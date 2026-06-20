@@ -1,0 +1,8 @@
+^commons\.Rproj$
+^\.Rproj\.user$
+^LICENSE\.md$
+^README\.Rmd$
+^cran-comments\.md$
+inst/resources
+inst/tiles/
+plans/
