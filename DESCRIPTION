@@ -13,6 +13,8 @@ Description: Build correct and easy-to-use self-service data science
     then deploy agents that answer data questions, log interactions, and
     can be evaluated and improved over time.
 License: MIT + file LICENSE
+URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
+BugReports: https://github.com/posit-dev/commons/issues
 Suggests: 
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
