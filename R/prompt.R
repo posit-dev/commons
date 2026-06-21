@@ -1,0 +1,30 @@
+commons_system_prompt <- function(source, context, registry) {
+  template <- paste(
+    readLines(
+      system.file("prompts/system-prompt.md", package = "commons"),
+      warn = FALSE
+    ),
+    collapse = "\n"
+  )
+
+  tables <- paste(sprintf("- %s", list_tables(source)), collapse = "\n")
+  measures <- format_measure_catalog(registry)
+
+  always <- if (!is.null(context) && length(context$always)) {
+    paste0(
+      "\n# Context\n\nThese facts apply to every question:\n\n",
+      paste(sprintf("- %s", context$always), collapse = "\n")
+    )
+  } else {
+    ""
+  }
+
+  template <- fill_token(template, "{{TABLES}}", tables)
+  template <- fill_token(template, "{{MEASURES}}", measures)
+  fill_token(template, "{{ALWAYS}}", always)
+}
+
+# Avoid regular expression handling in prompt fragments supplied by users.
+fill_token <- function(text, token, value) {
+  gsub(token, value, text, fixed = TRUE)
+}

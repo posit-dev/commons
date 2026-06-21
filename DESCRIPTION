@@ -15,8 +15,26 @@ Description: Build correct and easy-to-use self-service data science
 License: MIT + file LICENSE
 URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
 BugReports: https://github.com/posit-dev/commons/issues
-Suggests: 
-    testthat (>= 3.0.0)
+Imports:
+    cli,
+    DBI,
+    duckdb,
+    ellmer (>= 0.4.1),
+    jsonlite,
+    knitr,
+    R6,
+    ragnar,
+    rlang,
+    S7,
+    utils
+Suggests:
+    bsicons,
+    pins,
+    readr,
+    shinychat,
+    testthat (>= 3.0.0),
+    vitals,
+    withr
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
