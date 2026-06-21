@@ -1,4 +1,4 @@
-commons_system_prompt <- function(source, context, registry) {
+commons_system_prompt <- function(source, context) {
   template <- paste(
     readLines(
       system.file("prompts/system-prompt.md", package = "commons"),
@@ -8,7 +8,6 @@ commons_system_prompt <- function(source, context, registry) {
   )
 
   tables <- paste(sprintf("- %s", list_tables(source)), collapse = "\n")
-  measures <- format_measure_catalog(registry)
 
   always <- if (!is.null(context) && length(context$always)) {
     paste0(
@@ -20,7 +19,6 @@ commons_system_prompt <- function(source, context, registry) {
   }
 
   template <- fill_token(template, "{{TABLES}}", tables)
-  template <- fill_token(template, "{{MEASURES}}", measures)
   fill_token(template, "{{ALWAYS}}", always)
 }
 

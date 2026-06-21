@@ -24,7 +24,7 @@ test_that("commons() returns a Chat subclass with the five fixed tools", {
   expect_true(is.na(agent$last_tag))
 })
 
-test_that("the system prompt includes tables, measures, and context", {
+test_that("the system prompt includes tables, context, and measure workflow", {
   agent <- test_agent(
     context = context_store(always = "Booked revenue excludes tax.")
   )
@@ -37,9 +37,9 @@ test_that("the system prompt includes tables, measures, and context", {
   prompt <- agent$get_system_prompt()
 
   expect_match(prompt, "sales")
-  expect_match(prompt, "order_count")
+  expect_no_match(prompt, "order_count")
   expect_match(prompt, "Booked revenue excludes tax")
-  expect_match(prompt, "measure", ignore.case = TRUE)
+  expect_match(prompt, "first call `search_measures`")
 })
 
 test_that("register_measure stores measures off the provider tool list", {

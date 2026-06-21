@@ -11,7 +11,7 @@ build_commons_tools <- function(self, private) {
 tool_search_measures <- function(private) {
   ellmer::tool(
     function(query) search_measures_text(private$registry, query),
-    "Search registered measures. Returns matching measures with their argument schemas. Try this before writing SQL.",
+    "Search registered measures. Returns matching measures with their argument schemas. Use this before call_measure.",
     arguments = list(
       query = ellmer::type_string(
         "What you want to measure, in plain language."
@@ -31,7 +31,9 @@ tool_call_measure <- function(private) {
     function(name, arguments = "{}") {
       call_measure_tool(private$registry, name, arguments)
     },
-    "Run a registered measure by name. `arguments` is a JSON object mapping argument names to values, e.g. {\"region\": \"EMEA\", \"year\": 2025}. Get the schema from search_measures first.",
+    # For small registries, we may eventually expose each measure schema upfront
+    # instead of relying on search_measures for discovery.
+    "Run a registered measure returned by search_measures. `arguments` is a JSON object using exactly the argument names from search_measures.",
     arguments = list(
       name = ellmer::type_string(
         "The measure name, exactly as returned by search_measures."

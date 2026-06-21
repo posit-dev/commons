@@ -101,7 +101,6 @@ Commons <- R6::R6Class(
         arguments = arguments,
         name = name
       )
-      private$refresh_prompt()
       invisible(self)
     },
 
@@ -126,8 +125,7 @@ Commons <- R6::R6Class(
     refresh_prompt = function() {
       self$set_system_prompt(commons_system_prompt(
         private$source,
-        private$context,
-        private$registry
+        private$context
       ))
     },
 

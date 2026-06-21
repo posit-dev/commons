@@ -1,15 +1,3 @@
-format_measure_catalog <- function(registry) {
-  if (length(registry) == 0) {
-    return("(no measures registered)")
-  }
-  lines <- vapply(
-    registry,
-    function(td) sprintf("- %s: %s", tool_name(td), tool_description(td)),
-    character(1)
-  )
-  paste(lines, collapse = "\n")
-}
-
 search_measures_text <- function(registry, query) {
   if (length(registry) == 0) {
     return("No measures are registered.")
