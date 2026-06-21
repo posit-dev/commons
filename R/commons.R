@@ -82,7 +82,7 @@ Commons <- R6::R6Class(
         private$turn_calls <- c(private$turn_calls, request@name)
         invisible()
       })
-      private$refresh_prompt()
+      self$set_system_prompt(commons_system_prompt(private$source, private$context))
     },
 
     #' @description Register a measure. Measures are stored as [ellmer::tool()]
@@ -121,13 +121,6 @@ Commons <- R6::R6Class(
     registry = NULL,
     log_dir = NULL,
     turn_calls = character(),
-
-    refresh_prompt = function() {
-      self$set_system_prompt(commons_system_prompt(
-        private$source,
-        private$context
-      ))
-    },
 
     finalize_turn = function(response) {
       self$last_tag <- derive_tag(private$turn_calls)
