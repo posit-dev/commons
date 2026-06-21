@@ -39,7 +39,8 @@ test_that("the system prompt includes tables, context, and measure workflow", {
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
   expect_match(prompt, "Booked revenue excludes tax")
-  expect_match(prompt, "first call `search_measures`")
+  expect_match(prompt, "For any question that needs data")
+  expect_match(prompt, "Use SQL only after `search_measures`")
 })
 
 test_that("register_measure stores measures off the provider tool list", {
