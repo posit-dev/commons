@@ -21,16 +21,17 @@ $$gif$$
 commons agents support whatever LLMs your organization has deployed
 already.
 
-To get started, have your agent of choice look at `commons::onboard`:
+To get started, configure a database connection with `data_source()` and
+then two layers on top of it:
 
-- Assemble a “semantic layer,” a pool of pre-vetted queries that
+- Assemble a `semantic_layer()`, a pool of pre-vetted queries that
   directly use the definitions defined by your data science team. This
   can make use of existing semantic layers defined with other
   technologies, or can be assembled using existing, trusted data
   artifacts (like dashboards and parameterized reports). The semantic
   layer is the agents’ happy path, relying on existing, trusted
   definitions.
-- Assemble a “context layer”, a pool of free-text knowledge that the
+- Assemble a `context_layer()`, a pool of free-text knowledge that the
   agent can search through when a data query is not covered by the
   semantic layer. This layer informs how the agent will author fallback
   SQL queries.
