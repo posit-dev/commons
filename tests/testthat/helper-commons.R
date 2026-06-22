@@ -25,19 +25,23 @@ test_client <- function() {
 }
 
 test_agent <- function(
-  context = NULL,
+  context_layer = NULL,
+  semantic_layer = NULL,
   log_dir = withr::local_tempdir(.local_envir = parent.frame())
 ) {
   commons(
     test_client(),
-    source = test_source(),
-    context = context,
+    data_source = test_source(),
+    context_layer = context_layer,
+    semantic_layer = semantic_layer,
     log_dir = log_dir
   )
 }
 
 count_measure_tool <- function() {
-  ellmer::tool(
+  measure(
+    "order_count",
+    "Count orders, optionally filtered by region and a revenue ceiling.",
     function(region = NULL, revenue_under = NULL) {
       df <- test_sales()
       if (!is.null(region)) {
@@ -48,14 +52,12 @@ count_measure_tool <- function() {
       }
       nrow(df)
     },
-    "Count orders, optionally filtered by region and a revenue ceiling.",
     arguments = list(
       region = ellmer::type_array(
         ellmer::type_enum(c("Americas", "APAC", "EMEA")),
         required = FALSE
       ),
       revenue_under = ellmer::type_number(required = FALSE)
-    ),
-    name = "order_count"
+    )
   )
 }

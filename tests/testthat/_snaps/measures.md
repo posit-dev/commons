@@ -1,3 +1,19 @@
+# semantic_layer validates its measures
+
+    Code
+      semantic_layer("not a measure")
+    Condition
+      Error in `semantic_layer()`:
+      ! Every item in `semantic_layer` must be created by `measure()`.
+
+---
+
+    Code
+      semantic_layer(count_measure_tool(), count_measure_tool())
+    Condition
+      Error in `semantic_layer()`:
+      ! Measure names must be unique; duplicated name: "order_count".
+
 # validate_measure_args rejects out-of-vocabulary enum values
 
     Code

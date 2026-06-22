@@ -53,7 +53,7 @@ tool_call_measure <- function(private) {
 
 tool_search_context <- function(private) {
   ellmer::tool(
-    function(query) search_context_tool(private$context, query),
+    function(query) search_context_tool(private$context_layer, query),
     "Search context for metric definitions, data notes, and table relationships.",
     arguments = list(
       query = ellmer::type_string(
@@ -71,7 +71,7 @@ tool_search_context <- function(private) {
 
 tool_describe_table <- function(private) {
   ellmer::tool(
-    function(table) describe_table_tool(private$source, table),
+    function(table) describe_table_tool(private$data_source, table),
     "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table.",
     arguments = list(
       table = ellmer::type_string(
@@ -89,7 +89,7 @@ tool_describe_table <- function(private) {
 
 tool_run_sql <- function(private) {
   ellmer::tool(
-    function(sql) run_sql_tool(private$source, sql),
+    function(sql) run_sql_tool(private$data_source, sql),
     "Run a read-only SELECT query against the data source. Use this when no registered measure answers the question.",
     arguments = list(
       sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect.")
@@ -128,7 +128,7 @@ call_measure_tool <- function(registry, name, arguments) {
 
 search_context_tool <- function(context, query) {
   if (is.null(context)) {
-    return("No context store is configured for this agent.")
+    return("No context layer is configured for this agent.")
   }
   hits <- context_search(context, query)
   body <- if (length(hits)) {

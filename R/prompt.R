@@ -1,4 +1,4 @@
-commons_system_prompt <- function(source, context) {
+commons_system_prompt <- function(data_source, context_layer) {
   template <- paste(
     readLines(
       system.file("prompts/system-prompt.md", package = "commons"),
@@ -7,12 +7,12 @@ commons_system_prompt <- function(source, context) {
     collapse = "\n"
   )
 
-  tables <- paste(sprintf("- %s", list_tables(source)), collapse = "\n")
+  tables <- paste(sprintf("- %s", list_tables(data_source)), collapse = "\n")
 
-  always <- if (!is.null(context) && length(context$always)) {
+  always <- if (!is.null(context_layer) && length(context_layer$always)) {
     paste0(
       "\n# Context\n\nThese facts apply to every question:\n\n",
-      paste(sprintf("- %s", context$always), collapse = "\n")
+      paste(sprintf("- %s", context_layer$always), collapse = "\n")
     )
   } else {
     ""

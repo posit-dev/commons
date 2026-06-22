@@ -4,10 +4,10 @@
 \alias{list_tables}
 \title{List the tables an agent can query}
 \usage{
-list_tables(source)
+list_tables(data_source)
 }
 \arguments{
-\item{source}{A \code{\link[=data_source]{data_source()}}.}
+\item{data_source}{A \code{\link[=data_source]{data_source()}}.}
 }
 \value{
 A character vector of table names.

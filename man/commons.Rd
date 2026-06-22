@@ -7,8 +7,9 @@
 \usage{
 commons(
   client = ellmer::chat_anthropic(),
-  source,
-  context = NULL,
+  data_source,
+  context_layer = NULL,
+  semantic_layer = NULL,
   log_dir = file.path(tempdir(), "commons-logs")
 )
 }
@@ -16,9 +17,11 @@ commons(
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
 \code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}.}
 
-\item{source}{A \code{\link[=data_source]{data_source()}}.}
+\item{data_source}{A \code{\link[=data_source]{data_source()}}.}
 
-\item{context}{An optional \code{\link[=context_store]{context_store()}}.}
+\item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
+
+\item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{log_dir}{Directory for per-turn JSON logs. Defaults to a session temp
 directory.}
@@ -27,8 +30,8 @@ directory.}
 A \code{Commons} object, which subclasses \link[ellmer:Chat]{ellmer::Chat}.
 }
 \description{
-\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools for registered
-measures, context search, table inspection, and SQL queries.
+\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools for a semantic
+layer, context search, table inspection, and SQL queries.
 }
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
@@ -38,15 +41,20 @@ to use the agent as a vitals solver.
 }
 \examples{
 \dontrun{
-src <- data_source(sales = my_sales)
-agent <- commons(ellmer::chat_anthropic(), source = src)
-
 # A measure over local data computes directly in R.
-agent$register_measure(
-  "order_count",
-  "Count of orders.",
-  function() nrow(my_sales),
-  arguments = list()
+sem <- semantic_layer(
+  measure(
+    "order_count",
+    "Count of orders.",
+    function() nrow(my_sales),
+    arguments = list()
+  )
+)
+src <- data_source(sales = my_sales)
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_source = src,
+  semantic_layer = sem
 )
 agent$chat("How many orders are there?")
 agent$last_tag # "A"
@@ -54,33 +62,41 @@ agent$last_tag # "A"
 # A measure over a database closes over the connection. For canned SQL,
 # interpolate arguments with glue::glue_sql() so they're quoted safely.
 con <- DBI::dbConnect(duckdb::duckdb())
-agent <- commons(ellmer::chat_anthropic(), source = data_source(con))
-agent$register_measure(
-  "revenue_by_region",
-  "Total revenue for a region.",
-  function(region) {
-    DBI::dbGetQuery(
-      con,
-      glue::glue_sql(
-        "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
-        .con = con
+sem <- semantic_layer(
+  measure(
+    "revenue_by_region",
+    "Total revenue for a region.",
+    function(region) {
+      DBI::dbGetQuery(
+        con,
+        glue::glue_sql(
+          "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
+          .con = con
+        )
       )
-    )
-  },
-  arguments = list(region = ellmer::type_string("Sales region."))
+    },
+    arguments = list(region = ellmer::type_string("Sales region."))
+  )
+)
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_source = data_source(con),
+  semantic_layer = sem
 )
 
 # To reuse an existing function that takes a connection, wrap it so its
 # formals are just the measure's arguments.
-agent$register_measure(
-  "revenue_metrics",
-  "Revenue metrics over a date range.",
-  function(start_date, end_date) {
-    pull_revenue_metrics(con, start_date, end_date)
-  },
-  arguments = list(
-    start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
-    end_date = ellmer::type_string("End date, YYYY-MM-DD.")
+sem <- semantic_layer(
+  measure(
+    "revenue_metrics",
+    "Revenue metrics over a date range.",
+    function(start_date, end_date) {
+      pull_revenue_metrics(con, start_date, end_date)
+    },
+    arguments = list(
+      start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
+      end_date = ellmer::type_string("End date, YYYY-MM-DD.")
+    )
   )
 )
 }
@@ -101,7 +117,6 @@ registered measure, \code{"B"} for SQL, or \code{NA}.}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-Commons-new}{\code{Commons$new()}}
-\item \href{#method-Commons-register_measure}{\code{Commons$register_measure()}}
 \item \href{#method-Commons-chat}{\code{Commons$chat()}}
 \item \href{#method-Commons-stream_async}{\code{Commons$stream_async()}}
 \item \href{#method-Commons-clone}{\code{Commons$clone()}}
@@ -141,7 +156,13 @@ registered measure, \code{"B"} for SQL, or \code{NA}.}
 Create a Commons agent. Most users should call \code{\link[=commons]{commons()}}
 rather than this method directly.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Commons$new(client, source, context = NULL, log_dir = tempdir())}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Commons$new(
+  client,
+  data_source,
+  context_layer = NULL,
+  semantic_layer = NULL,
+  log_dir = tempdir()
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -149,52 +170,13 @@ rather than this method directly.
 \describe{
 \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
 
-\item{\code{source}}{A \code{\link[=data_source]{data_source()}}.}
+\item{\code{data_source}}{A \code{\link[=data_source]{data_source()}}.}
 
-\item{\code{context}}{An optional \code{\link[=context_store]{context_store()}}.}
+\item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
+
+\item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{\code{log_dir}}{Directory for turn logs.}
-}
-\if{html}{\out{</div>}}
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Commons-register_measure"></a>}}
-\if{latex}{\out{\hypertarget{method-Commons-register_measure}{}}}
-\subsection{Method \code{register_measure()}}{
-Register a measure. Measures are stored as \code{\link[ellmer:tool]{ellmer::tool()}}
-objects and called by name through the \code{call_measure} tool. Returns the
-agent invisibly.
-
-A measure is any function whose formals are the arguments you want the
-model to supply. Where the data lives determines how you write it:
-\itemize{
-\item Local data: compute directly in R over the in-memory object.
-\item A database: query a connection. For canned SQL, close over the
-connection and call \code{\link[DBI:dbGetQuery]{DBI::dbGetQuery()}} (use \code{\link[glue:glue_sql]{glue::glue_sql()}} to
-interpolate arguments safely). To reuse an existing connection-taking
-function (e.g. from another package), wrap it in a closure that fixes
-the connection.
-}
-
-Functions that return a lazy \code{dbplyr} table are collected before
-formatting.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Commons$register_measure(name, description, fn, arguments = list())}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{name}}{Measure name.}
-
-\item{\code{description}}{What the measure computes.}
-
-\item{\code{fn}}{Function that computes the measure. Its formals are the
-measure's arguments.}
-
-\item{\code{arguments}}{A named list of \code{\link[ellmer:type_boolean]{ellmer::type_string()}} and friends, one
-per formal of \code{fn}.}
 }
 \if{html}{\out{</div>}}
 }

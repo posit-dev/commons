@@ -102,14 +102,14 @@ data_source_pins <- function(board, names) {
 
 #' List the tables an agent can query
 #'
-#' @param source A [data_source()].
+#' @param data_source A [data_source()].
 #'
 #' @return A character vector of table names.
 #'
 #' @export
-list_tables <- function(source) {
-  check_data_source(source)
-  source$tables
+list_tables <- function(data_source) {
+  check_data_source(data_source)
+  data_source$tables
 }
 
 new_data_source <- function(con, tables, owned) {
@@ -238,8 +238,11 @@ check_named_frames <- function(frames, call = rlang::caller_env()) {
   }
 }
 
-check_data_source <- function(source, call = rlang::caller_env()) {
-  if (!inherits(source, "commons_data_source")) {
-    cli::cli_abort("{.arg source} must be a {.fn data_source}.", call = call)
+check_data_source <- function(data_source, call = rlang::caller_env()) {
+  if (!inherits(data_source, "commons_data_source")) {
+    cli::cli_abort(
+      "{.arg data_source} must be a {.fn data_source}.",
+      call = call
+    )
   }
 }

@@ -1,6 +1,6 @@
-#' Create a context store
+#' Create a context layer
 #'
-#' A context store contains text that helps a [commons()] agent interpret its
+#' A context layer contains text that helps a [commons()] agent interpret its
 #' data source.
 #'
 #' Files are chunked and indexed with \pkg{ragnar}. The `always` argument is for
@@ -10,15 +10,15 @@
 #' @param always Character vector of facts to inject into the system prompt on
 #'   every turn. Optional.
 #'
-#' @return A `commons_context_store` object.
+#' @return A `commons_context_layer` object.
 #'
 #' @examples
-#' store <- context_store(
+#' layer <- context_layer(
 #'   always = "Revenue excludes tax unless stated otherwise."
 #' )
 #'
 #' @export
-context_store <- function(files = character(), always = character()) {
+context_layer <- function(files = character(), always = character()) {
   if (!is.character(files) || !is.character(always)) {
     cli::cli_abort("{.arg files} and {.arg always} must be character vectors.")
   }
@@ -34,7 +34,7 @@ context_store <- function(files = character(), always = character()) {
 
   structure(
     list(store = store, always = always, n_docs = length(files)),
-    class = "commons_context_store"
+    class = "commons_context_layer"
   )
 }
 
@@ -49,10 +49,10 @@ context_search <- function(store, query, n = 3) {
   trimws(res$text)
 }
 
-check_context_store <- function(context, call = rlang::caller_env()) {
-  if (!is.null(context) && !inherits(context, "commons_context_store")) {
+check_context_layer <- function(context_layer, call = rlang::caller_env()) {
+  if (!is.null(context_layer) && !inherits(context_layer, "commons_context_layer")) {
     cli::cli_abort(
-      "{.arg context} must be a {.fn context_store} or {.code NULL}.",
+      "{.arg context_layer} must be a {.fn context_layer} or {.code NULL}.",
       call = call
     )
   }

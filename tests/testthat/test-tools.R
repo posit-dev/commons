@@ -46,8 +46,8 @@ test_that("describe_table_tool reports columns and samples", {
   expect_match(res@value, "Sample rows")
 })
 
-test_that("search_context_tool handles a missing context store", {
-  expect_match(search_context_tool(NULL, "anything"), "No context store")
+test_that("search_context_tool handles a missing context layer", {
+  expect_match(search_context_tool(NULL, "anything"), "No context layer")
 })
 
 test_that("parse_json_args handles empty, brace, and object input", {

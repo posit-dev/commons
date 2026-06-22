@@ -26,13 +26,15 @@ test_that("commons() returns a Chat subclass with the five fixed tools", {
 
 test_that("the system prompt includes tables, context, and measure workflow", {
   agent <- test_agent(
-    context = context_store(always = "Booked revenue excludes tax.")
-  )
-  agent$register_measure(
-    "order_count",
-    "Count of orders.",
-    function() nrow(test_sales()),
-    arguments = list()
+    context_layer = context_layer(always = "Booked revenue excludes tax."),
+    semantic_layer = semantic_layer(
+      measure(
+        "order_count",
+        "Count of orders.",
+        function() nrow(test_sales()),
+        arguments = list()
+      )
+    )
   )
   prompt <- agent$get_system_prompt()
 
@@ -45,33 +47,50 @@ test_that("the system prompt includes tables, context, and measure workflow", {
   expect_no_match(prompt, "tagged B")
 })
 
-test_that("register_measure stores measures off the provider tool list", {
-  agent <- test_agent()
-  agent$register_measure(
-    "order_count",
-    "Count of orders.",
-    function() nrow(test_sales()),
-    arguments = list()
+test_that("semantic_layer stores measures off the provider tool list", {
+  agent <- test_agent(
+    semantic_layer = semantic_layer(
+      measure(
+        "order_count",
+        "Count of orders.",
+        function() nrow(test_sales()),
+        arguments = list()
+      )
+    )
   )
 
   provider_tools <- vapply(agent$get_tools(), tool_name, character(1))
   expect_false("order_count" %in% provider_tools)
 })
 
-test_that("register_measure returns the agent invisibly for chaining", {
-  agent <- test_agent()
-  out <- withVisible(agent$register_measure("m", "d", function() 1, list()))
-  expect_false(out$visible)
-  expect_identical(out$value, agent)
+test_that("commons() accepts an empty semantic layer", {
+  agent <- test_agent(semantic_layer = semantic_layer())
+  expect_s3_class(agent, "Commons")
 })
 
 test_that("commons() validates its inputs", {
   expect_snapshot(
-    commons(client = "not a chat", source = test_source()),
+    commons(client = "not a chat", data_source = test_source()),
     error = TRUE
   )
   expect_snapshot(
-    commons(client = test_client(), source = "not a source"),
+    commons(client = test_client(), data_source = "not a source"),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_source = test_source(),
+      context_layer = "not context"
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_source = test_source(),
+      semantic_layer = list()
+    ),
     error = TRUE
   )
 })

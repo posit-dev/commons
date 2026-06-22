@@ -1,3 +1,24 @@
+test_that("semantic_layer stores measures by name", {
+  layer <- semantic_layer(count_measure_tool())
+
+  expect_s3_class(layer, "commons_semantic_layer")
+  expect_named(layer$measures, "order_count")
+})
+
+test_that("semantic_layer accepts a list of measures", {
+  layer <- semantic_layer(list(count_measure_tool()))
+
+  expect_named(layer$measures, "order_count")
+})
+
+test_that("semantic_layer validates its measures", {
+  expect_snapshot(semantic_layer("not a measure"), error = TRUE)
+  expect_snapshot(
+    semantic_layer(count_measure_tool(), count_measure_tool()),
+    error = TRUE
+  )
+})
+
 test_that("validate_measure_args coerces valid arguments", {
   td <- count_measure_tool()
   args <- validate_measure_args(

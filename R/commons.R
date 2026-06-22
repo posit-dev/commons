@@ -1,7 +1,7 @@
 #' Create a commons agent
 #'
-#' `commons()` creates an [ellmer::Chat] subclass with tools for registered
-#' measures, context search, table inspection, and SQL queries.
+#' `commons()` creates an [ellmer::Chat] subclass with tools for a semantic
+#' layer, context search, table inspection, and SQL queries.
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
 #' and tools. Use `agent$chat()` to ask questions, [commons_mod_ui()] and
@@ -10,8 +10,9 @@
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()].
-#' @param source A [data_source()].
-#' @param context An optional [context_store()].
+#' @param data_source A [data_source()].
+#' @param context_layer An optional [context_layer()].
+#' @param semantic_layer An optional [semantic_layer()].
 #' @param log_dir Directory for per-turn JSON logs. Defaults to a session temp
 #'   directory.
 #'
@@ -19,15 +20,20 @@
 #'
 #' @examples
 #' \dontrun{
-#' src <- data_source(sales = my_sales)
-#' agent <- commons(ellmer::chat_anthropic(), source = src)
-#'
 #' # A measure over local data computes directly in R.
-#' agent$register_measure(
-#'   "order_count",
-#'   "Count of orders.",
-#'   function() nrow(my_sales),
-#'   arguments = list()
+#' sem <- semantic_layer(
+#'   measure(
+#'     "order_count",
+#'     "Count of orders.",
+#'     function() nrow(my_sales),
+#'     arguments = list()
+#'   )
+#' )
+#' src <- data_source(sales = my_sales)
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_source = src,
+#'   semantic_layer = sem
 #' )
 #' agent$chat("How many orders are there?")
 #' agent$last_tag # "A"
@@ -35,33 +41,41 @@
 #' # A measure over a database closes over the connection. For canned SQL,
 #' # interpolate arguments with glue::glue_sql() so they're quoted safely.
 #' con <- DBI::dbConnect(duckdb::duckdb())
-#' agent <- commons(ellmer::chat_anthropic(), source = data_source(con))
-#' agent$register_measure(
-#'   "revenue_by_region",
-#'   "Total revenue for a region.",
-#'   function(region) {
-#'     DBI::dbGetQuery(
-#'       con,
-#'       glue::glue_sql(
-#'         "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
-#'         .con = con
+#' sem <- semantic_layer(
+#'   measure(
+#'     "revenue_by_region",
+#'     "Total revenue for a region.",
+#'     function(region) {
+#'       DBI::dbGetQuery(
+#'         con,
+#'         glue::glue_sql(
+#'           "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
+#'           .con = con
+#'         )
 #'       )
-#'     )
-#'   },
-#'   arguments = list(region = ellmer::type_string("Sales region."))
+#'     },
+#'     arguments = list(region = ellmer::type_string("Sales region."))
+#'   )
+#' )
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_source = data_source(con),
+#'   semantic_layer = sem
 #' )
 #'
 #' # To reuse an existing function that takes a connection, wrap it so its
 #' # formals are just the measure's arguments.
-#' agent$register_measure(
-#'   "revenue_metrics",
-#'   "Revenue metrics over a date range.",
-#'   function(start_date, end_date) {
-#'     pull_revenue_metrics(con, start_date, end_date)
-#'   },
-#'   arguments = list(
-#'     start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
-#'     end_date = ellmer::type_string("End date, YYYY-MM-DD.")
+#' sem <- semantic_layer(
+#'   measure(
+#'     "revenue_metrics",
+#'     "Revenue metrics over a date range.",
+#'     function(start_date, end_date) {
+#'       pull_revenue_metrics(con, start_date, end_date)
+#'     },
+#'     arguments = list(
+#'       start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
+#'       end_date = ellmer::type_string("End date, YYYY-MM-DD.")
+#'     )
 #'   )
 #' )
 #' }
@@ -69,8 +83,9 @@
 #' @export
 commons <- function(
   client = ellmer::chat_anthropic(),
-  source,
-  context = NULL,
+  data_source,
+  context_layer = NULL,
+  semantic_layer = NULL,
   log_dir = file.path(tempdir(), "commons-logs")
 ) {
   if (!inherits(client, "Chat")) {
@@ -78,13 +93,16 @@ commons <- function(
       "{.arg client} must be an {.cls ellmer::Chat}, e.g. from {.fn ellmer::chat_anthropic}."
     )
   }
-  check_data_source(source)
-  check_context_store(context)
+  check_data_source(data_source)
+  check_context_layer(context_layer)
+  semantic_layer <- semantic_layer %||% new_semantic_layer()
+  check_semantic_layer(semantic_layer)
 
   Commons$new(
     client = client,
-    source = source,
-    context = context,
+    data_source = data_source,
+    context_layer = context_layer,
+    semantic_layer = semantic_layer,
     log_dir = log_dir
   )
 }
@@ -102,15 +120,23 @@ Commons <- R6::R6Class(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
     #' @param client An [ellmer::Chat] supplying the provider.
-    #' @param source A [data_source()].
-    #' @param context An optional [context_store()].
+    #' @param data_source A [data_source()].
+    #' @param context_layer An optional [context_layer()].
+    #' @param semantic_layer An optional [semantic_layer()].
     #' @param log_dir Directory for turn logs.
-    initialize = function(client, source, context = NULL, log_dir = tempdir()) {
+    initialize = function(
+      client,
+      data_source,
+      context_layer = NULL,
+      semantic_layer = NULL,
+      log_dir = tempdir()
+    ) {
       super$initialize(provider = client$get_provider(), echo = "none")
+      semantic_layer <- semantic_layer %||% new_semantic_layer()
 
-      private$source <- source
-      private$context <- context
-      private$registry <- list()
+      private$data_source <- data_source
+      private$context_layer <- context_layer
+      private$registry <- semantic_layer$measures
       private$log_dir <- log_dir
 
       self$register_tools(build_commons_tools(self, private))
@@ -119,39 +145,9 @@ Commons <- R6::R6Class(
         self$last_tag <- derive_tag(private$turn_calls)
         invisible()
       })
-      self$set_system_prompt(commons_system_prompt(private$source, private$context))
-    },
-
-    #' @description Register a measure. Measures are stored as [ellmer::tool()]
-    #'   objects and called by name through the `call_measure` tool. Returns the
-    #'   agent invisibly.
-    #'
-    #'   A measure is any function whose formals are the arguments you want the
-    #'   model to supply. Where the data lives determines how you write it:
-    #'
-    #'   * Local data: compute directly in R over the in-memory object.
-    #'   * A database: query a connection. For canned SQL, close over the
-    #'     connection and call [DBI::dbGetQuery()] (use [glue::glue_sql()] to
-    #'     interpolate arguments safely). To reuse an existing connection-taking
-    #'     function (e.g. from another package), wrap it in a closure that fixes
-    #'     the connection.
-    #'
-    #'   Functions that return a lazy `dbplyr` table are collected before
-    #'   formatting.
-    #' @param name Measure name.
-    #' @param description What the measure computes.
-    #' @param fn Function that computes the measure. Its formals are the
-    #'   measure's arguments.
-    #' @param arguments A named list of [ellmer::type_string()] and friends, one
-    #'   per formal of `fn`.
-    register_measure = function(name, description, fn, arguments = list()) {
-      private$registry[[name]] <- ellmer::tool(
-        fn,
-        description,
-        arguments = arguments,
-        name = name
+      self$set_system_prompt(
+        commons_system_prompt(private$data_source, private$context_layer)
       )
-      invisible(self)
     },
 
     #' @description Submit input and return the response. Also updates
@@ -188,8 +184,8 @@ Commons <- R6::R6Class(
     }
   ),
   private = list(
-    source = NULL,
-    context = NULL,
+    data_source = NULL,
+    context_layer = NULL,
     registry = NULL,
     log_dir = NULL,
     turn_calls = character(),

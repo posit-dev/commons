@@ -50,8 +50,8 @@ ui <- page_fillable(
 )
 
 server <- function(input, output, session) {
-  src <- data_source(sales = sales)
-  agent <- commons(ellmer::chat_anthropic(), source = src)
+  data_source <- data_source(sales = sales)
+  agent <- commons(ellmer::chat_anthropic(), data_source = data_source)
   commons::commons_mod_server("chat", agent)
 }
 

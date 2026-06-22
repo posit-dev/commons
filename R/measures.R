@@ -1,3 +1,98 @@
+#' Create a semantic layer
+#'
+#' A semantic layer is a collection of governed measures available to a
+#' [commons()] agent.
+#'
+#' @param ... [measure()] objects. You can also supply a single list of measures.
+#'
+#' @return A `commons_semantic_layer` object.
+#'
+#' @examples
+#' semantic_layer(
+#'   measure(
+#'     "order_count",
+#'     "Count of orders.",
+#'     function() 10,
+#'     arguments = list()
+#'   )
+#' )
+#'
+#' @export
+semantic_layer <- function(...) {
+  measures <- rlang::list2(...)
+
+  if (length(measures) == 1 && is_measure_list(measures[[1]])) {
+    measures <- measures[[1]]
+  }
+
+  check_measures(measures)
+  names(measures) <- vapply(measures, tool_name, character(1))
+
+  duplicated <- names(measures)[duplicated(names(measures))]
+  if (length(duplicated)) {
+    cli::cli_abort(
+      "Measure names must be unique; duplicated name{?s}: {.val {unique(duplicated)}}."
+    )
+  }
+
+  new_semantic_layer(measures)
+}
+
+#' Create a measure
+#'
+#' A measure is a governed calculation inside a [semantic_layer()]. Its function
+#' body is ordinary R; its `arguments` schema tells the model what inputs it can
+#' supply.
+#'
+#' @param name Measure name.
+#' @param description What the measure computes.
+#' @param fn Function that computes the measure. Its formals are the measure's
+#'   arguments.
+#' @param arguments A named list of [ellmer::type_string()] and friends, one per
+#'   formal of `fn`.
+#'
+#' @return A measure object.
+#'
+#' @export
+measure <- function(name, description, fn, arguments = list()) {
+  ellmer::tool(
+    fn,
+    description,
+    arguments = arguments,
+    name = name
+  )
+}
+
+new_semantic_layer <- function(measures = list()) {
+  structure(
+    list(measures = measures),
+    class = "commons_semantic_layer"
+  )
+}
+
+check_semantic_layer <- function(semantic_layer, call = rlang::caller_env()) {
+  if (!inherits(semantic_layer, "commons_semantic_layer")) {
+    cli::cli_abort(
+      "{.arg semantic_layer} must be a {.fn semantic_layer}.",
+      call = call
+    )
+  }
+}
+
+check_measures <- function(measures, call = rlang::caller_env()) {
+  ok <- vapply(measures, inherits, logical(1), "ellmer::ToolDef")
+  if (!all(ok)) {
+    cli::cli_abort(
+      "Every item in {.arg semantic_layer} must be created by {.fn measure}.",
+      call = call
+    )
+  }
+}
+
+is_measure_list <- function(x) {
+  is.list(x) && !inherits(x, "ellmer::ToolDef")
+}
+
 search_measures_text <- function(registry, query) {
   if (length(registry) == 0) {
     return("No measures are registered.")
