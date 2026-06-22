@@ -68,6 +68,15 @@ test_that("commons() accepts an empty semantic layer", {
   expect_s3_class(agent, "Commons")
 })
 
+test_that("default log directory can come from COMMONS_LOG_DIR", {
+  withr::local_envvar(COMMONS_LOG_DIR = NA)
+  expect_equal(commons_log_dir(), file.path(tempdir(), "commons-logs"))
+
+  path <- withr::local_tempdir()
+  withr::local_envvar(COMMONS_LOG_DIR = path)
+  expect_equal(commons_log_dir(), path)
+})
+
 test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(client = "not a chat", data_source = test_source()),

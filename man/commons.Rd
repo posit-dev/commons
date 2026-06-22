@@ -10,7 +10,7 @@ commons(
   data_source,
   context_layer = NULL,
   semantic_layer = NULL,
-  log_dir = file.path(tempdir(), "commons-logs")
+  log_dir = NULL
 )
 }
 \arguments{
@@ -23,8 +23,8 @@ commons(
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
-\item{log_dir}{Directory for per-turn JSON logs. Defaults to a session temp
-directory.}
+\item{log_dir}{Directory for per-turn JSON logs. If \code{NULL}, defaults to
+\code{Sys.getenv("COMMONS_LOG_DIR")}, or a session temp directory if unset.}
 }
 \value{
 A \code{Commons} object, which subclasses \link[ellmer:Chat]{ellmer::Chat}.
@@ -161,7 +161,7 @@ rather than this method directly.
   data_source,
   context_layer = NULL,
   semantic_layer = NULL,
-  log_dir = tempdir()
+  log_dir = NULL
 )}\if{html}{\out{</div>}}
 }
 

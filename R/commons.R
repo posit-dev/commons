@@ -13,8 +13,8 @@
 #' @param data_source A [data_source()].
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param log_dir Directory for per-turn JSON logs. Defaults to a session temp
-#'   directory.
+#' @param log_dir Directory for per-turn JSON logs. If `NULL`, defaults to
+#'   `Sys.getenv("COMMONS_LOG_DIR")`, or a session temp directory if unset.
 #'
 #' @return A `Commons` object, which subclasses [ellmer::Chat].
 #'
@@ -86,7 +86,7 @@ commons <- function(
   data_source,
   context_layer = NULL,
   semantic_layer = NULL,
-  log_dir = file.path(tempdir(), "commons-logs")
+  log_dir = NULL
 ) {
   if (!inherits(client, "Chat")) {
     cli::cli_abort(
@@ -97,6 +97,7 @@ commons <- function(
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
+  log_dir <- log_dir %||% commons_log_dir()
 
   Commons$new(
     client = client,
@@ -105,6 +106,10 @@ commons <- function(
     semantic_layer = semantic_layer,
     log_dir = log_dir
   )
+}
+
+commons_log_dir <- function() {
+  Sys.getenv("COMMONS_LOG_DIR", unset = file.path(tempdir(), "commons-logs"))
 }
 
 #' @rdname commons
@@ -129,10 +134,11 @@ Commons <- R6::R6Class(
       data_source,
       context_layer = NULL,
       semantic_layer = NULL,
-      log_dir = tempdir()
+      log_dir = NULL
     ) {
       super$initialize(provider = client$get_provider(), echo = "none")
       semantic_layer <- semantic_layer %||% new_semantic_layer()
+      log_dir <- log_dir %||% commons_log_dir()
 
       private$data_source <- data_source
       private$context_layer <- context_layer
