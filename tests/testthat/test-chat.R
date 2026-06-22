@@ -4,12 +4,16 @@ test_that("answer pills describe trusted and fallback answers", {
     commons_answer_pill("B", "review")
   )$html
 
-  expect_match(trusted, "Trusted answer")
+  expect_match(trusted, "Verified answer")
+  expect_match(trusted, "governed calculation")
+  expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
 
   expect_match(fallback, "AI can be wrong")
-  expect_match(fallback, "Request review")
-  expect_no_match(fallback, "Request review\\s+\\.")
+  expect_match(fallback, "not produced by a governed calculation")
+  expect_match(fallback, "request review")
+  expect_match(fallback, "commons-answer-pill-icon")
+  expect_no_match(fallback, "request review\\s+\\.")
   expect_match(fallback, "commons-answer-pill-caution")
 })
 
@@ -31,8 +35,8 @@ test_that("review requests include the previous request and answer", {
     "There were 6 orders."
   )
 
-  expect_match(prompt, "adversarial review")
-  expect_match(prompt, "load-bearing assumptions")
+  expect_match(prompt, "Briefly note assumptions")
+  expect_match(prompt, "one or two other possible different answers")
   expect_no_match(prompt, "How many orders were there?", fixed = TRUE)
   expect_no_match(prompt, "There were 6 orders.", fixed = TRUE)
 })

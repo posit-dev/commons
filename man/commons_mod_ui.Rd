@@ -38,7 +38,7 @@ shinychat module server result.
 \description{
 These functions wrap \code{\link[shinychat:chat_app]{shinychat::chat_mod_ui()}} and
 \code{\link[shinychat:chat_app]{shinychat::chat_mod_server()}} with commons-specific answer provenance UI.
-Answers produced from registered measures get a compact trusted-answer pill.
+Answers produced from registered measures get a compact verified-answer pill.
 Answers produced from fallback SQL get a caution pill with a review request.
 }
 \examples{

@@ -12,12 +12,10 @@
   vertical-align: text-bottom;
 }
 
-.commons-answer-pill-dot {
-  border-radius: 999px;
-  display: inline-block;
+.commons-answer-pill-icon {
   flex: 0 0 auto;
-  height: 0.38rem;
-  width: 0.38rem;
+  height: 0.82rem;
+  width: 0.82rem;
 }
 
 .commons-answer-pill-trusted {
@@ -26,18 +24,10 @@
   color: #286144;
 }
 
-.commons-answer-pill-trusted .commons-answer-pill-dot {
-  background: #57b77a;
-}
-
 .commons-answer-pill-caution {
   background: #fff8ec;
   border: 1px solid #f2ddbb;
   color: #6b4b1b;
-}
-
-.commons-answer-pill-caution .commons-answer-pill-dot {
-  background: #d3933b;
 }
 
 .commons-review-link {

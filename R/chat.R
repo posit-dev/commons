@@ -2,7 +2,7 @@
 #'
 #' These functions wrap [shinychat::chat_mod_ui()] and
 #' [shinychat::chat_mod_server()] with commons-specific answer provenance UI.
-#' Answers produced from registered measures get a compact trusted-answer pill.
+#' Answers produced from registered measures get a compact verified-answer pill.
 #' Answers produced from fallback SQL get a caution pill with a review request.
 #'
 #' @param id Module ID.
@@ -127,12 +127,16 @@ commons_answer_pill <- function(tag, review_id = NULL) {
     tag,
     A = htmltools::tags$span(
       class = "commons-answer-pill commons-answer-pill-trusted",
-      htmltools::tags$span(class = "commons-answer-pill-dot"),
-      htmltools::tags$span("Trusted answer")
+      title = "This answer comes from a governed calculation defined by your data team.",
+      `aria-label` = "Verified answer. This answer comes from a governed calculation defined by your data team.",
+      commons_pill_icon("trusted-icon.svg", "Verified answer"),
+      htmltools::tags$span("Verified answer")
     ),
     B = htmltools::tags$span(
       class = "commons-answer-pill commons-answer-pill-caution",
-      htmltools::tags$span(class = "commons-answer-pill-dot"),
+      title = "This answer was generated from available context and data, but was not produced by a governed calculation.",
+      `aria-label` = "AI can be wrong. This answer was generated from available context and data, but was not produced by a governed calculation.",
+      commons_pill_icon("warning-icon.svg", "AI can be wrong"),
       htmltools::tags$span("AI can be wrong."),
       htmltools::tags$span("If you want, you can"),
       htmltools::tags$button(
@@ -140,10 +144,30 @@ commons_answer_pill <- function(tag, review_id = NULL) {
         class = "commons-review-link",
         type = "button",
         `data-commons-review-trigger` = "",
-        "Request review."
+        "request review."
       )
     ),
     NULL
+  )
+}
+
+commons_pill_icon <- function(file, alt) {
+  path <- system.file("figs", file, package = "commons")
+  if (!nzchar(path)) {
+    return(NULL)
+  }
+
+  svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  svg <- sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg)
+  src <- paste0(
+    "data:image/svg+xml,",
+    utils::URLencode(svg, reserved = TRUE)
+  )
+
+  htmltools::tags$img(
+    src = src,
+    alt = alt,
+    class = "commons-answer-pill-icon"
   )
 }
 
@@ -162,12 +186,10 @@ observe_review_request <- function(review_id, client, question) {
 
 review_request_prompt <- function(question, answer = NULL) {
   paste(
-    "Please perform an adversarial review of your previous answer.",
+    "Briefly note assumptions you made in your previous answer.",
     "",
-    "Focus on load-bearing assumptions and what could be wrong: data sources,",
-    "metric definitions, filters, joins, date windows, grain, missing context,",
-    "and unsupported interpretation. If something needs validation, say exactly",
-    "what to check.",
+    "Then provide one or two other possible different answers you could have",
+    "come to if you had made different assumptions.",
     sep = "\n"
   )
 }
