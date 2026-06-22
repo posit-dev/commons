@@ -1,15 +1,31 @@
 #' Create a data source
 #'
 #' A data source is the set of tables available to a [commons()] agent.
-#' `data_source()` copies named data frames into an in-process DuckDB database.
-#' `data_source_pins()` reads Posit Connect pins and creates the same kind of
-#' source.
+#'
+#' `data_source()` accepts data that already lives in a database or data frames
+#' that don't:
+#'
+#' * Pass a DBI connection to query it as-is. Nothing is copied; the agent
+#'   queries the database directly.
+#' * Pass named data frames to load them into an in-process DuckDB database. Use
+#'   this when the data isn't already in a database.
+#'
+#' `data_source_pins()` reads Posit Connect pins into the DuckDB path.
 #'
 #' The resulting object gives the agent a DBI connection plus a table registry.
 #' Use [list_tables()] to list the registered tables.
 #'
-#' @param ... Named data frames to register as tables. Each name becomes a table
-#'   name the agent can query.
+#' @param ... Either a single DBI connection, or named data frames to register
+#'   as tables. When passing data frames, each name becomes a table name the
+#'   agent can query.
+#' @param tables A character vector of table names to expose, used only when a
+#'   connection is supplied. Defaults to every table on the connection.
+#'
+#' @section Trust:
+#' The agent can issue arbitrary SQL through the `run_sql` tool. commons does
+#' not sandbox or restrict those queries. When you supply your own connection,
+#' open it in read-only mode (where the backend supports it) so the agent cannot
+#' modify the underlying data.
 #'
 #' @return A `commons_data_source` object.
 #'
@@ -20,21 +36,45 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(...) {
-  frames <- rlang::list2(...)
-  check_named_frames(frames)
+data_source <- function(..., tables = NULL) {
+  dots <- rlang::list2(...)
 
+  if (length(dots) == 1 && inherits(dots[[1]], "DBIConnection")) {
+    return(data_source_connection(dots[[1]], tables))
+  }
+
+  check_named_frames(dots)
   con <- DBI::dbConnect(duckdb::duckdb())
-  for (name in names(frames)) {
+  for (name in names(dots)) {
     DBI::dbWriteTable(
       con,
       name,
-      as.data.frame(frames[[name]]),
+      as.data.frame(dots[[name]]),
       overwrite = TRUE
     )
   }
 
-  new_data_source(con, names(frames))
+  new_data_source(con, names(dots), owned = TRUE)
+}
+
+data_source_connection <- function(con, tables, call = rlang::caller_env()) {
+  available <- DBI::dbListTables(con)
+  if (is.null(tables)) {
+    tables <- available
+  } else {
+    missing <- setdiff(tables, available)
+    if (length(missing)) {
+      cli::cli_abort(
+        c(
+          "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
+          i = "Available tables: {.val {available}}."
+        ),
+        call = call
+      )
+    }
+  }
+
+  new_data_source(con, tables, owned = FALSE)
 }
 
 #' @rdname data_source
@@ -69,15 +109,19 @@ list_tables <- function(source) {
   source$tables
 }
 
-new_data_source <- function(con, tables) {
-  # The DuckDB connection has no other owner.
-  handle <- new.env(parent = emptyenv())
-  handle$con <- con
-  reg.finalizer(
-    handle,
-    function(h) DBI::dbDisconnect(h$con, shutdown = TRUE),
-    onexit = TRUE
-  )
+new_data_source <- function(con, tables, owned) {
+  # Disconnect only the DuckDB connection we created; a user-supplied connection
+  # has its own owner and lifetime.
+  handle <- NULL
+  if (owned) {
+    handle <- new.env(parent = emptyenv())
+    handle$con <- con
+    reg.finalizer(
+      handle,
+      function(h) DBI::dbDisconnect(h$con, shutdown = TRUE),
+      onexit = TRUE
+    )
+  }
 
   structure(
     list(con = con, tables = tables, handle = handle),

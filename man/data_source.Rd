@@ -5,13 +5,17 @@
 \alias{data_source_pins}
 \title{Create a data source}
 \usage{
-data_source(...)
+data_source(..., tables = NULL)
 
 data_source_pins(board, names)
 }
 \arguments{
-\item{...}{Named data frames to register as tables. Each name becomes a table
-name the agent can query.}
+\item{...}{Either a single DBI connection, or named data frames to register
+as tables. When passing data frames, each name becomes a table name the
+agent can query.}
+
+\item{tables}{A character vector of table names to expose, used only when a
+connection is supplied. Defaults to every table on the connection.}
 
 \item{board}{A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}. On Posit Connect
 the default board authenticates as the deployed content's identity.}
@@ -24,14 +28,30 @@ A \code{commons_data_source} object.
 }
 \description{
 A data source is the set of tables available to a \code{\link[=commons]{commons()}} agent.
-\code{data_source()} copies named data frames into an in-process DuckDB database.
-\code{data_source_pins()} reads Posit Connect pins and creates the same kind of
-source.
 }
 \details{
+\code{data_source()} accepts data that already lives in a database or data frames
+that don't:
+\itemize{
+\item Pass a DBI connection to query it as-is. Nothing is copied; the agent
+queries the database directly.
+\item Pass named data frames to load them into an in-process DuckDB database. Use
+this when the data isn't already in a database.
+}
+
+\code{data_source_pins()} reads Posit Connect pins into the DuckDB path.
+
 The resulting object gives the agent a DBI connection plus a table registry.
 Use \code{\link[=list_tables]{list_tables()}} to list the registered tables.
 }
+\section{Trust}{
+
+The agent can issue arbitrary SQL through the \code{run_sql} tool. commons does
+not sandbox or restrict those queries. When you supply your own connection,
+open it in read-only mode (where the backend supports it) so the agent cannot
+modify the underlying data.
+}
+
 \examples{
 src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))

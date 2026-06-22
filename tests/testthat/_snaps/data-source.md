@@ -7,6 +7,15 @@
       ! No table named "nope".
       i Available tables: "sales".
 
+# data_source errors for tables absent from the connection
+
+    Code
+      data_source(con, tables = "nope")
+    Condition
+      Error in `data_source()`:
+      ! `tables` names table not on the connection: "nope".
+      i Available tables: "sales".
+
 # data_source rejects unnamed or non-data-frame input
 
     Code
