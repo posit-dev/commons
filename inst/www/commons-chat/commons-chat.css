@@ -1,0 +1,54 @@
+.commons-answer-pill {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.74rem;
+  gap: 0.32rem;
+  line-height: 1.2;
+  margin-left: 0;
+  margin-top: 0;
+  max-width: 100%;
+  padding: 0.18rem 0.45rem;
+  vertical-align: text-bottom;
+}
+
+.commons-answer-pill-dot {
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 0.38rem;
+  width: 0.38rem;
+}
+
+.commons-answer-pill-trusted {
+  background: #f2fbf5;
+  border: 1px solid #cfeedd;
+  color: #286144;
+}
+
+.commons-answer-pill-trusted .commons-answer-pill-dot {
+  background: #57b77a;
+}
+
+.commons-answer-pill-caution {
+  background: #fff8ec;
+  border: 1px solid #f2ddbb;
+  color: #6b4b1b;
+}
+
+.commons-answer-pill-caution .commons-answer-pill-dot {
+  background: #d3933b;
+}
+
+.commons-review-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  padding: 0;
+  text-decoration: underline;
+}

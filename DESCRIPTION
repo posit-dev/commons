@@ -29,8 +29,10 @@ Imports:
     utils
 Suggests:
     bsicons,
+    htmltools,
     pins,
     readr,
+    shiny,
     shinychat,
     testthat (>= 3.0.0),
     vitals,

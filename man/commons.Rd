@@ -32,8 +32,9 @@ measures, context search, table inspection, and SQL queries.
 }
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
-and tools. Use \code{agent$chat()} to ask questions, \code{\link[shinychat:chat_app]{shinychat::chat_app()}} to
-open a chat UI, and \code{\link[vitals:generate]{vitals::generate()}} to use the agent as a vitals solver.
+and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_mod_ui]{commons_mod_ui()}} and
+\code{\link[=commons_mod_server]{commons_mod_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
+to use the agent as a vitals solver.
 }
 \examples{
 \dontrun{
@@ -67,6 +68,7 @@ registered measure, \code{"B"} for SQL, or \code{NA}.}
 \item \href{#method-Commons-new}{\code{Commons$new()}}
 \item \href{#method-Commons-register_measure}{\code{Commons$register_measure()}}
 \item \href{#method-Commons-chat}{\code{Commons$chat()}}
+\item \href{#method-Commons-stream_async}{\code{Commons$stream_async()}}
 \item \href{#method-Commons-clone}{\code{Commons$clone()}}
 }
 }
@@ -94,7 +96,6 @@ registered measure, \code{"B"} for SQL, or \code{NA}.}
 <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_tools"><a href='../../ellmer/html/Chat.html#method-Chat-set_tools'><code>ellmer::Chat$set_tools()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_turns"><a href='../../ellmer/html/Chat.html#method-Chat-set_turns'><code>ellmer::Chat$set_turns()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="stream"><a href='../../ellmer/html/Chat.html#method-Chat-stream'><code>ellmer::Chat$stream()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="stream_async"><a href='../../ellmer/html/Chat.html#method-Chat-stream_async'><code>ellmer::Chat$stream_async()</code></a></span></li>
 </ul>
 </details>
 }}
@@ -165,6 +166,35 @@ Submit input and return the response. Also updates
 \item{\code{...}}{Input to send to the model.}
 
 \item{\code{echo}}{Whether to echo output; see \link[ellmer:Chat]{ellmer::Chat}.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Commons-stream_async"></a>}}
+\if{latex}{\out{\hypertarget{method-Commons-stream_async}{}}}
+\subsection{Method \code{stream_async()}}{
+Stream input and return the response stream. Also updates
+\verb{$last_tag} as tools are requested. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Commons$stream_async(
+  ...,
+  tool_mode = c("concurrent", "sequential"),
+  stream = c("text", "content"),
+  controller = NULL
+)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{Input to send to the model.}
+
+\item{\code{tool_mode}}{Whether tool calls may run concurrently or sequentially.}
+
+\item{\code{stream}}{Whether to stream plain text or \link[ellmer:Content]{ellmer::Content} objects.}
+
+\item{\code{controller}}{Optional \code{\link[ellmer:stream_controller]{ellmer::stream_controller()}}.}
 }
 \if{html}{\out{</div>}}
 }

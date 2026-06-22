@@ -4,8 +4,9 @@
 #' measures, context search, table inspection, and SQL queries.
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
-#' and tools. Use `agent$chat()` to ask questions, [shinychat::chat_app()] to
-#' open a chat UI, and [vitals::generate()] to use the agent as a vitals solver.
+#' and tools. Use `agent$chat()` to ask questions, [commons_mod_ui()] and
+#' [commons_mod_server()] to embed the agent in Shiny, and [vitals::generate()]
+#' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()].
@@ -80,6 +81,7 @@ Commons <- R6::R6Class(
       self$register_tools(build_commons_tools(self, private))
       self$on_tool_request(function(request) {
         private$turn_calls <- c(private$turn_calls, request@name)
+        self$last_tag <- derive_tag(private$turn_calls)
         invisible()
       })
       self$set_system_prompt(commons_system_prompt(private$source, private$context))
@@ -113,6 +115,28 @@ Commons <- R6::R6Class(
       response <- super$chat(..., echo = echo)
       private$finalize_turn(response)
       response
+    },
+
+    #' @description Stream input and return the response stream. Also updates
+    #'   `$last_tag` as tools are requested. See [ellmer::Chat] for arguments.
+    #' @param ... Input to send to the model.
+    #' @param tool_mode Whether tool calls may run concurrently or sequentially.
+    #' @param stream Whether to stream plain text or [ellmer::Content] objects.
+    #' @param controller Optional [ellmer::stream_controller()].
+    stream_async = function(
+      ...,
+      tool_mode = c("concurrent", "sequential"),
+      stream = c("text", "content"),
+      controller = NULL
+    ) {
+      private$turn_calls <- character()
+      self$last_tag <- NA_character_
+      super$stream_async(
+        ...,
+        tool_mode = tool_mode,
+        stream = stream,
+        controller = controller
+      )
     }
   ),
   private = list(
