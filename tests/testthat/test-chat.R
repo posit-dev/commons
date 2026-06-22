@@ -6,11 +6,13 @@ test_that("answer pills describe trusted and fallback answers", {
 
   expect_match(trusted, "Verified answer")
   expect_match(trusted, "governed calculation")
+  expect_match(trusted, "data-commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
 
   expect_match(fallback, "AI can be wrong")
   expect_match(fallback, "not produced by a governed calculation")
+  expect_match(fallback, "data-commons-tooltip")
   expect_match(fallback, "request review")
   expect_match(fallback, "commons-answer-pill-icon")
   expect_no_match(fallback, "request review\\s+\\.")

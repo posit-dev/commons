@@ -129,6 +129,8 @@ commons_answer_pill <- function(tag, review_id = NULL) {
       class = "commons-answer-pill commons-answer-pill-trusted",
       title = "This answer comes from a governed calculation defined by your data team.",
       `aria-label` = "Verified answer. This answer comes from a governed calculation defined by your data team.",
+      `data-commons-tooltip` = "This answer comes from a governed calculation defined by your data team.",
+      tabindex = "0",
       commons_pill_icon("trusted-icon.svg", "Verified answer"),
       htmltools::tags$span("Verified answer")
     ),
@@ -136,6 +138,7 @@ commons_answer_pill <- function(tag, review_id = NULL) {
       class = "commons-answer-pill commons-answer-pill-caution",
       title = "This answer was generated from available context and data, but was not produced by a governed calculation.",
       `aria-label` = "AI can be wrong. This answer was generated from available context and data, but was not produced by a governed calculation.",
+      `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation.",
       commons_pill_icon("warning-icon.svg", "AI can be wrong"),
       htmltools::tags$span("AI can be wrong."),
       htmltools::tags$span("If you want, you can"),
