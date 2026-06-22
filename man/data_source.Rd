@@ -46,10 +46,12 @@ Use \code{\link[=list_tables]{list_tables()}} to list the registered tables.
 }
 \section{Trust}{
 
-The agent can issue arbitrary SQL through the \code{run_sql} tool. commons does
-not sandbox or restrict those queries. When you supply your own connection,
-open it in read-only mode (where the backend supports it) so the agent cannot
-modify the underlying data.
+The \code{run_sql} tool runs only read-only \code{SELECT} queries; statements that
+would modify data or schema (\code{INSERT}, \code{UPDATE}, \code{DROP}, and similar) are
+rejected before reaching the database. For the in-process DuckDB built from
+data frames, commons additionally disables extension loading and filesystem
+access. These are safeguards, not a sandbox: when you supply your own
+connection, still open it in read-only mode where the backend supports it.
 }
 
 \examples{

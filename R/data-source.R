@@ -22,10 +22,12 @@
 #'   connection is supplied. Defaults to every table on the connection.
 #'
 #' @section Trust:
-#' The agent can issue arbitrary SQL through the `run_sql` tool. commons does
-#' not sandbox or restrict those queries. When you supply your own connection,
-#' open it in read-only mode (where the backend supports it) so the agent cannot
-#' modify the underlying data.
+#' The `run_sql` tool runs only read-only `SELECT` queries; statements that
+#' would modify data or schema (`INSERT`, `UPDATE`, `DROP`, and similar) are
+#' rejected before reaching the database. For the in-process DuckDB built from
+#' data frames, commons additionally disables extension loading and filesystem
+#' access. These are safeguards, not a sandbox: when you supply your own
+#' connection, still open it in read-only mode where the backend supports it.
 #'
 #' @return A `commons_data_source` object.
 #'
@@ -53,6 +55,7 @@ data_source <- function(..., tables = NULL) {
       overwrite = TRUE
     )
   }
+  duckdb_lock_down(con)
 
   new_data_source(con, names(dots), owned = TRUE)
 }
@@ -154,7 +157,66 @@ source_describe <- function(source, table, n_sample = 5) {
 }
 
 source_query <- function(source, sql) {
+  check_query(sql)
   DBI::dbGetQuery(source$con, sql)
+}
+
+# A keyword denylist, not a SQL parser: it anchors on the leading statement
+# keyword, so it pairs with duckdb_lock_down() and the read-only-connection
+# recommendation rather than standing alone. Ported from posit-dev/querychat.
+check_query <- function(sql, call = rlang::caller_env()) {
+  normalized <- toupper(trimws(gsub(
+    " +",
+    " ",
+    gsub("[\r\n\t]+", " ", sql)
+  )))
+  blocked <- c(
+    "DELETE",
+    "TRUNCATE",
+    "CREATE",
+    "DROP",
+    "ALTER",
+    "GRANT",
+    "REVOKE",
+    "EXEC",
+    "EXECUTE",
+    "CALL",
+    "INSERT",
+    "UPDATE",
+    "MERGE",
+    "REPLACE",
+    "UPSERT"
+  )
+  pattern <- paste0("^(", paste(blocked, collapse = "|"), ")\\b")
+  if (grepl(pattern, normalized)) {
+    matched <- regmatches(normalized, regexpr(pattern, normalized))
+    cli::cli_abort(
+      c(
+        "The query contains a disallowed operation: {.code {matched}}.",
+        i = "Only read-only SELECT queries are allowed."
+      ),
+      call = call
+    )
+  }
+  invisible(sql)
+}
+
+# DuckDB-specific hardening for the connection we own: no extension loading,
+# no filesystem or external access, and the configuration locked thereafter.
+duckdb_lock_down <- function(con) {
+  DBI::dbExecute(
+    con,
+    "
+SET allow_community_extensions = false;
+SET allow_unsigned_extensions = false;
+SET autoinstall_known_extensions = false;
+SET autoload_known_extensions = false;
+SET enable_external_access = false;
+SET disabled_filesystems = 'LocalFileSystem';
+SET lock_configuration = true;
+"
+  )
+  invisible(con)
 }
 
 check_named_frames <- function(frames, call = rlang::caller_env()) {

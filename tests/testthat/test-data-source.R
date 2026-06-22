@@ -43,6 +43,28 @@ test_that("data_source errors for tables absent from the connection", {
   expect_snapshot(data_source(con, tables = "nope"), error = TRUE)
 })
 
+test_that("source_query rejects non-SELECT statements", {
+  src <- test_source()
+  expect_error(source_query(src, "DROP TABLE sales"), "disallowed operation")
+  expect_error(source_query(src, "DELETE FROM sales"), "disallowed operation")
+  expect_error(
+    source_query(src, "INSERT INTO sales VALUES ('o07', 1, 'EMEA', 'x', 'y')"),
+    "disallowed operation"
+  )
+  expect_equal(source_query(src, "SELECT count(*) AS n FROM sales")$n, 6)
+})
+
+test_that("check_query ignores keywords that aren't the leading statement", {
+  expect_invisible(check_query("SELECT 'dropped' AS status FROM sales"))
+})
+
+test_that("the frame-path DuckDB is locked down", {
+  src <- test_source()
+  expect_error(
+    DBI::dbExecute(src$con, "SET enable_external_access = true")
+  )
+})
+
 test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(data.frame(x = 1)), error = TRUE)
   expect_snapshot(data_source(a = 1), error = TRUE)

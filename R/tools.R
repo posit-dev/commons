@@ -90,9 +90,9 @@ tool_describe_table <- function(private) {
 tool_run_sql <- function(private) {
   ellmer::tool(
     function(sql) run_sql_tool(private$source, sql),
-    "Run a SELECT query against the data source. Use this when no registered measure answers the question.",
+    "Run a read-only SELECT query against the data source. Use this when no registered measure answers the question.",
     arguments = list(
-      sql = ellmer::type_string("A SELECT query, in the data source's SQL dialect.")
+      sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect.")
     ),
     name = "run_sql",
     annotations = ellmer::tool_annotations(
