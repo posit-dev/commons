@@ -77,6 +77,63 @@ test_that("default log directory can come from COMMONS_LOG_DIR", {
   expect_equal(commons_log_dir(), path)
 })
 
+test_that("local trajectory logs can be read and replayed", {
+  path <- withr::local_tempdir()
+  chat <- test_client()
+  chat$add_turn(
+    ellmer::UserTurn("How many orders are there?"),
+    ellmer::AssistantTurn("There are 6 orders."),
+    log_tokens = FALSE
+  )
+
+  logger <- new_trajectory_logger(path)
+  record_trajectory(logger, chat, "A", "call_measure")
+
+  logs <- read_trajectories(path, replay = TRUE)
+  expect_length(logs, 1)
+  expect_equal(logs[[1]]$schema, "commons.trajectory.v1")
+  expect_equal(logs[[1]]$commons_turns[[1]]$tag, "A")
+  expect_equal(logs[[1]]$commons_turns[[1]]$tools, list("call_measure"))
+  expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
+  expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
+})
+
+test_that("trajectory pins can be read from a board", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  trajectory <- init_trajectory("test-conversation")
+  suppressMessages(
+    pins::pin_write(
+      board,
+      trajectory,
+      name = "commons-trajectory-test-conversation",
+      type = "json"
+    )
+  )
+  suppressMessages(
+    pins::pin_write(board, list(x = 1), name = "not-a-trajectory", type = "json")
+  )
+
+  logs <- read_trajectories(board)
+  expect_length(logs, 1)
+  expect_equal(logs[[1]]$conversation_id, "test-conversation")
+})
+
+test_that("Connect trajectory pins request ACL access", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  trajectory <- init_trajectory("test-conversation")
+
+  args <- pin_trajectory_write_args(board, "test-pin", trajectory)
+  expect_null(args$access_type)
+
+  class(board) <- c("pins_board_connect", class(board))
+  args <- pin_trajectory_write_args(board, "test-pin", trajectory)
+  expect_equal(args$access_type, "acl")
+})
+
 test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(client = "not a chat", data_source = test_source()),

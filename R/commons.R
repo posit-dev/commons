@@ -13,8 +13,10 @@
 #' @param data_source A [data_source()].
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param log_dir Directory for per-turn JSON logs. If `NULL`, defaults to
-#'   `Sys.getenv("COMMONS_LOG_DIR")`, or a session temp directory if unset.
+#' @param log Whether to log conversation trajectories. `FALSE` disables
+#'   logging. `TRUE` uses private Connect pins on Posit Connect and local JSON
+#'   files elsewhere. A single string is treated as a local directory path to
+#'   write JSON trajectory files.
 #'
 #' @return A `Commons` object, which subclasses [ellmer::Chat].
 #'
@@ -86,7 +88,7 @@ commons <- function(
   data_source,
   context_layer = NULL,
   semantic_layer = NULL,
-  log_dir = NULL
+  log = FALSE
 ) {
   if (!inherits(client, "Chat")) {
     cli::cli_abort(
@@ -97,19 +99,14 @@ commons <- function(
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
-  log_dir <- log_dir %||% commons_log_dir()
 
   Commons$new(
     client = client,
     data_source = data_source,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
-    log_dir = log_dir
+    log = log
   )
-}
-
-commons_log_dir <- function() {
-  Sys.getenv("COMMONS_LOG_DIR", unset = file.path(tempdir(), "commons-logs"))
 }
 
 #' @rdname commons
@@ -128,22 +125,21 @@ Commons <- R6::R6Class(
     #' @param data_source A [data_source()].
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
-    #' @param log_dir Directory for turn logs.
+    #' @param log Whether to log conversation trajectories.
     initialize = function(
       client,
       data_source,
       context_layer = NULL,
       semantic_layer = NULL,
-      log_dir = NULL
+      log = FALSE
     ) {
       super$initialize(provider = client$get_provider(), echo = "none")
       semantic_layer <- semantic_layer %||% new_semantic_layer()
-      log_dir <- log_dir %||% commons_log_dir()
 
       private$data_source <- data_source
       private$context_layer <- context_layer
       private$registry <- semantic_layer$measures
-      private$log_dir <- log_dir
+      private$logger <- new_trajectory_logger(log)
 
       self$register_tools(build_commons_tools(self, private))
       self$on_tool_request(function(request) {
@@ -181,33 +177,34 @@ Commons <- R6::R6Class(
     ) {
       private$turn_calls <- character()
       self$last_tag <- NA_character_
-      super$stream_async(
+      stream <- super$stream_async(
         ...,
         tool_mode = tool_mode,
         stream = stream,
         controller = controller
       )
+      coro::async_generator(function() {
+        for (chunk in coro::await_each(stream)) {
+          yield(chunk)
+        }
+        private$finalize_turn()
+      })()
     }
   ),
   private = list(
     data_source = NULL,
     context_layer = NULL,
     registry = NULL,
-    log_dir = NULL,
+    logger = NULL,
     turn_calls = character(),
 
-    finalize_turn = function(response) {
+    finalize_turn = function(response = NULL) {
       self$last_tag <- derive_tag(private$turn_calls)
-      question <- self$last_turn(role = "user")
-      write_trajectory(
-        private$log_dir,
-        list(
-          time = format(Sys.time()),
-          question = if (!is.null(question)) question@text else NA_character_,
-          answer = as.character(response),
-          tag = self$last_tag,
-          tools = as.list(private$turn_calls)
-        )
+      record_trajectory(
+        private$logger,
+        self,
+        self$last_tag,
+        private$turn_calls
       )
     }
   )

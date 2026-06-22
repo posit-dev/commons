@@ -27,14 +27,14 @@ test_client <- function() {
 test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,
-  log_dir = withr::local_tempdir(.local_envir = parent.frame())
+  log = withr::local_tempdir(.local_envir = parent.frame())
 ) {
   commons(
     test_client(),
     data_source = test_source(),
     context_layer = context_layer,
     semantic_layer = semantic_layer,
-    log_dir = log_dir
+    log = log
   )
 }
 
