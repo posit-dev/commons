@@ -29,6 +29,9 @@ Imports:
     utils
 Suggests:
     bsicons,
+    dbplyr,
+    dplyr,
+    glue,
     htmltools,
     pins,
     readr,

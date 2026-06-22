@@ -215,6 +215,10 @@ parse_json_args <- function(x) {
 }
 
 format_measure_value <- function(value) {
+  if (inherits(value, "tbl_sql")) {
+    rlang::check_installed("dplyr")
+    value <- dplyr::collect(value)
+  }
   if (is.data.frame(value)) {
     return(df_to_markdown(value))
   }

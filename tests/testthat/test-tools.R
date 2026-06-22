@@ -28,6 +28,18 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_match(res@extra$display$title, "SQL query \\(B\\)")
 })
 
+test_that("format_measure_value collects a lazy dbplyr table", {
+  skip_if_not_installed("dbplyr")
+  skip_if_not_installed("dplyr")
+
+  src <- test_source()
+  lazy <- dplyr::tbl(src$con, "sales")
+  expect_s3_class(lazy, "tbl_sql")
+
+  out <- format_measure_value(dplyr::filter(lazy, region == "EMEA"))
+  expect_match(out, "EMEA")
+})
+
 test_that("describe_table_tool reports columns and samples", {
   res <- describe_table_tool(test_source(), "sales")
   expect_match(res@value, "order_id")

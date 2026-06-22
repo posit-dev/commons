@@ -40,6 +40,8 @@ to use the agent as a vitals solver.
 \dontrun{
 src <- data_source(sales = my_sales)
 agent <- commons(ellmer::chat_anthropic(), source = src)
+
+# A measure over local data computes directly in R.
 agent$register_measure(
   "order_count",
   "Count of orders.",
@@ -48,6 +50,39 @@ agent$register_measure(
 )
 agent$chat("How many orders are there?")
 agent$last_tag # "A"
+
+# A measure over a database closes over the connection. For canned SQL,
+# interpolate arguments with glue::glue_sql() so they're quoted safely.
+con <- DBI::dbConnect(duckdb::duckdb())
+agent <- commons(ellmer::chat_anthropic(), source = data_source(con))
+agent$register_measure(
+  "revenue_by_region",
+  "Total revenue for a region.",
+  function(region) {
+    DBI::dbGetQuery(
+      con,
+      glue::glue_sql(
+        "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
+        .con = con
+      )
+    )
+  },
+  arguments = list(region = ellmer::type_string("Sales region."))
+)
+
+# To reuse an existing function that takes a connection, wrap it so its
+# formals are just the measure's arguments.
+agent$register_measure(
+  "revenue_metrics",
+  "Revenue metrics over a date range.",
+  function(start_date, end_date) {
+    pull_revenue_metrics(con, start_date, end_date)
+  },
+  arguments = list(
+    start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
+    end_date = ellmer::type_string("End date, YYYY-MM-DD.")
+  )
+)
 }
 
 }
@@ -130,6 +165,20 @@ rather than this method directly.
 Register a measure. Measures are stored as \code{\link[ellmer:tool]{ellmer::tool()}}
 objects and called by name through the \code{call_measure} tool. Returns the
 agent invisibly.
+
+A measure is any function whose formals are the arguments you want the
+model to supply. Where the data lives determines how you write it:
+\itemize{
+\item Local data: compute directly in R over the in-memory object.
+\item A database: query a connection. For canned SQL, close over the
+connection and call \code{\link[DBI:dbGetQuery]{DBI::dbGetQuery()}} (use \code{\link[glue:glue_sql]{glue::glue_sql()}} to
+interpolate arguments safely). To reuse an existing connection-taking
+function (e.g. from another package), wrap it in a closure that fixes
+the connection.
+}
+
+Functions that return a lazy \code{dbplyr} table are collected before
+formatting.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Commons$register_measure(name, description, fn, arguments = list())}\if{html}{\out{</div>}}
 }
