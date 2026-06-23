@@ -46,7 +46,7 @@ data_source <- function(..., tables = NULL) {
   }
 
   check_named_frames(dots)
-  con <- DBI::dbConnect(duckdb::duckdb())
+  con <- duckdb_connect()
   for (name in names(dots)) {
     DBI::dbWriteTable(
       con,
@@ -217,6 +217,19 @@ SET lock_configuration = true;
 "
   )
   invisible(con)
+}
+
+# DuckDB defaults its extension and home directories to the package library,
+# which is read-only in deployed environments (e.g. Posit Connect). Point them
+# at the session temp directory. This must happen at connection time: any query
+# (even `SET extension_directory`) first initializes the extension subsystem
+# against the default directory, which fails when that directory is read-only.
+duckdb_connect <- function() {
+  dir <- file.path(tempdir(), "duckdb")
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  DBI::dbConnect(
+    duckdb::duckdb(config = list(extension_directory = dir, home_directory = dir))
+  )
 }
 
 check_named_frames <- function(frames, call = rlang::caller_env()) {

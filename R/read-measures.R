@@ -1,4 +1,4 @@
-read_measures <- function(paths) {
+read_measures <- function(paths, env = globalenv()) {
   rlang::check_installed("roxygen2")
 
   registerS3method(
@@ -15,14 +15,16 @@ read_measures <- function(paths) {
   files <- resolve_measure_files(paths)
 
   # Source every file into one shared env (in order) so a measure can call a
-  # helper defined in a sibling file. The parsed block only reads tags.
-  env <- new.env(parent = globalenv())
+  # helper defined in a sibling file. The parsed block only reads tags. The env
+  # inherits from `env` (the semantic_layer() caller) so measures can reference
+  # data defined there, not only in the global environment.
+  measure_env <- new.env(parent = env)
   for (file in files) {
-    sys.source(file, envir = env)
+    sys.source(file, envir = measure_env)
   }
 
   measures <- unlist(
-    lapply(files, function(file) read_measures_file(file, env)),
+    lapply(files, function(file) read_measures_file(file, measure_env)),
     recursive = FALSE
   )
   measures %||% list()

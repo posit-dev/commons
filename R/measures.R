@@ -22,7 +22,7 @@
 #'
 #' @export
 semantic_layer <- function(...) {
-  measures <- expand_measures(rlang::list2(...))
+  measures <- expand_measures(rlang::list2(...), rlang::caller_env())
 
   check_measures(measures)
   names(measures) <- vapply(measures, tool_name, character(1))
@@ -38,11 +38,13 @@ semantic_layer <- function(...) {
 }
 
 # Expand each `...` element into measures: character vectors are read from disk,
-# lists of measures are spliced in, and a lone measure is kept as is.
-expand_measures <- function(args) {
+# lists of measures are spliced in, and a lone measure is kept as is. `env` is
+# the caller of semantic_layer(), so measures read from disk close over the data
+# the user defined there rather than only the global environment.
+expand_measures <- function(args, env = rlang::caller_env()) {
   expanded <- lapply(args, function(arg) {
     if (is.character(arg)) {
-      read_measures(arg)
+      read_measures(arg, env)
     } else if (is_measure_list(arg)) {
       arg
     } else {
