@@ -15,12 +15,18 @@ A list of \code{\link[=measure]{measure()}} objects, suitable for \code{\link[=s
 }
 \description{
 Reads \code{\link[=measure]{measure()}} definitions from one or more R scripts, deriving each
-measure from a documented function. Every top-level function assignment that
-carries a roxygen2 block becomes a measure: its name is the function name,
-its description is the \verb{@title}, \verb{@description}, and \verb{@return}, its body is
-the function, and its arguments come from the \verb{@param} tags.
+measure from a documented function. A function becomes a measure only when
+its roxygen2 block carries a \verb{@measure} tag (mirroring how \verb{@export} marks a
+function for export): its name is the function name, its description is the
+\verb{@title}, \verb{@description}, and \verb{@return}, its body is the function, and its
+arguments come from the \verb{@param} tags. Documented functions without
+\verb{@measure} are ignored, so helper functions can live alongside measures.
 }
 \details{
+All files in a single \code{read_measures()} call share one environment, sourced
+in order, so a measure in one file can call a helper defined in a sibling
+file of the same call.
+
 Argument types are declared with a leading type code span in the \verb{@param}
 description:
 

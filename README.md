@@ -43,8 +43,11 @@ the agent can call by name. You can write each measure with `measure()`,
 or – often more naturally – define them as ordinary documented R
 functions and load them with `read_measures()`.
 
-Every top-level function in the script with a roxygen2 block becomes a
-measure. Its name, description, and arguments are read directly from the
+A function becomes a measure when its roxygen2 block is marked with
+`#' @measure` – much like `@export` marks a function as part of a
+package’s public interface. Other documented functions in the file are
+ignored, so helpers can live alongside your measures. The measure’s
+name, description, and arguments are read directly from the
 documentation:
 
 ``` r
@@ -57,6 +60,7 @@ documentation:
 #' @param top_n `integer` Maximum number of rows to return.
 #'
 #' @return An integer count of orders.
+#' @measure
 order_count <- function(region = NULL, period, top_n = 10L) {
   # ... ordinary R that computes the measure ...
 }
@@ -68,6 +72,11 @@ values, or `type[]` for an array (e.g. `string[]`). An argument is
 required when it has no default in the function signature; otherwise it
 is optional. Untyped arguments fall back to a type inferred from their
 default.
+
+A measure can call helper functions defined in the same file – or in
+sibling files passed together in a single `read_measures()` call –
+because all files loaded in one call are sourced into a shared
+environment.
 
 Pass the script – or a directory of scripts – straight to
 `semantic_layer()`, alongside any inline `measure()` definitions:

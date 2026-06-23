@@ -24,7 +24,7 @@ test_that("semantic_layer reads measures from path inputs", {
 
   path <- withr::local_tempfile(fileext = ".R")
   writeLines(
-    c("#' Counter", "#' @description Counts.", "counter <- function() 1L"),
+    c("#' Counter", "#' @description Counts.", "#' @measure", "counter <- function() 1L"),
     path
   )
 

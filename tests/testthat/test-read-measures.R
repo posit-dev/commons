@@ -15,6 +15,7 @@ test_that("read_measures derives a measure from a documented function", {
     "#' @param region `string` The sales region.",
     "#'",
     "#' @return An integer count.",
+    "#' @measure",
     "order_count <- function(region = NULL) {",
     "  42L",
     "}"
@@ -43,6 +44,7 @@ test_that("read_measures maps param type code spans to ellmer types", {
     "#' @param d `boolean` A boolean.",
     "#' @param e `enum[x, y, z]` An enum.",
     "#' @param f `string[]` An array.",
+    "#' @measure",
     "m <- function(a, b, c, d, e, f) NULL"
   ))
 
@@ -66,6 +68,7 @@ test_that("read_measures derives required from the signature, not the type", {
     "#' @description A measure.",
     "#' @param required_arg `string` Required.",
     "#' @param optional_arg `string` Optional.",
+    "#' @measure",
     "m <- function(required_arg, optional_arg = NULL) NULL"
   ))
 
@@ -82,6 +85,7 @@ test_that("read_measures uses the param text as the type description", {
     "#' Measure",
     "#' @description A measure.",
     "#' @param region `string` The sales region.",
+    "#' @measure",
     "m <- function(region) NULL"
   ))
 
@@ -99,6 +103,7 @@ test_that("read_measures infers untyped args from their defaults", {
     "#' @param n A number default.",
     "#' @param b A boolean default.",
     "#' @param s No default.",
+    "#' @measure",
     "m <- function(i = 10L, n = 1.5, b = TRUE, s) NULL"
   ))
 
@@ -110,14 +115,19 @@ test_that("read_measures infers untyped args from their defaults", {
   expect_equal(type_kind(props$s), "string")
 })
 
-test_that("read_measures ignores undocumented functions", {
+test_that("read_measures ignores undocumented and untagged functions", {
   skip_if_not_installed("roxygen2")
 
   path <- measures_script(c(
     "#' Measure",
     "#' @description A measure.",
     "#' @param a `string` An arg.",
+    "#' @measure",
     "m <- function(a) NULL",
+    "",
+    "#' Documented helper",
+    "#' @description Documented but not a measure.",
+    "documented_helper <- function(x) x",
     "",
     "helper <- function(x) x"
   ))
@@ -128,16 +138,90 @@ test_that("read_measures ignores undocumented functions", {
   expect_equal(tool_name(measures[[1]]), "m")
 })
 
+test_that("read_measures returns only @measure functions", {
+  skip_if_not_installed("roxygen2")
+
+  path <- measures_script(c(
+    "#' Tagged",
+    "#' @description Tagged measure.",
+    "#' @measure",
+    "tagged <- function() 1L",
+    "",
+    "#' Untagged",
+    "#' @description Documented but not tagged.",
+    "untagged <- function() 2L"
+  ))
+
+  measures <- read_measures(path)
+
+  expect_length(measures, 1)
+  expect_equal(tool_name(measures[[1]]), "tagged")
+})
+
+test_that("read_measures shares an env across files in one call", {
+  skip_if_not_installed("roxygen2")
+
+  dir <- withr::local_tempdir()
+  a <- file.path(dir, "a.R")
+  b <- file.path(dir, "b.R")
+  writeLines(
+    c("helper <- function(x) x * 2L"),
+    a
+  )
+  writeLines(
+    c(
+      "#' Uses helper",
+      "#' @description Calls a helper from a sibling file.",
+      "#' @measure",
+      "uses_helper <- function() helper(21L)"
+    ),
+    b
+  )
+
+  measures <- read_measures(c(a, b))
+
+  expect_length(measures, 1)
+  td <- measures[[1]]
+  expect_equal(tool_name(td), "uses_helper")
+  expect_equal(do.call(td, list()), 42L)
+})
+
+test_that("semantic_layer isolates measures read from separate path args", {
+  skip_if_not_installed("roxygen2")
+
+  dir <- withr::local_tempdir()
+  a <- file.path(dir, "a.R")
+  b <- file.path(dir, "b.R")
+  writeLines(
+    c("helper <- function(x) x * 2L"),
+    a
+  )
+  writeLines(
+    c(
+      "#' Uses helper",
+      "#' @description Calls a helper from another file.",
+      "#' @measure",
+      "uses_helper <- function() helper(21L)"
+    ),
+    b
+  )
+
+  layer <- semantic_layer(a, b)
+
+  expect_named(layer$measures, "uses_helper")
+  expect_error(do.call(layer$measures$uses_helper, list()))
+})
+
 test_that("read_measures reads multiple files and directories", {
   skip_if_not_installed("roxygen2")
 
   dir <- withr::local_tempdir()
   writeLines(
-    c("#' One", "#' @description First.", "one <- function() 1L"),
+    c("#' One", "#' @description First.", "#' @measure", "one <- function() 1L"),
     file.path(dir, "one.R")
   )
   writeLines(
-    c("#' Two", "#' @description Second.", "two <- function() 2L"),
+    c("#' Two", "#' @description Second.", "#' @measure", "two <- function() 2L"),
     file.path(dir, "two.R")
   )
 
@@ -153,6 +237,7 @@ test_that("read_measures produces measures usable in a semantic_layer", {
     "#' Count orders",
     "#' @description Counts orders.",
     "#' @param region `enum[EMEA, APAC]` The region.",
+    "#' @measure",
     "order_count <- function(region) 7L"
   ))
 

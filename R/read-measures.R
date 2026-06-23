@@ -1,10 +1,16 @@
 #' Read measures from R scripts
 #'
 #' Reads [measure()] definitions from one or more R scripts, deriving each
-#' measure from a documented function. Every top-level function assignment that
-#' carries a roxygen2 block becomes a measure: its name is the function name,
-#' its description is the `@title`, `@description`, and `@return`, its body is
-#' the function, and its arguments come from the `@param` tags.
+#' measure from a documented function. A function becomes a measure only when
+#' its roxygen2 block carries a `@measure` tag (mirroring how `@export` marks a
+#' function for export): its name is the function name, its description is the
+#' `@title`, `@description`, and `@return`, its body is the function, and its
+#' arguments come from the `@param` tags. Documented functions without
+#' `@measure` are ignored, so helper functions can live alongside measures.
+#'
+#' All files in a single `read_measures()` call share one environment, sourced
+#' in order, so a measure in one file can call a helper defined in a sibling
+#' file of the same call.
 #'
 #' Argument types are declared with a leading type code span in the `@param`
 #' description:
@@ -38,12 +44,30 @@
 read_measures <- function(paths) {
   rlang::check_installed("roxygen2")
 
+  registerS3method(
+    "roxy_tag_parse",
+    "roxy_tag_measure",
+    function(x) roxygen2::tag_toggle(x),
+    envir = asNamespace("roxygen2")
+  )
+
   if (!is.character(paths)) {
     cli::cli_abort("{.arg paths} must be a character vector of file or directory paths.")
   }
 
   files <- resolve_measure_files(paths)
-  measures <- unlist(lapply(files, read_measures_file), recursive = FALSE)
+
+  # Source every file into one shared env (in order) so a measure can call a
+  # helper defined in a sibling file. The parsed block only reads tags.
+  env <- new.env(parent = globalenv())
+  for (file in files) {
+    sys.source(file, envir = env)
+  }
+
+  measures <- unlist(
+    lapply(files, function(file) read_measures_file(file, env)),
+    recursive = FALSE
+  )
   measures %||% list()
 }
 
@@ -66,19 +90,23 @@ resolve_measure_files <- function(paths, call = rlang::caller_env()) {
   unique(files)
 }
 
-read_measures_file <- function(file) {
+read_measures_file <- function(file, env) {
   blocks <- roxygen2::parse_file(file)
-  measures <- lapply(blocks, block_to_measure)
+  measures <- lapply(blocks, function(block) block_to_measure(block, env))
   Filter(Negate(is.null), measures)
 }
 
-block_to_measure <- function(block) {
-  fn <- block$object$value
-  if (!is.function(fn)) {
+block_to_measure <- function(block, env) {
+  if (is.null(roxygen2::block_get_tag(block, "measure"))) {
     return(NULL)
   }
 
   name <- block$object$topic
+  fn <- get(name, envir = env)
+  if (!is.function(fn)) {
+    return(NULL)
+  }
+
   description <- block_description(block)
   arguments <- block_arguments(block, fn)
 
