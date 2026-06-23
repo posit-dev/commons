@@ -38,8 +38,15 @@
           });
         }
 
-        var blocks = content.querySelectorAll("p, li, td, th");
+        var blocks = content.querySelectorAll("p, li, table");
         var target = blocks[blocks.length - 1] || content;
+
+        if (target.tagName === "TABLE") {
+          content.appendChild(document.createElement("br"));
+          content.appendChild(pill);
+          return;
+        }
+
         target.appendChild(document.createTextNode(" "));
         target.appendChild(pill);
       };
