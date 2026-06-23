@@ -17,7 +17,7 @@ test_that("read_measures derives a measure from a documented function", {
     "#' @return An integer count.",
     "#' @measure",
     "order_count <- function(region = NULL) {",
-    "  42L",
+    "  2026L",
     "}"
   ))
 
@@ -29,7 +29,7 @@ test_that("read_measures derives a measure from a documented function", {
   expect_match(tool_description(td), "Count orders")
   expect_match(tool_description(td), "Total orders")
   expect_match(tool_description(td), "Returns: An integer count")
-  expect_equal(do.call(td, list()), 42L)
+  expect_equal(do.call(td, list()), 2026L)
 })
 
 test_that("read_measures maps param type code spans to ellmer types", {
@@ -173,7 +173,7 @@ test_that("read_measures shares an env across files in one call", {
       "#' Uses helper",
       "#' @description Calls a helper from a sibling file.",
       "#' @measure",
-      "uses_helper <- function() helper(21L)"
+      "uses_helper <- function() helper(1013L)"
     ),
     b
   )
@@ -183,7 +183,7 @@ test_that("read_measures shares an env across files in one call", {
   expect_length(measures, 1)
   td <- measures[[1]]
   expect_equal(tool_name(td), "uses_helper")
-  expect_equal(do.call(td, list()), 42L)
+  expect_equal(do.call(td, list()), 2026L)
 })
 
 test_that("semantic_layer isolates measures read from separate path args", {
@@ -201,7 +201,7 @@ test_that("semantic_layer isolates measures read from separate path args", {
       "#' Uses helper",
       "#' @description Calls a helper from another file.",
       "#' @measure",
-      "uses_helper <- function() helper(21L)"
+      "uses_helper <- function() helper(1013L)"
     ),
     b
   )

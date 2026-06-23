@@ -1,7 +1,7 @@
 # semantic_layer validates its measures
 
     Code
-      semantic_layer(42)
+      semantic_layer(2026)
     Condition
       Error in `semantic_layer()`:
       ! Every item in `semantic_layer` must be created by `measure()`.

@@ -12,7 +12,7 @@ test_that("semantic_layer accepts a list of measures", {
 })
 
 test_that("semantic_layer validates its measures", {
-  expect_snapshot(semantic_layer(42), error = TRUE)
+  expect_snapshot(semantic_layer(2026), error = TRUE)
   expect_snapshot(
     semantic_layer(count_measure_tool(), count_measure_tool()),
     error = TRUE
