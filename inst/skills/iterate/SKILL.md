@@ -28,16 +28,19 @@ The answer uses SQL with little documentation and the agent had to inspect table
 2. Load trajectories.
    Use `commons::read_trajectories(..., replay = TRUE)` when possible. If the path or pins board is unclear, inspect the project for `log =`, `COMMONS_LOG_DIR`, or deployment setup.
 
-3. Extract the conversation surface.
-   Start with user turns and commons turn metadata:
+3. Read the conversations.
+   Prefer the replayed ellmer turns as the transcript view.
 
 ```r
-user_turns <- function(trajectory) {
-  turns <- trajectory$turns
-  users <- Filter(function(turn) identical(turn@role, "user"), turns)
-  vapply(users, function(turn) turn@text, character(1))
-}
+trajectories <- commons::read_trajectories(log_dir, replay = TRUE)
+traj <- trajectories[[1]]
 
+print(traj$turns)
+```
+
+Use `commons_turns` separately to understand the path for each completed commons turn:
+
+```r
 tool_path <- function(trajectory) {
   vapply(
     trajectory$commons_turns,
@@ -48,7 +51,7 @@ tool_path <- function(trajectory) {
 ```
 
 4. Analyze themes.
-   Group questions by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
+   Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
 
 5. Propose changes.
    Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change. 
