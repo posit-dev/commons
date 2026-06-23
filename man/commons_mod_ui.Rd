@@ -46,13 +46,13 @@ Answers produced from fallback SQL get a caution pill with a review request.
 library(shiny)
 
 ui <- page_fillable(
-  commons::commons_mod_ui("chat")
+  commons_mod_ui("chat")
 )
 
 server <- function(input, output, session) {
   data_source <- data_source(sales = sales)
   agent <- commons(ellmer::chat_anthropic(), data_source = data_source)
-  commons::commons_mod_server("chat", agent)
+  commons_mod_server("chat", agent)
 }
 
 shinyApp(ui, server)

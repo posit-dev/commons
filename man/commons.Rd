@@ -142,6 +142,7 @@ registered measure, \code{"B"} for SQL, or \code{NA}.}
   <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_result"><a href='../../ellmer/html/Chat.html#method-Chat-on_tool_result'><code>ellmer::Chat$on_tool_result()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tool"><a href='../../ellmer/html/Chat.html#method-Chat-register_tool'><code>ellmer::Chat$register_tool()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tools"><a href='../../ellmer/html/Chat.html#method-Chat-register_tools'><code>ellmer::Chat$register_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_model"><a href='../../ellmer/html/Chat.html#method-Chat-set_model'><code>ellmer::Chat$set_model()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_system_prompt"><a href='../../ellmer/html/Chat.html#method-Chat-set_system_prompt'><code>ellmer::Chat$set_system_prompt()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_tools"><a href='../../ellmer/html/Chat.html#method-Chat-set_tools'><code>ellmer::Chat$set_tools()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_turns"><a href='../../ellmer/html/Chat.html#method-Chat-set_turns'><code>ellmer::Chat$set_turns()</code></a></span></li>
