@@ -4,13 +4,11 @@
 #' [commons()] agent.
 #'
 #' @param ... [measure()] objects, lists of measures, or paths to R scripts or
-#'   directories. Paths are passed to [read_measures()], so file and inline
-#'   measures can be freely mixed.
+#'   directories. File and inline measures can be freely mixed.
 #'
 #' @return A `commons_semantic_layer` object.
 #'
-#' @seealso [measure()] to define a measure, and [read_measures()] to load
-#'   measures from documented R scripts.
+#' @seealso [measure()] to define a measure.
 #'
 #' @examples
 #' semantic_layer(
@@ -39,9 +37,8 @@ semantic_layer <- function(...) {
   new_semantic_layer(measures)
 }
 
-# Expand each `...` element into measures: character vectors are read from disk
-# with `read_measures()`, lists of measures are spliced in, and a lone measure
-# is kept as is.
+# Expand each `...` element into measures: character vectors are read from disk,
+# lists of measures are spliced in, and a lone measure is kept as is.
 expand_measures <- function(args) {
   expanded <- lapply(args, function(arg) {
     if (is.character(arg)) {
@@ -72,8 +69,7 @@ expand_measures <- function(args) {
 #'
 #' @return A measure object.
 #'
-#' @seealso [semantic_layer()] to collect measures into a layer, and
-#'   [read_measures()] to define measures in documented R scripts instead.
+#' @seealso [semantic_layer()] to collect measures into a layer.
 #'
 #' @export
 measure <- function(name, description, fn, arguments = list(), title = NULL) {

@@ -29,6 +29,5 @@ body is ordinary R; its \code{arguments} schema tells the model what inputs it c
 supply.
 }
 \seealso{
-\code{\link[=semantic_layer]{semantic_layer()}} to collect measures into a layer, and
-\code{\link[=read_measures]{read_measures()}} to define measures in documented R scripts instead.
+\code{\link[=semantic_layer]{semantic_layer()}} to collect measures into a layer.
 }

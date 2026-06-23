@@ -8,8 +8,7 @@ semantic_layer(...)
 }
 \arguments{
 \item{...}{\code{\link[=measure]{measure()}} objects, lists of measures, or paths to R scripts or
-directories. Paths are passed to \code{\link[=read_measures]{read_measures()}}, so file and inline
-measures can be freely mixed.}
+directories. File and inline measures can be freely mixed.}
 }
 \value{
 A \code{commons_semantic_layer} object.
@@ -30,6 +29,5 @@ semantic_layer(
 
 }
 \seealso{
-\code{\link[=measure]{measure()}} to define a measure, and \code{\link[=read_measures]{read_measures()}} to load
-measures from documented R scripts.
+\code{\link[=measure]{measure()}} to define a measure.
 }
