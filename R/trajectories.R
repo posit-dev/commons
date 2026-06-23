@@ -24,7 +24,10 @@ new_trajectory_logger <- function(log, call = rlang::caller_env()) {
 
 record_trajectory <- function(logger, chat, tag, tools) {
   tryCatch(
-    logger$record(chat, tag, tools),
+    {
+      logger$record(chat, tag, tools)
+      invisible(NULL)
+    },
     error = function(err) {
       cli::cli_warn(
         c(

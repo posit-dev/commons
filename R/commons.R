@@ -188,6 +188,7 @@ Commons <- R6::R6Class(
           yield(chunk)
         }
         private$finalize_turn()
+        coro::exhausted()
       })()
     }
   ),
@@ -206,6 +207,7 @@ Commons <- R6::R6Class(
         self$last_tag,
         private$turn_calls
       )
+      invisible(NULL)
     }
   )
 )

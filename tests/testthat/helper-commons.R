@@ -61,3 +61,31 @@ count_measure_tool <- function() {
     )
   )
 }
+
+sync_promise <- function(promise) {
+  done <- FALSE
+  success <- NULL
+  error <- NULL
+
+  promises::then(
+    promise,
+    function(result) {
+      success <<- result
+      done <<- TRUE
+    },
+    function(err) {
+      error <<- err
+      done <<- TRUE
+    }
+  )
+
+  while (!done) {
+    later::run_now(0.25)
+  }
+
+  if (!is.null(error)) {
+    stop(error)
+  }
+
+  success
+}

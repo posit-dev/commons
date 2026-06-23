@@ -98,6 +98,55 @@ test_that("local trajectory logs can be read and replayed", {
   expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
 })
 
+test_that("trajectory recording does not return the local log path", {
+  path <- withr::local_tempdir()
+  chat <- test_client()
+  chat$add_turn(
+    ellmer::UserTurn("How many orders are there?"),
+    ellmer::AssistantTurn("There are 6 orders."),
+    log_tokens = FALSE
+  )
+
+  logger <- new_trajectory_logger(path)
+  expect_null(record_trajectory(logger, chat, "A", "call_measure"))
+})
+
+test_that("logged Claude streams do not append the local trajectory path", {
+  skip_if_not_installed("promises")
+  skip_if_not_installed("later")
+  skip_if(
+    !nzchar(Sys.getenv("ANTHROPIC_API_KEY")),
+    "ANTHROPIC_API_KEY is not available."
+  )
+
+  path <- withr::local_tempdir()
+  agent <- commons(
+    client = ellmer::chat_claude(
+      params = ellmer::params(temperature = 0, max_tokens = 32),
+      cache = "none"
+    ),
+    data_source = test_source(),
+    log = path
+  )
+
+  chunks <- tryCatch(
+    sync_promise(coro::async_collect(agent$stream_async("Reply with only: ok"))),
+    error = function(err) {
+      skip(sprintf(
+        "ANTHROPIC_API_KEY is not functional: %s",
+        conditionMessage(err)
+      ))
+    }
+  )
+
+  expect_true(all(vapply(chunks, is.character, logical(1))))
+  expect_false(any(grepl("commons-trajectory", unlist(chunks), fixed = TRUE)))
+  expect_length(
+    list.files(path, pattern = "^commons-trajectory-.*[.]json$"),
+    1
+  )
+})
+
 test_that("trajectory pins can be read from a board", {
   skip_if_not_installed("pins")
 
