@@ -4,7 +4,7 @@
 \alias{measure}
 \title{Create a measure}
 \usage{
-measure(name, description, fn, arguments = list())
+measure(name, description, fn, arguments = list(), title = NULL)
 }
 \arguments{
 \item{name}{Measure name.}
@@ -16,6 +16,9 @@ arguments.}
 
 \item{arguments}{A named list of \code{\link[ellmer:type_boolean]{ellmer::type_string()}} and friends, one per
 formal of \code{fn}.}
+
+\item{title}{Human-readable measure title to show in user interfaces. If
+\code{NULL}, a title is derived from \code{name}.}
 }
 \value{
 A measure object.

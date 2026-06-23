@@ -12,7 +12,30 @@ test_that("call_measure_tool runs a measure and tags the result", {
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_equal(res@value, "2")
   expect_equal(res@extra$commons_tag, "A")
-  expect_match(res@extra$display$title, "Registered measure \\(A\\)")
+  expect_equal(res@extra$display$title, "Measure: order count")
+  expect_false(res@extra$display$show_request)
+  expect_match(res@extra$display$html, "Region:")
+  expect_match(res@extra$display$html, "EMEA")
+  expect_match(res@extra$display$html, "Revenue under:")
+  expect_match(res@extra$display$html, "1,000")
+  expect_match(res@extra$display$html, "Tool result")
+  expect_match(res@extra$display$html, "2")
+})
+
+test_that("call_measure_tool uses measure display titles", {
+  registry <- list(
+    order_count = measure(
+      "order_count",
+      "Count orders.",
+      function() 2,
+      title = "Order count"
+    )
+  )
+
+  res <- call_measure_tool(registry, "order_count", "{}")
+
+  expect_equal(res@extra$display$title, "Measure: Order count")
+  expect_match(res@extra$display$html, "No arguments")
 })
 
 test_that("call_measure_tool errors for an unknown measure name", {
@@ -25,7 +48,11 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_match(res@value, "6")
   expect_equal(res@extra$commons_tag, "B")
-  expect_match(res@extra$display$title, "SQL query \\(B\\)")
+  expect_equal(res@extra$display$title, "Ran SQL")
+  expect_false(res@extra$display$open)
+  expect_false(res@extra$display$show_request)
+  expect_match(res@extra$display$markdown, "```sql")
+  expect_match(res@extra$display$markdown, "SELECT count")
 })
 
 test_that("format_measure_value collects a lazy dbplyr table", {

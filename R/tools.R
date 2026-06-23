@@ -118,11 +118,13 @@ call_measure_tool <- function(registry, name, arguments) {
   body <- format_measure_value(value)
   tool_result(
     body,
-    title = sprintf("Measure: %s", name),
+    title = sprintf("Measure: %s", html_escape(tool_title(td))),
     icon = maybe_icon("shield-check"),
-    markdown = body,
+    html = measure_display_html(args, body),
     tag = "A",
-    open = TRUE
+    open = TRUE,
+    show_request = FALSE,
+    show_tag = FALSE
   )
 }
 
@@ -170,7 +172,9 @@ run_sql_tool <- function(source, sql) {
     icon = maybe_icon("code-square"),
     markdown = display_md,
     tag = "B",
-    open = TRUE
+    open = FALSE,
+    show_request = FALSE,
+    show_tag = FALSE
   )
 }
 
@@ -178,17 +182,22 @@ tool_result <- function(
   value,
   title,
   icon = NULL,
+  html = NULL,
   markdown = NULL,
   tag = NULL,
   open = FALSE,
-  show_request = TRUE
+  show_request = TRUE,
+  show_tag = TRUE
 ) {
-  if (!is.null(tag)) {
+  if (!is.null(tag) && isTRUE(show_tag)) {
     title <- sprintf("%s \u00b7 %s", title, tag_label(tag))
   }
   display <- list(title = title, open = open, show_request = show_request)
   if (!is.null(icon)) {
     display$icon <- icon
+  }
+  if (!is.null(html)) {
+    display$html <- html
   }
   if (!is.null(markdown)) {
     display$markdown <- markdown
@@ -226,4 +235,90 @@ format_measure_value <- function(value) {
     return(paste(format(value, trim = TRUE), collapse = ", "))
   }
   paste(utils::capture.output(print(value)), collapse = "\n")
+}
+
+measure_args_html <- function(args) {
+  if (length(args) == 0) {
+    rows <- "<div class=\"commons-measure-arg commons-measure-arg-empty\">No arguments</div>"
+  } else {
+    rows <- paste(
+      vapply(
+        names(args),
+        function(nm) {
+          sprintf(
+            "<div class=\"commons-measure-arg\"><span class=\"commons-measure-arg-name\">%s:</span> <span class=\"commons-measure-arg-value\">%s</span></div>",
+            html_escape(label_name(nm)),
+            html_escape(format_arg_value(args[[nm]]))
+          )
+        },
+        character(1)
+      ),
+      collapse = "\n"
+    )
+  }
+
+  sprintf("<div class=\"commons-measure-args\">%s</div>", rows)
+}
+
+measure_display_html <- function(args, result) {
+  sprintf(
+    "<div class=\"commons-measure-display\">%s%s</div>",
+    measure_args_html(args),
+    measure_result_html(result)
+  )
+}
+
+measure_result_html <- function(result) {
+  sprintf(
+    "<div class=\"commons-measure-result\"><strong>Tool result</strong><div class=\"commons-measure-result-value\">%s</div></div>",
+    html_escape(result)
+  )
+}
+
+label_name <- function(x) {
+  x <- humanize_name(x)
+  paste0(toupper(substr(x, 1, 1)), substr(x, 2, nchar(x)))
+}
+
+format_arg_value <- function(x) {
+  if (is.null(x)) {
+    return("")
+  }
+  if (is.atomic(x)) {
+    return(paste(vapply(x, format_arg_scalar, character(1)), collapse = ", "))
+  }
+  jsonlite::toJSON(x, auto_unbox = TRUE)
+}
+
+format_arg_scalar <- function(x) {
+  if (is.na(x)) {
+    return("NA")
+  }
+  if (is.numeric(x)) {
+    return(format_number(x))
+  }
+  if (is.logical(x)) {
+    return(tolower(as.character(x)))
+  }
+  as.character(x)
+}
+
+format_number <- function(x) {
+  if (isTRUE(all.equal(x, round(x)))) {
+    return(formatC(x, format = "f", digits = 0, big.mark = ","))
+  }
+  prettyNum(
+    format(x, scientific = FALSE, trim = TRUE),
+    big.mark = ",",
+    preserve.width = "none"
+  )
+}
+
+html_escape <- function(x) {
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  x <- gsub("<", "&lt;", x, fixed = TRUE)
+  x <- gsub(">", "&gt;", x, fixed = TRUE)
+  x <- gsub("\"", "&quot;", x, fixed = TRUE)
+  x <- gsub("'", "&#39;", x, fixed = TRUE)
+  x
 }

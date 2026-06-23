@@ -50,16 +50,20 @@ semantic_layer <- function(...) {
 #'   arguments.
 #' @param arguments A named list of [ellmer::type_string()] and friends, one per
 #'   formal of `fn`.
+#' @param title Human-readable measure title to show in user interfaces. If
+#'   `NULL`, a title is derived from `name`.
 #'
 #' @return A measure object.
 #'
 #' @export
-measure <- function(name, description, fn, arguments = list()) {
+measure <- function(name, description, fn, arguments = list(), title = NULL) {
+  title <- title %||% humanize_name(name)
   ellmer::tool(
     fn,
     description,
     arguments = arguments,
-    name = name
+    name = name,
+    annotations = ellmer::tool_annotations(title = title)
   )
 }
 
@@ -220,6 +224,10 @@ coerce_arg <- function(td, nm, type, value, call = rlang::caller_env()) {
 # Isolate the ellmer internals used by registered measure tools.
 tool_name <- function(td) S7::prop(td, "name")
 tool_description <- function(td) S7::prop(td, "description")
+tool_title <- function(td) {
+  annotations <- S7::prop(td, "annotations")
+  annotations$title %||% humanize_name(tool_name(td))
+}
 tool_properties <- function(td) {
   S7::prop(S7::prop(td, "arguments"), "properties")
 }
@@ -234,4 +242,8 @@ type_kind <- function(type) {
     "ellmer::TypeBasic" = S7::prop(type, "type"),
     "string"
   )
+}
+
+humanize_name <- function(x) {
+  gsub("_", " ", x, fixed = TRUE)
 }

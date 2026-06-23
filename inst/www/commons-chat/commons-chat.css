@@ -85,3 +85,41 @@
   padding: 0;
   text-decoration: underline;
 }
+
+.commons-measure-display {
+  display: grid;
+  gap: 1rem;
+}
+
+.commons-measure-args {
+  display: grid;
+  gap: 0.38rem;
+  line-height: 1.35;
+}
+
+.commons-measure-arg {
+  min-width: 0;
+}
+
+.commons-measure-arg-name {
+  color: #146c5c;
+  font-weight: 650;
+}
+
+.commons-measure-arg-value {
+  color: var(--bs-body-color, #212529);
+}
+
+.commons-measure-arg-empty {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.commons-measure-result {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.commons-measure-result-value {
+  color: var(--bs-body-color, #212529);
+  white-space: pre-wrap;
+}
