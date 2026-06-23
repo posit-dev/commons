@@ -7,6 +7,9 @@
 #'
 #' @return A `commons_semantic_layer` object.
 #'
+#' @seealso [measure()] to define a measure, and [read_measures()] to load
+#'   measures from documented R scripts.
+#'
 #' @examples
 #' semantic_layer(
 #'   measure(
@@ -54,6 +57,9 @@ semantic_layer <- function(...) {
 #'   `NULL`, a title is derived from `name`.
 #'
 #' @return A measure object.
+#'
+#' @seealso [semantic_layer()] to collect measures into a layer, and
+#'   [read_measures()] to define measures in documented R scripts instead.
 #'
 #' @export
 measure <- function(name, description, fn, arguments = list(), title = NULL) {

@@ -26,6 +26,9 @@
 #'
 #' @return A list of [measure()] objects, suitable for [semantic_layer()].
 #'
+#' @seealso [measure()] to define a measure directly, and [semantic_layer()] to
+#'   collect the result into a layer.
+#'
 #' @examples
 #' \dontrun{
 #' semantic_layer(read_measures("measures.R"))

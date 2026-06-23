@@ -27,3 +27,7 @@ semantic_layer(
 )
 
 }
+\seealso{
+\code{\link[=measure]{measure()}} to define a measure, and \code{\link[=read_measures]{read_measures()}} to load
+measures from documented R scripts.
+}

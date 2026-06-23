@@ -41,3 +41,7 @@ semantic_layer(read_measures("measures.R"))
 }
 
 }
+\seealso{
+\code{\link[=measure]{measure()}} to define a measure directly, and \code{\link[=semantic_layer]{semantic_layer()}} to
+collect the result into a layer.
+}

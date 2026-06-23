@@ -36,6 +36,45 @@ then two layers on top of it:
   semantic layer. This layer informs how the agent will author fallback
   SQL queries.
 
+### Defining measures
+
+A semantic layer is built from **measures**: governed calculations that
+the agent can call by name. You can write each measure with `measure()`,
+or – often more naturally – define them as ordinary documented R
+functions and load them with `read_measures()`.
+
+Every top-level function in the script with a roxygen2 block becomes a
+measure. Its name, description, and arguments are read directly from the
+documentation:
+
+``` r
+#' Count orders
+#'
+#' @description Total orders, optionally filtered by region and period.
+#'
+#' @param region `string` The sales region. Omit for all regions.
+#' @param period `enum[day, week, month]` Aggregation period.
+#' @param top_n `integer` Maximum number of rows to return.
+#'
+#' @return An integer count of orders.
+order_count <- function(region = NULL, period, top_n = 10L) {
+  # ... ordinary R that computes the measure ...
+}
+```
+
+The argument type is declared with a leading code span in each `@param`:
+`string`, `integer`, `number`, `boolean`, `enum[...]` for a fixed set of
+values, or `type[]` for an array (e.g. `string[]`). An argument is
+required when it has no default in the function signature; otherwise it
+is optional. Untyped arguments fall back to a type inferred from their
+default.
+
+Load the script into a semantic layer with:
+
+``` r
+semantic_layer(read_measures("measures.R"))
+```
+
 With those two pieces, you’ve got the necessary pieces to ship on Posit
 Connect, in Slack/Teams, or via an email inbox. In production, the agent
 will search the context layer to determine the correct queries to answer
