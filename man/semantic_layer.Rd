@@ -7,7 +7,9 @@
 semantic_layer(...)
 }
 \arguments{
-\item{...}{\code{\link[=measure]{measure()}} objects. You can also supply a single list of measures.}
+\item{...}{\code{\link[=measure]{measure()}} objects, lists of measures, or paths to R scripts or
+directories. Paths are passed to \code{\link[=read_measures]{read_measures()}}, so file and inline
+measures can be freely mixed.}
 }
 \value{
 A \code{commons_semantic_layer} object.

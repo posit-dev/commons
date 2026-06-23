@@ -69,11 +69,15 @@ required when it has no default in the function signature; otherwise it
 is optional. Untyped arguments fall back to a type inferred from their
 default.
 
-Load the script into a semantic layer with:
+Pass the script – or a directory of scripts – straight to
+`semantic_layer()`, alongside any inline `measure()` definitions:
 
 ``` r
-semantic_layer(read_measures("measures.R"))
+semantic_layer("measures.R")
 ```
+
+Paths are read with `read_measures()`, which you can also call directly
+when you want the list of measures on its own.
 
 With those two pieces, you’ve got the necessary pieces to ship on Posit
 Connect, in Slack/Teams, or via an email inbox. In production, the agent
