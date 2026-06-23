@@ -38,6 +38,7 @@ Suggests:
     pins,
     promises,
     readr,
+    roxygen2,
     shiny,
     shinychat,
     testthat (>= 3.0.0),
