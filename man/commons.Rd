@@ -108,145 +108,142 @@ sem <- semantic_layer(
 \code{\link[ellmer:Chat]{ellmer::Chat}} -> \code{Commons}
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{last_tag}}{How the most recent answer was produced: \code{"A"} for a
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{last_tag}}{How the most recent answer was produced: \code{"A"} for a
 registered measure, \code{"B"} for SQL, or \code{NA}.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Commons-new}{\code{Commons$new()}}
-\item \href{#method-Commons-chat}{\code{Commons$chat()}}
-\item \href{#method-Commons-stream_async}{\code{Commons$stream_async()}}
-\item \href{#method-Commons-clone}{\code{Commons$clone()}}
+  \itemize{
+    \item \href{#method-Commons-initialize}{\code{Commons$new()}}
+    \item \href{#method-Commons-chat}{\code{Commons$chat()}}
+    \item \href{#method-Commons-stream_async}{\code{Commons$stream_async()}}
+    \item \href{#method-Commons-clone}{\code{Commons$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details><summary>Inherited methods</summary>
+\if{html}{\out{<details><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="add_turn"><a href='../../ellmer/html/Chat.html#method-Chat-add_turn'><code>ellmer::Chat$add_turn()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_async"><a href='../../ellmer/html/Chat.html#method-Chat-chat_async'><code>ellmer::Chat$chat_async()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured"><a href='../../ellmer/html/Chat.html#method-Chat-chat_structured'><code>ellmer::Chat$chat_structured()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured_async"><a href='../../ellmer/html/Chat.html#method-Chat-chat_structured_async'><code>ellmer::Chat$chat_structured_async()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_cost"><a href='../../ellmer/html/Chat.html#method-Chat-get_cost'><code>ellmer::Chat$get_cost()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_model"><a href='../../ellmer/html/Chat.html#method-Chat-get_model'><code>ellmer::Chat$get_model()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_provider"><a href='../../ellmer/html/Chat.html#method-Chat-get_provider'><code>ellmer::Chat$get_provider()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_system_prompt"><a href='../../ellmer/html/Chat.html#method-Chat-get_system_prompt'><code>ellmer::Chat$get_system_prompt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tokens"><a href='../../ellmer/html/Chat.html#method-Chat-get_tokens'><code>ellmer::Chat$get_tokens()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tools"><a href='../../ellmer/html/Chat.html#method-Chat-get_tools'><code>ellmer::Chat$get_tools()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_turns"><a href='../../ellmer/html/Chat.html#method-Chat-get_turns'><code>ellmer::Chat$get_turns()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="last_turn"><a href='../../ellmer/html/Chat.html#method-Chat-last_turn'><code>ellmer::Chat$last_turn()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_request"><a href='../../ellmer/html/Chat.html#method-Chat-on_tool_request'><code>ellmer::Chat$on_tool_request()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_result"><a href='../../ellmer/html/Chat.html#method-Chat-on_tool_result'><code>ellmer::Chat$on_tool_result()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tool"><a href='../../ellmer/html/Chat.html#method-Chat-register_tool'><code>ellmer::Chat$register_tool()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tools"><a href='../../ellmer/html/Chat.html#method-Chat-register_tools'><code>ellmer::Chat$register_tools()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_model"><a href='../../ellmer/html/Chat.html#method-Chat-set_model'><code>ellmer::Chat$set_model()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_system_prompt"><a href='../../ellmer/html/Chat.html#method-Chat-set_system_prompt'><code>ellmer::Chat$set_system_prompt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_tools"><a href='../../ellmer/html/Chat.html#method-Chat-set_tools'><code>ellmer::Chat$set_tools()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_turns"><a href='../../ellmer/html/Chat.html#method-Chat-set_turns'><code>ellmer::Chat$set_turns()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="stream"><a href='../../ellmer/html/Chat.html#method-Chat-stream'><code>ellmer::Chat$stream()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="add_turn"><a href='../../ellmer/html/Chat.html#method-Chat-add_turn'><code>ellmer::Chat$add_turn()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_async"><a href='../../ellmer/html/Chat.html#method-Chat-chat_async'><code>ellmer::Chat$chat_async()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured"><a href='../../ellmer/html/Chat.html#method-Chat-chat_structured'><code>ellmer::Chat$chat_structured()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured_async"><a href='../../ellmer/html/Chat.html#method-Chat-chat_structured_async'><code>ellmer::Chat$chat_structured_async()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_cost"><a href='../../ellmer/html/Chat.html#method-Chat-get_cost'><code>ellmer::Chat$get_cost()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_model"><a href='../../ellmer/html/Chat.html#method-Chat-get_model'><code>ellmer::Chat$get_model()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_provider"><a href='../../ellmer/html/Chat.html#method-Chat-get_provider'><code>ellmer::Chat$get_provider()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_system_prompt"><a href='../../ellmer/html/Chat.html#method-Chat-get_system_prompt'><code>ellmer::Chat$get_system_prompt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tokens"><a href='../../ellmer/html/Chat.html#method-Chat-get_tokens'><code>ellmer::Chat$get_tokens()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tools"><a href='../../ellmer/html/Chat.html#method-Chat-get_tools'><code>ellmer::Chat$get_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_turns"><a href='../../ellmer/html/Chat.html#method-Chat-get_turns'><code>ellmer::Chat$get_turns()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="last_turn"><a href='../../ellmer/html/Chat.html#method-Chat-last_turn'><code>ellmer::Chat$last_turn()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_request"><a href='../../ellmer/html/Chat.html#method-Chat-on_tool_request'><code>ellmer::Chat$on_tool_request()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_result"><a href='../../ellmer/html/Chat.html#method-Chat-on_tool_result'><code>ellmer::Chat$on_tool_result()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tool"><a href='../../ellmer/html/Chat.html#method-Chat-register_tool'><code>ellmer::Chat$register_tool()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tools"><a href='../../ellmer/html/Chat.html#method-Chat-register_tools'><code>ellmer::Chat$register_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_system_prompt"><a href='../../ellmer/html/Chat.html#method-Chat-set_system_prompt'><code>ellmer::Chat$set_system_prompt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_tools"><a href='../../ellmer/html/Chat.html#method-Chat-set_tools'><code>ellmer::Chat$set_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_turns"><a href='../../ellmer/html/Chat.html#method-Chat-set_turns'><code>ellmer::Chat$set_turns()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="stream"><a href='../../ellmer/html/Chat.html#method-Chat-stream'><code>ellmer::Chat$stream()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Commons-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Commons-new}{}}}
-\subsection{Method \code{new()}}{
-Create a Commons agent. Most users should call \code{\link[=commons]{commons()}}
+\if{html}{\out{<a id="method-Commons-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Commons-initialize}{}}}
+\subsection{\code{Commons$new()}}{
+  Create a Commons agent. Most users should call \code{\link[=commons]{commons()}}
 rather than this method directly.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Commons$new(
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Commons$new(
   client,
   data_source,
   context_layer = NULL,
   semantic_layer = NULL,
   log = FALSE
-)}\if{html}{\out{</div>}}
+)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
+      \item{\code{data_source}}{A \code{\link[=data_source]{data_source()}}.}
+      \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
+      \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
+      \item{\code{log}}{Whether to log conversation trajectories.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
-
-\item{\code{data_source}}{A \code{\link[=data_source]{data_source()}}.}
-
-\item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
-
-\item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
-
-\item{\code{log}}{Whether to log conversation trajectories.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Commons-chat"></a>}}
 \if{latex}{\out{\hypertarget{method-Commons-chat}{}}}
-\subsection{Method \code{chat()}}{
-Submit input and return the response. Also updates
+\subsection{\code{Commons$chat()}}{
+  Submit input and return the response. Also updates
 \verb{$last_tag} and writes a turn log. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Commons$chat(..., echo = NULL)}\if{html}{\out{</div>}}
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Commons$chat(..., echo = NULL)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{Input to send to the model.}
+      \item{\code{echo}}{Whether to echo output; see \link[ellmer:Chat]{ellmer::Chat}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{Input to send to the model.}
-
-\item{\code{echo}}{Whether to echo output; see \link[ellmer:Chat]{ellmer::Chat}.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Commons-stream_async"></a>}}
 \if{latex}{\out{\hypertarget{method-Commons-stream_async}{}}}
-\subsection{Method \code{stream_async()}}{
-Stream input and return the response stream. Also updates
+\subsection{\code{Commons$stream_async()}}{
+  Stream input and return the response stream. Also updates
 \verb{$last_tag} as tools are requested. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Commons$stream_async(
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Commons$stream_async(
   ...,
   tool_mode = c("concurrent", "sequential"),
   stream = c("text", "content"),
   controller = NULL
-)}\if{html}{\out{</div>}}
+)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{Input to send to the model.}
+      \item{\code{tool_mode}}{Whether tool calls may run concurrently or sequentially.}
+      \item{\code{stream}}{Whether to stream plain text or \link[ellmer:Content]{ellmer::Content} objects.}
+      \item{\code{controller}}{Optional \code{\link[ellmer:stream_controller]{ellmer::stream_controller()}}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{Input to send to the model.}
-
-\item{\code{tool_mode}}{Whether tool calls may run concurrently or sequentially.}
-
-\item{\code{stream}}{Whether to stream plain text or \link[ellmer:Content]{ellmer::Content} objects.}
-
-\item{\code{controller}}{Optional \code{\link[ellmer:stream_controller]{ellmer::stream_controller()}}.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Commons-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Commons-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Commons$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Commons$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Commons$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

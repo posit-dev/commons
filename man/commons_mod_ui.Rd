@@ -17,11 +17,11 @@ commons_mod_server(
 \arguments{
 \item{id}{Module ID.}
 
-\item{...}{Arguments passed to \code{\link[shinychat:chat_app]{shinychat::chat_mod_ui()}} or
-\code{\link[shinychat:chat_app]{shinychat::chat_mod_server()}}.}
+\item{...}{Arguments passed to \code{\link[shinychat:chat_mod_ui]{shinychat::chat_mod_ui()}} or
+\code{\link[shinychat:chat_mod_server]{shinychat::chat_mod_server()}}.}
 
 \item{messages}{Initial messages shown in the chat. Passed to
-\code{\link[shinychat:chat_app]{shinychat::chat_mod_ui()}}.}
+\code{\link[shinychat:chat_mod_ui]{shinychat::chat_mod_ui()}}.}
 
 \item{height}{Chat container height. Defaults to \code{"100\%"} so the chat input
 stays docked at the bottom of fill layouts.}
@@ -36,8 +36,8 @@ bookmarking hooks for user inputs and assistant responses.}
 shinychat module server result.
 }
 \description{
-These functions wrap \code{\link[shinychat:chat_app]{shinychat::chat_mod_ui()}} and
-\code{\link[shinychat:chat_app]{shinychat::chat_mod_server()}} with commons-specific answer provenance UI.
+These functions wrap \code{\link[shinychat:chat_mod_ui]{shinychat::chat_mod_ui()}} and
+\code{\link[shinychat:chat_mod_server]{shinychat::chat_mod_server()}} with commons-specific answer provenance UI.
 Answers produced from registered measures get a compact verified-answer pill.
 Answers produced from fallback SQL get a caution pill with a review request.
 }
