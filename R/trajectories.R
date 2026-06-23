@@ -267,6 +267,23 @@ commons_log_dir <- function() {
 #' `read_trajectories()` reads conversation trajectories written by
 #' [commons()] when `log = TRUE` or `log` is a local directory path.
 #'
+#' @section Agent skill:
+#' commons includes an agent skill scaffold for iterating on a deployed agent.
+#' To locate it:
+#'
+#' ```r
+#' system.file("skills", "iterate", "SKILL.md", package = "commons")
+#' ```
+#'
+#' To use it, copy the skill directory into your agent's skills directory,
+#' like `./.agents/skills`:
+#'
+#' ```r
+#' skill <- system.file("skills", "iterate", package = "commons")
+#' dir.create("./.agents/skills", recursive = TRUE, showWarnings = FALSE)
+#' file.copy(skill, "./.agents/skills", recursive = TRUE)
+#' ```
+#'
 #' @param x A `pins` board or a local directory path. If `NULL`, reads from the
 #'   local [commons()] log directory.
 #' @param replay Whether to include replayed ellmer turns.

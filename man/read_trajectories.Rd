@@ -21,3 +21,20 @@ A list of trajectory records.
 \code{read_trajectories()} reads conversation trajectories written by
 \code{\link[=commons]{commons()}} when \code{log = TRUE} or \code{log} is a local directory path.
 }
+\section{Agent skill}{
+
+commons includes an agent skill scaffold for iterating on a deployed agent.
+To locate it:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{system.file("skills", "iterate", "SKILL.md", package = "commons")
+}\if{html}{\out{</div>}}
+
+To use it, copy the skill directory into your agent's skills directory,
+like \code{./.agents/skills}:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{skill <- system.file("skills", "iterate", package = "commons")
+dir.create("./.agents/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, "./.agents/skills", recursive = TRUE)
+}\if{html}{\out{</div>}}
+}
+
