@@ -11,7 +11,7 @@ commons_system_prompt <- function(data_source, context_layer) {
 
   always <- if (!is.null(context_layer) && length(context_layer$always)) {
     paste0(
-      "\n# Context\n\nThese facts apply to every question:\n\n",
+      "\n# Context\n\nThe following context may be relevant:\n\n",
       paste(sprintf("- %s", context_layer$always), collapse = "\n")
     )
   } else {
