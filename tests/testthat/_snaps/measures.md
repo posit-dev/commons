@@ -1,7 +1,7 @@
 # semantic_layer validates its measures
 
     Code
-      semantic_layer("not a measure")
+      semantic_layer(2026)
     Condition
       Error in `semantic_layer()`:
       ! Every item in `semantic_layer` must be created by `measure()`.
@@ -13,6 +13,14 @@
     Condition
       Error in `semantic_layer()`:
       ! Measure names must be unique; duplicated name: "order_count".
+
+# semantic_layer surfaces read_measures errors for bad paths
+
+    Code
+      semantic_layer("not a measure")
+    Condition
+      Error in `read_measures()`:
+      ! Path does not exist: 'not a measure'.
 
 # validate_measure_args rejects out-of-vocabulary enum values
 

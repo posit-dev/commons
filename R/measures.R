@@ -3,9 +3,12 @@
 #' A semantic layer is a collection of governed measures available to a
 #' [commons()] agent.
 #'
-#' @param ... [measure()] objects. You can also supply a single list of measures.
+#' @param ... [measure()] objects, lists of measures, or paths to R scripts or
+#'   directories. File and inline measures can be freely mixed.
 #'
 #' @return A `commons_semantic_layer` object.
+#'
+#' @seealso [measure()] to define a measure.
 #'
 #' @examples
 #' semantic_layer(
@@ -19,11 +22,7 @@
 #'
 #' @export
 semantic_layer <- function(...) {
-  measures <- rlang::list2(...)
-
-  if (length(measures) == 1 && is_measure_list(measures[[1]])) {
-    measures <- measures[[1]]
-  }
+  measures <- expand_measures(rlang::list2(...))
 
   check_measures(measures)
   names(measures) <- vapply(measures, tool_name, character(1))
@@ -36,6 +35,21 @@ semantic_layer <- function(...) {
   }
 
   new_semantic_layer(measures)
+}
+
+# Expand each `...` element into measures: character vectors are read from disk,
+# lists of measures are spliced in, and a lone measure is kept as is.
+expand_measures <- function(args) {
+  expanded <- lapply(args, function(arg) {
+    if (is.character(arg)) {
+      read_measures(arg)
+    } else if (is_measure_list(arg)) {
+      arg
+    } else {
+      list(arg)
+    }
+  })
+  unlist(expanded, recursive = FALSE) %||% list()
 }
 
 #' Create a measure
@@ -54,6 +68,8 @@ semantic_layer <- function(...) {
 #'   `NULL`, a title is derived from `name`.
 #'
 #' @return A measure object.
+#'
+#' @seealso [semantic_layer()] to collect measures into a layer.
 #'
 #' @export
 measure <- function(name, description, fn, arguments = list(), title = NULL) {

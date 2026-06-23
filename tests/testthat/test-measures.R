@@ -12,11 +12,29 @@ test_that("semantic_layer accepts a list of measures", {
 })
 
 test_that("semantic_layer validates its measures", {
-  expect_snapshot(semantic_layer("not a measure"), error = TRUE)
+  expect_snapshot(semantic_layer(2026), error = TRUE)
   expect_snapshot(
     semantic_layer(count_measure_tool(), count_measure_tool()),
     error = TRUE
   )
+})
+
+test_that("semantic_layer reads measures from path inputs", {
+  skip_if_not_installed("roxygen2")
+
+  path <- withr::local_tempfile(fileext = ".R")
+  writeLines(
+    c("#' Counter", "#' @description Counts.", "#' @measure", "counter <- function() 1L"),
+    path
+  )
+
+  layer <- semantic_layer(path, count_measure_tool())
+
+  expect_named(layer$measures, c("counter", "order_count"))
+})
+
+test_that("semantic_layer surfaces read_measures errors for bad paths", {
+  expect_snapshot(semantic_layer("not a measure"), error = TRUE)
 })
 
 test_that("validate_measure_args coerces valid arguments", {

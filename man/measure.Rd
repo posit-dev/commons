@@ -14,7 +14,7 @@ measure(name, description, fn, arguments = list(), title = NULL)
 \item{fn}{Function that computes the measure. Its formals are the measure's
 arguments.}
 
-\item{arguments}{A named list of \code{\link[ellmer:type_boolean]{ellmer::type_string()}} and friends, one per
+\item{arguments}{A named list of \code{\link[ellmer:type_string]{ellmer::type_string()}} and friends, one per
 formal of \code{fn}.}
 
 \item{title}{Human-readable measure title to show in user interfaces. If
@@ -27,4 +27,7 @@ A measure object.
 A measure is a governed calculation inside a \code{\link[=semantic_layer]{semantic_layer()}}. Its function
 body is ordinary R; its \code{arguments} schema tells the model what inputs it can
 supply.
+}
+\seealso{
+\code{\link[=semantic_layer]{semantic_layer()}} to collect measures into a layer.
 }
