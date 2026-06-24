@@ -26,28 +26,16 @@ The answer uses SQL with little documentation and the agent had to inspect table
    Search for `commons(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers.
 
 2. Load trajectories.
-   Use `commons::read_trajectories(..., replay = TRUE)` when possible. If the path or pins board is unclear, inspect the project for `log =`, `COMMONS_LOG_DIR`, or deployment setup.
+   Use `commons::read_trajectories(...)`. If the path or pins board is unclear, inspect the project for `log =`, `COMMONS_LOG_DIR`, or deployment setup.
 
 3. Read the conversations.
-   Prefer the replayed ellmer turns as the transcript view.
+   Use `turns` as the transcript view.
 
 ```r
-trajectories <- commons::read_trajectories(log_dir, replay = TRUE)
+trajectories <- commons::read_trajectories(log_dir)
 traj <- trajectories[[1]]
 
 print(traj$turns)
-```
-
-Use `commons_turns` separately to understand the path for each completed commons turn:
-
-```r
-tool_path <- function(trajectory) {
-  vapply(
-    trajectory$commons_turns,
-    function(turn) paste(unlist(turn$tools), collapse = " -> "),
-    character(1)
-  )
-}
 ```
 
 4. Analyze themes.

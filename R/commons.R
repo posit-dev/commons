@@ -203,9 +203,7 @@ Commons <- R6::R6Class(
       self$last_tag <- derive_tag(private$turn_calls)
       record_trajectory(
         private$logger,
-        self,
-        self$last_tag,
-        private$turn_calls
+        self
       )
       invisible(NULL)
     }

@@ -4,18 +4,16 @@
 \alias{read_trajectories}
 \title{Read commons trajectories}
 \usage{
-read_trajectories(x = NULL, replay = FALSE, ...)
+read_trajectories(x = NULL, ...)
 }
 \arguments{
 \item{x}{A \code{pins} board or a local directory path. If \code{NULL}, reads from the
 local \code{\link[=commons]{commons()}} log directory.}
 
-\item{replay}{Whether to include replayed ellmer turns.}
-
 \item{...}{Reserved for future extensions.}
 }
 \value{
-A list of trajectory records.
+A list of lists of ellmer turns, one list per conversation.
 }
 \description{
 \code{read_trajectories()} reads conversation trajectories written by

@@ -22,10 +22,10 @@ new_trajectory_logger <- function(log, call = rlang::caller_env()) {
   )
 }
 
-record_trajectory <- function(logger, chat, tag, tools) {
+record_trajectory <- function(logger, chat) {
   tryCatch(
     {
-      logger$record(chat, tag, tools)
+      logger$record(chat)
       invisible(NULL)
     },
     error = function(err) {
@@ -43,7 +43,7 @@ record_trajectory <- function(logger, chat, tag, tools) {
 new_noop_logger <- function() {
   list(
     conversation_id = NA_character_,
-    record = function(chat, tag, tools) invisible(NULL)
+    record = function(chat) invisible(NULL)
   )
 }
 
@@ -51,8 +51,8 @@ new_local_logger <- function(conversation_id, path) {
   state <- new_trajectory_state(conversation_id)
   list(
     conversation_id = conversation_id,
-    record = function(chat, tag, tools) {
-      state$trajectory <- update_trajectory(state$trajectory, chat, tag, tools)
+    record = function(chat) {
+      state$trajectory <- update_trajectory(state$trajectory, chat)
       write_local_trajectory(path, state$trajectory)
     }
   )
@@ -90,8 +90,8 @@ new_pin_logger <- function(conversation_id) {
   state <- new_trajectory_state(conversation_id)
   list(
     conversation_id = conversation_id,
-    record = function(chat, tag, tools) {
-      state$trajectory <- update_trajectory(state$trajectory, chat, tag, tools)
+    record = function(chat) {
+      state$trajectory <- update_trajectory(state$trajectory, chat)
       write_pin_trajectory(board, name, state$trajectory)
     }
   )
@@ -111,27 +111,15 @@ init_trajectory <- function(conversation_id) {
     content_guid = connect_content_guid(),
     created_at = now,
     updated_at = now,
-    ellmer_turns = list(),
-    commons_turns = list()
+    ellmer_turns = list()
   )
 }
 
-update_trajectory <- function(trajectory, chat, tag, tools) {
+update_trajectory <- function(trajectory, chat) {
   now <- trajectory_time()
   turns <- chat$get_turns(include_system_prompt = TRUE)
   trajectory$updated_at <- now
   trajectory$ellmer_turns <- lapply(turns, record_turn)
-  trajectory$commons_turns <- c(
-    trajectory$commons_turns,
-    list(
-      list(
-        time = now,
-        tag = if (is.na(tag)) NULL else tag,
-        tools = as.list(tools),
-        n_ellmer_turns = length(turns)
-      )
-    )
-  )
   trajectory
 }
 
@@ -289,12 +277,11 @@ commons_log_dir <- function() {
 #'
 #' @param x A `pins` board or a local directory path. If `NULL`, reads from the
 #'   local [commons()] log directory.
-#' @param replay Whether to include replayed ellmer turns.
 #' @param ... Reserved for future extensions.
 #'
-#' @return A list of trajectory records.
+#' @return A list of lists of ellmer turns, one list per conversation.
 #' @export
-read_trajectories <- function(x = NULL, replay = FALSE, ...) {
+read_trajectories <- function(x = NULL, ...) {
   if (is.null(x)) {
     x <- commons_log_dir()
   }
@@ -309,11 +296,7 @@ read_trajectories <- function(x = NULL, replay = FALSE, ...) {
     )
   }
 
-  if (isTRUE(replay)) {
-    trajectories <- lapply(trajectories, add_replayed_turns)
-  }
-
-  trajectories
+  lapply(trajectories, replay_trajectory)
 }
 
 read_local_trajectories <- function(path) {
@@ -348,17 +331,10 @@ read_trajectory_file <- function(path) {
 
 normalize_pin_trajectory <- function(x) {
   x <- normalize_simplified_json(x)
-  if (is_commons_turn_record(x$commons_turns)) {
-    x$commons_turns <- list(x$commons_turns)
-  }
   if (is_recorded_ellmer_object(x$ellmer_turns)) {
     x$ellmer_turns <- list(x$ellmer_turns)
   }
   x
-}
-
-is_commons_turn_record <- function(x) {
-  is.list(x) && all(c("time", "tools", "n_ellmer_turns") %in% names(x))
 }
 
 normalize_simplified_json <- function(x) {
@@ -392,8 +368,9 @@ data_frame_cell <- function(x, i, n) {
   x[[i]]
 }
 
-add_replayed_turns <- function(trajectory) {
+replay_trajectory <- function(trajectory) {
   trajectory$turns <- replay_recorded_turns(trajectory$ellmer_turns)
+  trajectory$ellmer_turns <- NULL
   trajectory
 }
 

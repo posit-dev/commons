@@ -77,7 +77,7 @@ test_that("default log directory can come from COMMONS_LOG_DIR", {
   expect_equal(commons_log_dir(), path)
 })
 
-test_that("local trajectory logs can be read and replayed", {
+test_that("local trajectory logs are replayed when read", {
   path <- withr::local_tempdir()
   chat <- test_client()
   chat$add_turn(
@@ -87,13 +87,12 @@ test_that("local trajectory logs can be read and replayed", {
   )
 
   logger <- new_trajectory_logger(path)
-  record_trajectory(logger, chat, "A", "call_measure")
+  record_trajectory(logger, chat)
 
-  logs <- read_trajectories(path, replay = TRUE)
+  logs <- read_trajectories(path)
   expect_length(logs, 1)
   expect_equal(logs[[1]]$schema, "commons.trajectory.v1")
-  expect_equal(logs[[1]]$commons_turns[[1]]$tag, "A")
-  expect_equal(logs[[1]]$commons_turns[[1]]$tools, list("call_measure"))
+  expect_false("ellmer_turns" %in% names(logs[[1]]))
   expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
   expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
 })
@@ -108,7 +107,7 @@ test_that("trajectory recording does not return the local log path", {
   )
 
   logger <- new_trajectory_logger(path)
-  expect_null(record_trajectory(logger, chat, "A", "call_measure"))
+  expect_null(record_trajectory(logger, chat))
 })
 
 test_that("logged Claude streams do not append the local trajectory path", {
@@ -167,6 +166,8 @@ test_that("trajectory pins can be read from a board", {
   logs <- read_trajectories(board)
   expect_length(logs, 1)
   expect_equal(logs[[1]]$conversation_id, "test-conversation")
+  expect_false("ellmer_turns" %in% names(logs[[1]]))
+  expect_equal(logs[[1]]$turns, list())
 })
 
 test_that("trajectory pins can be replayed after JSON simplification", {
@@ -182,9 +183,7 @@ test_that("trajectory pins can be replayed after JSON simplification", {
 
   trajectory <- update_trajectory(
     init_trajectory("test-conversation"),
-    chat,
-    "A",
-    "call_measure"
+    chat
   )
   suppressMessages(
     pins::pin_write(
@@ -195,7 +194,7 @@ test_that("trajectory pins can be replayed after JSON simplification", {
     )
   )
 
-  logs <- read_trajectories(board, replay = TRUE)
+  logs <- read_trajectories(board)
   expect_length(logs, 1)
   expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
   expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
