@@ -24,9 +24,9 @@ commons(
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{log}{Whether to log conversation trajectories. \code{FALSE} disables
-logging. \code{TRUE} uses private Connect pins on Posit Connect and local JSON
-files elsewhere. A single string is treated as a local directory path to
-write JSON trajectory files.}
+logging. \code{TRUE} uses private Connect pins on Posit Connect and local files
+elsewhere. A single string is treated as a local directory path to write
+trajectory files.}
 }
 \value{
 A \code{Commons} object, which subclasses \link[ellmer:Chat]{ellmer::Chat}.

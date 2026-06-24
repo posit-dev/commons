@@ -14,9 +14,9 @@
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param log Whether to log conversation trajectories. `FALSE` disables
-#'   logging. `TRUE` uses private Connect pins on Posit Connect and local JSON
-#'   files elsewhere. A single string is treated as a local directory path to
-#'   write JSON trajectory files.
+#'   logging. `TRUE` uses private Connect pins on Posit Connect and local files
+#'   elsewhere. A single string is treated as a local directory path to write
+#'   trajectory files.
 #'
 #' @return A `Commons` object, which subclasses [ellmer::Chat].
 #'

@@ -154,36 +154,12 @@ test_that("logged Claude streams do not append the local trajectory path", {
   expect_true(all(vapply(chunks, is.character, logical(1))))
   expect_false(any(grepl("commons-trajectory", unlist(chunks), fixed = TRUE)))
   expect_length(
-    list.files(path, pattern = "^commons-trajectory-.*[.]json$"),
+    list.files(path, pattern = "^commons-trajectory-.*[.]rds$"),
     1
   )
 })
 
 test_that("trajectory pins can be read from a board", {
-  skip_if_not_installed("pins")
-
-  board <- pins::board_temp()
-  trajectory <- init_trajectory("test-conversation")
-  suppressMessages(
-    pins::pin_write(
-      board,
-      trajectory,
-      name = "commons-trajectory-test-conversation",
-      type = "json"
-    )
-  )
-  suppressMessages(
-    pins::pin_write(board, list(x = 1), name = "not-a-trajectory", type = "json")
-  )
-
-  logs <- read_trajectories(board)
-  expect_length(logs, 1)
-  expect_equal(logs[[1]]$conversation_id, "test-conversation")
-  expect_false("ellmer_turns" %in% names(logs[[1]]))
-  expect_equal(logs[[1]]$turns, list())
-})
-
-test_that("trajectory pins can be replayed after JSON simplification", {
   skip_if_not_installed("pins")
 
   board <- pins::board_temp()
@@ -203,12 +179,17 @@ test_that("trajectory pins can be replayed after JSON simplification", {
       board,
       trajectory,
       name = "commons-trajectory-test-conversation",
-      type = "json"
+      type = "rds"
     )
+  )
+  suppressMessages(
+    pins::pin_write(board, list(x = 1), name = "not-a-trajectory", type = "rds")
   )
 
   logs <- read_trajectories(board)
   expect_length(logs, 1)
+  expect_equal(logs[[1]]$conversation_id, "test-conversation")
+  expect_false("ellmer_turns" %in% names(logs[[1]]))
   expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
   expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
 })

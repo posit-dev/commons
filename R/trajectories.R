@@ -124,38 +124,7 @@ update_trajectory <- function(trajectory, chat) {
 }
 
 record_turn <- function(turn) {
-  json_safe(ellmer::contents_record(turn))
-}
-
-json_safe <- function(x) {
-  if (is.null(x)) {
-    return(NULL)
-  }
-  if (is.atomic(x)) {
-    if (inherits(x, c("Date", "POSIXt"))) {
-      return(as.character(x))
-    }
-    return(x)
-  }
-  if (is.data.frame(x)) {
-    return(lapply(x, json_safe))
-  }
-  if (inherits(x, "condition")) {
-    return(conditionMessage(x))
-  }
-  if (is.function(x) || is.environment(x)) {
-    return(NULL)
-  }
-  if (is.list(x)) {
-    return(lapply(x, json_safe))
-  }
-
-  tryCatch(
-    as.character(x),
-    error = function(err) {
-      paste(utils::capture.output(utils::str(x)), collapse = "\n")
-    }
-  )
+  ellmer::contents_record(turn)
 }
 
 write_local_trajectory <- function(path, trajectory) {
@@ -165,17 +134,10 @@ write_local_trajectory <- function(path, trajectory) {
 
   file <- file.path(
     path,
-    sprintf("commons-trajectory-%s.json", trajectory$conversation_id)
+    sprintf("commons-trajectory-%s.rds", trajectory$conversation_id)
   )
   tmp <- paste0(file, ".tmp")
-  jsonlite::write_json(
-    trajectory,
-    tmp,
-    auto_unbox = TRUE,
-    pretty = TRUE,
-    null = "null",
-    na = "null"
-  )
+  saveRDS(trajectory, tmp)
   file.rename(tmp, file)
   invisible(file)
 }
@@ -192,7 +154,7 @@ pin_trajectory_write_args <- function(board, name, trajectory) {
     board = board,
     x = trajectory,
     name = name,
-    type = "json",
+    type = "rds",
     title = sprintf("commons trajectory %s", trajectory$conversation_id),
     description = "A commons conversation trajectory.",
     metadata = trajectory_metadata(trajectory),
@@ -306,7 +268,7 @@ read_local_trajectories <- function(path) {
 
   files <- list.files(
     path,
-    pattern = "^commons-trajectory-.*[.]json$",
+    pattern = "^commons-trajectory-.*[.]rds$",
     full.names = TRUE
   )
   lapply(files, read_trajectory_file)
@@ -316,9 +278,7 @@ read_pin_trajectories <- function(board) {
   rlang::check_installed("pins")
   pins <- pins::pin_list(board)
   pins <- pins[is_trajectory_pin(pins)]
-  lapply(pins, function(pin) {
-    normalize_pin_trajectory(pins::pin_read(board, pin))
-  })
+  lapply(pins, function(pin) pins::pin_read(board, pin))
 }
 
 is_trajectory_pin <- function(x) {
@@ -326,46 +286,7 @@ is_trajectory_pin <- function(x) {
 }
 
 read_trajectory_file <- function(path) {
-  jsonlite::read_json(path, simplifyVector = FALSE)
-}
-
-normalize_pin_trajectory <- function(x) {
-  x <- normalize_simplified_json(x)
-  if (is_recorded_ellmer_object(x$ellmer_turns)) {
-    x$ellmer_turns <- list(x$ellmer_turns)
-  }
-  x
-}
-
-normalize_simplified_json <- function(x) {
-  if (is.data.frame(x)) {
-    records <- lapply(seq_len(nrow(x)), function(i) {
-      out <- lapply(names(x), function(nm) {
-        normalize_simplified_json(data_frame_cell(x[[nm]], i, nrow(x)))
-      })
-      names(out) <- names(x)
-      out
-    })
-    if (nrow(x) == 1) {
-      records[[1]]
-    } else {
-      records
-    }
-  } else if (is.list(x)) {
-    lapply(x, normalize_simplified_json)
-  } else {
-    x
-  }
-}
-
-data_frame_cell <- function(x, i, n) {
-  if (is.data.frame(x) && nrow(x) == n) {
-    return(x[i, , drop = FALSE])
-  }
-  if (is.list(x) && length(x) == n) {
-    return(x[[i]])
-  }
-  x[[i]]
+  readRDS(path)
 }
 
 replay_trajectory <- function(trajectory) {
