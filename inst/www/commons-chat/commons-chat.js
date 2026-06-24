@@ -41,7 +41,7 @@
         var blocks = content.querySelectorAll("p, li, table");
         var target = blocks[blocks.length - 1] || content;
 
-        if (target.tagName === "TABLE") {
+        if (target.tagName === "TABLE" || target.tagName === "LI") {
           content.appendChild(document.createElement("br"));
           content.appendChild(pill);
           return;
