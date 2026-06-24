@@ -29,13 +29,13 @@ The answer uses SQL with little documentation and the agent had to inspect table
    Use `commons::read_trajectories(...)`. If the path or pins board is unclear, inspect the project for `log =`, `COMMONS_LOG_DIR`, or deployment setup.
 
 3. Read the conversations.
-   Use `turns` as the transcript view.
+   Each trajectory is a list of ellmer turns.
 
 ```r
 trajectories <- commons::read_trajectories(log_dir)
-traj <- trajectories[[1]]
+turns <- trajectories[[1]]
 
-print(traj$turns)
+print(turns)
 ```
 
 4. Analyze themes.

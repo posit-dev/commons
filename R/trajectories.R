@@ -290,9 +290,7 @@ read_trajectory_file <- function(path) {
 }
 
 replay_trajectory <- function(trajectory) {
-  trajectory$turns <- replay_recorded_turns(trajectory$ellmer_turns)
-  trajectory$ellmer_turns <- NULL
-  trajectory
+  unname(replay_recorded_turns(trajectory$ellmer_turns))
 }
 
 replay_recorded_turns <- function(turns) {

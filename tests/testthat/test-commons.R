@@ -104,10 +104,16 @@ test_that("local trajectory logs are replayed when read", {
 
   logs <- read_trajectories(path)
   expect_length(logs, 1)
-  expect_equal(logs[[1]]$schema, "commons.trajectory.v1")
-  expect_false("ellmer_turns" %in% names(logs[[1]]))
-  expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
-  expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
+  expect_null(names(logs[[1]]))
+  expect_s7_class(logs[[1]][[1]], ellmer::UserTurn)
+  expect_s7_class(logs[[1]][[2]], ellmer::AssistantTurn)
+
+  replay <- test_client()
+  expect_no_error(replay$set_turns(logs[[1]]))
+  expect_equal(
+    replay$get_turns(include_system_prompt = TRUE),
+    logs[[1]]
+  )
 })
 
 test_that("trajectory recording does not return the local log path", {
@@ -188,10 +194,16 @@ test_that("trajectory pins can be read from a board", {
 
   logs <- read_trajectories(board)
   expect_length(logs, 1)
-  expect_equal(logs[[1]]$conversation_id, "test-conversation")
-  expect_false("ellmer_turns" %in% names(logs[[1]]))
-  expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
-  expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
+  expect_null(names(logs[[1]]))
+  expect_s7_class(logs[[1]][[1]], ellmer::UserTurn)
+  expect_s7_class(logs[[1]][[2]], ellmer::AssistantTurn)
+
+  replay <- test_client()
+  expect_no_error(replay$set_turns(logs[[1]]))
+  expect_equal(
+    replay$get_turns(include_system_prompt = TRUE),
+    logs[[1]]
+  )
 })
 
 test_that("Connect trajectory pins request ACL access", {
