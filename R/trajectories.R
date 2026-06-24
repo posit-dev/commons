@@ -230,7 +230,7 @@ trajectory_metadata <- function(trajectory) {
 }
 
 trajectory_pin_name <- function(conversation_id) {
-  guid <- connect_content_guid()
+  guid <- substr(sanitize_pin_part(connect_content_guid()), 1, 8)
   parts <- c("commons-trajectory", guid, conversation_id)
   paste(sanitize_pin_part(parts), collapse = "-")
 }
@@ -333,7 +333,9 @@ read_pin_trajectories <- function(board) {
   rlang::check_installed("pins")
   pins <- pins::pin_list(board)
   pins <- pins[is_trajectory_pin(pins)]
-  lapply(pins, function(pin) pins::pin_read(board, pin))
+  lapply(pins, function(pin) {
+    normalize_pin_trajectory(pins::pin_read(board, pin))
+  })
 }
 
 is_trajectory_pin <- function(x) {
@@ -342,6 +344,52 @@ is_trajectory_pin <- function(x) {
 
 read_trajectory_file <- function(path) {
   jsonlite::read_json(path, simplifyVector = FALSE)
+}
+
+normalize_pin_trajectory <- function(x) {
+  x <- normalize_simplified_json(x)
+  if (is_commons_turn_record(x$commons_turns)) {
+    x$commons_turns <- list(x$commons_turns)
+  }
+  if (is_recorded_ellmer_object(x$ellmer_turns)) {
+    x$ellmer_turns <- list(x$ellmer_turns)
+  }
+  x
+}
+
+is_commons_turn_record <- function(x) {
+  is.list(x) && all(c("time", "tools", "n_ellmer_turns") %in% names(x))
+}
+
+normalize_simplified_json <- function(x) {
+  if (is.data.frame(x)) {
+    records <- lapply(seq_len(nrow(x)), function(i) {
+      out <- lapply(names(x), function(nm) {
+        normalize_simplified_json(data_frame_cell(x[[nm]], i, nrow(x)))
+      })
+      names(out) <- names(x)
+      out
+    })
+    if (nrow(x) == 1) {
+      records[[1]]
+    } else {
+      records
+    }
+  } else if (is.list(x)) {
+    lapply(x, normalize_simplified_json)
+  } else {
+    x
+  }
+}
+
+data_frame_cell <- function(x, i, n) {
+  if (is.data.frame(x) && nrow(x) == n) {
+    return(x[i, , drop = FALSE])
+  }
+  if (is.list(x) && length(x) == n) {
+    return(x[[i]])
+  }
+  x[[i]]
 }
 
 add_replayed_turns <- function(trajectory) {
@@ -359,7 +407,17 @@ normalize_recorded_for_replay <- function(x) {
   if (is_recorded_ellmer_object(x)) {
     x$version <- as.numeric(x$version)
     x$props <- lapply(x$props, normalize_recorded_for_replay)
-    if (x$class %in% c("ellmer::AssistantTurn", "ellmer::AssistantPartialTurn")) {
+    if (x$class %in% c(
+      "ellmer::SystemTurn",
+      "ellmer::UserTurn",
+      "ellmer::AssistantTurn",
+      "ellmer::AssistantPartialTurn"
+    )) {
+      x$props <- normalize_turn_contents(x$props)
+    }
+    if (x$class %in% c("ellmer::SystemTurn", "ellmer::UserTurn")) {
+      x$props <- x$props["contents"]
+    } else if (x$class %in% c("ellmer::AssistantTurn", "ellmer::AssistantPartialTurn")) {
       x$props <- normalize_assistant_props(x$props)
     }
     return(x)
@@ -372,19 +430,30 @@ normalize_recorded_for_replay <- function(x) {
   x
 }
 
+normalize_turn_contents <- function(props) {
+  if (is_recorded_ellmer_object(props$contents)) {
+    props$contents <- list(props$contents)
+  }
+  props
+}
+
 normalize_assistant_props <- function(props) {
-  if (is_null_list(props$tokens)) {
+  if (is_nullish_recorded_value(props$tokens) || is_null_list(props$tokens)) {
     props$tokens <- NULL
   } else if (is.list(props$tokens)) {
     props$tokens <- as.numeric(unlist(props$tokens, use.names = FALSE))
   }
-  if (is.null(props$cost)) {
+  if (is_nullish_recorded_value(props$cost)) {
     props$cost <- NULL
   }
-  if (is.null(props$duration)) {
+  if (is_nullish_recorded_value(props$duration)) {
     props$duration <- NULL
   }
   props
+}
+
+is_nullish_recorded_value <- function(x) {
+  is.null(x) || (is.atomic(x) && (length(x) == 0 || all(is.na(x))))
 }
 
 is_null_list <- function(x) {

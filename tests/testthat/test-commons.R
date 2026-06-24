@@ -169,6 +169,38 @@ test_that("trajectory pins can be read from a board", {
   expect_equal(logs[[1]]$conversation_id, "test-conversation")
 })
 
+test_that("trajectory pins can be replayed after JSON simplification", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  chat <- test_client()
+  chat$add_turn(
+    ellmer::UserTurn("How many orders are there?"),
+    ellmer::AssistantTurn("There are 6 orders."),
+    log_tokens = FALSE
+  )
+
+  trajectory <- update_trajectory(
+    init_trajectory("test-conversation"),
+    chat,
+    "A",
+    "call_measure"
+  )
+  suppressMessages(
+    pins::pin_write(
+      board,
+      trajectory,
+      name = "commons-trajectory-test-conversation",
+      type = "json"
+    )
+  )
+
+  logs <- read_trajectories(board, replay = TRUE)
+  expect_length(logs, 1)
+  expect_s7_class(logs[[1]]$turns[[1]], ellmer::UserTurn)
+  expect_s7_class(logs[[1]]$turns[[2]], ellmer::AssistantTurn)
+})
+
 test_that("Connect trajectory pins request ACL access", {
   skip_if_not_installed("pins")
 
@@ -181,6 +213,18 @@ test_that("Connect trajectory pins request ACL access", {
   class(board) <- c("pins_board_connect", class(board))
   args <- pin_trajectory_write_args(board, "test-pin", trajectory)
   expect_equal(args$access_type, "acl")
+})
+
+test_that("trajectory pin names fit Connect content name limits", {
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+  )
+
+  name <- trajectory_pin_name("20260624t124240-123-abcdefghij")
+
+  expect_lte(nchar(name), 64)
+  expect_match(name, "^[a-z0-9._-]+$")
+  expect_match(name, "^commons-trajectory-ea3c1445-")
 })
 
 test_that("commons() validates its inputs", {
