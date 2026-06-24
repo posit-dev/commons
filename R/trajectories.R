@@ -225,14 +225,14 @@ commons_log_dir <- function() {
 #' To locate it:
 #'
 #' ```r
-#' system.file("skills", "iterate", "SKILL.md", package = "commons")
+#' system.file("skills", "commons", "SKILL.md", package = "commons")
 #' ```
 #'
 #' To use it, copy the skill directory into your agent's skills directory,
 #' like `./.agents/skills`:
 #'
 #' ```r
-#' skill <- system.file("skills", "iterate", package = "commons")
+#' skill <- system.file("skills", "commons", package = "commons")
 #' dir.create("./.agents/skills", recursive = TRUE, showWarnings = FALSE)
 #' file.copy(skill, "./.agents/skills", recursive = TRUE)
 #' ```

@@ -24,15 +24,14 @@ A list of lists of ellmer turns, one list per conversation.
 commons includes an agent skill scaffold for iterating on a deployed agent.
 To locate it:
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{system.file("skills", "iterate", "SKILL.md", package = "commons")
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{system.file("skills", "commons", "SKILL.md", package = "commons")
 }\if{html}{\out{</div>}}
 
 To use it, copy the skill directory into your agent's skills directory,
 like \code{./.agents/skills}:
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{skill <- system.file("skills", "iterate", package = "commons")
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{skill <- system.file("skills", "commons", package = "commons")
 dir.create("./.agents/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, "./.agents/skills", recursive = TRUE)
 }\if{html}{\out{</div>}}
 }
-
