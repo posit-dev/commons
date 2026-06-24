@@ -1,9 +1,23 @@
 test_that("derive_tag reports how the answer was produced", {
-  expect_equal(derive_tag(c("search_measures", "call_measure")), "A")
-  expect_equal(derive_tag(c("call_measure", "run_sql")), "B")
-  expect_equal(derive_tag("run_sql"), "B")
+  expect_equal(derive_tag(c("A")), "A")
+  expect_equal(derive_tag(c("A", "B")), "B")
+  expect_equal(derive_tag("B"), "B")
   expect_true(is.na(derive_tag(character())))
-  expect_true(is.na(derive_tag("search_context")))
+})
+
+test_that("derive_tag_from_turns reads tags from tool result content", {
+  turns <- list(
+    ellmer::UserTurn("How many orders are there?"),
+    ellmer::UserTurn(list(
+      ellmer::ContentToolResult(
+        value = "6",
+        extra = list(commons_tag = "A")
+      )
+    )),
+    ellmer::AssistantTurn("There are 6 orders.")
+  )
+
+  expect_equal(derive_tag_from_turns(turns), "A")
 })
 
 test_that("commons() returns a Chat subclass with the five fixed tools", {
@@ -21,7 +35,6 @@ test_that("commons() returns a Chat subclass with the five fixed tools", {
       "run_sql"
     )
   )
-  expect_true(is.na(agent$last_tag))
 })
 
 test_that("the system prompt includes tables, context, and measure workflow", {

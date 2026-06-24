@@ -59,7 +59,6 @@ agent <- commons(
   semantic_layer = sem
 )
 agent$chat("How many orders are there?")
-agent$last_tag # "A"
 
 # A measure over a database closes over the connection. For canned SQL,
 # interpolate arguments with glue::glue_sql() so they're quoted safely.
@@ -106,14 +105,6 @@ sem <- semantic_layer(
 }
 \section{Super class}{
 \code{\link[ellmer:Chat]{ellmer::Chat}} -> \code{Commons}
-}
-\section{Public fields}{
-  \if{html}{\out{<div class="r6-fields">}}
-  \describe{
-    \item{\code{last_tag}}{How the most recent answer was produced: \code{"A"} for a
-registered measure, \code{"B"} for SQL, or \code{NA}.}
-  }
-  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
@@ -183,8 +174,8 @@ rather than this method directly.
 \if{html}{\out{<a id="method-Commons-chat"></a>}}
 \if{latex}{\out{\hypertarget{method-Commons-chat}{}}}
 \subsection{\code{Commons$chat()}}{
-  Submit input and return the response. Also updates
-\verb{$last_tag} and writes a turn log. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
+  Submit input and return the response. Also writes a turn
+log. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$chat(..., echo = NULL)}
@@ -204,8 +195,8 @@ rather than this method directly.
 \if{html}{\out{<a id="method-Commons-stream_async"></a>}}
 \if{latex}{\out{\hypertarget{method-Commons-stream_async}{}}}
 \subsection{\code{Commons$stream_async()}}{
-  Stream input and return the response stream. Also updates
-\verb{$last_tag} as tools are requested. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
+  Stream input and return the response stream. See
+\link[ellmer:Chat]{ellmer::Chat} for arguments.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$stream_async(

@@ -38,7 +38,6 @@
 #'   semantic_layer = sem
 #' )
 #' agent$chat("How many orders are there?")
-#' agent$last_tag # "A"
 #'
 #' # A measure over a database closes over the connection. For canned SQL,
 #' # interpolate arguments with glue::glue_sql() so they're quoted safely.
@@ -115,10 +114,6 @@ Commons <- R6::R6Class(
   "Commons",
   inherit = ellmer:::Chat,
   public = list(
-    #' @field last_tag How the most recent answer was produced: `"A"` for a
-    #'   registered measure, `"B"` for SQL, or `NA`.
-    last_tag = NA_character_,
-
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
     #' @param client An [ellmer::Chat] supplying the provider.
@@ -142,29 +137,23 @@ Commons <- R6::R6Class(
       private$logger <- new_trajectory_logger(log)
 
       self$register_tools(build_commons_tools(self, private))
-      self$on_tool_request(function(request) {
-        private$turn_calls <- c(private$turn_calls, request@name)
-        self$last_tag <- derive_tag(private$turn_calls)
-        invisible()
-      })
       self$set_system_prompt(
         commons_system_prompt(private$data_source, private$context_layer)
       )
     },
 
-    #' @description Submit input and return the response. Also updates
-    #'   `$last_tag` and writes a turn log. See [ellmer::Chat] for arguments.
+    #' @description Submit input and return the response. Also writes a turn
+    #'   log. See [ellmer::Chat] for arguments.
     #' @param ... Input to send to the model.
     #' @param echo Whether to echo output; see [ellmer::Chat].
     chat = function(..., echo = NULL) {
-      private$turn_calls <- character()
       response <- super$chat(..., echo = echo)
-      private$finalize_turn(response)
+      private$finalize_turn()
       response
     },
 
-    #' @description Stream input and return the response stream. Also updates
-    #'   `$last_tag` as tools are requested. See [ellmer::Chat] for arguments.
+    #' @description Stream input and return the response stream. See
+    #'   [ellmer::Chat] for arguments.
     #' @param ... Input to send to the model.
     #' @param tool_mode Whether tool calls may run concurrently or sequentially.
     #' @param stream Whether to stream plain text or [ellmer::Content] objects.
@@ -175,8 +164,6 @@ Commons <- R6::R6Class(
       stream = c("text", "content"),
       controller = NULL
     ) {
-      private$turn_calls <- character()
-      self$last_tag <- NA_character_
       stream <- super$stream_async(
         ...,
         tool_mode = tool_mode,
@@ -197,10 +184,8 @@ Commons <- R6::R6Class(
     context_layer = NULL,
     registry = NULL,
     logger = NULL,
-    turn_calls = character(),
 
-    finalize_turn = function(response = NULL) {
-      self$last_tag <- derive_tag(private$turn_calls)
+    finalize_turn = function() {
       record_trajectory(
         private$logger,
         self

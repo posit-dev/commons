@@ -63,7 +63,7 @@ commons_mod_server <- function(
 
   shiny::moduleServer(id, function(input, output, session) {
     shiny::observeEvent(mod$last_turn(), {
-      tag <- client$last_tag
+      tag <- commons_last_tag(client)
       if (is.na(tag)) {
         return()
       }
