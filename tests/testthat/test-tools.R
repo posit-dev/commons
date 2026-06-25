@@ -38,6 +38,67 @@ test_that("call_measure_tool uses measure display titles", {
   expect_match(res@extra$display$html, "No arguments")
 })
 
+test_that("call_measure_tool can derive from tabular measure output with SQL", {
+  registry <- list(
+    revenue_by_region = measure(
+      "revenue_by_region",
+      "Revenue by region.",
+      function() aggregate(revenue ~ region, test_sales(), sum),
+      arguments = list()
+    )
+  )
+
+  res <- call_measure_tool(
+    registry,
+    "revenue_by_region",
+    "{}",
+    sql = "SELECT sum(revenue) AS total_revenue FROM measure WHERE region IN ('Americas', 'EMEA')"
+  )
+
+  expect_s7_class(res, ellmer::ContentToolResult)
+  expect_match(res@value, "5350")
+  expect_equal(res@extra$commons_tag, "B")
+  expect_match(res@extra$display$html, "Measure result")
+  expect_match(res@extra$display$html, "Post-processing SQL")
+  expect_match(res@extra$display$html, "Derived result")
+  expect_match(res@extra$display$html, "total_revenue")
+})
+
+test_that("call_measure_tool requires tabular output when SQL is supplied", {
+  registry <- list(order_count = count_measure_tool())
+
+  expect_error(
+    call_measure_tool(
+      registry,
+      "order_count",
+      "{}",
+      sql = "SELECT * FROM measure"
+    ),
+    "data frame or lazy table"
+  )
+})
+
+test_that("call_measure_tool checks SQL before deriving from measure output", {
+  registry <- list(
+    orders = measure(
+      "orders",
+      "Orders.",
+      function() test_sales(),
+      arguments = list()
+    )
+  )
+
+  expect_error(
+    call_measure_tool(
+      registry,
+      "orders",
+      "{}",
+      sql = "DROP TABLE measure"
+    ),
+    "disallowed operation"
+  )
+})
+
 test_that("call_measure_tool errors for an unknown measure name", {
   expect_snapshot(call_measure_tool(list(), "nope", "{}"), error = TRUE)
 })
