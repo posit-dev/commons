@@ -123,3 +123,23 @@
   color: var(--bs-body-color, #212529);
   white-space: pre-wrap;
 }
+
+.commons-measure-result-value table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.commons-measure-result-value th,
+.commons-measure-result-value td {
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  padding: 0.3rem 0.5rem;
+}
+
+.commons-measure-result-value th {
+  font-weight: 600;
+}
+
+.commons-measure-result-value tbody tr:nth-child(even) {
+  background: var(--bs-tertiary-bg, #f3f4f6);
+}

@@ -120,7 +120,7 @@ call_measure_tool <- function(registry, name, arguments) {
     body,
     title = sprintf("Measure: %s", html_escape(tool_title(td))),
     icon = maybe_icon("shield-check"),
-    html = measure_display_html(args, body),
+    html = measure_display_html(args, value),
     tag = "A",
     open = TRUE,
     show_request = FALSE,
@@ -260,19 +260,32 @@ measure_args_html <- function(args) {
   sprintf("<div class=\"commons-measure-args\">%s</div>", rows)
 }
 
-measure_display_html <- function(args, result) {
+measure_display_html <- function(args, value) {
   sprintf(
     "<div class=\"commons-measure-display\">%s%s</div>",
     measure_args_html(args),
-    measure_result_html(result)
+    measure_result_html(value)
   )
 }
 
-measure_result_html <- function(result) {
+measure_result_html <- function(value) {
   sprintf(
     "<div class=\"commons-measure-result\"><strong>Tool result</strong><div class=\"commons-measure-result-value\">%s</div></div>",
-    html_escape(result)
+    format_measure_html(value)
   )
+}
+
+# Render a measure result for display: data frames become HTML tables; other
+# values reuse the text formatting, escaped for HTML.
+format_measure_html <- function(value) {
+  if (inherits(value, "tbl_sql")) {
+    rlang::check_installed("dplyr")
+    value <- dplyr::collect(value)
+  }
+  if (is.data.frame(value)) {
+    return(df_to_html(value))
+  }
+  html_escape(format_measure_value(value))
 }
 
 label_name <- function(x) {
