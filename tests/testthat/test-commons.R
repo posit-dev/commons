@@ -60,6 +60,20 @@ test_that("the system prompt includes tables, context, and measure workflow", {
   expect_no_match(prompt, "tagged B")
 })
 
+test_that("the system prompt includes schema-qualified table labels", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR, revenue DOUBLE)")
+
+  agent <- commons(
+    test_client(),
+    data_source = data_source(con, tables = "crm.sales")
+  )
+
+  expect_match(agent$get_system_prompt(), "- crm.sales", fixed = TRUE)
+})
+
 test_that("semantic_layer stores measures off the provider tool list", {
   agent <- test_agent(
     semantic_layer = semantic_layer(

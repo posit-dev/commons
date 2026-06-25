@@ -35,6 +35,49 @@ test_that("data_source wraps an existing connection without copying", {
   expect_equal(list_tables(src_one), "sales")
 })
 
+test_that("data_source supports schema-qualified connection tables", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR, revenue DOUBLE)")
+  DBI::dbExecute(con, "INSERT INTO crm.sales VALUES ('o01', 100)")
+
+  src <- data_source(con, tables = "crm.sales")
+
+  expect_equal(list_tables(src), "crm.sales")
+  d <- source_describe(src, "crm.sales")
+  expect_equal(d$schema$column, c("order_id", "revenue"))
+  expect_equal(d$sample$order_id, "o01")
+})
+
+test_that("data_source supports explicit DBI identifiers", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR, revenue DOUBLE)")
+  DBI::dbExecute(con, "INSERT INTO crm.sales VALUES ('o01', 100)")
+
+  src <- data_source(
+    con,
+    tables = list(DBI::Id(schema = "crm", table = "sales"))
+  )
+
+  expect_equal(list_tables(src), "crm.sales")
+  d <- source_describe(src, "crm.sales")
+  expect_equal(d$sample$order_id, "o01")
+})
+
+test_that("data_source keeps default connection discovery unvalidated", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR)")
+
+  src <- data_source(con)
+
+  expect_equal(list_tables(src), "sales")
+})
+
 test_that("data_source errors for tables absent from the connection", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))

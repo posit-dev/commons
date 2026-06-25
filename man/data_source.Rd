@@ -14,8 +14,12 @@ data_source_pins(board, names)
 as tables. When passing data frames, each name becomes a table name the
 agent can query.}
 
-\item{tables}{A character vector of table names to expose, used only when a
-connection is supplied. Defaults to every table on the connection.}
+\item{tables}{Tables to expose, used only when a connection is supplied. Can
+be a character vector of table names, schema-qualified strings like
+\code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every table returned by
+\code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are interpreted as
+schema-qualified names; use \code{DBI::Id(table = "a.b")} for literal table
+names containing dots.}
 
 \item{board}{A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}. On Posit Connect
 the default board authenticates as the deployed content's identity.}

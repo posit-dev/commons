@@ -18,8 +18,12 @@
 #' @param ... Either a single DBI connection, or named data frames to register
 #'   as tables. When passing data frames, each name becomes a table name the
 #'   agent can query.
-#' @param tables A character vector of table names to expose, used only when a
-#'   connection is supplied. Defaults to every table on the connection.
+#' @param tables Tables to expose, used only when a connection is supplied. Can
+#'   be a character vector of table names, schema-qualified strings like
+#'   `"schema.table"`, or `DBI::Id` objects. Defaults to every table returned by
+#'   [DBI::dbListTables()]. Strings containing dots are interpreted as
+#'   schema-qualified names; use `DBI::Id(table = "a.b")` for literal table
+#'   names containing dots.
 #'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
@@ -61,23 +65,19 @@ data_source <- function(..., tables = NULL) {
 }
 
 data_source_connection <- function(con, tables, call = rlang::caller_env()) {
-  available <- DBI::dbListTables(con)
   if (is.null(tables)) {
-    tables <- available
-  } else {
-    missing <- setdiff(tables, available)
-    if (length(missing)) {
-      cli::cli_abort(
-        c(
-          "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
-          i = "Available tables: {.val {available}}."
-        ),
-        call = call
-      )
-    }
+    return(new_data_source(con, DBI::dbListTables(con), owned = FALSE))
   }
 
-  new_data_source(con, tables, owned = FALSE)
+  table_registry <- normalize_table_registry(tables, call = call)
+  check_table_ids_exist(con, table_registry, call = call)
+
+  new_data_source(
+    con,
+    table_registry$labels,
+    owned = FALSE,
+    table_ids = table_registry$ids
+  )
 }
 
 #' @rdname data_source
@@ -112,7 +112,12 @@ list_tables <- function(data_source) {
   data_source$tables
 }
 
-new_data_source <- function(con, tables, owned) {
+new_data_source <- function(
+  con,
+  tables,
+  owned,
+  table_ids = table_ids_from_labels(tables)
+) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
   handle <- NULL
@@ -127,13 +132,14 @@ new_data_source <- function(con, tables, owned) {
   }
 
   structure(
-    list(con = con, tables = tables, handle = handle),
+    list(con = con, tables = tables, table_ids = table_ids, handle = handle),
     class = "commons_data_source"
   )
 }
 
 source_describe <- function(source, table, n_sample = 5) {
-  if (!table %in% source$tables) {
+  id <- source$table_ids[[table]]
+  if (is.null(id)) {
     cli::cli_abort(c(
       "No table named {.val {table}}.",
       i = "Available tables: {.val {source$tables}}."
@@ -144,7 +150,7 @@ source_describe <- function(source, table, n_sample = 5) {
     source$con,
     sprintf(
       "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(source$con, table),
+      DBI::dbQuoteIdentifier(source$con, id),
       n_sample
     )
   )
@@ -229,6 +235,120 @@ duckdb_connect <- function() {
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
   DBI::dbConnect(
     duckdb::duckdb(config = list(extension_directory = dir, home_directory = dir))
+  )
+}
+
+normalize_table_registry <- function(tables, call = rlang::caller_env()) {
+  entries <- table_entries(tables, call = call)
+  ids <- lapply(entries, table_entry_id, call = call)
+  labels <- vapply(ids, table_id_label, character(1), call = call)
+
+  duplicated_labels <- unique(labels[duplicated(labels)])
+  if (length(duplicated_labels)) {
+    cli::cli_abort(
+      "{.arg tables} must not contain duplicate labels: {.val {duplicated_labels}}.",
+      call = call
+    )
+  }
+
+  names(ids) <- labels
+  list(labels = labels, ids = ids)
+}
+
+table_entries <- function(tables, call = rlang::caller_env()) {
+  if (inherits(tables, "Id")) {
+    return(list(tables))
+  }
+  if (is.character(tables)) {
+    return(as.list(tables))
+  }
+  if (is.list(tables)) {
+    return(tables)
+  }
+
+  cli::cli_abort(
+    "{.arg tables} must be a character vector, a list, or a {.cls DBI::Id}.",
+    call = call
+  )
+}
+
+table_entry_id <- function(table, call = rlang::caller_env()) {
+  if (inherits(table, "Id")) {
+    return(table)
+  }
+
+  if (
+    !is.character(table) ||
+      length(table) != 1 ||
+      is.na(table) ||
+      table == ""
+  ) {
+    cli::cli_abort(
+      "Each entry in {.arg tables} must be a table name or a {.cls DBI::Id}.",
+      call = call
+    )
+  }
+
+  parts <- strsplit(table, ".", fixed = TRUE)[[1]]
+  if (any(parts == "")) {
+    cli::cli_abort(
+      "Schema-qualified entries in {.arg tables} must not contain empty name components.",
+      call = call
+    )
+  }
+
+  if (length(parts) == 1) {
+    return(DBI::Id(table = table))
+  }
+
+  DBI::Id(
+    schema = paste(parts[-length(parts)], collapse = "."),
+    table = parts[[length(parts)]]
+  )
+}
+
+table_id_label <- function(id, call = rlang::caller_env()) {
+  components <- id@name
+  table <- components[["table"]]
+
+  if (is.null(table) || is.na(table)) {
+    cli::cli_abort(
+      "{.cls DBI::Id} entries in {.arg tables} must include a {.arg table} component.",
+      call = call
+    )
+  }
+
+  if (any(is.na(components) | components == "")) {
+    cli::cli_abort(
+      "{.cls DBI::Id} entries in {.arg tables} must not contain empty name components.",
+      call = call
+    )
+  }
+
+  paste(components, collapse = ".")
+}
+
+table_ids_from_labels <- function(tables) {
+  ids <- lapply(tables, function(table) DBI::Id(table = table))
+  names(ids) <- tables
+  ids
+}
+
+check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env()) {
+  exists <- vapply(
+    table_registry$ids,
+    function(id) isTRUE(DBI::dbExistsTable(con, id)),
+    logical(1)
+  )
+
+  if (all(exists)) {
+    return(invisible(table_registry))
+  }
+
+  missing <- table_registry$labels[!exists]
+  cli::cli_abort(
+    "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
+    call = call
   )
 }
 

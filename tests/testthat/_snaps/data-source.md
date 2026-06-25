@@ -14,7 +14,6 @@
     Condition
       Error in `data_source()`:
       ! `tables` names table not on the connection: "nope".
-      i Available tables: "sales".
 
 # data_source rejects unnamed or non-data-frame input
 
