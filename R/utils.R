@@ -34,6 +34,16 @@ df_to_markdown <- function(df, max_rows = 50) {
   paste(out, collapse = "\n")
 }
 
+df_to_html <- function(df, max_rows = 50) {
+  n <- nrow(df)
+  shown <- utils::head(df, max_rows)
+  out <- paste(knitr::kable(shown, format = "html"), collapse = "")
+  if (n > max_rows) {
+    out <- paste0(out, sprintf("<p>%d more rows not shown</p>", n - max_rows))
+  }
+  out
+}
+
 # Icons are decorative, so bsicons is optional.
 maybe_icon <- function(name) {
   if (is_installed("bsicons")) {
