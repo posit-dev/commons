@@ -6,6 +6,16 @@
 #' @param ... [measure()] objects, lists of measures, or paths to R scripts or
 #'   directories. File and inline measures can be freely mixed.
 #'
+#' @details
+#' Measures read from files are sourced into an environment that inherits from
+#' the caller of `semantic_layer()`. If a file-backed measure refers to a
+#' connection, pins board, API client, or other object, call `semantic_layer()`
+#' from the same function or script frame that defines that object.
+#'
+#' Do not create a semantic layer at top level and then expect it to use a
+#' connection supplied later to [commons()]; the measure functions have already
+#' been created by then.
+#'
 #' @return A `commons_semantic_layer` object.
 #'
 #' @seealso [measure()] to define a measure.
@@ -19,6 +29,18 @@
 #'     arguments = list()
 #'   )
 #' )
+#'
+#' \dontrun{
+#' con <- DBI::dbConnect(...)
+#' board <- pins::board_connect()
+#'
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_source = data_source(con),
+#'   # Measures in R/semantic_layer.R can refer to `con` and `board`.
+#'   semantic_layer = semantic_layer("R/semantic_layer.R")
+#' )
+#' }
 #'
 #' @export
 semantic_layer <- function(...) {

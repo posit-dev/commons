@@ -17,6 +17,16 @@ A \code{commons_semantic_layer} object.
 A semantic layer is a collection of governed measures available to a
 \code{\link[=commons]{commons()}} agent.
 }
+\details{
+Measures read from files are sourced into an environment that inherits from
+the caller of \code{semantic_layer()}. If a file-backed measure refers to a
+connection, pins board, API client, or other object, call \code{semantic_layer()}
+from the same function or script frame that defines that object.
+
+Do not create a semantic layer at top level and then expect it to use a
+connection supplied later to \code{\link[=commons]{commons()}}; the measure functions have already
+been created by then.
+}
 \examples{
 semantic_layer(
   measure(
@@ -26,6 +36,18 @@ semantic_layer(
     arguments = list()
   )
 )
+
+\dontrun{
+con <- DBI::dbConnect(...)
+board <- pins::board_connect()
+
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_source = data_source(con),
+  # Measures in R/semantic_layer.R can refer to `con` and `board`.
+  semantic_layer = semantic_layer("R/semantic_layer.R")
+)
+}
 
 }
 \seealso{

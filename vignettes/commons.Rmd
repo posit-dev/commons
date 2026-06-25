@@ -135,6 +135,40 @@ agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
 
 commons parses roxygen blocks marked with `@measure`, sources the file, and registers those functions as governed tools.
 
+### Scoping connections and other measure resources
+
+File-backed measures are ordinary R functions. If a measure refers to objects that are not arguments, such as `con`, `board`, or an API client, those objects must be visible from the environment where `commons::semantic_layer()` is called.
+
+This is the safe pattern:
+
+```r
+con <- DBI::dbConnect(...)
+board <- pins::board_connect()
+
+agent <- commons::commons(
+  client = ellmer::chat_anthropic(),
+  data_source = commons::data_source(con, tables = c("orders", "customers")),
+  # Measures in R/semantic_layer.R can refer to `con` and `board`.
+  semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
+  context_layer = agent_context
+)
+```
+
+Avoid creating the semantic layer before the resources it uses are in scope:
+
+```r
+agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
+
+con <- DBI::dbConnect(...)
+
+agent <- commons::commons(
+  data_source = commons::data_source(con),
+  semantic_layer = agent_semantics
+)
+```
+
+In the second example, the measure functions have already been created before `con` exists, so they cannot see it. Create the semantic layer after defining the resources that measures use.
+
 ## Defining the context layer
 
 The context layer is text the agent can search when no measure fits. Use it for metric definitions, table grain, join notes, business terminology, caveats, and source material that helps the agent write fallback SQL responsibly.
