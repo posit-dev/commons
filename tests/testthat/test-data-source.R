@@ -108,6 +108,21 @@ test_that("the frame-path DuckDB is locked down", {
   )
 })
 
+test_that("duckdb_connect supports coexisting connections in one process", {
+  con1 <- duckdb_connect()
+  withr::defer(DBI::dbDisconnect(con1, shutdown = TRUE))
+  # home_directory is a process-global option; a second connection must not fail
+  # trying to re-set it once the first instance exists.
+  con2 <- expect_no_error(duckdb_connect())
+  withr::defer(DBI::dbDisconnect(con2, shutdown = TRUE))
+
+  dir <- file.path(tempdir(), "duckdb")
+  expect_equal(
+    DBI::dbGetQuery(con2, "SELECT current_setting('home_directory') AS h")$h,
+    dir
+  )
+})
+
 test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(data.frame(x = 1)), error = TRUE)
   expect_snapshot(data_source(a = 1), error = TRUE)
