@@ -227,15 +227,26 @@ SET lock_configuration = true;
 
 # DuckDB defaults its extension and home directories to the package library,
 # which is read-only in deployed environments (e.g. Posit Connect). Point them
-# at the session temp directory. This must happen at connection time: any query
-# (even `SET extension_directory`) first initializes the extension subsystem
-# against the default directory, which fails when that directory is read-only.
+# at the session temp directory.
+#
+# `extension_directory` must be set in `config` (i.e. at startup): any query
+# first initializes the extension subsystem against this directory, which fails
+# when it defaults to the read-only package library. `home_directory`, however,
+# is a process-global option; passing it in `config` re-sets a global option on
+# every connection, which DuckDB rejects once any DuckDB instance already exists
+# in the process (e.g. the connection a data frame `data_source()` holds). Set it
+# instead with a session-scoped `SET`, which is safe across coexisting connections.
 duckdb_connect <- function() {
   dir <- file.path(tempdir(), "duckdb")
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
-  DBI::dbConnect(
-    duckdb::duckdb(config = list(extension_directory = dir, home_directory = dir))
+  con <- DBI::dbConnect(
+    duckdb::duckdb(config = list(extension_directory = dir))
   )
+  DBI::dbExecute(
+    con,
+    paste0("SET home_directory=", DBI::dbQuoteString(con, dir), ";")
+  )
+  con
 }
 
 normalize_table_registry <- function(tables, call = rlang::caller_env()) {
