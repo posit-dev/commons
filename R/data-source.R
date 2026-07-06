@@ -140,7 +140,7 @@ new_data_source <- function(
 # Pick the data source a SQL tool call runs against. With one source no
 # choice is needed; with several, the model passes a `source` name. The tool
 # schema's enum should prevent bad values, but validate anyway so a bad call
-# errors clearly and retryably.
+# gets a clear error the model can act on.
 resolve_sql_source <- function(sources, name, call = rlang::caller_env()) {
   if (length(sources) == 1) {
     return(sources[[1]])
@@ -424,7 +424,8 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
 # Entries besides the data_source() can be anything a measure wants by name:
 # a pins board, an API client. A bare data_source() is accepted for the
 # quick-start path; it has no name, so measures can't take its connection as
-# an argument. Idempotent, so commons() and Commons$new() can both validate.
+# an argument. commons() and Commons$new() both call this, so it must accept
+# its own output.
 as_data_sources <- function(x, call = rlang::caller_env()) {
   if (inherits(x, "commons_data_source")) {
     return(list(x))

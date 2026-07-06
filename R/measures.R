@@ -14,8 +14,8 @@
 #' * Undocumented arguments are supplied by [commons()] when the measure runs.
 #'   An argument named after a `data_sources` entry receives that entry — for
 #'   a [data_source()], its connection — even if the argument has a default.
-#'   An undocumented argument matching no entry keeps its default, and errors
-#'   at assembly if it has none. The model never sees these arguments.
+#'   An undocumented argument matching no entry keeps its default; if it has
+#'   no default, [commons()] errors. The model never sees these arguments.
 #'
 #' This means a measure can take the connection it needs as an argument
 #' rather than relying on a variable defined elsewhere, and you can create a
@@ -119,8 +119,8 @@ measure <- function(name, description, fn, arguments = list(), title = NULL) {
 
 # Arguments of `fn` not described in `arguments` are supplied by commons(),
 # not the model. type_ignore() satisfies ellmer's check that `arguments`
-# matches formals(fn) but stays out of the model-visible schema, so these
-# arguments are always recoverable as formals minus schema.
+# matches formals(fn) but stays out of the model-visible schema, which is how
+# measure_injection_names() tells the two kinds of argument apart.
 fill_injected_arguments <- function(arguments, fn) {
   injected <- setdiff(names(formals(fn)), names(arguments))
   for (nm in injected) {
@@ -134,8 +134,8 @@ measure_injection_names <- function(td) {
 }
 
 # Look up each measure's undocumented arguments among the agent's named
-# data_sources entries. An unmatched argument with a default is left to it;
-# an unmatched one without a default is an error.
+# data_sources entries. An unmatched argument keeps its default; one with no
+# default is an error.
 resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
   lapply(registry, function(td) {
     needed <- measure_injection_names(td)
@@ -245,7 +245,7 @@ measure_schema_text <- function(td, source_names = character()) {
 
 # When an agent has several data sources, noting which one(s) a measure
 # queries points the SQL fallback at the right source. `source_names` is empty
-# for single-source agents, so the line never renders there.
+# for single-source agents, so the line never appears there.
 measure_sources_line <- function(td, source_names) {
   used <- intersect(measure_injection_names(td), source_names)
   if (length(used) == 0) {

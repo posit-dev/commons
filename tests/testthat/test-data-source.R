@@ -139,7 +139,7 @@ test_that("as_data_sources accepts a source alongside other named entries", {
   srcs <- as_data_sources(list(sales_db = test_source(), board = list()))
   expect_named(srcs, c("sales_db", "board"))
 
-  # Idempotent, so commons() and Commons$new() can both normalize.
+  # Accepts its own output, since commons() and Commons$new() both call it.
   expect_identical(as_data_sources(srcs), srcs)
 })
 

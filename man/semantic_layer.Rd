@@ -25,8 +25,8 @@ A measure function can take two kinds of arguments:
 \item Undocumented arguments are supplied by \code{\link[=commons]{commons()}} when the measure runs.
 An argument named after a \code{data_sources} entry receives that entry — for
 a \code{\link[=data_source]{data_source()}}, its connection — even if the argument has a default.
-An undocumented argument matching no entry keeps its default, and errors
-at assembly if it has none. The model never sees these arguments.
+An undocumented argument matching no entry keeps its default; if it has
+no default, \code{\link[=commons]{commons()}} errors. The model never sees these arguments.
 }
 
 This means a measure can take the connection it needs as an argument
