@@ -160,7 +160,7 @@ commons parses roxygen blocks marked with `@measure`, sources the file, and regi
 
 ### Connections and other measure resources
 
-A measure function can take two kinds of arguments. Arguments documented with `@param` are supplied by the model. Undocumented arguments, like `warehouse` above, are supplied by `commons()` when the measure runs: an argument named after a `data_sources` entry receives that entry — for a `data_source()`, its connection. The model never sees them.
+A measure function can take two kinds of arguments. Arguments documented with `@param` are supplied by the model. Undocumented arguments, like `warehouse` above, are supplied by `commons()` when the measure runs: an argument named after a `data_sources` entry receives that entry — for a `data_source()`, its connection. An undocumented argument matching no entry keeps its default. The model never sees them.
 
 Since connections are supplied when the agent is assembled, you can create the semantic layer anywhere, even before connecting to a database.
 

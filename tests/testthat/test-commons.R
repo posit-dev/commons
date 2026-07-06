@@ -419,6 +419,49 @@ test_that("injection parameters are hidden from the model", {
   )
 })
 
+test_that("undocumented arguments matching no entry keep their defaults", {
+  layer <- semantic_layer(
+    measure(
+      "order_count",
+      "Count of orders.",
+      function(sales_db, limit = 5L) limit,
+      arguments = list()
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+
+  injections <- agent$.__enclos_env__$private$injections
+  expect_named(injections$order_count, "sales_db")
+
+  res <- call_measure_tool(
+    agent$.__enclos_env__$private$registry,
+    "order_count",
+    "{}",
+    injections = injections
+  )
+  expect_match(res@value, "5")
+})
+
+test_that("an entry match wins over an undocumented argument's default", {
+  layer <- semantic_layer(
+    measure(
+      "source_class",
+      "Class of the source object.",
+      function(sales_db = "unused default") class(sales_db)[[1]],
+      arguments = list()
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+
+  res <- call_measure_tool(
+    agent$.__enclos_env__$private$registry,
+    "source_class",
+    "{}",
+    injections = agent$.__enclos_env__$private$injections
+  )
+  expect_match(res@value, "duckdb_connection")
+})
+
 test_that("commons() errors on injection parameters matching no name", {
   layer <- semantic_layer(
     measure(

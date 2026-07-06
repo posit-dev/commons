@@ -13,7 +13,9 @@
 #'   [measure()]s) are supplied by the model.
 #' * Undocumented arguments are supplied by [commons()] when the measure runs.
 #'   An argument named after a `data_sources` entry receives that entry — for
-#'   a [data_source()], its connection. The model never sees these arguments.
+#'   a [data_source()], its connection — even if the argument has a default.
+#'   An undocumented argument matching no entry keeps its default, and errors
+#'   at assembly if it has none. The model never sees these arguments.
 #'
 #' This means a measure can take the connection it needs as an argument
 #' rather than relying on a variable defined elsewhere, and you can create a
@@ -132,12 +134,18 @@ measure_injection_names <- function(td) {
 }
 
 # Look up each measure's undocumented arguments among the agent's named
-# data_sources entries, erroring on names that match nothing.
+# data_sources entries. An unmatched argument with a default is left to it;
+# an unmatched one without a default is an error.
 resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
   lapply(registry, function(td) {
     needed <- measure_injection_names(td)
     unmatched <- setdiff(needed, names(injectables))
-    if (length(unmatched)) {
+    no_default <- unmatched[vapply(
+      unmatched,
+      function(nm) identical(formals(td)[[nm]], quote(expr = )),
+      logical(1)
+    )]
+    if (length(no_default)) {
       available <- if (length(injectables)) {
         cli::format_inline("Available names: {.val {names(injectables)}}.")
       } else {
@@ -145,13 +153,13 @@ resolve_injections <- function(registry, injectables, call = rlang::caller_env()
       }
       cli::cli_abort(
         c(
-          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(unmatched)}argument{?s} {.arg {unmatched}} matching no {.arg data_sources} entry.",
+          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(no_default)}argument{?s} {.arg {no_default}} matching no {.arg data_sources} entry.",
           i = available
         ),
         call = call
       )
     }
-    injectables[needed]
+    injectables[intersect(needed, names(injectables))]
   })
 }
 
