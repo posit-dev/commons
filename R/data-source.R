@@ -391,27 +391,33 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
   }
 }
 
-# A bare data_source() is accepted for the quick-start path; it has no name,
-# so measures can't take its connection as an argument. Idempotent, so
-# commons() and Commons$new() can both validate.
+# Entries besides the data_source() can be anything a measure wants by name:
+# a pins board, an API client. A bare data_source() is accepted for the
+# quick-start path; it has no name, so measures can't take its connection as
+# an argument. Idempotent, so commons() and Commons$new() can both validate.
 as_data_sources <- function(x, call = rlang::caller_env()) {
   if (inherits(x, "commons_data_source")) {
     return(list(x))
   }
 
-  is_source <- is.list(x) &&
-    length(x) > 0 &&
-    all(vapply(x, inherits, logical(1), "commons_data_source"))
-  if (!is_source) {
+  if (!is.list(x)) {
     cli::cli_abort(
-      "{.arg data_sources} must be a {.fn data_source} or a named list of them.",
+      "{.arg data_sources} must be a {.fn data_source} or a named list containing one.",
+      call = call
+    )
+  }
+
+  n_sources <- sum(vapply(x, inherits, logical(1), "commons_data_source"))
+  if (n_sources != 1) {
+    cli::cli_abort(
+      "{.fn commons} currently supports exactly one {.fn data_source}; {.arg data_sources} has {n_sources}.",
       call = call
     )
   }
 
   if (length(x) > 1 && !rlang::is_named(x)) {
     cli::cli_abort(
-      "Each data source in {.arg data_sources} must be named.",
+      "Each entry in {.arg data_sources} must be named.",
       call = call
     )
   }
@@ -419,7 +425,7 @@ as_data_sources <- function(x, call = rlang::caller_env()) {
   duplicated_names <- unique(names(x)[duplicated(names(x))])
   if (length(duplicated_names)) {
     cli::cli_abort(
-      "Data source names must be unique; duplicated name{?s}: {.val {duplicated_names}}.",
+      "{.arg data_sources} names must be unique; duplicated name{?s}: {.val {duplicated_names}}.",
       call = call
     )
   }

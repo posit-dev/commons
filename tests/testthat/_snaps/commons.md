@@ -12,7 +12,7 @@
       commons(client = test_client(), data_sources = "not a source")
     Condition
       Error in `commons()`:
-      ! `data_sources` must be a `data_source()` or a named list of them.
+      ! `data_sources` must be a `data_source()` or a named list containing one.
 
 ---
 
@@ -33,19 +33,10 @@
 ---
 
     Code
-      commons(client = test_client(), data_sources = test_source(), resources = list(
-        1, 2))
-    Condition
-      Error in `commons()`:
-      ! `resources` must be a named list.
-
----
-
-    Code
       commons(client = test_client(), data_sources = list(a = test_source(), b = test_source()))
     Condition
-      Error in `initialize()`:
-      ! `commons()` currently supports exactly one data source, not 2.
+      Error in `commons()`:
+      ! `commons()` currently supports exactly one `data_source()`; `data_sources` has 2.
 
 # commons() errors on injection parameters matching no name
 
@@ -54,7 +45,7 @@
       semantic_layer = layer)
     Condition
       Error in `initialize()`:
-      ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source or resource name.
+      ! Measure "region_revenue" has undocumented argument `warehouse` matching no `data_sources` entry.
       i Available names: "sales_db".
 
 ---
@@ -63,15 +54,6 @@
       commons(client = test_client(), data_sources = test_source(), semantic_layer = layer)
     Condition
       Error in `initialize()`:
-      ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source or resource name.
-      i No named data sources or resources are available.
-
-# commons() rejects resource names that collide with source names
-
-    Code
-      commons(client = test_client(), data_sources = list(sales_db = test_source()),
-      resources = list(sales_db = "duplicate"))
-    Condition
-      Error in `initialize()`:
-      ! `resources` names must not collide with data source names: "sales_db".
+      ! Measure "region_revenue" has undocumented argument `warehouse` matching no `data_sources` entry.
+      i `data_sources` has no named entries.
 

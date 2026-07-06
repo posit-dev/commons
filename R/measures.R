@@ -12,9 +12,8 @@
 #' * Arguments documented with `@param` (or listed in `arguments`, for inline
 #'   [measure()]s) are supplied by the model.
 #' * Undocumented arguments are supplied by [commons()] when the measure runs.
-#'   An argument named after a data source receives that source's connection;
-#'   an argument named after a `resources` entry receives that object. The
-#'   model never sees these arguments.
+#'   An argument named after a `data_sources` entry receives that entry — for
+#'   a [data_source()], its connection. The model never sees these arguments.
 #'
 #' This means a measure can take the connection it needs as an argument
 #' rather than relying on a variable defined elsewhere, and you can create a
@@ -96,7 +95,7 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' @param arguments A named list of [ellmer::type_string()] and friends
 #'   describing the arguments the model supplies. Arguments of `fn` not listed
 #'   here are hidden from the model and supplied by [commons()] from its
-#'   `data_sources` and `resources`; see [semantic_layer()].
+#'   `data_sources`; see [semantic_layer()].
 #' @param title Human-readable measure title to show in user interfaces. If
 #'   `NULL`, a title is derived from `name`.
 #'
@@ -132,8 +131,8 @@ measure_injection_names <- function(td) {
   setdiff(names(formals(td)), names(tool_properties(td)))
 }
 
-# Look up each measure's undocumented arguments among the agent's data source
-# and resource names, erroring on names that match neither.
+# Look up each measure's undocumented arguments among the agent's named
+# data_sources entries, erroring on names that match nothing.
 resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
   lapply(registry, function(td) {
     needed <- measure_injection_names(td)
@@ -142,11 +141,11 @@ resolve_injections <- function(registry, injectables, call = rlang::caller_env()
       available <- if (length(injectables)) {
         cli::format_inline("Available names: {.val {names(injectables)}}.")
       } else {
-        "No named data sources or resources are available."
+        "{.arg data_sources} has no named entries."
       }
       cli::cli_abort(
         c(
-          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(unmatched)}argument{?s} {.arg {unmatched}} matching no data source or resource name.",
+          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(unmatched)}argument{?s} {.arg {unmatched}} matching no {.arg data_sources} entry.",
           i = available
         ),
         call = call

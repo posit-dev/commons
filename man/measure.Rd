@@ -16,7 +16,7 @@ measure(name, description, fn, arguments = list(), title = NULL)
 \item{arguments}{A named list of \code{\link[ellmer:type_string]{ellmer::type_string()}} and friends
 describing the arguments the model supplies. Arguments of \code{fn} not listed
 here are hidden from the model and supplied by \code{\link[=commons]{commons()}} from its
-\code{data_sources} and \code{resources}; see \code{\link[=semantic_layer]{semantic_layer()}}.}
+\code{data_sources}; see \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{title}{Human-readable measure title to show in user interfaces. If
 \code{NULL}, a title is derived from \code{name}.}

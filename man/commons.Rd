@@ -10,7 +10,6 @@ commons(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  resources = list(),
   log = FALSE
 )
 }
@@ -18,16 +17,14 @@ commons(
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
 \code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}.}
 
-\item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
-can take a source's connection as an argument named after the source; see
+\item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list containing one along
+with any other objects measures need, such as a pins board or an API
+client. Measures can take an entry as an argument named after it; see
 \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
-
-\item{resources}{A named list of other objects that measures can take as
-arguments, such as a pins board or an API client. See \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{log}{Whether to log conversation trajectories. \code{FALSE} disables
 logging. \code{TRUE} uses private Connect pins on Posit Connect and local files
@@ -92,12 +89,13 @@ agent <- commons(
   semantic_layer = sem
 )
 
-# Objects that aren't data sources (pins boards, API clients) work the
-# same way through `resources`.
+# Other named entries (pins boards, API clients) work the same way.
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_sources = list(warehouse = data_source(con)),
-  resources = list(board = pins::board_connect()),
+  data_sources = list(
+    warehouse = data_source(con),
+    board = pins::board_connect()
+  ),
   semantic_layer = semantic_layer("R/semantic_layer.R")
 )
 }
@@ -153,7 +151,6 @@ rather than this method directly.
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  resources = list(),
   log = FALSE
 )}
     \if{html}{\out{</div>}}
@@ -162,11 +159,10 @@ rather than this method directly.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
-      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list of them.}
+      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list containing one
+along with any other objects measures need.}
       \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
       \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
-      \item{\code{resources}}{A named list of other objects that measures can take
-as arguments.}
       \item{\code{log}}{Whether to log conversation trajectories.}
     }
     \if{html}{\out{</div>}}

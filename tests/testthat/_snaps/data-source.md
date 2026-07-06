@@ -37,7 +37,7 @@
       as_data_sources("nope")
     Condition
       Error:
-      ! `data_sources` must be a `data_source()` or a named list of them.
+      ! `data_sources` must be a `data_source()` or a named list containing one.
 
 ---
 
@@ -45,7 +45,7 @@
       as_data_sources(list())
     Condition
       Error:
-      ! `data_sources` must be a `data_source()` or a named list of them.
+      ! `commons()` currently supports exactly one `data_source()`; `data_sources` has 0.
 
 ---
 
@@ -53,7 +53,7 @@
       as_data_sources(list(sales_db = "not a source"))
     Condition
       Error:
-      ! `data_sources` must be a `data_source()` or a named list of them.
+      ! `commons()` currently supports exactly one `data_source()`; `data_sources` has 0.
 
 ---
 
@@ -61,13 +61,21 @@
       as_data_sources(list(test_source(), test_source()))
     Condition
       Error:
-      ! Each data source in `data_sources` must be named.
+      ! `commons()` currently supports exactly one `data_source()`; `data_sources` has 2.
 
 ---
 
     Code
-      as_data_sources(list(a = test_source(), a = test_source()))
+      as_data_sources(list(test_source(), list()))
     Condition
       Error:
-      ! Data source names must be unique; duplicated name: "a".
+      ! Each entry in `data_sources` must be named.
+
+---
+
+    Code
+      as_data_sources(list(a = test_source(), a = list()))
+    Condition
+      Error:
+      ! `data_sources` names must be unique; duplicated name: "a".
 

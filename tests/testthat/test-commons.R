@@ -274,14 +274,6 @@ test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(
       client = test_client(),
-      data_sources = test_source(),
-      resources = list(1, 2)
-    ),
-    error = TRUE
-  )
-  expect_snapshot(
-    commons(
-      client = test_client(),
       data_sources = list(a = test_source(), b = test_source())
     ),
     error = TRUE
@@ -320,7 +312,7 @@ test_that("measures receive named data source connections by injection", {
   expect_match(res@value, "2450")
 })
 
-test_that("measures receive resources by injection", {
+test_that("measures receive non-source entries by injection", {
   layer <- semantic_layer(
     measure(
       "order_count",
@@ -331,7 +323,7 @@ test_that("measures receive resources by injection", {
   )
   agent <- test_agent(
     semantic_layer = layer,
-    resources = list(cache = list(n = 6L))
+    data_sources = list(sales_db = test_source(), cache = list(n = 6L))
   )
 
   res <- call_measure_tool(
@@ -390,13 +382,3 @@ test_that("commons() errors on injection parameters matching no name", {
   )
 })
 
-test_that("commons() rejects resource names that collide with source names", {
-  expect_snapshot(
-    commons(
-      client = test_client(),
-      data_sources = list(sales_db = test_source()),
-      resources = list(sales_db = "duplicate")
-    ),
-    error = TRUE
-  )
-})

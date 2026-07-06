@@ -10,13 +10,12 @@
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()].
-#' @param data_sources A [data_source()], or a named list of them. Measures
-#'   can take a source's connection as an argument named after the source; see
+#' @param data_sources A [data_source()], or a named list containing one along
+#'   with any other objects measures need, such as a pins board or an API
+#'   client. Measures can take an entry as an argument named after it; see
 #'   [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param resources A named list of other objects that measures can take as
-#'   arguments, such as a pins board or an API client. See [semantic_layer()].
 #' @param log Whether to log conversation trajectories. `FALSE` disables
 #'   logging. `TRUE` uses private Connect pins on Posit Connect and local files
 #'   elsewhere. A single string is treated as a local directory path to write
@@ -69,12 +68,13 @@
 #'   semantic_layer = sem
 #' )
 #'
-#' # Objects that aren't data sources (pins boards, API clients) work the
-#' # same way through `resources`.
+#' # Other named entries (pins boards, API clients) work the same way.
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
-#'   data_sources = list(warehouse = data_source(con)),
-#'   resources = list(board = pins::board_connect()),
+#'   data_sources = list(
+#'     warehouse = data_source(con),
+#'     board = pins::board_connect()
+#'   ),
 #'   semantic_layer = semantic_layer("R/semantic_layer.R")
 #' )
 #' }
@@ -85,7 +85,6 @@ commons <- function(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  resources = list(),
   log = FALSE
 ) {
   if (!inherits(client, "Chat")) {
@@ -97,14 +96,12 @@ commons <- function(
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
-  check_resources(resources)
 
   Commons$new(
     client = client,
     data_sources = data_sources,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
-    resources = resources,
     log = log
   )
 }
@@ -118,36 +115,31 @@ Commons <- R6::R6Class(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
     #' @param client An [ellmer::Chat] supplying the provider.
-    #' @param data_sources A [data_source()], or a named list of them.
+    #' @param data_sources A [data_source()], or a named list containing one
+    #'   along with any other objects measures need.
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
-    #' @param resources A named list of other objects that measures can take
-    #'   as arguments.
     #' @param log Whether to log conversation trajectories.
     initialize = function(
       client,
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
-      resources = list(),
       log = FALSE
     ) {
       super$initialize(provider = client$get_provider(), echo = "none")
       semantic_layer <- semantic_layer %||% new_semantic_layer()
 
       sources <- as_data_sources(data_sources)
-      if (length(sources) != 1) {
-        cli::cli_abort(
-          "{.fn commons} currently supports exactly one data source, not {length(sources)}."
-        )
-      }
-      check_resources(resources)
+      is_source <- vapply(sources, inherits, logical(1), "commons_data_source")
 
-      private$data_source <- sources[[1]]
+      private$data_source <- sources[[which(is_source)]]
       private$context_layer <- context_layer
       private$registry <- semantic_layer$measures
-      injectables <- measure_injectables(sources, resources)
-      private$injections <- resolve_injections(private$registry, injectables)
+      private$injections <- resolve_injections(
+        private$registry,
+        measure_injectables(sources)
+      )
       private$logger <- new_trajectory_logger(log)
 
       self$register_tools(build_commons_tools(self, private))
@@ -210,35 +202,11 @@ Commons <- R6::R6Class(
   )
 )
 
-# Everything a measure can take by name: a named source's connection, or a
-# resource itself.
-measure_injectables <- function(sources, resources, call = rlang::caller_env()) {
-  connections <- lapply(
-    sources[rlang::have_name(sources)],
-    function(source) source$con
-  )
-
-  clash <- intersect(names(connections), names(resources))
-  if (length(clash)) {
-    cli::cli_abort(
-      "{.arg resources} names must not collide with data source names: {.val {clash}}.",
-      call = call
-    )
-  }
-
-  c(connections, resources)
-}
-
-check_resources <- function(resources, call = rlang::caller_env()) {
-  if (!is.list(resources) || (length(resources) && !rlang::is_named(resources))) {
-    cli::cli_abort("{.arg resources} must be a named list.", call = call)
-  }
-
-  duplicated_names <- unique(names(resources)[duplicated(names(resources))])
-  if (length(duplicated_names)) {
-    cli::cli_abort(
-      "{.arg resources} names must be unique; duplicated name{?s}: {.val {duplicated_names}}.",
-      call = call
-    )
-  }
+# Everything a measure can take by name: a data_source() contributes its
+# connection, any other entry contributes itself.
+measure_injectables <- function(sources) {
+  named <- sources[rlang::have_name(sources)]
+  lapply(named, function(entry) {
+    if (inherits(entry, "commons_data_source")) entry$con else entry
+  })
 }

@@ -23,9 +23,8 @@ A measure function can take two kinds of arguments:
 \item Arguments documented with \verb{@param} (or listed in \code{arguments}, for inline
 \code{\link[=measure]{measure()}}s) are supplied by the model.
 \item Undocumented arguments are supplied by \code{\link[=commons]{commons()}} when the measure runs.
-An argument named after a data source receives that source's connection;
-an argument named after a \code{resources} entry receives that object. The
-model never sees these arguments.
+An argument named after a \code{data_sources} entry receives that entry — for
+a \code{\link[=data_source]{data_source()}}, its connection. The model never sees these arguments.
 }
 
 This means a measure can take the connection it needs as an argument
