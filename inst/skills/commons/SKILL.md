@@ -23,7 +23,7 @@ The answer uses SQL with little documentation and the agent had to inspect table
 ## Workflow
 
 1. Find the agent definition.
-   Search for `commons(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers.
+   Search for `commons(`, `data_sources(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure formals without `@param` documentation are injection parameters: `commons()` fills them by name from its named data sources (the connection) and `resources` entries, and the model never sees them. A new measure that queries a database should declare the connection this way rather than closing over one.
 
 2. Load trajectories.
    Use `commons::read_trajectories(...)`. If the path or pins board is unclear, inspect the project for `log =`, `COMMONS_LOG_DIR`, or deployment setup.

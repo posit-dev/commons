@@ -52,22 +52,28 @@ For Claude Code, copy the same directory into `.claude/skills` instead.
 
 The data source is the set of tables available to the agent. If your data already lives in a database, pass a DBI connection. In production, prefer exposing only the tables the agent needs.
 
+Wrap the source in `data_sources()` to give it a name. The name is how measures reach the source's connection (see the next section).
+
 ```r
 # R/data_sources.R
 con <- DBI::dbConnect(...)
 
-agent_data <- commons::data_source(
-  con,
-  tables = c("orders", "customers")
+agent_data <- commons::data_sources(
+  warehouse = commons::data_source(
+    con,
+    tables = c("orders", "customers")
+  )
 )
 ```
 
 For data that does not already live in a database, pass named data frames. commons loads them into an in-process DuckDB database.
 
 ```r
-agent_data <- commons::data_source(
-  orders = orders,
-  customers = customers
+agent_data <- commons::data_sources(
+  warehouse = commons::data_source(
+    orders = orders,
+    customers = customers
+  )
 )
 ```
 
@@ -76,11 +82,13 @@ If the data lives in Posit Connect pins, `data_source_pins()` reads the pins and
 ```r
 board <- pins::board_connect()
 
-agent_data <- commons::data_source_pins(
-  board,
-  names = c(
-    orders = "team/orders",
-    customers = "team/customers"
+agent_data <- commons::data_sources(
+  warehouse = commons::data_source_pins(
+    board,
+    names = c(
+      orders = "team/orders",
+      customers = "team/customers"
+    )
   )
 )
 ```
@@ -105,11 +113,11 @@ Measures should use definitions your team already trusts: existing metric functi
 #'
 #' @return A data frame with columns region and revenue.
 #' @measure
-revenue_by_region <- function(start_date, end_date, region = NULL) {
+revenue_by_region <- function(start_date, end_date, region = NULL, warehouse) {
   region_filter <- if (is.null(region)) {
     DBI::SQL("TRUE")
   } else {
-    glue::glue_sql("region = {region}", .con = con)
+    glue::glue_sql("region = {region}", .con = warehouse)
   }
 
   sql <- glue::glue_sql(
@@ -120,10 +128,10 @@ revenue_by_region <- function(start_date, end_date, region = NULL) {
       AND ({region_filter})
     GROUP BY region
     ",
-    .con = con
+    .con = warehouse
   )
 
-  DBI::dbGetQuery(con, sql)
+  DBI::dbGetQuery(warehouse, sql)
 }
 ```
 
@@ -135,39 +143,23 @@ agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
 
 commons parses roxygen blocks marked with `@measure`, sources the file, and registers those functions as governed tools.
 
-### Scoping connections and other measure resources
+### Connections and other measure resources
 
-File-backed measures are ordinary R functions. If a measure refers to objects that are not arguments, such as `con`, `board`, or an API client, those objects must be visible from the environment where `commons::semantic_layer()` is called.
+A measure function's formals split into two groups. Formals documented with `@param` are the measure's arguments, supplied by the model. Formals without a `@param`, like `warehouse` above, are injection parameters: when the agent runs the measure, `commons()` supplies each one whose name matches a named data source (the source's connection) or a `resources` entry, and never shows it to the model.
 
-This is the safe pattern:
+Because binding happens when the agent is assembled, the semantic layer can be created anywhere — including at top level, before any connection exists.
+
+Objects that aren't data sources, such as a pins board or an API client, are injected from `resources`:
 
 ```r
-con <- DBI::dbConnect(...)
-board <- pins::board_connect()
-
 agent <- commons::commons(
   client = ellmer::chat_anthropic(),
-  data_source = commons::data_source(con, tables = c("orders", "customers")),
-  # Measures in R/semantic_layer.R can refer to `con` and `board`.
+  data_sources = agent_data,
   semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
-  context_layer = agent_context
+  # A measure formal named `board` (with no @param) receives this pins board.
+  resources = list(board = pins::board_connect())
 )
 ```
-
-Avoid creating the semantic layer before the resources it uses are in scope:
-
-```r
-agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
-
-con <- DBI::dbConnect(...)
-
-agent <- commons::commons(
-  data_source = commons::data_source(con),
-  semantic_layer = agent_semantics
-)
-```
-
-In the second example, the measure functions have already been created before `con` exists, so they cannot see it. Create the semantic layer after defining the resources that measures use.
 
 ## Defining the context layer
 
@@ -204,7 +196,7 @@ source("R/context_layer.R")
 
 agent <- commons::commons(
   client = ellmer::chat_anthropic(),
-  data_source = agent_data,
+  data_sources = agent_data,
   semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
   context_layer = agent_context,
   log = TRUE

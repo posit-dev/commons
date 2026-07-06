@@ -18,14 +18,20 @@ A semantic layer is a collection of governed measures available to a
 \code{\link[=commons]{commons()}} agent.
 }
 \details{
-Measures read from files are sourced into an environment that inherits from
-the caller of \code{semantic_layer()}. If a file-backed measure refers to a
-connection, pins board, API client, or other object, call \code{semantic_layer()}
-from the same function or script frame that defines that object.
+A measure function's formals split into two groups:
+\itemize{
+\item Formals documented with \verb{@param} (or, for inline \code{\link[=measure]{measure()}}s, named in
+\code{arguments}) are the measure's arguments, supplied by the model.
+\item Formals without documentation are injection parameters. When the agent
+runs the measure, \code{\link[=commons]{commons()}} supplies each one by name: the name of a
+\code{\link[=data_sources]{data_sources()}} entry receives that source's connection, and the name of
+a \code{resources} entry receives that object. Injection parameters are never
+shown to the model.
+}
 
-Do not create a semantic layer at top level and then expect it to use a
-connection supplied later to \code{\link[=commons]{commons()}}; the measure functions have already
-been created by then.
+So a measure that queries a database declares the connection it needs
+rather than closing over one, and the semantic layer can be created before
+any connection exists; binding happens when the agent is assembled.
 }
 \examples{
 semantic_layer(
@@ -38,13 +44,20 @@ semantic_layer(
 )
 
 \dontrun{
-con <- DBI::dbConnect(...)
-board <- pins::board_connect()
+# In R/semantic_layer.R, `warehouse` has no @param, so it's an injection
+# parameter:
+#
+# #' @param region `string` The sales region.
+# #' @measure
+# revenue <- function(region, warehouse) {
+#   DBI::dbGetQuery(warehouse, ...)
+# }
 
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_source = data_source(con),
-  # Measures in R/semantic_layer.R can refer to `con` and `board`.
+  data_sources = data_sources(
+    warehouse = data_source(DBI::dbConnect(...))
+  ),
   semantic_layer = semantic_layer("R/semantic_layer.R")
 )
 }

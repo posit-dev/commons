@@ -7,9 +7,10 @@
 \usage{
 commons(
   client = ellmer::chat_anthropic(),
-  data_source,
+  data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  resources = list(),
   log = FALSE
 )
 }
@@ -17,11 +18,17 @@ commons(
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
 \code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}.}
 
-\item{data_source}{A \code{\link[=data_source]{data_source()}}.}
+\item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named \code{\link[=data_sources]{data_sources()}}
+collection. Naming a source lets measures receive its connection: a
+measure formal with a source's name and no documentation is supplied at
+call time and never shown to the model.}
 
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
+
+\item{resources}{A named list of other objects measures can receive by
+injection, e.g. a pins board or an API client. See \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{log}{Whether to log conversation trajectories. \code{FALSE} disables
 logging. \code{TRUE} uses private Connect pins on Posit Connect and local files
@@ -52,27 +59,29 @@ sem <- semantic_layer(
     arguments = list()
   )
 )
-src <- data_source(sales = my_sales)
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_source = src,
+  data_sources = data_source(sales = my_sales),
   semantic_layer = sem
 )
 agent$chat("How many orders are there?")
 
-# A measure over a database closes over the connection. For canned SQL,
-# interpolate arguments with glue::glue_sql() so they're quoted safely.
+# A measure that queries a database declares the connection it needs as a
+# formal named after a data source: `warehouse` is absent from `arguments`,
+# so commons injects it at call time and never shows it to the model. For
+# canned SQL, interpolate arguments with glue::glue_sql() so they're quoted
+# safely.
 con <- DBI::dbConnect(duckdb::duckdb())
 sem <- semantic_layer(
   measure(
     "revenue_by_region",
     "Total revenue for a region.",
-    function(region) {
+    function(region, warehouse) {
       DBI::dbGetQuery(
-        con,
+        warehouse,
         glue::glue_sql(
           "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
-          .con = con
+          .con = warehouse
         )
       )
     },
@@ -81,24 +90,17 @@ sem <- semantic_layer(
 )
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_source = data_source(con),
+  data_sources = data_sources(warehouse = data_source(con)),
   semantic_layer = sem
 )
 
-# To reuse an existing function that takes a connection, wrap it so its
-# formals are just the measure's arguments.
-sem <- semantic_layer(
-  measure(
-    "revenue_metrics",
-    "Revenue metrics over a date range.",
-    function(start_date, end_date) {
-      pull_revenue_metrics(con, start_date, end_date)
-    },
-    arguments = list(
-      start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
-      end_date = ellmer::type_string("End date, YYYY-MM-DD.")
-    )
-  )
+# Objects that aren't data sources (pins boards, API clients) are injected
+# from `resources` the same way.
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_sources = data_sources(warehouse = data_source(con)),
+  resources = list(board = pins::board_connect()),
+  semantic_layer = semantic_layer("R/semantic_layer.R")
 )
 }
 
@@ -150,9 +152,10 @@ rather than this method directly.
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$new(
   client,
-  data_source,
+  data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  resources = list(),
   log = FALSE
 )}
     \if{html}{\out{</div>}}
@@ -161,9 +164,11 @@ rather than this method directly.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
-      \item{\code{data_source}}{A \code{\link[=data_source]{data_source()}}.}
+      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}} or named \code{\link[=data_sources]{data_sources()}}.}
       \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
       \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
+      \item{\code{resources}}{A named list of objects measures can receive by
+injection.}
       \item{\code{log}}{Whether to log conversation trajectories.}
     }
     \if{html}{\out{</div>}}
