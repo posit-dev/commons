@@ -20,6 +20,10 @@ At their core, commons agents are composed of a data source, a semantic layer, a
 
 This vignette shows the shape of a small commons project.
 
+```r
+library(commons)
+```
+
 ## Setting up the project directory
 
 A commons agent is easiest to maintain when the pieces live in separate files:
@@ -59,7 +63,7 @@ Give the source a name by placing it in a named list. The name is how measures r
 con <- DBI::dbConnect(...)
 
 agent_data <- list(
-  warehouse = commons::data_source(
+  warehouse = data_source(
     con,
     tables = c("orders", "customers")
   )
@@ -70,7 +74,7 @@ For data that does not already live in a database, pass named data frames. commo
 
 ```r
 agent_data <- list(
-  warehouse = commons::data_source(
+  warehouse = data_source(
     orders = orders,
     customers = customers
   )
@@ -83,7 +87,7 @@ If the data lives in Posit Connect pins, `data_source_pins()` reads the pins and
 board <- pins::board_connect()
 
 agent_data <- list(
-  warehouse = commons::data_source_pins(
+  warehouse = data_source_pins(
     board,
     names = c(
       orders = "team/orders",
@@ -92,6 +96,17 @@ agent_data <- list(
   )
 )
 ```
+
+An agent can have more than one data source:
+
+```r
+agent_data <- list(
+  warehouse = data_source(con, tables = c("orders", "customers")),
+  finance = data_source(finance_con, tables = "invoices")
+)
+```
+
+With several sources, the system prompt lists each source's tables separately, and the agent's `describe_table` and `run_sql` tools take the source's name as a `source` argument. With one source, that argument doesn't exist.
 
 ## Defining the semantic layer
 
@@ -138,7 +153,7 @@ revenue_by_region <- function(start_date, end_date, region = NULL, warehouse) {
 Then collect the documented measures into a semantic layer:
 
 ```r
-agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
+agent_semantics <- semantic_layer("R/semantic_layer.R")
 ```
 
 commons parses roxygen blocks marked with `@measure`, sources the file, and registers those functions as governed tools.
@@ -152,14 +167,14 @@ Since connections are supplied when the agent is assembled, you can create the s
 Entries that aren't `data_source()`s, such as a pins board or an API client, work the same way:
 
 ```r
-agent <- commons::commons(
+agent <- commons(
   client = ellmer::chat_anthropic(),
   data_sources = list(
-    warehouse = commons::data_source(con, tables = c("orders", "customers")),
+    warehouse = data_source(con, tables = c("orders", "customers")),
     # A measure argument named `board` (with no @param) receives this board.
     board = pins::board_connect()
   ),
-  semantic_layer = commons::semantic_layer("R/semantic_layer.R")
+  semantic_layer = semantic_layer("R/semantic_layer.R")
 )
 ```
 
@@ -171,7 +186,7 @@ Good context sources include existing app code, report source, metric catalogs, 
 
 ```r
 # R/context_layer.R
-agent_context <- commons::context_layer(
+agent_context <- context_layer(
   files = c(
     "context/metrics.md",
     "context/table-notes.md"
@@ -196,20 +211,20 @@ library(commons)
 source("R/data_sources.R")
 source("R/context_layer.R")
 
-agent <- commons::commons(
+agent <- commons(
   client = ellmer::chat_anthropic(),
   data_sources = agent_data,
-  semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
+  semantic_layer = semantic_layer("R/semantic_layer.R"),
   context_layer = agent_context,
   log = TRUE
 )
 
 ui <- bslib::page_fillable(
-  commons::commons_mod_ui("chat")
+  commons_mod_ui("chat")
 )
 
 server <- function(input, output, session) {
-  commons::commons_mod_server("chat", agent)
+  commons_mod_server("chat", agent)
 }
 
 shinyApp(ui, server)
