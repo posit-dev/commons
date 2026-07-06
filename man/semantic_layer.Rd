@@ -18,20 +18,19 @@ A semantic layer is a collection of governed measures available to a
 \code{\link[=commons]{commons()}} agent.
 }
 \details{
-A measure function's formals split into two groups:
+A measure function can take two kinds of arguments:
 \itemize{
-\item Formals documented with \verb{@param} (or, for inline \code{\link[=measure]{measure()}}s, named in
-\code{arguments}) are the measure's arguments, supplied by the model.
-\item Formals without documentation are injection parameters. When the agent
-runs the measure, \code{\link[=commons]{commons()}} supplies each one by name: the name of a
-\code{\link[=data_sources]{data_sources()}} entry receives that source's connection, and the name of
-a \code{resources} entry receives that object. Injection parameters are never
-shown to the model.
+\item Arguments documented with \verb{@param} (or listed in \code{arguments}, for inline
+\code{\link[=measure]{measure()}}s) are supplied by the model.
+\item Undocumented arguments are supplied by \code{\link[=commons]{commons()}} when the measure runs.
+An argument named after a data source receives that source's connection;
+an argument named after a \code{resources} entry receives that object. The
+model never sees these arguments.
 }
 
-So a measure that queries a database declares the connection it needs
-rather than closing over one, and the semantic layer can be created before
-any connection exists; binding happens when the agent is assembled.
+This means a measure can take the connection it needs as an argument
+rather than relying on a variable defined elsewhere, and you can create a
+semantic layer before connecting to a database.
 }
 \examples{
 semantic_layer(
@@ -44,8 +43,7 @@ semantic_layer(
 )
 
 \dontrun{
-# In R/semantic_layer.R, `warehouse` has no @param, so it's an injection
-# parameter:
+# In R/semantic_layer.R, `warehouse` has no @param, so commons supplies it:
 #
 # #' @param region `string` The sales region.
 # #' @measure
@@ -55,9 +53,7 @@ semantic_layer(
 
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_sources = data_sources(
-    warehouse = data_source(DBI::dbConnect(...))
-  ),
+  data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
   semantic_layer = semantic_layer("R/semantic_layer.R")
 )
 }

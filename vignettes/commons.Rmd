@@ -52,13 +52,13 @@ For Claude Code, copy the same directory into `.claude/skills` instead.
 
 The data source is the set of tables available to the agent. If your data already lives in a database, pass a DBI connection. In production, prefer exposing only the tables the agent needs.
 
-Wrap the source in `data_sources()` to give it a name. The name is how measures reach the source's connection (see the next section).
+Give the source a name by placing it in a named list. The name is how measures reach the source's connection (see the next section).
 
 ```r
 # R/data_sources.R
 con <- DBI::dbConnect(...)
 
-agent_data <- commons::data_sources(
+agent_data <- list(
   warehouse = commons::data_source(
     con,
     tables = c("orders", "customers")
@@ -69,7 +69,7 @@ agent_data <- commons::data_sources(
 For data that does not already live in a database, pass named data frames. commons loads them into an in-process DuckDB database.
 
 ```r
-agent_data <- commons::data_sources(
+agent_data <- list(
   warehouse = commons::data_source(
     orders = orders,
     customers = customers
@@ -82,7 +82,7 @@ If the data lives in Posit Connect pins, `data_source_pins()` reads the pins and
 ```r
 board <- pins::board_connect()
 
-agent_data <- commons::data_sources(
+agent_data <- list(
   warehouse = commons::data_source_pins(
     board,
     names = c(
@@ -145,18 +145,18 @@ commons parses roxygen blocks marked with `@measure`, sources the file, and regi
 
 ### Connections and other measure resources
 
-A measure function's formals split into two groups. Formals documented with `@param` are the measure's arguments, supplied by the model. Formals without a `@param`, like `warehouse` above, are injection parameters: when the agent runs the measure, `commons()` supplies each one whose name matches a named data source (the source's connection) or a `resources` entry, and never shows it to the model.
+A measure function can take two kinds of arguments. Arguments documented with `@param` are supplied by the model. Undocumented arguments, like `warehouse` above, are supplied by `commons()` when the measure runs: an argument named after a data source receives that source's connection, and an argument named after a `resources` entry receives that object. The model never sees them.
 
-Because binding happens when the agent is assembled, the semantic layer can be created anywhere — including at top level, before any connection exists.
+Since connections are supplied when the agent is assembled, you can create the semantic layer anywhere, even before connecting to a database.
 
-Objects that aren't data sources, such as a pins board or an API client, are injected from `resources`:
+Use `resources` for objects that aren't data sources, such as a pins board or an API client:
 
 ```r
 agent <- commons::commons(
   client = ellmer::chat_anthropic(),
   data_sources = agent_data,
   semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
-  # A measure formal named `board` (with no @param) receives this pins board.
+  # A measure argument named `board` (with no @param) receives this board.
   resources = list(board = pins::board_connect())
 )
 ```

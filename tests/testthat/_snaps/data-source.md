@@ -31,35 +31,43 @@
       Error in `data_source()`:
       ! Every argument must be a data frame; `a` is not.
 
-# data_sources validates its inputs
-
-    Code
-      data_sources()
-    Condition
-      Error in `data_sources()`:
-      ! Supply at least one named `data_source()`.
-
----
-
-    Code
-      data_sources(test_source())
-    Condition
-      Error in `data_sources()`:
-      ! All arguments to `data_sources()` must be named.
-
----
-
-    Code
-      data_sources(sales_db = "not a source")
-    Condition
-      Error in `data_sources()`:
-      ! Every argument must be a `data_source()`; `sales_db` is not.
-
-# as_data_sources wraps a bare data_source
+# as_data_sources validates its input
 
     Code
       as_data_sources("nope")
     Condition
       Error:
-      ! `data_sources` must be a `data_source()` or `data_sources()`.
+      ! `data_sources` must be a `data_source()` or a named list of them.
+
+---
+
+    Code
+      as_data_sources(list())
+    Condition
+      Error:
+      ! `data_sources` must be a `data_source()` or a named list of them.
+
+---
+
+    Code
+      as_data_sources(list(sales_db = "not a source"))
+    Condition
+      Error:
+      ! `data_sources` must be a `data_source()` or a named list of them.
+
+---
+
+    Code
+      as_data_sources(list(test_source(), test_source()))
+    Condition
+      Error:
+      ! Each data source in `data_sources` must be named.
+
+---
+
+    Code
+      as_data_sources(list(a = test_source(), a = test_source()))
+    Condition
+      Error:
+      ! Data source names must be unique; duplicated name: "a".
 

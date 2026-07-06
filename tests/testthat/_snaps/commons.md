@@ -12,7 +12,7 @@
       commons(client = test_client(), data_sources = "not a source")
     Condition
       Error in `commons()`:
-      ! `data_sources` must be a `data_source()` or `data_sources()`.
+      ! `data_sources` must be a `data_source()` or a named list of them.
 
 ---
 
@@ -42,8 +42,7 @@
 ---
 
     Code
-      commons(client = test_client(), data_sources = data_sources(a = test_source(),
-      b = test_source()))
+      commons(client = test_client(), data_sources = list(a = test_source(), b = test_source()))
     Condition
       Error in `initialize()`:
       ! `commons()` currently supports exactly one data source, not 2.
@@ -51,11 +50,11 @@
 # commons() errors on injection parameters matching no name
 
     Code
-      commons(client = test_client(), data_sources = data_sources(sales_db = test_source()),
+      commons(client = test_client(), data_sources = list(sales_db = test_source()),
       semantic_layer = layer)
     Condition
       Error in `initialize()`:
-      ! Measure "region_revenue" declares undocumented argument `warehouse` matching no data source or resource name.
+      ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source or resource name.
       i Available names: "sales_db".
 
 ---
@@ -64,13 +63,13 @@
       commons(client = test_client(), data_sources = test_source(), semantic_layer = layer)
     Condition
       Error in `initialize()`:
-      ! Measure "region_revenue" declares undocumented argument `warehouse` matching no data source or resource name.
+      ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source or resource name.
       i No named data sources or resources are available.
 
 # commons() rejects resource names that collide with source names
 
     Code
-      commons(client = test_client(), data_sources = data_sources(sales_db = test_source()),
+      commons(client = test_client(), data_sources = list(sales_db = test_source()),
       resources = list(sales_db = "duplicate"))
     Condition
       Error in `initialize()`:

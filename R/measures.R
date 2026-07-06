@@ -7,19 +7,18 @@
 #'   directories. File and inline measures can be freely mixed.
 #'
 #' @details
-#' A measure function's formals split into two groups:
+#' A measure function can take two kinds of arguments:
 #'
-#' * Formals documented with `@param` (or, for inline [measure()]s, named in
-#'   `arguments`) are the measure's arguments, supplied by the model.
-#' * Formals without documentation are injection parameters. When the agent
-#'   runs the measure, [commons()] supplies each one by name: the name of a
-#'   [data_sources()] entry receives that source's connection, and the name of
-#'   a `resources` entry receives that object. Injection parameters are never
-#'   shown to the model.
+#' * Arguments documented with `@param` (or listed in `arguments`, for inline
+#'   [measure()]s) are supplied by the model.
+#' * Undocumented arguments are supplied by [commons()] when the measure runs.
+#'   An argument named after a data source receives that source's connection;
+#'   an argument named after a `resources` entry receives that object. The
+#'   model never sees these arguments.
 #'
-#' So a measure that queries a database declares the connection it needs
-#' rather than closing over one, and the semantic layer can be created before
-#' any connection exists; binding happens when the agent is assembled.
+#' This means a measure can take the connection it needs as an argument
+#' rather than relying on a variable defined elsewhere, and you can create a
+#' semantic layer before connecting to a database.
 #'
 #' @return A `commons_semantic_layer` object.
 #'
@@ -36,8 +35,7 @@
 #' )
 #'
 #' \dontrun{
-#' # In R/semantic_layer.R, `warehouse` has no @param, so it's an injection
-#' # parameter:
+#' # In R/semantic_layer.R, `warehouse` has no @param, so commons supplies it:
 #' #
 #' # #' @param region `string` The sales region.
 #' # #' @measure
@@ -47,9 +45,7 @@
 #'
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
-#'   data_sources = data_sources(
-#'     warehouse = data_source(DBI::dbConnect(...))
-#'   ),
+#'   data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
 #'   semantic_layer = semantic_layer("R/semantic_layer.R")
 #' )
 #' }
@@ -97,10 +93,10 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' @param name Measure name.
 #' @param description What the measure computes.
 #' @param fn Function that computes the measure.
-#' @param arguments A named list of [ellmer::type_string()] and friends, one per
-#'   model-supplied formal of `fn`. Formals of `fn` not named here are
-#'   injection parameters: hidden from the model and supplied by [commons()]
-#'   from its named [data_sources()] and `resources`.
+#' @param arguments A named list of [ellmer::type_string()] and friends
+#'   describing the arguments the model supplies. Arguments of `fn` not listed
+#'   here are hidden from the model and supplied by [commons()] from its
+#'   `data_sources` and `resources`; see [semantic_layer()].
 #' @param title Human-readable measure title to show in user interfaces. If
 #'   `NULL`, a title is derived from `name`.
 #'
@@ -120,10 +116,10 @@ measure <- function(name, description, fn, arguments = list(), title = NULL) {
   )
 }
 
-# Formals of `fn` absent from `arguments` are injection parameters. Typing them
-# as ignored keeps ellmer's arguments-match-formals check satisfied while
-# excluding them from the model-visible schema, so they're recoverable later as
-# setdiff(formals, schema properties).
+# Arguments of `fn` not described in `arguments` are supplied by commons(),
+# not the model. type_ignore() satisfies ellmer's check that `arguments`
+# matches formals(fn) but stays out of the model-visible schema, so these
+# arguments are always recoverable as formals minus schema.
 fill_injected_arguments <- function(arguments, fn) {
   injected <- setdiff(names(formals(fn)), names(arguments))
   for (nm in injected) {
@@ -136,8 +132,8 @@ measure_injection_names <- function(td) {
   setdiff(names(formals(td)), names(tool_properties(td)))
 }
 
-# Match each measure's injection parameters against the agent's named data
-# sources and resources, erroring on names that match neither.
+# Look up each measure's undocumented arguments among the agent's data source
+# and resource names, erroring on names that match neither.
 resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
   lapply(registry, function(td) {
     needed <- measure_injection_names(td)
@@ -150,7 +146,7 @@ resolve_injections <- function(registry, injectables, call = rlang::caller_env()
       }
       cli::cli_abort(
         c(
-          "Measure {.val {tool_name(td)}} declares undocumented {cli::qty(unmatched)}argument{?s} {.arg {unmatched}} matching no data source or resource name.",
+          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(unmatched)}argument{?s} {.arg {unmatched}} matching no data source or resource name.",
           i = available
         ),
         call = call

@@ -282,7 +282,7 @@ test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(
       client = test_client(),
-      data_sources = data_sources(a = test_source(), b = test_source())
+      data_sources = list(a = test_source(), b = test_source())
     ),
     error = TRUE
   )
@@ -375,7 +375,7 @@ test_that("commons() errors on injection parameters matching no name", {
   expect_snapshot(
     commons(
       client = test_client(),
-      data_sources = data_sources(sales_db = test_source()),
+      data_sources = list(sales_db = test_source()),
       semantic_layer = layer
     ),
     error = TRUE
@@ -394,7 +394,7 @@ test_that("commons() rejects resource names that collide with source names", {
   expect_snapshot(
     commons(
       client = test_client(),
-      data_sources = data_sources(sales_db = test_source()),
+      data_sources = list(sales_db = test_source()),
       resources = list(sales_db = "duplicate")
     ),
     error = TRUE

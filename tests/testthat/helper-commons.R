@@ -32,7 +32,7 @@ test_agent <- function(
 ) {
   commons(
     test_client(),
-    data_sources = data_sources(sales_db = test_source()),
+    data_sources = list(sales_db = test_source()),
     context_layer = context_layer,
     semantic_layer = semantic_layer,
     resources = resources,

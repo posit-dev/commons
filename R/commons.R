@@ -10,14 +10,13 @@
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()].
-#' @param data_sources A [data_source()], or a named [data_sources()]
-#'   collection. Naming a source lets measures receive its connection: a
-#'   measure formal with a source's name and no documentation is supplied at
-#'   call time and never shown to the model.
+#' @param data_sources A [data_source()], or a named list of them. Measures
+#'   can take a source's connection as an argument named after the source; see
+#'   [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param resources A named list of other objects measures can receive by
-#'   injection, e.g. a pins board or an API client. See [semantic_layer()].
+#' @param resources A named list of other objects that measures can take as
+#'   arguments, such as a pins board or an API client. See [semantic_layer()].
 #' @param log Whether to log conversation trajectories. `FALSE` disables
 #'   logging. `TRUE` uses private Connect pins on Posit Connect and local files
 #'   elsewhere. A single string is treated as a local directory path to write
@@ -43,11 +42,10 @@
 #' )
 #' agent$chat("How many orders are there?")
 #'
-#' # A measure that queries a database declares the connection it needs as a
-#' # formal named after a data source: `warehouse` is absent from `arguments`,
-#' # so commons injects it at call time and never shows it to the model. For
-#' # canned SQL, interpolate arguments with glue::glue_sql() so they're quoted
-#' # safely.
+#' # A measure takes a connection as an argument named after a data source.
+#' # `warehouse` isn't in `arguments`, so the model never sees it; commons
+#' # supplies it when the measure runs. Interpolate model-supplied arguments
+#' # with glue::glue_sql() so they're quoted safely.
 #' con <- DBI::dbConnect(duckdb::duckdb())
 #' sem <- semantic_layer(
 #'   measure(
@@ -67,15 +65,15 @@
 #' )
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
-#'   data_sources = data_sources(warehouse = data_source(con)),
+#'   data_sources = list(warehouse = data_source(con)),
 #'   semantic_layer = sem
 #' )
 #'
-#' # Objects that aren't data sources (pins boards, API clients) are injected
-#' # from `resources` the same way.
+#' # Objects that aren't data sources (pins boards, API clients) work the
+#' # same way through `resources`.
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
-#'   data_sources = data_sources(warehouse = data_source(con)),
+#'   data_sources = list(warehouse = data_source(con)),
 #'   resources = list(board = pins::board_connect()),
 #'   semantic_layer = semantic_layer("R/semantic_layer.R")
 #' )
@@ -120,11 +118,11 @@ Commons <- R6::R6Class(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
     #' @param client An [ellmer::Chat] supplying the provider.
-    #' @param data_sources A [data_source()] or named [data_sources()].
+    #' @param data_sources A [data_source()], or a named list of them.
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
-    #' @param resources A named list of objects measures can receive by
-    #'   injection.
+    #' @param resources A named list of other objects that measures can take
+    #'   as arguments.
     #' @param log Whether to log conversation trajectories.
     initialize = function(
       client,
@@ -212,8 +210,8 @@ Commons <- R6::R6Class(
   )
 )
 
-# The injection namespace: named sources contribute their connections, and
-# resources contribute themselves.
+# Everything a measure can take by name: a named source's connection, or a
+# resource itself.
 measure_injectables <- function(sources, resources, call = rlang::caller_env()) {
   connections <- lapply(
     sources[rlang::have_name(sources)],

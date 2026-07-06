@@ -13,10 +13,10 @@ measure(name, description, fn, arguments = list(), title = NULL)
 
 \item{fn}{Function that computes the measure.}
 
-\item{arguments}{A named list of \code{\link[ellmer:type_string]{ellmer::type_string()}} and friends, one per
-model-supplied formal of \code{fn}. Formals of \code{fn} not named here are
-injection parameters: hidden from the model and supplied by \code{\link[=commons]{commons()}}
-from its named \code{\link[=data_sources]{data_sources()}} and \code{resources}.}
+\item{arguments}{A named list of \code{\link[ellmer:type_string]{ellmer::type_string()}} and friends
+describing the arguments the model supplies. Arguments of \code{fn} not listed
+here are hidden from the model and supplied by \code{\link[=commons]{commons()}} from its
+\code{data_sources} and \code{resources}; see \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{title}{Human-readable measure title to show in user interfaces. If
 \code{NULL}, a title is derived from \code{name}.}

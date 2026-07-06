@@ -100,53 +100,6 @@ data_source_pins <- function(board, names) {
   rlang::inject(data_source(!!!frames))
 }
 
-#' Collect named data sources
-#'
-#' `data_sources()` names the [data_source()] objects available to a
-#' [commons()] agent. A source's name is how measures reach its connection: a
-#' measure function can declare an argument with the source's name and no
-#' `@param` documentation, and the agent supplies that source's connection when
-#' the measure runs. See [semantic_layer()] for details.
-#'
-#' @param ... Named [data_source()] objects.
-#'
-#' @return A `commons_data_sources` object.
-#'
-#' @examples
-#' data_sources(
-#'   sales_db = data_source(
-#'     sales = data.frame(id = 1:2, revenue = c(100, 200))
-#'   )
-#' )
-#'
-#' @export
-data_sources <- function(...) {
-  sources <- rlang::list2(...)
-
-  if (length(sources) == 0) {
-    cli::cli_abort("Supply at least one named {.fn data_source}.")
-  }
-  if (!rlang::is_named(sources)) {
-    cli::cli_abort("All arguments to {.fn data_sources} must be named.")
-  }
-
-  is_source <- vapply(sources, inherits, logical(1), "commons_data_source")
-  if (!all(is_source)) {
-    cli::cli_abort(
-      "Every argument must be a {.fn data_source}; {.arg {names(sources)[!is_source]}} {?is/are} not."
-    )
-  }
-
-  duplicated_names <- unique(names(sources)[duplicated(names(sources))])
-  if (length(duplicated_names)) {
-    cli::cli_abort(
-      "Source names must be unique; duplicated name{?s}: {.val {duplicated_names}}."
-    )
-  }
-
-  structure(sources, class = "commons_data_sources")
-}
-
 #' List the tables an agent can query
 #'
 #' @param data_source A [data_source()].
@@ -439,17 +392,37 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
 }
 
 # A bare data_source() is accepted for the quick-start path; it has no name,
-# so measures can't receive its connection by injection.
+# so measures can't take its connection as an argument. Idempotent, so
+# commons() and Commons$new() can both validate.
 as_data_sources <- function(x, call = rlang::caller_env()) {
-  if (inherits(x, "commons_data_sources")) {
-    return(x)
-  }
   if (inherits(x, "commons_data_source")) {
-    return(structure(list(x), class = "commons_data_sources"))
+    return(list(x))
   }
 
-  cli::cli_abort(
-    "{.arg data_sources} must be a {.fn data_source} or {.fn data_sources}.",
-    call = call
-  )
+  is_source <- is.list(x) &&
+    length(x) > 0 &&
+    all(vapply(x, inherits, logical(1), "commons_data_source"))
+  if (!is_source) {
+    cli::cli_abort(
+      "{.arg data_sources} must be a {.fn data_source} or a named list of them.",
+      call = call
+    )
+  }
+
+  if (length(x) > 1 && !rlang::is_named(x)) {
+    cli::cli_abort(
+      "Each data source in {.arg data_sources} must be named.",
+      call = call
+    )
+  }
+
+  duplicated_names <- unique(names(x)[duplicated(names(x))])
+  if (length(duplicated_names)) {
+    cli::cli_abort(
+      "Data source names must be unique; duplicated name{?s}: {.val {duplicated_names}}.",
+      call = call
+    )
+  }
+
+  x
 }

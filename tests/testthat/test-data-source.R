@@ -128,25 +128,31 @@ test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(a = 1), error = TRUE)
 })
 
-test_that("data_sources collects named sources", {
-  srcs <- data_sources(sales_db = test_source(), other = test_source())
-
-  expect_s3_class(srcs, "commons_data_sources")
-  expect_named(srcs, c("sales_db", "other"))
-})
-
-test_that("data_sources validates its inputs", {
-  expect_snapshot(data_sources(), error = TRUE)
-  expect_snapshot(data_sources(test_source()), error = TRUE)
-  expect_snapshot(data_sources(sales_db = "not a source"), error = TRUE)
-})
-
 test_that("as_data_sources wraps a bare data_source", {
   srcs <- as_data_sources(test_source())
 
-  expect_s3_class(srcs, "commons_data_sources")
   expect_length(srcs, 1)
   expect_false(rlang::have_name(srcs))
+})
 
+test_that("as_data_sources accepts a named list of sources", {
+  srcs <- as_data_sources(list(sales_db = test_source(), other = test_source()))
+  expect_named(srcs, c("sales_db", "other"))
+
+  # Idempotent, so commons() and Commons$new() can both normalize.
+  expect_identical(as_data_sources(srcs), srcs)
+})
+
+test_that("as_data_sources validates its input", {
   expect_snapshot(as_data_sources("nope"), error = TRUE)
+  expect_snapshot(as_data_sources(list()), error = TRUE)
+  expect_snapshot(as_data_sources(list(sales_db = "not a source")), error = TRUE)
+  expect_snapshot(
+    as_data_sources(list(test_source(), test_source())),
+    error = TRUE
+  )
+  expect_snapshot(
+    as_data_sources(list(a = test_source(), a = test_source())),
+    error = TRUE
+  )
 })

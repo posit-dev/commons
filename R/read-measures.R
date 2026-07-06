@@ -90,8 +90,7 @@ block_arguments <- function(block, fn) {
 
   args <- list()
   for (nm in names(formals)) {
-    # A formal without @param is an injection parameter; measure() hides it
-    # from the model and commons() supplies it by name.
+    # An argument without @param is supplied by commons(), not the model.
     if (is.null(param_text[[nm]])) {
       next
     }
