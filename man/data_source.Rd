@@ -2,17 +2,14 @@
 % Please edit documentation in R/data-source.R
 \name{data_source}
 \alias{data_source}
-\alias{data_source_pins}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL)
-
-data_source_pins(board, names)
+data_source(..., tables = NULL, names = NULL)
 }
 \arguments{
-\item{...}{Either a single DBI connection, or named data frames to register
-as tables. When passing data frames, each name becomes a table name the
-agent can query.}
+\item{...}{A single DBI connection, a single \code{pins} board, or named data
+frames to register as tables. When passing data frames, each name becomes
+a table name the agent can query.}
 
 \item{tables}{Tables to expose, used only when a connection is supplied. Can
 be a character vector of table names, schema-qualified strings like
@@ -21,11 +18,9 @@ be a character vector of table names, schema-qualified strings like
 schema-qualified names; use \code{DBI::Id(table = "a.b")} for literal table
 names containing dots.}
 
-\item{board}{A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}. On Posit Connect
-the default board authenticates as the deployed content's identity.}
-
-\item{names}{A named character vector of pins to read. The names become table
-names; the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
+\item{names}{Pins to read, used only when a board is supplied. A named
+character vector: the names become table names, and the values are pin
+names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
 }
 \value{
 A \code{commons_data_source} object.
@@ -34,16 +29,16 @@ A \code{commons_data_source} object.
 A data source is the set of tables available to a \code{\link[=commons]{commons()}} agent.
 }
 \details{
-\code{data_source()} accepts data that already lives in a database or data frames
-that don't:
+\code{data_source()} accepts data in several forms, picked by the class of what
+you pass:
 \itemize{
-\item Pass a DBI connection to query it as-is. Nothing is copied; the agent
-queries the database directly.
-\item Pass named data frames to load them into an in-process DuckDB database. Use
-this when the data isn't already in a database.
+\item A DBI connection is queried as-is. Nothing is copied; the agent queries
+the database directly.
+\item Named data frames are loaded into an in-process DuckDB database. Use this
+when the data isn't already in a database.
+\item A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}, is read into the same
+in-process database: each pin in \code{names} becomes a table.
 }
-
-\code{data_source_pins()} reads Posit Connect pins into the DuckDB path.
 
 The resulting object gives the agent a DBI connection plus a table registry.
 Use \code{\link[=list_tables]{list_tables()}} to list the registered tables.

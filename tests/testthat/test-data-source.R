@@ -123,6 +123,21 @@ test_that("duckdb_connect supports coexisting connections in one process", {
   )
 })
 
+test_that("data_source reads a pins board into queryable tables", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  suppressMessages(
+    pins::pin_write(board, data.frame(id = 1:3), "team-orders", type = "rds")
+  )
+
+  src <- data_source(board, names = c(orders = "team-orders"))
+  expect_equal(list_tables(src), "orders")
+  expect_equal(nrow(source_query(src, "SELECT * FROM orders")), 3)
+
+  expect_snapshot(data_source(board), error = TRUE)
+})
+
 test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(data.frame(x = 1)), error = TRUE)
   expect_snapshot(data_source(a = 1), error = TRUE)

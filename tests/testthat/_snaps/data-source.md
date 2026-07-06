@@ -15,6 +15,14 @@
       Error in `data_source()`:
       ! `tables` names table not on the connection: "nope".
 
+# data_source reads a pins board into queryable tables
+
+    Code
+      data_source(board)
+    Condition
+      Error in `data_source()`:
+      ! `names` must be a named character vector of pin names.
+
 # data_source rejects unnamed or non-data-frame input
 
     Code

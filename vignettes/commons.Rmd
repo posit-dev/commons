@@ -81,14 +81,12 @@ agent_data <- list(
 )
 ```
 
-If the data lives in Posit Connect pins, `data_source_pins()` reads the pins and uses the names you provide as table names:
+If the data lives in Posit Connect pins, pass a board and the pins to read; the names you provide become table names:
 
 ```r
-board <- pins::board_connect()
-
 agent_data <- list(
-  warehouse = data_source_pins(
-    board,
+  warehouse = data_source(
+    pins::board_connect(),
     names = c(
       orders = "team/orders",
       customers = "team/customers"
