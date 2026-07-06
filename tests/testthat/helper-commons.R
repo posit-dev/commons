@@ -39,6 +39,11 @@ test_agent <- function(
   )
 }
 
+agent_tool <- function(agent, name) {
+  tools <- agent$get_tools()
+  tools[[which(vapply(tools, tool_name, character(1)) == name)]]
+}
+
 count_measure_tool <- function() {
   measure(
     "order_count",

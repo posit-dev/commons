@@ -30,14 +30,6 @@
       Error in `commons()`:
       ! `semantic_layer` must be a `semantic_layer()`.
 
----
-
-    Code
-      commons(client = test_client(), data_sources = list(a = test_source(), b = test_source()))
-    Condition
-      Error in `commons()`:
-      ! `commons()` currently supports exactly one `data_source()`; `data_sources` has 2.
-
 # commons() errors on injection parameters matching no name
 
     Code

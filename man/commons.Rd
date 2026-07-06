@@ -17,10 +17,11 @@ commons(
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
 \code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}.}
 
-\item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list containing one along
-with any other objects measures need, such as a pins board or an API
-client. Measures can take an entry as an argument named after it; see
-\code{\link[=semantic_layer]{semantic_layer()}}.}
+\item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of one or more of
+them along with any other objects measures need, such as a pins board or
+an API client. Measures can take an entry as an argument named after it;
+see \code{\link[=semantic_layer]{semantic_layer()}}. When there are several sources, the \code{run_sql} and
+\code{describe_table} tools take a source's name as a \code{source} argument.}
 
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
@@ -159,8 +160,8 @@ rather than this method directly.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
-      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list containing one
-along with any other objects measures need.}
+      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list of one or more
+of them along with any other objects measures need.}
       \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
       \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
       \item{\code{log}}{Whether to log conversation trajectories.}

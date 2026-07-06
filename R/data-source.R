@@ -137,6 +137,36 @@ new_data_source <- function(
   )
 }
 
+# Pick the data source a SQL tool call runs against. With one source no
+# choice is needed; with several, the model passes a `source` name. The tool
+# schema's enum should prevent bad values, but validate anyway so a bad call
+# errors clearly and retryably.
+resolve_sql_source <- function(sources, name, call = rlang::caller_env()) {
+  if (length(sources) == 1) {
+    return(sources[[1]])
+  }
+  if (!is.null(name) && name %in% names(sources)) {
+    return(sources[[name]])
+  }
+
+  problem <- if (is.null(name)) {
+    "{.arg source} is required when an agent has multiple data sources."
+  } else {
+    "No data source named {.val {name}}."
+  }
+  cli::cli_abort(
+    c(problem, i = "Available sources: {.val {names(sources)}}."),
+    call = call
+  )
+}
+
+# Best-effort dialect hint for the system prompt. odbc and several other
+# backends report a dbms name; fall back to the connection class.
+source_dialect <- function(source) {
+  info <- tryCatch(DBI::dbGetInfo(source$con), error = function(e) NULL)
+  info$dbms.name %||% sub("_connection$", "", class(source$con)[[1]])
+}
+
 source_describe <- function(source, table, n_sample = 5) {
   id <- source$table_ids[[table]]
   if (is.null(id)) {
@@ -408,9 +438,9 @@ as_data_sources <- function(x, call = rlang::caller_env()) {
   }
 
   n_sources <- sum(vapply(x, inherits, logical(1), "commons_data_source"))
-  if (n_sources != 1) {
+  if (n_sources == 0) {
     cli::cli_abort(
-      "{.fn commons} currently supports exactly one {.fn data_source}; {.arg data_sources} has {n_sources}.",
+      "{.arg data_sources} must contain at least one {.fn data_source}.",
       call = call
     )
   }

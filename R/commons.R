@@ -10,10 +10,11 @@
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()].
-#' @param data_sources A [data_source()], or a named list containing one along
-#'   with any other objects measures need, such as a pins board or an API
-#'   client. Measures can take an entry as an argument named after it; see
-#'   [semantic_layer()].
+#' @param data_sources A [data_source()], or a named list of one or more of
+#'   them along with any other objects measures need, such as a pins board or
+#'   an API client. Measures can take an entry as an argument named after it;
+#'   see [semantic_layer()]. When there are several sources, the `run_sql` and
+#'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param log Whether to log conversation trajectories. `FALSE` disables
@@ -115,8 +116,8 @@ Commons <- R6::R6Class(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
     #' @param client An [ellmer::Chat] supplying the provider.
-    #' @param data_sources A [data_source()], or a named list containing one
-    #'   along with any other objects measures need.
+    #' @param data_sources A [data_source()], or a named list of one or more
+    #'   of them along with any other objects measures need.
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
     #' @param log Whether to log conversation trajectories.
@@ -133,7 +134,7 @@ Commons <- R6::R6Class(
       sources <- as_data_sources(data_sources)
       is_source <- vapply(sources, inherits, logical(1), "commons_data_source")
 
-      private$data_source <- sources[[which(is_source)]]
+      private$sources <- sources[is_source]
       private$context_layer <- context_layer
       private$registry <- semantic_layer$measures
       private$injections <- resolve_injections(
@@ -144,7 +145,7 @@ Commons <- R6::R6Class(
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
-        commons_system_prompt(private$data_source, private$context_layer)
+        commons_system_prompt(private$sources, private$context_layer)
       )
     },
 
@@ -186,7 +187,7 @@ Commons <- R6::R6Class(
     }
   ),
   private = list(
-    data_source = NULL,
+    sources = NULL,
     context_layer = NULL,
     registry = NULL,
     injections = NULL,

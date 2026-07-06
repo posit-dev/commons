@@ -143,6 +143,22 @@ test_that("as_data_sources accepts a source alongside other named entries", {
   expect_identical(as_data_sources(srcs), srcs)
 })
 
+test_that("as_data_sources accepts multiple sources", {
+  srcs <- as_data_sources(list(a = test_source(), b = test_source()))
+  expect_named(srcs, c("a", "b"))
+})
+
+test_that("resolve_sql_source picks the source for a SQL tool call", {
+  src <- test_source()
+  expect_identical(resolve_sql_source(list(src), NULL), src)
+
+  sources <- list(a = test_source(), b = src)
+  expect_identical(resolve_sql_source(sources, "b"), src)
+
+  expect_snapshot(resolve_sql_source(sources, "nope"), error = TRUE)
+  expect_snapshot(resolve_sql_source(sources, NULL), error = TRUE)
+})
+
 test_that("as_data_sources validates its input", {
   expect_snapshot(as_data_sources("nope"), error = TRUE)
   expect_snapshot(as_data_sources(list()), error = TRUE)

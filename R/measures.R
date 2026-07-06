@@ -185,7 +185,7 @@ is_measure_list <- function(x) {
   is.list(x) && !inherits(x, "ellmer::ToolDef")
 }
 
-search_measures_text <- function(registry, query) {
+search_measures_text <- function(registry, query, source_names = character()) {
   if (length(registry) == 0) {
     return("No measures are registered.")
   }
@@ -203,11 +203,16 @@ search_measures_text <- function(registry, query) {
     ))
   }
 
-  blocks <- vapply(registry[hits], measure_schema_text, character(1))
+  blocks <- vapply(
+    registry[hits],
+    measure_schema_text,
+    character(1),
+    source_names = source_names
+  )
   paste(blocks, collapse = "\n\n")
 }
 
-measure_schema_text <- function(td) {
+measure_schema_text <- function(td, source_names = character()) {
   props <- tool_properties(td)
   args <- if (length(props) == 0) {
     "  (no arguments)"
@@ -222,11 +227,23 @@ measure_schema_text <- function(td) {
     )
   }
   sprintf(
-    "### %s\n%s\n\narguments:\n%s",
+    "### %s\n%s\n\n%sarguments:\n%s",
     tool_name(td),
     tool_description(td),
+    measure_sources_line(td, source_names),
     args
   )
+}
+
+# When an agent has several data sources, noting which one(s) a measure
+# queries points the SQL fallback at the right source. `source_names` is empty
+# for single-source agents, so the line never renders there.
+measure_sources_line <- function(td, source_names) {
+  used <- intersect(measure_injection_names(td), source_names)
+  if (length(used) == 0) {
+    return("")
+  }
+  sprintf("sources: %s\n", paste(used, collapse = ", "))
 }
 
 arg_schema_line <- function(name, type) {

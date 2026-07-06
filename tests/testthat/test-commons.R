@@ -271,12 +271,77 @@ test_that("commons() validates its inputs", {
     ),
     error = TRUE
   )
-  expect_snapshot(
-    commons(
-      client = test_client(),
-      data_sources = list(a = test_source(), b = test_source())
-    ),
-    error = TRUE
+})
+
+test_that("SQL tools gain a source argument only with multiple sources", {
+  single <- test_agent()
+  expect_named(tool_properties(agent_tool(single, "run_sql")), "sql")
+  expect_named(tool_properties(agent_tool(single, "describe_table")), "table")
+
+  multi <- test_agent(
+    data_sources = list(sales_db = test_source(), crm = test_source())
+  )
+  run_sql_props <- tool_properties(agent_tool(multi, "run_sql"))
+  expect_named(run_sql_props, c("sql", "source"))
+  expect_equal(type_values(run_sql_props$source), c("sales_db", "crm"))
+  expect_named(
+    tool_properties(agent_tool(multi, "describe_table")),
+    c("table", "source")
+  )
+})
+
+test_that("run_sql and describe_table route to the named source", {
+  agent <- test_agent(
+    data_sources = list(
+      a = data_source(orders = data.frame(n = 1L)),
+      b = data_source(orders = data.frame(n = 2L))
+    )
+  )
+
+  run_sql <- agent_tool(agent, "run_sql")
+  expect_match(run_sql("SELECT n FROM orders", source = "a")@value, "1")
+  expect_match(run_sql("SELECT n FROM orders", source = "b")@value, "2")
+
+  describe <- agent_tool(agent, "describe_table")
+  res <- describe("orders", source = "b")
+  expect_match(res@value, "integer")
+  expect_match(S7::prop(res, "extra")$display$title, "(b)", fixed = TRUE)
+})
+
+test_that("the system prompt groups tables when there are several sources", {
+  agent <- test_agent(
+    data_sources = list(
+      sales_db = test_source(),
+      crm = data_source(accounts = data.frame(id = 1))
+    )
+  )
+  prompt <- agent$get_system_prompt()
+
+  expect_match(prompt, "## sales_db (duckdb)", fixed = TRUE)
+  expect_match(prompt, "## crm (duckdb)", fixed = TRUE)
+  expect_match(prompt, "- accounts", fixed = TRUE)
+  expect_match(prompt, "Pass the source's name as `source`", fixed = TRUE)
+
+  expect_no_match(test_agent()$get_system_prompt(), "## sales_db", fixed = TRUE)
+})
+
+test_that("a measure can take multiple sources' connections", {
+  layer <- semantic_layer(
+    measure(
+      "compare_sources",
+      "Compares the two databases.",
+      function(a, b) NULL,
+      arguments = list()
+    )
+  )
+  agent <- test_agent(
+    data_sources = list(a = test_source(), b = test_source()),
+    semantic_layer = layer
+  )
+
+  expect_named(
+    agent$.__enclos_env__$private$injections$compare_sources,
+    c("a", "b")
   )
 })
 
