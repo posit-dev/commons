@@ -18,14 +18,26 @@ A semantic layer is a collection of governed measures available to a
 \code{\link[=commons]{commons()}} agent.
 }
 \details{
-Measures read from files are sourced into an environment that inherits from
-the caller of \code{semantic_layer()}. If a file-backed measure refers to a
-connection, pins board, API client, or other object, call \code{semantic_layer()}
-from the same function or script frame that defines that object.
+A measure function can take two kinds of arguments:
+\itemize{
+\item Arguments documented with \verb{@param} (or listed in \code{arguments}, for inline
+\code{\link[=measure]{measure()}}s) are supplied by the model.
+\item Undocumented arguments are supplied by \code{\link[=commons]{commons()}} when the measure runs.
+An argument named after a data source receives its connection, even if
+the argument has a default. Any other undocumented argument keeps its
+default; if it has no default, \code{\link[=commons]{commons()}} errors. The model never sees
+these arguments.
+}
 
-Do not create a semantic layer at top level and then expect it to use a
-connection supplied later to \code{\link[=commons]{commons()}}; the measure functions have already
-been created by then.
+This means a measure can take the connection it needs as an argument
+rather than relying on a variable defined elsewhere, and you can create a
+semantic layer before connecting to a database.
+
+For objects that aren't data sources, such as a pins board or an API
+client, give the argument a default that builds the object, e.g.
+\code{board = pins::board_connect()}. Write the default as a call rather than a
+reference to a variable defined elsewhere, so the measure doesn't depend on
+where the semantic layer is created.
 }
 \examples{
 semantic_layer(
@@ -38,13 +50,17 @@ semantic_layer(
 )
 
 \dontrun{
-con <- DBI::dbConnect(...)
-board <- pins::board_connect()
+# In R/semantic_layer.R, `warehouse` has no @param, so commons supplies it:
+#
+# #' @param region `string` The sales region.
+# #' @measure
+# revenue <- function(region, warehouse) {
+#   DBI::dbGetQuery(warehouse, ...)
+# }
 
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_source = data_source(con),
-  # Measures in R/semantic_layer.R can refer to `con` and `board`.
+  data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
   semantic_layer = semantic_layer("R/semantic_layer.R")
 )
 }

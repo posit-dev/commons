@@ -81,6 +81,31 @@ test_that("search_measures_text surfaces matches with their schema", {
   expect_match(out, "EMEA")
 })
 
+test_that("search_measures_text notes measure sources when given source names", {
+  registry <- list(
+    region_revenue = measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, warehouse, cache) NULL,
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+
+  out <- search_measures_text(
+    registry,
+    "revenue for a region",
+    source_names = c("warehouse", "finance")
+  )
+  expect_match(out, "sources: warehouse", fixed = TRUE)
+  expect_no_match(out, "finance")
+  expect_no_match(out, "cache")
+
+  expect_no_match(
+    search_measures_text(registry, "revenue for a region"),
+    "sources:"
+  )
+})
+
 test_that("search_measures_text reports when nothing matches", {
   registry <- list(order_count = count_measure_tool())
   expect_match(

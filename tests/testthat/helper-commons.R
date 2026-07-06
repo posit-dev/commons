@@ -27,15 +27,21 @@ test_client <- function() {
 test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,
+  data_sources = list(sales_db = test_source()),
   log = withr::local_tempdir(.local_envir = parent.frame())
 ) {
   commons(
     test_client(),
-    data_source = test_source(),
+    data_sources = data_sources,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
     log = log
   )
+}
+
+agent_tool <- function(agent, name) {
+  tools <- agent$get_tools()
+  tools[[which(vapply(tools, tool_name, character(1)) == name)]]
 }
 
 count_measure_tool <- function() {

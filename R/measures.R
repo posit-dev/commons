@@ -7,14 +7,25 @@
 #'   directories. File and inline measures can be freely mixed.
 #'
 #' @details
-#' Measures read from files are sourced into an environment that inherits from
-#' the caller of `semantic_layer()`. If a file-backed measure refers to a
-#' connection, pins board, API client, or other object, call `semantic_layer()`
-#' from the same function or script frame that defines that object.
+#' A measure function can take two kinds of arguments:
 #'
-#' Do not create a semantic layer at top level and then expect it to use a
-#' connection supplied later to [commons()]; the measure functions have already
-#' been created by then.
+#' * Arguments documented with `@param` (or listed in `arguments`, for inline
+#'   [measure()]s) are supplied by the model.
+#' * Undocumented arguments are supplied by [commons()] when the measure runs.
+#'   An argument named after a data source receives its connection, even if
+#'   the argument has a default. Any other undocumented argument keeps its
+#'   default; if it has no default, [commons()] errors. The model never sees
+#'   these arguments.
+#'
+#' This means a measure can take the connection it needs as an argument
+#' rather than relying on a variable defined elsewhere, and you can create a
+#' semantic layer before connecting to a database.
+#'
+#' For objects that aren't data sources, such as a pins board or an API
+#' client, give the argument a default that builds the object, e.g.
+#' `board = pins::board_connect()`. Write the default as a call rather than a
+#' reference to a variable defined elsewhere, so the measure doesn't depend on
+#' where the semantic layer is created.
 #'
 #' @return A `commons_semantic_layer` object.
 #'
@@ -31,13 +42,17 @@
 #' )
 #'
 #' \dontrun{
-#' con <- DBI::dbConnect(...)
-#' board <- pins::board_connect()
+#' # In R/semantic_layer.R, `warehouse` has no @param, so commons supplies it:
+#' #
+#' # #' @param region `string` The sales region.
+#' # #' @measure
+#' # revenue <- function(region, warehouse) {
+#' #   DBI::dbGetQuery(warehouse, ...)
+#' # }
 #'
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
-#'   data_source = data_source(con),
-#'   # Measures in R/semantic_layer.R can refer to `con` and `board`.
+#'   data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
 #'   semantic_layer = semantic_layer("R/semantic_layer.R")
 #' )
 #' }
@@ -84,10 +99,11 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #'
 #' @param name Measure name.
 #' @param description What the measure computes.
-#' @param fn Function that computes the measure. Its formals are the measure's
-#'   arguments.
-#' @param arguments A named list of [ellmer::type_string()] and friends, one per
-#'   formal of `fn`.
+#' @param fn Function that computes the measure.
+#' @param arguments A named list of [ellmer::type_string()] and friends
+#'   describing the arguments the model supplies. Arguments of `fn` not listed
+#'   here are hidden from the model: they receive a matching data source's
+#'   connection or keep their defaults. See [semantic_layer()].
 #' @param title Human-readable measure title to show in user interfaces. If
 #'   `NULL`, a title is derived from `name`.
 #'
@@ -101,10 +117,56 @@ measure <- function(name, description, fn, arguments = list(), title = NULL) {
   ellmer::tool(
     fn,
     description,
-    arguments = arguments,
+    arguments = fill_injected_arguments(arguments, fn),
     name = name,
     annotations = ellmer::tool_annotations(title = title)
   )
+}
+
+# Arguments of `fn` not described in `arguments` are supplied by commons(),
+# not the model. type_ignore() satisfies ellmer's check that `arguments`
+# matches formals(fn) but stays out of the model-visible schema, which is how
+# measure_injection_names() tells the two kinds of argument apart.
+fill_injected_arguments <- function(arguments, fn) {
+  injected <- setdiff(names(formals(fn)), names(arguments))
+  for (nm in injected) {
+    arguments[[nm]] <- ellmer::type_ignore()
+  }
+  arguments
+}
+
+measure_injection_names <- function(td) {
+  setdiff(names(formals(td)), names(tool_properties(td)))
+}
+
+# Look up each measure's undocumented arguments among the agent's named
+# data_sources entries. An unmatched argument keeps its default; one with no
+# default is an error.
+resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
+  lapply(registry, function(td) {
+    needed <- measure_injection_names(td)
+    unmatched <- setdiff(needed, names(injectables))
+    no_default <- unmatched[vapply(
+      unmatched,
+      function(nm) identical(formals(td)[[nm]], quote(expr = )),
+      logical(1)
+    )]
+    if (length(no_default)) {
+      available <- if (length(injectables)) {
+        cli::format_inline("Available sources: {.val {names(injectables)}}.")
+      } else {
+        "{.arg data_sources} has no named sources."
+      }
+      cli::cli_abort(
+        c(
+          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(no_default)}argument{?s} {.arg {no_default}} matching no data source.",
+          i = available
+        ),
+        call = call
+      )
+    }
+    injectables[intersect(needed, names(injectables))]
+  })
 }
 
 new_semantic_layer <- function(measures = list()) {
@@ -137,7 +199,7 @@ is_measure_list <- function(x) {
   is.list(x) && !inherits(x, "ellmer::ToolDef")
 }
 
-search_measures_text <- function(registry, query) {
+search_measures_text <- function(registry, query, source_names = character()) {
   if (length(registry) == 0) {
     return("No measures are registered.")
   }
@@ -155,11 +217,16 @@ search_measures_text <- function(registry, query) {
     ))
   }
 
-  blocks <- vapply(registry[hits], measure_schema_text, character(1))
+  blocks <- vapply(
+    registry[hits],
+    measure_schema_text,
+    character(1),
+    source_names = source_names
+  )
   paste(blocks, collapse = "\n\n")
 }
 
-measure_schema_text <- function(td) {
+measure_schema_text <- function(td, source_names = character()) {
   props <- tool_properties(td)
   args <- if (length(props) == 0) {
     "  (no arguments)"
@@ -174,11 +241,23 @@ measure_schema_text <- function(td) {
     )
   }
   sprintf(
-    "### %s\n%s\n\narguments:\n%s",
+    "### %s\n%s\n\n%sarguments:\n%s",
     tool_name(td),
     tool_description(td),
+    measure_sources_line(td, source_names),
     args
   )
+}
+
+# When an agent has several data sources, noting which one(s) a measure
+# queries points the SQL fallback at the right source. `source_names` is empty
+# for single-source agents, so the line never appears there.
+measure_sources_line <- function(td, source_names) {
+  used <- intersect(measure_injection_names(td), source_names)
+  if (length(used) == 0) {
+    return("")
+  }
+  sprintf("sources: %s\n", paste(used, collapse = ", "))
 }
 
 arg_schema_line <- function(name, type) {

@@ -90,9 +90,13 @@ block_arguments <- function(block, fn) {
 
   args <- list()
   for (nm in names(formals)) {
+    # An argument without @param is supplied by commons(), not the model.
+    if (is.null(param_text[[nm]])) {
+      next
+    }
     required <- identical(formals[[nm]], quote(expr = ))
     args[[nm]] <- param_type(
-      param_text[[nm]] %||% "",
+      param_text[[nm]],
       default = formals[[nm]],
       required = required
     )

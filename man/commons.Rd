@@ -7,7 +7,7 @@
 \usage{
 commons(
   client = ellmer::chat_anthropic(),
-  data_source,
+  data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
   log = FALSE
@@ -17,7 +17,10 @@ commons(
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
 \code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}.}
 
-\item{data_source}{A \code{\link[=data_source]{data_source()}}.}
+\item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
+can take a source's connection as an argument named after the source; see
+\code{\link[=semantic_layer]{semantic_layer()}}. When there are several sources, the \code{run_sql} and
+\code{describe_table} tools take a source's name as a \code{source} argument.}
 
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
@@ -52,27 +55,28 @@ sem <- semantic_layer(
     arguments = list()
   )
 )
-src <- data_source(sales = my_sales)
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_source = src,
+  data_sources = data_source(sales = my_sales),
   semantic_layer = sem
 )
 agent$chat("How many orders are there?")
 
-# A measure over a database closes over the connection. For canned SQL,
-# interpolate arguments with glue::glue_sql() so they're quoted safely.
+# A measure takes a connection as an argument named after a data source.
+# `warehouse` isn't in `arguments`, so the model never sees it; commons
+# supplies it when the measure runs. Interpolate model-supplied arguments
+# with glue::glue_sql() so they're quoted safely.
 con <- DBI::dbConnect(duckdb::duckdb())
 sem <- semantic_layer(
   measure(
     "revenue_by_region",
     "Total revenue for a region.",
-    function(region) {
+    function(region, warehouse) {
       DBI::dbGetQuery(
-        con,
+        warehouse,
         glue::glue_sql(
           "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
-          .con = con
+          .con = warehouse
         )
       )
     },
@@ -81,25 +85,13 @@ sem <- semantic_layer(
 )
 agent <- commons(
   ellmer::chat_anthropic(),
-  data_source = data_source(con),
+  data_sources = list(warehouse = data_source(con)),
   semantic_layer = sem
 )
 
-# To reuse an existing function that takes a connection, wrap it so its
-# formals are just the measure's arguments.
-sem <- semantic_layer(
-  measure(
-    "revenue_metrics",
-    "Revenue metrics over a date range.",
-    function(start_date, end_date) {
-      pull_revenue_metrics(con, start_date, end_date)
-    },
-    arguments = list(
-      start_date = ellmer::type_string("Start date, YYYY-MM-DD."),
-      end_date = ellmer::type_string("End date, YYYY-MM-DD.")
-    )
-  )
-)
+# Objects that aren't data sources (a pins board, an API client) come from
+# argument defaults in the measure, e.g. `board = pins::board_connect()`.
+# See ?semantic_layer.
 }
 
 }
@@ -150,7 +142,7 @@ rather than this method directly.
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$new(
   client,
-  data_source,
+  data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
   log = FALSE
@@ -161,7 +153,7 @@ rather than this method directly.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
-      \item{\code{data_source}}{A \code{\link[=data_source]{data_source()}}.}
+      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list of them.}
       \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
       \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
       \item{\code{log}}{Whether to log conversation trajectories.}

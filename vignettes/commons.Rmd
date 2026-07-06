@@ -20,6 +20,10 @@ At their core, commons agents are composed of a data source, a semantic layer, a
 
 This vignette shows the shape of a small commons project.
 
+```r
+library(commons)
+```
+
 ## Setting up the project directory
 
 A commons agent is easiest to maintain when the pieces live in separate files:
@@ -52,38 +56,55 @@ For Claude Code, copy the same directory into `.claude/skills` instead.
 
 The data source is the set of tables available to the agent. If your data already lives in a database, pass a DBI connection. In production, prefer exposing only the tables the agent needs.
 
+Give the source a name by placing it in a named list. The name is how measures reach the source's connection (see the next section).
+
 ```r
 # R/data_sources.R
 con <- DBI::dbConnect(...)
 
-agent_data <- commons::data_source(
-  con,
-  tables = c("orders", "customers")
+agent_data <- list(
+  warehouse = data_source(
+    con,
+    tables = c("orders", "customers")
+  )
 )
 ```
 
 For data that does not already live in a database, pass named data frames. commons loads them into an in-process DuckDB database.
 
 ```r
-agent_data <- commons::data_source(
-  orders = orders,
-  customers = customers
-)
-```
-
-If the data lives in Posit Connect pins, `data_source_pins()` reads the pins and uses the names you provide as table names:
-
-```r
-board <- pins::board_connect()
-
-agent_data <- commons::data_source_pins(
-  board,
-  names = c(
-    orders = "team/orders",
-    customers = "team/customers"
+agent_data <- list(
+  warehouse = data_source(
+    orders = orders,
+    customers = customers
   )
 )
 ```
+
+If the data lives in Posit Connect pins, pass a board and the pins to read; the names you provide become table names:
+
+```r
+agent_data <- list(
+  warehouse = data_source(
+    pins::board_connect(),
+    names = c(
+      orders = "team/orders",
+      customers = "team/customers"
+    )
+  )
+)
+```
+
+An agent can have more than one data source:
+
+```r
+agent_data <- list(
+  warehouse = data_source(con, tables = c("orders", "customers")),
+  finance = data_source(finance_con, tables = "invoices")
+)
+```
+
+With several sources, the system prompt lists each source's tables separately, and the agent's `describe_table` and `run_sql` tools take the source's name as a `source` argument. With one source, that argument doesn't exist.
 
 ## Defining the semantic layer
 
@@ -105,11 +126,11 @@ Measures should use definitions your team already trusts: existing metric functi
 #'
 #' @return A data frame with columns region and revenue.
 #' @measure
-revenue_by_region <- function(start_date, end_date, region = NULL) {
+revenue_by_region <- function(start_date, end_date, region = NULL, warehouse) {
   region_filter <- if (is.null(region)) {
     DBI::SQL("TRUE")
   } else {
-    glue::glue_sql("region = {region}", .con = con)
+    glue::glue_sql("region = {region}", .con = warehouse)
   }
 
   sql <- glue::glue_sql(
@@ -120,54 +141,40 @@ revenue_by_region <- function(start_date, end_date, region = NULL) {
       AND ({region_filter})
     GROUP BY region
     ",
-    .con = con
+    .con = warehouse
   )
 
-  DBI::dbGetQuery(con, sql)
+  DBI::dbGetQuery(warehouse, sql)
 }
 ```
 
 Then collect the documented measures into a semantic layer:
 
 ```r
-agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
+agent_semantics <- semantic_layer("R/semantic_layer.R")
 ```
 
 commons parses roxygen blocks marked with `@measure`, sources the file, and registers those functions as governed tools.
 
-### Scoping connections and other measure resources
+### Connections and other measure resources
 
-File-backed measures are ordinary R functions. If a measure refers to objects that are not arguments, such as `con`, `board`, or an API client, those objects must be visible from the environment where `commons::semantic_layer()` is called.
+A measure function can take two kinds of arguments. Arguments documented with `@param` are supplied by the model. Undocumented arguments, like `warehouse` above, are supplied when the measure runs: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. The model never sees them.
 
-This is the safe pattern:
+Since connections are supplied when the agent is assembled, you can create the semantic layer anywhere, even before connecting to a database.
 
-```r
-con <- DBI::dbConnect(...)
-board <- pins::board_connect()
-
-agent <- commons::commons(
-  client = ellmer::chat_anthropic(),
-  data_source = commons::data_source(con, tables = c("orders", "customers")),
-  # Measures in R/semantic_layer.R can refer to `con` and `board`.
-  semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
-  context_layer = agent_context
-)
-```
-
-Avoid creating the semantic layer before the resources it uses are in scope:
+For objects that aren't data sources, such as a pins board or an API client, give the argument a default that builds the object:
 
 ```r
-agent_semantics <- commons::semantic_layer("R/semantic_layer.R")
-
-con <- DBI::dbConnect(...)
-
-agent <- commons::commons(
-  data_source = commons::data_source(con),
-  semantic_layer = agent_semantics
-)
+#' @param start_date `string` Start date, YYYY-MM-DD.
+#' @measure
+new_leads <- function(start_date, board = pins::board_connect()) {
+  pins::pin_read(board, "team/leads") |>
+    dplyr::filter(created >= as.Date(start_date)) |>
+    nrow()
+}
 ```
 
-In the second example, the measure functions have already been created before `con` exists, so they cannot see it. Create the semantic layer after defining the resources that measures use.
+Write the default as a call rather than a reference to a variable defined elsewhere; the measure then works no matter where the semantic layer is created.
 
 ## Defining the context layer
 
@@ -177,7 +184,7 @@ Good context sources include existing app code, report source, metric catalogs, 
 
 ```r
 # R/context_layer.R
-agent_context <- commons::context_layer(
+agent_context <- context_layer(
   files = c(
     "context/metrics.md",
     "context/table-notes.md"
@@ -202,20 +209,20 @@ library(commons)
 source("R/data_sources.R")
 source("R/context_layer.R")
 
-agent <- commons::commons(
+agent <- commons(
   client = ellmer::chat_anthropic(),
-  data_source = agent_data,
-  semantic_layer = commons::semantic_layer("R/semantic_layer.R"),
+  data_sources = agent_data,
+  semantic_layer = semantic_layer("R/semantic_layer.R"),
   context_layer = agent_context,
   log = TRUE
 )
 
 ui <- bslib::page_fillable(
-  commons::commons_mod_ui("chat")
+  commons_mod_ui("chat")
 )
 
 server <- function(input, output, session) {
-  commons::commons_mod_server("chat", agent)
+  commons_mod_server("chat", agent)
 }
 
 shinyApp(ui, server)

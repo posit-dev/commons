@@ -123,7 +123,66 @@ test_that("duckdb_connect supports coexisting connections in one process", {
   )
 })
 
+test_that("data_source reads a pins board into queryable tables", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  suppressMessages(
+    pins::pin_write(board, data.frame(id = 1:3), "team-orders", type = "rds")
+  )
+
+  src <- data_source(board, names = c(orders = "team-orders"))
+  expect_equal(list_tables(src), "orders")
+  expect_equal(nrow(source_query(src, "SELECT * FROM orders")), 3)
+
+  expect_snapshot(data_source(board), error = TRUE)
+})
+
 test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(data.frame(x = 1)), error = TRUE)
   expect_snapshot(data_source(a = 1), error = TRUE)
+})
+
+test_that("as_data_sources wraps a bare data_source", {
+  srcs <- as_data_sources(test_source())
+
+  expect_length(srcs, 1)
+  expect_false(rlang::have_name(srcs))
+})
+
+test_that("as_data_sources accepts multiple sources", {
+  srcs <- as_data_sources(list(a = test_source(), b = test_source()))
+  expect_named(srcs, c("a", "b"))
+
+  # Accepts its own output, since commons() and Commons$new() both call it.
+  expect_identical(as_data_sources(srcs), srcs)
+})
+
+test_that("resolve_sql_source picks the source for a SQL tool call", {
+  src <- test_source()
+  expect_identical(resolve_sql_source(list(src), NULL), src)
+
+  sources <- list(a = test_source(), b = src)
+  expect_identical(resolve_sql_source(sources, "b"), src)
+
+  expect_snapshot(resolve_sql_source(sources, "nope"), error = TRUE)
+  expect_snapshot(resolve_sql_source(sources, NULL), error = TRUE)
+})
+
+test_that("as_data_sources validates its input", {
+  expect_snapshot(as_data_sources("nope"), error = TRUE)
+  expect_snapshot(as_data_sources(list()), error = TRUE)
+  expect_snapshot(as_data_sources(list(sales_db = "not a source")), error = TRUE)
+  expect_snapshot(
+    as_data_sources(list(sales_db = test_source(), board = list())),
+    error = TRUE
+  )
+  expect_snapshot(
+    as_data_sources(list(test_source(), test_source())),
+    error = TRUE
+  )
+  expect_snapshot(
+    as_data_sources(list(a = test_source(), a = test_source())),
+    error = TRUE
+  )
 })

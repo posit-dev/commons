@@ -68,7 +68,7 @@ test_that("the system prompt includes schema-qualified table labels", {
 
   agent <- commons(
     test_client(),
-    data_source = data_source(con, tables = "crm.sales")
+    data_sources = data_source(con, tables = "crm.sales")
   )
 
   expect_match(agent$get_system_prompt(), "- crm.sales", fixed = TRUE)
@@ -157,7 +157,7 @@ test_that("logged Claude streams do not append the local trajectory path", {
       params = ellmer::params(temperature = 0, max_tokens = 32),
       cache = "none"
     ),
-    data_source = test_source(),
+    data_sources = test_source(),
     log = path
   )
 
@@ -248,17 +248,17 @@ test_that("trajectory pin names fit Connect content name limits", {
 
 test_that("commons() validates its inputs", {
   expect_snapshot(
-    commons(client = "not a chat", data_source = test_source()),
+    commons(client = "not a chat", data_sources = test_source()),
     error = TRUE
   )
   expect_snapshot(
-    commons(client = test_client(), data_source = "not a source"),
+    commons(client = test_client(), data_sources = "not a source"),
     error = TRUE
   )
   expect_snapshot(
     commons(
       client = test_client(),
-      data_source = test_source(),
+      data_sources = test_source(),
       context_layer = "not context"
     ),
     error = TRUE
@@ -266,9 +266,204 @@ test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(
       client = test_client(),
-      data_source = test_source(),
+      data_sources = test_source(),
       semantic_layer = list()
     ),
     error = TRUE
   )
 })
+
+test_that("SQL tools gain a source argument only with multiple sources", {
+  single <- test_agent()
+  expect_named(tool_properties(agent_tool(single, "run_sql")), "sql")
+  expect_named(tool_properties(agent_tool(single, "describe_table")), "table")
+
+  multi <- test_agent(
+    data_sources = list(sales_db = test_source(), crm = test_source())
+  )
+  run_sql_props <- tool_properties(agent_tool(multi, "run_sql"))
+  expect_named(run_sql_props, c("sql", "source"))
+  expect_equal(type_values(run_sql_props$source), c("sales_db", "crm"))
+  expect_named(
+    tool_properties(agent_tool(multi, "describe_table")),
+    c("table", "source")
+  )
+})
+
+test_that("run_sql and describe_table route to the named source", {
+  agent <- test_agent(
+    data_sources = list(
+      a = data_source(orders = data.frame(n = 1L)),
+      b = data_source(orders = data.frame(n = 2L))
+    )
+  )
+
+  run_sql <- agent_tool(agent, "run_sql")
+  expect_match(run_sql("SELECT n FROM orders", source = "a")@value, "1")
+  expect_match(run_sql("SELECT n FROM orders", source = "b")@value, "2")
+
+  describe <- agent_tool(agent, "describe_table")
+  res <- describe("orders", source = "b")
+  expect_match(res@value, "integer")
+  expect_match(S7::prop(res, "extra")$display$title, "(b)", fixed = TRUE)
+})
+
+test_that("the system prompt groups tables when there are several sources", {
+  agent <- test_agent(
+    data_sources = list(
+      sales_db = test_source(),
+      crm = data_source(accounts = data.frame(id = 1))
+    )
+  )
+  prompt <- agent$get_system_prompt()
+
+  expect_match(prompt, "## sales_db (duckdb)", fixed = TRUE)
+  expect_match(prompt, "## crm (duckdb)", fixed = TRUE)
+  expect_match(prompt, "- accounts", fixed = TRUE)
+  expect_match(prompt, "Pass the source's name as `source`", fixed = TRUE)
+
+  expect_no_match(test_agent()$get_system_prompt(), "## sales_db", fixed = TRUE)
+})
+
+test_that("a measure can take multiple sources' connections", {
+  layer <- semantic_layer(
+    measure(
+      "compare_sources",
+      "Compares the two databases.",
+      function(a, b) NULL,
+      arguments = list()
+    )
+  )
+  agent <- test_agent(
+    data_sources = list(a = test_source(), b = test_source()),
+    semantic_layer = layer
+  )
+
+  expect_named(
+    agent$.__enclos_env__$private$injections$compare_sources,
+    c("a", "b")
+  )
+})
+
+test_that("measures receive named data source connections by injection", {
+  layer <- semantic_layer(
+    measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, sales_db) {
+        DBI::dbGetQuery(
+          sales_db,
+          sprintf(
+            "SELECT SUM(revenue) AS revenue FROM sales WHERE region = %s",
+            DBI::dbQuoteString(sales_db, region)
+          )
+        )
+      },
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+
+  registry <- agent$.__enclos_env__$private$registry
+  injections <- agent$.__enclos_env__$private$injections
+
+  expect_named(injections$region_revenue, "sales_db")
+  res <- call_measure_tool(
+    registry,
+    "region_revenue",
+    '{"region": "EMEA"}',
+    injections = injections
+  )
+  expect_match(res@value, "2450")
+})
+
+test_that("injection parameters are hidden from the model", {
+  layer <- semantic_layer(
+    measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, sales_db) NULL,
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+  registry <- agent$.__enclos_env__$private$registry
+
+  expect_named(tool_properties(registry$region_revenue), "region")
+  expect_no_match(
+    search_measures_text(registry, "revenue for a region"),
+    "sales_db"
+  )
+})
+
+test_that("undocumented arguments matching no entry keep their defaults", {
+  layer <- semantic_layer(
+    measure(
+      "order_count",
+      "Count of orders.",
+      function(sales_db, limit = 5L) limit,
+      arguments = list()
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+
+  injections <- agent$.__enclos_env__$private$injections
+  expect_named(injections$order_count, "sales_db")
+
+  res <- call_measure_tool(
+    agent$.__enclos_env__$private$registry,
+    "order_count",
+    "{}",
+    injections = injections
+  )
+  expect_match(res@value, "5")
+})
+
+test_that("an entry match wins over an undocumented argument's default", {
+  layer <- semantic_layer(
+    measure(
+      "source_class",
+      "Class of the source object.",
+      function(sales_db = "unused default") class(sales_db)[[1]],
+      arguments = list()
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+
+  res <- call_measure_tool(
+    agent$.__enclos_env__$private$registry,
+    "source_class",
+    "{}",
+    injections = agent$.__enclos_env__$private$injections
+  )
+  expect_match(res@value, "duckdb_connection")
+})
+
+test_that("commons() errors on injection parameters matching no name", {
+  layer <- semantic_layer(
+    measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, warehouse) NULL,
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = list(sales_db = test_source()),
+      semantic_layer = layer
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = test_source(),
+      semantic_layer = layer
+    ),
+    error = TRUE
+  )
+})
+

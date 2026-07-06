@@ -11,11 +11,12 @@ measure(name, description, fn, arguments = list(), title = NULL)
 
 \item{description}{What the measure computes.}
 
-\item{fn}{Function that computes the measure. Its formals are the measure's
-arguments.}
+\item{fn}{Function that computes the measure.}
 
-\item{arguments}{A named list of \code{\link[ellmer:type_string]{ellmer::type_string()}} and friends, one per
-formal of \code{fn}.}
+\item{arguments}{A named list of \code{\link[ellmer:type_string]{ellmer::type_string()}} and friends
+describing the arguments the model supplies. Arguments of \code{fn} not listed
+here are hidden from the model: they receive a matching data source's
+connection or keep their defaults. See \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{title}{Human-readable measure title to show in user interfaces. If
 \code{NULL}, a title is derived from \code{name}.}

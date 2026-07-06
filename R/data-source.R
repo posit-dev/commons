@@ -2,28 +2,31 @@
 #'
 #' A data source is the set of tables available to a [commons()] agent.
 #'
-#' `data_source()` accepts data that already lives in a database or data frames
-#' that don't:
+#' `data_source()` accepts data in several forms, picked by the class of what
+#' you pass:
 #'
-#' * Pass a DBI connection to query it as-is. Nothing is copied; the agent
-#'   queries the database directly.
-#' * Pass named data frames to load them into an in-process DuckDB database. Use
-#'   this when the data isn't already in a database.
-#'
-#' `data_source_pins()` reads Posit Connect pins into the DuckDB path.
+#' * A DBI connection is queried as-is. Nothing is copied; the agent queries
+#'   the database directly.
+#' * Named data frames are loaded into an in-process DuckDB database. Use this
+#'   when the data isn't already in a database.
+#' * A `pins` board, e.g. [pins::board_connect()], is read into the same
+#'   in-process database: each pin in `names` becomes a table.
 #'
 #' The resulting object gives the agent a DBI connection plus a table registry.
 #' Use [list_tables()] to list the registered tables.
 #'
-#' @param ... Either a single DBI connection, or named data frames to register
-#'   as tables. When passing data frames, each name becomes a table name the
-#'   agent can query.
+#' @param ... A single DBI connection, a single `pins` board, or named data
+#'   frames to register as tables. When passing data frames, each name becomes
+#'   a table name the agent can query.
 #' @param tables Tables to expose, used only when a connection is supplied. Can
 #'   be a character vector of table names, schema-qualified strings like
 #'   `"schema.table"`, or `DBI::Id` objects. Defaults to every table returned by
 #'   [DBI::dbListTables()]. Strings containing dots are interpreted as
 #'   schema-qualified names; use `DBI::Id(table = "a.b")` for literal table
 #'   names containing dots.
+#' @param names Pins to read, used only when a board is supplied. A named
+#'   character vector: the names become table names, and the values are pin
+#'   names passed to [pins::pin_read()].
 #'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
@@ -42,11 +45,14 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL) {
+data_source <- function(..., tables = NULL, names = NULL) {
   dots <- rlang::list2(...)
 
   if (length(dots) == 1 && inherits(dots[[1]], "DBIConnection")) {
     return(data_source_connection(dots[[1]], tables))
+  }
+  if (length(dots) == 1 && inherits(dots[[1]], "pins_board")) {
+    return(data_source_board(dots[[1]], names))
   }
 
   check_named_frames(dots)
@@ -80,18 +86,11 @@ data_source_connection <- function(con, tables, call = rlang::caller_env()) {
   )
 }
 
-#' @rdname data_source
-#'
-#' @param board A `pins` board, e.g. [pins::board_connect()]. On Posit Connect
-#'   the default board authenticates as the deployed content's identity.
-#' @param names A named character vector of pins to read. The names become table
-#'   names; the values are pin names passed to [pins::pin_read()].
-#'
-#' @export
-data_source_pins <- function(board, names) {
+data_source_board <- function(board, names, call = rlang::caller_env()) {
   if (!rlang::is_named(names) || !is.character(names)) {
     cli::cli_abort(
-      "{.arg names} must be a named character vector of pin names."
+      "{.arg names} must be a named character vector of pin names.",
+      call = call
     )
   }
 
@@ -135,6 +134,36 @@ new_data_source <- function(
     list(con = con, tables = tables, table_ids = table_ids, handle = handle),
     class = "commons_data_source"
   )
+}
+
+# Pick the data source a SQL tool call runs against. With one source no
+# choice is needed; with several, the model passes a `source` name. The tool
+# schema's enum should prevent bad values, but validate anyway so a bad call
+# gets a clear error the model can act on.
+resolve_sql_source <- function(sources, name, call = rlang::caller_env()) {
+  if (length(sources) == 1) {
+    return(sources[[1]])
+  }
+  if (!is.null(name) && name %in% names(sources)) {
+    return(sources[[name]])
+  }
+
+  problem <- if (is.null(name)) {
+    "{.arg source} is required when an agent has multiple data sources."
+  } else {
+    "No data source named {.val {name}}."
+  }
+  cli::cli_abort(
+    c(problem, i = "Available sources: {.val {names(sources)}}."),
+    call = call
+  )
+}
+
+# Best-effort dialect hint for the system prompt. odbc and several other
+# backends report a dbms name; fall back to the connection class.
+source_dialect <- function(source) {
+  info <- tryCatch(DBI::dbGetInfo(source$con), error = function(e) NULL)
+  info$dbms.name %||% sub("_connection$", "", class(source$con)[[1]])
 }
 
 source_describe <- function(source, table, n_sample = 5) {
@@ -389,4 +418,40 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
       call = call
     )
   }
+}
+
+# A bare data_source() is accepted for the quick-start path; it has no name,
+# so measures can't take its connection as an argument. commons() and
+# Commons$new() both call this, so it must accept its own output.
+as_data_sources <- function(x, call = rlang::caller_env()) {
+  if (inherits(x, "commons_data_source")) {
+    return(list(x))
+  }
+
+  all_sources <- is.list(x) &&
+    length(x) > 0 &&
+    all(vapply(x, inherits, logical(1), "commons_data_source"))
+  if (!all_sources) {
+    cli::cli_abort(
+      "{.arg data_sources} must be a {.fn data_source} or a named list of them.",
+      call = call
+    )
+  }
+
+  if (length(x) > 1 && !rlang::is_named(x)) {
+    cli::cli_abort(
+      "Each entry in {.arg data_sources} must be named.",
+      call = call
+    )
+  }
+
+  duplicated_names <- unique(names(x)[duplicated(names(x))])
+  if (length(duplicated_names)) {
+    cli::cli_abort(
+      "{.arg data_sources} names must be unique; duplicated name{?s}: {.val {duplicated_names}}.",
+      call = call
+    )
+  }
+
+  x
 }

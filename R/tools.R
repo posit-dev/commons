@@ -9,8 +9,15 @@ build_commons_tools <- function(self, private) {
 }
 
 tool_search_measures <- function(private) {
+  source_names <- if (length(private$sources) > 1) {
+    names(private$sources)
+  } else {
+    character()
+  }
   ellmer::tool(
-    function(query) search_measures_text(private$registry, query),
+    function(query) {
+      search_measures_text(private$registry, query, source_names)
+    },
     "Search registered measures. Returns matching measures with their argument schemas. Use this before call_measure.",
     arguments = list(
       query = ellmer::type_string(
@@ -29,7 +36,13 @@ tool_search_measures <- function(private) {
 tool_call_measure <- function(private) {
   ellmer::tool(
     function(name, arguments = "{}", sql = NULL) {
-      call_measure_tool(private$registry, name, arguments, sql)
+      call_measure_tool(
+        private$registry,
+        name,
+        arguments,
+        sql,
+        injections = private$injections
+      )
     },
     # For small registries, we may eventually expose each measure schema upfront
     # instead of relying on search_measures for discovery.
@@ -75,12 +88,19 @@ tool_search_context <- function(private) {
 
 tool_describe_table <- function(private) {
   ellmer::tool(
-    function(table) describe_table_tool(private$data_source, table),
+    function(table, source = NULL) {
+      describe_table_tool(
+        resolve_sql_source(private$sources, source),
+        table,
+        source_name = source
+      )
+    },
     "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table.",
     arguments = list(
       table = ellmer::type_string(
         "The table name, as listed in the system prompt."
-      )
+      ),
+      source = sql_source_type(private$sources)
     ),
     name = "describe_table",
     annotations = ellmer::tool_annotations(
@@ -93,10 +113,17 @@ tool_describe_table <- function(private) {
 
 tool_run_sql <- function(private) {
   ellmer::tool(
-    function(sql) run_sql_tool(private$data_source, sql),
-    "Run a read-only SELECT query against the data source. Use this when no registered measure answers the question.",
+    function(sql, source = NULL) {
+      run_sql_tool(
+        resolve_sql_source(private$sources, source),
+        sql,
+        source_name = source
+      )
+    },
+    "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
     arguments = list(
-      sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect.")
+      sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect."),
+      source = sql_source_type(private$sources)
     ),
     name = "run_sql",
     annotations = ellmer::tool_annotations(
@@ -107,7 +134,25 @@ tool_run_sql <- function(private) {
   )
 }
 
-call_measure_tool <- function(registry, name, arguments, sql = NULL) {
+# With one source there's nothing to choose, so the model never sees the
+# `source` argument (type_ignore keeps it out of the schema).
+sql_source_type <- function(sources) {
+  if (length(sources) == 1) {
+    return(ellmer::type_ignore())
+  }
+  ellmer::type_enum(
+    values = names(sources),
+    description = "The data source to use, as listed in the system prompt."
+  )
+}
+
+call_measure_tool <- function(
+  registry,
+  name,
+  arguments,
+  sql = NULL,
+  injections = list()
+) {
   td <- registry[[name]]
   if (is.null(td)) {
     detail <- if (length(registry)) {
@@ -118,7 +163,7 @@ call_measure_tool <- function(registry, name, arguments, sql = NULL) {
     cli::cli_abort(c("No measure named {.val {name}}.", i = detail))
   }
   args <- validate_measure_args(td, parse_json_args(arguments))
-  value <- do.call(td, args)
+  value <- do.call(td, c(args, injections[[name]]))
   derived <- !is.null(sql) && !identical(sql, "")
   if (derived) {
     result <- query_measure_output(value, sql)
@@ -197,7 +242,7 @@ search_context_tool <- function(context, query) {
   )
 }
 
-describe_table_tool <- function(source, table) {
+describe_table_tool <- function(source, table, source_name = NULL) {
   d <- source_describe(source, table)
   body <- sprintf(
     "Columns of `%s`:\n\n%s\n\nSample rows:\n\n%s",
@@ -207,19 +252,19 @@ describe_table_tool <- function(source, table) {
   )
   tool_result(
     body,
-    title = sprintf("Described %s", table),
+    title = sprintf("Described %s%s", table, source_label(source_name)),
     icon = maybe_icon("table"),
     markdown = body
   )
 }
 
-run_sql_tool <- function(source, sql) {
+run_sql_tool <- function(source, sql, source_name = NULL) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
   display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
   tool_result(
     body,
-    title = "Ran SQL",
+    title = sprintf("Ran SQL%s", source_label(source_name)),
     icon = maybe_icon("code-square"),
     markdown = display_md,
     tag = "B",
@@ -227,6 +272,13 @@ run_sql_tool <- function(source, sql) {
     show_request = FALSE,
     show_tag = FALSE
   )
+}
+
+source_label <- function(source_name) {
+  if (is.null(source_name)) {
+    return("")
+  }
+  sprintf(" (%s)", html_escape(source_name))
 }
 
 tool_result <- function(
