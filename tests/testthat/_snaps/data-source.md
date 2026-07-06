@@ -31,3 +31,35 @@
       Error in `data_source()`:
       ! Every argument must be a data frame; `a` is not.
 
+# data_sources validates its inputs
+
+    Code
+      data_sources()
+    Condition
+      Error in `data_sources()`:
+      ! Supply at least one named `data_source()`.
+
+---
+
+    Code
+      data_sources(test_source())
+    Condition
+      Error in `data_sources()`:
+      ! All arguments to `data_sources()` must be named.
+
+---
+
+    Code
+      data_sources(sales_db = "not a source")
+    Condition
+      Error in `data_sources()`:
+      ! Every argument must be a `data_source()`; `sales_db` is not.
+
+# as_data_sources wraps a bare data_source
+
+    Code
+      as_data_sources("nope")
+    Condition
+      Error:
+      ! `data_sources` must be a `data_source()` or `data_sources()`.
+

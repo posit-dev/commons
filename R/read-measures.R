@@ -90,9 +90,14 @@ block_arguments <- function(block, fn) {
 
   args <- list()
   for (nm in names(formals)) {
+    # A formal without @param is an injection parameter; measure() hides it
+    # from the model and commons() supplies it by name.
+    if (is.null(param_text[[nm]])) {
+      next
+    }
     required <- identical(formals[[nm]], quote(expr = ))
     args[[nm]] <- param_type(
-      param_text[[nm]] %||% "",
+      param_text[[nm]],
       default = formals[[nm]],
       required = required
     )

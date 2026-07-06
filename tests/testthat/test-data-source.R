@@ -127,3 +127,26 @@ test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(data.frame(x = 1)), error = TRUE)
   expect_snapshot(data_source(a = 1), error = TRUE)
 })
+
+test_that("data_sources collects named sources", {
+  srcs <- data_sources(sales_db = test_source(), other = test_source())
+
+  expect_s3_class(srcs, "commons_data_sources")
+  expect_named(srcs, c("sales_db", "other"))
+})
+
+test_that("data_sources validates its inputs", {
+  expect_snapshot(data_sources(), error = TRUE)
+  expect_snapshot(data_sources(test_source()), error = TRUE)
+  expect_snapshot(data_sources(sales_db = "not a source"), error = TRUE)
+})
+
+test_that("as_data_sources wraps a bare data_source", {
+  srcs <- as_data_sources(test_source())
+
+  expect_s3_class(srcs, "commons_data_sources")
+  expect_length(srcs, 1)
+  expect_false(rlang::have_name(srcs))
+
+  expect_snapshot(as_data_sources("nope"), error = TRUE)
+})

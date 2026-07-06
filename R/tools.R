@@ -29,7 +29,13 @@ tool_search_measures <- function(private) {
 tool_call_measure <- function(private) {
   ellmer::tool(
     function(name, arguments = "{}", sql = NULL) {
-      call_measure_tool(private$registry, name, arguments, sql)
+      call_measure_tool(
+        private$registry,
+        name,
+        arguments,
+        sql,
+        injections = private$injections
+      )
     },
     # For small registries, we may eventually expose each measure schema upfront
     # instead of relying on search_measures for discovery.
@@ -107,7 +113,13 @@ tool_run_sql <- function(private) {
   )
 }
 
-call_measure_tool <- function(registry, name, arguments, sql = NULL) {
+call_measure_tool <- function(
+  registry,
+  name,
+  arguments,
+  sql = NULL,
+  injections = list()
+) {
   td <- registry[[name]]
   if (is.null(td)) {
     detail <- if (length(registry)) {
@@ -118,7 +130,7 @@ call_measure_tool <- function(registry, name, arguments, sql = NULL) {
     cli::cli_abort(c("No measure named {.val {name}}.", i = detail))
   }
   args <- validate_measure_args(td, parse_json_args(arguments))
-  value <- do.call(td, args)
+  value <- do.call(td, c(args, injections[[name]]))
   derived <- !is.null(sql) && !identical(sql, "")
   if (derived) {
     result <- query_measure_output(value, sql)

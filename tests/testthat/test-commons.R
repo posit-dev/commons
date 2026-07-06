@@ -68,7 +68,7 @@ test_that("the system prompt includes schema-qualified table labels", {
 
   agent <- commons(
     test_client(),
-    data_source = data_source(con, tables = "crm.sales")
+    data_sources = data_source(con, tables = "crm.sales")
   )
 
   expect_match(agent$get_system_prompt(), "- crm.sales", fixed = TRUE)
@@ -157,7 +157,7 @@ test_that("logged Claude streams do not append the local trajectory path", {
       params = ellmer::params(temperature = 0, max_tokens = 32),
       cache = "none"
     ),
-    data_source = test_source(),
+    data_sources = test_source(),
     log = path
   )
 
@@ -248,17 +248,17 @@ test_that("trajectory pin names fit Connect content name limits", {
 
 test_that("commons() validates its inputs", {
   expect_snapshot(
-    commons(client = "not a chat", data_source = test_source()),
+    commons(client = "not a chat", data_sources = test_source()),
     error = TRUE
   )
   expect_snapshot(
-    commons(client = test_client(), data_source = "not a source"),
+    commons(client = test_client(), data_sources = "not a source"),
     error = TRUE
   )
   expect_snapshot(
     commons(
       client = test_client(),
-      data_source = test_source(),
+      data_sources = test_source(),
       context_layer = "not context"
     ),
     error = TRUE
@@ -266,8 +266,136 @@ test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(
       client = test_client(),
-      data_source = test_source(),
+      data_sources = test_source(),
       semantic_layer = list()
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = test_source(),
+      resources = list(1, 2)
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = data_sources(a = test_source(), b = test_source())
+    ),
+    error = TRUE
+  )
+})
+
+test_that("measures receive named data source connections by injection", {
+  layer <- semantic_layer(
+    measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, sales_db) {
+        DBI::dbGetQuery(
+          sales_db,
+          sprintf(
+            "SELECT SUM(revenue) AS revenue FROM sales WHERE region = %s",
+            DBI::dbQuoteString(sales_db, region)
+          )
+        )
+      },
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+
+  registry <- agent$.__enclos_env__$private$registry
+  injections <- agent$.__enclos_env__$private$injections
+
+  expect_named(injections$region_revenue, "sales_db")
+  res <- call_measure_tool(
+    registry,
+    "region_revenue",
+    '{"region": "EMEA"}',
+    injections = injections
+  )
+  expect_match(res@value, "2450")
+})
+
+test_that("measures receive resources by injection", {
+  layer <- semantic_layer(
+    measure(
+      "order_count",
+      "Count of orders.",
+      function(cache) cache$n,
+      arguments = list()
+    )
+  )
+  agent <- test_agent(
+    semantic_layer = layer,
+    resources = list(cache = list(n = 6L))
+  )
+
+  res <- call_measure_tool(
+    agent$.__enclos_env__$private$registry,
+    "order_count",
+    "{}",
+    injections = agent$.__enclos_env__$private$injections
+  )
+  expect_match(res@value, "6")
+})
+
+test_that("injection parameters are hidden from the model", {
+  layer <- semantic_layer(
+    measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, sales_db) NULL,
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+  agent <- test_agent(semantic_layer = layer)
+  registry <- agent$.__enclos_env__$private$registry
+
+  expect_named(tool_properties(registry$region_revenue), "region")
+  expect_no_match(
+    search_measures_text(registry, "revenue for a region"),
+    "sales_db"
+  )
+})
+
+test_that("commons() errors on injection parameters matching no name", {
+  layer <- semantic_layer(
+    measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, warehouse) NULL,
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = data_sources(sales_db = test_source()),
+      semantic_layer = layer
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = test_source(),
+      semantic_layer = layer
+    ),
+    error = TRUE
+  )
+})
+
+test_that("commons() rejects resource names that collide with source names", {
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = data_sources(sales_db = test_source()),
+      resources = list(sales_db = "duplicate")
     ),
     error = TRUE
   )

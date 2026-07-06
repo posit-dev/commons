@@ -115,6 +115,23 @@ test_that("read_measures infers untyped args from their defaults", {
   expect_equal(type_kind(props$s), "string")
 })
 
+test_that("read_measures treats formals without @param as injection parameters", {
+  skip_if_not_installed("roxygen2")
+
+  path <- measures_script(c(
+    "#' Measure",
+    "#' @description A measure.",
+    "#' @param region `string` The region.",
+    "#' @measure",
+    "m <- function(region, warehouse, board) NULL"
+  ))
+
+  td <- read_measures(path)[[1]]
+
+  expect_named(tool_properties(td), "region")
+  expect_equal(measure_injection_names(td), c("warehouse", "board"))
+})
+
 test_that("read_measures ignores undocumented and untagged functions", {
   skip_if_not_installed("roxygen2")
 

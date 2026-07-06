@@ -7,14 +7,19 @@
 #'   directories. File and inline measures can be freely mixed.
 #'
 #' @details
-#' Measures read from files are sourced into an environment that inherits from
-#' the caller of `semantic_layer()`. If a file-backed measure refers to a
-#' connection, pins board, API client, or other object, call `semantic_layer()`
-#' from the same function or script frame that defines that object.
+#' A measure function's formals split into two groups:
 #'
-#' Do not create a semantic layer at top level and then expect it to use a
-#' connection supplied later to [commons()]; the measure functions have already
-#' been created by then.
+#' * Formals documented with `@param` (or, for inline [measure()]s, named in
+#'   `arguments`) are the measure's arguments, supplied by the model.
+#' * Formals without documentation are injection parameters. When the agent
+#'   runs the measure, [commons()] supplies each one by name: the name of a
+#'   [data_sources()] entry receives that source's connection, and the name of
+#'   a `resources` entry receives that object. Injection parameters are never
+#'   shown to the model.
+#'
+#' So a measure that queries a database declares the connection it needs
+#' rather than closing over one, and the semantic layer can be created before
+#' any connection exists; binding happens when the agent is assembled.
 #'
 #' @return A `commons_semantic_layer` object.
 #'
@@ -31,13 +36,20 @@
 #' )
 #'
 #' \dontrun{
-#' con <- DBI::dbConnect(...)
-#' board <- pins::board_connect()
+#' # In R/semantic_layer.R, `warehouse` has no @param, so it's an injection
+#' # parameter:
+#' #
+#' # #' @param region `string` The sales region.
+#' # #' @measure
+#' # revenue <- function(region, warehouse) {
+#' #   DBI::dbGetQuery(warehouse, ...)
+#' # }
 #'
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
-#'   data_source = data_source(con),
-#'   # Measures in R/semantic_layer.R can refer to `con` and `board`.
+#'   data_sources = data_sources(
+#'     warehouse = data_source(DBI::dbConnect(...))
+#'   ),
 #'   semantic_layer = semantic_layer("R/semantic_layer.R")
 #' )
 #' }
@@ -84,10 +96,11 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #'
 #' @param name Measure name.
 #' @param description What the measure computes.
-#' @param fn Function that computes the measure. Its formals are the measure's
-#'   arguments.
+#' @param fn Function that computes the measure.
 #' @param arguments A named list of [ellmer::type_string()] and friends, one per
-#'   formal of `fn`.
+#'   model-supplied formal of `fn`. Formals of `fn` not named here are
+#'   injection parameters: hidden from the model and supplied by [commons()]
+#'   from its named [data_sources()] and `resources`.
 #' @param title Human-readable measure title to show in user interfaces. If
 #'   `NULL`, a title is derived from `name`.
 #'
@@ -101,10 +114,50 @@ measure <- function(name, description, fn, arguments = list(), title = NULL) {
   ellmer::tool(
     fn,
     description,
-    arguments = arguments,
+    arguments = fill_injected_arguments(arguments, fn),
     name = name,
     annotations = ellmer::tool_annotations(title = title)
   )
+}
+
+# Formals of `fn` absent from `arguments` are injection parameters. Typing them
+# as ignored keeps ellmer's arguments-match-formals check satisfied while
+# excluding them from the model-visible schema, so they're recoverable later as
+# setdiff(formals, schema properties).
+fill_injected_arguments <- function(arguments, fn) {
+  injected <- setdiff(names(formals(fn)), names(arguments))
+  for (nm in injected) {
+    arguments[[nm]] <- ellmer::type_ignore()
+  }
+  arguments
+}
+
+measure_injection_names <- function(td) {
+  setdiff(names(formals(td)), names(tool_properties(td)))
+}
+
+# Match each measure's injection parameters against the agent's named data
+# sources and resources, erroring on names that match neither.
+resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
+  lapply(registry, function(td) {
+    needed <- measure_injection_names(td)
+    unmatched <- setdiff(needed, names(injectables))
+    if (length(unmatched)) {
+      available <- if (length(injectables)) {
+        cli::format_inline("Available names: {.val {names(injectables)}}.")
+      } else {
+        "No named data sources or resources are available."
+      }
+      cli::cli_abort(
+        c(
+          "Measure {.val {tool_name(td)}} declares undocumented {cli::qty(unmatched)}argument{?s} {.arg {unmatched}} matching no data source or resource name.",
+          i = available
+        ),
+        call = call
+      )
+    }
+    injectables[needed]
+  })
 }
 
 new_semantic_layer <- function(measures = list()) {
