@@ -135,17 +135,12 @@ test_that("as_data_sources wraps a bare data_source", {
   expect_false(rlang::have_name(srcs))
 })
 
-test_that("as_data_sources accepts a source alongside other named entries", {
-  srcs <- as_data_sources(list(sales_db = test_source(), board = list()))
-  expect_named(srcs, c("sales_db", "board"))
-
-  # Accepts its own output, since commons() and Commons$new() both call it.
-  expect_identical(as_data_sources(srcs), srcs)
-})
-
 test_that("as_data_sources accepts multiple sources", {
   srcs <- as_data_sources(list(a = test_source(), b = test_source()))
   expect_named(srcs, c("a", "b"))
+
+  # Accepts its own output, since commons() and Commons$new() both call it.
+  expect_identical(as_data_sources(srcs), srcs)
 })
 
 test_that("resolve_sql_source picks the source for a SQL tool call", {
@@ -164,15 +159,15 @@ test_that("as_data_sources validates its input", {
   expect_snapshot(as_data_sources(list()), error = TRUE)
   expect_snapshot(as_data_sources(list(sales_db = "not a source")), error = TRUE)
   expect_snapshot(
+    as_data_sources(list(sales_db = test_source(), board = list())),
+    error = TRUE
+  )
+  expect_snapshot(
     as_data_sources(list(test_source(), test_source())),
     error = TRUE
   )
   expect_snapshot(
-    as_data_sources(list(test_source(), list())),
-    error = TRUE
-  )
-  expect_snapshot(
-    as_data_sources(list(a = test_source(), a = list())),
+    as_data_sources(list(a = test_source(), a = test_source())),
     error = TRUE
   )
 })

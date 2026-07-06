@@ -421,27 +421,20 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
   }
 }
 
-# Entries besides the data_source() can be anything a measure wants by name:
-# a pins board, an API client. A bare data_source() is accepted for the
-# quick-start path; it has no name, so measures can't take its connection as
-# an argument. commons() and Commons$new() both call this, so it must accept
-# its own output.
+# A bare data_source() is accepted for the quick-start path; it has no name,
+# so measures can't take its connection as an argument. commons() and
+# Commons$new() both call this, so it must accept its own output.
 as_data_sources <- function(x, call = rlang::caller_env()) {
   if (inherits(x, "commons_data_source")) {
     return(list(x))
   }
 
-  if (!is.list(x)) {
+  all_sources <- is.list(x) &&
+    length(x) > 0 &&
+    all(vapply(x, inherits, logical(1), "commons_data_source"))
+  if (!all_sources) {
     cli::cli_abort(
-      "{.arg data_sources} must be a {.fn data_source} or a named list containing one.",
-      call = call
-    )
-  }
-
-  n_sources <- sum(vapply(x, inherits, logical(1), "commons_data_source"))
-  if (n_sources == 0) {
-    cli::cli_abort(
-      "{.arg data_sources} must contain at least one {.fn data_source}.",
+      "{.arg data_sources} must be a {.fn data_source} or a named list of them.",
       call = call
     )
   }

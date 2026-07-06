@@ -160,23 +160,23 @@ commons parses roxygen blocks marked with `@measure`, sources the file, and regi
 
 ### Connections and other measure resources
 
-A measure function can take two kinds of arguments. Arguments documented with `@param` are supplied by the model. Undocumented arguments, like `warehouse` above, are supplied by `commons()` when the measure runs: an argument named after a `data_sources` entry receives that entry — for a `data_source()`, its connection. An undocumented argument matching no entry keeps its default. The model never sees them.
+A measure function can take two kinds of arguments. Arguments documented with `@param` are supplied by the model. Undocumented arguments, like `warehouse` above, are supplied when the measure runs: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. The model never sees them.
 
 Since connections are supplied when the agent is assembled, you can create the semantic layer anywhere, even before connecting to a database.
 
-Entries that aren't `data_source()`s, such as a pins board or an API client, work the same way:
+For objects that aren't data sources, such as a pins board or an API client, give the argument a default that builds the object:
 
 ```r
-agent <- commons(
-  client = ellmer::chat_anthropic(),
-  data_sources = list(
-    warehouse = data_source(con, tables = c("orders", "customers")),
-    # A measure argument named `board` (with no @param) receives this board.
-    board = pins::board_connect()
-  ),
-  semantic_layer = semantic_layer("R/semantic_layer.R")
-)
+#' @param start_date `string` Start date, YYYY-MM-DD.
+#' @measure
+new_leads <- function(start_date, board = pins::board_connect()) {
+  pins::pin_read(board, "team/leads") |>
+    dplyr::filter(created >= as.Date(start_date)) |>
+    nrow()
+}
 ```
+
+Write the default as a call rather than a reference to a variable defined elsewhere; the measure then works no matter where the semantic layer is created.
 
 ## Defining the context layer
 

@@ -12,7 +12,7 @@
       commons(client = test_client(), data_sources = "not a source")
     Condition
       Error in `commons()`:
-      ! `data_sources` must be a `data_source()` or a named list containing one.
+      ! `data_sources` must be a `data_source()` or a named list of them.
 
 ---
 
@@ -37,8 +37,8 @@
       semantic_layer = layer)
     Condition
       Error in `initialize()`:
-      ! Measure "region_revenue" has undocumented argument `warehouse` matching no `data_sources` entry.
-      i Available names: "sales_db".
+      ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source.
+      i Available sources: "sales_db".
 
 ---
 
@@ -46,6 +46,6 @@
       commons(client = test_client(), data_sources = test_source(), semantic_layer = layer)
     Condition
       Error in `initialize()`:
-      ! Measure "region_revenue" has undocumented argument `warehouse` matching no `data_sources` entry.
-      i `data_sources` has no named entries.
+      ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source.
+      i `data_sources` has no named sources.
 

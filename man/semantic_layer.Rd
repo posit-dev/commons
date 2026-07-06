@@ -23,15 +23,21 @@ A measure function can take two kinds of arguments:
 \item Arguments documented with \verb{@param} (or listed in \code{arguments}, for inline
 \code{\link[=measure]{measure()}}s) are supplied by the model.
 \item Undocumented arguments are supplied by \code{\link[=commons]{commons()}} when the measure runs.
-An argument named after a \code{data_sources} entry receives that entry — for
-a \code{\link[=data_source]{data_source()}}, its connection — even if the argument has a default.
-An undocumented argument matching no entry keeps its default; if it has
-no default, \code{\link[=commons]{commons()}} errors. The model never sees these arguments.
+An argument named after a data source receives its connection, even if
+the argument has a default. Any other undocumented argument keeps its
+default; if it has no default, \code{\link[=commons]{commons()}} errors. The model never sees
+these arguments.
 }
 
 This means a measure can take the connection it needs as an argument
 rather than relying on a variable defined elsewhere, and you can create a
 semantic layer before connecting to a database.
+
+For objects that aren't data sources, such as a pins board or an API
+client, give the argument a default that builds the object, e.g.
+\code{board = pins::board_connect()}. Write the default as a call rather than a
+reference to a variable defined elsewhere, so the measure doesn't depend on
+where the semantic layer is created.
 }
 \examples{
 semantic_layer(

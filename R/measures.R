@@ -12,14 +12,20 @@
 #' * Arguments documented with `@param` (or listed in `arguments`, for inline
 #'   [measure()]s) are supplied by the model.
 #' * Undocumented arguments are supplied by [commons()] when the measure runs.
-#'   An argument named after a `data_sources` entry receives that entry — for
-#'   a [data_source()], its connection — even if the argument has a default.
-#'   An undocumented argument matching no entry keeps its default; if it has
-#'   no default, [commons()] errors. The model never sees these arguments.
+#'   An argument named after a data source receives its connection, even if
+#'   the argument has a default. Any other undocumented argument keeps its
+#'   default; if it has no default, [commons()] errors. The model never sees
+#'   these arguments.
 #'
 #' This means a measure can take the connection it needs as an argument
 #' rather than relying on a variable defined elsewhere, and you can create a
 #' semantic layer before connecting to a database.
+#'
+#' For objects that aren't data sources, such as a pins board or an API
+#' client, give the argument a default that builds the object, e.g.
+#' `board = pins::board_connect()`. Write the default as a call rather than a
+#' reference to a variable defined elsewhere, so the measure doesn't depend on
+#' where the semantic layer is created.
 #'
 #' @return A `commons_semantic_layer` object.
 #'
@@ -96,8 +102,8 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' @param fn Function that computes the measure.
 #' @param arguments A named list of [ellmer::type_string()] and friends
 #'   describing the arguments the model supplies. Arguments of `fn` not listed
-#'   here are hidden from the model and supplied by [commons()] from its
-#'   `data_sources`; see [semantic_layer()].
+#'   here are hidden from the model: they receive a matching data source's
+#'   connection or keep their defaults. See [semantic_layer()].
 #' @param title Human-readable measure title to show in user interfaces. If
 #'   `NULL`, a title is derived from `name`.
 #'
@@ -147,13 +153,13 @@ resolve_injections <- function(registry, injectables, call = rlang::caller_env()
     )]
     if (length(no_default)) {
       available <- if (length(injectables)) {
-        cli::format_inline("Available names: {.val {names(injectables)}}.")
+        cli::format_inline("Available sources: {.val {names(injectables)}}.")
       } else {
-        "{.arg data_sources} has no named entries."
+        "{.arg data_sources} has no named sources."
       }
       cli::cli_abort(
         c(
-          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(no_default)}argument{?s} {.arg {no_default}} matching no {.arg data_sources} entry.",
+          "Measure {.val {tool_name(td)}} has undocumented {cli::qty(no_default)}argument{?s} {.arg {no_default}} matching no data source.",
           i = available
         ),
         call = call

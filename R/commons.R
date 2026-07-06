@@ -10,10 +10,9 @@
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()].
-#' @param data_sources A [data_source()], or a named list of one or more of
-#'   them along with any other objects measures need, such as a pins board or
-#'   an API client. Measures can take an entry as an argument named after it;
-#'   see [semantic_layer()]. When there are several sources, the `run_sql` and
+#' @param data_sources A [data_source()], or a named list of them. Measures
+#'   can take a source's connection as an argument named after the source; see
+#'   [semantic_layer()]. When there are several sources, the `run_sql` and
 #'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
@@ -69,15 +68,9 @@
 #'   semantic_layer = sem
 #' )
 #'
-#' # Other named entries (pins boards, API clients) work the same way.
-#' agent <- commons(
-#'   ellmer::chat_anthropic(),
-#'   data_sources = list(
-#'     warehouse = data_source(con),
-#'     board = pins::board_connect()
-#'   ),
-#'   semantic_layer = semantic_layer("R/semantic_layer.R")
-#' )
+#' # Objects that aren't data sources (a pins board, an API client) come from
+#' # argument defaults in the measure, e.g. `board = pins::board_connect()`.
+#' # See ?semantic_layer.
 #' }
 #'
 #' @export
@@ -116,8 +109,7 @@ Commons <- R6::R6Class(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
     #' @param client An [ellmer::Chat] supplying the provider.
-    #' @param data_sources A [data_source()], or a named list of one or more
-    #'   of them along with any other objects measures need.
+    #' @param data_sources A [data_source()], or a named list of them.
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
     #' @param log Whether to log conversation trajectories.
@@ -132,9 +124,8 @@ Commons <- R6::R6Class(
       semantic_layer <- semantic_layer %||% new_semantic_layer()
 
       sources <- as_data_sources(data_sources)
-      is_source <- vapply(sources, inherits, logical(1), "commons_data_source")
 
-      private$sources <- sources[is_source]
+      private$sources <- sources
       private$context_layer <- context_layer
       private$registry <- semantic_layer$measures
       private$injections <- resolve_injections(
@@ -203,11 +194,8 @@ Commons <- R6::R6Class(
   )
 )
 
-# Everything a measure can take by name: a data_source() contributes its
-# connection, any other entry contributes itself.
+# Measures can take a named source's connection as an argument.
 measure_injectables <- function(sources) {
   named <- sources[rlang::have_name(sources)]
-  lapply(named, function(entry) {
-    if (inherits(entry, "commons_data_source")) entry$con else entry
-  })
+  lapply(named, function(source) source$con)
 }

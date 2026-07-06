@@ -377,29 +377,6 @@ test_that("measures receive named data source connections by injection", {
   expect_match(res@value, "2450")
 })
 
-test_that("measures receive non-source entries by injection", {
-  layer <- semantic_layer(
-    measure(
-      "order_count",
-      "Count of orders.",
-      function(cache) cache$n,
-      arguments = list()
-    )
-  )
-  agent <- test_agent(
-    semantic_layer = layer,
-    data_sources = list(sales_db = test_source(), cache = list(n = 6L))
-  )
-
-  res <- call_measure_tool(
-    agent$.__enclos_env__$private$registry,
-    "order_count",
-    "{}",
-    injections = agent$.__enclos_env__$private$injections
-  )
-  expect_match(res@value, "6")
-})
-
 test_that("injection parameters are hidden from the model", {
   layer <- semantic_layer(
     measure(

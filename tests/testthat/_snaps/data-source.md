@@ -55,7 +55,7 @@
       as_data_sources("nope")
     Condition
       Error:
-      ! `data_sources` must be a `data_source()` or a named list containing one.
+      ! `data_sources` must be a `data_source()` or a named list of them.
 
 ---
 
@@ -63,7 +63,7 @@
       as_data_sources(list())
     Condition
       Error:
-      ! `data_sources` must contain at least one `data_source()`.
+      ! `data_sources` must be a `data_source()` or a named list of them.
 
 ---
 
@@ -71,7 +71,15 @@
       as_data_sources(list(sales_db = "not a source"))
     Condition
       Error:
-      ! `data_sources` must contain at least one `data_source()`.
+      ! `data_sources` must be a `data_source()` or a named list of them.
+
+---
+
+    Code
+      as_data_sources(list(sales_db = test_source(), board = list()))
+    Condition
+      Error:
+      ! `data_sources` must be a `data_source()` or a named list of them.
 
 ---
 
@@ -84,15 +92,7 @@
 ---
 
     Code
-      as_data_sources(list(test_source(), list()))
-    Condition
-      Error:
-      ! Each entry in `data_sources` must be named.
-
----
-
-    Code
-      as_data_sources(list(a = test_source(), a = list()))
+      as_data_sources(list(a = test_source(), a = test_source()))
     Condition
       Error:
       ! `data_sources` names must be unique; duplicated name: "a".
