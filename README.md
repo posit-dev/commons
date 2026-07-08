@@ -21,7 +21,9 @@ $$gif$$
 commons agents support whatever LLMs your organization has deployed
 already.
 
-To get started, configure a database connection with `data_source()` and
+To get started, configure a database connection with
+`data_source()`—optionally described by a
+[data-dict.yaml](https://data-dict.tidyverse.org/) data dictionary—and
 then two layers on top of it:
 
 - Assemble a `semantic_layer()`, a pool of pre-vetted queries that

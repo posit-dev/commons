@@ -106,6 +106,26 @@ agent_data <- list(
 
 With several sources, the system prompt lists each source's tables separately, and the agent's `describe_table` and `run_sql` tools take the source's name as a `source` argument. With one source, that argument doesn't exist.
 
+### Describing tables with a data dictionary
+
+A data source can carry a data dictionary in the [data-dict.yaml](https://data-dict.tidyverse.org/) format, which describes the source's tables and columns: what each table's rows represent, what its columns mean, allowed values and units, how tables join, and a glossary of domain terms.
+
+```r
+agent_data <- list(
+  warehouse = data_source(
+    con,
+    tables = c("orders", "customers"),
+    dictionary = "data-dict.yaml"
+  )
+)
+```
+
+Dictionary content reaches the agent where it's needed rather than all at once. The dataset-level `description`, `details`, and glossary are included in the system prompt; those fields are the place for rules that span tables and for guidance on which tables answer which kinds of questions. A table's full entry---its prose, documented columns, relationships, and definitions of glossary terms it references---rides along with the first tool result that touches the table, whether that's `describe_table` or a SQL query. When the agent also has a context layer, the dictionary's prose is searchable with the rest of the context.
+
+A dictionary doesn't need to be complete to be useful: documented and undocumented tables and columns mix freely, and undocumented columns fall back to what commons infers from the data.
+
+Together with the layers below, this gives an agent three tiers of trust: the dictionary describes what the raw data *is*, the semantic layer defines how governed metrics are *computed*, and the context layer holds the less-structured remainder.
+
 ## Defining the semantic layer
 
 The semantic layer is currently composed of measures. A measure is an ordinary R function wrapped with metadata that tells the model what it computes and what arguments it accepts.
@@ -180,7 +200,7 @@ Write the default as a call rather than a reference to a variable defined elsewh
 
 The context layer is text the agent can search when no measure fits. Use it for metric definitions, table grain, join notes, business terminology, caveats, and source material that helps the agent write fallback SQL responsibly.
 
-Good context sources include existing app code, report source, metric catalogs, data dictionaries, analyst notes, relevant transcripts, and exported pages from systems such as Confluence. Short facts that should always be in the prompt can go in `always`.
+Good context sources include existing app code, report source, metric catalogs, analyst notes, relevant transcripts, and exported pages from systems such as Confluence. Structured table and column documentation is better attached to the data source as a dictionary (see above). Short facts that should always be in the prompt can go in `always`.
 
 ```r
 # R/context_layer.R

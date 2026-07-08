@@ -30,7 +30,7 @@
 #'
 #' @return A `commons_data_dictionary` object.
 #'
-#' @examples
+#' @examplesIf rlang::is_installed("yaml")
 #' path <- tempfile(fileext = ".yaml")
 #' writeLines('
 #' description: Order data for a small retailer.

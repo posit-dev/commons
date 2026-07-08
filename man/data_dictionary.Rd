@@ -41,6 +41,7 @@ the data source (or vice versa). To check a dictionary against its data,
 use the \href{https://data-dict.tidyverse.org/validation.html}{data-dict CLI}.
 }
 \examples{
+\dontshow{if (rlang::is_installed("yaml")) withAutoprint(\{ # examplesIf}
 path <- tempfile(fileext = ".yaml")
 writeLines('
 description: Order data for a small retailer.
@@ -57,5 +58,5 @@ glossary:
 
 dict <- data_dictionary(path)
 names(dict$tables)
-
+\dontshow{\}) # examplesIf}
 }
