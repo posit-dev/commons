@@ -2,4 +2,6 @@
 plans/
 inst/resources/
 inst/tiles/
+inst/tiles-agent/
 inst/pkgs
+.Rprofile
