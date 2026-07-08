@@ -94,18 +94,10 @@ test_that("unknown fields and missing sections are tolerated", {
   expect_null(dict$description)
 })
 
-test_that("data_source() accepts a dictionary as an object or path", {
+test_that("data_source() accepts a dictionary path", {
   skip_if_not_installed("yaml")
-  path <- local_dict_path()
-
-  from_path <- data_source(sales = test_sales(), dictionary = path)
-  expect_s3_class(from_path$dictionary, "commons_data_dictionary")
-
-  from_object <- data_source(
-    sales = test_sales(),
-    dictionary = data_dictionary(path)
-  )
-  expect_s3_class(from_object$dictionary, "commons_data_dictionary")
+  src <- data_source(sales = test_sales(), dictionary = local_dict_path())
+  expect_s3_class(src$dictionary, "commons_data_dictionary")
 })
 
 test_that("data_source() rejects other dictionary inputs", {

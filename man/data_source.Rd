@@ -22,9 +22,10 @@ names containing dots.}
 character vector: the names become table names, and the values are pin
 names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
 
-\item{dictionary}{An optional \code{\link[=data_dictionary]{data_dictionary()}}, or a path to a
-data-dict.yaml file, describing the source's tables and columns. See
-\code{\link[=data_dictionary]{data_dictionary()}} for how its content reaches the agent.}
+\item{dictionary}{An optional path to a data dictionary describing the
+source's tables and columns, in the
+\href{https://data-dict.tidyverse.org/}{data-dict.yaml} format. See the
+\verb{Data dictionaries} section.}
 }
 \value{
 A \code{commons_data_source} object.
@@ -47,6 +48,32 @@ in-process database: each pin in \code{names} becomes a table.
 The resulting object gives the agent a DBI connection plus a table registry.
 Use \code{\link[=list_tables]{list_tables()}} to list the registered tables.
 }
+\section{Data dictionaries}{
+
+A data dictionary describes a data source's tables and columns: what each
+table's rows represent, what its columns mean, allowed values and units,
+how tables join, and definitions of domain terms. Its content reaches the
+agent three ways:
+\itemize{
+\item The dataset-level \code{description} and \code{details}, along with the glossary,
+are included in the system prompt. These fields are the place for rules
+that span tables and for guidance on which tables answer which kinds of
+questions.
+\item The first time a conversation touches a table---via the \code{describe_table}
+tool or a SQL query---the table's full dictionary entry rides along with
+the tool result: its prose, documented columns, relationships, and
+definitions of glossary terms it references. \code{describe_table} merges
+documented columns with the table's live schema.
+\item When the agent also has a \code{\link[=context_layer]{context_layer()}}, the dictionary's prose is
+indexed for the \code{search_context} tool.
+}
+
+Dictionaries are read leniently: unknown fields are ignored, optional
+fields can be absent, and a dictionary may describe tables that aren't on
+the data source (or vice versa). To check a dictionary against its data,
+use the \href{https://data-dict.tidyverse.org/validation.html}{data-dict CLI}.
+}
+
 \section{Trust}{
 
 The \code{run_sql} tool runs only read-only \code{SELECT} queries; statements that

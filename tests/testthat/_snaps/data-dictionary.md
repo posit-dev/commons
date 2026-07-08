@@ -21,7 +21,7 @@
       data_source(sales = test_sales(), dictionary = 42)
     Condition
       Error in `data_source()`:
-      ! `dictionary` must be a `data_dictionary()` or a path to a data-dict.yaml file.
+      ! `dictionary` must be a path to a data-dict.yaml file.
 
 # dictionary content lands in the system prompt
 
