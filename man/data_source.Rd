@@ -4,7 +4,7 @@
 \alias{data_source}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL, names = NULL)
+data_source(..., tables = NULL, names = NULL, dictionary = NULL)
 }
 \arguments{
 \item{...}{A single DBI connection, a single \code{pins} board, or named data
@@ -21,6 +21,10 @@ names containing dots.}
 \item{names}{Pins to read, used only when a board is supplied. A named
 character vector: the names become table names, and the values are pin
 names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
+
+\item{dictionary}{An optional \code{\link[=data_dictionary]{data_dictionary()}}, or a path to a
+data-dict.yaml file, describing the source's tables and columns. See
+\code{\link[=data_dictionary]{data_dictionary()}} for how its content reaches the agent.}
 }
 \value{
 A \code{commons_data_source} object.

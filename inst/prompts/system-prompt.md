@@ -31,5 +31,5 @@ inspect relevant tables with `describe_table`, then run a read-only query with
 # Available tables
 
 {{TABLES}}
-
+{{DICTIONARY}}
 {{ALWAYS}}

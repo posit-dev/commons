@@ -44,6 +44,16 @@ df_to_html <- function(df, max_rows = 50) {
   out
 }
 
+# Collapse a multi-line prose field onto one line, e.g. for a bullet item.
+flatten_inline <- function(x) {
+  trimws(gsub("\\s*\\n\\s*", " ", x))
+}
+
+# Match `x` as a whole word, escaping any regex metacharacters it contains.
+word_pattern <- function(x) {
+  paste0("\\b", gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x), "\\b")
+}
+
 # Icons are decorative, so bsicons is optional.
 maybe_icon <- function(name) {
   if (is_installed("bsicons")) {

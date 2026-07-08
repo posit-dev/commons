@@ -27,6 +27,9 @@
 #' @param names Pins to read, used only when a board is supplied. A named
 #'   character vector: the names become table names, and the values are pin
 #'   names passed to [pins::pin_read()].
+#' @param dictionary An optional [data_dictionary()], or a path to a
+#'   data-dict.yaml file, describing the source's tables and columns. See
+#'   [data_dictionary()] for how its content reaches the agent.
 #'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
@@ -45,14 +48,15 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL, names = NULL) {
+data_source <- function(..., tables = NULL, names = NULL, dictionary = NULL) {
   dots <- rlang::list2(...)
+  dictionary <- as_data_dictionary(dictionary)
 
   if (length(dots) == 1 && inherits(dots[[1]], "DBIConnection")) {
-    return(data_source_connection(dots[[1]], tables))
+    return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
   }
   if (length(dots) == 1 && inherits(dots[[1]], "pins_board")) {
-    return(data_source_board(dots[[1]], names))
+    return(data_source_board(dots[[1]], names, dictionary = dictionary))
   }
 
   check_named_frames(dots)
@@ -67,12 +71,22 @@ data_source <- function(..., tables = NULL, names = NULL) {
   }
   duckdb_lock_down(con)
 
-  new_data_source(con, names(dots), owned = TRUE)
+  new_data_source(con, names(dots), owned = TRUE, dictionary = dictionary)
 }
 
-data_source_connection <- function(con, tables, call = rlang::caller_env()) {
+data_source_connection <- function(
+  con,
+  tables,
+  dictionary = NULL,
+  call = rlang::caller_env()
+) {
   if (is.null(tables)) {
-    return(new_data_source(con, DBI::dbListTables(con), owned = FALSE))
+    return(new_data_source(
+      con,
+      DBI::dbListTables(con),
+      owned = FALSE,
+      dictionary = dictionary
+    ))
   }
 
   table_registry <- normalize_table_registry(tables, call = call)
@@ -82,11 +96,17 @@ data_source_connection <- function(con, tables, call = rlang::caller_env()) {
     con,
     table_registry$labels,
     owned = FALSE,
-    table_ids = table_registry$ids
+    table_ids = table_registry$ids,
+    dictionary = dictionary
   )
 }
 
-data_source_board <- function(board, names, call = rlang::caller_env()) {
+data_source_board <- function(
+  board,
+  names,
+  dictionary = NULL,
+  call = rlang::caller_env()
+) {
   if (!rlang::is_named(names) || !is.character(names)) {
     cli::cli_abort(
       "{.arg names} must be a named character vector of pin names.",
@@ -96,7 +116,7 @@ data_source_board <- function(board, names, call = rlang::caller_env()) {
 
   frames <- lapply(names, function(pin) pins::pin_read(board, pin))
   names(frames) <- names(names)
-  rlang::inject(data_source(!!!frames))
+  rlang::inject(data_source(!!!frames, dictionary = dictionary))
 }
 
 #' List the tables an agent can query
@@ -115,7 +135,8 @@ new_data_source <- function(
   con,
   tables,
   owned,
-  table_ids = table_ids_from_labels(tables)
+  table_ids = table_ids_from_labels(tables),
+  dictionary = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -131,7 +152,13 @@ new_data_source <- function(
   }
 
   structure(
-    list(con = con, tables = tables, table_ids = table_ids, handle = handle),
+    list(
+      con = con,
+      tables = tables,
+      table_ids = table_ids,
+      handle = handle,
+      dictionary = dictionary
+    ),
     class = "commons_data_source"
   )
 }

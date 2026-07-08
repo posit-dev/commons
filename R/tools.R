@@ -92,7 +92,8 @@ tool_describe_table <- function(private) {
       describe_table_tool(
         resolve_sql_source(private$sources, source),
         table,
-        source_name = source
+        source_name = source,
+        tracker = private$first_touch
       )
     },
     "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table.",
@@ -117,7 +118,8 @@ tool_run_sql <- function(private) {
       run_sql_tool(
         resolve_sql_source(private$sources, source),
         sql,
-        source_name = source
+        source_name = source,
+        tracker = private$first_touch
       )
     },
     "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
@@ -242,14 +244,33 @@ search_context_tool <- function(context, query) {
   )
 }
 
-describe_table_tool <- function(source, table, source_name = NULL) {
+describe_table_tool <- function(source, table, source_name = NULL, tracker = NULL) {
   d <- source_describe(source, table)
-  body <- sprintf(
-    "Columns of `%s`:\n\n%s\n\nSample rows:\n\n%s",
-    table,
-    df_to_markdown(d$schema),
+  entry <- source$dictionary$tables[[table]]
+
+  sample <- sprintf(
+    "Sample rows:\n\n%s",
     df_to_markdown(d$sample, max_rows = 5)
   )
+  if (is.null(entry)) {
+    parts <- c(
+      sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
+      sample
+    )
+  } else {
+    mark_table_touched(tracker, source_name, table)
+    columns <- sprintf(
+      "Columns of `%s`:\n\n%s",
+      table,
+      dictionary_columns_text(entry$columns, live = d$schema)
+    )
+    parts <- c(
+      dictionary_entry_parts(source$dictionary, table, columns),
+      sample
+    )
+  }
+
+  body <- paste(parts, collapse = "\n\n")
   tool_result(
     body,
     title = sprintf("Described %s%s", table, source_label(source_name)),
@@ -258,12 +279,13 @@ describe_table_tool <- function(source, table, source_name = NULL) {
   )
 }
 
-run_sql_tool <- function(source, sql, source_name = NULL) {
+run_sql_tool <- function(source, sql, source_name = NULL, tracker = NULL) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
   display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
+  entries <- dictionary_sql_entries(source, sql, source_name, tracker)
   tool_result(
-    body,
+    paste(c(body, entries), collapse = "\n\n"),
     title = sprintf("Ran SQL%s", source_label(source_name)),
     icon = maybe_icon("code-square"),
     markdown = display_md,
@@ -272,6 +294,55 @@ run_sql_tool <- function(source, sql, source_name = NULL) {
     show_request = FALSE,
     show_tag = FALSE
   )
+}
+
+# Dictionary entries for tables this query touches that the conversation
+# hasn't seen yet, via either tool. Matching is by table name in the SQL
+# text, which is reliable in a way column matching is not; a false positive
+# appends a harmless note.
+dictionary_sql_entries <- function(source, sql, source_name, tracker) {
+  dictionary <- source$dictionary
+  tables <- names(dictionary$tables)
+  hits <- tables[vapply(
+    tables,
+    function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
+    logical(1)
+  )]
+  hits <- hits[!vapply(
+    hits,
+    function(table) table_touched(tracker, source_name, table),
+    logical(1)
+  )]
+  if (length(hits) == 0) {
+    return(NULL)
+  }
+
+  for (table in hits) {
+    mark_table_touched(tracker, source_name, table)
+  }
+  vapply(
+    hits,
+    function(table) dictionary_entry_text(dictionary, table),
+    character(1)
+  )
+}
+
+# Which tables' dictionary entries this conversation has already seen, so
+# run_sql doesn't re-deliver them. A NULL tracker (tools used outside an
+# agent) treats every touch as the first.
+table_touched <- function(tracker, source_name, table) {
+  !is.null(tracker) && isTRUE(tracker[[touch_key(source_name, table)]])
+}
+
+mark_table_touched <- function(tracker, source_name, table) {
+  if (!is.null(tracker)) {
+    tracker[[touch_key(source_name, table)]] <- TRUE
+  }
+  invisible(NULL)
+}
+
+touch_key <- function(source_name, table) {
+  paste(source_name %||% "", table, sep = "\n")
 }
 
 source_label <- function(source_name) {
