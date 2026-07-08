@@ -67,11 +67,6 @@ documented columns with the table's live schema.
 \item When the agent also has a \code{\link[=context_layer]{context_layer()}}, the dictionary's prose is
 indexed for the \code{search_context} tool.
 }
-
-Dictionaries are read leniently: unknown fields are ignored, optional
-fields can be absent, and a dictionary may describe tables that aren't on
-the data source (or vice versa). To check a dictionary against its data,
-use the \href{https://data-dict.tidyverse.org/validation.html}{data-dict CLI}.
 }
 
 \section{Trust}{
