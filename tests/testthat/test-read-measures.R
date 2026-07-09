@@ -264,6 +264,40 @@ test_that("read_measures produces measures usable in a semantic_layer", {
   expect_named(layer$measures, "order_count")
 })
 
+test_that("read_measures parses @provenance tags without changing the measure", {
+  skip_if_not_installed("roxygen2")
+
+  base <- measures_script(c(
+    "#' Revenue",
+    "#' @description Quarterly revenue.",
+    "#' @param quarter `string` The quarter.",
+    "#' @measure",
+    "revenue <- function(quarter) 1L"
+  ))
+  tagged <- measures_script(c(
+    "#' Revenue",
+    "#' @description Quarterly revenue.",
+    "#' @param quarter `string` The quarter.",
+    "#' @provenance github.com/org/app@abc1234 R/server.R#L1-L9",
+    "#' @provenance trajectory analysis (2026-07-09)",
+    "#' @measure",
+    "revenue <- function(quarter) 1L"
+  ))
+
+  base_measure <- expect_no_warning(read_measures(base)[[1]])
+  tagged_measure <- expect_no_warning(read_measures(tagged)[[1]])
+
+  expect_equal(tool_name(tagged_measure), tool_name(base_measure))
+  expect_equal(
+    tool_description(tagged_measure),
+    tool_description(base_measure)
+  )
+  expect_equal(
+    names(tool_properties(tagged_measure)),
+    names(tool_properties(base_measure))
+  )
+})
+
 test_that("read_measures validates its inputs", {
   expect_snapshot(read_measures(123), error = TRUE)
   expect_snapshot(read_measures("does-not-exist.R"), error = TRUE)

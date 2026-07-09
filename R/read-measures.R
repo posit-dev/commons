@@ -7,6 +7,12 @@ read_measures <- function(paths, env = globalenv()) {
     function(x) roxygen2::tag_toggle(x),
     envir = asNamespace("roxygen2")
   )
+  registerS3method(
+    "roxy_tag_parse",
+    "roxy_tag_provenance",
+    function(x) roxygen2::tag_value(x),
+    envir = asNamespace("roxygen2")
+  )
 
   if (!is.character(paths)) {
     cli::cli_abort("{.arg paths} must be a character vector of file or directory paths.")

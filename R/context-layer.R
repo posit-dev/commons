@@ -25,8 +25,10 @@ context_layer <- function(files = character(), always = character()) {
 
   store <- ragnar::ragnar_store_create(embed = NULL)
   for (path in files) {
-    md <- paste(readLines(path, warn = FALSE), collapse = "\n")
-    ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(md))
+    md <- strip_frontmatter(paste(readLines(path, warn = FALSE), collapse = "\n"))
+    if (nzchar(trimws(md))) {
+      ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(md))
+    }
   }
   if (length(files)) {
     ragnar::ragnar_store_build_index(store, type = "fts")
@@ -86,6 +88,12 @@ dictionary_context_chunks <- function(dictionary) {
 
   chunks <- c(dictionary$details, tables[!is.na(tables)], glossary)
   chunks[nzchar(chunks)]
+}
+
+# Frontmatter carries file metadata (e.g. provenance) meant for maintainers,
+# not the model; drop it so retrieval can't surface it.
+strip_frontmatter <- function(md) {
+  sub("(?s)^---\r?\n.*?\r?\n---(\r?\n|$)", "", md, perl = TRUE)
 }
 
 context_search <- function(store, query, n = 3) {
