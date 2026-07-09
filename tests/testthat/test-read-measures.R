@@ -278,7 +278,7 @@ test_that("read_measures parses @provenance tags without changing the measure", 
     "#' Revenue",
     "#' @description Quarterly revenue.",
     "#' @param quarter `string` The quarter.",
-    "#' @provenance github.com/org/app@abc1234 R/server.R#L1-L9",
+    "#' @provenance https://github.com/org/app/blob/abc1234/R/server.R#L1-L9",
     "#' @provenance trajectory analysis (2026-07-09)",
     "#' @measure",
     "revenue <- function(quarter) 1L"

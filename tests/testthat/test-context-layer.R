@@ -36,7 +36,7 @@ test_that("context_layer strips YAML frontmatter before indexing", {
   writeLines(
     c(
       "---",
-      "provenance: github.com/org/app@abc1234 R/server.R#L1-L9",
+      "provenance: https://github.com/org/app/blob/abc1234/R/server.R#L1-L9",
       "---",
       "# Revenue",
       "Revenue excludes tax unless stated otherwise."
