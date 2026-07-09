@@ -36,7 +36,7 @@ Every contribution points back to the source it came from with a machine-parseab
 <repo-url>@<sha> <path>#L<start>-L<end>
 ```
 
-For artifacts not under version control, use `<path> (retrieved <yyyy-mm-dd>)`. Measures born from the iterate skill rather than an artifact self-reference their origin: `trajectory analysis (<yyyy-mm-dd>)`.
+For artifacts not under version control, prefer a stable URL that identifies the source (e.g. a published report or deployed app) over a local path; either way, use `<location> (retrieved <yyyy-mm-dd>)`, where `<location>` is that URL or, failing that, a local path. Measures born from the iterate skill rather than an artifact self-reference their origin: `trajectory analysis (<yyyy-mm-dd>)`.
 
 Where each kind of contribution carries it:
 
