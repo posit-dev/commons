@@ -30,7 +30,13 @@ my-agent/
 
 ## Provenance
 
-Every contribution points back to the source it came from with a machine-parseable string. The grammar:
+Every contribution points back to the source it came from with a machine-parseable string. When the host offers a commit-pinned permalink to a line range, use it directly — it is clickable and pins the same repo, sha, path, and lines in one token:
+
+```
+https://github.com/org/sales-dashboard/blob/abc1234/R/server.R#L120-L145
+```
+
+For hosts without a permalink convention (a bare git remote, an internal server), fall back to the host-agnostic grammar:
 
 ```
 <repo-url>@<sha> <path>#L<start>-L<end>
@@ -53,7 +59,7 @@ Example extracted measure:
 #' "Revenue (QTD)" value box. Excludes tax and intra-company transfers.
 #'
 #' @param quarter `string` Fiscal quarter, e.g. "2026 Q2".
-#' @provenance github.com/org/sales-dashboard@abc1234 R/server.R#L120-L145
+#' @provenance https://github.com/org/sales-dashboard/blob/abc1234/R/server.R#L120-L145
 #' @measure
 quarterly_revenue <- function(quarter, warehouse) {
   ...
