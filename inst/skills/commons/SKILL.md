@@ -1,50 +1,67 @@
 ---
 name: commons
-description: Improve and maintain a commons data agent by reading logged trajectories, finding recurring low-trust or slow answers, and proposing semantic-layer or context-layer changes.
+description: Building, maintaining, and iterating on a self-service data agent with commons.
 ---
 
-# Work with a commons agent
+# commons
 
-Use this skill when asked to improve an existing `commons` agent from logged trajectories, user feedback, or repeated low-trust answers.
+Read the relevant reference below before starting the corresponding task.
 
-The task is to move recurring questions to the highest appropriate path, increasing trustworthiness and decreasing latency.
+- [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, dictionary edits, and free-text context, each carrying provenance back to its source.
+- [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent by reading logged trajectories, finding recurring low-trust or slow answers, and proposing semantic-layer or context-layer changes.
 
-```text
-Path A: semantic layer
-The answer comes from a governed `measure()`. Prefer this for stable, recurring business metrics.
+## Agent project layout
 
-Path B, documented
-The answer uses SQL, but the context layer identifies the right table, grain, filters, joins, caveats, or SQL shape. If there are recurring cases in this bucket, consider proposing changes to the semantic layer that would promote those cases into Path A.
+A commons agent project follows this on-disk convention. Both references above build on it.
 
-Path B, exploratory
-The answer uses SQL with little documentation and the agent had to inspect tables, write custom SQL, or make assumptions. Promote recurring cases out of this state.
+```
+my-agent/
+├── agent.R                  # commons() definition
+├── dictionaries/
+│   └── warehouse.yaml       # one data-dict.yaml per data_source(), named
+│                            # to match the source name in the commons() call
+├── measures/
+│   ├── sales-dashboard.R    # measures grouped by source artifact (default
+│   └── churn-report.R       # landing spot only; reorganizing later is safe)
+└── context/
+    ├── sales-dashboard.md   # free-text context, one file per artifact
+    └── churn-report.md
 ```
 
-## Workflow
+## Provenance
 
-1. Find the agent definition.
-   Search for `commons(`, `data_source(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure arguments without `@param` documentation are never seen by the model: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. A new measure that queries a database should take the connection this way rather than referencing a global; other objects it needs (a pins board, an API client) should come from a default written as a call, e.g. `board = pins::board_connect()`.
+Every contribution points back to the source it came from with a machine-parseable string. When the host offers a commit-pinned permalink to a line range, use it directly — it is clickable and pins the same repo, sha, path, and lines in one token:
 
-2. Load trajectories.
-   Use `commons::read_trajectories(...)`. If the path or pins board is unclear, inspect the project for `log =`, `COMMONS_LOG_DIR`, or deployment setup.
+```
+https://github.com/org/sales-dashboard/blob/abc1234/R/server.R#L120-L145
+```
 
-3. Read the conversations.
-   Each trajectory is a list of ellmer turns.
+For hosts without a permalink convention (a bare git remote, an internal server), fall back to the host-agnostic grammar:
+
+```
+<repo-url>@<sha> <path>#L<start>-L<end>
+```
+
+For artifacts not under version control, prefer a stable URL that identifies the source (e.g. a published report or deployed app) over a local path; either way, use `<location> (retrieved <yyyy-mm-dd>)`, where `<location>` is that URL or, failing that, a local path. Measures born from the iterate skill rather than an artifact self-reference their origin: `trajectory analysis (<yyyy-mm-dd>)`.
+
+Where each kind of contribution carries it:
+
+* Measures: one or more `#' @provenance` roxygen tags per measure. The tag never reaches the model — `read_measures()` forwards only the title, description, `@return`, and documented `@param`s.
+* Context files: the same string in YAML frontmatter. `context_layer()` strips frontmatter before indexing, so it never reaches the model.
+* Dictionary edits: git commit messages; optionally a column's `details` when a caveat comes straight from artifact code.
+
+Example extracted measure:
 
 ```r
-trajectories <- commons::read_trajectories(log_dir)
-turns <- trajectories[[1]]
-
-print(turns)
+#' Quarterly revenue
+#'
+#' Revenue for a fiscal quarter as reported in the sales dashboard's
+#' "Revenue (QTD)" value box. Excludes tax and intra-company transfers.
+#'
+#' @param quarter `string` Fiscal quarter, e.g. "2026 Q2".
+#' @provenance https://github.com/org/sales-dashboard/blob/abc1234/R/server.R#L120-L145
+#' @measure
+quarterly_revenue <- function(quarter, warehouse) {
+  ...
+}
 ```
-
-4. Analyze themes.
-   Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
-
-5. Propose changes.
-   Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change. 
-
-Prefer semantic-layer edits when the question is a stable governed metric. Prefer context-layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
-
-6. Wait before editing.
-   Do not make semantic-layer or context-layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.

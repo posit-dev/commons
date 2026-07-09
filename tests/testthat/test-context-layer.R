@@ -30,3 +30,55 @@ test_that("prompt facts are carried on the layer", {
   layer <- context_layer(always = "Revenue excludes tax.")
   expect_equal(layer$always, "Revenue excludes tax.")
 })
+
+test_that("context_layer strips YAML frontmatter before indexing", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(
+    c(
+      "---",
+      "provenance: https://github.com/org/app/blob/abc1234/R/server.R#L1-L9",
+      "---",
+      "# Revenue",
+      "Revenue excludes tax unless stated otherwise."
+    ),
+    path
+  )
+
+  layer <- context_layer(files = path)
+
+  expect_match(context_search(layer, "revenue")[[1]], "tax")
+  expect_length(context_search(layer, "abc1234"), 0)
+})
+
+test_that("context_layer leaves a body thematic break intact", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(
+    c(
+      "# Intro",
+      "Revenue excludes tax.",
+      "",
+      "---",
+      "",
+      "# Details",
+      "Discounts are applied before tax."
+    ),
+    path
+  )
+
+  layer <- context_layer(files = path)
+
+  expect_match(context_search(layer, "discounts")[[1]], "before tax")
+})
+
+test_that("strip_frontmatter leaves a file without frontmatter unchanged", {
+  md <- "# Revenue\nRevenue excludes tax."
+  expect_equal(strip_frontmatter(md), md)
+})
+
+test_that("context_layer skips a frontmatter-only file", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("---", "provenance: some-source", "---"), path)
+
+  layer <- context_layer(files = path)
+  expect_length(context_search(layer, "provenance"), 0)
+})
