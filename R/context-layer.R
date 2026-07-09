@@ -38,6 +38,56 @@ context_layer <- function(files = character(), always = character()) {
   )
 }
 
+# Dictionary prose doubles as searchable context, inserted at natural YAML
+# boundaries (one chunk per glossary term, per table's prose, and for the
+# dataset details) so retrieval returns coherent units. Column-level content
+# stays out of the store: first touch owns it, and indexing it would pay for
+# a second copy the agent already has.
+augment_context_layer <- function(context_layer, sources) {
+  chunks <- unlist(lapply(
+    sources,
+    function(source) dictionary_context_chunks(source$dictionary)
+  ))
+  if (length(chunks) == 0) {
+    return(context_layer)
+  }
+
+  layer <- context_layer %||% context_layer()
+  for (chunk in chunks) {
+    ragnar::ragnar_store_insert(layer$store, ragnar::markdown_chunk(chunk))
+  }
+  ragnar::ragnar_store_build_index(layer$store, type = "fts")
+  layer$n_docs <- layer$n_docs + length(chunks)
+  layer
+}
+
+dictionary_context_chunks <- function(dictionary) {
+  if (is.null(dictionary)) {
+    return(character(0))
+  }
+
+  tables <- vapply(
+    names(dictionary$tables),
+    function(name) {
+      entry <- dictionary$tables[[name]]
+      prose <- paste(c(entry$description, entry$details), collapse = "\n\n")
+      if (!nzchar(prose)) {
+        return(NA_character_)
+      }
+      sprintf("Table `%s`: %s", name, prose)
+    },
+    character(1)
+  )
+  glossary <- sprintf(
+    "%s: %s",
+    names(dictionary$glossary),
+    vapply(dictionary$glossary, identity, character(1))
+  )
+
+  chunks <- c(dictionary$details, tables[!is.na(tables)], glossary)
+  chunks[nzchar(chunks)]
+}
+
 context_search <- function(store, query, n = 3) {
   if (store$n_docs == 0) {
     return(character(0))

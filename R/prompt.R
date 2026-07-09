@@ -19,7 +19,52 @@ commons_system_prompt <- function(sources, context_layer) {
   }
 
   template <- fill_token(template, "{{TABLES}}", tables)
+  template <- fill_token(template, "{{DICTIONARY}}", dictionary_prompt_text(sources))
   fill_token(template, "{{ALWAYS}}", always)
+}
+
+# Only dataset-wide dictionary content is ambient: description and details
+# (global guardrails, coarse routing) and the glossary up to a cap. Per-table
+# content is delivered at first touch instead; see dictionary_entry_text().
+dictionary_prompt_text <- function(sources) {
+  blocks <- character()
+  for (i in seq_along(sources)) {
+    dictionary <- sources[[i]]$dictionary
+    if (is.null(dictionary)) {
+      next
+    }
+    label <- if (length(sources) > 1) {
+      rlang::names2(sources)[[i]]
+    } else {
+      dictionary$name %||% ""
+    }
+    blocks <- c(blocks, dictionary_prompt_block(dictionary, label))
+  }
+
+  if (length(blocks) == 0) {
+    return("")
+  }
+  paste0("\n# About the data\n\n", paste(blocks, collapse = "\n\n"))
+}
+
+dictionary_prompt_block <- function(dictionary, label) {
+  ambient <- glossary_ambient(dictionary)
+  glossary <- if (length(ambient)) {
+    lines <- sprintf(
+      "- %s: %s",
+      ambient,
+      vapply(dictionary$glossary[ambient], flatten_inline, character(1))
+    )
+    paste0("Definitions of domain terms:\n\n", paste(lines, collapse = "\n"))
+  }
+
+  parts <- c(
+    if (nzchar(label)) sprintf("## %s", label),
+    dictionary$description,
+    dictionary$details,
+    glossary
+  )
+  paste(parts, collapse = "\n\n")
 }
 
 # One source keeps the flat bullet list; several group each source's tables

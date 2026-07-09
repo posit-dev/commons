@@ -44,7 +44,8 @@ Suggests:
     shinychat,
     testthat (>= 3.0.0),
     vitals,
-    withr
+    withr,
+    yaml
 VignetteBuilder: knitr
 Remotes:
     simonpcouch/ragnar@writable-extensions

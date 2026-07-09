@@ -126,7 +126,8 @@ Commons <- R6::R6Class(
       sources <- as_data_sources(data_sources)
 
       private$sources <- sources
-      private$context_layer <- context_layer
+      private$context_layer <- augment_context_layer(context_layer, sources)
+      private$first_touch <- new.env(parent = emptyenv())
       private$registry <- semantic_layer$measures
       private$injections <- resolve_injections(
         private$registry,
@@ -183,6 +184,7 @@ Commons <- R6::R6Class(
     registry = NULL,
     injections = NULL,
     logger = NULL,
+    first_touch = NULL,
 
     finalize_turn = function() {
       record_trajectory(
