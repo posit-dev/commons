@@ -17,7 +17,9 @@ A list of lists of ellmer turns, one list per conversation.
 }
 \description{
 \code{read_trajectories()} reads conversation trajectories written by
-\code{\link[=commons]{commons()}} when \code{log = TRUE} or \code{log} is a local directory path.
+\code{\link[=commons]{commons()}} when logging is enabled via its \code{log} argument (for example
+\code{log = TRUE}, a local directory path, or a \code{\link[=log_local]{log_local()}} or \code{\link[=log_pins]{log_pins()}}
+spec).
 }
 \section{Agent skill}{
 
