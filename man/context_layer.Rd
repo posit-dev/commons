@@ -20,8 +20,9 @@ A context layer contains text that helps a \code{\link[=commons]{commons()}} age
 data source.
 }
 \details{
-Files are chunked and indexed with \pkg{ragnar}. The \code{always} argument is for
-short facts that should be included in every system prompt.
+Files are chunked and indexed with \pkg{ragnar} when the agent first
+searches its context. The \code{always} argument is for short facts that should
+be included in every system prompt.
 }
 \examples{
 layer <- context_layer(

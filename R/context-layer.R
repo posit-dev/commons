@@ -3,8 +3,9 @@
 #' A context layer contains text that helps a [commons()] agent interpret its
 #' data source.
 #'
-#' Files are chunked and indexed with \pkg{ragnar}. The `always` argument is for
-#' short facts that should be included in every system prompt.
+#' Files are chunked and indexed with \pkg{ragnar} when the agent first
+#' searches its context. The `always` argument is for short facts that should
+#' be included in every system prompt.
 #'
 #' @param files Character vector of paths to text/markdown files to index.
 #' @param always Character vector of facts to inject into the system prompt on
@@ -23,21 +24,17 @@ context_layer <- function(files = character(), always = character()) {
     cli::cli_abort("{.arg files} and {.arg always} must be character vectors.")
   }
 
-  store <- ragnar::ragnar_store_create(embed = NULL)
+  # Read eagerly so a bad path fails at construction; index lazily (see
+  # context_store()).
+  docs <- character(0)
   for (path in files) {
     md <- strip_frontmatter(paste(readLines(path, warn = FALSE), collapse = "\n"))
     if (nzchar(trimws(md))) {
-      ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(md))
+      docs <- c(docs, md)
     }
   }
-  if (length(files)) {
-    ragnar::ragnar_store_build_index(store, type = "fts")
-  }
 
-  structure(
-    list(store = store, always = always, n_docs = length(files)),
-    class = "commons_context_layer"
-  )
+  new_context_layer(docs, always)
 }
 
 # Dictionary prose doubles as searchable context, inserted at natural YAML
@@ -55,12 +52,14 @@ augment_context_layer <- function(context_layer, sources) {
   }
 
   layer <- context_layer %||% context_layer()
-  for (chunk in chunks) {
-    ragnar::ragnar_store_insert(layer$store, ragnar::markdown_chunk(chunk))
-  }
-  ragnar::ragnar_store_build_index(layer$store, type = "fts")
-  layer$n_docs <- layer$n_docs + length(chunks)
-  layer
+  new_context_layer(c(layer$docs, chunks), layer$always)
+}
+
+new_context_layer <- function(docs, always) {
+  structure(
+    list(docs = docs, always = always, cache = new.env(parent = emptyenv())),
+    class = "commons_context_layer"
+  )
 }
 
 dictionary_context_chunks <- function(dictionary) {
@@ -96,11 +95,28 @@ strip_frontmatter <- function(md) {
   sub("(?s)^---\r?\n.*?\r?\n---(\r?\n|$)", "", md, perl = TRUE)
 }
 
-context_search <- function(store, query, n = 3) {
-  if (store$n_docs == 0) {
+# Store setup (duckdb creation, chunk insertion, FTS indexing) is the most
+# expensive part of building an agent and many conversations never search, so
+# it's deferred to the first search. The cache environment is created fresh
+# whenever a layer's docs change, so layers sharing docs share a store and
+# layers that differ never do.
+context_store <- function(layer) {
+  if (is.null(layer$cache$store)) {
+    store <- ragnar::ragnar_store_create(embed = NULL)
+    for (doc in layer$docs) {
+      ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
+    }
+    ragnar::ragnar_store_build_index(store, type = "fts")
+    layer$cache$store <- store
+  }
+  layer$cache$store
+}
+
+context_search <- function(layer, query, n = 3) {
+  if (length(layer$docs) == 0) {
     return(character(0))
   }
-  res <- ragnar::ragnar_retrieve_bm25(store$store, query, top_k = n)
+  res <- ragnar::ragnar_retrieve_bm25(context_store(layer), query, top_k = n)
   if (nrow(res) == 0) {
     return(character(0))
   }
