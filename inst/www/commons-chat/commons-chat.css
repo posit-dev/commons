@@ -251,19 +251,6 @@ shiny-tool-request .shiny-tool-card .tool-title,
   color: #8a6d2f;
 }
 
-.commons-review-link {
-  appearance: none;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font-size: inherit;
-  font-weight: 600;
-  line-height: inherit;
-  padding: 0;
-  text-decoration: underline;
-}
-
 /* ---- Measure display ------------------------------------------------- */
 
 .commons-measure-display {

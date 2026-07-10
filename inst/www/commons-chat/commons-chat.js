@@ -11,11 +11,12 @@
     // Keep the viewport still when a tool card is expanded or collapsed;
     // otherwise shinychat's stick-to-bottom scrolling chases the height
     // change. A synthetic upward wheel tick is the library's own escape
-    // hatch: it unpins from the bottom without moving the viewport. Direct
-    // scrollTop writes don't work here, since scroll events are ignored
-    // while a resize (the expansion itself) is in flight. Repeated on the
-    // next frames because the escape requires overflowing content, which
-    // the expansion may only create after this handler runs.
+    // hatch: it unpins from the bottom without moving the viewport. The
+    // escape only registers once the content actually overflows, which the
+    // expansion may create at any point during its transition, so it is
+    // repeated every frame for a beat — alongside a scrollTop hold, since
+    // scroll events (but not wheel events) are ignored while a resize is
+    // in flight.
     document.addEventListener("click", function(event) {
       if (!event.target || !event.target.closest) return;
       var header = event.target.closest(".shiny-tool-card > .card-header");
@@ -23,14 +24,18 @@
       var scroller = header.closest(".shiny-chat-messages");
       if (!scroller) return;
 
-      var escape = function() {
+      var top = scroller.scrollTop;
+      var until = performance.now() + 600;
+      var steady = function() {
         scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }));
+        if (scroller.scrollTop !== top) {
+          scroller.scrollTop = top;
+        }
+        if (performance.now() < until) {
+          window.requestAnimationFrame(steady);
+        }
       };
-      escape();
-      window.requestAnimationFrame(function() {
-        escape();
-        window.requestAnimationFrame(escape);
-      });
+      steady();
     }, true);
 
     Shiny.addCustomMessageHandler("commonsProvenancePill", function(message) {
@@ -59,14 +64,6 @@
         holder.innerHTML = message.html;
         var pill = holder.firstElementChild;
         if (!pill) return;
-
-        var trigger = pill.querySelector("[data-commons-review-trigger]");
-        if (trigger && message.inputId && window.Shiny && Shiny.setInputValue) {
-          trigger.addEventListener("click", function(event) {
-            event.preventDefault();
-            Shiny.setInputValue(message.inputId, Date.now(), { priority: "event" });
-          });
-        }
 
         var blocks = content.querySelectorAll("p, li, table");
         var target = blocks[blocks.length - 1] || content;
