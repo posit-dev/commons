@@ -41,14 +41,19 @@
         var messages = chat.querySelectorAll(
           ".shiny-chat-message .shiny-chat-message-content"
         );
-        var content = messages[messages.length - 1];
+        // Counted from the end: seeded chats may open with welcome messages,
+        // so restored exchanges are the *last* assistant messages.
+        var fromEnd = typeof message.indexFromEnd === "number" ? message.indexFromEnd : 0;
+        var content = messages[messages.length - 1 - fromEnd];
 
         if (!content) {
-          if (attempt < 20) {
+          if (attempt < 40) {
             window.setTimeout(function() { appendPill(attempt + 1); }, 25);
           }
           return;
         }
+
+        if (content.querySelector(".commons-answer-pill")) return;
 
         var holder = document.createElement("span");
         holder.innerHTML = message.html;

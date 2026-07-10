@@ -52,7 +52,7 @@ shiny-tool-result,
   border-radius: 0.5rem;
   color: var(--bs-secondary-color, #6c757d);
   gap: 0.4rem;
-  min-height: 0;
+  min-height: 1.875rem;
   padding: 0.22rem 0.45rem;
   transition: background-color 0.15s ease, color 0.15s ease;
 }

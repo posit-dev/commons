@@ -64,6 +64,10 @@ commons_mod_server <- function(
   )
 
   shiny::moduleServer(id, function(input, output, session) {
+    session$onFlushed(function() {
+      seed_commons_pills(session, client)
+    }, once = TRUE)
+
     shiny::observeEvent(mod$last_turn(), {
       tag <- commons_last_tag(client)
       if (is.na(tag)) {
@@ -83,20 +87,37 @@ commons_mod_server <- function(
   mod
 }
 
-send_commons_pill <- function(session, tag, review_id = NULL) {
+send_commons_pill <- function(session, tag, review_id = NULL, index_from_end = NULL) {
   review_input_id <- if (is.null(review_id)) NULL else session$ns(review_id)
   html <- htmltools::renderTags(
     commons_answer_pill(tag, review_input_id)
   )$html
 
-  session$sendCustomMessage(
-    "commonsProvenancePill",
-    list(
-      id = session$ns("chat"),
-      html = html,
-      inputId = review_input_id
-    )
+  msg <- list(
+    id = session$ns("chat"),
+    html = html,
+    inputId = review_input_id
   )
+  if (!is.null(index_from_end)) {
+    msg$indexFromEnd <- index_from_end
+  }
+  session$sendCustomMessage("commonsProvenancePill", msg)
+}
+
+# Restored exchanges get their pills without a review link: the review
+# prompt asks the model about "your previous answer", which is only
+# coherent for the latest one.
+seed_commons_pills <- function(session, client) {
+  tags <- commons_exchange_tags(
+    client$get_turns(include_system_prompt = FALSE)
+  )
+  n <- length(tags)
+  for (i in seq_len(n)) {
+    if (is.na(tags[[i]])) {
+      next
+    }
+    send_commons_pill(session, tags[[i]], index_from_end = n - i)
+  }
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
@@ -143,14 +164,18 @@ commons_answer_pill <- function(tag, review_id = NULL) {
       `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation.",
       commons_pill_icon("warning-icon.svg", "AI can be wrong"),
       htmltools::tags$span("AI can be wrong."),
-      htmltools::tags$span("If you want, you can"),
-      htmltools::tags$button(
-        id = review_id,
-        class = "commons-review-link",
-        type = "button",
-        `data-commons-review-trigger` = "",
-        "request review."
-      )
+      if (!is.null(review_id)) {
+        list(
+          htmltools::tags$span("If you want, you can"),
+          htmltools::tags$button(
+            id = review_id,
+            class = "commons-review-link",
+            type = "button",
+            `data-commons-review-trigger` = "",
+            "request review."
+          )
+        )
+      }
     ),
     NULL
   )
