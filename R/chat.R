@@ -185,12 +185,17 @@ commons_pill_icon <- function(file, alt) {
   )
 }
 
+# Asset mtimes ride in the version so the dependency URL changes whenever
+# the files do; browsers otherwise cache edited assets under the stable
+# version's URL indefinitely.
 commons_chat_dependency <- function() {
+  src <- system.file("www", "commons-chat", package = "commons")
+  stamp <- max(file.mtime(list.files(src, full.names = TRUE)))
+
   htmltools::htmlDependency(
     name = "commons-chat",
-    version = "0.0.0.9000",
-    package = "commons",
-    src = "www/commons-chat",
+    version = paste0("0.0.0.9000.", as.integer(stamp)),
+    src = c(file = src),
     stylesheet = "commons-chat.css",
     script = "commons-chat.js"
   )
