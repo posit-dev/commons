@@ -30,6 +30,7 @@ Imports:
     utils
 Suggests:
     bsicons,
+    connectapi,
     dbplyr,
     dplyr,
     glue,

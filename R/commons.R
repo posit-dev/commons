@@ -16,10 +16,11 @@
 #'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param log Whether to log conversation trajectories. `FALSE` disables
-#'   logging. `TRUE` uses private Connect pins on Posit Connect and local files
-#'   elsewhere. A single string is treated as a local directory path to write
-#'   trajectory files.
+#' @param log Where to log conversation trajectories, if anywhere. `FALSE` (the
+#'   default) disables logging and `TRUE` picks a destination automatically:
+#'   private Connect pins on Posit Connect and local files elsewhere. For
+#'   control over the destination, pass a spec from [log_pins()] or
+#'   [log_local()]. A single string is shorthand for `log_local(path)`.
 #'
 #' @return A `Commons` object, which subclasses [ellmer::Chat].
 #'
@@ -112,7 +113,7 @@ Commons <- R6::R6Class(
     #' @param data_sources A [data_source()], or a named list of them.
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
-    #' @param log Whether to log conversation trajectories.
+    #' @param log Where to log conversation trajectories. See [commons()].
     initialize = function(
       client,
       data_sources,
