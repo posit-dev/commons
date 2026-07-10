@@ -36,6 +36,18 @@ shiny-chat-container {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
+/* Send/stop controls in quiet monochrome rather than primary/danger; the
+ * icons are filled circles with knocked-out glyphs, so a dark currentColor
+ * reads as a dark button with a light glyph. */
+.shiny-chat-input .shiny-chat-btn-send,
+.shiny-chat-input .shiny-chat-btn-send.shiny-chat-btn-cancel {
+  color: var(--bs-emphasis-color, #1a1a1a);
+}
+
+.shiny-chat-input .shiny-chat-btn-send:disabled {
+  color: var(--bs-gray-400, #ced4da);
+}
+
 /* ---- Tool rows ------------------------------------------------------- */
 
 /* Both the element and class forms appear here so the rules cover
