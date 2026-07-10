@@ -19,10 +19,7 @@ tool_search_measures <- function(private) {
       body <- search_measures_text(private$registry, query, source_names)
       tool_result(
         body,
-        title = sprintf(
-          "Searched measures for \u201c%s\u201d",
-          html_escape(query)
-        ),
+        title = "Searched measures",
         icon = maybe_icon("search")
       )
     },
@@ -191,7 +188,6 @@ call_measure_tool <- function(
     icon = maybe_icon("shield-check"),
     html = html,
     tag = tag,
-    open = TRUE,
     show_tag = FALSE
   )
 }
@@ -245,10 +241,7 @@ search_context_tool <- function(context, query) {
   }
   tool_result(
     body,
-    title = sprintf(
-      "Searched context for \u201c%s\u201d",
-      html_escape(query)
-    ),
+    title = "Searched context",
     icon = maybe_icon("book"),
     markdown = body
   )
