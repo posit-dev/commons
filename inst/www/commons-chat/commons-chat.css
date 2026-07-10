@@ -14,6 +14,15 @@ shiny-chat-container {
   padding: 0.65rem 1.1rem;
 }
 
+/* No assistant avatar; replies sit flush with the message column */
+.shiny-chat-message {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shiny-chat-message > .message-icon {
+  display: none;
+}
+
 .shiny-chat-input .tiptap {
   border-color: var(--bs-border-color, #dee2e6);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);

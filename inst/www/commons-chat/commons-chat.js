@@ -8,6 +8,31 @@
     if (window.commonsProvenancePillInitialized) return;
     window.commonsProvenancePillInitialized = true;
 
+    // Keep the viewport still when a tool card is expanded or collapsed;
+    // otherwise shinychat's stick-to-bottom scrolling chases the height
+    // change. A synthetic upward wheel tick is the library's own escape
+    // hatch: it unpins from the bottom without moving the viewport. Direct
+    // scrollTop writes don't work here, since scroll events are ignored
+    // while a resize (the expansion itself) is in flight. Repeated on the
+    // next frames because the escape requires overflowing content, which
+    // the expansion may only create after this handler runs.
+    document.addEventListener("click", function(event) {
+      if (!event.target || !event.target.closest) return;
+      var header = event.target.closest(".shiny-tool-card > .card-header");
+      if (!header) return;
+      var scroller = header.closest(".shiny-chat-messages");
+      if (!scroller) return;
+
+      var escape = function() {
+        scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }));
+      };
+      escape();
+      window.requestAnimationFrame(function() {
+        escape();
+        window.requestAnimationFrame(escape);
+      });
+    }, true);
+
     Shiny.addCustomMessageHandler("commonsProvenancePill", function(message) {
       var chat = document.getElementById(message.id);
       if (!chat) return;
