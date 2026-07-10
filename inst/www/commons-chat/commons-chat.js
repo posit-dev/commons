@@ -38,18 +38,41 @@
       steady();
     }, true);
 
+    var messageContents = function(chat) {
+      return chat.querySelectorAll(
+        ".shiny-chat-message .shiny-chat-message-content"
+      );
+    };
+
+    var placePill = function(content, html) {
+      if (content.querySelector(".commons-answer-pill")) return;
+
+      var holder = document.createElement("span");
+      holder.innerHTML = html;
+      var pill = holder.firstElementChild;
+      if (!pill) return;
+
+      var blocks = content.querySelectorAll("p, li, table");
+      var target = blocks[blocks.length - 1] || content;
+
+      if (target.tagName === "TABLE" || target.tagName === "LI") {
+        content.appendChild(document.createElement("br"));
+        content.appendChild(pill);
+        return;
+      }
+
+      target.appendChild(document.createTextNode(" "));
+      target.appendChild(pill);
+    };
+
+    // A live turn's pill lands on the last assistant message.
     Shiny.addCustomMessageHandler("commonsProvenancePill", function(message) {
       var chat = document.getElementById(message.id);
       if (!chat) return;
 
       var appendPill = function(attempt) {
-        var messages = chat.querySelectorAll(
-          ".shiny-chat-message .shiny-chat-message-content"
-        );
-        // Counted from the end: seeded chats may open with welcome messages,
-        // so restored exchanges are the *last* assistant messages.
-        var fromEnd = typeof message.indexFromEnd === "number" ? message.indexFromEnd : 0;
-        var content = messages[messages.length - 1 - fromEnd];
+        var messages = messageContents(chat);
+        var content = messages[messages.length - 1];
 
         if (!content) {
           if (attempt < 40) {
@@ -58,27 +81,49 @@
           return;
         }
 
-        if (content.querySelector(".commons-answer-pill")) return;
-
-        var holder = document.createElement("span");
-        holder.innerHTML = message.html;
-        var pill = holder.firstElementChild;
-        if (!pill) return;
-
-        var blocks = content.querySelectorAll("p, li, table");
-        var target = blocks[blocks.length - 1] || content;
-
-        if (target.tagName === "TABLE" || target.tagName === "LI") {
-          content.appendChild(document.createElement("br"));
-          content.appendChild(pill);
-          return;
-        }
-
-        target.appendChild(document.createTextNode(" "));
-        target.appendChild(pill);
+        placePill(content, message.html);
       };
 
       window.requestAnimationFrame(function() { appendPill(0); });
+    });
+
+    // Restored history streams into the chat message by message, so pills
+    // for seeded exchanges can only be placed once every exchange has
+    // rendered and the transcript has stopped growing; placing them
+    // eagerly races the restore and pins them to whichever message happens
+    // to be last at the time. Indexed from the end because seeded chats may
+    // open with welcome messages ahead of the restored exchanges.
+    Shiny.addCustomMessageHandler("commonsProvenancePillSeed", function(message) {
+      var chat = document.getElementById(message.id);
+      if (!chat) return;
+
+      var attempts = 0;
+      var stable = 0;
+      var lastSize = -1;
+
+      var place = function() {
+        var messages = messageContents(chat);
+        var size = chat.textContent.length;
+
+        if (messages.length < message.count || size !== lastSize) {
+          stable = 0;
+        } else {
+          stable += 1;
+        }
+        lastSize = size;
+
+        if (stable < 3) {
+          if (attempts++ < 200) window.setTimeout(place, 50);
+          return;
+        }
+
+        message.pills.forEach(function(pill) {
+          var content = messages[messages.length - 1 - pill.indexFromEnd];
+          if (content) placePill(content, pill.html);
+        });
+      };
+
+      window.setTimeout(place, 50);
     });
   };
 

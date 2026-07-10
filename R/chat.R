@@ -81,30 +81,39 @@ commons_mod_server <- function(
   mod
 }
 
-send_commons_pill <- function(session, tag, index_from_end = NULL) {
+send_commons_pill <- function(session, tag) {
   html <- htmltools::renderTags(commons_answer_pill(tag))$html
-
-  msg <- list(
-    id = session$ns("chat"),
-    html = html
+  session$sendCustomMessage(
+    "commonsProvenancePill",
+    list(id = session$ns("chat"), html = html)
   )
-  if (!is.null(index_from_end)) {
-    msg$indexFromEnd <- index_from_end
-  }
-  session$sendCustomMessage("commonsProvenancePill", msg)
 }
 
+# Restored history renders as streams, so all seeded pills go in one
+# message and the client places them only once the transcript settles.
 seed_commons_pills <- function(session, client) {
   tags <- commons_exchange_tags(
     client$get_turns(include_system_prompt = FALSE)
   )
   n <- length(tags)
+  pills <- list()
   for (i in seq_len(n)) {
     if (is.na(tags[[i]])) {
       next
     }
-    send_commons_pill(session, tags[[i]], index_from_end = n - i)
+    pills[[length(pills) + 1]] <- list(
+      html = htmltools::renderTags(commons_answer_pill(tags[[i]]))$html,
+      indexFromEnd = n - i
+    )
   }
+  if (length(pills) == 0) {
+    return(invisible())
+  }
+
+  session$sendCustomMessage(
+    "commonsProvenancePillSeed",
+    list(id = session$ns("chat"), count = n, pills = pills)
+  )
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
