@@ -16,7 +16,15 @@ tool_search_measures <- function(private) {
   }
   ellmer::tool(
     function(query) {
-      search_measures_text(private$registry, query, source_names)
+      body <- search_measures_text(private$registry, query, source_names)
+      tool_result(
+        body,
+        title = sprintf(
+          "Searched measures for \u201c%s\u201d",
+          html_escape(query)
+        ),
+        icon = maybe_icon("search")
+      )
     },
     "Search registered measures. Returns matching measures with their argument schemas. Use this before call_measure.",
     arguments = list(
@@ -184,7 +192,6 @@ call_measure_tool <- function(
     html = html,
     tag = tag,
     open = TRUE,
-    show_request = FALSE,
     show_tag = FALSE
   )
 }
@@ -238,7 +245,10 @@ search_context_tool <- function(context, query) {
   }
   tool_result(
     body,
-    title = "Searched context",
+    title = sprintf(
+      "Searched context for \u201c%s\u201d",
+      html_escape(query)
+    ),
     icon = maybe_icon("book"),
     markdown = body
   )
@@ -291,7 +301,6 @@ run_sql_tool <- function(source, sql, source_name = NULL, tracker = NULL) {
     markdown = display_md,
     tag = "B",
     open = FALSE,
-    show_request = FALSE,
     show_tag = FALSE
   )
 }
@@ -360,7 +369,7 @@ tool_result <- function(
   markdown = NULL,
   tag = NULL,
   open = FALSE,
-  show_request = TRUE,
+  show_request = FALSE,
   show_tag = TRUE
 ) {
   if (!is.null(tag) && isTRUE(show_tag)) {
