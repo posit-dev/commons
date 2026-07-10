@@ -36,12 +36,14 @@ shiny-chat-container {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
-/* Send/stop controls in quiet monochrome rather than primary/danger; the
- * icons are filled circles with knocked-out glyphs, so a dark currentColor
- * reads as a dark button with a light glyph. */
-.shiny-chat-input .shiny-chat-btn-send,
+/* Send/stop keep shinychat's primary/danger hues, softened toward the
+ * background so they don't dominate the chat. */
+.shiny-chat-input .shiny-chat-btn-send {
+  color: color-mix(in srgb, var(--bs-primary, #007bc2) 65%, var(--bs-body-bg, #fff));
+}
+
 .shiny-chat-input .shiny-chat-btn-send.shiny-chat-btn-cancel {
-  color: var(--bs-emphasis-color, #1a1a1a);
+  color: color-mix(in srgb, var(--bs-danger, #dc3545) 65%, var(--bs-body-bg, #fff));
 }
 
 .shiny-chat-input .shiny-chat-btn-send:disabled {
@@ -203,14 +205,13 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 .commons-answer-pill {
   align-items: center;
-  background: transparent;
-  border: 0;
+  border-radius: 999px;
   display: inline-flex;
   font-size: 0.74rem;
   gap: 0.3rem;
   line-height: 1.2;
   max-width: 100%;
-  padding: 0.1rem 0;
+  padding: 0.18rem 0.45rem;
   position: relative;
   vertical-align: text-bottom;
 }
@@ -264,11 +265,15 @@ shiny-tool-request .shiny-tool-card .tool-title,
 }
 
 .commons-answer-pill-trusted {
-  color: #2e7d5b;
+  background: #f2fbf5;
+  border: 1px solid #cfeedd;
+  color: #286144;
 }
 
 .commons-answer-pill-caution {
-  color: #8a6d2f;
+  background: #fff8ec;
+  border: 1px solid #f2ddbb;
+  color: #6b4b1b;
 }
 
 /* ---- Measure display ------------------------------------------------- */
