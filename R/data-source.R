@@ -420,18 +420,44 @@ table_ids_from_labels <- function(tables) {
   ids
 }
 
+# Per-table dbExistsTable() calls cost one round trip each, which dominates
+# startup against a remote warehouse. Probe every table in a single zero-row
+# query instead, and fall back to per-table checks only to name the missing
+# tables when that probe fails.
 check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env()) {
+  probes <- vapply(
+    table_registry$ids,
+    function(id) {
+      sprintf("SELECT 1 FROM %s WHERE 1 = 0", DBI::dbQuoteIdentifier(con, id))
+    },
+    character(1)
+  )
+  probe_error <- tryCatch(
+    {
+      DBI::dbGetQuery(con, paste(probes, collapse = " UNION ALL "))
+      NULL
+    },
+    error = function(err) err
+  )
+  if (is.null(probe_error)) {
+    return(invisible(table_registry))
+  }
+
   exists <- vapply(
     table_registry$ids,
     function(id) isTRUE(DBI::dbExistsTable(con, id)),
     logical(1)
   )
+  missing <- table_registry$labels[!exists]
 
-  if (all(exists)) {
-    return(invisible(table_registry))
+  if (length(missing) == 0) {
+    cli::cli_abort(
+      "Failed to verify {.arg tables} against the connection.",
+      parent = probe_error,
+      call = call
+    )
   }
 
-  missing <- table_registry$labels[!exists]
   cli::cli_abort(
     "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
     call = call
