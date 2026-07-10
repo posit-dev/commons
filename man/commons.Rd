@@ -26,10 +26,11 @@ can take a source's connection as an argument named after the source; see
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
-\item{log}{Whether to log conversation trajectories. \code{FALSE} disables
-logging. \code{TRUE} uses private Connect pins on Posit Connect and local files
-elsewhere. A single string is treated as a local directory path to write
-trajectory files.}
+\item{log}{Where to log conversation trajectories, if anywhere. \code{FALSE} (the
+default) disables logging and \code{TRUE} picks a destination automatically:
+private Connect pins on Posit Connect and local files elsewhere. For
+control over the destination, pass a spec from \code{\link[=log_pins]{log_pins()}} or
+\code{\link[=log_local]{log_local()}}. A single string is shorthand for \code{log_local(path)}.}
 }
 \value{
 A \code{Commons} object, which subclasses \link[ellmer:Chat]{ellmer::Chat}.
@@ -156,7 +157,7 @@ rather than this method directly.
       \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list of them.}
       \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
       \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
-      \item{\code{log}}{Whether to log conversation trajectories.}
+      \item{\code{log}}{Where to log conversation trajectories. See \code{\link[=commons]{commons()}}.}
     }
     \if{html}{\out{</div>}}
   }

@@ -248,7 +248,29 @@ server <- function(input, output, session) {
 shinyApp(ui, server)
 ```
 
-When `log = TRUE`, commons records conversation trajectories. Locally, logs are written to `COMMONS_LOG_DIR` or a temporary directory. On Posit Connect, commons uses Connect pins when possible.
+## Logging trajectories
+
+The `log` argument controls whether, and where, commons records conversation trajectories. It is `FALSE` by default. `log = TRUE` picks a destination automatically: private Connect pins when running on Posit Connect, and local files otherwise (written to `COMMONS_LOG_DIR` or a temporary directory). A bare string is shorthand for a local directory path.
+
+For more control, pass a spec built with `log_local()` or `log_pins()`:
+
+```r
+# Always log to a specific local directory
+log = log_local("/srv/commons/logs")
+
+# Log to private Connect pins
+log = log_pins()
+```
+
+Connect trajectory pins are private to the deploying account. To let named colleagues review them, pass their Connect usernames to `share_with`. Each conversation's pin grants those users viewer access as it is created, so they retain access to new trajectories:
+
+```r
+log = log_pins(share_with = c("jdoe", "asmith"))
+```
+
+Sharing requires the [connectapi](https://pkg.posit.co/connectapi/) package. `share_with` only applies on Connect; off Connect, commons warns and logs locally instead.
+
+Read logged trajectories back with `read_trajectories()`.
 
 ## Iterating on the agent
 
