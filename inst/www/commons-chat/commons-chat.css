@@ -39,11 +39,11 @@ shiny-chat-container {
 /* Send/stop keep shinychat's primary/danger hues, softened toward the
  * background so they don't dominate the chat. */
 .shiny-chat-input .shiny-chat-btn-send {
-  color: color-mix(in srgb, var(--bs-primary, #007bc2) 65%, var(--bs-body-bg, #fff));
+  color: color-mix(in srgb, var(--bs-primary, #007bc2) 60%, var(--bs-body-bg, #fff));
 }
 
 .shiny-chat-input .shiny-chat-btn-send.shiny-chat-btn-cancel {
-  color: color-mix(in srgb, var(--bs-danger, #dc3545) 65%, var(--bs-body-bg, #fff));
+  color: color-mix(in srgb, var(--bs-danger, #dc3545) 60%, var(--bs-body-bg, #fff));
 }
 
 .shiny-chat-input .shiny-chat-btn-send:disabled {
