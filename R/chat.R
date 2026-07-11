@@ -3,7 +3,7 @@
 #' These functions wrap [shinychat::chat_mod_ui()] and
 #' [shinychat::chat_mod_server()] with commons-specific answer provenance UI.
 #' Answers produced from registered measures get a compact verified-answer pill.
-#' Answers produced from fallback SQL get a caution pill with a review request.
+#' Answers produced from fallback SQL get a caution pill.
 #'
 #' @param id Module ID.
 #' @param ... Arguments passed to [shinychat::chat_mod_ui()] or
@@ -64,38 +64,55 @@ commons_mod_server <- function(
   )
 
   shiny::moduleServer(id, function(input, output, session) {
+    session$onFlushed(function() {
+      seed_commons_pills(session, client)
+    }, once = TRUE)
+
     shiny::observeEvent(mod$last_turn(), {
       tag <- commons_last_tag(client)
       if (is.na(tag)) {
         return()
       }
 
-      review_id <- NULL
-      if (identical(tag, "B")) {
-        review_id <- next_review_id()
-        observe_review_request(review_id, client, mod$last_input())
-      }
-
-      send_commons_pill(session, tag, review_id)
+      send_commons_pill(session, tag)
     }, ignoreNULL = TRUE)
   })
 
   mod
 }
 
-send_commons_pill <- function(session, tag, review_id = NULL) {
-  review_input_id <- if (is.null(review_id)) NULL else session$ns(review_id)
-  html <- htmltools::renderTags(
-    commons_answer_pill(tag, review_input_id)
-  )$html
-
+send_commons_pill <- function(session, tag) {
+  html <- htmltools::renderTags(commons_answer_pill(tag))$html
   session$sendCustomMessage(
     "commonsProvenancePill",
-    list(
-      id = session$ns("chat"),
-      html = html,
-      inputId = review_input_id
+    list(id = session$ns("chat"), html = html)
+  )
+}
+
+# Restored history renders as streams, so all seeded pills go in one
+# message and the client places them only once the transcript settles.
+seed_commons_pills <- function(session, client) {
+  tags <- commons_exchange_tags(
+    client$get_turns(include_system_prompt = FALSE)
+  )
+  n <- length(tags)
+  pills <- list()
+  for (i in seq_len(n)) {
+    if (is.na(tags[[i]])) {
+      next
+    }
+    pills[[length(pills) + 1]] <- list(
+      html = htmltools::renderTags(commons_answer_pill(tags[[i]]))$html,
+      indexFromEnd = n - i
     )
+  }
+  if (length(pills) == 0) {
+    return(invisible())
+  }
+
+  session$sendCustomMessage(
+    "commonsProvenancePillSeed",
+    list(id = session$ns("chat"), count = n, pills = pills)
   )
 }
 
@@ -124,7 +141,7 @@ check_commons_client <- function(client, call = rlang::caller_env()) {
   }
 }
 
-commons_answer_pill <- function(tag, review_id = NULL) {
+commons_answer_pill <- function(tag) {
   switch(
     tag,
     A = htmltools::tags$span(
@@ -142,15 +159,7 @@ commons_answer_pill <- function(tag, review_id = NULL) {
       `aria-label` = "AI can be wrong. This answer was generated from available context and data, but was not produced by a governed calculation.",
       `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation.",
       commons_pill_icon("warning-icon.svg", "AI can be wrong"),
-      htmltools::tags$span("AI can be wrong."),
-      htmltools::tags$span("If you want, you can"),
-      htmltools::tags$button(
-        id = review_id,
-        class = "commons-review-link",
-        type = "button",
-        `data-commons-review-trigger` = "",
-        "request review."
-      )
+      htmltools::tags$span("AI can be wrong.")
     ),
     NULL
   )
@@ -176,50 +185,17 @@ commons_pill_icon <- function(file, alt) {
   )
 }
 
-observe_review_request <- function(review_id, client, question) {
-  session <- shiny::getDefaultReactiveDomain()
-  shiny::observeEvent(session$input[[review_id]], {
-    answer <- commons_turn_text(client$last_turn())
-    shinychat::update_chat_user_input(
-      "chat",
-      value = review_request_prompt(question, answer),
-      submit = TRUE,
-      session = session
-    )
-  }, ignoreInit = TRUE, once = TRUE)
-}
-
-review_request_prompt <- function(question, answer = NULL) {
-  paste(
-    "Briefly note assumptions you made in your previous answer.",
-    "",
-    "Then provide one or two other possible different answers you could have",
-    "come to if you had made different assumptions.",
-    sep = "\n"
-  )
-}
-
-commons_turn_text <- function(turn) {
-  if (is.null(turn)) {
-    return(NA_character_)
-  }
-  turn@text %||% as.character(turn)
-}
-
-next_review_id <- local({
-  i <- 0L
-  function() {
-    i <<- i + 1L
-    sprintf("commons_request_review_%s", i)
-  }
-})
-
+# Asset mtimes ride in the version so the dependency URL changes whenever
+# the files do; browsers otherwise cache edited assets under the stable
+# version's URL indefinitely.
 commons_chat_dependency <- function() {
+  src <- system.file("www", "commons-chat", package = "commons")
+  stamp <- max(file.mtime(list.files(src, full.names = TRUE)))
+
   htmltools::htmlDependency(
     name = "commons-chat",
-    version = "0.0.0.9000",
-    package = "commons",
-    src = "www/commons-chat",
+    version = paste0("0.0.0.9000.", as.integer(stamp)),
+    src = c(file = src),
     stylesheet = "commons-chat.css",
     script = "commons-chat.js"
   )

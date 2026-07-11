@@ -12,6 +12,30 @@ commons_last_tag <- function(chat) {
   derive_tag_from_turns(chat$get_turns(include_system_prompt = FALSE))
 }
 
+# Tag for each completed question -> answer exchange, in order. Used to
+# reinstate provenance pills when an existing conversation seeds a new
+# session, since pills are otherwise only injected as live turns complete.
+commons_exchange_tags <- function(turns) {
+  out <- character()
+  tags <- character()
+  started <- FALSE
+  for (turn in turns) {
+    if (identical(turn@role, "user") && !turn_has_tool_result(turn)) {
+      if (started) {
+        out <- c(out, derive_tag(tags))
+      }
+      tags <- character()
+      started <- TRUE
+    } else if (started) {
+      tags <- c(tags, turn_tags(turn))
+    }
+  }
+  if (started) {
+    out <- c(out, derive_tag(tags))
+  }
+  out
+}
+
 derive_tag_from_turns <- function(turns) {
   tags <- character()
   for (turn in rev(turns)) {

@@ -1,8 +1,6 @@
 test_that("answer pills describe trusted and fallback answers", {
   trusted <- htmltools::renderTags(commons_answer_pill("A"))$html
-  fallback <- htmltools::renderTags(
-    commons_answer_pill("B", "review")
-  )$html
+  fallback <- htmltools::renderTags(commons_answer_pill("B"))$html
 
   expect_match(trusted, "Verified answer")
   expect_match(trusted, "governed calculation")
@@ -13,9 +11,7 @@ test_that("answer pills describe trusted and fallback answers", {
   expect_match(fallback, "AI can be wrong")
   expect_match(fallback, "not produced by a governed calculation")
   expect_match(fallback, "data-commons-tooltip")
-  expect_match(fallback, "request review")
   expect_match(fallback, "commons-answer-pill-icon")
-  expect_no_match(fallback, "request review\\s+\\.")
   expect_match(fallback, "commons-answer-pill-caution")
 })
 
@@ -29,18 +25,6 @@ test_that("chat UI preserves shinychat's top-level fill container", {
   expect_true("html-fill-item" %in% classes)
   expect_true("html-fill-container" %in% classes)
   expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
-})
-
-test_that("review requests include the previous request and answer", {
-  prompt <- review_request_prompt(
-    "How many orders were there?",
-    "There were 6 orders."
-  )
-
-  expect_match(prompt, "Briefly note assumptions")
-  expect_match(prompt, "one or two other possible different answers")
-  expect_no_match(prompt, "How many orders were there?", fixed = TRUE)
-  expect_no_match(prompt, "There were 6 orders.", fixed = TRUE)
 })
 
 test_that("commons_mod_server requires a commons agent", {
