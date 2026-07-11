@@ -56,6 +56,14 @@ commons_mod_server <- function(
   check_chat_packages()
   check_commons_client(client)
 
+  # Build the context index during post-startup idle time (while the user
+  # reads the welcome message) rather than inside the first search. Errors are
+  # swallowed: the first search retries the build and surfaces the failure to
+  # the model.
+  later::later(function() {
+    tryCatch(client$prewarm(), error = function(err) NULL)
+  })
+
   mod <- shinychat::chat_mod_server(
     id,
     client = client,

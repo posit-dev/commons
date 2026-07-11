@@ -249,7 +249,7 @@ test_that("augmenting keeps existing context and always facts", {
   augmented <- augment_context_layer(layer, list(local_dict_source()))
 
   expect_equal(augmented$always, "Booked revenue excludes tax.")
-  expect_gt(augmented$n_docs, 0)
+  expect_gt(length(augmented$docs), 0)
 })
 
 test_that("augmenting without dictionaries is a no-op", {

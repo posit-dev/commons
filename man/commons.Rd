@@ -105,6 +105,7 @@ agent <- commons(
     \item \href{#method-Commons-initialize}{\code{Commons$new()}}
     \item \href{#method-Commons-chat}{\code{Commons$chat()}}
     \item \href{#method-Commons-stream_async}{\code{Commons$stream_async()}}
+    \item \href{#method-Commons-prewarm}{\code{Commons$prewarm()}}
     \item \href{#method-Commons-clone}{\code{Commons$clone()}}
   }
 }
@@ -208,6 +209,20 @@ log. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
       \item{\code{stream}}{Whether to stream plain text or \link[ellmer:Content]{ellmer::Content} objects.}
       \item{\code{controller}}{Optional \code{\link[ellmer:stream_controller]{ellmer::stream_controller()}}.}
     }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Commons-prewarm"></a>}}
+\if{latex}{\out{\hypertarget{method-Commons-prewarm}{}}}
+\subsection{\code{Commons$prewarm()}}{
+  Build the context layer's search index ahead of the first
+\code{search_context} call, e.g. during idle time right after a Shiny
+session starts. \code{\link[=commons_mod_server]{commons_mod_server()}} does this automatically.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Commons$prewarm()}
     \if{html}{\out{</div>}}
   }
 }

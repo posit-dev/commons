@@ -177,6 +177,17 @@ Commons <- R6::R6Class(
         private$finalize_turn()
         coro::exhausted()
       })()
+    },
+
+    #' @description Build the context layer's search index ahead of the first
+    #'   `search_context` call, e.g. during idle time right after a Shiny
+    #'   session starts. [commons_mod_server()] does this automatically.
+    prewarm = function() {
+      layer <- private$context_layer
+      if (!is.null(layer) && length(layer$docs) > 0) {
+        context_store(layer)
+      }
+      invisible(self)
     }
   ),
   private = list(

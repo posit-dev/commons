@@ -467,3 +467,22 @@ test_that("commons() errors on injection parameters matching no name", {
   )
 })
 
+
+test_that("prewarm() builds the context store ahead of the first search", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  layer <- context_layer(files = path)
+
+  # test_source() has no dictionary, so the agent augments nothing and shares
+  # `layer`'s cache environment.
+  agent <- test_agent(context_layer = layer)
+  expect_null(layer$cache$store)
+
+  agent$prewarm()
+  expect_false(is.null(layer$cache$store))
+  expect_match(context_search(layer, "revenue")[[1]], "booked")
+})
+
+test_that("prewarm() without a context layer is a no-op", {
+  expect_no_error(test_agent()$prewarm())
+})
