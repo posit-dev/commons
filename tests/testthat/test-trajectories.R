@@ -91,11 +91,17 @@ test_that("the sharer warns once but keeps retrying when granting fails", {
   expect_equal(calls, 2L)
 })
 
-test_that("share_trajectory_pin resolves usernames and grants viewer access", {
+test_that("share_trajectory_pin grants viewer access without sending email", {
   skip_if_not_installed("connectapi")
 
-  captured <- NULL
+  posts <- list()
   resolved_guid <- NULL
+  connect <- list(
+    POST = function(path, body, ...) {
+      posts[[length(posts) + 1]] <<- list(path = path, body = body)
+      NULL
+    }
+  )
   local_mocked_bindings(
     pin_meta = function(board, name, ...) list(local = list(content_id = "content-guid")),
     .package = "pins"
@@ -105,11 +111,10 @@ test_that("share_trajectory_pin resolves usernames and grants viewer access", {
     user_guid_from_username = function(client, username) paste0("guid-", username),
     content_item = function(client, guid) {
       resolved_guid <<- guid
-      structure(list(guid = guid), class = "content")
-    },
-    content_add_user = function(content, guid, role) {
-      captured <<- list(content = content, guid = guid, role = role)
-      content
+      list(
+        get_connect = function() connect,
+        get_content = function() list(guid = guid)
+      )
     },
     .package = "connectapi"
   )
@@ -117,9 +122,12 @@ test_that("share_trajectory_pin resolves usernames and grants viewer access", {
   share_trajectory_pin(list(account = "u"), "commons-trajectory-x", c("jdoe", "asmith"))
 
   expect_equal(resolved_guid, "content-guid")
-  expect_equal(unname(captured$guid), c("guid-jdoe", "guid-asmith"))
-  expect_equal(captured$role, "viewer")
-  expect_equal(captured$content$guid, "content-guid")
+  expect_equal(vapply(posts, function(p) p$body$principal_guid, character(1)),
+    c("guid-jdoe", "guid-asmith"))
+  expect_true(all(vapply(posts, function(p) p$path, character(1)) ==
+    "v1/content/content-guid/permissions"))
+  expect_true(all(vapply(posts, function(p) p$body$role, character(1)) == "viewer"))
+  expect_true(all(vapply(posts, function(p) isFALSE(p$body$send_email), logical(1))))
 })
 
 test_that("connect_pin_name qualifies bare names with the board account", {

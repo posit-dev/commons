@@ -223,7 +223,27 @@ share_trajectory_pin <- function(board, name, share_with) {
     character(1)
   )
   content <- trajectory_content_item(client, board, name)
-  connectapi::content_add_user(content, guid = user_guids, role = "viewer")
+  for (guid in user_guids) {
+    grant_viewer_silently(content, guid)
+  }
+  invisible(NULL)
+}
+
+# connectapi::content_add_user() doesn't expose Connect's send_email flag, which
+# defaults to emailing each named user for every trajectory pin we create. Post
+# the permission directly so viewers are granted access without notification.
+grant_viewer_silently <- function(content, guid) {
+  connect <- content$get_connect()
+  path <- paste0("v1/content/", content$get_content()$guid, "/permissions")
+  connect$POST(
+    path,
+    body = list(
+      principal_guid = guid,
+      principal_type = "user",
+      role = "viewer",
+      send_email = FALSE
+    )
+  )
   invisible(NULL)
 }
 
