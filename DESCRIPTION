@@ -13,7 +13,7 @@ Description: Build correct and easy-to-use self-service data science
     then deploy agents that answer data questions, log interactions, and
     can be evaluated and improved over time.
 License: MIT + file LICENSE
-URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
+URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/, https://solid-adventure-ny1mpqy.pages.github.io/
 BugReports: https://github.com/posit-dev/commons/issues
 Imports:
     cli,
@@ -54,3 +54,4 @@ Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.0.0
+Config/Needs/website: tidyverse/tidytemplate

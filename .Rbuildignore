@@ -8,3 +8,7 @@ inst/tiles/
 plans/
 AGENTS.md
 CLAUDE.md
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^\.github$
