@@ -1,0 +1,372 @@
+# Getting started with commons
+
+At their core, commons agents are composed of a data source, a semantic
+layer, and a context layer. The data source is what the agent can query.
+The semantic layer is the happy path: a set of governed
+[`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)s
+that use vetted definitions. The context layer is searchable text that
+helps the agent answer questions that are not covered by a measure.
+
+This vignette shows the shape of a small commons project.
+
+``` r
+
+library(commons)
+```
+
+## Setting up the project directory
+
+A commons agent is easiest to maintain when the pieces live in separate
+files:
+
+``` text
+.
+|-- R/
+|   |-- data_sources.R
+|   |-- semantic_layer.R
+|   `-- context_layer.R
+|-- app.R
+`-- context/
+    `-- metrics.md
+```
+
+The bundled `commons` agent skill can also be copied into your project.
+The skill helps coding agents follow best practices when building and
+iterating on commons agents.
+
+``` r
+
+dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(
+  system.file("skills", "commons", package = "commons"),
+  ".agents/skills",
+  recursive = TRUE
+)
+```
+
+For Claude Code, copy the same directory into `.claude/skills` instead.
+
+## Connecting to data sources
+
+The data source is the set of tables available to the agent. If your
+data already lives in a database, pass a DBI connection. In production,
+prefer exposing only the tables the agent needs.
+
+Give the source a name by placing it in a named list. The name is how
+measures reach the source’s connection (see the next section).
+
+``` r
+
+# R/data_sources.R
+con <- DBI::dbConnect(...)
+
+agent_data <- list(
+  warehouse = data_source(
+    con,
+    tables = c("orders", "customers")
+  )
+)
+```
+
+For data that does not already live in a database, pass named data
+frames. commons loads them into an in-process DuckDB database.
+
+``` r
+
+agent_data <- list(
+  warehouse = data_source(
+    orders = orders,
+    customers = customers
+  )
+)
+```
+
+If the data lives in Posit Connect pins, pass a board and the pins to
+read; the names you provide become table names:
+
+``` r
+
+agent_data <- list(
+  warehouse = data_source(
+    pins::board_connect(),
+    names = c(
+      orders = "team/orders",
+      customers = "team/customers"
+    )
+  )
+)
+```
+
+An agent can have more than one data source:
+
+``` r
+
+agent_data <- list(
+  warehouse = data_source(con, tables = c("orders", "customers")),
+  finance = data_source(finance_con, tables = "invoices")
+)
+```
+
+With several sources, the system prompt lists each source’s tables
+separately, and the agent’s `describe_table` and `run_sql` tools take
+the source’s name as a `source` argument. With one source, that argument
+doesn’t exist.
+
+### Describing tables with a data dictionary
+
+A data source can carry a data dictionary in the
+[data-dict.yaml](https://data-dict.tidyverse.org/) format, which
+describes the source’s tables and columns: what each table’s rows
+represent, what its columns mean, allowed values and units, how tables
+join, and a glossary of domain terms.
+
+``` r
+
+agent_data <- list(
+  warehouse = data_source(
+    con,
+    tables = c("orders", "customers"),
+    dictionary = "data-dict.yaml"
+  )
+)
+```
+
+Dictionary content reaches the agent where it’s needed rather than all
+at once. The dataset-level `description`, `details`, and glossary are
+included in the system prompt; those fields are the place for rules that
+span tables and for guidance on which tables answer which kinds of
+questions. A table’s full entry—its prose, documented columns,
+relationships, and definitions of glossary terms it references—rides
+along with the first tool result that touches the table, whether that’s
+`describe_table` or a SQL query. When the agent also has a context
+layer, the dictionary’s prose is searchable with the rest of the
+context.
+
+A dictionary doesn’t need to be complete to be useful: documented and
+undocumented tables and columns mix freely, and undocumented columns
+fall back to what commons infers from the data.
+
+Together with the layers below, this gives an agent three tiers of
+trust: the dictionary describes what the raw data *is*, the semantic
+layer defines how governed metrics are *computed*, and the context layer
+holds the less-structured remainder.
+
+## Defining the semantic layer
+
+The semantic layer is currently composed of measures. A measure is an
+ordinary R function wrapped with metadata that tells the model what it
+computes and what arguments it accepts.
+
+Measures should use definitions your team already trusts: existing
+metric functions, SQL saved in reports, semantic-layer APIs, or
+calculations from production dashboards. The wrapper should be
+maintainable and thin. When an existing definition can be extended with
+a filter or grouping argument, prefer that over adding another
+near-duplicate measure.
+
+``` r
+
+# R/semantic_layer.R
+
+#' Revenue by Region
+#'
+#' @description Total order revenue, optionally filtered to a date range and
+#' region. Uses the same revenue definition as the team's monthly report.
+#'
+#' @param start_date `string` Start date, YYYY-MM-DD.
+#' @param end_date `string` End date, YYYY-MM-DD.
+#' @param region `enum[North, South, East, West]` Region to filter to.
+#'
+#' @return A data frame with columns region and revenue.
+#' @measure
+revenue_by_region <- function(start_date, end_date, region = NULL, warehouse) {
+  region_filter <- if (is.null(region)) {
+    DBI::SQL("TRUE")
+  } else {
+    glue::glue_sql("region = {region}", .con = warehouse)
+  }
+
+  sql <- glue::glue_sql(
+    "
+    SELECT region, SUM(revenue) AS revenue
+    FROM orders
+    WHERE order_date BETWEEN {start_date} AND {end_date}
+      AND ({region_filter})
+    GROUP BY region
+    ",
+    .con = warehouse
+  )
+
+  DBI::dbGetQuery(warehouse, sql)
+}
+```
+
+Then collect the documented measures into a semantic layer:
+
+``` r
+
+agent_semantics <- semantic_layer("R/semantic_layer.R")
+```
+
+commons parses roxygen blocks marked with `@measure`, sources the file,
+and registers those functions as governed tools.
+
+### Connections and other measure resources
+
+A measure function can take two kinds of arguments. Arguments documented
+with `@param` are supplied by the model. Undocumented arguments, like
+`warehouse` above, are supplied when the measure runs: an argument named
+after a data source receives that source’s connection, and any other
+undocumented argument keeps its default. The model never sees them.
+
+Since connections are supplied when the agent is assembled, you can
+create the semantic layer anywhere, even before connecting to a
+database.
+
+For objects that aren’t data sources, such as a pins board or an API
+client, give the argument a default that builds the object:
+
+``` r
+
+#' @param start_date `string` Start date, YYYY-MM-DD.
+#' @measure
+new_leads <- function(start_date, board = pins::board_connect()) {
+  pins::pin_read(board, "team/leads") |>
+    dplyr::filter(created >= as.Date(start_date)) |>
+    nrow()
+}
+```
+
+Write the default as a call rather than a reference to a variable
+defined elsewhere; the measure then works no matter where the semantic
+layer is created.
+
+## Defining the context layer
+
+The context layer is text the agent can search when no measure fits. Use
+it for metric definitions, table grain, join notes, business
+terminology, caveats, and source material that helps the agent write
+fallback SQL responsibly.
+
+Good context sources include existing app code, report source, metric
+catalogs, analyst notes, relevant transcripts, and exported pages from
+systems such as Confluence. Structured table and column documentation is
+better attached to the data source as a dictionary (see above). Short
+facts that should always be in the prompt can go in `always`.
+
+``` r
+
+# R/context_layer.R
+agent_context <- context_layer(
+  files = c(
+    "context/metrics.md",
+    "context/table-notes.md"
+  ),
+  always = c(
+    "Revenue excludes tax unless stated otherwise.",
+    "The orders table is one row per order."
+  )
+)
+```
+
+## Creating the agent
+
+A minimal Shiny app wires the layers together and gives the agent a chat
+UI:
+
+``` r
+
+# app.R
+library(shiny)
+library(bslib)
+library(commons)
+
+source("R/data_sources.R")
+source("R/context_layer.R")
+
+agent <- commons(
+  client = ellmer::chat_anthropic(),
+  data_sources = agent_data,
+  semantic_layer = semantic_layer("R/semantic_layer.R"),
+  context_layer = agent_context,
+  log = TRUE
+)
+
+ui <- bslib::page_fillable(
+  commons_mod_ui("chat")
+)
+
+server <- function(input, output, session) {
+  commons_mod_server("chat", agent)
+}
+
+shinyApp(ui, server)
+```
+
+## Logging trajectories
+
+The `log` argument controls whether, and where, commons records
+conversation trajectories. It is `FALSE` by default. `log = TRUE` picks
+a destination automatically: private Connect pins when running on Posit
+Connect, and local files otherwise (written to `COMMONS_LOG_DIR` or a
+temporary directory). A bare string is shorthand for a local directory
+path.
+
+For more control, pass a spec built with
+[`log_local()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
+or
+[`log_pins()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md):
+
+``` r
+
+# Always log to a specific local directory
+log = log_local("/srv/commons/logs")
+
+# Log to private Connect pins
+log = log_pins()
+```
+
+Connect trajectory pins are private to the deploying account. To let
+named colleagues review them, pass their Connect usernames to
+`share_with`. Each conversation’s pin grants those users viewer access
+as it is created, so they retain access to new trajectories:
+
+``` r
+
+log = log_pins(share_with = c("jdoe", "asmith"))
+```
+
+Sharing requires the [connectapi](https://pkg.posit.co/connectapi/)
+package. `share_with` only applies on Connect; off Connect, commons
+warns and logs locally instead.
+
+Read logged trajectories back with
+[`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md).
+
+## Iterating on the agent
+
+The maintenance goal is to move recurring questions toward higher-trust
+paths:
+
+``` text
+Path A: semantic layer
+The answer comes from a governed measure.
+
+Path B, documented
+The answer uses fallback SQL, but the context layer identifies the right table,
+grain, filters, joins, caveats, or SQL shape.
+
+Path B, exploratory
+The answer uses fallback SQL with little supporting context, or the agent has to
+make assumptions.
+```
+
+Use logged trajectories to find repeated Path B questions, unclear
+answers, and questions the agent could not answer. Stable business
+metrics usually belong in the semantic layer. Table choice, grain,
+terminology, joins, and caveats usually belong in the context layer.
+
+When promoting a recurring question into Path A, first ask whether an
+existing measure can be extended with a filter, grouping, or aggregation
+argument. That keeps the semantic layer smaller and closer to the
+definitions your team already maintains.

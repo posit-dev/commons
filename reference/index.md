@@ -1,0 +1,24 @@
+# Package index
+
+## All functions
+
+- [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+  : Create a commons agent
+- [`commons_mod_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+  [`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+  : Shiny module for commons agents
+- [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md)
+  : Create a context layer
+- [`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md)
+  : Create a data source
+- [`list_tables()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/list_tables.md)
+  : List the tables an agent can query
+- [`log_pins()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
+  [`log_local()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
+  : Configure where commons logs conversation trajectories
+- [`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)
+  : Create a measure
+- [`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md)
+  : Read commons trajectories
+- [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md)
+  : Create a semantic layer

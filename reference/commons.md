@@ -1,0 +1,304 @@
+# Create a commons agent
+
+`commons()` creates an
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+subclass with tools for a semantic layer, context search, table
+inspection, and SQL queries.
+
+## Usage
+
+``` r
+commons(
+  client = ellmer::chat_anthropic(),
+  data_sources,
+  context_layer = NULL,
+  semantic_layer = NULL,
+  log = FALSE
+)
+```
+
+## Arguments
+
+- client:
+
+  An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+  giving the provider and model to use, e.g.
+  [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
+
+- data_sources:
+
+  A
+  [`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md),
+  or a named list of them. Measures can take a source's connection as an
+  argument named after the source; see
+  [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
+  When there are several sources, the `run_sql` and `describe_table`
+  tools take a source's name as a `source` argument.
+
+- context_layer:
+
+  An optional
+  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md).
+
+- semantic_layer:
+
+  An optional
+  [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
+
+- log:
+
+  Where to log conversation trajectories, if anywhere. `FALSE` (the
+  default) disables logging and `TRUE` picks a destination
+  automatically: private Connect pins on Posit Connect and local files
+  elsewhere. For control over the destination, pass a spec from
+  [`log_pins()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
+  or
+  [`log_local()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md).
+  A single string is shorthand for `log_local(path)`.
+
+## Value
+
+A `Commons` object, which subclasses
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html).
+
+## Details
+
+The provider and model come from `client`; commons sets its own system
+prompt and tools. Use `agent$chat()` to ask questions,
+[`commons_mod_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+and
+[`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+to embed the agent in Shiny, and
+[`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
+to use the agent as a vitals solver.
+
+## Super class
+
+[`ellmer::Chat`](https://ellmer.tidyverse.org/reference/Chat.html) -\>
+`Commons`
+
+## Methods
+
+### Public methods
+
+- [`Commons$new()`](#method-Commons-initialize)
+
+- [`Commons$chat()`](#method-Commons-chat)
+
+- [`Commons$stream_async()`](#method-Commons-stream_async)
+
+- [`Commons$prewarm()`](#method-Commons-prewarm)
+
+- [`Commons$clone()`](#method-Commons-clone)
+
+Inherited methods
+
+- [`ellmer::Chat$add_turn()`](https://ellmer.tidyverse.org/reference/Chat.html#method-add_turn)
+- [`ellmer::Chat$chat_async()`](https://ellmer.tidyverse.org/reference/Chat.html#method-chat_async)
+- [`ellmer::Chat$chat_structured()`](https://ellmer.tidyverse.org/reference/Chat.html#method-chat_structured)
+- [`ellmer::Chat$chat_structured_async()`](https://ellmer.tidyverse.org/reference/Chat.html#method-chat_structured_async)
+- [`ellmer::Chat$get_cost()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_cost)
+- [`ellmer::Chat$get_model()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_model)
+- [`ellmer::Chat$get_provider()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_provider)
+- [`ellmer::Chat$get_system_prompt()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_system_prompt)
+- [`ellmer::Chat$get_tokens()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_tokens)
+- [`ellmer::Chat$get_tools()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_tools)
+- [`ellmer::Chat$get_turns()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_turns)
+- [`ellmer::Chat$last_turn()`](https://ellmer.tidyverse.org/reference/Chat.html#method-last_turn)
+- [`ellmer::Chat$on_tool_request()`](https://ellmer.tidyverse.org/reference/Chat.html#method-on_tool_request)
+- [`ellmer::Chat$on_tool_result()`](https://ellmer.tidyverse.org/reference/Chat.html#method-on_tool_result)
+- [`ellmer::Chat$register_tool()`](https://ellmer.tidyverse.org/reference/Chat.html#method-register_tool)
+- [`ellmer::Chat$register_tools()`](https://ellmer.tidyverse.org/reference/Chat.html#method-register_tools)
+- [`ellmer::Chat$set_model()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_model)
+- [`ellmer::Chat$set_system_prompt()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_system_prompt)
+- [`ellmer::Chat$set_tools()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_tools)
+- [`ellmer::Chat$set_turns()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_turns)
+- [`ellmer::Chat$stream()`](https://ellmer.tidyverse.org/reference/Chat.html#method-stream)
+
+------------------------------------------------------------------------
+
+### `Commons$new()`
+
+Create a Commons agent. Most users should call `commons()` rather than
+this method directly.
+
+#### Usage
+
+    Commons$new(
+      client,
+      data_sources,
+      context_layer = NULL,
+      semantic_layer = NULL,
+      log = FALSE
+    )
+
+#### Arguments
+
+- `client`:
+
+  An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+  supplying the provider.
+
+- `data_sources`:
+
+  A
+  [`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md),
+  or a named list of them.
+
+- `context_layer`:
+
+  An optional
+  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md).
+
+- `semantic_layer`:
+
+  An optional
+  [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
+
+- `log`:
+
+  Where to log conversation trajectories. See `commons()`.
+
+------------------------------------------------------------------------
+
+### `Commons$chat()`
+
+Submit input and return the response. Also writes a turn log. See
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html) for
+arguments.
+
+#### Usage
+
+    Commons$chat(..., echo = NULL)
+
+#### Arguments
+
+- `...`:
+
+  Input to send to the model.
+
+- `echo`:
+
+  Whether to echo output; see
+  [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html).
+
+------------------------------------------------------------------------
+
+### `Commons$stream_async()`
+
+Stream input and return the response stream. See
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html) for
+arguments.
+
+#### Usage
+
+    Commons$stream_async(
+      ...,
+      tool_mode = c("concurrent", "sequential"),
+      stream = c("text", "content"),
+      controller = NULL
+    )
+
+#### Arguments
+
+- `...`:
+
+  Input to send to the model.
+
+- `tool_mode`:
+
+  Whether tool calls may run concurrently or sequentially.
+
+- `stream`:
+
+  Whether to stream plain text or
+  [ellmer::Content](https://ellmer.tidyverse.org/reference/Content.html)
+  objects.
+
+- `controller`:
+
+  Optional
+  [`ellmer::stream_controller()`](https://ellmer.tidyverse.org/reference/stream_controller.html).
+
+------------------------------------------------------------------------
+
+### `Commons$prewarm()`
+
+Build the context layer's search index ahead of the first
+`search_context` call, e.g. during idle time right after a Shiny session
+starts.
+[`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+does this automatically.
+
+#### Usage
+
+    Commons$prewarm()
+
+------------------------------------------------------------------------
+
+### `Commons$clone()`
+
+The objects of this class are cloneable with this method.
+
+#### Usage
+
+    Commons$clone(deep = FALSE)
+
+#### Arguments
+
+- `deep`:
+
+  Whether to make a deep clone.
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+# A measure over local data computes directly in R.
+sem <- semantic_layer(
+  measure(
+    "order_count",
+    "Count of orders.",
+    function() nrow(my_sales),
+    arguments = list()
+  )
+)
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_sources = data_source(sales = my_sales),
+  semantic_layer = sem
+)
+agent$chat("How many orders are there?")
+
+# A measure takes a connection as an argument named after a data source.
+# `warehouse` isn't in `arguments`, so the model never sees it; commons
+# supplies it when the measure runs. Interpolate model-supplied arguments
+# with glue::glue_sql() so they're quoted safely.
+con <- DBI::dbConnect(duckdb::duckdb())
+sem <- semantic_layer(
+  measure(
+    "revenue_by_region",
+    "Total revenue for a region.",
+    function(region, warehouse) {
+      DBI::dbGetQuery(
+        warehouse,
+        glue::glue_sql(
+          "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
+          .con = warehouse
+        )
+      )
+    },
+    arguments = list(region = ellmer::type_string("Sales region."))
+  )
+)
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_sources = list(warehouse = data_source(con)),
+  semantic_layer = sem
+)
+
+# Objects that aren't data sources (a pins board, an API client) come from
+# argument defaults in the measure, e.g. `board = pins::board_connect()`.
+# See ?semantic_layer.
+} # }
+```
