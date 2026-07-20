@@ -32,6 +32,7 @@ Imports:
     R6,
     ragnar,
     rlang,
+    roxygen2,
     S7,
     utils
 Suggests:
@@ -45,7 +46,6 @@ Suggests:
     pins,
     ragg,
     readr,
-    roxygen2,
     rmarkdown,
     shiny,
     shinychat,
