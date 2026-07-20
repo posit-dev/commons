@@ -72,15 +72,15 @@ run_r_tool <- function(worker, handles, code) {
   chain <- promises::then(worker_tail(worker), onFulfilled = task)
   worker$tail <- promises::catch(chain, function(e) NULL)
 
-  result <- promises::then(chain, function(res) {
+  # Decrement exactly once, whether the call succeeded or failed: this and
+  # run_r_result() below are separate promise handlers that could both fire,
+  # and a double decrement could let schedule_worker_reap() close the worker
+  # while another call is still in flight.
+  settled <- promises::finally(chain, function() {
     worker$pending <- worker$pending - 1L
     schedule_worker_reap(worker)
-    run_r_result(code, res)
   })
-  promises::catch(result, function(e) {
-    worker$pending <- worker$pending - 1L
-    stop(e)
-  })
+  promises::then(settled, function(res) run_r_result(code, res))
 }
 
 run_r_result <- function(code, res) {

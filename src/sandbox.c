@@ -20,8 +20,28 @@
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <unistd.h>
+#include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+
+/* The seccomp filter matches syscall numbers, which are architecture-specific,
+ * so it must first confirm the calling arch is the native one: a foreign arch
+ * (e.g. the i386 compat ABI on an x86_64 kernel) numbers its syscalls
+ * differently, so socket() could slip through as a number we don't screen. An
+ * unrecognized build arch fails closed rather than installing a filter that
+ * screens the wrong table. */
+#if defined(__x86_64__)
+#define SANDBOX_AUDIT_ARCH AUDIT_ARCH_X86_64
+#define SANDBOX_X32_SYSCALL_BIT 0x40000000
+#elif defined(__aarch64__)
+#define SANDBOX_AUDIT_ARCH AUDIT_ARCH_AARCH64
+#elif defined(__i386__)
+#define SANDBOX_AUDIT_ARCH AUDIT_ARCH_I386
+#elif defined(__arm__)
+#define SANDBOX_AUDIT_ARCH AUDIT_ARCH_ARM
+#else
+#error "run_r sandbox: unsupported architecture for the seccomp filter"
+#endif
 
 #ifndef __NR_landlock_create_ruleset
 #define __NR_landlock_create_ruleset 444
@@ -118,7 +138,17 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
    * credentials the worker must never see. */
   struct sock_filter filt[] = {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, arch)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SANDBOX_AUDIT_ARCH, 1, 0),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
              (uint32_t) offsetof(struct seccomp_data, nr)),
+#ifdef SANDBOX_X32_SYSCALL_BIT
+    /* x32 syscalls share the x86_64 arch tag but set a high bit and index a
+     * separate table, so screen them out before the number comparisons. */
+    BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, SANDBOX_X32_SYSCALL_BIT, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+#endif
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 4, 0),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_ptrace, 3, 0),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_process_vm_readv, 2, 0),
