@@ -39,6 +39,12 @@ test_agent <- function(
   )
 }
 
+# share_trajectory_access() latches grants process-wide; tests that exercise
+# it start from a clean slate.
+clear_granted_access <- function() {
+  rm(list = ls(granted), envir = granted)
+}
+
 agent_tool <- function(agent, name) {
   tools <- agent$get_tools()
   tools[[which(vapply(tools, tool_name, character(1)) == name)]]

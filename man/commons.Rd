@@ -167,14 +167,7 @@ rather than this method directly.
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{client}}{An \link[ellmer:Chat]{ellmer::Chat} supplying the provider.}
-      \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list of them.}
-      \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
-      \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
-      \item{\code{log}}{Whether to capture conversation trajectories with
-OpenTelemetry. See \code{\link[=commons]{commons()}}.}
-      \item{\code{share_with}}{Connect usernames granted access to this content's
-trajectories. See \code{\link[=commons]{commons()}}.}
+      \item{\code{client, data_sources, context_layer, semantic_layer, log, share_with}}{See \code{\link[=commons]{commons()}}.}
     }
     \if{html}{\out{</div>}}
   }

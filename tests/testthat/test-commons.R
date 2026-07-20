@@ -120,6 +120,19 @@ test_that("commons() validates its inputs", {
     ),
     error = TRUE
   )
+  expect_snapshot(
+    commons(client = test_client(), data_sources = test_source(), log = "yes"),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = test_source(),
+      log = TRUE,
+      share_with = 1
+    ),
+    error = TRUE
+  )
 })
 
 test_that("SQL tools gain a source argument only with multiple sources", {

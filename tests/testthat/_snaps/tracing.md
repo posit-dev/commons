@@ -79,3 +79,12 @@
       Could not share trajectory access with `share_with`.
       i no api key
 
+# an explicit content-capture setting is respected
+
+    Code
+      .res <- enable_content_capture()
+    Condition
+      Warning:
+      `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set to "false", so logged trajectories will not include message content.
+      i Unset it or set it to "true" to capture full trajectories.
+

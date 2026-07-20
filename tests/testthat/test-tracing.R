@@ -109,27 +109,124 @@ test_that("share_trajectory_access warns off Connect", {
 
 test_that("share_trajectory_access grants only missing collaborators", {
   withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
-  added <- character()
+  clear_granted_access()
+  state <- new.env()
+  state$added <- character()
   local_mocked_bindings(
     connect_client = function(...) list(server = "s", api_key = "k"),
     connect_permission_principals = function(client, guid) "guid-jdoe",
     connect_user_guid = function(client, username, ...) paste0("guid-", username),
     connect_add_collaborator = function(client, guid, principal_guid) {
-      added <<- c(added, principal_guid)
+      state$added <- c(state$added, principal_guid)
       invisible(NULL)
     }
   )
 
   share_trajectory_access(c("jdoe", "asmith"))
 
-  expect_equal(added, "guid-asmith")
+  expect_equal(state$added, "guid-asmith")
+})
+
+test_that("share_trajectory_access skips usernames already handled", {
+  withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
+  clear_granted_access()
+  state <- new.env()
+  state$lookups <- 0
+  local_mocked_bindings(
+    connect_client = function(...) list(server = "s", api_key = "k"),
+    connect_permission_principals = function(client, guid) character(),
+    connect_user_guid = function(client, username, ...) {
+      state$lookups <- state$lookups + 1
+      paste0("guid-", username)
+    },
+    connect_add_collaborator = function(client, guid, principal_guid) {
+      invisible(NULL)
+    }
+  )
+
+  share_trajectory_access("jdoe")
+  share_trajectory_access("jdoe")
+
+  expect_equal(state$lookups, 1)
 })
 
 test_that("share_trajectory_access warns rather than errors on failure", {
   withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
+  clear_granted_access()
   local_mocked_bindings(
     connect_client = function(...) rlang::abort("no api key")
   )
 
   expect_snapshot(share_trajectory_access("jdoe"))
+})
+
+test_that("an explicit content-capture setting is respected", {
+  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false")
+  expect_snapshot(.res <- enable_content_capture())
+  expect_false(.res)
+  expect_equal(
+    Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
+    "false"
+  )
+
+  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
+  expect_no_warning(.res <- enable_content_capture())
+  expect_false(.res)
+})
+
+test_that("content capture is enabled when unset", {
+  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
+  local_mocked_bindings(refresh_ellmer_otel_cache = function() NULL)
+
+  expect_true(enable_content_capture())
+  expect_equal(
+    Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
+    "true"
+  )
+})
+
+test_that("share_with grants wait for tracing to be live", {
+  skip_if_not_installed("otel")
+  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  state <- new.env()
+  state$shared <- FALSE
+  local_mocked_bindings(
+    enable_content_capture = function() NULL,
+    share_trajectory_access = function(share_with) state$shared <- TRUE
+  )
+
+  suppressWarnings(.res <- new_trajectory_tracing(TRUE, share_with = "jdoe"))
+
+  expect_false(.res)
+  expect_false(state$shared)
+})
+
+# The tracing hacks reach into ellmer and otel internals and are written to
+# degrade silently if those internals change; fail loudly here instead so an
+# upgrade can't quietly stop trajectory capture.
+test_that("the internals the tracing hacks rely on still exist", {
+  skip_if_not_installed("otel")
+
+  expect_true(is.function(asNamespace("ellmer")[["otel_cache_tracer"]]))
+
+  the <- asNamespace("otel")[["the"]]
+  expect_true(is.environment(the))
+  expect_true(exists("tracer_provider", envir = the, inherits = FALSE))
+})
+
+test_that("conversation turn spans record the conversation id", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record({
+    turn <- function() {
+      local_conversation_turn_span("conv-1")
+      invisible(NULL)
+    }
+    turn()
+  })
+
+  spans <- recorded$traces
+  expect_length(spans, 1)
+  expect_equal(spans[[1]]$name, "commons_conversation_turn")
+  expect_equal(spans[[1]]$attributes[["gen_ai.conversation.id"]], "conv-1")
 })

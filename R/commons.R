@@ -102,6 +102,8 @@ commons <- function(
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
+  check_log(log)
+  check_share_with(share_with)
 
   Commons$new(
     client = client,
@@ -121,14 +123,8 @@ Commons <- R6::R6Class(
   public = list(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
-    #' @param client An [ellmer::Chat] supplying the provider.
-    #' @param data_sources A [data_source()], or a named list of them.
-    #' @param context_layer An optional [context_layer()].
-    #' @param semantic_layer An optional [semantic_layer()].
-    #' @param log Whether to capture conversation trajectories with
-    #'   OpenTelemetry. See [commons()].
-    #' @param share_with Connect usernames granted access to this content's
-    #'   trajectories. See [commons()].
+    #' @param client,data_sources,context_layer,semantic_layer,log,share_with
+    #'   See [commons()].
     initialize = function(
       client,
       data_sources,

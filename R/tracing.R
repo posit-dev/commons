@@ -12,18 +12,8 @@ new_trajectory_tracing <- function(
   share_with = NULL,
   call = rlang::caller_env()
 ) {
-  if (!rlang::is_bool(log)) {
-    cli::cli_abort(
-      "{.arg log} must be {.code TRUE} or {.code FALSE}.",
-      call = call
-    )
-  }
-  if (!is.null(share_with) && !is.character(share_with)) {
-    cli::cli_abort(
-      "{.arg share_with} must be a character vector of Connect usernames.",
-      call = call
-    )
-  }
+  check_log(log, call = call)
+  check_share_with(share_with, call = call)
 
   if (!log) {
     if (!is.null(share_with)) {
@@ -42,11 +32,17 @@ new_trajectory_tracing <- function(
     return(FALSE)
   }
 
-  enable_content_capture()
-
-  if (!is.null(share_with)) {
-    share_trajectory_access(share_with)
+  if (
+    is_installed("promises") && !is_installed("promises", version = "1.5.0")
+  ) {
+    cli::cli_warn(c(
+      "Concurrent conversations may be logged under the wrong conversation
+       with {.pkg promises} older than 1.5.0.",
+      i = "Update {.pkg promises} to 1.5.0 or later."
+    ))
   }
+
+  enable_content_capture()
 
   if (!otel::is_tracing_enabled() && !is_connect_runtime()) {
     enable_local_tracing()
@@ -57,7 +53,31 @@ new_trajectory_tracing <- function(
     return(FALSE)
   }
 
+  if (!is.null(share_with)) {
+    share_trajectory_access(share_with)
+  }
+
   TRUE
+}
+
+check_log <- function(log, call = rlang::caller_env()) {
+  if (!rlang::is_bool(log)) {
+    cli::cli_abort(
+      "{.arg log} must be {.code TRUE} or {.code FALSE}.",
+      call = call
+    )
+  }
+  invisible(NULL)
+}
+
+check_share_with <- function(share_with, call = rlang::caller_env()) {
+  if (!is.null(share_with) && !is.character(share_with)) {
+    cli::cli_abort(
+      "{.arg share_with} must be a character vector of Connect usernames.",
+      call = call
+    )
+  }
+  invisible(NULL)
 }
 
 #' @noRd
@@ -85,7 +105,7 @@ local_conversation_turn_span <- function(
     attributes = list("gen_ai.conversation.id" = conversation_id),
     tracer = otel::get_tracer("co.posit.r-package.commons")
   )
-  if (is_installed("promises")) {
+  if (is_installed("promises", version = "1.5.0")) {
     promises::local_otel_promise_domain(envir)
   }
   otel::local_active_span(span, activation_scope = envir)
@@ -110,9 +130,26 @@ refresh_ellmer_otel_cache <- function() {
   invisible(NULL)
 }
 
+# ellmer captures message content only when this semconv env var is truthy
+# ("true"/"1", matching ellmer's parsing). An explicit pre-set value is
+# respected -- a deliberate opt-out must not be flipped process-wide -- like
+# enable_local_tracing() respects an explicit OTEL_TRACES_EXPORTER.
 enable_content_capture <- function() {
+  current <- Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
+  if (nzchar(current)) {
+    if (!tolower(current) %in% c("true", "1")) {
+      cli::cli_warn(c(
+        "{.envvar OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT} is set
+         to {.val {current}}, so logged trajectories will not include message
+         content.",
+        i = "Unset it or set it to {.val true} to capture full trajectories."
+      ))
+    }
+    return(invisible(FALSE))
+  }
   Sys.setenv(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
   refresh_ellmer_otel_cache()
+  invisible(TRUE)
 }
 
 # Configure otelsdk's file exporter for a local session that hasn't set up
@@ -194,7 +231,10 @@ commons_traces_dir <- function() {
 
 # Grant `share_with` users access to this content's traces. Reading traces
 # requires editor-level access, so users are added as collaborators; see
-# connect_add_collaborator(). Grants are durable, so failures only warn.
+# connect_add_collaborator(). Grants are durable, so failures only warn, and
+# usernames this process has already handled are skipped -- agents are
+# typically constructed once per Shiny session, and the grant API calls
+# shouldn't tax every session start.
 share_trajectory_access <- function(share_with) {
   if (!is_connect_runtime()) {
     cli::cli_warn(c(
@@ -204,17 +244,24 @@ share_trajectory_access <- function(share_with) {
     return(invisible(NULL))
   }
 
+  guid <- connect_content_guid()
+  share_with <- share_with[
+    !vapply(share_key(guid, share_with), exists, logical(1), envir = granted)
+  ]
+  if (length(share_with) == 0) {
+    return(invisible(NULL))
+  }
+
   tryCatch(
     {
       client <- connect_client()
-      guid <- connect_content_guid()
       existing <- connect_permission_principals(client, guid)
       for (username in share_with) {
         user_guid <- connect_user_guid(client, username)
-        if (user_guid %in% existing) {
-          next
+        if (!user_guid %in% existing) {
+          connect_add_collaborator(client, guid, user_guid)
         }
-        connect_add_collaborator(client, guid, user_guid)
+        assign(share_key(guid, username), TRUE, envir = granted)
       }
     },
     error = function(err) {
@@ -225,4 +272,10 @@ share_trajectory_access <- function(share_with) {
     }
   )
   invisible(NULL)
+}
+
+granted <- new.env(parent = emptyenv())
+
+share_key <- function(guid, username) {
+  paste(guid, tolower(username))
 }
