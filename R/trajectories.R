@@ -1,397 +1,27 @@
-#' Configure where commons logs conversation trajectories
-#'
-#' Pass one of these to the `log` argument of [commons()] for control over where
-#' trajectories are written. `log_pins()` writes to private Connect pins;
-#' `log_local()` writes to a local directory.
-#'
-#' @param share_with An optional character vector of Connect usernames to grant
-#'   viewer access to logged trajectory pins. Requires the \pkg{connectapi}
-#'   package. Access is granted as each conversation's pin is created, so named
-#'   users retain ongoing access to new trajectories.
-#' @param path A directory to write trajectory files to. Defaults to the
-#'   `COMMONS_LOG_DIR` environment variable, or a temporary directory.
-#'
-#' @return A logging spec to pass to the `log` argument of [commons()].
-#' @export
-log_pins <- function(share_with = NULL) {
-  if (!is.null(share_with) && !is.character(share_with)) {
-    cli::cli_abort(
-      "{.arg share_with} must be a character vector of Connect usernames."
-    )
-  }
-  structure(
-    list(kind = "pins", share_with = share_with),
-    class = c("commons_log_pins", "commons_log_spec")
-  )
-}
-
-#' @rdname log_pins
-#' @export
-log_local <- function(path = NULL) {
-  if (!is.null(path) && !(is.character(path) && length(path) == 1)) {
-    cli::cli_abort("{.arg path} must be a single directory path.")
-  }
-  structure(
-    list(kind = "local", path = path),
-    class = c("commons_log_local", "commons_log_spec")
-  )
-}
-
-new_trajectory_logger <- function(log, call = rlang::caller_env()) {
-  spec <- normalize_log_spec(log, call = call)
-
-  if (spec$kind == "off") {
-    return(new_noop_logger())
-  }
-
-  conversation_id <- new_conversation_id()
-
-  if (spec$kind == "pins" && is_connect_runtime()) {
-    return(new_pin_logger(conversation_id, spec$share_with))
-  }
-
-  if (spec$kind == "pins") {
-    if (!is.null(spec$share_with)) {
-      cli::cli_warn(c(
-        "{.arg share_with} only applies when logging to Connect pins.",
-        i = "Not running on Connect; logging locally and ignoring {.arg share_with}."
-      ))
-    }
-    return(new_local_logger(conversation_id, commons_log_dir()))
-  }
-
-  if (spec$kind == "auto") {
-    if (is_connect_runtime()) {
-      return(new_pin_logger(conversation_id, NULL))
-    }
-    return(new_local_logger(conversation_id, commons_log_dir()))
-  }
-
-  new_local_logger(conversation_id, spec$path %||% commons_log_dir())
-}
-
-normalize_log_spec <- function(log, call = rlang::caller_env()) {
-  if (is.null(log) || identical(log, FALSE)) {
-    return(list(kind = "off"))
-  }
-  if (identical(log, TRUE)) {
-    return(list(kind = "auto"))
-  }
-  if (is.character(log) && length(log) == 1) {
-    return(log_local(log))
-  }
-  if (inherits(log, "commons_log_spec")) {
-    return(log)
-  }
-
-  cli::cli_abort(
-    c(
-      "{.arg log} must be {.code TRUE}, {.code FALSE}, {.code NULL}, a directory path, or a logging spec.",
-      i = "Create a spec with {.fn log_pins} or {.fn log_local}."
-    ),
-    call = call
-  )
-}
-
-record_trajectory <- function(logger, chat) {
-  tryCatch(
-    {
-      logger$record(chat)
-      invisible(NULL)
-    },
-    error = function(err) {
-      cli::cli_warn(
-        c(
-          "Could not write commons trajectory log.",
-          i = conditionMessage(err)
-        )
-      )
-      invisible(NULL)
-    }
-  )
-}
-
-new_noop_logger <- function() {
-  list(
-    conversation_id = NA_character_,
-    record = function(chat) invisible(NULL)
-  )
-}
-
-new_local_logger <- function(conversation_id, path) {
-  state <- new_trajectory_state(conversation_id)
-  list(
-    conversation_id = conversation_id,
-    record = function(chat) {
-      state$trajectory <- update_trajectory(state$trajectory, chat)
-      write_local_trajectory(path, state$trajectory)
-    }
-  )
-}
-
-new_pin_logger <- function(conversation_id, share_with = NULL) {
-  if (!requireNamespace("pins", quietly = TRUE)) {
-    cli::cli_warn(
-      c(
-        "Trajectory logging with Connect pins requires the {.pkg pins} package.",
-        i = "Install {.pkg pins} or set {.arg log} to a local directory path."
-      )
-    )
-    return(new_noop_logger())
-  }
-
-  board <- tryCatch(
-    pins::board_connect(auth = "envvar"),
-    error = function(err) {
-      cli::cli_warn(
-        c(
-          "Could not create a Connect pins board for trajectory logging.",
-          i = conditionMessage(err)
-        )
-      )
-      NULL
-    }
-  )
-
-  if (is.null(board)) {
-    return(new_noop_logger())
-  }
-
-  name <- trajectory_pin_name(conversation_id)
-  state <- new_trajectory_state(conversation_id)
-  share <- new_trajectory_sharer(board, share_with)
-  list(
-    conversation_id = conversation_id,
-    record = function(chat) {
-      state$trajectory <- update_trajectory(state$trajectory, chat)
-      write_pin_trajectory(board, name, state$trajectory)
-      share(name)
-    }
-  )
-}
-
-# Grant viewer access once the pin's Connect content exists, then latch so we
-# don't re-grant on every turn. A transient failure on one turn is retried on
-# the next; the warning is emitted at most once so a persistent failure doesn't
-# warn on every turn.
-new_trajectory_sharer <- function(board, share_with) {
-  if (length(share_with) == 0) {
-    return(function(name) invisible(NULL))
-  }
-
-  if (!requireNamespace("connectapi", quietly = TRUE)) {
-    cli::cli_warn(c(
-      "Sharing trajectories with {.arg share_with} requires the {.pkg connectapi} package.",
-      i = "Install {.pkg connectapi} or unset {.arg share_with}."
-    ))
-    return(function(name) invisible(NULL))
-  }
-
-  state <- new.env(parent = emptyenv())
-  state$shared <- FALSE
-  state$warned <- FALSE
-  function(name) {
-    if (state$shared) {
-      return(invisible(NULL))
-    }
-    tryCatch(
-      {
-        share_trajectory_pin(board, name, share_with)
-        state$shared <- TRUE
-      },
-      error = function(err) {
-        if (!state$warned) {
-          state$warned <- TRUE
-          cli::cli_warn(c(
-            "Could not share the trajectory pin with {.arg share_with}.",
-            i = conditionMessage(err)
-          ))
-        }
-      }
-    )
-    invisible(NULL)
-  }
-}
-
-share_trajectory_pin <- function(board, name, share_with) {
-  # connectapi grants permissions via its own client, built from the same
-  # CONNECT_* env vars as the pins board.
-  client <- connectapi::connect()
-  user_guids <- vapply(
-    share_with,
-    function(username) connectapi::user_guid_from_username(client, username),
-    character(1)
-  )
-  content <- trajectory_content_item(client, board, name)
-  for (guid in user_guids) {
-    grant_viewer_silently(content, guid)
-  }
-  invisible(NULL)
-}
-
-# connectapi::content_add_user() doesn't expose Connect's send_email flag, which
-# defaults to emailing each named user for every trajectory pin we create. Post
-# the permission directly so viewers are granted access without notification.
-grant_viewer_silently <- function(content, guid) {
-  connect <- content$get_connect()
-  path <- paste0("v1/content/", content$get_content()$guid, "/permissions")
-  connect$POST(
-    path,
-    body = list(
-      principal_guid = guid,
-      principal_type = "user",
-      role = "viewer",
-      send_email = FALSE
-    )
-  )
-  invisible(NULL)
-}
-
-# pins already knows the pin's Connect content GUID, so resolve the content item
-# from it directly. This avoids connectapi::get_content(), whose response parsing
-# is incompatible with some Connect server versions.
-trajectory_content_item <- function(client, board, name) {
-  guid <- pins::pin_meta(board, connect_pin_name(board, name))$local$content_id
-  if (is.null(guid) || !nzchar(guid)) {
-    cli::cli_abort("Could not resolve the Connect content GUID for pin {.val {name}}.")
-  }
-  connectapi::content_item(client, guid)
-}
-
-# The logger writes with a bare pin name (pins prepends the account on write),
-# but board_connect reads want the fully qualified "account/name".
-connect_pin_name <- function(board, name) {
-  account <- board$account
-  if (is.null(account) || !nzchar(account) || grepl("/", name, fixed = TRUE)) {
-    return(name)
-  }
-  paste0(account, "/", name)
-}
-
-new_trajectory_state <- function(conversation_id) {
-  state <- new.env(parent = emptyenv())
-  state$trajectory <- init_trajectory(conversation_id)
-  state
-}
-
-init_trajectory <- function(conversation_id) {
-  now <- trajectory_time()
-  list(
-    schema = "commons.trajectory.v1",
-    conversation_id = conversation_id,
-    content_guid = connect_content_guid(),
-    created_at = now,
-    updated_at = now,
-    ellmer_turns = list()
-  )
-}
-
-update_trajectory <- function(trajectory, chat) {
-  now <- trajectory_time()
-  turns <- chat$get_turns(include_system_prompt = TRUE)
-  trajectory$updated_at <- now
-  trajectory$ellmer_turns <- lapply(turns, record_turn)
-  trajectory
-}
-
-record_turn <- function(turn) {
-  ellmer::contents_record(turn)
-}
-
-write_local_trajectory <- function(path, trajectory) {
-  if (!dir.exists(path)) {
-    dir.create(path, recursive = TRUE)
-  }
-
-  file <- file.path(
-    path,
-    sprintf("commons-trajectory-%s.rds", trajectory$conversation_id)
-  )
-  tmp <- paste0(file, ".tmp")
-  saveRDS(trajectory, tmp)
-  file.rename(tmp, file)
-  invisible(file)
-}
-
-write_pin_trajectory <- function(board, name, trajectory) {
-  suppressMessages(
-    do.call(pins::pin_write, pin_trajectory_write_args(board, name, trajectory))
-  )
-  invisible(name)
-}
-
-pin_trajectory_write_args <- function(board, name, trajectory) {
-  args <- list(
-    board = board,
-    x = trajectory,
-    name = name,
-    type = "rds",
-    title = sprintf("commons trajectory %s", trajectory$conversation_id),
-    description = "A commons conversation trajectory.",
-    metadata = trajectory_metadata(trajectory),
-    force_identical_write = TRUE
-  )
-
-  if (inherits(board, "pins_board_connect")) {
-    args$access_type <- "acl"
-  }
-
-  args
-}
-
-trajectory_metadata <- function(trajectory) {
-  list(
-    commons_schema = trajectory$schema,
-    commons_content_guid = trajectory$content_guid,
-    commons_conversation_id = trajectory$conversation_id,
-    commons_created_at = trajectory$created_at,
-    commons_updated_at = trajectory$updated_at,
-    commons_version = as.character(utils::packageVersion("commons"))
-  )
-}
-
-trajectory_pin_name <- function(conversation_id) {
-  guid <- substr(sanitize_pin_part(connect_content_guid()), 1, 8)
-  parts <- c("commons-trajectory", guid, conversation_id)
-  paste(sanitize_pin_part(parts), collapse = "-")
-}
-
-sanitize_pin_part <- function(x) {
-  x <- tolower(x)
-  x <- gsub("[^a-z0-9]+", "-", x)
-  x <- gsub("(^-+|-+$)", "", x)
-  x[nchar(x) == 0] <- "unknown"
-  x
-}
-
-new_conversation_id <- function() {
-  suffix <- paste(sample(c(letters, 0:9), 10, replace = TRUE), collapse = "")
-  sanitize_pin_part(paste0(format(Sys.time(), "%Y%m%dT%H%M%OS3"), "-", suffix))
-}
-
-trajectory_time <- function() {
-  format(Sys.time(), "%Y-%m-%dT%H:%M:%OS3%z")
-}
-
-is_connect_runtime <- function() {
-  identical(Sys.getenv("POSIT_PRODUCT"), "CONNECT") ||
-    nzchar(Sys.getenv("CONNECT_CONTENT_GUID"))
-}
-
-connect_content_guid <- function() {
-  Sys.getenv("CONNECT_CONTENT_GUID", unset = "local")
-}
-
-commons_log_dir <- function() {
-  Sys.getenv("COMMONS_LOG_DIR", unset = file.path(tempdir(), "commons-logs"))
-}
-
 #' Read commons trajectories
 #'
-#' `read_trajectories()` reads conversation trajectories written by
-#' [commons()] when logging is enabled via its `log` argument (for example
-#' `log = TRUE`, a local directory path, or a [log_local()] or [log_pins()]
-#' spec).
+#' @description
+#' `read_trajectories()` reads conversation trajectories captured by
+#' [commons()] when `log = TRUE`. Trajectories are recorded as OpenTelemetry
+#' spans—see the `log` argument of [commons()] for how capture is enabled—and
+#' read back from Posit Connect's content observability store or from local
+#' trace files.
+#'
+#' @param source Where to read trajectories from:
+#'
+#'   * `NULL` (the default) resolves automatically: on Posit Connect, this
+#'     content's own traces; in a project that has been deployed with
+#'     rsconnect, the deployed content's traces; otherwise, the local trace
+#'     directory that [commons()] writes to.
+#'   * A Connect content GUID or dashboard content URL.
+#'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
+#'
+#' @details
+#' Reading traces from Connect requires the `CONNECT_API_KEY` environment
+#' variable (and `CONNECT_SERVER`, when the server can't be inferred from the
+#' project's deployment record), and editor-level access to the content: you
+#' must own it or be a collaborator. See the `share_with` argument of
+#' [commons()].
 #'
 #' @section Agent skill:
 #' commons includes an agent skill scaffold for iterating on a deployed agent.
@@ -410,125 +40,422 @@ commons_log_dir <- function() {
 #' file.copy(skill, "./.agents/skills", recursive = TRUE)
 #' ```
 #'
-#' @param x A `pins` board or a local directory path. If `NULL`, reads from the
-#'   local [commons()] log directory.
-#' @param ... Reserved for future extensions.
-#'
-#' @return A list of lists of ellmer turns, one list per conversation.
+#' @return A list of conversations, named by conversation id and ordered
+#'   oldest-first. Each conversation is a list of [ellmer::Turn]s.
 #' @export
-read_trajectories <- function(x = NULL, ...) {
-  if (is.null(x)) {
-    x <- commons_log_dir()
+read_trajectories <- function(source = NULL) {
+  resolved <- resolve_trajectory_source(source)
+  spans <- switch(
+    resolved$kind,
+    local = read_local_spans(resolved$path),
+    connect = parse_otlp_lines(
+      connect_trace_lines(resolved$client, resolved$guid)
+    )
+  )
+  build_trajectories(spans)
+}
+
+resolve_trajectory_source <- function(source, call = rlang::caller_env()) {
+  if (is.null(source)) {
+    return(resolve_default_source(call))
   }
 
-  trajectories <- if (is.character(x) && length(x) == 1) {
-    read_local_trajectories(x)
-  } else if (inherits(x, "pins_board")) {
-    read_pin_trajectories(x)
-  } else {
-    cli::cli_abort(
-      "{.arg x} must be a local directory path, a pins board, or {.code NULL}."
+  if (is.character(source) && length(source) == 1) {
+    if (is_content_guid(source)) {
+      return(list(
+        kind = "connect",
+        guid = source,
+        client = connect_client(call = call)
+      ))
+    }
+    url_guid <- content_url_guid(source)
+    if (!is.null(url_guid)) {
+      return(list(
+        kind = "connect",
+        guid = url_guid$guid,
+        client = connect_client(server = url_guid$server, call = call)
+      ))
+    }
+    return(list(kind = "local", path = source))
+  }
+
+  cli::cli_abort(
+    "{.arg source} must be {.code NULL}, a directory path, a Connect content
+     GUID, or a Connect content URL.",
+    call = call
+  )
+}
+
+resolve_default_source <- function(call = rlang::caller_env()) {
+  if (is_connect_runtime()) {
+    return(list(
+      kind = "connect",
+      guid = connect_content_guid(),
+      client = connect_client(call = call)
+    ))
+  }
+
+  deployment <- find_rsconnect_deployment()
+  if (!is.null(deployment)) {
+    return(list(
+      kind = "connect",
+      guid = deployment$guid,
+      client = connect_client(server = deployment$server, call = call)
+    ))
+  }
+
+  list(kind = "local", path = local_traces_dir())
+}
+
+# The write side may have pointed the file exporter somewhere via
+# OTEL_EXPORTER_OTLP_TRACES_FILE; read from there when it did.
+local_traces_dir <- function() {
+  file <- Sys.getenv("OTEL_EXPORTER_OTLP_TRACES_FILE")
+  if (nzchar(file)) {
+    return(dirname(file))
+  }
+  commons_traces_dir()
+}
+
+is_content_guid <- function(x) {
+  grepl(
+    "^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$",
+    x
+  )
+}
+
+content_url_guid <- function(x) {
+  if (!grepl("^https?://", x)) {
+    return(NULL)
+  }
+  match <- regmatches(
+    x,
+    regexec(
+      "^(.*?)/content/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})",
+      x
+    )
+  )[[1]]
+  if (length(match) == 0) {
+    return(NULL)
+  }
+  list(server = match[2], guid = match[3])
+}
+
+# Find the project's Connect deployment record (written by rsconnect under
+# rsconnect/). The record's `url` field carries the content GUID.
+find_rsconnect_deployment <- function(dir = getwd()) {
+  files <- list.files(
+    dir,
+    pattern = "[.]dcf$",
+    recursive = TRUE,
+    full.names = TRUE
+  )
+  files <- files[grepl("(^|/)rsconnect/", files)]
+  if (length(files) == 0) {
+    return(NULL)
+  }
+
+  deployments <- drop_nulls(lapply(files, read_deployment_record))
+  if (length(deployments) == 0) {
+    return(NULL)
+  }
+
+  if (length(deployments) > 1) {
+    mtimes <- vapply(
+      deployments,
+      function(dep) as.numeric(file.mtime(dep$file)),
+      numeric(1)
+    )
+    deployments <- deployments[order(mtimes, decreasing = TRUE)]
+    cli::cli_inform(
+      "Reading trajectories for the most recent deployment,
+       {.val {deployments[[1]]$name}} on {.url {deployments[[1]]$server}}."
     )
   }
 
-  lapply(trajectories, replay_trajectory)
+  deployments[[1]]
 }
 
-read_local_trajectories <- function(path) {
+read_deployment_record <- function(file) {
+  fields <- tryCatch(
+    as.list(as.data.frame(read.dcf(file), stringsAsFactors = FALSE)),
+    error = function(err) NULL
+  )
+  if (is.null(fields) || is.null(fields$url)) {
+    return(NULL)
+  }
+
+  match <- regmatches(
+    fields$url,
+    regexec(
+      "/content/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})",
+      fields$url
+    )
+  )[[1]]
+  if (length(match) == 0) {
+    return(NULL)
+  }
+
+  server <- fields$hostUrl %||% ""
+  server <- sub("/__api__/?$", "", server)
+  if (!nzchar(server)) {
+    return(NULL)
+  }
+
+  list(
+    guid = match[2],
+    server = server,
+    name = fields$name %||% basename(file),
+    file = file
+  )
+}
+
+# OTLP NDJSON parsing ---------------------------------------------------
+
+read_local_spans <- function(path) {
   if (!dir.exists(path)) {
     return(list())
   }
-
+  # Numbered rotation files only: the exporter also writes a
+  # trace-latest.jsonl hardlink to the newest file, which would duplicate its
+  # spans. Mirrors Connect's own glob.
   files <- list.files(
     path,
-    pattern = "^commons-trajectory-.*[.]rds$",
+    pattern = "^trace(-[0-9]+)?[.]jsonl$",
     full.names = TRUE
   )
-  lapply(files, read_trajectory_file)
+  lines <- unlist(lapply(files, readLines, warn = FALSE))
+  parse_otlp_lines(lines)
 }
 
-read_pin_trajectories <- function(board) {
-  rlang::check_installed("pins")
-  pins <- pins::pin_list(board)
-  pins <- pins[is_trajectory_pin(pins)]
-  lapply(pins, function(pin) pins::pin_read(board, pin))
-}
-
-is_trajectory_pin <- function(x) {
-  grepl("(^|/)commons-trajectory-", x)
-}
-
-read_trajectory_file <- function(path) {
-  readRDS(path)
-}
-
-replay_trajectory <- function(trajectory) {
-  unname(replay_recorded_turns(trajectory$ellmer_turns))
-}
-
-replay_recorded_turns <- function(turns) {
-  lapply(turns, function(turn) {
-    ellmer::contents_replay(normalize_recorded_for_replay(turn))
-  })
-}
-
-normalize_recorded_for_replay <- function(x) {
-  if (is_recorded_ellmer_object(x)) {
-    x$version <- as.numeric(x$version)
-    x$props <- lapply(x$props, normalize_recorded_for_replay)
-    if (x$class %in% c(
-      "ellmer::SystemTurn",
-      "ellmer::UserTurn",
-      "ellmer::AssistantTurn",
-      "ellmer::AssistantPartialTurn"
-    )) {
-      x$props <- normalize_turn_contents(x$props)
+# Each NDJSON line is a full OTLP envelope: {"resourceSpans": [{"scopeSpans":
+# [{"spans": [...]}]}]}. Malformed lines are skipped, matching Connect's own
+# reader.
+parse_otlp_lines <- function(lines) {
+  spans <- list()
+  for (line in lines) {
+    envelope <- tryCatch(
+      jsonlite::fromJSON(line, simplifyVector = FALSE),
+      error = function(err) NULL
+    )
+    if (is.null(envelope)) {
+      next
     }
-    if (x$class %in% c("ellmer::SystemTurn", "ellmer::UserTurn")) {
-      x$props <- x$props["contents"]
-    } else if (x$class %in% c("ellmer::AssistantTurn", "ellmer::AssistantPartialTurn")) {
-      x$props <- normalize_assistant_props(x$props)
+    for (resource_spans in envelope$resourceSpans) {
+      for (scope_spans in resource_spans$scopeSpans) {
+        for (span in scope_spans$spans) {
+          spans[[length(spans) + 1]] <- otlp_span(span)
+        }
+      }
     }
-    return(x)
   }
-
-  if (is.list(x)) {
-    return(lapply(x, normalize_recorded_for_replay))
-  }
-
-  x
+  spans
 }
 
-normalize_turn_contents <- function(props) {
-  if (is_recorded_ellmer_object(props$contents)) {
-    props$contents <- list(props$contents)
-  }
-  props
+otlp_span <- function(span) {
+  list(
+    trace_id = span$traceId %||% "",
+    span_id = span$spanId %||% "",
+    parent_span_id = span$parentSpanId %||% "",
+    name = span$name %||% "",
+    start_time = as.character(span$startTimeUnixNano %||% ""),
+    end_time = as.character(span$endTimeUnixNano %||% ""),
+    attributes = otlp_attributes(span$attributes)
+  )
 }
 
-normalize_assistant_props <- function(props) {
-  if (is_nullish_recorded_value(props$tokens) || is_null_list(props$tokens)) {
-    props$tokens <- NULL
-  } else if (is.list(props$tokens)) {
-    props$tokens <- as.numeric(unlist(props$tokens, use.names = FALSE))
-  }
-  if (is_nullish_recorded_value(props$cost)) {
-    props$cost <- NULL
-  }
-  if (is_nullish_recorded_value(props$duration)) {
-    props$duration <- NULL
-  }
-  props
+otlp_attributes <- function(attributes) {
+  values <- lapply(
+    attributes,
+    function(attribute) otlp_attribute_value(attribute$value)
+  )
+  rlang::set_names(
+    values,
+    vapply(attributes, function(attribute) attribute$key, character(1))
+  )
 }
 
-is_nullish_recorded_value <- function(x) {
-  is.null(x) || (is.atomic(x) && (length(x) == 0 || all(is.na(x))))
+otlp_attribute_value <- function(value) {
+  if (!is.null(value$stringValue)) {
+    return(value$stringValue)
+  }
+  if (!is.null(value$intValue)) {
+    return(as.numeric(value$intValue))
+  }
+  if (!is.null(value$doubleValue)) {
+    return(value$doubleValue)
+  }
+  if (!is.null(value$boolValue)) {
+    return(value$boolValue)
+  }
+  if (!is.null(value$arrayValue)) {
+    return(lapply(value$arrayValue$values, otlp_attribute_value))
+  }
+  value
 }
 
-is_null_list <- function(x) {
-  is.list(x) && length(x) > 0 && all(vapply(x, is.null, logical(1)))
+# Reconstruction ---------------------------------------------------------
+
+# ellmer's chat spans repeat the full message history, so the latest chat
+# span in a conversation carries the whole trajectory: group chat spans by
+# conversation, keep the last one, and parse its GenAI-semconv messages.
+build_trajectories <- function(spans) {
+  chat_spans <- Filter(
+    function(span) {
+      identical(span$attributes[["gen_ai.operation.name"]], "chat")
+    },
+    spans
+  )
+  if (length(chat_spans) == 0) {
+    return(list())
+  }
+
+  index <- span_index(spans)
+  latest <- list()
+  for (span in chat_spans) {
+    id <- span_conversation_id(span, index)
+    prev <- latest[[id]]
+    if (is.null(prev) || span_time(span) > span_time(prev)) {
+      latest[[id]] <- span
+    }
+  }
+
+  latest <- latest[
+    order(vapply(latest, span_time, character(1)))
+  ]
+  lapply(latest, trajectory_turns)
 }
 
-is_recorded_ellmer_object <- function(x) {
-  is.list(x) && all(c("version", "class", "props") %in% names(x))
+span_index <- function(spans) {
+  rlang::set_names(
+    spans,
+    vapply(
+      spans,
+      function(span) paste(span$trace_id, span$span_id),
+      character(1)
+    )
+  )
+}
+
+# The conversation id lives on the commons wrapper span, which is not
+# necessarily the chat span's direct parent (ellmer's invoke_agent span sits
+# between, and instrumented hosts like Shiny may add ancestors above), so
+# walk the ancestor chain. Chat spans with no wrapper anywhere—e.g. emitted
+# outside commons—fall back to their trace id, which still groups per turn.
+span_conversation_id <- function(span, index) {
+  current <- span
+  for (i in seq_len(length(index))) {
+    id <- current$attributes[["gen_ai.conversation.id"]]
+    if (!is.null(id)) {
+      return(as.character(id))
+    }
+    if (!nzchar(current$parent_span_id)) {
+      break
+    }
+    current <- index[[paste(span$trace_id, current$parent_span_id)]]
+    if (is.null(current)) {
+      break
+    }
+  }
+  span$trace_id
+}
+
+# Unix-nano timestamps overflow doubles, so compare them as space-padded
+# strings, which order lexicographically like the numbers they encode.
+span_time <- function(span) {
+  time <- if (nzchar(span$end_time)) span$end_time else span$start_time
+  sprintf("%32s", time)
+}
+
+trajectory_turns <- function(span) {
+  requests <- new.env(parent = emptyenv())
+  attributes <- span$attributes
+  turns <- c(
+    semconv_system_turns(attributes[["gen_ai.system_instructions"]]),
+    semconv_message_turns(attributes[["gen_ai.input.messages"]], requests),
+    semconv_message_turns(attributes[["gen_ai.output.messages"]], requests)
+  )
+  unname(turns)
+}
+
+semconv_system_turns <- function(json) {
+  parts <- parse_semconv_json(json)
+  if (is.null(parts)) {
+    return(list())
+  }
+  contents <- drop_nulls(lapply(parts, semconv_part_content))
+  if (length(contents) == 0) {
+    return(list())
+  }
+  list(ellmer::SystemTurn(contents = contents))
+}
+
+semconv_message_turns <- function(json, requests) {
+  messages <- parse_semconv_json(json)
+  if (is.null(messages)) {
+    return(list())
+  }
+  drop_nulls(lapply(messages, semconv_turn, requests = requests))
+}
+
+parse_semconv_json <- function(json) {
+  if (is.null(json) || !nzchar(json)) {
+    return(NULL)
+  }
+  tryCatch(
+    jsonlite::fromJSON(json, simplifyVector = FALSE),
+    error = function(err) NULL
+  )
+}
+
+# Tool-result turns are emitted with role "tool" (matching Python's GenAI
+# instrumentations); ellmer represents them as UserTurns.
+semconv_turn <- function(message, requests) {
+  contents <- drop_nulls(
+    lapply(message$parts, semconv_part_content, requests = requests)
+  )
+  if (length(contents) == 0) {
+    return(NULL)
+  }
+  switch(
+    message$role %||% "",
+    assistant = ellmer::AssistantTurn(contents = contents),
+    user = ,
+    tool = ellmer::UserTurn(contents = contents),
+    system = ellmer::SystemTurn(contents = contents),
+    NULL
+  )
+}
+
+# The inverse of ellmer's as_otel_part(). `generic` parts (content classes
+# with no semconv representation) don't carry enough to rebuild and are
+# dropped.
+semconv_part_content <- function(part, requests = NULL) {
+  switch(
+    part$type %||% "",
+    text = ellmer::ContentText(as.character(part$content %||% "")),
+    tool_call = semconv_tool_request(part, requests),
+    tool_call_response = semconv_tool_result(part, requests),
+    NULL
+  )
+}
+
+semconv_tool_request <- function(part, requests) {
+  request <- ellmer::ContentToolRequest(
+    id = as.character(part$id %||% ""),
+    name = as.character(part$name %||% ""),
+    arguments = as.list(part$arguments)
+  )
+  if (!is.null(requests) && nzchar(request@id)) {
+    assign(request@id, request, envir = requests)
+  }
+  request
+}
+
+semconv_tool_result <- function(part, requests) {
+  request <- NULL
+  if (!is.null(requests) && !is.null(part$id)) {
+    request <- get0(as.character(part$id), envir = requests)
+  }
+  ellmer::ContentToolResult(value = part$response, request = request)
 }

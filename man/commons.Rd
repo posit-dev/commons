@@ -10,7 +10,8 @@ commons(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  log = FALSE
+  log = FALSE,
+  share_with = NULL
 )
 }
 \arguments{
@@ -26,11 +27,22 @@ can take a source's connection as an argument named after the source; see
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
-\item{log}{Where to log conversation trajectories, if anywhere. \code{FALSE} (the
-default) disables logging and \code{TRUE} picks a destination automatically:
-private Connect pins on Posit Connect and local files elsewhere. For
-control over the destination, pass a spec from \code{\link[=log_pins]{log_pins()}} or
-\code{\link[=log_local]{log_local()}}. A single string is shorthand for \code{log_local(path)}.}
+\item{log}{Whether to capture conversation trajectories with OpenTelemetry
+(default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content
+capture in \pkg{ellmer} and tags each turn's spans with a conversation
+id; the spans go wherever OTel is configured to export. On Posit Connect,
+enable \emph{Content Observability} in the content's \emph{Settings > Advanced}
+panel and traces land in Connect's observability store (browsable in its
+Trace Viewer). Locally, commons configures \pkg{otelsdk}'s file exporter
+automatically when no exporter is set up. Read trajectories back with
+\code{\link[=read_trajectories]{read_trajectories()}}.}
+
+\item{share_with}{An optional character vector of Connect usernames granted
+access to this content's trajectories when running on Posit Connect.
+Reading traces requires editor-level access, so named users are added as
+collaborators on the content. Note that users whose Connect \emph{account}
+role is viewer cannot read traces even when named here; trace readers
+need at least a publisher account.}
 }
 \value{
 A \code{Commons} object, which subclasses \link[ellmer:Chat]{ellmer::Chat}.
@@ -147,7 +159,8 @@ rather than this method directly.
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  log = FALSE
+  log = FALSE,
+  share_with = NULL
 )}
     \if{html}{\out{</div>}}
   }
@@ -158,7 +171,10 @@ rather than this method directly.
       \item{\code{data_sources}}{A \code{\link[=data_source]{data_source()}}, or a named list of them.}
       \item{\code{context_layer}}{An optional \code{\link[=context_layer]{context_layer()}}.}
       \item{\code{semantic_layer}}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
-      \item{\code{log}}{Where to log conversation trajectories. See \code{\link[=commons]{commons()}}.}
+      \item{\code{log}}{Whether to capture conversation trajectories with
+OpenTelemetry. See \code{\link[=commons]{commons()}}.}
+      \item{\code{share_with}}{Connect usernames granted access to this content's
+trajectories. See \code{\link[=commons]{commons()}}.}
     }
     \if{html}{\out{</div>}}
   }
@@ -168,8 +184,8 @@ rather than this method directly.
 \if{html}{\out{<a id="method-Commons-chat"></a>}}
 \if{latex}{\out{\hypertarget{method-Commons-chat}{}}}
 \subsection{\code{Commons$chat()}}{
-  Submit input and return the response. Also writes a turn
-log. See \link[ellmer:Chat]{ellmer::Chat} for arguments.
+  Submit input and return the response. See \link[ellmer:Chat]{ellmer::Chat}
+for arguments.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$chat(..., echo = NULL)}

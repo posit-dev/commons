@@ -4,22 +4,36 @@
 \alias{read_trajectories}
 \title{Read commons trajectories}
 \usage{
-read_trajectories(x = NULL, ...)
+read_trajectories(source = NULL)
 }
 \arguments{
-\item{x}{A \code{pins} board or a local directory path. If \code{NULL}, reads from the
-local \code{\link[=commons]{commons()}} log directory.}
-
-\item{...}{Reserved for future extensions.}
+\item{source}{Where to read trajectories from:
+\itemize{
+\item \code{NULL} (the default) resolves automatically: on Posit Connect, this
+content's own traces; in a project that has been deployed with
+rsconnect, the deployed content's traces; otherwise, the local trace
+directory that \code{\link[=commons]{commons()}} writes to.
+\item A Connect content GUID or dashboard content URL.
+\item A directory of OTLP NDJSON trace files (\verb{trace-*.jsonl}).
+}}
 }
 \value{
-A list of lists of ellmer turns, one list per conversation.
+A list of conversations, named by conversation id and ordered
+oldest-first. Each conversation is a list of \link[ellmer:Turn]{ellmer::Turn}s.
 }
 \description{
-\code{read_trajectories()} reads conversation trajectories written by
-\code{\link[=commons]{commons()}} when logging is enabled via its \code{log} argument (for example
-\code{log = TRUE}, a local directory path, or a \code{\link[=log_local]{log_local()}} or \code{\link[=log_pins]{log_pins()}}
-spec).
+\code{read_trajectories()} reads conversation trajectories captured by
+\code{\link[=commons]{commons()}} when \code{log = TRUE}. Trajectories are recorded as OpenTelemetry
+spans—see the \code{log} argument of \code{\link[=commons]{commons()}} for how capture is enabled—and
+read back from Posit Connect's content observability store or from local
+trace files.
+}
+\details{
+Reading traces from Connect requires the \code{CONNECT_API_KEY} environment
+variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
+project's deployment record), and editor-level access to the content: you
+must own it or be a collaborator. See the \code{share_with} argument of
+\code{\link[=commons]{commons()}}.
 }
 \section{Agent skill}{
 

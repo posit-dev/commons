@@ -250,27 +250,23 @@ shinyApp(ui, server)
 
 ## Logging trajectories
 
-The `log` argument controls whether, and where, commons records conversation trajectories. It is `FALSE` by default. `log = TRUE` picks a destination automatically: private Connect pins when running on Posit Connect, and local files otherwise (written to `COMMONS_LOG_DIR` or a temporary directory). A bare string is shorthand for a local directory path.
+The `log` argument controls whether commons records conversation trajectories. It is `FALSE` by default. With `log = TRUE`, trajectories are captured as OpenTelemetry spans: ellmer records each turn's full message history, and commons tags the spans with a conversation id.
 
-For more control, pass a spec built with `log_local()` or `log_pins()`:
+On Posit Connect, enable *Content Observability* in the content's *Settings > Advanced* panel, and spans land in Connect's observability store—browsable in the dashboard's Trace Viewer, and readable with `read_trajectories()`. (A server administrator may first need to set `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration.) Locally, commons configures a file exporter automatically when no OTel exporter is set up, writing to `COMMONS_TRACES_DIR` or a temporary directory.
 
-```r
-# Always log to a specific local directory
-log = log_local("/srv/commons/logs")
-
-# Log to private Connect pins
-log = log_pins()
-```
-
-Connect trajectory pins are private to the deploying account. To let named colleagues review them, pass their Connect usernames to `share_with`. Each conversation's pin grants those users viewer access as it is created, so they retain access to new trajectories:
+Trajectories on Connect are governed by the content's permissions: reading them requires editor-level access. To let named colleagues review them, pass their Connect usernames to `share_with` and they'll be added as collaborators on the content:
 
 ```r
-log = log_pins(share_with = c("jdoe", "asmith"))
+agent <- commons(
+  # ...
+  log = TRUE,
+  share_with = c("jdoe", "asmith")
+)
 ```
 
-Sharing requires the [connectapi](https://pkg.posit.co/connectapi/) package. `share_with` only applies on Connect; off Connect, commons warns and logs locally instead.
+Note that a colleague whose Connect *account* role is viewer cannot read trajectories even when named in `share_with`; trajectory readers need at least a publisher account. `share_with` only applies on Connect; off Connect, commons warns and ignores it.
 
-Read logged trajectories back with `read_trajectories()`.
+Read logged trajectories back with `read_trajectories()`. With no arguments, it reads this content's traces when running on Connect, the deployed content's traces when run in a project that's been deployed with rsconnect (set `CONNECT_API_KEY`), and local trace files otherwise.
 
 ## Iterating on the agent
 

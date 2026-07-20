@@ -28,7 +28,7 @@ test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,
   data_sources = list(sales_db = test_source()),
-  log = withr::local_tempdir(.local_envir = parent.frame())
+  log = FALSE
 ) {
   commons(
     test_client(),

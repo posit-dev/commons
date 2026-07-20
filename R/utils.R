@@ -66,3 +66,14 @@ maybe_icon <- function(name) {
 is_installed <- function(pkg) {
   requireNamespace(pkg, quietly = TRUE)
 }
+
+# Run `expr` when `envir` exits, like withr::defer(). Works inside coro
+# generator frames, which persist across yields and exit on completion.
+defer <- function(expr, envir = parent.frame()) {
+  thunk <- as.call(list(function() expr))
+  do.call(on.exit, list(thunk, add = TRUE), envir = envir)
+}
+
+drop_nulls <- function(x) {
+  x[!vapply(x, is.null, logical(1))]
+}

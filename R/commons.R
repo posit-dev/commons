@@ -16,11 +16,21 @@
 #'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param log Where to log conversation trajectories, if anywhere. `FALSE` (the
-#'   default) disables logging and `TRUE` picks a destination automatically:
-#'   private Connect pins on Posit Connect and local files elsewhere. For
-#'   control over the destination, pass a spec from [log_pins()] or
-#'   [log_local()]. A single string is shorthand for `log_local(path)`.
+#' @param log Whether to capture conversation trajectories with OpenTelemetry
+#'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
+#'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
+#'   id; the spans go wherever OTel is configured to export. On Posit Connect,
+#'   enable *Content Observability* in the content's *Settings > Advanced*
+#'   panel and traces land in Connect's observability store (browsable in its
+#'   Trace Viewer). Locally, commons configures \pkg{otelsdk}'s file exporter
+#'   automatically when no exporter is set up. Read trajectories back with
+#'   [read_trajectories()].
+#' @param share_with An optional character vector of Connect usernames granted
+#'   access to this content's trajectories when running on Posit Connect.
+#'   Reading traces requires editor-level access, so named users are added as
+#'   collaborators on the content. Note that users whose Connect *account*
+#'   role is viewer cannot read traces even when named here; trace readers
+#'   need at least a publisher account.
 #'
 #' @return A `Commons` object, which subclasses [ellmer::Chat].
 #'
@@ -80,7 +90,8 @@ commons <- function(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  log = FALSE
+  log = FALSE,
+  share_with = NULL
 ) {
   if (!inherits(client, "Chat")) {
     cli::cli_abort(
@@ -97,7 +108,8 @@ commons <- function(
     data_sources = data_sources,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
-    log = log
+    log = log,
+    share_with = share_with
   )
 }
 
@@ -113,13 +125,17 @@ Commons <- R6::R6Class(
     #' @param data_sources A [data_source()], or a named list of them.
     #' @param context_layer An optional [context_layer()].
     #' @param semantic_layer An optional [semantic_layer()].
-    #' @param log Where to log conversation trajectories. See [commons()].
+    #' @param log Whether to capture conversation trajectories with
+    #'   OpenTelemetry. See [commons()].
+    #' @param share_with Connect usernames granted access to this content's
+    #'   trajectories. See [commons()].
     initialize = function(
       client,
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
-      log = FALSE
+      log = FALSE,
+      share_with = NULL
     ) {
       super$initialize(provider = client$get_provider(), echo = "none")
       semantic_layer <- semantic_layer %||% new_semantic_layer()
@@ -134,7 +150,8 @@ Commons <- R6::R6Class(
         private$registry,
         measure_injectables(sources)
       )
-      private$logger <- new_trajectory_logger(log)
+      private$conversation_id <- new_conversation_id()
+      private$tracing <- new_trajectory_tracing(log, share_with)
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
@@ -142,14 +159,15 @@ Commons <- R6::R6Class(
       )
     },
 
-    #' @description Submit input and return the response. Also writes a turn
-    #'   log. See [ellmer::Chat] for arguments.
+    #' @description Submit input and return the response. See [ellmer::Chat]
+    #'   for arguments.
     #' @param ... Input to send to the model.
     #' @param echo Whether to echo output; see [ellmer::Chat].
     chat = function(..., echo = NULL) {
-      response <- super$chat(..., echo = echo)
-      private$finalize_turn()
-      response
+      if (private$tracing) {
+        local_conversation_turn_span(private$conversation_id)
+      }
+      super$chat(..., echo = echo)
     },
 
     #' @description Stream input and return the response stream. See
@@ -170,11 +188,17 @@ Commons <- R6::R6Class(
         stream = stream,
         controller = controller
       )
+      if (!private$tracing) {
+        return(stream)
+      }
+      conversation_id <- private$conversation_id
+      # The generator frame persists across yields and exits on completion,
+      # so the conversation span covers the whole streamed turn.
       coro::async_generator(function() {
+        local_conversation_turn_span(conversation_id)
         for (chunk in coro::await_each(stream)) {
           yield(chunk)
         }
-        private$finalize_turn()
         coro::exhausted()
       })()
     },
@@ -195,16 +219,9 @@ Commons <- R6::R6Class(
     context_layer = NULL,
     registry = NULL,
     injections = NULL,
-    logger = NULL,
-    first_touch = NULL,
-
-    finalize_turn = function() {
-      record_trajectory(
-        private$logger,
-        self
-      )
-      invisible(NULL)
-    }
+    conversation_id = NULL,
+    tracing = FALSE,
+    first_touch = NULL
   )
 )
 

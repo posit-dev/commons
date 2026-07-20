@@ -21,6 +21,7 @@ Imports:
     DBI,
     duckdb,
     ellmer (>= 0.4.1),
+    httr2,
     jsonlite,
     knitr,
     R6,
@@ -30,12 +31,13 @@ Imports:
     utils
 Suggests:
     bsicons,
-    connectapi,
     dbplyr,
     dplyr,
     glue,
     htmltools,
     later,
+    otel,
+    otelsdk,
     pins,
     promises,
     readr,
