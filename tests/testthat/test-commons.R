@@ -75,6 +75,16 @@ test_that("a custom system prompt replaces the packaged one", {
   expect_match(prompt, "- sales", fixed = TRUE)
 })
 
+test_that("a system prompt already set on the client warns", {
+  client <- test_client()
+  client$set_system_prompt("You are a pirate.")
+
+  expect_warning(
+    commons(client, data_sources = list(sales_db = test_source())),
+    "commons builds its own"
+  )
+})
+
 test_that("system_prompt is validated", {
   expect_error(
     test_agent(system_prompt = c("a", "b")),

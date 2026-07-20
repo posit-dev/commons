@@ -9,7 +9,8 @@
 #' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
-#'   [ellmer::chat_anthropic()].
+#'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
+#'   ignored, with a warning; use `system_prompt` instead.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()]. When there are several sources, the `run_sql` and
@@ -124,6 +125,15 @@ commons <- function(
   if (!inherits(client, "Chat")) {
     cli::cli_abort(
       "{.arg client} must be an {.cls ellmer::Chat}, e.g. from {.fn ellmer::chat_anthropic}."
+    )
+  }
+  if (!is.null(client$get_system_prompt())) {
+    cli::cli_warn(
+      c(
+        "The system prompt set on {.arg client} is ignored; commons builds
+         its own.",
+        i = "Pass it to the {.arg system_prompt} argument instead."
+      )
     )
   }
   data_sources <- as_data_sources(data_sources)
