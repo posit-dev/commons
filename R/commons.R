@@ -149,6 +149,8 @@ Commons <- R6::R6Class(
       )
       private$conversation_id <- new_conversation_id()
       private$tracing <- new_trajectory_tracing(log, share_with)
+      private$handles <- new_handle_store()
+      private$worker <- new_r_worker()
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
@@ -218,7 +220,9 @@ Commons <- R6::R6Class(
     injections = NULL,
     conversation_id = NULL,
     tracing = FALSE,
-    first_touch = NULL
+    first_touch = NULL,
+    handles = NULL,
+    worker = NULL
   )
 )
 

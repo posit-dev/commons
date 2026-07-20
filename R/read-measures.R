@@ -1,6 +1,4 @@
 read_measures <- function(paths, env = globalenv()) {
-  rlang::check_installed("roxygen2")
-
   registerS3method(
     "roxy_tag_parse",
     "roxy_tag_measure",

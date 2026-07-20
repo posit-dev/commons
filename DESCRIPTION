@@ -16,17 +16,23 @@ License: MIT + file LICENSE
 URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/, https://solid-adventure-ny1mpqy.pages.github.io/
 BugReports: https://github.com/posit-dev/commons/issues
 Imports:
+    callr,
     cli,
     coro,
     DBI,
     duckdb,
     ellmer (>= 0.4.1),
+    evaluate,
     httr2 (>= 1.1.0),
     jsonlite,
     knitr,
+    later,
+    processx,
+    promises (>= 1.5.0),
     R6,
     ragnar,
     rlang,
+    roxygen2,
     S7,
     utils
 Suggests:
@@ -35,13 +41,11 @@ Suggests:
     dplyr,
     glue,
     htmltools,
-    later,
     otel (>= 0.2.0),
     otelsdk (>= 0.2.0),
     pins,
-    promises (>= 1.5.0),
+    ragg,
     readr,
-    roxygen2,
     rmarkdown,
     shiny,
     shinychat,

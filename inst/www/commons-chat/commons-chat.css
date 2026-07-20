@@ -141,8 +141,7 @@ shiny-tool-result,
 .shiny-tool-card .shiny-tool-result__request summary,
 .shiny-tool-card .shiny-tool-result__result > strong,
 .shiny-tool-card .shiny-tool-request__arguments > strong,
-.commons-measure-result > strong,
-.commons-measure-sql > strong {
+.commons-measure-result > strong {
   color: var(--bs-secondary-color, #6c757d);
   display: block;
   font-size: 0.72rem;
@@ -334,4 +333,43 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 .commons-measure-result-value tbody tr:nth-child(even) {
   background: var(--bs-tertiary-bg, #f3f4f6);
+}
+
+/* ---- run_r display ---------------------------------------------------- */
+
+.commons-run-r-display {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.commons-run-r-code > summary {
+  color: var(--bs-secondary-color, #6c757d);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.commons-run-r-code > pre {
+  margin: 0.4rem 0 0;
+}
+
+.commons-run-r-output {
+  margin: 0;
+}
+
+.commons-run-r-warning code {
+  color: var(--bs-warning-text-emphasis, #664d03);
+}
+
+.commons-run-r-error code {
+  color: var(--bs-danger-text-emphasis, #58151c);
+}
+
+.commons-run-r-plot {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  height: auto;
+  max-width: min(100%, 34rem);
 }
