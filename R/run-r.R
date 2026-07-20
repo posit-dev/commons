@@ -526,7 +526,11 @@ worker_run_code <- function(code, new_handles, plot_width, plot_height) {
             sprintf("... (%d more lines not shown)", length(lines) - 100)
           )
         }
-        add("text", text = paste(lines, collapse = "\n"))
+        # Printing invisibly (e.g. a ggplot, which draws to the device and
+        # returns nothing) yields no lines; skip the otherwise-empty segment.
+        if (length(lines)) {
+          add("text", text = paste(lines, collapse = "\n"))
+        }
       }
     }
   )
