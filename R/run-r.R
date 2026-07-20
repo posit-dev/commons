@@ -200,6 +200,9 @@ new_r_worker <- function() {
   worker$tail <- NULL
   worker$pending <- 0L
   worker$last_used <- Sys.time()
+  # Close the child process when the agent is garbage-collected, so a session
+  # that ends without idling out doesn't leak an R process.
+  reg.finalizer(worker, worker_close, onexit = TRUE)
   worker
 }
 
