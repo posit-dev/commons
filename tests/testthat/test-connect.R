@@ -33,15 +33,16 @@ test_that("connect_trace_lines pages until the total is exhausted", {
     c("line1", "line2"),
     "line3"
   )
-  calls <- 0
+  state <- new.env()
+  state$calls <- 0
   local_mocked_bindings(
     connect_req = function(client, ...) structure(list(), class = "fake_req")
   )
   local_mocked_bindings(
     req_url_query = function(req, ...) req,
     req_perform = function(req, ...) {
-      calls <<- calls + 1
-      calls
+      state$calls <- state$calls + 1
+      state$calls
     },
     resp_body_string = function(resp) {
       paste(pages[[resp]], collapse = "\n")
@@ -53,5 +54,62 @@ test_that("connect_trace_lines pages until the total is exhausted", {
   lines <- connect_trace_lines(list(server = "s", api_key = "k"), "guid")
 
   expect_equal(lines, c("line1", "line2", "line3"))
-  expect_equal(calls, 2)
+  expect_equal(state$calls, 2)
+})
+
+test_that("connect_trace_lines explains auth failures on the traces endpoint", {
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ...) req,
+    req_perform = function(req, ...) {
+      rlang::abort("HTTP 403 Forbidden.", class = "httr2_http_403")
+    },
+    .package = "httr2"
+  )
+
+  expect_snapshot(
+    connect_trace_lines(list(server = "s", api_key = "k"), "guid"),
+    error = TRUE
+  )
+})
+
+test_that("connect_user_guid pages past the first page of prefix matches", {
+  pages <- list(
+    lapply(1:500, function(i) {
+      list(username = paste0("jdoe", i), guid = paste0("g", i))
+    }),
+    list(list(username = "jdoe", guid = "guid-jdoe"))
+  )
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ..., page_number) page_number,
+    req_perform = function(req, ...) req,
+    resp_body_json = function(resp, ...) list(results = pages[[resp]]),
+    .package = "httr2"
+  )
+
+  guid <- connect_user_guid(list(server = "s", api_key = "k"), "jdoe")
+
+  expect_equal(guid, "guid-jdoe")
+})
+
+test_that("connect_user_guid errors when no user matches", {
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ...) req,
+    req_perform = function(req, ...) req,
+    resp_body_json = function(resp, ...) list(results = list()),
+    .package = "httr2"
+  )
+
+  expect_snapshot(
+    connect_user_guid(list(server = "s", api_key = "k"), "jdoe"),
+    error = TRUE
+  )
 })

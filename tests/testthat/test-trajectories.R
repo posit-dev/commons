@@ -152,6 +152,46 @@ test_that("read_trajectories reads OTLP files from a directory", {
   expect_s7_class(trajectories[[1]][[1]], ellmer::UserTurn)
 })
 
+test_that("local trace files can follow a custom exporter template", {
+  path <- withr::local_tempdir()
+  withr::local_envvar(
+    OTEL_EXPORTER_OTLP_TRACES_FILE = file.path(path, "spans-%N.ndjson")
+  )
+  json <- test_turn_json()
+  line <- otlp_test_line(list(
+    chat_test_span("t1", "s1", input_messages = json$input)
+  ))
+  writeLines(line, file.path(path, "spans-0.ndjson"))
+  writeLines(line, file.path(path, "spans-latest.ndjson"))
+
+  expect_length(read_local_spans(path), 1)
+})
+
+test_that("the latest chat span wins across timestamp digit counts", {
+  json <- test_turn_json()
+  early <- chat_test_span(
+    "t1",
+    "s1",
+    input_messages = json$input,
+    end_time = "999"
+  )
+  late <- chat_test_span(
+    "t1",
+    "s2",
+    input_messages = json$input,
+    output_messages = json$output,
+    end_time = "1000"
+  )
+  spans <- parse_otlp_lines(otlp_test_line(list(early, late)))
+
+  trajectories <- build_trajectories(spans)
+
+  expect_length(trajectories, 1)
+  final <- trajectories[[1]][[length(trajectories[[1]])]]
+  expect_s7_class(final, ellmer::AssistantTurn)
+  expect_equal(final@text, "You rolled a 4.")
+})
+
 test_that("read_trajectories returns an empty list for a missing directory", {
   expect_equal(read_trajectories(file.path(tempdir(), "nope")), list())
 })
@@ -185,6 +225,25 @@ test_that("a content URL source carries its own server", {
   expect_equal(resolved$kind, "connect")
   expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
   expect_equal(resolved$client$server, "https://connect.example.com")
+})
+
+test_that("a dashboard URL source carries its own server", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+
+  resolved <- resolve_trajectory_source(
+    "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/access"
+  )
+
+  expect_equal(resolved$kind, "connect")
+  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_equal(resolved$client$server, "https://connect.example.com")
+})
+
+test_that("a URL without a recognizable GUID errors rather than reading locally", {
+  expect_snapshot(
+    resolve_trajectory_source("https://connect.example.com/other"),
+    error = TRUE
+  )
 })
 
 test_that("NULL source on Connect reads this content's traces", {
@@ -262,8 +321,37 @@ test_that("content_url_guid extracts the server and GUID", {
   expect_equal(parsed$server, "https://connect.example.com/rsc")
   expect_equal(parsed$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
 
+  parsed <- content_url_guid(
+    "https://connect.example.com/connect/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41/logs"
+  )
+  expect_equal(parsed$server, "https://connect.example.com")
+  expect_equal(parsed$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+
+  parsed <- content_url_guid(
+    "https://connect.example.com/#/apps/ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+  )
+  expect_equal(parsed$server, "https://connect.example.com")
+
   expect_null(content_url_guid("https://connect.example.com/other"))
   expect_null(content_url_guid("plain-string"))
+})
+
+test_that("deployment records are found in project subdirectories", {
+  dir <- withr::local_tempdir()
+  record_dir <- file.path(dir, "app", "rsconnect", "connect.example.com", "me")
+  dir.create(record_dir, recursive = TRUE)
+  writeLines(
+    c(
+      "name: my-agent",
+      "hostUrl: https://connect.example.com/__api__",
+      "url: https://connect.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
+    ),
+    file.path(record_dir, "my-agent.dcf")
+  )
+
+  deployment <- find_rsconnect_deployment(dir)
+
+  expect_equal(deployment$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
 })
 
 test_that("read_deployment_record skips records without a GUID", {

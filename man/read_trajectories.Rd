@@ -13,7 +13,8 @@ read_trajectories(source = NULL)
 content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
 directory that \code{\link[=commons]{commons()}} writes to.
-\item A Connect content GUID or dashboard content URL.
+\item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), or a
+dashboard URL (\verb{.../connect/#/apps/<guid>/}).
 \item A directory of OTLP NDJSON trace files (\verb{trace-*.jsonl}).
 }}
 }

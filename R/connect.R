@@ -44,13 +44,22 @@ connect_req <- function(client, ...) {
 
 # Fetch all trace rows for a content item as raw OTLP NDJSON lines, paging
 # until the X-Total-Count header is exhausted.
-connect_trace_lines <- function(client, guid, page_size = 1000) {
+connect_trace_lines <- function(
+  client,
+  guid,
+  page_size = 1000,
+  call = rlang::caller_env()
+) {
   lines <- character()
   offset <- 0
   repeat {
-    resp <- connect_req(client, "content", guid, "traces") |>
-      httr2::req_url_query(limit = page_size, offset = offset) |>
-      httr2::req_perform()
+    resp <- tryCatch(
+      connect_req(client, "content", guid, "traces") |>
+        httr2::req_url_query(limit = page_size, offset = offset) |>
+        httr2::req_perform(),
+      httr2_http_401 = function(err) trace_access_abort(err, call),
+      httr2_http_403 = function(err) trace_access_abort(err, call)
+    )
     page <- httr2::resp_body_string(resp)
     page <- strsplit(page, "\n", fixed = TRUE)[[1]]
     page <- page[nzchar(page)]
@@ -66,15 +75,45 @@ connect_trace_lines <- function(client, guid, page_size = 1000) {
   lines
 }
 
+# An auth failure on the traces endpoint nearly always means the API key's
+# user fails the endpoint's editor-level permission check, not that traces
+# don't exist; say so rather than surfacing a bare 401/403.
+trace_access_abort <- function(err, call) {
+  cli::cli_abort(
+    c(
+      "Couldn't read this content's traces from Posit Connect.",
+      i = "Reading traces requires editor access: the {.envvar
+           CONNECT_API_KEY} user must own the content or be a collaborator.
+           See the {.arg share_with} argument of {.fn commons}."
+    ),
+    parent = err,
+    call = call
+  )
+}
+
+# Prefix search over users, paging like Connect's own full-listing loop: a
+# page shorter than page_size is the last one.
 connect_user_guid <- function(client, username, call = rlang::caller_env()) {
-  resp <- connect_req(client, "users") |>
-    httr2::req_url_query(prefix = username, page_size = 500) |>
-    httr2::req_perform() |>
-    httr2::resp_body_json()
-  for (user in resp$results) {
-    if (identical(tolower(user$username), tolower(username))) {
-      return(user$guid)
+  page_size <- 500
+  page_number <- 1
+  repeat {
+    resp <- connect_req(client, "users") |>
+      httr2::req_url_query(
+        prefix = username,
+        page_size = page_size,
+        page_number = page_number
+      ) |>
+      httr2::req_perform() |>
+      httr2::resp_body_json()
+    for (user in resp$results) {
+      if (identical(tolower(user$username), tolower(username))) {
+        return(user$guid)
+      }
     }
+    if (length(resp$results) < page_size) {
+      break
+    }
+    page_number <- page_number + 1
   }
   cli::cli_abort(
     "No Connect user with username {.val {username}}.",

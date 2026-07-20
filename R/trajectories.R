@@ -13,7 +13,8 @@
 #'     content's own traces; in a project that has been deployed with
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
 #'     directory that [commons()] writes to.
-#'   * A Connect content GUID or dashboard content URL.
+#'   * A Connect content GUID, a content URL (`.../content/<guid>/`), or a
+#'     dashboard URL (`.../connect/#/apps/<guid>/`).
 #'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
 #'
 #' @details
@@ -68,8 +69,18 @@ resolve_trajectory_source <- function(source, call = rlang::caller_env()) {
         client = connect_client(call = call)
       ))
     }
-    url_guid <- content_url_guid(source)
-    if (!is.null(url_guid)) {
+    if (grepl("^https?://", source)) {
+      url_guid <- content_url_guid(source)
+      if (is.null(url_guid)) {
+        cli::cli_abort(
+          c(
+            "Can't find a content GUID in {.url {source}}.",
+            i = "Supported URLs contain {.code /content/<guid>} (a content
+                 URL) or {.code #/apps/<guid>} (a dashboard URL)."
+          ),
+          call = call
+        )
+      }
       return(list(
         kind = "connect",
         guid = url_guid$guid,
@@ -128,29 +139,27 @@ content_url_guid <- function(x) {
   if (!grepl("^https?://", x)) {
     return(NULL)
   }
+  guid <- "([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"
+  match <- regmatches(x, regexec(paste0("^(.*?)/content/", guid), x))[[1]]
+  if (length(match) > 0) {
+    return(list(server = match[2], guid = match[3]))
+  }
+  # Dashboard URLs: <server>[/connect]/#/apps/<guid>/...; the dashboard path
+  # (default "/connect") is not part of the API base URL.
   match <- regmatches(
     x,
-    regexec(
-      "^(.*?)/content/([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})",
-      x
-    )
+    regexec(paste0("^(.*?)(?:/connect)?/#/apps/", guid), x)
   )[[1]]
-  if (length(match) == 0) {
-    return(NULL)
+  if (length(match) > 0) {
+    return(list(server = match[2], guid = match[3]))
   }
-  list(server = match[2], guid = match[3])
+  NULL
 }
 
 # Find the project's Connect deployment record (written by rsconnect under
 # rsconnect/). The record's `url` field carries the content GUID.
 find_rsconnect_deployment <- function(dir = getwd()) {
-  files <- list.files(
-    dir,
-    pattern = "[.]dcf$",
-    recursive = TRUE,
-    full.names = TRUE
-  )
-  files <- files[grepl("(^|/)rsconnect/", files)]
+  files <- rsconnect_record_files(dir)
   if (length(files) == 0) {
     return(NULL)
   }
@@ -174,6 +183,33 @@ find_rsconnect_deployment <- function(dir = getwd()) {
   }
 
   deployments[[1]]
+}
+
+# Walk a few levels down looking for rsconnect/ directories rather than
+# listing every file under `dir`: projects routinely carry trees (renv/,
+# data/) that a full recursive listing would crawl.
+rsconnect_record_files <- function(dir, max_depth = 3) {
+  files <- character()
+  level <- dir
+  for (depth in seq_len(max_depth)) {
+    hits <- file.path(level, "rsconnect")
+    hits <- hits[dir.exists(hits)]
+    files <- c(
+      files,
+      list.files(hits, pattern = "[.]dcf$", recursive = TRUE, full.names = TRUE)
+    )
+    level <- unlist(
+      lapply(level, list.dirs, recursive = FALSE),
+      use.names = FALSE
+    )
+    keep <- !grepl("^[.]", basename(level)) &
+      !basename(level) %in% c("rsconnect", "renv", "packrat", "node_modules")
+    level <- level[keep]
+    if (length(level) == 0) {
+      break
+    }
+  }
+  files
 }
 
 read_deployment_record <- function(file) {
@@ -216,16 +252,27 @@ read_local_spans <- function(path) {
   if (!dir.exists(path)) {
     return(list())
   }
-  # Numbered rotation files only: the exporter also writes a
-  # trace-latest.jsonl hardlink to the newest file, which would duplicate its
-  # spans. Mirrors Connect's own glob.
   files <- list.files(
     path,
-    pattern = "^trace(-[0-9]+)?[.]jsonl$",
+    pattern = local_traces_pattern(),
     full.names = TRUE
   )
   lines <- unlist(lapply(files, readLines, warn = FALSE))
   parse_otlp_lines(lines)
+}
+
+# Numbered rotation files only: the exporter also writes a
+# trace-latest.jsonl hardlink to the newest file, which would duplicate its
+# spans. Mirrors Connect's own glob. When the file exporter was pointed at a
+# custom filename template, files named from that template match too.
+local_traces_pattern <- function() {
+  patterns <- "trace(-[0-9]+)?[.]jsonl"
+  template <- basename(Sys.getenv("OTEL_EXPORTER_OTLP_TRACES_FILE"))
+  if (nzchar(template)) {
+    escaped <- gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", template)
+    patterns <- c(patterns, gsub("%N", "[0-9]+", escaped, fixed = TRUE))
+  }
+  paste0("^(", paste(unique(patterns), collapse = "|"), ")$")
 }
 
 # Each NDJSON line is a full OTLP envelope: {"resourceSpans": [{"scopeSpans":
@@ -360,11 +407,12 @@ span_conversation_id <- function(span, index) {
   span$trace_id
 }
 
-# Unix-nano timestamps overflow doubles, so compare them as space-padded
+# Unix-nano timestamps overflow doubles, so compare them as zero-padded
 # strings, which order lexicographically like the numbers they encode.
+# (Zero- rather than space-padded: some locales' collation ignores spaces.)
 span_time <- function(span) {
   time <- if (nzchar(span$end_time)) span$end_time else span$start_time
-  sprintf("%32s", time)
+  paste0(strrep("0", max(0, 32 - nchar(time))), time)
 }
 
 trajectory_turns <- function(span) {
