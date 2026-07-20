@@ -16,6 +16,7 @@ License: MIT + file LICENSE
 URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/, https://solid-adventure-ny1mpqy.pages.github.io/
 BugReports: https://github.com/posit-dev/commons/issues
 Imports:
+    callr,
     cli,
     coro,
     DBI,

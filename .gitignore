@@ -6,3 +6,6 @@ inst/tiles-agent/
 inst/pkgs
 .Rprofile
 docs
+src/*.o
+src/*.so
+src/*.dll
