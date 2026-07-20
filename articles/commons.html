@@ -322,11 +322,13 @@ conversation trajectories. It is <code>FALSE</code> by default. With
 <code>log = TRUE</code>, trajectories are captured as OpenTelemetry
 spans: ellmer records each turn’s full message history, and commons tags
 the spans with a conversation id.</p>
-<p>On Posit Connect, enable <em>Content Observability</em> in the
-content’s <em>Settings &gt; Advanced</em> panel, and spans land in
-Connect’s observability store—browsable in the dashboard’s Trace Viewer,
-and readable with <code><a href="../reference/read_trajectories.html">read_trajectories()</a></code>. (A server
-administrator may first need to set
+<p>On Posit Connect, spans land in Connect’s observability
+store—browsable in the dashboard’s Trace Viewer, and readable with
+<code><a href="../reference/read_trajectories.html">read_trajectories()</a></code>. commons switches on the content’s
+<em>Content Observability</em> setting (in <em>Settings &gt;
+Advanced</em>) itself when needed; capture starts once the content
+restarts after that first enablement. (A server administrator may first
+need to set
 <code>OpenTelemetry.AllowContentInstrumentation = true</code> in the
 Connect configuration.) Locally, commons configures a file exporter
 automatically when no OTel exporter is set up, writing to

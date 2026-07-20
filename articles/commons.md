@@ -310,14 +310,15 @@ trajectories. It is `FALSE` by default. With `log = TRUE`, trajectories
 are captured as OpenTelemetry spans: ellmer records each turn’s full
 message history, and commons tags the spans with a conversation id.
 
-On Posit Connect, enable *Content Observability* in the content’s
-*Settings \> Advanced* panel, and spans land in Connect’s observability
-store—browsable in the dashboard’s Trace Viewer, and readable with
+On Posit Connect, spans land in Connect’s observability store—browsable
+in the dashboard’s Trace Viewer, and readable with
 [`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md).
-(A server administrator may first need to set
-`OpenTelemetry.AllowContentInstrumentation = true` in the Connect
-configuration.) Locally, commons configures a file exporter
-automatically when no OTel exporter is set up, writing to
+commons switches on the content’s *Content Observability* setting (in
+*Settings \> Advanced*) itself when needed; capture starts once the
+content restarts after that first enablement. (A server administrator
+may first need to set `OpenTelemetry.AllowContentInstrumentation = true`
+in the Connect configuration.) Locally, commons configures a file
+exporter automatically when no OTel exporter is set up, writing to
 `COMMONS_TRACES_DIR` or a temporary directory.
 
 Trajectories on Connect are governed by the content’s permissions:
