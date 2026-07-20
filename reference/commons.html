@@ -47,7 +47,8 @@ layer, context search, table inspection, and SQL queries.</p>
 <span>  <span class="va">data_sources</span>,</span>
 <span>  context_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  log <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  log <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  share_with <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -76,11 +77,24 @@ can take a source's connection as an argument named after the source; see
 
 
 <dt id="arg-log">log<a class="anchor" aria-label="anchor" href="#arg-log"></a></dt>
-<dd><p>Where to log conversation trajectories, if anywhere. <code>FALSE</code> (the
-default) disables logging and <code>TRUE</code> picks a destination automatically:
-private Connect pins on Posit Connect and local files elsewhere. For
-control over the destination, pass a spec from <code><a href="log_pins.html">log_pins()</a></code> or
-<code><a href="log_pins.html">log_local()</a></code>. A single string is shorthand for <code>log_local(path)</code>.</p></dd>
+<dd><p>Whether to capture conversation trajectories with OpenTelemetry
+(default <code>FALSE</code>). When <code>TRUE</code>, commons enables GenAI message-content
+capture in <span class="pkg">ellmer</span> and tags each turn's spans with a conversation
+id; the spans go wherever OTel is configured to export. On Posit Connect,
+enable <em>Content Observability</em> in the content's <em>Settings &gt; Advanced</em>
+panel and traces land in Connect's observability store (browsable in its
+Trace Viewer). Locally, commons configures <span class="pkg">otelsdk</span>'s file exporter
+automatically when no exporter is set up. Read trajectories back with
+<code><a href="read_trajectories.html">read_trajectories()</a></code>.</p></dd>
+
+
+<dt id="arg-share-with">share_with<a class="anchor" aria-label="anchor" href="#arg-share-with"></a></dt>
+<dd><p>An optional character vector of Connect usernames granted
+access to this content's trajectories when running on Posit Connect.
+Reading traces requires editor-level access, so named users are added as
+collaborators on the content. Note that users whose Connect <em>account</em>
+role is viewer cannot read traces even when named here; trace readers
+need at least a publisher account.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -139,24 +153,13 @@ rather than this method directly.</p><div class="section">
 <span>  <span class="va">data_sources</span>,</span>
 <span>  context_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  log <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span>  log <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  share_with <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-1">Arguments<a class="anchor" aria-label="anchor" href="#arguments-1"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>client</code></dt>
-<dd><p>An <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a> supplying the provider.</p></dd>
-
-      <dt><code>data_sources</code></dt>
-<dd><p>A <code><a href="data_source.html">data_source()</a></code>, or a named list of them.</p></dd>
-
-      <dt><code>context_layer</code></dt>
-<dd><p>An optional <code><a href="context_layer.html">context_layer()</a></code>.</p></dd>
-
-      <dt><code>semantic_layer</code></dt>
-<dd><p>An optional <code><a href="semantic_layer.html">semantic_layer()</a></code>.</p></dd>
-
-      <dt><code>log</code></dt>
-<dd><p>Where to log conversation trajectories. See <code>commons()</code>.</p></dd>
+<p></p><div class="arguments"><dl><dt><code>client, data_sources, context_layer, semantic_layer, log, share_with</code></dt>
+<dd><p>See <code>commons()</code>.</p></dd>
 
 
 </dl><p></p></div>
@@ -166,8 +169,8 @@ rather than this method directly.</p><div class="section">
 
 <p></p><hr><a id="method-Commons-chat"></a><div class="section">
 <h3 id="commons-chat-"><code>Commons$chat()</code><a class="anchor" aria-label="anchor" href="#commons-chat-"></a></h3>
-<p>Submit input and return the response. Also writes a turn
-log. See <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a> for arguments.</p><div class="section">
+<p>Submit input and return the response. See <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a>
+for arguments.</p><div class="section">
 <h4 id="usage-1">Usage<a class="anchor" aria-label="anchor" href="#usage-1"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Commons</span><span class="op">$</span><span class="fu">chat</span><span class="op">(</span><span class="va">...</span>, echo <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">

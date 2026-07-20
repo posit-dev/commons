@@ -1,36 +1,51 @@
 # Read commons trajectories
 
-`read_trajectories()` reads conversation trajectories written by
+`read_trajectories()` reads conversation trajectories captured by
 [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
-when logging is enabled via its `log` argument (for example
-`log = TRUE`, a local directory path, or a
-[`log_local()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
-or
-[`log_pins()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
-spec).
+when `log = TRUE`. Trajectories are recorded as OpenTelemetry spans—see
+the `log` argument of
+[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+for how capture is enabled—and read back from Posit Connect's content
+observability store or from local trace files.
 
 ## Usage
 
 ``` r
-read_trajectories(x = NULL, ...)
+read_trajectories(source = NULL)
 ```
 
 ## Arguments
 
-- x:
+- source:
 
-  A `pins` board or a local directory path. If `NULL`, reads from the
-  local
-  [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
-  log directory.
+  Where to read trajectories from:
 
-- ...:
+  - `NULL` (the default) resolves automatically: on Posit Connect, this
+    content's own traces; in a project that has been deployed with
+    rsconnect, the deployed content's traces; otherwise, the local trace
+    directory that
+    [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+    writes to.
 
-  Reserved for future extensions.
+  - A Connect content GUID, a content URL (`.../content/<guid>/`), or a
+    dashboard URL (`.../connect/#/apps/<guid>/`).
+
+  - A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
 
 ## Value
 
-A list of lists of ellmer turns, one list per conversation.
+A list of conversations, named by conversation id and ordered
+oldest-first. Each conversation is a list of
+[ellmer::Turn](https://ellmer.tidyverse.org/reference/Turn.html)s.
+
+## Details
+
+Reading traces from Connect requires the `CONNECT_API_KEY` environment
+variable (and `CONNECT_SERVER`, when the server can't be inferred from
+the project's deployment record), and editor-level access to the
+content: you must own it or be a collaborator. See the `share_with`
+argument of
+[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md).
 
 ## Agent skill
 

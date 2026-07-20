@@ -13,9 +13,6 @@
   : Create a data source
 - [`list_tables()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/list_tables.md)
   : List the tables an agent can query
-- [`log_pins()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
-  [`log_local()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
-  : Configure where commons logs conversation trajectories
 - [`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)
   : Create a measure
 - [`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md)

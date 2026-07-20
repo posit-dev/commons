@@ -6,7 +6,7 @@ and
 [`shinychat::chat_mod_server()`](https://posit-dev.github.io/shinychat/r/reference/chat_app.html)
 with commons-specific answer provenance UI. Answers produced from
 registered measures get a compact verified-answer pill. Answers produced
-from fallback SQL get a caution pill with a review request.
+from fallback SQL get a caution pill.
 
 ## Usage
 

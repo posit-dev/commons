@@ -317,32 +317,40 @@ chat UI:</p>
 <div class="section level2">
 <h2 id="logging-trajectories">Logging trajectories<a class="anchor" aria-label="anchor" href="#logging-trajectories"></a>
 </h2>
-<p>The <code>log</code> argument controls whether, and where, commons
-records conversation trajectories. It is <code>FALSE</code> by default.
-<code>log = TRUE</code> picks a destination automatically: private
-Connect pins when running on Posit Connect, and local files otherwise
-(written to <code>COMMONS_LOG_DIR</code> or a temporary directory). A
-bare string is shorthand for a local directory path.</p>
-<p>For more control, pass a spec built with <code><a href="../reference/log_pins.html">log_local()</a></code> or
-<code><a href="../reference/log_pins.html">log_pins()</a></code>:</p>
+<p>The <code>log</code> argument controls whether commons records
+conversation trajectories. It is <code>FALSE</code> by default. With
+<code>log = TRUE</code>, trajectories are captured as OpenTelemetry
+spans: ellmer records each turn’s full message history, and commons tags
+the spans with a conversation id.</p>
+<p>On Posit Connect, enable <em>Content Observability</em> in the
+content’s <em>Settings &gt; Advanced</em> panel, and spans land in
+Connect’s observability store—browsable in the dashboard’s Trace Viewer,
+and readable with <code><a href="../reference/read_trajectories.html">read_trajectories()</a></code>. (A server
+administrator may first need to set
+<code>OpenTelemetry.AllowContentInstrumentation = true</code> in the
+Connect configuration.) Locally, commons configures a file exporter
+automatically when no OTel exporter is set up, writing to
+<code>COMMONS_TRACES_DIR</code> or a temporary directory.</p>
+<p>Trajectories on Connect are governed by the content’s permissions:
+reading them requires editor-level access. To let named colleagues
+review them, pass their Connect usernames to <code>share_with</code> and
+they’ll be added as collaborators on the content:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Always log to a specific local directory</span></span>
-<span><span class="va">log</span> <span class="op">=</span> <span class="fu"><a href="../reference/log_pins.html">log_local</a></span><span class="op">(</span><span class="st">"/srv/commons/logs"</span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># Log to private Connect pins</span></span>
-<span><span class="va">log</span> <span class="op">=</span> <span class="fu"><a href="../reference/log_pins.html">log_pins</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p>Connect trajectory pins are private to the deploying account. To let
-named colleagues review them, pass their Connect usernames to
-<code>share_with</code>. Each conversation’s pin grants those users
-viewer access as it is created, so they retain access to new
-trajectories:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">log</span> <span class="op">=</span> <span class="fu"><a href="../reference/log_pins.html">log_pins</a></span><span class="op">(</span>share_with <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"jdoe"</span>, <span class="st">"asmith"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>Sharing requires the <a href="https://pkg.posit.co/connectapi/" class="external-link">connectapi</a> package.
+<code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
+<span>  <span class="co"># ...</span></span>
+<span>  log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>  share_with <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"jdoe"</span>, <span class="st">"asmith"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>Note that a colleague whose Connect <em>account</em> role is viewer
+cannot read trajectories even when named in <code>share_with</code>;
+trajectory readers need at least a publisher account.
 <code>share_with</code> only applies on Connect; off Connect, commons
-warns and logs locally instead.</p>
-<p>Read logged trajectories back with
-<code><a href="../reference/read_trajectories.html">read_trajectories()</a></code>.</p>
+warns and ignores it.</p>
+<p>Read logged trajectories back with <code><a href="../reference/read_trajectories.html">read_trajectories()</a></code>.
+With no arguments, it reads this content’s traces when running on
+Connect, the deployed content’s traces when run in a project that’s been
+deployed with rsconnect (set <code>CONNECT_API_KEY</code>), and local
+trace files otherwise.</p>
 </div>
 <div class="section level2">
 <h2 id="iterating-on-the-agent">Iterating on the agent<a class="anchor" aria-label="anchor" href="#iterating-on-the-agent"></a>

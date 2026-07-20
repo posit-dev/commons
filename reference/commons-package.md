@@ -14,6 +14,8 @@ Useful links:
 
 - <https://posit-dev.github.io/commons/>
 
+- <https://solid-adventure-ny1mpqy.pages.github.io/>
+
 - Report bugs at <https://github.com/posit-dev/commons/issues>
 
 ## Author

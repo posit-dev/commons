@@ -13,7 +13,8 @@ commons(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  log = FALSE
+  log = FALSE,
+  share_with = NULL
 )
 ```
 
@@ -47,14 +48,24 @@ commons(
 
 - log:
 
-  Where to log conversation trajectories, if anywhere. `FALSE` (the
-  default) disables logging and `TRUE` picks a destination
-  automatically: private Connect pins on Posit Connect and local files
-  elsewhere. For control over the destination, pass a spec from
-  [`log_pins()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md)
-  or
-  [`log_local()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/log_pins.md).
-  A single string is shorthand for `log_local(path)`.
+  Whether to capture conversation trajectories with OpenTelemetry
+  (default `FALSE`). When `TRUE`, commons enables GenAI message-content
+  capture in ellmer and tags each turn's spans with a conversation id;
+  the spans go wherever OTel is configured to export. On Posit Connect,
+  enable *Content Observability* in the content's *Settings \> Advanced*
+  panel and traces land in Connect's observability store (browsable in
+  its Trace Viewer). Locally, commons configures otelsdk's file exporter
+  automatically when no exporter is set up. Read trajectories back with
+  [`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md).
+
+- share_with:
+
+  An optional character vector of Connect usernames granted access to
+  this content's trajectories when running on Posit Connect. Reading
+  traces requires editor-level access, so named users are added as
+  collaborators on the content. Note that users whose Connect *account*
+  role is viewer cannot read traces even when named here; trace readers
+  need at least a publisher account.
 
 ## Value
 
@@ -129,41 +140,21 @@ this method directly.
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
-      log = FALSE
+      log = FALSE,
+      share_with = NULL
     )
 
 #### Arguments
 
-- `client`:
+- `client, data_sources, context_layer, semantic_layer, log, share_with`:
 
-  An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
-  supplying the provider.
-
-- `data_sources`:
-
-  A
-  [`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md),
-  or a named list of them.
-
-- `context_layer`:
-
-  An optional
-  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md).
-
-- `semantic_layer`:
-
-  An optional
-  [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
-
-- `log`:
-
-  Where to log conversation trajectories. See `commons()`.
+  See `commons()`.
 
 ------------------------------------------------------------------------
 
 ### `Commons$chat()`
 
-Submit input and return the response. Also writes a turn log. See
+Submit input and return the response. See
 [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html) for
 arguments.
 
