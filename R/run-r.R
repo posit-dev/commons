@@ -408,8 +408,18 @@ plot_dimensions <- function(ratio, longest_side) {
 worker_init <- function(parent_tmp, work_dir, dll_path) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  if (!identical(Sys.info()[["sysname"]], "Linux") || is.na(dll_path)) {
+  # Off Linux there is no sandbox; run unsandboxed (local dev only). On Linux
+  # the sandbox must engage, so a missing compiled library is a hard error
+  # rather than a silent drop to unsandboxed execution.
+  if (!identical(Sys.info()[["sysname"]], "Linux")) {
     return(invisible(FALSE))
+  }
+  if (is.na(dll_path)) {
+    stop(
+      "commons cannot sandbox the run_r session: its compiled library was ",
+      "not found. Install commons as a package, or bundle its src/ directory ",
+      "so load_all() can compile it."
+    )
   }
   if (!("commons" %in% names(getLoadedDLLs()))) {
     dyn.load(dll_path)
