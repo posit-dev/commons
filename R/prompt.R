@@ -1,26 +1,33 @@
-commons_system_prompt <- function(sources, context_layer) {
-  template <- paste(
-    readLines(
-      system.file("prompts/system-prompt.md", package = "commons"),
-      warn = FALSE
-    ),
-    collapse = "\n"
+commons_system_prompt <- function(sources, system_prompt) {
+  paste0(
+    trimws(system_prompt, which = "right"),
+    "\n\n# Available tables\n\n",
+    sources_tables_text(sources),
+    "\n",
+    dictionary_prompt_text(sources)
   )
+}
 
-  tables <- sources_tables_text(sources)
-
-  always <- if (!is.null(context_layer) && length(context_layer$always)) {
-    paste0(
-      "\n# Context\n\nThe following context may be relevant:\n\n",
-      paste(sprintf("- %s", context_layer$always), collapse = "\n")
+check_system_prompt <- function(system_prompt, call = rlang::caller_env()) {
+  if (!rlang::is_string(system_prompt)) {
+    cli::cli_abort(
+      "{.arg system_prompt} must be a single string, e.g. from
+       {.fn ellmer::interpolate_file}.",
+      call = call
     )
-  } else {
-    ""
   }
-
-  template <- fill_token(template, "{{TABLES}}", tables)
-  template <- fill_token(template, "{{DICTIONARY}}", dictionary_prompt_text(sources))
-  fill_token(template, "{{ALWAYS}}", always)
+  # A path here would silently become the literal prompt text.
+  if (!grepl("\n", system_prompt, fixed = TRUE) && file.exists(system_prompt)) {
+    suggestion <- sprintf('ellmer::interpolate_file("%s")', system_prompt)
+    cli::cli_abort(
+      c(
+        "{.arg system_prompt} must be prompt content, not a file path.",
+        i = "Did you mean {.code {suggestion}}?"
+      ),
+      call = call
+    )
+  }
+  invisible(system_prompt)
 }
 
 # Only dataset-wide dictionary content is ambient: description and details
@@ -97,7 +104,3 @@ table_bullets <- function(source) {
   paste(sprintf("- %s", list_tables(source)), collapse = "\n")
 }
 
-# Avoid regular expression handling in prompt fragments supplied by users.
-fill_token <- function(text, token, value) {
-  gsub(token, value, text, fixed = TRUE)
-}

@@ -26,11 +26,6 @@ test_that("context_search returns empty when nothing matches or store is empty",
   expect_length(context_search(context_layer(files = path), "zzzzz"), 0)
 })
 
-test_that("prompt facts are carried on the layer", {
-  layer <- context_layer(always = "Revenue excludes tax.")
-  expect_equal(layer$always, "Revenue excludes tax.")
-})
-
 test_that("context_layer strips YAML frontmatter before indexing", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(

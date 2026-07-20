@@ -35,6 +35,7 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 |   |-- semantic_layer.R
 |   `-- context_layer.R
 |-- app.R
+|-- system-prompt.md
 `-- context/
     `-- metrics.md
 ```
@@ -200,7 +201,7 @@ Write the default as a call rather than a reference to a variable defined elsewh
 
 The context layer is text the agent can search when no measure fits. Use it for metric definitions, table grain, join notes, business terminology, caveats, and source material that helps the agent write fallback SQL responsibly.
 
-Good context sources include existing app code, report source, metric catalogs, analyst notes, relevant transcripts, and exported pages from systems such as Confluence. Structured table and column documentation is better attached to the data source as a dictionary (see above). Short facts that should always be in the prompt can go in `always`.
+Good context sources include existing app code, report source, metric catalogs, analyst notes, relevant transcripts, and exported pages from systems such as Confluence. Structured table and column documentation is better attached to the data source as a dictionary (see above). Facts that should be in every prompt belong in the system prompt file (see "Customizing the system prompt" below).
 
 ```r
 # R/context_layer.R
@@ -208,10 +209,6 @@ agent_context <- context_layer(
   files = c(
     "context/metrics.md",
     "context/table-notes.md"
-  ),
-  always = c(
-    "Revenue excludes tax unless stated otherwise.",
-    "The orders table is one row per order."
   )
 )
 ```
@@ -246,6 +243,44 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+```
+
+## Customizing the system prompt
+
+The system prompt is a markdown file you own. commons ships a default; copy it into your project and edit it freely:
+
+```r
+file.copy(
+  system.file("prompts", "system-prompt.md", package = "commons"),
+  "system-prompt.md"
+)
+```
+
+Then interpolate your copy and pass the result to `system_prompt`:
+
+```r
+agent <- commons(
+  # ...
+  system_prompt = ellmer::interpolate_file(
+    "system-prompt.md",
+    date = Sys.Date()
+  )
+)
+```
+
+commons appends documentation of the available tables and data dictionaries to the prompt itself, so the file needn't describe them.
+
+`{{keyword}}` tokens in the file are filled by [`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html)'s arguments when the agent is created. The packaged prompt uses one keyword, `{{date}}`; keep passing `date = Sys.Date()` as long as your copy retains it, and supply values for any keywords you add the same way:
+
+```r
+agent <- commons(
+  # ...
+  system_prompt = ellmer::interpolate_file(
+    "system-prompt.md",
+    date = Sys.Date(),
+    fiscal_year_start = "February"
+  )
+)
 ```
 
 ## Logging trajectories

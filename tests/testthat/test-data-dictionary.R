@@ -110,7 +110,7 @@ test_that("data_source() rejects other dictionary inputs", {
 test_that("dictionary content lands in the system prompt", {
   skip_if_not_installed("yaml")
   src <- local_dict_source()
-  prompt <- commons_system_prompt(list(src), NULL)
+  prompt <- commons_system_prompt(list(src), "You are a data analyst.")
 
   expect_match(prompt, "# About the data", fixed = TRUE)
   expect_match(prompt, "- sales", fixed = TRUE)
@@ -243,13 +243,15 @@ test_that("dictionary prose is searchable via the context layer", {
   )
 })
 
-test_that("augmenting keeps existing context and always facts", {
+test_that("augmenting keeps existing context docs", {
   skip_if_not_installed("yaml")
-  layer <- context_layer(always = "Booked revenue excludes tax.")
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Booked revenue excludes tax.", path)
+  layer <- context_layer(files = path)
   augmented <- augment_context_layer(layer, list(local_dict_source()))
 
-  expect_equal(augmented$always, "Booked revenue excludes tax.")
-  expect_gt(length(augmented$docs), 0)
+  expect_true("Booked revenue excludes tax." %in% augmented$docs)
+  expect_gt(length(augmented$docs), length(layer$docs))
 })
 
 test_that("augmenting without dictionaries is a no-op", {

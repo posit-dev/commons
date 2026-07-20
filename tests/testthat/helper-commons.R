@@ -28,14 +28,16 @@ test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,
   data_sources = list(sales_db = test_source()),
-  log = FALSE
+  log = FALSE,
+  ...
 ) {
   commons(
     test_client(),
     data_sources = data_sources,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
-    log = log
+    log = log,
+    ...
   )
 }
 
