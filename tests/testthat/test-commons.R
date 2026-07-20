@@ -20,7 +20,7 @@ test_that("derive_tag_from_turns reads tags from tool result content", {
   expect_equal(derive_tag_from_turns(turns), "A")
 })
 
-test_that("commons() returns a Chat subclass with the five fixed tools", {
+test_that("commons() returns a Chat subclass with the six fixed tools", {
   agent <- test_agent()
 
   expect_s3_class(agent, "Commons")
@@ -32,7 +32,8 @@ test_that("commons() returns a Chat subclass with the five fixed tools", {
       "call_measure",
       "search_context",
       "describe_table",
-      "run_sql"
+      "run_sql",
+      "run_r"
     )
   )
 })

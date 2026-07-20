@@ -4,7 +4,8 @@ build_commons_tools <- function(self, private) {
     tool_call_measure(private),
     tool_search_context(private),
     tool_describe_table(private),
-    tool_run_sql(private)
+    tool_run_sql(private),
+    tool_run_r(private)
   )
 }
 
