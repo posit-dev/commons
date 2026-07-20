@@ -21,7 +21,11 @@ test_that("chat UI preserves shinychat's top-level fill container", {
   deps <- htmltools::findDependencies(ui)
 
   expect_equal(ui$name, "shiny-chat-container")
-  expect_equal(ui$attribs$style, "width:min(680px, 100%);height:100%;")
+  # shinychat controls the width property's name (it moved from `width` to a
+  # `--_chat-width` variable in 0.5.0); commons only cares that its height
+  # rides through and the default width cap is intact.
+  expect_match(ui$attribs$style, "min\\(680px, 100%\\)")
+  expect_match(ui$attribs$style, "height:100%;")
   expect_true("html-fill-item" %in% classes)
   expect_true("html-fill-container" %in% classes)
   expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
