@@ -38,47 +38,7 @@ test_that("call_measure_tool uses measure display titles", {
   expect_match(res@extra$display$html, "No arguments")
 })
 
-test_that("call_measure_tool can derive from tabular measure output with SQL", {
-  registry <- list(
-    revenue_by_region = measure(
-      "revenue_by_region",
-      "Revenue by region.",
-      function() aggregate(revenue ~ region, test_sales(), sum),
-      arguments = list()
-    )
-  )
-
-  res <- call_measure_tool(
-    registry,
-    "revenue_by_region",
-    "{}",
-    sql = "SELECT sum(revenue) AS total_revenue FROM measure WHERE region IN ('Americas', 'EMEA')"
-  )
-
-  expect_s7_class(res, ellmer::ContentToolResult)
-  expect_match(res@value, "5350")
-  expect_equal(res@extra$commons_tag, "B")
-  expect_match(res@extra$display$html, "Measure result")
-  expect_match(res@extra$display$html, "Post-processing SQL")
-  expect_match(res@extra$display$html, "Derived result")
-  expect_match(res@extra$display$html, "total_revenue")
-})
-
-test_that("call_measure_tool requires tabular output when SQL is supplied", {
-  registry <- list(order_count = count_measure_tool())
-
-  expect_error(
-    call_measure_tool(
-      registry,
-      "order_count",
-      "{}",
-      sql = "SELECT * FROM measure"
-    ),
-    "data frame or lazy table"
-  )
-})
-
-test_that("call_measure_tool checks SQL before deriving from measure output", {
+test_that("call_measure_tool registers tabular output as a handle", {
   registry <- list(
     orders = measure(
       "orders",
@@ -87,16 +47,38 @@ test_that("call_measure_tool checks SQL before deriving from measure output", {
       arguments = list()
     )
   )
+  store <- new_handle_store()
 
-  expect_error(
-    call_measure_tool(
-      registry,
-      "orders",
-      "{}",
-      sql = "DROP TABLE measure"
-    ),
-    "disallowed operation"
-  )
+  res <- call_measure_tool(registry, "orders", "{}", handles = store)
+
+  expect_equal(res@extra$commons_tag, "A")
+  expect_match(res@value, "Result stored as `r1`")
+  expect_match(res@value, "A data frame with 6 rows and 5 columns")
+  expect_match(res@value, "revenue: numeric")
+  expect_equal(get_handle(store, "r1"), test_sales())
+})
+
+test_that("call_measure_tool skips handle registration for scalar output", {
+  registry <- list(order_count = count_measure_tool())
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "order_count", "{}", handles = store)
+
+  expect_no_match(res@value, "stored as")
+  expect_equal(handle_ids(store), character())
+})
+
+test_that("register_handle numbers handles in call order and caps rows", {
+  store <- new_handle_store()
+
+  first <- register_handle(store, test_sales())
+  second <- register_handle(store, test_sales(), max_rows = 2)
+
+  expect_match(first, "`r1`")
+  expect_match(second, "`r2`")
+  expect_match(second, "Only the first 2 rows are stored")
+  expect_equal(handle_ids(store), c("r1", "r2"))
+  expect_equal(nrow(get_handle(store, "r2")), 2)
 })
 
 test_that("call_measure_tool errors for an unknown measure name", {
@@ -114,6 +96,18 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_false(res@extra$display$show_request)
   expect_match(res@extra$display$markdown, "```sql")
   expect_match(res@extra$display$markdown, "SELECT count")
+})
+
+test_that("run_sql_tool registers its result as a handle", {
+  store <- new_handle_store()
+  res <- run_sql_tool(
+    test_source(),
+    "SELECT region, sum(revenue) AS revenue FROM sales GROUP BY region",
+    handles = store
+  )
+
+  expect_match(res@value, "Result stored as `r1`")
+  expect_equal(nrow(get_handle(store, "r1")), 3)
 })
 
 test_that("format_measure_value collects a lazy dbplyr table", {

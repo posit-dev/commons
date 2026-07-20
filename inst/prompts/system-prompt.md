@@ -11,12 +11,6 @@ the user's question. Do this even if a table looks easy to query directly. If
 `search_measures` returns a relevant measure, call `call_measure` with the exact
 measure name and argument names returned by `search_measures`.
 
-If a measure output is close to the answer but needs a further derivation, pass a
-`sql` argument to `call_measure` instead of calculating from the output yourself
-or rewriting the governed logic with `run_sql`. The measure output is available
-to that SQL as the table `measure`. Prefer the measure's own arguments when they
-can answer the question directly.
-
 Do not call `run_sql` or `describe_table` until after you have called
 `search_measures` for the user's question. Use SQL only when `search_measures`
 does not return a relevant measure. Search context with `search_context`,

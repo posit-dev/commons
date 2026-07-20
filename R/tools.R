@@ -40,28 +40,24 @@ tool_search_measures <- function(private) {
 
 tool_call_measure <- function(private) {
   ellmer::tool(
-    function(name, arguments = "{}", sql = NULL) {
+    function(name, arguments = "{}") {
       call_measure_tool(
         private$registry,
         name,
         arguments,
-        sql,
-        injections = private$injections
+        injections = private$injections,
+        handles = private$handles
       )
     },
     # For small registries, we may eventually expose each measure schema upfront
     # instead of relying on search_measures for discovery.
-    "Run a registered measure returned by search_measures. `arguments` is a JSON object using exactly the argument names from search_measures. If the measure output is close to the answer but needs a final filter, total, ratio, ranking, or other derivation, pass a read-only SELECT query in `sql`; the measure output is available as the table `measure`.",
+    "Run a registered measure returned by search_measures. `arguments` is a JSON object using exactly the argument names from search_measures.",
     arguments = list(
       name = ellmer::type_string(
         "The measure name, exactly as returned by search_measures."
       ),
       arguments = ellmer::type_string(
         "A JSON object of the measure's arguments."
-      ),
-      sql = ellmer::type_string(
-        "Optional read-only SELECT query to run against the measure output, exposed as the table `measure`. Prefer this over calculating from the measure output yourself when a governed measure gets close to the answer.",
-        required = FALSE
       )
     ),
     name = "call_measure",
@@ -124,7 +120,8 @@ tool_run_sql <- function(private) {
         resolve_sql_source(private$sources, source),
         sql,
         source_name = source,
-        tracker = private$first_touch
+        tracker = private$first_touch,
+        handles = private$handles
       )
     },
     "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
@@ -157,8 +154,8 @@ call_measure_tool <- function(
   registry,
   name,
   arguments,
-  sql = NULL,
-  injections = list()
+  injections = list(),
+  handles = NULL
 ) {
   td <- registry[[name]]
   if (is.null(td)) {
@@ -171,62 +168,16 @@ call_measure_tool <- function(
   }
   args <- validate_measure_args(td, parse_json_args(arguments))
   value <- do.call(td, c(args, injections[[name]]))
-  derived <- !is.null(sql) && !identical(sql, "")
-  if (derived) {
-    result <- query_measure_output(value, sql)
-    body <- df_to_markdown(result)
-    tag <- "B"
-    html <- measure_display_html(args, value, sql = sql, derived_value = result)
-  } else {
-    body <- format_measure_value(value)
-    tag <- "A"
-    html <- measure_display_html(args, value)
-  }
+  value <- collect_lazy_table(value)
+  advert <- register_handle(handles, value)
   tool_result(
-    body,
+    paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = sprintf("Measure: %s", html_escape(tool_title(td))),
     icon = maybe_icon("shield-check"),
-    html = html,
-    tag = tag,
+    html = measure_display_html(args, value),
+    tag = "A",
     show_tag = FALSE
   )
-}
-
-query_measure_output <- function(value, sql, call = rlang::caller_env()) {
-  check_query(sql, call = call)
-  df <- collect_measure_frame(value, call = call)
-
-  con <- duckdb_connect()
-  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-  duckdb_lock_down(con)
-
-  registered <- FALSE
-  tryCatch(
-    {
-      invisible(duckdb::duckdb_register(con, "measure", df))
-      registered <- TRUE
-      DBI::dbGetQuery(con, sql)
-    },
-    finally = {
-      if (registered) {
-        try(duckdb::duckdb_unregister(con, "measure"), silent = TRUE)
-      }
-    }
-  )
-}
-
-collect_measure_frame <- function(value, call = rlang::caller_env()) {
-  if (inherits(value, "tbl_sql")) {
-    rlang::check_installed("dplyr")
-    value <- dplyr::collect(value)
-  }
-  if (!is.data.frame(value)) {
-    cli::cli_abort(
-      "{.arg sql} can only be supplied when the measure returns a data frame or lazy table.",
-      call = call
-    )
-  }
-  as.data.frame(value)
 }
 
 search_context_tool <- function(context, query) {
@@ -282,13 +233,20 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   )
 }
 
-run_sql_tool <- function(source, sql, source_name = NULL, tracker = NULL) {
+run_sql_tool <- function(
+  source,
+  sql,
+  source_name = NULL,
+  tracker = NULL,
+  handles = NULL
+) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
   display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
+  advert <- register_handle(handles, res)
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
   tool_result(
-    paste(c(body, entries), collapse = "\n\n"),
+    paste(c(body, advert, entries), collapse = "\n\n"),
     title = sprintf("Ran SQL%s", source_label(source_name)),
     icon = maybe_icon("code-square"),
     markdown = display_md,
@@ -399,11 +357,16 @@ parse_json_args <- function(x) {
   as.list(jsonlite::fromJSON(x, simplifyVector = TRUE))
 }
 
-format_measure_value <- function(value) {
+collect_lazy_table <- function(value) {
   if (inherits(value, "tbl_sql")) {
     rlang::check_installed("dplyr")
     value <- dplyr::collect(value)
   }
+  value
+}
+
+format_measure_value <- function(value) {
+  value <- collect_lazy_table(value)
   if (is.data.frame(value)) {
     return(df_to_markdown(value))
   }
@@ -436,42 +399,25 @@ measure_args_html <- function(args) {
   sprintf("<div class=\"commons-measure-args\">%s</div>", rows)
 }
 
-measure_display_html <- function(args, value, sql = NULL, derived_value = NULL) {
-  result_label <- if (is.null(sql)) "Tool result" else "Measure result"
+measure_display_html <- function(args, value) {
   sprintf(
-    "<div class=\"commons-measure-display\">%s%s%s</div>",
+    "<div class=\"commons-measure-display\">%s%s</div>",
     measure_args_html(args),
-    measure_result_html(value, label = result_label),
-    measure_sql_html(sql, derived_value)
+    measure_result_html(value)
   )
 }
 
-measure_result_html <- function(value, label = "Tool result") {
+measure_result_html <- function(value) {
   sprintf(
-    "<div class=\"commons-measure-result\"><strong>%s</strong><div class=\"commons-measure-result-value\">%s</div></div>",
-    html_escape(label),
+    "<div class=\"commons-measure-result\"><strong>Tool result</strong><div class=\"commons-measure-result-value\">%s</div></div>",
     format_measure_html(value)
-  )
-}
-
-measure_sql_html <- function(sql, value) {
-  if (is.null(sql)) {
-    return("")
-  }
-  sprintf(
-    "<div class=\"commons-measure-sql\"><strong>Post-processing SQL</strong><pre><code>%s</code></pre></div>%s",
-    html_escape(sql),
-    measure_result_html(value, label = "Derived result")
   )
 }
 
 # Render a measure result for display: data frames become HTML tables; other
 # values reuse the text formatting, escaped for HTML.
 format_measure_html <- function(value) {
-  if (inherits(value, "tbl_sql")) {
-    rlang::check_installed("dplyr")
-    value <- dplyr::collect(value)
-  }
+  value <- collect_lazy_table(value)
   if (is.data.frame(value)) {
     return(df_to_html(value))
   }

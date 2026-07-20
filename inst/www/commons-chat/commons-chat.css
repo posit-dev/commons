@@ -141,8 +141,7 @@ shiny-tool-result,
 .shiny-tool-card .shiny-tool-result__request summary,
 .shiny-tool-card .shiny-tool-result__result > strong,
 .shiny-tool-card .shiny-tool-request__arguments > strong,
-.commons-measure-result > strong,
-.commons-measure-sql > strong {
+.commons-measure-result > strong {
   color: var(--bs-secondary-color, #6c757d);
   display: block;
   font-size: 0.72rem;
