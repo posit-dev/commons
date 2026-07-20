@@ -39,7 +39,7 @@ shinychat module server result.
 These functions wrap \code{\link[shinychat:chat_mod_ui]{shinychat::chat_mod_ui()}} and
 \code{\link[shinychat:chat_mod_server]{shinychat::chat_mod_server()}} with commons-specific answer provenance UI.
 Answers produced from registered measures get a compact verified-answer pill.
-Answers produced from fallback SQL get a caution pill with a review request.
+Answers produced from fallback SQL get a caution pill.
 }
 \examples{
 \dontrun{

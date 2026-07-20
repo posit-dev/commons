@@ -30,6 +30,23 @@
       Error in `commons()`:
       ! `semantic_layer` must be a `semantic_layer()`.
 
+---
+
+    Code
+      commons(client = test_client(), data_sources = test_source(), log = "yes")
+    Condition
+      Error in `commons()`:
+      ! `log` must be `TRUE` or `FALSE`.
+
+---
+
+    Code
+      commons(client = test_client(), data_sources = test_source(), log = TRUE,
+      share_with = 1)
+    Condition
+      Error in `commons()`:
+      ! `share_with` must be a character vector of Connect usernames.
+
 # commons() errors on injection parameters matching no name
 
     Code

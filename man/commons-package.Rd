@@ -12,6 +12,7 @@ Useful links:
 \itemize{
   \item \url{https://github.com/posit-dev/commons}
   \item \url{https://posit-dev.github.io/commons/}
+  \item \url{https://solid-adventure-ny1mpqy.pages.github.io/}
   \item Report bugs at \url{https://github.com/posit-dev/commons/issues}
 }
 

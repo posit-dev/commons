@@ -95,157 +95,6 @@ test_that("commons() accepts an empty semantic layer", {
   expect_s3_class(agent, "Commons")
 })
 
-test_that("default log directory can come from COMMONS_LOG_DIR", {
-  withr::local_envvar(COMMONS_LOG_DIR = NA)
-  expect_equal(commons_log_dir(), file.path(tempdir(), "commons-logs"))
-
-  path <- withr::local_tempdir()
-  withr::local_envvar(COMMONS_LOG_DIR = path)
-  expect_equal(commons_log_dir(), path)
-})
-
-test_that("local trajectory logs are replayed when read", {
-  path <- withr::local_tempdir()
-  chat <- test_client()
-  chat$add_turn(
-    ellmer::UserTurn("How many orders are there?"),
-    ellmer::AssistantTurn("There are 6 orders."),
-    log_tokens = FALSE
-  )
-
-  logger <- new_trajectory_logger(path)
-  record_trajectory(logger, chat)
-
-  logs <- read_trajectories(path)
-  expect_length(logs, 1)
-  expect_null(names(logs[[1]]))
-  expect_s7_class(logs[[1]][[1]], ellmer::UserTurn)
-  expect_s7_class(logs[[1]][[2]], ellmer::AssistantTurn)
-
-  replay <- test_client()
-  expect_no_error(replay$set_turns(logs[[1]]))
-  expect_equal(
-    replay$get_turns(include_system_prompt = TRUE),
-    logs[[1]]
-  )
-})
-
-test_that("trajectory recording does not return the local log path", {
-  path <- withr::local_tempdir()
-  chat <- test_client()
-  chat$add_turn(
-    ellmer::UserTurn("How many orders are there?"),
-    ellmer::AssistantTurn("There are 6 orders."),
-    log_tokens = FALSE
-  )
-
-  logger <- new_trajectory_logger(path)
-  expect_null(record_trajectory(logger, chat))
-})
-
-test_that("logged Claude streams do not append the local trajectory path", {
-  skip_if_not_installed("promises")
-  skip_if_not_installed("later")
-  skip_if(
-    !nzchar(Sys.getenv("ANTHROPIC_API_KEY")),
-    "ANTHROPIC_API_KEY is not available."
-  )
-
-  path <- withr::local_tempdir()
-  agent <- commons(
-    client = ellmer::chat_claude(
-      params = ellmer::params(temperature = 0, max_tokens = 32),
-      cache = "none"
-    ),
-    data_sources = test_source(),
-    log = path
-  )
-
-  chunks <- tryCatch(
-    sync_promise(coro::async_collect(agent$stream_async("Reply with only: ok"))),
-    error = function(err) {
-      skip(sprintf(
-        "ANTHROPIC_API_KEY is not functional: %s",
-        conditionMessage(err)
-      ))
-    }
-  )
-
-  expect_true(all(vapply(chunks, is.character, logical(1))))
-  expect_false(any(grepl("commons-trajectory", unlist(chunks), fixed = TRUE)))
-  expect_length(
-    list.files(path, pattern = "^commons-trajectory-.*[.]rds$"),
-    1
-  )
-})
-
-test_that("trajectory pins can be read from a board", {
-  skip_if_not_installed("pins")
-
-  board <- pins::board_temp()
-  chat <- test_client()
-  chat$add_turn(
-    ellmer::UserTurn("How many orders are there?"),
-    ellmer::AssistantTurn("There are 6 orders."),
-    log_tokens = FALSE
-  )
-
-  trajectory <- update_trajectory(
-    init_trajectory("test-conversation"),
-    chat
-  )
-  suppressMessages(
-    pins::pin_write(
-      board,
-      trajectory,
-      name = "commons-trajectory-test-conversation",
-      type = "rds"
-    )
-  )
-  suppressMessages(
-    pins::pin_write(board, list(x = 1), name = "not-a-trajectory", type = "rds")
-  )
-
-  logs <- read_trajectories(board)
-  expect_length(logs, 1)
-  expect_null(names(logs[[1]]))
-  expect_s7_class(logs[[1]][[1]], ellmer::UserTurn)
-  expect_s7_class(logs[[1]][[2]], ellmer::AssistantTurn)
-
-  replay <- test_client()
-  expect_no_error(replay$set_turns(logs[[1]]))
-  expect_equal(
-    replay$get_turns(include_system_prompt = TRUE),
-    logs[[1]]
-  )
-})
-
-test_that("Connect trajectory pins request ACL access", {
-  skip_if_not_installed("pins")
-
-  board <- pins::board_temp()
-  trajectory <- init_trajectory("test-conversation")
-
-  args <- pin_trajectory_write_args(board, "test-pin", trajectory)
-  expect_null(args$access_type)
-
-  class(board) <- c("pins_board_connect", class(board))
-  args <- pin_trajectory_write_args(board, "test-pin", trajectory)
-  expect_equal(args$access_type, "acl")
-})
-
-test_that("trajectory pin names fit Connect content name limits", {
-  withr::local_envvar(
-    CONNECT_CONTENT_GUID = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-  )
-
-  name <- trajectory_pin_name("20260624t124240-123-abcdefghij")
-
-  expect_lte(nchar(name), 64)
-  expect_match(name, "^[a-z0-9._-]+$")
-  expect_match(name, "^commons-trajectory-ea3c1445-")
-})
-
 test_that("commons() validates its inputs", {
   expect_snapshot(
     commons(client = "not a chat", data_sources = test_source()),
@@ -268,6 +117,19 @@ test_that("commons() validates its inputs", {
       client = test_client(),
       data_sources = test_source(),
       semantic_layer = list()
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(client = test_client(), data_sources = test_source(), log = "yes"),
+    error = TRUE
+  )
+  expect_snapshot(
+    commons(
+      client = test_client(),
+      data_sources = test_source(),
+      log = TRUE,
+      share_with = 1
     ),
     error = TRUE
   )

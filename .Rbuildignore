@@ -1,5 +1,6 @@
 ^commons\.Rproj$
 ^\.Rproj\.user$
+^\.claude$
 ^LICENSE\.md$
 ^README\.Rmd$
 ^cran-comments\.md$

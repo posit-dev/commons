@@ -28,7 +28,7 @@ test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,
   data_sources = list(sales_db = test_source()),
-  log = withr::local_tempdir(.local_envir = parent.frame())
+  log = FALSE
 ) {
   commons(
     test_client(),
@@ -37,6 +37,12 @@ test_agent <- function(
     semantic_layer = semantic_layer,
     log = log
   )
+}
+
+# share_trajectory_access() latches grants process-wide; tests that exercise
+# it start from a clean slate.
+clear_granted_access <- function() {
+  rm(list = ls(granted), envir = granted)
 }
 
 agent_tool <- function(agent, name) {
