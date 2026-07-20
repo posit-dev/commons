@@ -61,6 +61,26 @@
       i Enable Content Observability in this content's Settings > Advanced panel on Posit Connect, then redeploy or restart the content.
       i A server administrator may first need to set `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration.
 
+# tracing disabled on Connect flips the observability setting on
+
+    Code
+      .res <- new_trajectory_tracing(TRUE)
+    Condition
+      Warning:
+      Enabled Content Observability for this content, but this process started without it.
+      i Trajectory logging will begin once the content restarts.
+      i If it doesn't, a server administrator may need to set `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration.
+
+# an already-on observability setting warns about the restart
+
+    Code
+      .res <- new_trajectory_tracing(TRUE)
+    Condition
+      Warning:
+      Content Observability is enabled for this content, but this process started without OpenTelemetry tracing.
+      i Trajectory logging will begin once the content restarts.
+      i If it doesn't, a server administrator may need to set `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration.
+
 # share_trajectory_access warns off Connect
 
     Code

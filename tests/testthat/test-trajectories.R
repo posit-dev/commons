@@ -192,6 +192,34 @@ test_that("the latest chat span wins across timestamp digit counts", {
   expect_equal(final@text, "You rolled a 4.")
 })
 
+test_that("read_trajectories hints when no conversation carries content", {
+  path <- withr::local_tempdir()
+  withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
+  line <- otlp_test_line(list(
+    chat_test_span("t1", "s1"),
+    chat_test_span("t2", "s2")
+  ))
+  writeLines(line, file.path(path, "trace-0.jsonl"))
+
+  expect_snapshot(.res <- read_trajectories(path))
+  expect_length(.res, 0)
+})
+
+test_that("read_trajectories drops content-less conversations, keeping the rest", {
+  path <- withr::local_tempdir()
+  withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
+  json <- test_turn_json()
+  line <- otlp_test_line(list(
+    chat_test_span("t1", "s1", input_messages = json$input),
+    chat_test_span("t2", "s2")
+  ))
+  writeLines(line, file.path(path, "trace-0.jsonl"))
+
+  expect_snapshot(.res <- read_trajectories(path))
+  expect_length(.res, 1)
+  expect_s7_class(.res[[1]][[1]], ellmer::UserTurn)
+})
+
 test_that("read_trajectories returns an empty list for a missing directory", {
   expect_equal(read_trajectories(file.path(tempdir(), "nope")), list())
 })

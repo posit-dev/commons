@@ -39,10 +39,14 @@ test_agent <- function(
   )
 }
 
-# share_trajectory_access() latches grants process-wide; tests that exercise
-# it start from a clean slate.
+# share_trajectory_access() and enable_content_observability() latch
+# process-wide; tests that exercise them start from a clean slate.
 clear_granted_access <- function() {
   rm(list = ls(granted), envir = granted)
+}
+
+clear_observability_attempted <- function() {
+  rm(list = ls(observability), envir = observability)
 }
 
 agent_tool <- function(agent, name) {

@@ -53,7 +53,31 @@ read_trajectories <- function(source = NULL) {
       connect_trace_lines(resolved$client, resolved$guid)
     )
   )
-  build_trajectories(spans)
+  drop_contentless(build_trajectories(spans))
+}
+
+# Chat spans emitted without message content -- capture was off, or the spans
+# came from a non-commons emitter -- reconstruct to zero turns. Returning
+# them as empty conversations reads like data loss, so drop them, pointing
+# at the likely cause when nothing at all carried content.
+drop_contentless <- function(trajectories) {
+  empty <- vapply(trajectories, function(turns) length(turns) == 0, logical(1))
+  if (length(trajectories) > 0 && all(empty)) {
+    cli::cli_warn(c(
+      "Found {length(trajectories)} conversation{?s} of spans, but none carry
+       message content; returning none.",
+      i = "Message content is captured only when the agent runs with
+           {.code log = TRUE} while OpenTelemetry tracing is active. On Posit
+           Connect, check the app's startup log for warnings from
+           {.fn commons}."
+    ))
+  } else if (any(empty)) {
+    cli::cli_inform(
+      "Dropping {sum(empty)} conversation{?s} whose spans carry no message
+       content."
+    )
+  }
+  trajectories[!empty]
 }
 
 resolve_trajectory_source <- function(source, call = rlang::caller_env()) {

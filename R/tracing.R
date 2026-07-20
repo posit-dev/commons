@@ -49,7 +49,11 @@ new_trajectory_tracing <- function(
   }
 
   if (!otel::is_tracing_enabled()) {
-    warn_tracing_disabled()
+    if (is_connect_runtime()) {
+      enable_content_observability()
+    } else {
+      warn_tracing_disabled()
+    }
     return(FALSE)
   }
 
@@ -201,6 +205,58 @@ reset_otel_tracer_provider <- function() {
   )
   invisible(NULL)
 }
+
+# Tracing is off on Connect either because this content's Content
+# Observability setting is off or because the server disallows content
+# instrumentation. The setting is editable over the API with the ephemeral,
+# owner-scoped CONNECT_API_KEY that Connect provides to running content
+# (Applications.DefaultAPIKeyEnv, on by default), so flip it on here rather
+# than sending the publisher to the dashboard. This process still can't
+# trace -- Connect only injects the exporter configuration into processes
+# started after enablement -- so warn about the restart and leave tracing
+# off. Attempted once per process: agents are typically constructed per
+# Shiny session, and each would otherwise repeat the API calls.
+enable_content_observability <- function() {
+  if (isTRUE(observability$attempted)) {
+    return(invisible(NULL))
+  }
+  observability$attempted <- TRUE
+
+  toggled <- tryCatch(
+    {
+      client <- connect_client()
+      guid <- connect_content_guid()
+      already_on <- isTRUE(connect_content(client, guid)$otel_enabled)
+      if (!already_on) {
+        connect_enable_otel(client, guid)
+      }
+      if (already_on) "already_on" else "toggled"
+    },
+    error = function(err) NULL
+  )
+
+  if (is.null(toggled)) {
+    warn_tracing_disabled()
+    return(invisible(NULL))
+  }
+
+  cli::cli_warn(c(
+    if (toggled == "toggled") {
+      "Enabled {.emph Content Observability} for this content, but this
+       process started without it."
+    } else {
+      "{.emph Content Observability} is enabled for this content, but this
+       process started without OpenTelemetry tracing."
+    },
+    i = "Trajectory logging will begin once the content restarts.",
+    i = "If it doesn't, a server administrator may need to set
+         {.code OpenTelemetry.AllowContentInstrumentation = true} in the
+         Connect configuration."
+  ))
+  invisible(NULL)
+}
+
+observability <- new.env(parent = emptyenv())
 
 warn_tracing_disabled <- function() {
   if (is_connect_runtime()) {

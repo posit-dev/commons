@@ -75,6 +75,20 @@ connect_trace_lines <- function(
   lines
 }
 
+connect_content <- function(client, guid) {
+  connect_req(client, "content", guid) |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
+}
+
+connect_enable_otel <- function(client, guid) {
+  connect_req(client, "content", guid) |>
+    httr2::req_method("PATCH") |>
+    httr2::req_body_json(list(otel_enabled = TRUE)) |>
+    httr2::req_perform()
+  invisible(NULL)
+}
+
 # An auth failure on the traces endpoint nearly always means the API key's
 # user fails the endpoint's editor-level permission check, not that traces
 # don't exist; say so rather than surfacing a bare 401/403.

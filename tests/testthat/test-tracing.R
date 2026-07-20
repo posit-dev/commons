@@ -38,15 +38,64 @@ test_that("log = TRUE warns when tracing stays disabled locally", {
 test_that("log = TRUE points at Content Observability on Connect", {
   skip_if_not_installed("otel")
   withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
-  local_enabled <- FALSE
+  clear_observability_attempted()
+  state <- new.env()
+  state$local_enabled <- FALSE
   local_mocked_bindings(
     enable_content_capture = function() NULL,
-    enable_local_tracing = function() local_enabled <<- TRUE
+    enable_local_tracing = function() state$local_enabled <- TRUE,
+    connect_client = function(...) rlang::abort("no api key")
   )
 
   expect_snapshot(.res <- new_trajectory_tracing(TRUE))
   expect_false(.res)
-  expect_false(local_enabled)
+  expect_false(state$local_enabled)
+})
+
+test_that("tracing disabled on Connect flips the observability setting on", {
+  skip_if_not_installed("otel")
+  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  clear_observability_attempted()
+  state <- new.env()
+  state$patched <- 0
+  local_mocked_bindings(
+    enable_content_capture = function() NULL,
+    connect_client = function(...) list(server = "s", api_key = "k"),
+    connect_content = function(client, guid) list(otel_enabled = FALSE),
+    connect_enable_otel = function(client, guid) {
+      state$patched <- state$patched + 1
+      invisible(NULL)
+    }
+  )
+
+  expect_snapshot(.res <- new_trajectory_tracing(TRUE))
+  expect_false(.res)
+  expect_equal(state$patched, 1)
+
+  # Later constructions in the same process skip the API calls.
+  expect_no_warning(.res <- new_trajectory_tracing(TRUE))
+  expect_equal(state$patched, 1)
+})
+
+test_that("an already-on observability setting warns about the restart", {
+  skip_if_not_installed("otel")
+  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  clear_observability_attempted()
+  state <- new.env()
+  state$patched <- 0
+  local_mocked_bindings(
+    enable_content_capture = function() NULL,
+    connect_client = function(...) list(server = "s", api_key = "k"),
+    connect_content = function(client, guid) list(otel_enabled = TRUE),
+    connect_enable_otel = function(client, guid) {
+      state$patched <- state$patched + 1
+      invisible(NULL)
+    }
+  )
+
+  expect_snapshot(.res <- new_trajectory_tracing(TRUE))
+  expect_false(.res)
+  expect_equal(state$patched, 0)
 })
 
 test_that("enable_local_tracing configures the file exporter when unset", {
@@ -192,6 +241,7 @@ test_that("share_with grants wait for tracing to be live", {
   state$shared <- FALSE
   local_mocked_bindings(
     enable_content_capture = function() NULL,
+    enable_content_observability = function() NULL,
     share_trajectory_access = function(share_with) state$shared <- TRUE
   )
 

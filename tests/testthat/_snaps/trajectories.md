@@ -1,3 +1,19 @@
+# read_trajectories hints when no conversation carries content
+
+    Code
+      .res <- read_trajectories(path)
+    Condition
+      Warning:
+      Found 2 conversations of spans, but none carry message content; returning none.
+      i Message content is captured only when the agent runs with `log = TRUE` while OpenTelemetry tracing is active. On Posit Connect, check the app's startup log for warnings from `commons()`.
+
+# read_trajectories drops content-less conversations, keeping the rest
+
+    Code
+      .res <- read_trajectories(path)
+    Message
+      Dropping 1 conversation whose spans carry no message content.
+
 # read_trajectories validates source
 
     Code

@@ -20,9 +20,10 @@
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
 #'   id; the spans go wherever OTel is configured to export. On Posit Connect,
-#'   enable *Content Observability* in the content's *Settings > Advanced*
-#'   panel and traces land in Connect's observability store (browsable in its
-#'   Trace Viewer). Locally, commons configures \pkg{otelsdk}'s file exporter
+#'   traces land in Connect's observability store (browsable in its Trace
+#'   Viewer); commons switches on the content's *Content Observability*
+#'   setting itself when needed, though capture only starts once the content
+#'   restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
 #'   automatically when no exporter is set up. Read trajectories back with
 #'   [read_trajectories()].
 #' @param share_with An optional character vector of Connect usernames granted

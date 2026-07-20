@@ -31,9 +31,10 @@ can take a source's connection as an argument named after the source; see
 (default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content
 capture in \pkg{ellmer} and tags each turn's spans with a conversation
 id; the spans go wherever OTel is configured to export. On Posit Connect,
-enable \emph{Content Observability} in the content's \emph{Settings > Advanced}
-panel and traces land in Connect's observability store (browsable in its
-Trace Viewer). Locally, commons configures \pkg{otelsdk}'s file exporter
+traces land in Connect's observability store (browsable in its Trace
+Viewer); commons switches on the content's \emph{Content Observability}
+setting itself when needed, though capture only starts once the content
+restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
 automatically when no exporter is set up. Read trajectories back with
 \code{\link[=read_trajectories]{read_trajectories()}}.}
 
