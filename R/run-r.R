@@ -51,7 +51,7 @@ run_r_tool <- function(worker, handles, code) {
         # callr rebinds a transferred function's environment to the worker's
         # global env, so the entry point must be namespace-qualified.
         worker$rs$call(
-          function(...) commons:::worker_run_code(...),
+          worker_run_code,
           args = list(
             code = code,
             new_handles = new_handles,
@@ -217,13 +217,30 @@ worker_ensure <- function(worker) {
     callr::r_session_options(env = worker_scrubbed_env(work_dir)),
     wait = TRUE
   )
+  # callr rebinds a transferred function's environment to the worker's global
+  # env, and the worker starts with a scrubbed, minimal package set, so the
+  # worker entry points are self-contained (no commons internals by name). The
+  # sandbox is reached by loading commons's compiled library by path, which
+  # works whether commons is installed or loaded via load_all().
   rs$run(
-    function(...) commons:::worker_init(...),
-    args = list(parent_tmp = tempdir(), work_dir = work_dir)
+    worker_init,
+    args = list(
+      parent_tmp = tempdir(),
+      work_dir = work_dir,
+      dll_path = commons_dll_path()
+    )
   )
   worker$rs <- rs
   worker$synced <- 0L
   invisible(worker)
+}
+
+commons_dll_path <- function() {
+  dll <- getLoadedDLLs()[["commons"]]
+  if (is.null(dll)) {
+    return(NA_character_)
+  }
+  dll[["path"]]
 }
 
 worker_close <- function(worker) {
@@ -381,14 +398,41 @@ plot_dimensions <- function(ratio, longest_side) {
 }
 
 # --- worker side -------------------------------------------------------------
-# Everything below runs inside the callr worker process.
+# Everything below runs inside the callr worker process, whose closure
+# environment is reset to the global env, so these reference only base R,
+# `pkg::fn`, and their own arguments — no commons internals.
 
-worker_init <- function(parent_tmp, work_dir) {
+worker_init <- function(parent_tmp, work_dir, dll_path) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
+  if (!identical(Sys.info()[["sysname"]], "Linux") || is.na(dll_path)) {
+    return(invisible(FALSE))
+  }
+  if (!("commons" %in% names(getLoadedDLLs()))) {
+    dyn.load(dll_path)
+  }
+  # Landlock resolves symlinks, and Connect's packrat library is a farm of
+  # symlinks into a shared cache, so grant the resolved package paths too.
+  pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
+  resolved <- vapply(
+    pkg_dirs,
+    function(p) tryCatch(normalizePath(p), error = function(e) p),
+    character(1),
+    USE.NAMES = FALSE
+  )
+  read_roots <- unique(c(
+    R.home(),
+    .libPaths(),
+    resolved,
+    "/usr", "/lib", "/lib64", "/etc", "/opt/R"
+  ))
+  read_roots <- read_roots[dir.exists(read_roots)]
   # callr writes its per-call result files into the parent's tempdir, so the
   # worker must be able to write there for results to make it back.
-  sandbox_engage(sandbox_read_roots(), c(parent_tmp, work_dir))
+  write_roots <- unique(c(parent_tmp, work_dir))
+  sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
+  .Call(sym, read_roots, write_roots, NULL)
+  invisible(TRUE)
 }
 
 worker_run_code <- function(code, new_handles, plot_width, plot_height) {
@@ -399,6 +443,14 @@ worker_run_code <- function(code, new_handles, plot_width, plot_height) {
   segments <- list()
   add <- function(type, ...) {
     segments[[length(segments) + 1L]] <<- list(type = type, ...)
+  }
+
+  # evaluate emits a recordedplot per plot-modifying step; only flush the
+  # prior state when the new one doesn't build on it (btw's run_r prior art).
+  is_prefix <- function(x, y) {
+    x <- x[[1]]
+    y <- y[[1]]
+    length(x) <= length(y) && identical(x[], y[seq_along(x)])
   }
 
   last_plot <- NULL
@@ -430,7 +482,7 @@ worker_run_code <- function(code, new_handles, plot_width, plot_height) {
       text
     },
     graphics = function(plot) {
-      if (!is.null(last_plot) && !is_plot_prefix(last_plot, plot)) {
+      if (!is.null(last_plot) && !is_prefix(last_plot, plot)) {
         flush_plot()
       }
       last_plot <<- plot
@@ -476,12 +528,4 @@ worker_run_code <- function(code, new_handles, plot_width, plot_height) {
   flush_plot()
 
   list(segments = segments)
-}
-
-# evaluate emits a recordedplot per plot-modifying step; only flush the prior
-# state when the new one doesn't build on it. See btw's run_r for prior art.
-is_plot_prefix <- function(x, y) {
-  x <- x[[1]]
-  y <- y[[1]]
-  length(x) <= length(y) && identical(x[], y[seq_along(x)])
 }
