@@ -38,9 +38,8 @@ test_that("commons() returns a Chat subclass with the six fixed tools", {
   )
 })
 
-test_that("the system prompt includes tables, context, and measure workflow", {
+test_that("the system prompt includes tables, the date, and measure workflow", {
   agent <- test_agent(
-    context_layer = context_layer(always = "Booked revenue excludes tax."),
     semantic_layer = semantic_layer(
       measure(
         "order_count",
@@ -54,11 +53,50 @@ test_that("the system prompt includes tables, context, and measure workflow", {
 
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
-  expect_match(prompt, "Booked revenue excludes tax")
+  expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
   expect_match(prompt, "your first tool call must be `search_measures`")
   expect_match(prompt, "Do not call `run_sql` or `describe_table`")
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")
+})
+
+test_that("a custom system prompt replaces the packaged one", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("You answer questions about {{org}}'s data.", path)
+
+  agent <- test_agent(
+    system_prompt = ellmer::interpolate_file(path, org = "Acme")
+  )
+  prompt <- agent$get_system_prompt()
+
+  expect_match(prompt, "about Acme's data", fixed = TRUE)
+  expect_no_match(prompt, "search_measures")
+  expect_match(prompt, "# Available tables", fixed = TRUE)
+  expect_match(prompt, "- sales", fixed = TRUE)
+})
+
+test_that("a system prompt already set on the client warns", {
+  client <- test_client()
+  client$set_system_prompt("You are a pirate.")
+
+  expect_warning(
+    commons(client, data_sources = list(sales_db = test_source())),
+    "commons builds its own"
+  )
+})
+
+test_that("system_prompt is validated", {
+  expect_error(
+    test_agent(system_prompt = c("a", "b")),
+    "single string"
+  )
+
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("A prompt.", path)
+  expect_error(
+    test_agent(system_prompt = path),
+    "not a file path"
+  )
 })
 
 test_that("the system prompt includes schema-qualified table labels", {

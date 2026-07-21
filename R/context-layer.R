@@ -4,24 +4,22 @@
 #' data source.
 #'
 #' Files are chunked and indexed with \pkg{ragnar} when the agent first
-#' searches its context. The `always` argument is for short facts that should
-#' be included in every system prompt.
+#' searches its context. Facts that should be in every prompt belong in the
+#' `system_prompt` passed to [commons()], not here.
 #'
 #' @param files Character vector of paths to text/markdown files to index.
-#' @param always Character vector of facts to inject into the system prompt on
-#'   every turn. Optional.
 #'
 #' @return A `commons_context_layer` object.
 #'
 #' @examples
-#' layer <- context_layer(
-#'   always = "Revenue excludes tax unless stated otherwise."
-#' )
+#' path <- tempfile(fileext = ".md")
+#' writeLines("Revenue excludes tax unless stated otherwise.", path)
+#' layer <- context_layer(files = path)
 #'
 #' @export
-context_layer <- function(files = character(), always = character()) {
-  if (!is.character(files) || !is.character(always)) {
-    cli::cli_abort("{.arg files} and {.arg always} must be character vectors.")
+context_layer <- function(files = character()) {
+  if (!is.character(files)) {
+    cli::cli_abort("{.arg files} must be a character vector.")
   }
 
   # Read eagerly so a bad path fails at construction; index lazily (see
@@ -34,7 +32,7 @@ context_layer <- function(files = character(), always = character()) {
     }
   }
 
-  new_context_layer(docs, always)
+  new_context_layer(docs)
 }
 
 # Dictionary prose doubles as searchable context, inserted at natural YAML
@@ -52,12 +50,12 @@ augment_context_layer <- function(context_layer, sources) {
   }
 
   layer <- context_layer %||% context_layer()
-  new_context_layer(c(layer$docs, chunks), layer$always)
+  new_context_layer(c(layer$docs, chunks))
 }
 
-new_context_layer <- function(docs, always) {
+new_context_layer <- function(docs) {
   structure(
-    list(docs = docs, always = always, cache = new.env(parent = emptyenv())),
+    list(docs = docs, cache = new.env(parent = emptyenv())),
     class = "commons_context_layer"
   )
 }

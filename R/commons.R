@@ -9,13 +9,37 @@
 #' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
-#'   [ellmer::chat_anthropic()].
+#'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
+#'   ignored, with a warning; use `system_prompt` instead.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()]. When there are several sources, the `run_sql` and
 #'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
+#' @param system_prompt The agent's system prompt, as a single string. The
+#'   default interpolates the markdown prompt shipped with commons, filling
+#'   its `{{date}}` keyword. To customize the prompt, copy that file into
+#'   your project, edit freely, and interpolate it yourself:
+#'
+#'   ```r
+#'   file.copy(
+#'     system.file("prompts/system-prompt.md", package = "commons"),
+#'     "system-prompt.md"
+#'   )
+#'   commons(
+#'     # ...
+#'     system_prompt = ellmer::interpolate_file(
+#'       "system-prompt.md",
+#'       date = Sys.Date()
+#'     )
+#'   )
+#'   ```
+#'
+#'   Pass values for any `{{keyword}}` tokens you add as arguments to
+#'   [ellmer::interpolate_file()]. commons appends documentation of the
+#'   available tables and data dictionaries to the prompt itself; the file
+#'   needn't (and shouldn't) describe them.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -91,6 +115,10 @@ commons <- function(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  system_prompt = ellmer::interpolate_file(
+    system.file("prompts/system-prompt.md", package = "commons"),
+    date = Sys.Date()
+  ),
   log = FALSE,
   share_with = NULL
 ) {
@@ -99,10 +127,20 @@ commons <- function(
       "{.arg client} must be an {.cls ellmer::Chat}, e.g. from {.fn ellmer::chat_anthropic}."
     )
   }
+  if (!is.null(client$get_system_prompt())) {
+    cli::cli_warn(
+      c(
+        "The system prompt set on {.arg client} is ignored; commons builds
+         its own.",
+        i = "Pass it to the {.arg system_prompt} argument instead."
+      )
+    )
+  }
   data_sources <- as_data_sources(data_sources)
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
+  check_system_prompt(system_prompt)
   check_log(log)
   check_share_with(share_with)
 
@@ -111,6 +149,7 @@ commons <- function(
     data_sources = data_sources,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
+    system_prompt = system_prompt,
     log = log,
     share_with = share_with
   )
@@ -124,13 +163,17 @@ Commons <- R6::R6Class(
   public = list(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
-    #' @param client,data_sources,context_layer,semantic_layer,log,share_with
+    #' @param client,data_sources,context_layer,semantic_layer,system_prompt,log,share_with
     #'   See [commons()].
     initialize = function(
       client,
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
+      system_prompt = ellmer::interpolate_file(
+        system.file("prompts/system-prompt.md", package = "commons"),
+        date = Sys.Date()
+      ),
       log = FALSE,
       share_with = NULL
     ) {
@@ -154,7 +197,7 @@ Commons <- R6::R6Class(
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
-        commons_system_prompt(private$sources, private$context_layer)
+        commons_system_prompt(private$sources, system_prompt)
       )
     },
 
