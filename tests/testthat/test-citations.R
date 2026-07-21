@@ -7,10 +7,27 @@ test_that("extract_citations pulls quotes in order", {
 
   expect_equal(
     extract_citations(text),
-    c("Revenue excludes tax.", "Orders are counted\nper line item.")
+    list(
+      list(quote = "Revenue excludes tax.", reason = NA_character_),
+      list(quote = "Orders are counted\nper line item.", reason = NA_character_)
+    )
   )
-  expect_equal(extract_citations("No citations here."), character())
-  expect_equal(extract_citations(character()), character())
+  expect_equal(extract_citations("No citations here."), list())
+  expect_equal(extract_citations(character()), list())
+})
+
+test_that("extract_citations reads the reason attribute", {
+  text <- paste0(
+    '<citation reason="Definition followed">Revenue excludes tax.</citation>\n',
+    "<citation reason='documented caveat'>Refunds are negative rows.</citation>\n",
+    "<citation>No reason given.</citation>"
+  )
+
+  citations <- extract_citations(text)
+
+  expect_equal(citations[[1]]$reason, "Definition followed")
+  expect_equal(citations[[2]]$reason, "documented caveat")
+  expect_true(is.na(citations[[3]]$reason))
 })
 
 test_that("extraction skips markup inside code and tolerates tag variants", {
@@ -20,7 +37,10 @@ test_that("extraction skips markup inside code and tolerates tag variants", {
     "<CITATION >Revenue excludes tax.</citation >"
   )
 
-  expect_equal(extract_citations(text), "Revenue excludes tax.")
+  expect_equal(
+    extract_citations(text),
+    list(list(quote = "Revenue excludes tax.", reason = NA_character_))
+  )
 })
 
 test_that("answer_citations verifies quotes against the corpus", {
@@ -29,7 +49,7 @@ test_that("answer_citations verifies quotes against the corpus", {
     list(label = "measure 'order_count'", text = "order_count\nCount of orders, per line item.")
   )
   text <- paste0(
-    "<citation>Refunds are negative rows.</citation>",
+    '<citation reason="Refund handling">Refunds are negative rows.</citation>',
     "<citation>Count of orders, per line item.</citation>",
     "<citation>Entirely fabricated support.</citation>"
   )
@@ -38,7 +58,9 @@ test_that("answer_citations verifies quotes against the corpus", {
 
   expect_length(citations, 3)
   expect_equal(citations[[1]]$label, "context layer")
+  expect_equal(citations[[1]]$reason, "Refund handling")
   expect_equal(citations[[2]]$label, "measure 'order_count'")
+  expect_true(is.na(citations[[2]]$reason))
   expect_false(citations[[3]]$verified)
 })
 
@@ -157,7 +179,7 @@ test_that("add_citation_request appends once per conversation", {
   second <- add_citation_request(second, tracker)
 
   expect_match(first@value, "6 rows")
-  expect_match(first@value, "<citation>", fixed = TRUE)
+  expect_match(first@value, "<citation ", fixed = TRUE)
   expect_equal(second@value, "3 rows")
 })
 
@@ -172,5 +194,5 @@ test_that("add_citation_request appends ContentText to content lists", {
   result <- add_citation_request(result, tracker)
 
   expect_length(result@value, 2)
-  expect_match(result@value[[2]]@text, "<citation>", fixed = TRUE)
+  expect_match(result@value[[2]]@text, "<citation ", fixed = TRUE)
 })

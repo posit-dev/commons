@@ -1,7 +1,9 @@
 # Fallback answers can cite the trusted text that backs them: the model ends
-# its reply with <citation>exact text</citation> elements, and commons verifies
-# each quote against the corpus of text the agent could have drawn on. See
-# derive_provenance() for how verification affects an answer's provenance tag.
+# its reply with <citation reason="...">exact text</citation> elements, and
+# commons verifies each quote against the corpus of text the agent could have
+# drawn on. Only the quote is verified; the reason is unverified model
+# commentary shown alongside it. See derive_provenance() for how verification
+# affects an answer's provenance tag.
 
 # Everything citable: context layer docs, always-on facts, measure schemas
 # (as search_measures presents them), and dictionary entries (as first touch
@@ -52,7 +54,7 @@ build_citation_corpus <- function(context_layer, registry, sources) {
 # whitespace are tolerated the way an HTML parser tolerates them.
 extract_citations <- function(text) {
   if (length(text) == 0) {
-    return(character())
+    return(list())
   }
   text <- paste(text, collapse = "\n")
   text <- gsub("(?s)```.*?```", "", text, perl = TRUE)
@@ -61,17 +63,43 @@ extract_citations <- function(text) {
     text,
     gregexpr("(?si)<citation\\b[^>]*>.*?</citation\\s*>", text, perl = TRUE)
   )[[1]]
-  quotes <- sub("(?i)^<citation\\b[^>]*>", "", matches, perl = TRUE)
-  sub("(?i)</citation\\s*>$", "", quotes, perl = TRUE)
+  lapply(matches, function(match) {
+    opening <- regmatches(
+      match,
+      regexpr("(?i)^<citation\\b[^>]*>", match, perl = TRUE)
+    )
+    quote <- sub("(?i)^<citation\\b[^>]*>", "", match, perl = TRUE)
+    list(
+      quote = sub("(?i)</citation\\s*>$", "", quote, perl = TRUE),
+      reason = citation_reason(opening)
+    )
+  })
+}
+
+citation_reason <- function(opening) {
+  match <- regmatches(
+    opening,
+    regexec("(?i)\\breason\\s*=\\s*(\"[^\"]*\"|'[^']*')", opening, perl = TRUE)
+  )[[1]]
+  if (length(match) == 0) {
+    return(NA_character_)
+  }
+  value <- match[[2]]
+  trimws(substr(value, 2, nchar(value) - 1))
 }
 
 # All extracted citations, each verified against the corpus. Unverified
 # entries and their order are kept for the client's positional replacement of
 # the rendered <citation> elements (see applyCitations in commons-chat.js).
 answer_citations <- function(text, corpus) {
-  lapply(extract_citations(text), function(quote) {
-    label <- match_citation(quote, corpus)
-    list(quote = quote, label = label, verified = !is.na(label))
+  lapply(extract_citations(text), function(citation) {
+    label <- match_citation(citation$quote, corpus)
+    list(
+      quote = citation$quote,
+      reason = citation$reason,
+      label = label,
+      verified = !is.na(label)
+    )
   })
 }
 

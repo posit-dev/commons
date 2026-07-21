@@ -26,16 +26,27 @@ test_that("cited fallback answers get footnotes rather than a pill", {
 
 test_that("citations_payload aligns entries with the answer's citations", {
   payload <- citations_payload(list(
-    list(quote = "Revenue  excludes tax.", label = "context layer", verified = TRUE),
-    list(quote = "Made up.", label = NA_character_, verified = FALSE)
+    list(
+      quote = "Revenue  excludes tax.",
+      reason = "Definition followed",
+      label = "context layer",
+      verified = TRUE
+    ),
+    list(
+      quote = "Made up.",
+      reason = NA_character_,
+      label = NA_character_,
+      verified = FALSE
+    )
   ))
 
   expect_length(payload, 2)
   expect_true(payload[[1]]$verified)
-  expect_match(payload[[1]]$tooltip, "Revenue excludes tax")
-  expect_match(payload[[1]]$tooltip, "context layer")
+  expect_equal(payload[[1]]$quote, "Revenue excludes tax.")
+  expect_equal(payload[[1]]$reason, "Definition followed")
+  expect_equal(payload[[1]]$label, "context layer")
   expect_false(payload[[2]]$verified)
-  expect_null(payload[[2]]$tooltip)
+  expect_null(payload[[2]]$quote)
 })
 
 test_that("chat UI preserves shinychat's top-level fill container", {

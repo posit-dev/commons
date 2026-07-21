@@ -229,8 +229,8 @@ test_that("run_sql delivers the citation request once per conversation", {
   first <- run_sql("SELECT count(*) AS n FROM sales")
   second <- run_sql("SELECT count(*) AS n FROM sales")
 
-  expect_match(first@value, "<citation>", fixed = TRUE)
-  expect_no_match(second@value, "<citation>", fixed = TRUE)
+  expect_match(first@value, "<citation ", fixed = TRUE)
+  expect_no_match(second@value, "<citation ", fixed = TRUE)
 })
 
 test_that("the system prompt groups tables when there are several sources", {

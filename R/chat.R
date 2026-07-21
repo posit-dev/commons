@@ -135,17 +135,19 @@ seed_commons_pills <- function(session, client) {
   )
 }
 
+# The client assembles the footnote tooltip from these fields (see
+# footnote() in commons-chat.js); unverified entries carry nothing but
+# their position.
 citations_payload <- function(citations) {
   lapply(citations, function(citation) {
+    if (!citation$verified) {
+      return(list(verified = FALSE))
+    }
     list(
-      verified = citation$verified,
-      tooltip = if (citation$verified) {
-        sprintf(
-          "\u201c%s\u201d \u2014 %s",
-          normalize_citation(citation$quote),
-          citation$label
-        )
-      }
+      verified = TRUE,
+      reason = if (!is.na(citation$reason)) citation$reason,
+      quote = normalize_citation(citation$quote),
+      label = citation$label
     )
   })
 }
