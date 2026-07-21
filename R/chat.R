@@ -1,33 +1,31 @@
-#' Shiny module for commons agents
+#' Shiny chat UI and server for commons agents
 #'
-#' These functions wrap [shinychat::chat_mod_ui()] and
-#' [shinychat::chat_mod_server()] with commons-specific answer provenance UI.
-#' Answers produced from registered measures get a compact verified-answer
-#' pill. Answers produced from fallback SQL or R can cite text from the
-#' agent's context, measure definitions, or data documentation; verified
-#' citations render as footnotes whose tooltips name their source. Fallback
-#' answers with no verified citation get a potentially-untrusted caution pill.
+#' These functions wrap [shinychat::chat_ui()] and [shinychat::chat_server()]
+#' with commons-specific answer provenance UI. Answers produced from
+#' registered measures get a compact verified-answer pill. Answers produced
+#' from fallback SQL or R can cite text from the agent's context, measure
+#' definitions, or data documentation; verified citations render as footnotes
+#' whose tooltips name their source. Fallback answers with no verified
+#' citation get a potentially-untrusted caution pill.
 #'
-#' @param id Module ID.
-#' @param ... Arguments passed to [shinychat::chat_mod_ui()] or
-#'   [shinychat::chat_mod_server()].
+#' @param id The ID of the chat element; must match between `commons_ui()`
+#'   and `commons_server()`.
+#' @param ... Extra HTML attributes passed to [shinychat::chat_ui()].
 #' @param messages Initial messages shown in the chat. Passed to
-#'   [shinychat::chat_mod_ui()].
+#'   [shinychat::chat_ui()].
 #' @param height Chat container height. Defaults to `"100%"` so the chat input
 #'   stays docked at the bottom of fill layouts.
 #' @param client A [commons()] agent. Create a new agent for each Shiny session.
-#' @param bookmark_on_input,bookmark_on_response Whether to add Shiny
-#'   bookmarking hooks for user inputs and assistant responses.
 #'
-#' @return `commons_mod_ui()` returns UI. `commons_mod_server()` returns the
-#'   shinychat module server result.
+#' @return `commons_ui()` returns UI. `commons_server()` returns the
+#'   [shinychat::chat_server()] result.
 #'
 #' @examples
 #' \dontrun{
 #' library(shiny)
 #'
 #' ui <- page_fillable(
-#'   commons_mod_ui("chat")
+#'   commons_ui("chat")
 #' )
 #'
 #' server <- function(input, output, session) {
@@ -35,27 +33,22 @@
 #'     ellmer::chat_anthropic(),
 #'     data_sources = data_source(sales = sales)
 #'   )
-#'   commons_mod_server("chat", agent)
+#'   commons_server("chat", agent)
 #' }
 #'
 #' shinyApp(ui, server)
 #' }
 #'
 #' @export
-commons_mod_ui <- function(id, ..., messages = NULL, height = "100%") {
+commons_ui <- function(id, ..., messages = NULL, height = "100%") {
   check_chat_packages()
-  ui <- shinychat::chat_mod_ui(id, ..., messages = messages, height = height)
+  ui <- shinychat::chat_ui(id, ..., messages = messages, height = height)
   htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
 }
 
-#' @rdname commons_mod_ui
+#' @rdname commons_ui
 #' @export
-commons_mod_server <- function(
-  id,
-  client,
-  bookmark_on_input = TRUE,
-  bookmark_on_response = TRUE
-) {
+commons_server <- function(id, client) {
   check_chat_packages()
   check_commons_client(client)
 
@@ -67,37 +60,35 @@ commons_mod_server <- function(
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
 
-  mod <- shinychat::chat_mod_server(
-    id,
-    client = client,
-    bookmark_on_input = bookmark_on_input,
-    bookmark_on_response = bookmark_on_response
-  )
+  chat <- shinychat::chat_server(id, client = client)
 
-  shiny::moduleServer(id, function(input, output, session) {
-    session$onFlushed(function() {
-      seed_commons_pills(session, client)
-    }, once = TRUE)
+  session <- shiny::getDefaultReactiveDomain()
 
-    shiny::observeEvent(mod$last_turn(), {
-      provenance <- commons_last_provenance(client)
-      if (is.na(provenance$tag)) {
-        return()
-      }
+  shiny::observeEvent(chat$last_turn(), ignoreNULL = TRUE, {
+    provenance <- commons_last_provenance(client)
+    if (is.na(provenance$tag)) {
+      return()
+    }
 
-      send_commons_pill(session, provenance)
-    }, ignoreNULL = TRUE)
+    send_commons_pill(session, id, provenance)
   })
 
-  mod
+  session$onFlushed(
+    function() {
+      seed_commons_pills(session, id, client)
+    },
+    once = TRUE
+  )
+
+  chat
 }
 
-send_commons_pill <- function(session, provenance) {
+send_commons_pill <- function(session, id, provenance) {
   html <- htmltools::renderTags(commons_answer_pill(provenance$tag))$html
   session$sendCustomMessage(
     "commonsProvenancePill",
     list(
-      id = session$ns("chat"),
+      id = session$ns(id),
       html = html,
       citations = citations_payload(provenance$citations)
     )
@@ -106,7 +97,7 @@ send_commons_pill <- function(session, provenance) {
 
 # Restored history renders as streams, so all seeded pills go in one
 # message and the client places them only once the transcript settles.
-seed_commons_pills <- function(session, client) {
+seed_commons_pills <- function(session, id, client) {
   provenances <- commons_exchange_provenance(
     client$get_turns(include_system_prompt = FALSE),
     client$citation_corpus()
@@ -131,7 +122,7 @@ seed_commons_pills <- function(session, client) {
 
   session$sendCustomMessage(
     "commonsProvenancePillSeed",
-    list(id = session$ns("chat"), count = n, pills = pills)
+    list(id = session$ns(id), count = n, pills = pills)
   )
 }
 
@@ -161,7 +152,7 @@ check_chat_packages <- function(call = rlang::caller_env()) {
     cli::cli_abort(
       c(
         "The {.pkg commons} chat module requires missing package{?s}: {.pkg {missing}}.",
-        i = "Install {.pkg {missing}} to use {.fn commons_mod_ui} and {.fn commons_mod_server}."
+        i = "Install {.pkg {missing}} to use {.fn commons_ui} and {.fn commons_server}."
       ),
       call = call
     )

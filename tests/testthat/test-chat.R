@@ -49,8 +49,27 @@ test_that("citations_payload aligns entries with the answer's citations", {
   expect_null(payload[[2]]$quote)
 })
 
+test_that("send_commons_pill targets the chat's own id, not a hardcoded one", {
+  sent <- NULL
+  fake_session <- list(
+    ns = function(x) paste0("ns-", x),
+    sendCustomMessage = function(type, message) {
+      sent <<- list(type = type, message = message)
+    }
+  )
+
+  send_commons_pill(
+    fake_session,
+    "my_chat",
+    list(tag = "A", citations = list())
+  )
+
+  expect_equal(sent$type, "commonsProvenancePill")
+  expect_equal(sent$message$id, "ns-my_chat")
+})
+
 test_that("chat UI preserves shinychat's top-level fill container", {
-  ui <- commons_mod_ui("chat")
+  ui <- commons_ui("chat")
   classes <- unlist(ui$attribs[names(ui$attribs) == "class"], use.names = FALSE)
   deps <- htmltools::findDependencies(ui)
 
@@ -65,9 +84,9 @@ test_that("chat UI preserves shinychat's top-level fill container", {
   expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
 })
 
-test_that("commons_mod_server requires a commons agent", {
+test_that("commons_server requires a commons agent", {
   expect_snapshot(
-    commons_mod_server("chat", client = test_client()),
+    commons_server("chat", client = test_client()),
     error = TRUE
   )
 })

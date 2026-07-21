@@ -235,11 +235,11 @@ agent <- commons(
 )
 
 ui <- bslib::page_fillable(
-  commons_mod_ui("chat")
+  commons_ui("chat")
 )
 
 server <- function(input, output, session) {
-  commons_mod_server("chat", agent)
+  commons_server("chat", agent)
 }
 
 shinyApp(ui, server)
