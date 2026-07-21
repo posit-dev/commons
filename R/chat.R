@@ -135,8 +135,6 @@ seed_commons_pills <- function(session, client) {
   )
 }
 
-# One entry per <citation> element the answer rendered, in order; the client
-# replaces the i-th element with a footnote (verified) or removes it.
 citations_payload <- function(citations) {
   lapply(citations, function(citation) {
     list(

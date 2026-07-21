@@ -1,8 +1,7 @@
 # Fallback answers can cite the trusted text that backs them: the model ends
 # its reply with <citation>exact text</citation> elements, and commons verifies
-# each quote against the corpus of text the agent could have drawn on. A
-# verified citation promotes the answer from "Potentially untrusted" to the
-# neutral cited tier; see derive_provenance().
+# each quote against the corpus of text the agent could have drawn on. See
+# derive_provenance() for how verification affects an answer's provenance tag.
 
 # Everything citable: context layer docs, always-on facts, measure schemas
 # (as search_measures presents them), and dictionary entries (as first touch
@@ -50,10 +49,9 @@ extract_citations <- function(text) {
   sub("</citation>$", "", quotes)
 }
 
-# All extracted citations in order, each verified against the corpus. Order
-# and unverified entries are kept because the client replaces the rendered
-# <citation> elements positionally: the i-th element becomes the i-th entry's
-# footnote, or is removed when unverified.
+# All extracted citations, each verified against the corpus. Unverified
+# entries and their order are kept for the client's positional replacement of
+# the rendered <citation> elements (see applyCitations in commons-chat.js).
 answer_citations <- function(text, corpus) {
   lapply(extract_citations(text), function(quote) {
     label <- match_citation(quote, corpus)
