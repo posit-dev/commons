@@ -26,6 +26,16 @@ test_that("derive_provenance reports how the answer was produced", {
   )
   expect_equal(unmatched$tag, "C")
   expect_false(unmatched$citations[[1]]$verified)
+
+  # A measure-backed answer discards stray citation markup: the client
+  # receives no entries and removes the elements.
+  measure_backed <- derive_provenance(
+    "A",
+    "6 orders. <citation>Revenue excludes tax.</citation>",
+    corpus
+  )
+  expect_equal(measure_backed$tag, "A")
+  expect_equal(measure_backed$citations, list())
 })
 
 test_that("commons_exchange_provenance reads tags and text from turns", {

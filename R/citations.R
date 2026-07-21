@@ -18,14 +18,24 @@ build_citation_corpus <- function(context_layer, registry, sources) {
 
   add("context layer", context_layer$docs %||% character())
   add("context layer", context_layer$always %||% character())
+  # Mirror tool_search_measures(): source lines only appear in schemas when
+  # the agent has several sources, and quotes must match what was presented.
+  source_names <- if (length(sources) > 1) names(sources) else character()
   for (td in registry) {
     add(
       sprintf("measure '%s'", tool_name(td)),
-      measure_schema_text(td)
+      measure_schema_text(td, source_names = source_names)
     )
   }
   for (i in seq_along(sources)) {
     dictionary <- sources[[i]]$dictionary
+    add(
+      "data dictionary",
+      c(
+        dictionary$description %||% character(),
+        dictionary$details %||% character()
+      )
+    )
     for (table in names(dictionary$tables)) {
       add(
         sprintf("data dictionary, table '%s'", table),
@@ -36,17 +46,23 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   corpus
 }
 
+# Extraction mirrors how the browser will parse the markup, since the client
+# replaces the rendered elements positionally: markup inside code (which never
+# becomes an element) is skipped, and tag-name case, attributes, and
+# whitespace are tolerated the way an HTML parser tolerates them.
 extract_citations <- function(text) {
   if (length(text) == 0) {
     return(character())
   }
   text <- paste(text, collapse = "\n")
+  text <- gsub("(?s)```.*?```", "", text, perl = TRUE)
+  text <- gsub("`[^`\n]*`", "", text)
   matches <- regmatches(
     text,
-    gregexpr("(?s)<citation>.*?</citation>", text, perl = TRUE)
+    gregexpr("(?si)<citation\\b[^>]*>.*?</citation\\s*>", text, perl = TRUE)
   )[[1]]
-  quotes <- sub("^<citation>", "", matches)
-  sub("</citation>$", "", quotes)
+  quotes <- sub("(?i)^<citation\\b[^>]*>", "", matches, perl = TRUE)
+  sub("(?i)</citation\\s*>$", "", quotes, perl = TRUE)
 }
 
 # All extracted citations, each verified against the corpus. Unverified

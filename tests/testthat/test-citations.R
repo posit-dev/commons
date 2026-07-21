@@ -13,6 +13,16 @@ test_that("extract_citations pulls quotes in order", {
   expect_equal(extract_citations(character()), character())
 })
 
+test_that("extraction skips markup inside code and tolerates tag variants", {
+  text <- paste0(
+    "Wrap quotes in `<citation>` markup, for example:\n\n",
+    "```\n<citation>not a real citation</citation>\n```\n\n",
+    "<CITATION >Revenue excludes tax.</citation >"
+  )
+
+  expect_equal(extract_citations(text), "Revenue excludes tax.")
+})
+
 test_that("answer_citations verifies quotes against the corpus", {
   corpus <- list(
     list(label = "context layer", text = "Revenue excludes tax.\nRefunds are negative rows."),
@@ -85,6 +95,56 @@ test_that("the citation corpus spans context, measures, and dictionaries", {
   expect_equal(
     match_citation("Booked revenue, net of discounts.", corpus),
     "data dictionary, table 'sales'"
+  )
+})
+
+test_that("corpus measure text matches multi-source presentation", {
+  registry <- list(
+    region_revenue = measure(
+      "region_revenue",
+      "Total revenue for a region.",
+      function(region, sales_db) NULL,
+      arguments = list(region = ellmer::type_string("The sales region."))
+    )
+  )
+  sources <- list(sales_db = test_source(), crm = test_source())
+
+  corpus <- build_citation_corpus(NULL, registry, sources)
+
+  # search_measures presents a `sources:` line to multi-source agents; a
+  # verbatim quote spanning it must verify.
+  expect_equal(
+    match_citation(
+      "Total revenue for a region.\n\nsources: sales_db",
+      corpus
+    ),
+    "measure 'region_revenue'"
+  )
+})
+
+test_that("dataset-level dictionary prose is citable", {
+  skip_if_not_installed("yaml")
+  path <- withr::local_tempfile(fileext = ".yaml")
+  writeLines(
+    c(
+      '$version: "0.1.0"',
+      "name: retail sales",
+      "description: Order and revenue data for a small retailer.",
+      "details: Revenue figures exclude tax collected at checkout."
+    ),
+    path
+  )
+  source <- data_source(sales = test_sales(), dictionary = path)
+
+  corpus <- build_citation_corpus(NULL, list(), list(source))
+
+  expect_equal(
+    match_citation("Order and revenue data for a small retailer.", corpus),
+    "data dictionary"
+  )
+  expect_equal(
+    match_citation("Revenue figures exclude tax collected at checkout.", corpus),
+    "data dictionary"
   )
 })
 

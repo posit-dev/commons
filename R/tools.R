@@ -124,7 +124,7 @@ tool_run_sql <- function(private) {
         tracker = private$first_touch,
         handles = private$handles
       )
-      add_citation_request(res, private$citations)
+      add_citation_request(res, private$citation_request)
     },
     "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
     arguments = list(

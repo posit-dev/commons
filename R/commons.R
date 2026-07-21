@@ -156,7 +156,7 @@ Commons <- R6::R6Class(
         private$registry,
         sources
       )
-      private$citations <- new.env(parent = emptyenv())
+      private$citation_request <- new.env(parent = emptyenv())
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
@@ -238,7 +238,7 @@ Commons <- R6::R6Class(
     handles = NULL,
     worker = NULL,
     corpus = NULL,
-    citations = NULL
+    citation_request = NULL
   )
 )
 

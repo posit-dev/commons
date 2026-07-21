@@ -3,7 +3,7 @@ tool_run_r <- function(private) {
     function(code) {
       promises::then(
         run_r_tool(private$worker, private$handles, code),
-        function(res) add_citation_request(res, private$citations)
+        function(res) add_citation_request(res, private$citation_request)
       )
     },
     paste(
