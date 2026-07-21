@@ -282,14 +282,14 @@ shiny-tool-request .shiny-tool-card .tool-title,
 /* ---- Answer citations ------------------------------------------------- */
 
 /* Raw <citation> markup stays invisible while a reply streams; once the turn
- * settles, verified citations are replaced with footnotes and the rest are
- * removed (see commons-chat.js). */
+ * settles, verified citations become footnotes at the end of the reply and
+ * the rest are removed (see commons-chat.js). */
 .shiny-chat-message-content citation {
   display: none;
 }
 
 .commons-citation {
-  color: var(--bs-secondary-color, #6c757d);
+  color: color-mix(in srgb, var(--bs-primary, #007bc2) 70%, var(--bs-body-bg, #fff));
   cursor: default;
   font-size: 0.72em;
   font-weight: 600;
@@ -299,7 +299,7 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 .commons-citation[data-commons-tooltip]:hover,
 .commons-citation[data-commons-tooltip]:focus {
-  color: var(--bs-body-color, #212529);
+  color: var(--bs-primary, #007bc2);
 }
 
 /* ---- Measure display ------------------------------------------------- */

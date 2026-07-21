@@ -46,33 +46,41 @@
 
     // The server verifies each <citation> the answer rendered and sends one
     // entry per element, in document order: the i-th element becomes a
-    // numbered footnote when verified, and is removed otherwise. Positional
-    // replacement avoids re-matching quote text that markdown rendering may
-    // have reflowed.
+    // numbered footnote when verified, and is dropped otherwise. Positional
+    // matching avoids re-matching quote text that markdown rendering may
+    // have reflowed. Footnotes sit inline at the end of the answer's last
+    // block rather than in the trailing paragraph the citations streamed
+    // into.
     var applyCitations = function(content, citations) {
       var elements = content.querySelectorAll("citation");
-      var n = 0;
+      if (!elements.length) return;
+
+      var sups = [];
       elements.forEach(function(el, i) {
         var entry = (citations || [])[i];
         if (entry && entry.verified) {
-          n += 1;
           var sup = document.createElement("sup");
           sup.className = "commons-citation";
           sup.setAttribute("data-commons-tooltip", entry.tooltip);
           sup.setAttribute("aria-label", entry.tooltip);
           sup.setAttribute("tabindex", "0");
-          sup.textContent = String(n);
-          el.replaceWith(sup);
-        } else {
-          var parent = el.parentElement;
-          el.remove();
-          var emptied = parent &&
-            parent.tagName === "P" &&
-            !parent.textContent.trim() &&
-            !parent.children.length;
-          if (emptied) parent.remove();
+          sup.textContent = String(sups.length + 1);
+          sups.push(sup);
         }
+        var parent = el.parentElement;
+        el.remove();
+        var emptied = parent &&
+          parent.tagName === "P" &&
+          !parent.textContent.trim() &&
+          !parent.children.length;
+        if (emptied) parent.remove();
       });
+      if (!sups.length) return;
+
+      var blocks = content.querySelectorAll("p, li, table");
+      var target = blocks[blocks.length - 1] || content;
+      if (target.tagName === "TABLE") target = content;
+      sups.forEach(function(sup) { target.appendChild(sup); });
     };
 
     var placePill = function(content, html, citations) {
