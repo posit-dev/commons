@@ -7,8 +7,6 @@
 #' agent's context, measure definitions, or data documentation; verified
 #' citations render as footnotes whose tooltips name their source. Fallback
 #' answers with no verified citation get a potentially-untrusted caution pill.
-#' Note that verification checks that a quote appears verbatim in those
-#' sources, not that it justifies the answer.
 #'
 #' @param id Module ID.
 #' @param ... Arguments passed to [shinychat::chat_mod_ui()] or
