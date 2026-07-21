@@ -58,14 +58,14 @@ test_that("call_measure_tool registers tabular output as a handle", {
   expect_equal(get_handle(store, "r1"), test_sales())
 })
 
-test_that("call_measure_tool skips handle registration for scalar output", {
+test_that("call_measure_tool registers scalar output as a handle", {
   registry <- list(order_count = count_measure_tool())
   store <- new_handle_store()
 
   res <- call_measure_tool(registry, "order_count", "{}", handles = store)
 
-  expect_no_match(res@value, "stored as")
-  expect_equal(handle_ids(store), character())
+  expect_match(res@value, "Result stored as `r1`")
+  expect_equal(get_handle(store, "r1"), 6L)
 })
 
 test_that("register_handle numbers handles in call order and caps rows", {

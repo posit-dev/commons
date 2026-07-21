@@ -11,7 +11,7 @@ tool_run_r <- function(private) {
       "rendered plots, which are also shown to the user.",
       "The session persists across calls: variables you assign and packages",
       "you load remain available. Results from call_measure and run_sql are",
-      "preloaded as data frames under their advertised handles (r1, r2, ...).",
+      "preloaded under their advertised handles (r1, r2, ...).",
       "\n\nRules:",
       "\n- Work incrementally: each call should do one small, well-defined task.",
       "\n- Create at most one figure per call.",

@@ -8,13 +8,22 @@ new_handle_store <- function() {
   store
 }
 
-# Store a tabular tool result under the next handle id and return the text
+# Store a tool result under the next handle id and return the text
 # advertising it to the model, or NULL when there's nothing to register (no
-# store, or a non-tabular value).
+# store, or a NULL value). The system prompt tells the model every
+# call_measure/run_sql result is stored, so non-tabular values (e.g. scalar
+# measure results) must be registered too.
 register_handle <- function(store, value, max_rows = 10000L) {
-  if (is.null(store) || !is.data.frame(value)) {
+  if (is.null(store) || is.null(value)) {
     return(NULL)
   }
+  if (!is.data.frame(value)) {
+    store$count <- store$count + 1L
+    id <- paste0("r", store$count)
+    assign(id, value, envir = store$values)
+    return(sprintf("Result stored as `%s`, available in your R session.", id))
+  }
+
   value <- as.data.frame(value)
   capped <- nrow(value) > max_rows
   if (capped) {

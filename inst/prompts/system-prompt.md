@@ -17,8 +17,8 @@ does not return a relevant measure. Search context with `search_context`,
 inspect relevant tables with `describe_table`, then run a read-only query with
 `run_sql`.
 
-Data-returning tool results are stored under handles (`r1`, `r2`, ...) and
-preloaded into the `run_r` R session as data frames. When a measure output is
+Results from `call_measure` and `run_sql` are stored under handles (`r1`,
+`r2`, ...) and preloaded into the `run_r` R session. When a measure output is
 close to the answer but needs a further derivation — a filter, total, ratio,
 or ranking — call `run_r` on the stored handle rather than rewriting the
 governed logic with `run_sql`. Prefer the measure's own arguments when they
