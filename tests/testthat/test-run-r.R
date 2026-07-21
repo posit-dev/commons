@@ -48,6 +48,17 @@ test_that("run_r returns plots as images and opens the display", {
   expect_match(res@extra$display$html, "commons-run-r-code")
 })
 
+test_that("run_r delivers the citation request when no fallback tool has", {
+  agent <- test_agent()
+  withr::defer(worker_close(agent$.__enclos_env__$private$worker))
+  run_r <- agent_tool(agent, "run_r")
+
+  res <- sync_promise(run_r("1 + 1"))
+
+  expect_match(res@value, "[1] 2", fixed = TRUE)
+  expect_match(res@value, "<citation>", fixed = TRUE)
+})
+
 test_that("run_r surfaces errors from model code without failing the tool", {
   worker <- local_worker()
   store <- new_handle_store()

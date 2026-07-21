@@ -2,8 +2,11 @@
 #'
 #' These functions wrap [shinychat::chat_mod_ui()] and
 #' [shinychat::chat_mod_server()] with commons-specific answer provenance UI.
-#' Answers produced from registered measures get a compact verified-answer pill.
-#' Answers produced from fallback SQL get a caution pill.
+#' Answers produced from registered measures get a compact verified-answer
+#' pill. Answers produced from fallback SQL or R can cite text from the
+#' agent's context, measure definitions, or data documentation; verified
+#' citations render as footnotes whose tooltips name their source. Fallback
+#' answers with no verified citation get a potentially-untrusted caution pill.
 #'
 #' @param id Module ID.
 #' @param ... Arguments passed to [shinychat::chat_mod_ui()] or
@@ -77,40 +80,48 @@ commons_mod_server <- function(
     }, once = TRUE)
 
     shiny::observeEvent(mod$last_turn(), {
-      tag <- commons_last_tag(client)
-      if (is.na(tag)) {
+      provenance <- commons_last_provenance(client)
+      if (is.na(provenance$tag)) {
         return()
       }
 
-      send_commons_pill(session, tag)
+      send_commons_pill(session, provenance)
     }, ignoreNULL = TRUE)
   })
 
   mod
 }
 
-send_commons_pill <- function(session, tag) {
-  html <- htmltools::renderTags(commons_answer_pill(tag))$html
+send_commons_pill <- function(session, provenance) {
+  html <- htmltools::renderTags(commons_answer_pill(provenance$tag))$html
   session$sendCustomMessage(
     "commonsProvenancePill",
-    list(id = session$ns("chat"), html = html)
+    list(
+      id = session$ns("chat"),
+      html = html,
+      citations = citations_payload(provenance$citations)
+    )
   )
 }
 
 # Restored history renders as streams, so all seeded pills go in one
 # message and the client places them only once the transcript settles.
 seed_commons_pills <- function(session, client) {
-  tags <- commons_exchange_tags(
-    client$get_turns(include_system_prompt = FALSE)
+  provenances <- commons_exchange_provenance(
+    client$get_turns(include_system_prompt = FALSE),
+    client$citation_corpus()
   )
-  n <- length(tags)
+  n <- length(provenances)
   pills <- list()
   for (i in seq_len(n)) {
-    if (is.na(tags[[i]])) {
+    if (is.na(provenances[[i]]$tag)) {
       next
     }
     pills[[length(pills) + 1]] <- list(
-      html = htmltools::renderTags(commons_answer_pill(tags[[i]]))$html,
+      html = htmltools::renderTags(
+        commons_answer_pill(provenances[[i]]$tag)
+      )$html,
+      citations = citations_payload(provenances[[i]]$citations),
       indexFromEnd = n - i
     )
   }
@@ -122,6 +133,23 @@ seed_commons_pills <- function(session, client) {
     "commonsProvenancePillSeed",
     list(id = session$ns("chat"), count = n, pills = pills)
   )
+}
+
+# One entry per <citation> element the answer rendered, in order; the client
+# replaces the i-th element with a footnote (verified) or removes it.
+citations_payload <- function(citations) {
+  lapply(citations, function(citation) {
+    list(
+      verified = citation$verified,
+      tooltip = if (citation$verified) {
+        sprintf(
+          "\u201c%s\u201d \u2014 %s",
+          normalize_citation(citation$quote),
+          citation$label
+        )
+      }
+    )
+  })
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
@@ -161,13 +189,16 @@ commons_answer_pill <- function(tag) {
       commons_pill_icon("trusted-icon.svg", "Verified answer"),
       htmltools::tags$span("Verified answer")
     ),
-    B = htmltools::tags$span(
+    # Cited fallback answers ("B") get no pill: their citation footnotes are
+    # the provenance UI.
+    C = htmltools::tags$span(
       class = "commons-answer-pill commons-answer-pill-caution",
-      title = "This answer was generated from available context and data, but was not produced by a governed calculation.",
-      `aria-label` = "AI can be wrong. This answer was generated from available context and data, but was not produced by a governed calculation.",
-      `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation.",
-      commons_pill_icon("warning-icon.svg", "AI can be wrong"),
-      htmltools::tags$span("AI can be wrong.")
+      title = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
+      `aria-label` = "Potentially untrusted. This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
+      `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
+      tabindex = "0",
+      commons_pill_icon("warning-icon.svg", "Potentially untrusted"),
+      htmltools::tags$span("Potentially untrusted.")
     ),
     NULL
   )

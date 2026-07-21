@@ -44,7 +44,39 @@
       );
     };
 
-    var placePill = function(content, html) {
+    // The server verifies each <citation> the answer rendered and sends one
+    // entry per element, in document order: the i-th element becomes a
+    // numbered footnote when verified, and is removed otherwise. Positional
+    // replacement avoids re-matching quote text that markdown rendering may
+    // have reflowed.
+    var applyCitations = function(content, citations) {
+      var elements = content.querySelectorAll("citation");
+      var n = 0;
+      elements.forEach(function(el, i) {
+        var entry = (citations || [])[i];
+        if (entry && entry.verified) {
+          n += 1;
+          var sup = document.createElement("sup");
+          sup.className = "commons-citation";
+          sup.setAttribute("data-commons-tooltip", entry.tooltip);
+          sup.setAttribute("aria-label", entry.tooltip);
+          sup.setAttribute("tabindex", "0");
+          sup.textContent = String(n);
+          el.replaceWith(sup);
+        } else {
+          var parent = el.parentElement;
+          el.remove();
+          var emptied = parent &&
+            parent.tagName === "P" &&
+            !parent.textContent.trim() &&
+            !parent.children.length;
+          if (emptied) parent.remove();
+        }
+      });
+    };
+
+    var placePill = function(content, html, citations) {
+      applyCitations(content, citations);
       if (content.querySelector(".commons-answer-pill")) return;
 
       var holder = document.createElement("span");
@@ -81,7 +113,7 @@
           return;
         }
 
-        placePill(content, message.html);
+        placePill(content, message.html, message.citations);
       };
 
       window.requestAnimationFrame(function() { appendPill(0); });
@@ -119,7 +151,7 @@
 
         message.pills.forEach(function(pill) {
           var content = messages[messages.length - 1 - pill.indexFromEnd];
-          if (content) placePill(content, pill.html);
+          if (content) placePill(content, pill.html, pill.citations);
         });
       };
 

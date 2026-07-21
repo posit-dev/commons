@@ -151,6 +151,12 @@ Commons <- R6::R6Class(
       private$tracing <- new_trajectory_tracing(log, share_with)
       private$handles <- new_handle_store()
       private$worker <- new_r_worker()
+      private$corpus <- build_citation_corpus(
+        private$context_layer,
+        private$registry,
+        sources
+      )
+      private$citations <- new.env(parent = emptyenv())
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
@@ -202,6 +208,14 @@ Commons <- R6::R6Class(
       })()
     },
 
+    #' @description Text that can back an answer's citations: context layer
+    #'   documents, measure definitions, and data dictionary entries. Used by
+    #'   [commons_mod_server()] to verify the citations fallback answers
+    #'   provide; not typically called directly.
+    citation_corpus = function() {
+      private$corpus
+    },
+
     #' @description Build the context layer's search index ahead of the first
     #'   `search_context` call, e.g. during idle time right after a Shiny
     #'   session starts. [commons_mod_server()] does this automatically.
@@ -222,7 +236,9 @@ Commons <- R6::R6Class(
     tracing = FALSE,
     first_touch = NULL,
     handles = NULL,
-    worker = NULL
+    worker = NULL,
+    corpus = NULL,
+    citations = NULL
   )
 )
 

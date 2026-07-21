@@ -118,6 +118,7 @@ agent <- commons(
     \item \href{#method-Commons-initialize}{\code{Commons$new()}}
     \item \href{#method-Commons-chat}{\code{Commons$chat()}}
     \item \href{#method-Commons-stream_async}{\code{Commons$stream_async()}}
+    \item \href{#method-Commons-citation_corpus}{\code{Commons$citation_corpus()}}
     \item \href{#method-Commons-prewarm}{\code{Commons$prewarm()}}
     \item \href{#method-Commons-clone}{\code{Commons$clone()}}
   }
@@ -219,6 +220,21 @@ for arguments.
       \item{\code{stream}}{Whether to stream plain text or \link[ellmer:Content]{ellmer::Content} objects.}
       \item{\code{controller}}{Optional \code{\link[ellmer:stream_controller]{ellmer::stream_controller()}}.}
     }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Commons-citation_corpus"></a>}}
+\if{latex}{\out{\hypertarget{method-Commons-citation_corpus}{}}}
+\subsection{\code{Commons$citation_corpus()}}{
+  Text that can back an answer's citations: context layer
+documents, measure definitions, and data dictionary entries. Used by
+\code{\link[=commons_mod_server]{commons_mod_server()}} to verify the citations fallback answers
+provide; not typically called directly.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Commons$citation_corpus()}
     \if{html}{\out{</div>}}
   }
 }

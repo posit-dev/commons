@@ -1,0 +1,20 @@
+Note: because this answer will not come from a registered measure alone, it
+will be presented to the user as "Potentially untrusted" — unless you cite
+trusted text that supports your approach.
+
+If exact text you have seen in this conversation — from context search
+results, measure definitions, or data documentation — supports the way you
+computed the answer, end your reply with one citation per supporting excerpt:
+
+<citation>the supporting text, quoted exactly</citation>
+
+Rules:
+
+- Quote the text verbatim. Citations are verified by exact text match against
+  the agent's context and measure definitions, and are dropped if no match is
+  found.
+- Cite only text that genuinely supports your approach, e.g. a definition you
+  followed or a documented caveat you accounted for. If nothing you have seen
+  supports it, provide no citations.
+- Citations are rendered as footnotes; do not mention or explain them in the
+  body of your reply, and do not place them anywhere but the very end.
