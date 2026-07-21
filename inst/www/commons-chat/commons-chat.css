@@ -242,7 +242,9 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 .commons-answer-pill[data-commons-tooltip]:hover::before,
 .commons-answer-pill[data-commons-tooltip]:focus::before,
-.commons-answer-pill[data-commons-tooltip]:focus-within::before {
+.commons-answer-pill[data-commons-tooltip]:focus-within::before,
+.commons-citation:hover::before,
+.commons-citation:focus::before {
   background: var(--bs-body-bg, #fff);
   border-bottom: 1px solid var(--bs-border-color, #dee2e6);
   border-right: 1px solid var(--bs-border-color, #dee2e6);
@@ -273,6 +275,84 @@ shiny-tool-request .shiny-tool-card .tool-title,
   background: #fff8ec;
   border: 1px solid #f2ddbb;
   color: #6b4b1b;
+}
+
+/* ---- Answer citations ------------------------------------------------- */
+
+/* Raw <citation> markup stays invisible while a reply streams; once the turn
+ * settles, verified citations become footnotes at the end of the reply and
+ * the rest are removed (see commons-chat.js). */
+.shiny-chat-message-content citation {
+  display: none;
+}
+
+.commons-citation {
+  color: color-mix(in srgb, var(--bs-primary, #007bc2) 70%, var(--bs-body-bg, #fff));
+  cursor: default;
+  font-size: 0.72em;
+  font-weight: 600;
+  padding: 0 0.12em;
+  position: relative;
+}
+
+.commons-citation:hover,
+.commons-citation:focus {
+  color: var(--bs-primary, #007bc2);
+}
+
+/* The footnote tooltip is a real element (built in commons-chat.js) rather
+ * than the pills' attr() pseudo-element, so a merged footnote can interleave
+ * each citation's reason with its quoted excerpt. Box styling mirrors the
+ * pill tooltips above. */
+.commons-citation-tooltip {
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 6px;
+  bottom: calc(100% + 0.45rem);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: var(--bs-body-color, #212529);
+  display: none;
+  font-size: 0.74rem;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.25;
+  max-width: min(18rem, 70vw);
+  padding: 0.42rem 0.55rem;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  transform: translateX(-50%);
+  white-space: normal;
+  width: max-content;
+  z-index: 1000;
+}
+
+.commons-citation:hover > .commons-citation-tooltip,
+.commons-citation:focus > .commons-citation-tooltip {
+  display: block;
+}
+
+.commons-citation-reason {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 0.15rem;
+}
+
+.commons-citation-quote {
+  border-left: 2px solid var(--bs-border-color, #dee2e6);
+  color: var(--bs-secondary-color, #6c757d);
+  display: block;
+  margin: 0 0 0.5rem;
+  padding: 0.05rem 0 0.05rem 0.5rem;
+}
+
+.commons-citation-quote:last-child {
+  margin-bottom: 0;
+}
+
+.commons-citation-source {
+  display: block;
+  margin-top: 0.1rem;
 }
 
 /* ---- Measure display ------------------------------------------------- */

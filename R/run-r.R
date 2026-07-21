@@ -1,6 +1,11 @@
 tool_run_r <- function(private) {
   ellmer::tool(
-    function(code) run_r_tool(private$worker, private$handles, code),
+    function(code) {
+      promises::then(
+        run_r_tool(private$worker, private$handles, code),
+        function(res) add_citation_request(res, private$citation_request)
+      )
+    },
     paste(
       "Run R code in a sandboxed R session and see its output, including",
       "rendered plots, which are also shown to the user.",

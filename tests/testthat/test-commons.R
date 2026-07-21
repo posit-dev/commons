@@ -1,11 +1,47 @@
-test_that("derive_tag reports how the answer was produced", {
-  expect_equal(derive_tag(c("A")), "A")
-  expect_equal(derive_tag(c("A", "B")), "B")
-  expect_equal(derive_tag("B"), "B")
-  expect_true(is.na(derive_tag(character())))
+test_that("derive_provenance reports how the answer was produced", {
+  corpus <- list(
+    list(label = "context layer", text = "Revenue excludes tax.")
+  )
+
+  expect_equal(derive_provenance("A")$tag, "A")
+  expect_true(is.na(derive_provenance(character())$tag))
+
+  uncited <- derive_provenance(c("A", "B"))
+  expect_equal(uncited$tag, "C")
+  expect_equal(uncited$citations, list())
+
+  cited <- derive_provenance(
+    "B",
+    "Answer.\n\n<citation>Revenue excludes tax.</citation>",
+    corpus
+  )
+  expect_equal(cited$tag, "B")
+  expect_true(cited$citations[[1]]$verified)
+  expect_equal(cited$citations[[1]]$label, "context layer")
+
+  unmatched <- derive_provenance(
+    "B",
+    "<citation>Revenue includes shipping.</citation>",
+    corpus
+  )
+  expect_equal(unmatched$tag, "C")
+  expect_false(unmatched$citations[[1]]$verified)
+
+  # A measure-backed answer discards stray citation markup: the client
+  # receives no entries and removes the elements.
+  measure_backed <- derive_provenance(
+    "A",
+    "6 orders. <citation>Revenue excludes tax.</citation>",
+    corpus
+  )
+  expect_equal(measure_backed$tag, "A")
+  expect_equal(measure_backed$citations, list())
 })
 
-test_that("derive_tag_from_turns reads tags from tool result content", {
+test_that("commons_exchange_provenance reads tags and text from turns", {
+  corpus <- list(
+    list(label = "context layer", text = "Revenue excludes tax.")
+  )
   turns <- list(
     ellmer::UserTurn("How many orders are there?"),
     ellmer::UserTurn(list(
@@ -14,10 +50,25 @@ test_that("derive_tag_from_turns reads tags from tool result content", {
         extra = list(commons_tag = "A")
       )
     )),
-    ellmer::AssistantTurn("There are 6 orders.")
+    ellmer::AssistantTurn("There are 6 orders."),
+    ellmer::UserTurn("And total revenue?"),
+    ellmer::UserTurn(list(
+      ellmer::ContentToolResult(
+        value = "5650",
+        extra = list(commons_tag = "B")
+      )
+    )),
+    ellmer::AssistantTurn(
+      "5650.\n\n<citation>Revenue excludes tax.</citation>"
+    )
   )
 
-  expect_equal(derive_tag_from_turns(turns), "A")
+  out <- commons_exchange_provenance(turns, corpus)
+
+  expect_length(out, 2)
+  expect_equal(out[[1]]$tag, "A")
+  expect_equal(out[[2]]$tag, "B")
+  expect_true(out[[2]]$citations[[1]]$verified)
 })
 
 test_that("commons() returns a Chat subclass with the six fixed tools", {
@@ -207,6 +258,17 @@ test_that("run_sql and describe_table route to the named source", {
   res <- describe("orders", source = "b")
   expect_match(res@value, "integer")
   expect_match(S7::prop(res, "extra")$display$title, "(b)", fixed = TRUE)
+})
+
+test_that("run_sql delivers the citation request once per conversation", {
+  agent <- test_agent()
+  run_sql <- agent_tool(agent, "run_sql")
+
+  first <- run_sql("SELECT count(*) AS n FROM sales")
+  second <- run_sql("SELECT count(*) AS n FROM sales")
+
+  expect_match(first@value, "<citation ", fixed = TRUE)
+  expect_no_match(second@value, "<citation ", fixed = TRUE)
 })
 
 test_that("the system prompt groups tables when there are several sources", {

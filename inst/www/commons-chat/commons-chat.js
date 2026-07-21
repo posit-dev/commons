@@ -44,7 +44,134 @@
       );
     };
 
-    var placePill = function(content, html) {
+    // One numbered footnote for a run of adjacent citations. The tooltip
+    // interleaves the model's short reason for each citation (unverified
+    // commentary, shown plain) with the verified quote (shown as an
+    // attributed blockquote); it is a real element rather than the pills'
+    // attr() pseudo-element so it can hold that structure.
+    var footnote = function(number, entries) {
+      var sup = document.createElement("sup");
+      sup.className = "commons-citation";
+      sup.setAttribute("tabindex", "0");
+      sup.textContent = String(number);
+
+      var tip = document.createElement("span");
+      tip.className = "commons-citation-tooltip";
+      tip.setAttribute("role", "tooltip");
+      var summary = [];
+      entries.forEach(function(entry) {
+        var heading = entry.reason && (
+          /[.,:;!?]$/.test(entry.reason) ? entry.reason : entry.reason + ":"
+        );
+        if (heading) {
+          var reason = document.createElement("span");
+          reason.className = "commons-citation-reason";
+          reason.textContent = heading;
+          tip.appendChild(reason);
+        }
+        var quote = document.createElement("span");
+        quote.className = "commons-citation-quote";
+        quote.textContent = "“" + entry.quote + "”";
+        var source = document.createElement("span");
+        source.className = "commons-citation-source";
+        source.textContent = "— " + entry.label;
+        quote.appendChild(source);
+        tip.appendChild(quote);
+        summary.push(
+          (heading ? heading + " " : "") +
+            "“" + entry.quote + "” — " + entry.label
+        );
+      });
+      sup.setAttribute("aria-label", summary.join("; "));
+      sup.appendChild(tip);
+      return sup;
+    };
+
+    // Citations the model wrote back to back — separated only by
+    // whitespace, typically one per line at the end of the reply.
+    var adjacentCitations = function(a, b) {
+      var node = a.nextSibling;
+      while (node && node !== b) {
+        if (node.nodeType !== Node.TEXT_NODE || node.textContent.trim()) {
+          return false;
+        }
+        node = node.nextSibling;
+      }
+      return node === b;
+    };
+
+    var footnotesOnly = function(p) {
+      var found = false;
+      for (var node = p.firstChild; node; node = node.nextSibling) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          if (!node.classList.contains("commons-citation")) return false;
+          found = true;
+        } else if (node.textContent.trim()) {
+          return false;
+        }
+      }
+      return found;
+    };
+
+    // The server verifies each <citation> the answer rendered and sends one
+    // entry per element, in document order; positional matching avoids
+    // re-matching quote text that markdown rendering may have reflowed.
+    // Each run of adjacent citations with a verified entry becomes one
+    // merged numbered footnote, and unverified citations are dropped.
+    var applyCitations = function(content, citations) {
+      var elements = content.querySelectorAll("citation");
+      if (!elements.length) return;
+
+      var runs = [];
+      elements.forEach(function(el, i) {
+        var run = runs[runs.length - 1];
+        if (run && adjacentCitations(run.elements[run.elements.length - 1], el)) {
+          run.elements.push(el);
+          run.entries.push((citations || [])[i]);
+        } else {
+          runs.push({ elements: [el], entries: [(citations || [])[i]] });
+        }
+      });
+
+      var n = 0;
+      runs.forEach(function(run) {
+        var verified = run.entries.filter(function(entry) {
+          return entry && entry.verified;
+        });
+        if (verified.length) {
+          n += 1;
+          run.elements[0].replaceWith(footnote(n, verified));
+        }
+        run.elements.forEach(function(el) {
+          var parent = el.parentElement;
+          el.remove();
+          var emptied = parent &&
+            parent.tagName === "P" &&
+            !parent.textContent.trim() &&
+            !parent.children.length;
+          if (emptied) parent.remove();
+        });
+      });
+
+      // A paragraph left holding only footnotes collapses into the end of
+      // the preceding block, so markers sit inline with the answer.
+      content.querySelectorAll("p").forEach(function(p) {
+        if (!footnotesOnly(p)) return;
+        var prev = p.previousElementSibling;
+        var target =
+          prev && prev.tagName === "P" ? prev :
+          prev && (prev.tagName === "UL" || prev.tagName === "OL")
+            ? prev.lastElementChild : null;
+        if (!target) return;
+        p.querySelectorAll(".commons-citation").forEach(function(sup) {
+          target.appendChild(sup);
+        });
+        p.remove();
+      });
+    };
+
+    var placePill = function(content, html, citations) {
+      applyCitations(content, citations);
       if (content.querySelector(".commons-answer-pill")) return;
 
       var holder = document.createElement("span");
@@ -81,7 +208,7 @@
           return;
         }
 
-        placePill(content, message.html);
+        placePill(content, message.html, message.citations);
       };
 
       window.requestAnimationFrame(function() { appendPill(0); });
@@ -119,7 +246,7 @@
 
         message.pills.forEach(function(pill) {
           var content = messages[messages.length - 1 - pill.indexFromEnd];
-          if (content) placePill(content, pill.html);
+          if (content) placePill(content, pill.html, pill.citations);
         });
       };
 

@@ -117,13 +117,14 @@ tool_describe_table <- function(private) {
 tool_run_sql <- function(private) {
   ellmer::tool(
     function(sql, source = NULL) {
-      run_sql_tool(
+      res <- run_sql_tool(
         resolve_sql_source(private$sources, source),
         sql,
         source_name = source,
         tracker = private$first_touch,
         handles = private$handles
       )
+      add_citation_request(res, private$citation_request)
     },
     "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
     arguments = list(
