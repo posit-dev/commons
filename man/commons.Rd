@@ -80,8 +80,8 @@ layer, context search, table inspection, and SQL queries.
 }
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
-and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_mod_ui]{commons_mod_ui()}} and
-\code{\link[=commons_mod_server]{commons_mod_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
+and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_ui]{commons_ui()}} and
+\code{\link[=commons_server]{commons_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
 to use the agent as a vitals solver.
 }
 \examples{
@@ -258,7 +258,7 @@ for arguments.
 \subsection{\code{Commons$citation_corpus()}}{
   Text that can back an answer's citations: context layer
 documents, measure definitions, and data dictionary entries. Used by
-\code{\link[=commons_mod_server]{commons_mod_server()}} to verify the citations fallback answers
+\code{\link[=commons_server]{commons_server()}} to verify the citations fallback answers
 provide; not typically called directly.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
@@ -273,7 +273,7 @@ provide; not typically called directly.
 \subsection{\code{Commons$prewarm()}}{
   Build the context layer's search index ahead of the first
 \code{search_context} call, e.g. during idle time right after a Shiny
-session starts. \code{\link[=commons_mod_server]{commons_mod_server()}} does this automatically.
+session starts. \code{\link[=commons_server]{commons_server()}} does this automatically.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$prewarm()}

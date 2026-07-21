@@ -48,13 +48,14 @@ Suggests:
     readr,
     rmarkdown,
     shiny,
-    shinychat,
+    shinychat (> 0.4.0),
     testthat (>= 3.0.0),
     vitals,
     withr,
     yaml
 VignetteBuilder: knitr
 Remotes:
+    posit-dev/shinychat,
     simonpcouch/ragnar@writable-extensions
 Config/testthat/edition: 3
 Encoding: UTF-8

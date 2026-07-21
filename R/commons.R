@@ -4,8 +4,8 @@
 #' layer, context search, table inspection, and SQL queries.
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
-#' and tools. Use `agent$chat()` to ask questions, [commons_mod_ui()] and
-#' [commons_mod_server()] to embed the agent in Shiny, and [vitals::generate()]
+#' and tools. Use `agent$chat()` to ask questions, [commons_ui()] and
+#' [commons_server()] to embed the agent in Shiny, and [vitals::generate()]
 #' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
@@ -253,7 +253,7 @@ Commons <- R6::R6Class(
 
     #' @description Text that can back an answer's citations: context layer
     #'   documents, measure definitions, and data dictionary entries. Used by
-    #'   [commons_mod_server()] to verify the citations fallback answers
+    #'   [commons_server()] to verify the citations fallback answers
     #'   provide; not typically called directly.
     citation_corpus = function() {
       private$corpus
@@ -261,7 +261,7 @@ Commons <- R6::R6Class(
 
     #' @description Build the context layer's search index ahead of the first
     #'   `search_context` call, e.g. during idle time right after a Shiny
-    #'   session starts. [commons_mod_server()] does this automatically.
+    #'   session starts. [commons_server()] does this automatically.
     prewarm = function() {
       layer <- private$context_layer
       if (!is.null(layer) && length(layer$docs) > 0) {

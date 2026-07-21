@@ -2,8 +2,8 @@
 
 export(Commons)
 export(commons)
-export(commons_mod_server)
-export(commons_mod_ui)
+export(commons_server)
+export(commons_ui)
 export(context_layer)
 export(data_source)
 export(list_tables)
