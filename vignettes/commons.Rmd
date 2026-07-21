@@ -255,7 +255,7 @@ file.copy(
   "system-prompt.md"
 )
 ```
-
+commons appends documentation of the available tables and data dictionaries to the prompt itself, so the file needn't describe them.
 Then interpolate your copy and pass the result to `system_prompt`:
 
 ```r
@@ -268,9 +268,8 @@ agent <- commons(
 )
 ```
 
-commons appends documentation of the available tables and data dictionaries to the prompt itself, so the file needn't describe them.
 
-`{{keyword}}` tokens in the file are filled by [`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html)'s arguments when the agent is created. The packaged prompt uses one keyword, `{{date}}`; keep passing `date = Sys.Date()` as long as your copy retains it, and supply values for any keywords you add the same way:
+`{{keyword}}` tokens in the file are filled by [`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html)'s arguments when the agent is created. The packaged prompt uses one keyword, `{{date}}`. Continue passing in `date = Sys.Date()` as long as your prompt copy retains the `{{date}}` keyword, and supply values for any additional keywords that you added to your prompt:
 
 ```r
 agent <- commons(
