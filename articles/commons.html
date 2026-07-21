@@ -294,7 +294,7 @@ chat UI:</p>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"R/context_layer.R"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
-<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  data_sources <span class="op">=</span> <span class="va">agent_data</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="fu"><a href="../reference/semantic_layer.html">semantic_layer</a></span><span class="op">(</span><span class="st">"R/semantic_layer.R"</span><span class="op">)</span>,</span>
 <span>  context_layer <span class="op">=</span> <span class="va">agent_context</span>,</span>
@@ -328,7 +328,7 @@ Then interpolate your copy and pass the result to
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
-<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
 <span>    <span class="st">"system-prompt.md"</span>,</span>
 <span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="op">)</span></span>
@@ -342,7 +342,7 @@ keywords that you added to your prompt:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
-<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
 <span>    <span class="st">"system-prompt.md"</span>,</span>
 <span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>    fiscal_year_start <span class="op">=</span> <span class="st">"February"</span></span>

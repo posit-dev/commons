@@ -1,9 +1,9 @@
 # Create a commons agent
 
 `commons()` creates an
-[ellmer::Chat](https://rdrr.io/pkg/ellmer/man/Chat.html) subclass with
-tools for a semantic layer, context search, table inspection, and SQL
-queries.
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+subclass with tools for a semantic layer, context search, table
+inspection, and SQL queries.
 
 ## Usage
 
@@ -24,9 +24,9 @@ commons(
 
 - client:
 
-  An [ellmer::Chat](https://rdrr.io/pkg/ellmer/man/Chat.html) giving the
-  provider and model to use, e.g.
-  [`ellmer::chat_anthropic()`](https://rdrr.io/pkg/ellmer/man/chat_anthropic.html).
+  An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+  giving the provider and model to use, e.g.
+  [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
   A system prompt already set on the client is ignored, with a warning;
   use `system_prompt` instead.
 
@@ -70,7 +70,7 @@ commons(
       )
 
   Pass values for any `{{keyword}}` tokens you add as arguments to
-  [`ellmer::interpolate_file()`](https://rdrr.io/pkg/ellmer/man/interpolate.html).
+  [`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html).
   commons appends documentation of the available tables and data
   dictionaries to the prompt itself; the file needn't (and shouldn't)
   describe them.
@@ -100,7 +100,7 @@ commons(
 ## Value
 
 A `Commons` object, which subclasses
-[ellmer::Chat](https://rdrr.io/pkg/ellmer/man/Chat.html).
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html).
 
 ## Details
 
@@ -115,7 +115,8 @@ to use the agent as a vitals solver.
 
 ## Super class
 
-[`ellmer::Chat`](https://rdrr.io/pkg/ellmer/man/Chat.html) -\> `Commons`
+[`ellmer::Chat`](https://ellmer.tidyverse.org/reference/Chat.html) -\>
+`Commons`
 
 ## Methods
 
@@ -127,33 +128,35 @@ to use the agent as a vitals solver.
 
 - [`Commons$stream_async()`](#method-Commons-stream_async)
 
+- [`Commons$citation_corpus()`](#method-Commons-citation_corpus)
+
 - [`Commons$prewarm()`](#method-Commons-prewarm)
 
 - [`Commons$clone()`](#method-Commons-clone)
 
 Inherited methods
 
-- [`ellmer::Chat$add_turn()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-add_turn)
-- [`ellmer::Chat$chat_async()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-chat_async)
-- [`ellmer::Chat$chat_structured()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-chat_structured)
-- [`ellmer::Chat$chat_structured_async()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-chat_structured_async)
-- [`ellmer::Chat$get_cost()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_cost)
-- [`ellmer::Chat$get_model()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_model)
-- [`ellmer::Chat$get_provider()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_provider)
-- [`ellmer::Chat$get_system_prompt()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_system_prompt)
-- [`ellmer::Chat$get_tokens()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_tokens)
-- [`ellmer::Chat$get_tools()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_tools)
-- [`ellmer::Chat$get_turns()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_turns)
-- [`ellmer::Chat$last_turn()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-last_turn)
-- [`ellmer::Chat$on_tool_request()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-on_tool_request)
-- [`ellmer::Chat$on_tool_result()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-on_tool_result)
-- [`ellmer::Chat$register_tool()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-register_tool)
-- [`ellmer::Chat$register_tools()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-register_tools)
-- [`ellmer::Chat$set_model()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_model)
-- [`ellmer::Chat$set_system_prompt()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_system_prompt)
-- [`ellmer::Chat$set_tools()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_tools)
-- [`ellmer::Chat$set_turns()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_turns)
-- [`ellmer::Chat$stream()`](https://rdrr.io/pkg/ellmer/man/Chat.html#method-stream)
+- [`ellmer::Chat$add_turn()`](https://ellmer.tidyverse.org/reference/Chat.html#method-add_turn)
+- [`ellmer::Chat$chat_async()`](https://ellmer.tidyverse.org/reference/Chat.html#method-chat_async)
+- [`ellmer::Chat$chat_structured()`](https://ellmer.tidyverse.org/reference/Chat.html#method-chat_structured)
+- [`ellmer::Chat$chat_structured_async()`](https://ellmer.tidyverse.org/reference/Chat.html#method-chat_structured_async)
+- [`ellmer::Chat$get_cost()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_cost)
+- [`ellmer::Chat$get_model()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_model)
+- [`ellmer::Chat$get_provider()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_provider)
+- [`ellmer::Chat$get_system_prompt()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_system_prompt)
+- [`ellmer::Chat$get_tokens()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_tokens)
+- [`ellmer::Chat$get_tools()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_tools)
+- [`ellmer::Chat$get_turns()`](https://ellmer.tidyverse.org/reference/Chat.html#method-get_turns)
+- [`ellmer::Chat$last_turn()`](https://ellmer.tidyverse.org/reference/Chat.html#method-last_turn)
+- [`ellmer::Chat$on_tool_request()`](https://ellmer.tidyverse.org/reference/Chat.html#method-on_tool_request)
+- [`ellmer::Chat$on_tool_result()`](https://ellmer.tidyverse.org/reference/Chat.html#method-on_tool_result)
+- [`ellmer::Chat$register_tool()`](https://ellmer.tidyverse.org/reference/Chat.html#method-register_tool)
+- [`ellmer::Chat$register_tools()`](https://ellmer.tidyverse.org/reference/Chat.html#method-register_tools)
+- [`ellmer::Chat$set_model()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_model)
+- [`ellmer::Chat$set_system_prompt()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_system_prompt)
+- [`ellmer::Chat$set_tools()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_tools)
+- [`ellmer::Chat$set_turns()`](https://ellmer.tidyverse.org/reference/Chat.html#method-set_turns)
+- [`ellmer::Chat$stream()`](https://ellmer.tidyverse.org/reference/Chat.html#method-stream)
 
 ------------------------------------------------------------------------
 
@@ -186,7 +189,8 @@ this method directly.
 ### `Commons$chat()`
 
 Submit input and return the response. See
-[ellmer::Chat](https://rdrr.io/pkg/ellmer/man/Chat.html) for arguments.
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html) for
+arguments.
 
 #### Usage
 
@@ -201,14 +205,15 @@ Submit input and return the response. See
 - `echo`:
 
   Whether to echo output; see
-  [ellmer::Chat](https://rdrr.io/pkg/ellmer/man/Chat.html).
+  [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html).
 
 ------------------------------------------------------------------------
 
 ### `Commons$stream_async()`
 
 Stream input and return the response stream. See
-[ellmer::Chat](https://rdrr.io/pkg/ellmer/man/Chat.html) for arguments.
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html) for
+arguments.
 
 #### Usage
 
@@ -232,13 +237,27 @@ Stream input and return the response stream. See
 - `stream`:
 
   Whether to stream plain text or
-  [ellmer::Content](https://rdrr.io/pkg/ellmer/man/Content.html)
+  [ellmer::Content](https://ellmer.tidyverse.org/reference/Content.html)
   objects.
 
 - `controller`:
 
   Optional
-  [`ellmer::stream_controller()`](https://rdrr.io/pkg/ellmer/man/stream_controller.html).
+  [`ellmer::stream_controller()`](https://ellmer.tidyverse.org/reference/stream_controller.html).
+
+------------------------------------------------------------------------
+
+### `Commons$citation_corpus()`
+
+Text that can back an answer's citations: context layer documents,
+measure definitions, and data dictionary entries. Used by
+[`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+to verify the citations fallback answers provide; not typically called
+directly.
+
+#### Usage
+
+    Commons$citation_corpus()
 
 ------------------------------------------------------------------------
 

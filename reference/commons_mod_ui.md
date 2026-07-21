@@ -6,7 +6,10 @@ and
 [`shinychat::chat_mod_server()`](https://posit-dev.github.io/shinychat/r/reference/chat_app.html)
 with commons-specific answer provenance UI. Answers produced from
 registered measures get a compact verified-answer pill. Answers produced
-from fallback SQL get a caution pill.
+from fallback SQL or R can cite text from the agent's context, measure
+definitions, or data documentation; verified citations render as
+footnotes whose tooltips name their source. Fallback answers with no
+verified citation get a potentially-untrusted caution pill.
 
 ## Usage
 
