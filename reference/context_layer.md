@@ -7,7 +7,7 @@ agent interpret its data source.
 ## Usage
 
 ``` r
-context_layer(files = character(), always = character())
+context_layer(files = character())
 ```
 
 ## Arguments
@@ -16,11 +16,6 @@ context_layer(files = character(), always = character())
 
   Character vector of paths to text/markdown files to index.
 
-- always:
-
-  Character vector of facts to inject into the system prompt on every
-  turn. Optional.
-
 ## Value
 
 A `commons_context_layer` object.
@@ -28,13 +23,15 @@ A `commons_context_layer` object.
 ## Details
 
 Files are chunked and indexed with ragnar when the agent first searches
-its context. The `always` argument is for short facts that should be
-included in every system prompt.
+its context. Facts that should be in every prompt belong in the
+`system_prompt` passed to
+[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md),
+not here.
 
 ## Examples
 
 ``` r
-layer <- context_layer(
-  always = "Revenue excludes tax unless stated otherwise."
-)
+path <- tempfile(fileext = ".md")
+writeLines("Revenue excludes tax unless stated otherwise.", path)
+layer <- context_layer(files = path)
 ```

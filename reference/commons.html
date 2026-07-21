@@ -36,17 +36,19 @@ layer, context search, table inspection, and SQL queries."></head><body>
     </div>
 
     <div class="ref-description section level2">
-    <p><code>commons()</code> creates an <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a> subclass with tools for a semantic
+    <p><code>commons()</code> creates an <a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a> subclass with tools for a semantic
 layer, context search, table inspection, and SQL queries.</p>
     </div>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">commons</span><span class="op">(</span></span>
-<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">data_sources</span>,</span>
 <span>  context_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts/system-prompt.md"</span>,</span>
+<span>    package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>, date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  log <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  share_with <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -57,8 +59,9 @@ layer, context search, table inspection, and SQL queries.</p>
 
 
 <dl><dt id="arg-client">client<a class="anchor" aria-label="anchor" href="#arg-client"></a></dt>
-<dd><p>An <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a> giving the provider and model to use, e.g.
-<code><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">ellmer::chat_anthropic()</a></code>.</p></dd>
+<dd><p>An <a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a> giving the provider and model to use, e.g.
+<code><a href="https://rdrr.io/pkg/ellmer/man/chat_anthropic.html" class="external-link">ellmer::chat_anthropic()</a></code>. A system prompt already set on the client is
+ignored, with a warning; use <code>system_prompt</code> instead.</p></dd>
 
 
 <dt id="arg-data-sources">data_sources<a class="anchor" aria-label="anchor" href="#arg-data-sources"></a></dt>
@@ -74,6 +77,28 @@ can take a source's connection as an argument named after the source; see
 
 <dt id="arg-semantic-layer">semantic_layer<a class="anchor" aria-label="anchor" href="#arg-semantic-layer"></a></dt>
 <dd><p>An optional <code><a href="semantic_layer.html">semantic_layer()</a></code>.</p></dd>
+
+
+<dt id="arg-system-prompt">system_prompt<a class="anchor" aria-label="anchor" href="#arg-system-prompt"></a></dt>
+<dd><p>The agent's system prompt, as a single string. The
+default interpolates the markdown prompt shipped with commons, filling
+its <code>{{date}}</code> keyword. To customize the prompt, copy that file into
+your project, edit freely, and interpolate it yourself:</p>
+<p></p><div class="sourceCode r"><pre><code><span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts/system-prompt.md"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>,</span>
+<span>  <span class="st">"system-prompt.md"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
+<span>  <span class="co"># ...</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
+<span>    <span class="st">"system-prompt.md"</span>,</span>
+<span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre><p></p></div>
+<p>Pass values for any <code>{{keyword}}</code> tokens you add as arguments to
+<code><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">ellmer::interpolate_file()</a></code>. commons appends documentation of the
+available tables and data dictionaries to the prompt itself; the file
+needn't (and shouldn't) describe them.</p></dd>
 
 
 <dt id="arg-log">log<a class="anchor" aria-label="anchor" href="#arg-log"></a></dt>
@@ -100,7 +125,7 @@ need at least a publisher account.</p></dd>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A <code>Commons</code> object, which subclasses <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a>.</p>
+    <p>A <code>Commons</code> object, which subclasses <a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -111,7 +136,7 @@ to use the agent as a vitals solver.</p>
     </div>
     <div class="section level2">
     <h2 id="super-class">Super class<a class="anchor" aria-label="anchor" href="#super-class"></a></h2>
-    <p><code><a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a></code> -&gt; <code>Commons</code></p>
+    <p><code><a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a></code> -&gt; <code>Commons</code></p>
     </div>
     <div class="section level2">
     <h2 id="methods">Methods<a class="anchor" aria-label="anchor" href="#methods"></a></h2>
@@ -123,27 +148,27 @@ to use the agent as a vitals solver.</p>
 <li><p><a href="#method-Commons-stream_async"><code>Commons$stream_async()</code></a></p></li>
 <li><p><a href="#method-Commons-prewarm"><code>Commons$prewarm()</code></a></p></li>
 <li><p><a href="#method-Commons-clone"><code>Commons$clone()</code></a></p></li>
-</ul></div><p><details><summary>Inherited methods</summary><ul><li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="add_turn"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-add_turn"><code>ellmer::Chat$add_turn()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_async"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-chat_async"><code>ellmer::Chat$chat_async()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-chat_structured"><code>ellmer::Chat$chat_structured()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured_async"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-chat_structured_async"><code>ellmer::Chat$chat_structured_async()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_cost"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_cost"><code>ellmer::Chat$get_cost()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_model"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_model"><code>ellmer::Chat$get_model()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_provider"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_provider"><code>ellmer::Chat$get_provider()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_system_prompt"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_system_prompt"><code>ellmer::Chat$get_system_prompt()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tokens"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_tokens"><code>ellmer::Chat$get_tokens()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tools"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_tools"><code>ellmer::Chat$get_tools()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_turns"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-get_turns"><code>ellmer::Chat$get_turns()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="last_turn"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-last_turn"><code>ellmer::Chat$last_turn()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_request"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-on_tool_request"><code>ellmer::Chat$on_tool_request()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_result"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-on_tool_result"><code>ellmer::Chat$on_tool_result()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tool"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-register_tool"><code>ellmer::Chat$register_tool()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tools"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-register_tools"><code>ellmer::Chat$register_tools()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_model"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-set_model"><code>ellmer::Chat$set_model()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_system_prompt"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-set_system_prompt"><code>ellmer::Chat$set_system_prompt()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_tools"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-set_tools"><code>ellmer::Chat$set_tools()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_turns"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-set_turns"><code>ellmer::Chat$set_turns()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="stream"><a href="https://ellmer.tidyverse.org/reference/Chat.html#method-stream"><code>ellmer::Chat$stream()</code></a></span></li>
+</ul></div><p><details><summary>Inherited methods</summary><ul><li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="add_turn"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-add_turn"><code>ellmer::Chat$add_turn()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_async"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-chat_async"><code>ellmer::Chat$chat_async()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-chat_structured"><code>ellmer::Chat$chat_structured()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="chat_structured_async"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-chat_structured_async"><code>ellmer::Chat$chat_structured_async()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_cost"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_cost"><code>ellmer::Chat$get_cost()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_model"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_model"><code>ellmer::Chat$get_model()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_provider"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_provider"><code>ellmer::Chat$get_provider()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_system_prompt"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_system_prompt"><code>ellmer::Chat$get_system_prompt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tokens"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_tokens"><code>ellmer::Chat$get_tokens()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_tools"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_tools"><code>ellmer::Chat$get_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="get_turns"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-get_turns"><code>ellmer::Chat$get_turns()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="last_turn"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-last_turn"><code>ellmer::Chat$last_turn()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_request"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-on_tool_request"><code>ellmer::Chat$on_tool_request()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="on_tool_result"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-on_tool_result"><code>ellmer::Chat$on_tool_result()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tool"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-register_tool"><code>ellmer::Chat$register_tool()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="register_tools"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-register_tools"><code>ellmer::Chat$register_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_model"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_model"><code>ellmer::Chat$set_model()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_system_prompt"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_system_prompt"><code>ellmer::Chat$set_system_prompt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_tools"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_tools"><code>ellmer::Chat$set_tools()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="set_turns"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-set_turns"><code>ellmer::Chat$set_turns()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="ellmer" data-topic="Chat" data-id="stream"><a href="https://rdrr.io/pkg/ellmer/man/Chat.html#method-stream"><code>ellmer::Chat$stream()</code></a></span></li>
 </ul></details></p><hr><a id="method-Commons-initialize"></a><div class="section">
 <h3 id="commons-new-"><code>Commons$new()</code><a class="anchor" aria-label="anchor" href="#commons-new-"></a></h3>
 <p>Create a Commons agent. Most users should call <code>commons()</code>
@@ -154,12 +179,14 @@ rather than this method directly.</p><div class="section">
 <span>  <span class="va">data_sources</span>,</span>
 <span>  context_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts/system-prompt.md"</span>,</span>
+<span>    package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>, date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  log <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  share_with <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div><p></p><div class="section">
 <h4 id="arguments-1">Arguments<a class="anchor" aria-label="anchor" href="#arguments-1"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>client, data_sources, context_layer, semantic_layer, log, share_with</code></dt>
+<p></p><div class="arguments"><dl><dt><code>client, data_sources, context_layer, semantic_layer, system_prompt, log, share_with</code></dt>
 <dd><p>See <code>commons()</code>.</p></dd>
 
 
@@ -170,7 +197,7 @@ rather than this method directly.</p><div class="section">
 
 <p></p><hr><a id="method-Commons-chat"></a><div class="section">
 <h3 id="commons-chat-"><code>Commons$chat()</code><a class="anchor" aria-label="anchor" href="#commons-chat-"></a></h3>
-<p>Submit input and return the response. See <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a>
+<p>Submit input and return the response. See <a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a>
 for arguments.</p><div class="section">
 <h4 id="usage-1">Usage<a class="anchor" aria-label="anchor" href="#usage-1"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Commons</span><span class="op">$</span><span class="fu">chat</span><span class="op">(</span><span class="va">...</span>, echo <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
@@ -180,7 +207,7 @@ for arguments.</p><div class="section">
 <dd><p>Input to send to the model.</p></dd>
 
       <dt><code>echo</code></dt>
-<dd><p>Whether to echo output; see <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a>.</p></dd>
+<dd><p>Whether to echo output; see <a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a>.</p></dd>
 
 
 </dl><p></p></div>
@@ -191,7 +218,7 @@ for arguments.</p><div class="section">
 <p></p><hr><a id="method-Commons-stream_async"></a><div class="section">
 <h3 id="commons-stream-async-"><code>Commons$stream_async()</code><a class="anchor" aria-label="anchor" href="#commons-stream-async-"></a></h3>
 <p>Stream input and return the response stream. See
-<a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a> for arguments.</p><div class="section">
+<a href="https://rdrr.io/pkg/ellmer/man/Chat.html" class="external-link">ellmer::Chat</a> for arguments.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Commons</span><span class="op">$</span><span class="fu">stream_async</span><span class="op">(</span></span>
 <span>  <span class="va">...</span>,</span>
@@ -208,10 +235,10 @@ for arguments.</p><div class="section">
 <dd><p>Whether tool calls may run concurrently or sequentially.</p></dd>
 
       <dt><code>stream</code></dt>
-<dd><p>Whether to stream plain text or <a href="https://ellmer.tidyverse.org/reference/Content.html" class="external-link">ellmer::Content</a> objects.</p></dd>
+<dd><p>Whether to stream plain text or <a href="https://rdrr.io/pkg/ellmer/man/Content.html" class="external-link">ellmer::Content</a> objects.</p></dd>
 
       <dt><code>controller</code></dt>
-<dd><p>Optional <code><a href="https://ellmer.tidyverse.org/reference/stream_controller.html" class="external-link">ellmer::stream_controller()</a></code>.</p></dd>
+<dd><p>Optional <code><a href="https://rdrr.io/pkg/ellmer/man/stream_controller.html" class="external-link">ellmer::stream_controller()</a></code>.</p></dd>
 
 
 </dl><p></p></div>
@@ -262,7 +289,7 @@ session starts. <code><a href="commons_mod_ui.html">commons_mod_server()</a></co
 <span class="r-in"><span>  <span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">commons</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  data_sources <span class="op">=</span> <span class="fu"><a href="data_source.html">data_source</a></span><span class="op">(</span>sales <span class="op">=</span> <span class="va">my_sales</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  semantic_layer <span class="op">=</span> <span class="va">sem</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
@@ -286,11 +313,11 @@ session starts. <code><a href="commons_mod_ui.html">commons_mod_server()</a></co
 <span class="r-in"><span>        <span class="op">)</span></span></span>
 <span class="r-in"><span>      <span class="op">)</span></span></span>
 <span class="r-in"><span>    <span class="op">}</span>,</span></span>
-<span class="r-in"><span>    arguments <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>region <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/type_boolean.html" class="external-link">type_string</a></span><span class="op">(</span><span class="st">"Sales region."</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span>    arguments <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>region <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/type_boolean.html" class="external-link">type_string</a></span><span class="op">(</span><span class="st">"Sales region."</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu">commons</span><span class="op">(</span></span></span>
-<span class="r-in"><span>  <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  data_sources <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>warehouse <span class="op">=</span> <span class="fu"><a href="data_source.html">data_source</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  semantic_layer <span class="op">=</span> <span class="va">sem</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>

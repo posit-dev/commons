@@ -26,6 +26,7 @@ files:
 |   |-- semantic_layer.R
 |   `-- context_layer.R
 |-- app.R
+|-- system-prompt.md
 `-- context/
     `-- metrics.md
 ```
@@ -251,8 +252,9 @@ fallback SQL responsibly.
 Good context sources include existing app code, report source, metric
 catalogs, analyst notes, relevant transcripts, and exported pages from
 systems such as Confluence. Structured table and column documentation is
-better attached to the data source as a dictionary (see above). Short
-facts that should always be in the prompt can go in `always`.
+better attached to the data source as a dictionary (see above). Facts
+that should be in every prompt belong in the system prompt file (see
+“Customizing the system prompt” below).
 
 ``` r
 
@@ -261,10 +263,6 @@ agent_context <- context_layer(
   files = c(
     "context/metrics.md",
     "context/table-notes.md"
-  ),
-  always = c(
-    "Revenue excludes tax unless stated otherwise.",
-    "The orders table is one row per order."
   )
 )
 ```
@@ -301,6 +299,53 @@ server <- function(input, output, session) {
 }
 
 shinyApp(ui, server)
+```
+
+## Customizing the system prompt
+
+The system prompt is a markdown file you own. commons ships a default;
+copy it into your project and edit it freely:
+
+``` r
+
+file.copy(
+  system.file("prompts", "system-prompt.md", package = "commons"),
+  "system-prompt.md"
+)
+```
+
+commons appends documentation of the available tables and data
+dictionaries to the prompt itself, so the file needn’t describe them.
+Then interpolate your copy and pass the result to `system_prompt`:
+
+``` r
+
+agent <- commons(
+  # ...
+  system_prompt = ellmer::interpolate_file(
+    "system-prompt.md",
+    date = Sys.Date()
+  )
+)
+```
+
+`{{keyword}}` tokens in the file are filled by
+[`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html)’s
+arguments when the agent is created. The packaged prompt uses one
+keyword, `{{date}}`. Continue passing in `date = Sys.Date()` as long as
+your prompt copy retains the `{{date}}` keyword, and supply values for
+any additional keywords that you added to your prompt:
+
+``` r
+
+agent <- commons(
+  # ...
+  system_prompt = ellmer::interpolate_file(
+    "system-prompt.md",
+    date = Sys.Date(),
+    fiscal_year_start = "February"
+  )
+)
 ```
 
 ## Logging trajectories

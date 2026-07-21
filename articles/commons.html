@@ -79,6 +79,7 @@ separate files:</p>
 |   |-- semantic_layer.R
 |   `-- context_layer.R
 |-- app.R
+|-- system-prompt.md
 `-- context/
     `-- metrics.md</code></pre>
 <p>The bundled <code>commons</code> agent skill can also be copied into
@@ -266,19 +267,15 @@ fallback SQL responsibly.</p>
 <p>Good context sources include existing app code, report source, metric
 catalogs, analyst notes, relevant transcripts, and exported pages from
 systems such as Confluence. Structured table and column documentation is
-better attached to the data source as a dictionary (see above). Short
-facts that should always be in the prompt can go in
-<code>always</code>.</p>
+better attached to the data source as a dictionary (see above). Facts
+that should be in every prompt belong in the system prompt file (see
+“Customizing the system prompt” below).</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># R/context_layer.R</span></span>
 <span><span class="va">agent_context</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/context_layer.html">context_layer</a></span><span class="op">(</span></span>
 <span>  files <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
 <span>    <span class="st">"context/metrics.md"</span>,</span>
 <span>    <span class="st">"context/table-notes.md"</span></span>
-<span>  <span class="op">)</span>,</span>
-<span>  always <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>    <span class="st">"Revenue excludes tax unless stated otherwise."</span>,</span>
-<span>    <span class="st">"The orders table is one row per order."</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 </div>
@@ -297,7 +294,7 @@ chat UI:</p>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"R/context_layer.R"</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
-<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  data_sources <span class="op">=</span> <span class="va">agent_data</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="fu"><a href="../reference/semantic_layer.html">semantic_layer</a></span><span class="op">(</span><span class="st">"R/semantic_layer.R"</span><span class="op">)</span>,</span>
 <span>  context_layer <span class="op">=</span> <span class="va">agent_context</span>,</span>
@@ -313,6 +310,44 @@ chat UI:</p>
 <span><span class="op">}</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/shinyApp.html" class="external-link">shinyApp</a></span><span class="op">(</span><span class="va">ui</span>, <span class="va">server</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="customizing-the-system-prompt">Customizing the system prompt<a class="anchor" aria-label="anchor" href="#customizing-the-system-prompt"></a>
+</h2>
+<p>The system prompt is a markdown file you own. commons ships a
+default; copy it into your project and edit it freely:</p>
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts"</span>, <span class="st">"system-prompt.md"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>,</span>
+<span>  <span class="st">"system-prompt.md"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p>commons appends documentation of the available tables and data
+dictionaries to the prompt itself, so the file needn’t describe them.
+Then interpolate your copy and pass the result to
+<code>system_prompt</code>:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
+<span>  <span class="co"># ...</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
+<span>    <span class="st">"system-prompt.md"</span>,</span>
+<span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><code>{{keyword}}</code> tokens in the file are filled by <a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link"><code>ellmer::interpolate_file()</code></a>’s
+arguments when the agent is created. The packaged prompt uses one
+keyword, <code>{{date}}</code>. Continue passing in
+<code>date = Sys.Date()</code> as long as your prompt copy retains the
+<code>{{date}}</code> keyword, and supply values for any additional
+keywords that you added to your prompt:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
+<span>  <span class="co"># ...</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/ellmer/man/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
+<span>    <span class="st">"system-prompt.md"</span>,</span>
+<span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>    fiscal_year_start <span class="op">=</span> <span class="st">"February"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="logging-trajectories">Logging trajectories<a class="anchor" aria-label="anchor" href="#logging-trajectories"></a>
@@ -337,7 +372,7 @@ automatically when no OTel exporter is set up, writing to
 reading them requires editor-level access. To let named colleagues
 review them, pass their Connect usernames to <code>share_with</code> and
 they’ll be added as collaborators on the content:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
 <span>  log <span class="op">=</span> <span class="cn">TRUE</span>,</span>

@@ -36,7 +36,7 @@ read_trajectories(source = NULL)
 
 A list of conversations, named by conversation id and ordered
 oldest-first. Each conversation is a list of
-[ellmer::Turn](https://ellmer.tidyverse.org/reference/Turn.html)s.
+[ellmer::Turn](https://rdrr.io/pkg/ellmer/man/Turn.html)s.
 
 ## Details
 

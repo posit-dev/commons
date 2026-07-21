@@ -28,7 +28,7 @@ measure(name, description, fn, arguments = list(), title = NULL)
 - arguments:
 
   A named list of
-  [`ellmer::type_string()`](https://ellmer.tidyverse.org/reference/type_boolean.html)
+  [`ellmer::type_string()`](https://rdrr.io/pkg/ellmer/man/type_boolean.html)
   and friends describing the arguments the model supplies. Arguments of
   `fn` not listed here are hidden from the model: they receive a
   matching data source's connection or keep their defaults. See
