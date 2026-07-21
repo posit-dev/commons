@@ -130,8 +130,8 @@ need at least a publisher account.</p></dd>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>The provider and model come from <code>client</code>; commons sets its own system prompt
-and tools. Use <code>agent$chat()</code> to ask questions, <code><a href="commons_mod_ui.html">commons_mod_ui()</a></code> and
-<code><a href="commons_mod_ui.html">commons_mod_server()</a></code> to embed the agent in Shiny, and <code><a href="https://vitals.tidyverse.org/reference/generate.html" class="external-link">vitals::generate()</a></code>
+and tools. Use <code>agent$chat()</code> to ask questions, <code><a href="commons_ui.html">commons_ui()</a></code> and
+<code><a href="commons_ui.html">commons_server()</a></code> to embed the agent in Shiny, and <code><a href="https://vitals.tidyverse.org/reference/generate.html" class="external-link">vitals::generate()</a></code>
 to use the agent as a vitals solver.</p>
     </div>
     <div class="section level2">
@@ -251,7 +251,7 @@ for arguments.</p><div class="section">
 <h3 id="commons-citation-corpus-"><code>Commons$citation_corpus()</code><a class="anchor" aria-label="anchor" href="#commons-citation-corpus-"></a></h3>
 <p>Text that can back an answer's citations: context layer
 documents, measure definitions, and data dictionary entries. Used by
-<code><a href="commons_mod_ui.html">commons_mod_server()</a></code> to verify the citations fallback answers
+<code><a href="commons_ui.html">commons_server()</a></code> to verify the citations fallback answers
 provide; not typically called directly.</p><div class="section">
 <h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Commons</span><span class="op">$</span><span class="fu">citation_corpus</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
@@ -263,7 +263,7 @@ provide; not typically called directly.</p><div class="section">
 <h3 id="commons-prewarm-"><code>Commons$prewarm()</code><a class="anchor" aria-label="anchor" href="#commons-prewarm-"></a></h3>
 <p>Build the context layer's search index ahead of the first
 <code>search_context</code> call, e.g. during idle time right after a Shiny
-session starts. <code><a href="commons_mod_ui.html">commons_mod_server()</a></code> does this automatically.</p><div class="section">
+session starts. <code><a href="commons_ui.html">commons_server()</a></code> does this automatically.</p><div class="section">
 <h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Commons</span><span class="op">$</span><span class="fu">prewarm</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>

@@ -106,9 +106,9 @@ A `Commons` object, which subclasses
 
 The provider and model come from `client`; commons sets its own system
 prompt and tools. Use `agent$chat()` to ask questions,
-[`commons_mod_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+[`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
 and
-[`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
 to embed the agent in Shiny, and
 [`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
 to use the agent as a vitals solver.
@@ -251,7 +251,7 @@ arguments.
 
 Text that can back an answer's citations: context layer documents,
 measure definitions, and data dictionary entries. Used by
-[`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
 to verify the citations fallback answers provide; not typically called
 directly.
 
@@ -266,7 +266,7 @@ directly.
 Build the context layer's search index ahead of the first
 `search_context` call, e.g. during idle time right after a Shiny session
 starts.
-[`commons_mod_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_mod_ui.md)
+[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
 does this automatically.
 
 #### Usage
