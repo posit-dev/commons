@@ -60,10 +60,13 @@
       tip.setAttribute("role", "tooltip");
       var summary = [];
       entries.forEach(function(entry) {
-        if (entry.reason) {
+        var heading = entry.reason && (
+          /[.,:;!?]$/.test(entry.reason) ? entry.reason : entry.reason + ":"
+        );
+        if (heading) {
           var reason = document.createElement("span");
           reason.className = "commons-citation-reason";
-          reason.textContent = entry.reason;
+          reason.textContent = heading;
           tip.appendChild(reason);
         }
         var quote = document.createElement("span");
@@ -75,7 +78,7 @@
         quote.appendChild(source);
         tip.appendChild(quote);
         summary.push(
-          (entry.reason ? entry.reason + ": " : "") +
+          (heading ? heading + " " : "") +
             "“" + entry.quote + "” — " + entry.label
         );
       });

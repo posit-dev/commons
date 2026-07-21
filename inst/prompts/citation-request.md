@@ -6,7 +6,7 @@ If exact text you have seen in this conversation from context search
 results, measure definitions, or data documentation supports the way you
 computed an answer, end your reply with one citation per supporting excerpt:
 
-<citation reason="why this supports the answer">the supporting text, quoted exactly</citation>
+<citation reason="Why this supports the answer">the supporting text, quoted exactly</citation>
 
 Rules:
 
