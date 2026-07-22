@@ -38,6 +38,12 @@ client, give the argument a default that builds the object, e.g.
 \code{board = pins::board_connect()}. Write the default as a call rather than a
 reference to a variable defined elsewhere, so the measure doesn't depend on
 where the semantic layer is created.
+
+The source of each measure, and of any helper functions defined alongside
+it in the semantic layer's files, is readable in the agent's \code{run_r}
+session: evaluating a measure's name there prints its definition. Only
+source text is shared with that session; the functions' environments (and
+any connections or credentials in them) are not.
 }
 \examples{
 semantic_layer(

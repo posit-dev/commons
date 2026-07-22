@@ -2,7 +2,7 @@ tool_run_r <- function(private) {
   ellmer::tool(
     function(code) {
       promises::then(
-        run_r_tool(private$worker, private$handles, code),
+        run_r_tool(private$worker, private$handles, code, private$fn_sources),
         function(res) add_citation_request(res, private$citation_request)
       )
     },
@@ -12,6 +12,11 @@ tool_run_r <- function(private) {
       "The session persists across calls: variables you assign and packages",
       "you load remain available. Results from call_measure and run_sql are",
       "preloaded under their advertised handles (r1, r2, ...).",
+      "Measure definitions and their helper functions are predefined under",
+      "their own names: evaluate a measure's name to read its source.",
+      "These are source-only copies without their original environment or",
+      "database connections, so treat them as reference material; to compute",
+      "a measure, use call_measure.",
       "\n\nRules:",
       "\n- Work incrementally: each call should do one small, well-defined task.",
       "\n- Create at most one figure per call.",
@@ -38,11 +43,11 @@ tool_run_r <- function(private) {
 # Returns a promise so a long computation doesn't block other sessions'
 # chats. Calls are chained through worker$tail so concurrent tool calls
 # within a turn take turns on the single worker process.
-run_r_tool <- function(worker, handles, code) {
+run_r_tool <- function(worker, handles, code, fn_sources = character()) {
   task <- function(...) {
     tryCatch(
       {
-        worker_ensure(worker)
+        worker_ensure(worker, fn_sources)
         ids <- handle_ids(handles)
         new_ids <- ids[seq_along(ids) > worker$synced]
         new_handles <- lapply(
@@ -215,7 +220,7 @@ worker_tail <- function(worker) {
   worker$tail %||% promises::promise_resolve(NULL)
 }
 
-worker_ensure <- function(worker) {
+worker_ensure <- function(worker, fn_sources = character()) {
   if (!is.null(worker$rs) && worker$rs$is_alive()) {
     return(invisible(worker))
   }
@@ -238,6 +243,11 @@ worker_ensure <- function(worker) {
       dll_path = commons_dll_path()
     )
   )
+  # Defining sources at spawn (rather than syncing per call like handles)
+  # means a respawned worker gets them again for free.
+  if (length(fn_sources)) {
+    rs$run(worker_define_functions, args = list(fn_sources = fn_sources))
+  }
   worker$rs <- rs
   worker$synced <- 0L
   invisible(worker)
@@ -450,6 +460,20 @@ worker_init <- function(parent_tmp, work_dir, dll_path) {
   write_roots <- unique(c(parent_tmp, work_dir))
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
   .Call(sym, read_roots, write_roots, NULL)
+  invisible(TRUE)
+}
+
+# Define measure/helper sources in the worker's global env so the model can
+# read them. Parsing with keep.source here (the worker is non-interactive, so
+# it defaults off) keeps comments when a function is printed.
+worker_define_functions <- function(fn_sources) {
+  for (nm in names(fn_sources)) {
+    fn <- eval(
+      parse(text = fn_sources[[nm]], keep.source = TRUE),
+      envir = globalenv()
+    )
+    assign(nm, fn, envir = globalenv())
+  }
   invisible(TRUE)
 }
 

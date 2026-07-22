@@ -37,6 +37,28 @@ test_that("semantic_layer surfaces read_measures errors for bad paths", {
   expect_snapshot(semantic_layer("not a measure"), error = TRUE)
 })
 
+test_that("semantic_layer collects sources from files and inline measures", {
+  skip_if_not_installed("roxygen2")
+
+  path <- withr::local_tempfile(fileext = ".R")
+  writeLines(
+    c(
+      "double <- function(x) x * 2L",
+      "#' Counter",
+      "#' @description Counts.",
+      "#' @measure",
+      "counter <- function() double(1L)"
+    ),
+    path
+  )
+
+  layer <- semantic_layer(path, count_measure_tool())
+
+  expect_setequal(names(layer$fn_sources), c("double", "counter", "order_count"))
+  expect_match(layer$fn_sources[["double"]], "x * 2L", fixed = TRUE)
+  expect_match(layer$fn_sources[["order_count"]], "^function")
+})
+
 test_that("validate_measure_args coerces valid arguments", {
   td <- count_measure_tool()
   args <- validate_measure_args(

@@ -27,6 +27,12 @@
 #' reference to a variable defined elsewhere, so the measure doesn't depend on
 #' where the semantic layer is created.
 #'
+#' The source of each measure, and of any helper functions defined alongside
+#' it in the semantic layer's files, is readable in the agent's `run_r`
+#' session: evaluating a measure's name there prints its definition. Only
+#' source text is shared with that session; the functions' environments (and
+#' any connections or credentials in them) are not.
+#'
 #' @return A `commons_semantic_layer` object.
 #'
 #' @seealso [measure()] to define a measure.
@@ -59,7 +65,8 @@
 #'
 #' @export
 semantic_layer <- function(...) {
-  measures <- expand_measures(rlang::list2(...), rlang::caller_env())
+  expanded <- expand_measures(rlang::list2(...), rlang::caller_env())
+  measures <- expanded$measures
 
   check_measures(measures)
   names(measures) <- vapply(measures, tool_name, character(1))
@@ -71,13 +78,22 @@ semantic_layer <- function(...) {
     )
   }
 
-  new_semantic_layer(measures)
+  # Measures that didn't come from files (so no harvested source) still get a
+  # readable, if comment-free, deparse.
+  fn_sources <- expanded$fn_sources
+  for (nm in setdiff(names(measures), names(fn_sources))) {
+    fn_sources[[nm]] <- fn_source_text(tool_fn(measures[[nm]]))
+  }
+
+  new_semantic_layer(measures, fn_sources)
 }
 
 # Expand each `...` element into measures: character vectors are read from disk,
 # lists of measures are spliced in, and a lone measure is kept as is. `env` is
 # the caller of semantic_layer(), so measures read from disk close over the data
-# the user defined there rather than only the global environment.
+# the user defined there rather than only the global environment. Function
+# sources harvested by read_measures() ride along as an attribute on each
+# measure list; they're gathered here before unlist() drops attributes.
 expand_measures <- function(args, env = rlang::caller_env()) {
   expanded <- lapply(args, function(arg) {
     if (is.character(arg)) {
@@ -88,7 +104,12 @@ expand_measures <- function(args, env = rlang::caller_env()) {
       list(arg)
     }
   })
-  unlist(expanded, recursive = FALSE) %||% list()
+  fn_sources <- unlist(lapply(expanded, attr, "fn_sources"))
+  fn_sources <- fn_sources[!duplicated(names(fn_sources))] %||% character()
+  list(
+    measures = unlist(expanded, recursive = FALSE) %||% list(),
+    fn_sources = fn_sources
+  )
 }
 
 #' Create a measure
@@ -169,9 +190,9 @@ resolve_injections <- function(registry, injectables, call = rlang::caller_env()
   })
 }
 
-new_semantic_layer <- function(measures = list()) {
+new_semantic_layer <- function(measures = list(), fn_sources = character()) {
   structure(
-    list(measures = measures),
+    list(measures = measures, fn_sources = fn_sources),
     class = "commons_semantic_layer"
   )
 }
@@ -342,6 +363,7 @@ coerce_arg <- function(td, nm, type, value, call = rlang::caller_env()) {
 
 # Isolate the ellmer internals used by registered measure tools.
 tool_name <- function(td) S7::prop(td, "name")
+tool_fn <- function(td) S7::S7_data(td)
 tool_description <- function(td) S7::prop(td, "description")
 tool_title <- function(td) {
   annotations <- S7::prop(td, "annotations")
