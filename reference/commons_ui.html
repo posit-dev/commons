@@ -59,7 +59,7 @@ citation get a potentially-untrusted caution pill.</p>
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">commons_ui</span><span class="op">(</span><span class="va">id</span>, <span class="va">...</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu">commons_server</span><span class="op">(</span><span class="va">id</span>, <span class="va">client</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu">commons_server</span><span class="op">(</span><span class="va">id</span>, <span class="va">client</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -72,8 +72,9 @@ and <code>commons_server()</code>.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
-<dd><p>Arguments passed to <code><a href="https://posit-dev.github.io/shinychat/r/reference/chat_ui.html" class="external-link">shinychat::chat_ui()</a></code>, such as <code>greeting</code>
-or <code>height</code>, as well as extra HTML attributes.</p></dd>
+<dd><p>In <code>commons_ui()</code>, extra arguments passed to
+<code><a href="https://posit-dev.github.io/shinychat/r/reference/chat_ui.html" class="external-link">shinychat::chat_ui()</a></code>. In <code>commons_server()</code>, arguments passed to
+<code><a href="https://posit-dev.github.io/shinychat/r/reference/chat_app.html" class="external-link">shinychat::chat_server()</a></code>.</p></dd>
 
 
 <dt id="arg-client">client<a class="anchor" aria-label="anchor" href="#arg-client"></a></dt>

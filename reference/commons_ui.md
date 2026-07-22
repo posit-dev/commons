@@ -16,7 +16,7 @@ verified citation get a potentially-untrusted caution pill.
 ``` r
 commons_ui(id, ...)
 
-commons_server(id, client)
+commons_server(id, client, ...)
 ```
 
 ## Arguments
@@ -28,9 +28,10 @@ commons_server(id, client)
 
 - ...:
 
-  Arguments passed to
-  [`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html),
-  such as `greeting` or `height`, as well as extra HTML attributes.
+  In `commons_ui()`, extra arguments passed to
+  [`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html).
+  In `commons_server()`, arguments passed to
+  [`shinychat::chat_server()`](https://posit-dev.github.io/shinychat/r/reference/chat_app.html).
 
 - client:
 
