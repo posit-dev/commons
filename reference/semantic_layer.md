@@ -49,6 +49,12 @@ client, give the argument a default that builds the object, e.g.
 a reference to a variable defined elsewhere, so the measure doesn't
 depend on where the semantic layer is created.
 
+The source of each measure, and of any helper functions defined
+alongside it in the semantic layer's files, is readable in the agent's
+`run_r` session: evaluating a measure's name there prints its
+definition. Only source text is shared with that session; the functions'
+environments (and any connections or credentials in them) are not.
+
 ## See also
 
 [`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)
@@ -74,8 +80,12 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x55d2a5704978>
+#> <environment: 0x55cbfb1264b0>
 #> 
+#> 
+#> $fn_sources
+#>        order_count 
+#> "function () \n10" 
 #> 
 #> attr(,"class")
 #> [1] "commons_semantic_layer"
