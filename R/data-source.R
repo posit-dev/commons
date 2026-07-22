@@ -10,7 +10,7 @@
 #' * Named data frames are loaded into an in-process DuckDB database. Use this
 #'   when the data isn't already in a database.
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
-#'   in-process database: each pin in `names` becomes a table.
+#'   in-process database: each pin in `tables` becomes a table.
 #'
 #' The resulting object gives the agent a DBI connection plus a table registry.
 #' Use [list_tables()] to list the registered tables.
@@ -18,15 +18,17 @@
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
 #'   a table name the agent can query.
-#' @param tables Tables to expose, used only when a connection is supplied. Can
-#'   be a character vector of table names, schema-qualified strings like
-#'   `"schema.table"`, or `DBI::Id` objects. Defaults to every table returned by
-#'   [DBI::dbListTables()]. Strings containing dots are interpreted as
-#'   schema-qualified names; use `DBI::Id(table = "a.b")` for literal table
-#'   names containing dots.
-#' @param names Pins to read, used only when a board is supplied. A named
-#'   character vector: the names become table names, and the values are pin
-#'   names passed to [pins::pin_read()].
+#' @param tables Which tables to expose, used when a connection or a board is
+#'   supplied.
+#'
+#'   For a connection, a character vector of table names, schema-qualified
+#'   strings like `"schema.table"`, or `DBI::Id` objects. Defaults to every
+#'   table returned by [DBI::dbListTables()]. Strings containing dots are
+#'   interpreted as schema-qualified names; use `DBI::Id(table = "a.b")` for
+#'   literal table names containing dots.
+#'
+#'   For a board, a named character vector of pins to read: the names become
+#'   table names, and the values are pin names passed to [pins::pin_read()].
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
 #'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
@@ -67,7 +69,7 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL, names = NULL, dictionary = NULL) {
+data_source <- function(..., tables = NULL, dictionary = NULL) {
   dots <- rlang::list2(...)
   dictionary <- as_data_dictionary(dictionary)
 
@@ -75,7 +77,7 @@ data_source <- function(..., tables = NULL, names = NULL, dictionary = NULL) {
     return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
   }
   if (length(dots) == 1 && inherits(dots[[1]], "pins_board")) {
-    return(data_source_board(dots[[1]], names, dictionary = dictionary))
+    return(data_source_board(dots[[1]], tables, dictionary = dictionary))
   }
 
   check_named_frames(dots)
@@ -122,19 +124,19 @@ data_source_connection <- function(
 
 data_source_board <- function(
   board,
-  names,
+  tables,
   dictionary = NULL,
   call = rlang::caller_env()
 ) {
-  if (!rlang::is_named(names) || !is.character(names)) {
+  if (!rlang::is_named(tables) || !is.character(tables)) {
     cli::cli_abort(
-      "{.arg names} must be a named character vector of pin names.",
+      "{.arg tables} must be a named character vector of pin names.",
       call = call
     )
   }
 
-  frames <- lapply(names, function(pin) pins::pin_read(board, pin))
-  names(frames) <- names(names)
+  frames <- lapply(tables, function(pin) pins::pin_read(board, pin))
+  names(frames) <- names(tables)
   rlang::inject(data_source(!!!frames, dictionary = dictionary))
 }
 

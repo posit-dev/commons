@@ -4,23 +4,24 @@
 \alias{data_source}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL, names = NULL, dictionary = NULL)
+data_source(..., tables = NULL, dictionary = NULL)
 }
 \arguments{
 \item{...}{A single DBI connection, a single \code{pins} board, or named data
 frames to register as tables. When passing data frames, each name becomes
 a table name the agent can query.}
 
-\item{tables}{Tables to expose, used only when a connection is supplied. Can
-be a character vector of table names, schema-qualified strings like
-\code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every table returned by
-\code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are interpreted as
-schema-qualified names; use \code{DBI::Id(table = "a.b")} for literal table
-names containing dots.}
+\item{tables}{Which tables to expose, used when a connection or a board is
+supplied.
 
-\item{names}{Pins to read, used only when a board is supplied. A named
-character vector: the names become table names, and the values are pin
-names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
+For a connection, a character vector of table names, schema-qualified
+strings like \code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every
+table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are
+interpreted as schema-qualified names; use \code{DBI::Id(table = "a.b")} for
+literal table names containing dots.
+
+For a board, a named character vector of pins to read: the names become
+table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
 
 \item{dictionary}{An optional path to a data dictionary describing the
 source's tables and columns, in the
@@ -42,7 +43,7 @@ the database directly.
 \item Named data frames are loaded into an in-process DuckDB database. Use this
 when the data isn't already in a database.
 \item A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}, is read into the same
-in-process database: each pin in \code{names} becomes a table.
+in-process database: each pin in \code{tables} becomes a table.
 }
 
 The resulting object gives the agent a DBI connection plus a table registry.

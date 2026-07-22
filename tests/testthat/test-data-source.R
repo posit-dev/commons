@@ -131,7 +131,7 @@ test_that("data_source reads a pins board into queryable tables", {
     pins::pin_write(board, data.frame(id = 1:3), "team-orders", type = "rds")
   )
 
-  src <- data_source(board, names = c(orders = "team-orders"))
+  src <- data_source(board, tables = c(orders = "team-orders"))
   expect_equal(list_tables(src), "orders")
   expect_equal(nrow(source_query(src, "SELECT * FROM orders")), 3)
 

@@ -21,7 +21,7 @@
       data_source(board)
     Condition
       Error in `data_source()`:
-      ! `names` must be a named character vector of pin names.
+      ! `tables` must be a named character vector of pin names.
 
 # data_source rejects unnamed or non-data-frame input
 
