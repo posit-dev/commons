@@ -277,7 +277,10 @@ Commons <- R6::R6Class(
       if (!is.null(layer) && length(layer$docs) > 0) {
         local_commons_span(
           "commons_context_prewarm",
-          attributes = list("commons.context.n_docs" = length(layer$docs))
+          attributes = list(
+            "commons.context.n_docs" = length(layer$docs),
+            "commons.context.cache_hit" = !is.null(layer$cache$store)
+          )
         )
         context_store(layer)
       }
