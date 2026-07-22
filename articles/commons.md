@@ -90,7 +90,7 @@ read; the names you provide become table names:
 agent_data <- list(
   warehouse = data_source(
     pins::board_connect(),
-    names = c(
+    tables = c(
       orders = "team/orders",
       customers = "team/customers"
     )

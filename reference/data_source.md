@@ -7,7 +7,7 @@ agent.
 ## Usage
 
 ``` r
-data_source(..., tables = NULL, names = NULL, dictionary = NULL)
+data_source(..., tables = NULL, dictionary = NULL)
 ```
 
 ## Arguments
@@ -20,20 +20,18 @@ data_source(..., tables = NULL, names = NULL, dictionary = NULL)
 
 - tables:
 
-  Tables to expose, used only when a connection is supplied. Can be a
-  character vector of table names, schema-qualified strings like
-  `"schema.table"`, or
+  Which tables to expose, used when a connection or a board is supplied.
+
+  For a connection, a character vector of table names, schema-qualified
+  strings like `"schema.table"`, or
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) objects. Defaults
   to every table returned by
   [`DBI::dbListTables()`](https://dbi.r-dbi.org/reference/dbListTables.html).
   Strings containing dots are interpreted as schema-qualified names; use
   `DBI::Id(table = "a.b")` for literal table names containing dots.
 
-- names:
-
-  Pins to read, used only when a board is supplied. A named character
-  vector: the names become table names, and the values are pin names
-  passed to
+  For a board, a named character vector of pins to read: the names
+  become table names, and the values are pin names passed to
   [`pins::pin_read()`](https://pins.rstudio.com/reference/pin_read.html).
 
 - dictionary:
@@ -59,8 +57,8 @@ what you pass:
 
 - A `pins` board, e.g.
   [`pins::board_connect()`](https://pins.rstudio.com/reference/board_connect.html),
-  is read into the same in-process database: each pin in `names` becomes
-  a table.
+  is read into the same in-process database: each pin in `tables`
+  becomes a table.
 
 The resulting object gives the agent a DBI connection plus a table
 registry. Use

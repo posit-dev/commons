@@ -39,7 +39,7 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">data_source</span><span class="op">(</span><span class="va">...</span>, tables <span class="op">=</span> <span class="cn">NULL</span>, names <span class="op">=</span> <span class="cn">NULL</span>, dictionary <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">data_source</span><span class="op">(</span><span class="va">...</span>, tables <span class="op">=</span> <span class="cn">NULL</span>, dictionary <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -53,18 +53,15 @@ a table name the agent can query.</p></dd>
 
 
 <dt id="arg-tables">tables<a class="anchor" aria-label="anchor" href="#arg-tables"></a></dt>
-<dd><p>Tables to expose, used only when a connection is supplied. Can
-be a character vector of table names, schema-qualified strings like
-<code>"schema.table"</code>, or <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> objects. Defaults to every table returned by
-<code><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">DBI::dbListTables()</a></code>. Strings containing dots are interpreted as
-schema-qualified names; use <code>DBI::Id(table = "a.b")</code> for literal table
-names containing dots.</p></dd>
-
-
-<dt id="arg-names">names<a class="anchor" aria-label="anchor" href="#arg-names"></a></dt>
-<dd><p>Pins to read, used only when a board is supplied. A named
-character vector: the names become table names, and the values are pin
-names passed to <code><a href="https://pins.rstudio.com/reference/pin_read.html" class="external-link">pins::pin_read()</a></code>.</p></dd>
+<dd><p>Which tables to expose, used when a connection or a board is
+supplied.</p>
+<p>For a connection, a character vector of table names, schema-qualified
+strings like <code>"schema.table"</code>, or <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> objects. Defaults to every
+table returned by <code><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">DBI::dbListTables()</a></code>. Strings containing dots are
+interpreted as schema-qualified names; use <code>DBI::Id(table = "a.b")</code> for
+literal table names containing dots.</p>
+<p>For a board, a named character vector of pins to read: the names become
+table names, and the values are pin names passed to <code><a href="https://pins.rstudio.com/reference/pin_read.html" class="external-link">pins::pin_read()</a></code>.</p></dd>
 
 
 <dt id="arg-dictionary">dictionary<a class="anchor" aria-label="anchor" href="#arg-dictionary"></a></dt>
@@ -86,7 +83,7 @@ the database directly.</p></li>
 <li><p>Named data frames are loaded into an in-process DuckDB database. Use this
 when the data isn't already in a database.</p></li>
 <li><p>A <code>pins</code> board, e.g. <code><a href="https://pins.rstudio.com/reference/board_connect.html" class="external-link">pins::board_connect()</a></code>, is read into the same
-in-process database: each pin in <code>names</code> becomes a table.</p></li>
+in-process database: each pin in <code>tables</code> becomes a table.</p></li>
 </ul><p>The resulting object gives the agent a DBI connection plus a table registry.
 Use <code><a href="list_tables.html">list_tables()</a></code> to list the registered tables.</p>
     </div>
