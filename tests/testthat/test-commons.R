@@ -449,3 +449,27 @@ test_that("prewarm() builds the context store ahead of the first search", {
 test_that("prewarm() without a context layer is a no-op", {
   expect_no_error(test_agent()$prewarm())
 })
+
+test_that("prewarm() records a span with the doc count", {
+  skip_if_not_installed("otelsdk")
+
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  recorded <- otelsdk::with_otel_record(agent$prewarm())
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  expect_true("commons_context_prewarm" %in% names)
+  span <- recorded$traces[[which(names == "commons_context_prewarm")]]
+  expect_equal(span$attributes[["commons.context.n_docs"]], 1L)
+})
+
+test_that("commons() records an agent-creation span", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record(test_agent())
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  span <- recorded$traces[[which(names == "commons_agent_create")]]
+  expect_equal(span$attributes[["commons.agent.n_data_sources"]], 1L)
+  expect_equal(span$attributes[["commons.agent.has_context_layer"]], FALSE)
+})

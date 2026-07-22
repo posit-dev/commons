@@ -49,6 +49,10 @@ commons_ui <- function(id, ...) {
 commons_server <- function(id, client, ...) {
   check_chat_packages()
   check_commons_client(client)
+  local_commons_span(
+    "commons_server_start",
+    attributes = list("commons.server.id" = id)
+  )
 
   # Build the context index during post-startup idle time (while the user
   # reads the welcome message) rather than inside the first search. Errors are

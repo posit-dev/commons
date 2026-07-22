@@ -1,3 +1,6 @@
+# @staticimports pkg:staticimports
+#   is_installed
+
 # Trajectory capture rides on OpenTelemetry: ellmer emits GenAI-semconv chat
 # spans carrying the full message history, and commons adds a per-turn wrapper
 # span carrying `gen_ai.conversation.id` so spans can be grouped back into
@@ -70,6 +73,33 @@ check_log <- function(log, call = rlang::caller_env()) {
       "{.arg log} must be {.code TRUE} or {.code FALSE}.",
       call = call
     )
+  }
+  invisible(NULL)
+}
+
+# Start and activate a span for the calling frame's lifetime, ending when it
+# exits. Unlike trajectory logging, these setup spans aren't gated behind
+# `log = TRUE`: they cover product setup (data source and agent construction),
+# not conversation content, and otel's default tracer provider is a no-op
+# until an exporter is configured, so this is cheap even when tracing is off.
+local_commons_span <- function(name, attributes = NULL, envir = parent.frame()) {
+  if (!is_installed("otel")) {
+    return(invisible(NULL))
+  }
+  otel::start_local_active_span(
+    name,
+    attributes = attributes,
+    tracer = otel::get_tracer("co.posit.r-package.commons"),
+    activation_scope = envir
+  )
+}
+
+# Attributes are best set at span creation (samplers can only see those), but
+# some, like a row count, are only known after the work the span covers has
+# started. `span` is NULL when otel isn't installed; no-op then.
+commons_span_set_attribute <- function(span, name, value) {
+  if (!is.null(span)) {
+    span$set_attribute(name, value)
   }
   invisible(NULL)
 }
