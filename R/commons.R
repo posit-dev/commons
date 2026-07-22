@@ -186,6 +186,7 @@ Commons <- R6::R6Class(
       private$context_layer <- augment_context_layer(context_layer, sources)
       private$first_touch <- new.env(parent = emptyenv())
       private$registry <- semantic_layer$measures
+      private$fn_sources <- semantic_layer$fn_sources
       private$injections <- resolve_injections(
         private$registry,
         measure_injectables(sources)
@@ -274,6 +275,7 @@ Commons <- R6::R6Class(
     sources = NULL,
     context_layer = NULL,
     registry = NULL,
+    fn_sources = NULL,
     injections = NULL,
     conversation_id = NULL,
     tracing = FALSE,

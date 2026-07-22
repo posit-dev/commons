@@ -21,17 +21,43 @@ read_measures <- function(paths, env = globalenv()) {
   # Source every file into one shared env (in order) so a measure can call a
   # helper defined in a sibling file. The parsed block only reads tags. The env
   # inherits from `env` (the semantic_layer() caller) so measures can reference
-  # data defined there, not only in the global environment.
+  # data defined there, not only in the global environment. keep.source
+  # preserves srcrefs so measure sources ship to the run_r session verbatim,
+  # comments included.
   measure_env <- new.env(parent = env)
   for (file in files) {
-    sys.source(file, envir = measure_env)
+    sys.source(file, envir = measure_env, keep.source = TRUE)
   }
 
   measures <- unlist(
     lapply(files, function(file) read_measures_file(file, measure_env)),
     recursive = FALSE
   )
-  measures %||% list()
+  measures <- measures %||% list()
+  attr(measures, "fn_sources") <- env_fn_sources(measure_env)
+  measures
+}
+
+# Source text for every function defined by the semantic layer files —
+# measures and the helpers they call alike — so run_r can present them for
+# reading. Only text leaves the environment; closures never do.
+env_fn_sources <- function(env) {
+  out <- character()
+  for (nm in ls(env)) {
+    obj <- env[[nm]]
+    if (is.function(obj)) {
+      out[[nm]] <- fn_source_text(obj)
+    }
+  }
+  out
+}
+
+fn_source_text <- function(fn) {
+  src <- attr(fn, "srcref")
+  if (is.null(src)) {
+    return(paste(deparse(fn), collapse = "\n"))
+  }
+  paste(as.character(src), collapse = "\n")
 }
 
 resolve_measure_files <- function(paths, call = rlang::caller_env()) {

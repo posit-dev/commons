@@ -264,6 +264,29 @@ test_that("read_measures produces measures usable in a semantic_layer", {
   expect_named(layer$measures, "order_count")
 })
 
+test_that("read_measures harvests measure and helper sources, comments included", {
+  skip_if_not_installed("roxygen2")
+
+  path <- measures_script(c(
+    "double <- function(x) {",
+    "  # helpers ride along",
+    "  x * 2L",
+    "}",
+    "",
+    "#' Count orders",
+    "#' @description Counts orders.",
+    "#' @measure",
+    "order_count <- function() double(1013L)"
+  ))
+
+  measures <- read_measures(path)
+
+  sources <- attr(measures, "fn_sources")
+  expect_named(sources, c("double", "order_count"))
+  expect_match(sources[["double"]], "# helpers ride along", fixed = TRUE)
+  expect_match(sources[["order_count"]], "double(1013L)", fixed = TRUE)
+})
+
 test_that("read_measures parses @provenance tags without changing the measure", {
   skip_if_not_installed("roxygen2")
 

@@ -48,6 +48,18 @@ test_that("run_r returns plots as images and opens the display", {
   expect_match(res@extra$display$html, "commons-run-r-code")
 })
 
+test_that("run_r preloads measure sources for reading, comments included", {
+  worker <- local_worker()
+  store <- new_handle_store()
+  fn_sources <- c(order_count = "function() {\n  # count every order\n  6L\n}")
+
+  res <- sync_promise(run_r_tool(worker, store, "order_count", fn_sources))
+  expect_match(res@value, "# count every order", fixed = TRUE)
+
+  called <- sync_promise(run_r_tool(worker, store, "order_count()", fn_sources))
+  expect_match(called@value, "6")
+})
+
 test_that("run_r delivers the citation request when no fallback tool has", {
   agent <- test_agent()
   withr::defer(worker_close(agent$.__enclos_env__$private$worker))
