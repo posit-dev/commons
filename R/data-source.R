@@ -86,7 +86,15 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
     return(data_source_board(dots[[1]], tables, dictionary = dictionary))
   }
 
-  check_named_frames(dots)
+  data_source_frames(dots, dictionary)
+}
+
+# Shared by the top-level frames path and data_source_board(), which reads a
+# board's pins into data frames and loads them the same way. Called directly
+# rather than through data_source() so a board source emits one
+# commons_data_source_create span, not a duplicate nested one.
+data_source_frames <- function(dots, dictionary, call = rlang::caller_env()) {
+  check_named_frames(dots, call = call)
   local_commons_span(
     "commons_data_source_load_frames",
     attributes = list("commons.data_source.n_tables" = length(dots))
@@ -165,7 +173,7 @@ data_source_board <- function(
   )
   frames <- lapply(tables, function(pin) pins::pin_read(board, pin))
   names(frames) <- names(tables)
-  rlang::inject(data_source(!!!frames, dictionary = dictionary))
+  data_source_frames(frames, dictionary)
 }
 
 #' List the tables an agent can query

@@ -182,15 +182,6 @@ Commons <- R6::R6Class(
 
       sources <- as_data_sources(data_sources)
 
-      local_commons_span(
-        "commons_agent_create",
-        attributes = list(
-          "commons.agent.n_data_sources" = length(sources),
-          "commons.agent.has_context_layer" = !is.null(context_layer),
-          "commons.agent.n_measures" = length(semantic_layer$measures)
-        )
-      )
-
       private$sources <- sources
       private$context_layer <- augment_context_layer(context_layer, sources)
       private$first_touch <- new.env(parent = emptyenv())
@@ -202,6 +193,19 @@ Commons <- R6::R6Class(
       )
       private$conversation_id <- new_conversation_id()
       private$tracing <- new_trajectory_tracing(log, share_with)
+
+      # Created after new_trajectory_tracing() so a fresh `log = TRUE` local
+      # exporter is already configured; otherwise otel::get_tracer() below
+      # would resolve and cache a no-op provider before tracing turns on.
+      local_commons_span(
+        "commons_agent_create",
+        attributes = list(
+          "commons.agent.n_data_sources" = length(sources),
+          "commons.agent.has_context_layer" = !is.null(context_layer),
+          "commons.agent.n_measures" = length(semantic_layer$measures)
+        )
+      )
+
       private$handles <- new_handle_store()
       private$worker <- new_r_worker()
       private$corpus <- build_citation_corpus(
