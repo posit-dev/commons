@@ -74,7 +74,7 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x56034dedccb8>
+#> <environment: 0x55d2a5704978>
 #> 
 #> 
 #> attr(,"class")

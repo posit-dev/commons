@@ -14,7 +14,7 @@ verified citation get a potentially-untrusted caution pill.
 ## Usage
 
 ``` r
-commons_ui(id, ..., messages = NULL, height = "100%")
+commons_ui(id, ...)
 
 commons_server(id, client)
 ```
@@ -28,18 +28,9 @@ commons_server(id, client)
 
 - ...:
 
-  Extra HTML attributes passed to
-  [`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html).
-
-- messages:
-
-  Initial messages shown in the chat. Passed to
-  [`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html).
-
-- height:
-
-  Chat container height. Defaults to `"100%"` so the chat input stays
-  docked at the bottom of fill layouts.
+  Arguments passed to
+  [`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html),
+  such as `greeting` or `height`, as well as extra HTML attributes.
 
 - client:
 
