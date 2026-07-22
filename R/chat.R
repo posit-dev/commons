@@ -10,8 +10,9 @@
 #'
 #' @param id The ID of the chat element; must match between `commons_ui()`
 #'   and `commons_server()`.
-#' @param ... Arguments passed to [shinychat::chat_ui()], such as `greeting`
-#'   or `height`, as well as extra HTML attributes.
+#' @param ... In `commons_ui()`, extra arguments passed to 
+#'  [shinychat::chat_ui()]. In `commons_server()`, arguments passed to 
+#'  [shinychat::chat_server()].
 #' @param client A [commons()] agent. Create a new agent for each Shiny session.
 #'
 #' @return `commons_ui()` returns UI. `commons_server()` returns the
@@ -45,7 +46,7 @@ commons_ui <- function(id, ...) {
 
 #' @rdname commons_ui
 #' @export
-commons_server <- function(id, client) {
+commons_server <- function(id, client, ...) {
   check_chat_packages()
   check_commons_client(client)
 
@@ -57,7 +58,7 @@ commons_server <- function(id, client) {
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
 
-  chat <- shinychat::chat_server(id, client = client)
+  chat <- shinychat::chat_server(id, client = client, ...)
 
   session <- shiny::getDefaultReactiveDomain()
 
