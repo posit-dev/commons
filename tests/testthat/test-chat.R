@@ -69,14 +69,14 @@ test_that("send_commons_pill targets the chat's own id, not a hardcoded one", {
 })
 
 test_that("chat UI preserves shinychat's top-level fill container", {
-  ui <- commons_ui("chat")
+  ui <- commons_ui("chat", height = "100%")
   classes <- unlist(ui$attribs[names(ui$attribs) == "class"], use.names = FALSE)
   deps <- htmltools::findDependencies(ui)
 
   expect_equal(ui$name, "shiny-chat-container")
   # shinychat controls the width property's name (it moved from `width` to a
-  # `--_chat-width` variable in 0.5.0); commons only cares that its height
-  # rides through and the default width cap is intact.
+  # `--_chat-width` variable in 0.5.0); commons only cares that arguments in
+  # `...` reach chat_ui()'s formals and the default width cap is intact.
   expect_match(ui$attribs$style, "min\\(680px, 100%\\)")
   expect_match(ui$attribs$style, "height:100%;")
   expect_true("html-fill-item" %in% classes)

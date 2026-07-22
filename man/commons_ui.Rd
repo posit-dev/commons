@@ -5,7 +5,7 @@
 \alias{commons_server}
 \title{Shiny chat UI and server for commons agents}
 \usage{
-commons_ui(id, ..., messages = NULL, height = "100\%")
+commons_ui(id, ...)
 
 commons_server(id, client)
 }
@@ -13,13 +13,8 @@ commons_server(id, client)
 \item{id}{The ID of the chat element; must match between \code{commons_ui()}
 and \code{commons_server()}.}
 
-\item{...}{Extra HTML attributes passed to \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}.}
-
-\item{messages}{Initial messages shown in the chat. Passed to
-\code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}.}
-
-\item{height}{Chat container height. Defaults to \code{"100\%"} so the chat input
-stays docked at the bottom of fill layouts.}
+\item{...}{Arguments passed to \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}, such as \code{greeting}
+or \code{height}, as well as extra HTML attributes.}
 
 \item{client}{A \code{\link[=commons]{commons()}} agent. Create a new agent for each Shiny session.}
 }

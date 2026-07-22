@@ -10,11 +10,8 @@
 #'
 #' @param id The ID of the chat element; must match between `commons_ui()`
 #'   and `commons_server()`.
-#' @param ... Extra HTML attributes passed to [shinychat::chat_ui()].
-#' @param messages Initial messages shown in the chat. Passed to
-#'   [shinychat::chat_ui()].
-#' @param height Chat container height. Defaults to `"100%"` so the chat input
-#'   stays docked at the bottom of fill layouts.
+#' @param ... Arguments passed to [shinychat::chat_ui()], such as `greeting`
+#'   or `height`, as well as extra HTML attributes.
 #' @param client A [commons()] agent. Create a new agent for each Shiny session.
 #'
 #' @return `commons_ui()` returns UI. `commons_server()` returns the
@@ -40,9 +37,9 @@
 #' }
 #'
 #' @export
-commons_ui <- function(id, ..., messages = NULL, height = "100%") {
+commons_ui <- function(id, ...) {
   check_chat_packages()
-  ui <- shinychat::chat_ui(id, ..., messages = messages, height = height)
+  ui <- shinychat::chat_ui(id, ...)
   htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
 }
 
