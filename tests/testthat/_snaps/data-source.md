@@ -15,13 +15,30 @@
       Error in `data_source()`:
       ! `tables` names table not on the connection: "nope".
 
-# data_source reads a pins board into queryable tables
+# data_source validates board pin names at construction
+
+    Code
+      data_source(board, tables = c(orders = "team-orders", missing = "nope"))
+    Condition
+      Error in `data_source()`:
+      ! `tables` names pin not on the board: "nope".
+
+---
 
     Code
       data_source(board)
     Condition
       Error in `data_source()`:
       ! `tables` must be a named character vector of pin names.
+
+# a pin that isn't a data frame errors clearly
+
+    Code
+      source_describe(src, "cfg")
+    Condition
+      Error in `source_describe()`:
+      ! Pin "config" for table "cfg" is not a data frame.
+      i It is a list.
 
 # data_source rejects unnamed or non-data-frame input
 

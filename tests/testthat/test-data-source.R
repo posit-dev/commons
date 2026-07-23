@@ -123,19 +123,126 @@ test_that("duckdb_connect supports coexisting connections in one process", {
   )
 })
 
-test_that("data_source reads a pins board into queryable tables", {
+test_that("data_source defers reading a board's pins until first use", {
   skip_if_not_installed("pins")
 
-  board <- pins::board_temp()
-  suppressMessages(
-    pins::pin_write(board, data.frame(id = 1:3), "team-orders", type = "rds")
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
   )
 
-  src <- data_source(board, tables = c(orders = "team-orders"))
-  expect_equal(list_tables(src), "orders")
-  expect_equal(nrow(source_query(src, "SELECT * FROM orders")), 3)
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps")
+  )
+  expect_setequal(list_tables(src), c("orders", "reps"))
+  expect_length(DBI::dbListTables(src$con), 0)
+})
 
+test_that("source_describe loads only the table it describes", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps")
+  )
+
+  d <- source_describe(src, "orders")
+  expect_equal(d$schema$column, "id")
+  expect_equal(DBI::dbListTables(src$con), "orders")
+})
+
+test_that("source_query loads the tables a query references", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3, rep = c("Ada", "Bo", "Ada")),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"), team = c("x", "y")),
+    "team-regions" = data.frame(region = "EMEA")
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps", regions = "team-regions")
+  )
+
+  # A join over two pending tables, one named in a different case and one
+  # quoted. The unreferenced `regions` table stays pending.
+  res <- source_query(
+    src,
+    'SELECT o.id, r.team FROM ORDERS o JOIN "reps" r ON o.rep = r.rep'
+  )
+  expect_equal(nrow(res), 3)
+  expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
+  expect_equal(names(src$pending$pins), "regions")
+
+  # A repeated query reuses the loaded tables and leaves `regions` pending.
+  source_query(src, "SELECT count(*) AS n FROM orders")
+  expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
+  expect_equal(names(src$pending$pins), "regions")
+})
+
+test_that("source_query loads a referenced table the matcher misses", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  # Force the word matcher to find nothing; the query still succeeds via the
+  # load-all-and-retry fallback.
+  local_mocked_bindings(pending_tables_in_sql = function(source, sql) character(0))
+  res <- source_query(src, "SELECT count(*) AS n FROM orders")
+  expect_equal(res$n, 3)
+})
+
+test_that("data_source validates board pin names at construction", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+
+  expect_snapshot(
+    data_source(board, tables = c(orders = "team-orders", missing = "nope")),
+    error = TRUE
+  )
   expect_snapshot(data_source(board), error = TRUE)
+})
+
+test_that("a failed pin read surfaces at use and is retried, not cached", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  suppressMessages(pins::pin_delete(board, "team-orders"))
+  expect_error(source_describe(src, "orders"), "Failed to read pin")
+
+  suppressMessages(
+    pins::pin_write(board, data.frame(id = 1:5), "team-orders", type = "rds")
+  )
+  expect_equal(nrow(source_describe(src, "orders")$sample), 5)
+})
+
+test_that("a pin that isn't a data frame errors clearly", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("config" = list(threshold = 1))
+  src <- data_source(board, tables = c(cfg = "config"))
+
+  expect_snapshot(source_describe(src, "cfg"), error = TRUE)
+})
+
+test_that("dbWriteTable works after duckdb_lock_down", {
+  con <- duckdb_connect()
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  duckdb_lock_down(con)
+
+  expect_no_error(
+    DBI::dbWriteTable(con, "t", data.frame(x = 1:2), overwrite = TRUE)
+  )
+  expect_equal(DBI::dbGetQuery(con, "SELECT count(*) AS n FROM t")$n, 2)
 })
 
 test_that("data_source rejects unnamed or non-data-frame input", {
@@ -171,20 +278,31 @@ test_that("data_source spans record table counts for connections", {
   expect_equal(list_span$attributes[["commons.data_source.n_tables"]], 1L)
 })
 
-test_that("data_source spans record table counts for pins boards", {
+test_that("board construction records a list-pins span, not a read span", {
   skip_if_not_installed("otelsdk")
   skip_if_not_installed("pins")
 
-  board <- pins::board_temp()
-  suppressMessages(
-    pins::pin_write(board, data.frame(id = 1:3), "team-orders", type = "rds")
-  )
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
 
   recorded <- otelsdk::with_otel_record(
     data_source(board, tables = c(orders = "team-orders"))
   )
   names <- vapply(recorded$traces, `[[`, character(1), "name")
-  expect_true("commons_data_source_read_board" %in% names)
+  expect_true("commons_data_source_list_pins" %in% names)
+  expect_false("commons_data_source_read_board" %in% names)
+  list_span <- recorded$traces[[which(names == "commons_data_source_list_pins")]]
+  expect_equal(list_span$attributes[["commons.data_source.n_tables"]], 1L)
+})
+
+test_that("reading a board table records a read-board span", {
+  skip_if_not_installed("otelsdk")
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  recorded <- otelsdk::with_otel_record(source_describe(src, "orders"))
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
   read_span <- recorded$traces[[which(names == "commons_data_source_read_board")]]
   expect_equal(read_span$attributes[["commons.data_source.n_tables"]], 1L)
 })

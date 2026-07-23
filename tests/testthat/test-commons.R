@@ -485,6 +485,60 @@ test_that("prewarm() records a cache hit without a build span", {
   expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], TRUE)
 })
 
+test_that("a board source loads no pins until prewarm()", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps")
+  )
+  agent <- test_agent(data_sources = list(sales_db = src))
+
+  # Agent construction and system-prompt generation use only table labels.
+  expect_length(DBI::dbListTables(src$con), 0)
+
+  agent$prewarm()
+  expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
+})
+
+test_that("a measure injected a board source loads its pins when it runs", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  layer <- semantic_layer(
+    measure(
+      "order_count",
+      "Count of orders.",
+      function(warehouse) {
+        DBI::dbGetQuery(warehouse, "SELECT count(*) AS n FROM orders")$n
+      },
+      arguments = list()
+    )
+  )
+  agent <- test_agent(
+    semantic_layer = layer,
+    data_sources = list(warehouse = src)
+  )
+  expect_length(DBI::dbListTables(src$con), 0)
+
+  private <- agent$.__enclos_env__$private
+  res <- call_measure_tool(
+    private$registry,
+    "order_count",
+    "{}",
+    injections = private$injections,
+    sources = private$sources
+  )
+  expect_match(res@value, "3")
+  expect_equal(DBI::dbListTables(src$con), "orders")
+})
+
 test_that("commons() records an agent-creation span", {
   skip_if_not_installed("otelsdk")
 

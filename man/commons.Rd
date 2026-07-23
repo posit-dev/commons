@@ -272,8 +272,9 @@ provide; not typically called directly.
 \if{latex}{\out{\hypertarget{method-Commons-prewarm}{}}}
 \subsection{\code{Commons$prewarm()}}{
   Build the context layer's search index ahead of the first
-\code{search_context} call, e.g. during idle time right after a Shiny
-session starts. \code{\link[=commons_server]{commons_server()}} does this automatically.
+\code{search_context} call, and read any board tables not yet loaded into
+their data source, e.g. during idle time right after a Shiny session
+starts. \code{\link[=commons_server]{commons_server()}} does this automatically.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Commons$prewarm()}

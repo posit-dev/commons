@@ -47,7 +47,8 @@ tool_call_measure <- function(private) {
         name,
         arguments,
         injections = private$injections,
-        handles = private$handles
+        handles = private$handles,
+        sources = private$sources
       )
     },
     # For small registries, we may eventually expose each measure schema upfront
@@ -157,7 +158,8 @@ call_measure_tool <- function(
   name,
   arguments,
   injections = list(),
-  handles = NULL
+  handles = NULL,
+  sources = list()
 ) {
   td <- registry[[name]]
   if (is.null(td)) {
@@ -169,6 +171,11 @@ call_measure_tool <- function(
     cli::cli_abort(c("No measure named {.val {name}}.", i = detail))
   }
   args <- validate_measure_args(td, parse_json_args(arguments))
+  # A measure takes a source's connection by the source's name; a board source
+  # must have its pins loaded before that connection can answer a query.
+  for (source_name in names(injections[[name]])) {
+    source_ensure_all(sources[[source_name]])
+  }
   value <- do.call(td, c(args, injections[[name]]))
   value <- collect_lazy_table(value)
   advert <- register_handle(handles, value)
