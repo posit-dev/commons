@@ -264,6 +264,35 @@ test_that("the internals the tracing hacks rely on still exist", {
   expect_true(exists("tracer_provider", envir = the, inherits = FALSE))
 })
 
+test_that("local_commons_span is a no-op without otel", {
+  local_mocked_bindings(is_installed = function(pkg) FALSE)
+  expect_null(local_commons_span("commons_test_span"))
+})
+
+test_that("local_commons_span records a span with attributes", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record({
+    fn <- function() {
+      local_commons_span(
+        "commons_test_span",
+        attributes = list("commons.test.value" = 1L)
+      )
+      invisible(NULL)
+    }
+    fn()
+  })
+
+  spans <- recorded$traces
+  expect_length(spans, 1)
+  expect_equal(spans[[1]]$name, "commons_test_span")
+  expect_equal(spans[[1]]$attributes[["commons.test.value"]], 1L)
+})
+
+test_that("commons_span_set_attribute no-ops when span is NULL", {
+  expect_null(commons_span_set_attribute(NULL, "commons.test.value", 1L))
+})
+
 test_that("conversation turn spans record the conversation id", {
   skip_if_not_installed("otelsdk")
 

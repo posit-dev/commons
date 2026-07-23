@@ -72,15 +72,33 @@
 data_source <- function(..., tables = NULL, dictionary = NULL) {
   dots <- rlang::list2(...)
   dictionary <- as_data_dictionary(dictionary)
+  kind <- data_source_kind(dots)
 
-  if (length(dots) == 1 && inherits(dots[[1]], "DBIConnection")) {
+  local_commons_span(
+    "commons_data_source_create",
+    attributes = list("commons.data_source.kind" = kind)
+  )
+
+  if (kind == "connection") {
     return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
   }
-  if (length(dots) == 1 && inherits(dots[[1]], "pins_board")) {
+  if (kind == "board") {
     return(data_source_board(dots[[1]], tables, dictionary = dictionary))
   }
 
-  check_named_frames(dots)
+  data_source_frames(dots, dictionary)
+}
+
+# Shared by the top-level frames path and data_source_board(), which reads a
+# board's pins into data frames and loads them the same way. Called directly
+# rather than through data_source() so a board source emits one
+# commons_data_source_create span, not a duplicate nested one.
+data_source_frames <- function(dots, dictionary, call = rlang::caller_env()) {
+  check_named_frames(dots, call = call)
+  local_commons_span(
+    "commons_data_source_load_frames",
+    attributes = list("commons.data_source.n_tables" = length(dots))
+  )
   con <- duckdb_connect()
   for (name in names(dots)) {
     DBI::dbWriteTable(
@@ -95,23 +113,37 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   new_data_source(con, names(dots), owned = TRUE, dictionary = dictionary)
 }
 
+data_source_kind <- function(dots) {
+  if (length(dots) == 1 && inherits(dots[[1]], "DBIConnection")) {
+    return("connection")
+  }
+  if (length(dots) == 1 && inherits(dots[[1]], "pins_board")) {
+    return("board")
+  }
+  "frames"
+}
+
 data_source_connection <- function(
   con,
   tables,
   dictionary = NULL,
   call = rlang::caller_env()
 ) {
+  span <- local_commons_span("commons_data_source_list_tables")
+
   if (is.null(tables)) {
-    return(new_data_source(
-      con,
-      DBI::dbListTables(con),
-      owned = FALSE,
-      dictionary = dictionary
-    ))
+    listed <- DBI::dbListTables(con)
+    commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
+    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
   }
 
   table_registry <- normalize_table_registry(tables, call = call)
   check_table_ids_exist(con, table_registry, call = call)
+  commons_span_set_attribute(
+    span,
+    "commons.data_source.n_tables",
+    length(table_registry$labels)
+  )
 
   new_data_source(
     con,
@@ -135,9 +167,13 @@ data_source_board <- function(
     )
   }
 
+  local_commons_span(
+    "commons_data_source_read_board",
+    attributes = list("commons.data_source.n_tables" = length(tables))
+  )
   frames <- lapply(tables, function(pin) pins::pin_read(board, pin))
   names(frames) <- names(tables)
-  rlang::inject(data_source(!!!frames, dictionary = dictionary))
+  data_source_frames(frames, dictionary)
 }
 
 #' List the tables an agent can query

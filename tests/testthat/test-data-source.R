@@ -143,6 +143,52 @@ test_that("data_source rejects unnamed or non-data-frame input", {
   expect_snapshot(data_source(a = 1), error = TRUE)
 })
 
+test_that("data_source spans record kind and table counts", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record(test_source())
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  expect_setequal(
+    names,
+    c("commons_data_source_create", "commons_data_source_load_frames")
+  )
+  load_span <- recorded$traces[[which(names == "commons_data_source_load_frames")]]
+  expect_equal(load_span$attributes[["commons.data_source.n_tables"]], 1L)
+  create_span <- recorded$traces[[which(names == "commons_data_source_create")]]
+  expect_equal(create_span$attributes[["commons.data_source.kind"]], "frames")
+})
+
+test_that("data_source spans record table counts for connections", {
+  skip_if_not_installed("otelsdk")
+
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+
+  recorded <- otelsdk::with_otel_record(data_source(con))
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  list_span <- recorded$traces[[which(names == "commons_data_source_list_tables")]]
+  expect_equal(list_span$attributes[["commons.data_source.n_tables"]], 1L)
+})
+
+test_that("data_source spans record table counts for pins boards", {
+  skip_if_not_installed("otelsdk")
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  suppressMessages(
+    pins::pin_write(board, data.frame(id = 1:3), "team-orders", type = "rds")
+  )
+
+  recorded <- otelsdk::with_otel_record(
+    data_source(board, tables = c(orders = "team-orders"))
+  )
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  expect_true("commons_data_source_read_board" %in% names)
+  read_span <- recorded$traces[[which(names == "commons_data_source_read_board")]]
+  expect_equal(read_span$attributes[["commons.data_source.n_tables"]], 1L)
+})
+
 test_that("as_data_sources wraps a bare data_source", {
   srcs <- as_data_sources(test_source())
 

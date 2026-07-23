@@ -449,3 +449,48 @@ test_that("prewarm() builds the context store ahead of the first search", {
 test_that("prewarm() without a context layer is a no-op", {
   expect_no_error(test_agent()$prewarm())
 })
+
+test_that("prewarm() records a cache-miss build and its own span", {
+  skip_if_not_installed("otelsdk")
+
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  recorded <- otelsdk::with_otel_record(agent$prewarm())
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  expect_true("commons_context_store_build" %in% names)
+
+  build_span <- recorded$traces[[which(names == "commons_context_store_build")]]
+  expect_equal(build_span$attributes[["commons.context.n_docs"]], 1L)
+
+  prewarm_span <- recorded$traces[[which(names == "commons_context_prewarm")]]
+  expect_equal(prewarm_span$attributes[["commons.context.n_docs"]], 1L)
+  expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], FALSE)
+})
+
+test_that("prewarm() records a cache hit without a build span", {
+  skip_if_not_installed("otelsdk")
+
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+  agent$prewarm()
+
+  recorded <- otelsdk::with_otel_record(agent$prewarm())
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  expect_false("commons_context_store_build" %in% names)
+
+  prewarm_span <- recorded$traces[[which(names == "commons_context_prewarm")]]
+  expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], TRUE)
+})
+
+test_that("commons() records an agent-creation span", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record(test_agent())
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  span <- recorded$traces[[which(names == "commons_agent_create")]]
+  expect_equal(span$attributes[["commons.agent.n_data_sources"]], 1L)
+  expect_equal(span$attributes[["commons.agent.has_context_layer"]], FALSE)
+})

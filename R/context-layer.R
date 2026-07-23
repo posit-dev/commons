@@ -100,6 +100,10 @@ strip_frontmatter <- function(md) {
 # layers that differ never do.
 context_store <- function(layer) {
   if (is.null(layer$cache$store)) {
+    local_commons_span(
+      "commons_context_store_build",
+      attributes = list("commons.context.n_docs" = length(layer$docs))
+    )
     store <- ragnar::ragnar_store_create(embed = NULL)
     for (doc in layer$docs) {
       ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
