@@ -208,6 +208,10 @@ test_that("data_source validates board pin names at construction", {
     error = TRUE
   )
   expect_snapshot(data_source(board), error = TRUE)
+  expect_snapshot(
+    data_source(board, tables = stats::setNames(character(0), character(0))),
+    error = TRUE
+  )
 })
 
 test_that("a failed pin read surfaces at use and is retried, not cached", {

@@ -289,8 +289,9 @@ Commons <- R6::R6Class(
         )
         context_store(layer)
       }
-      # One failing pin shouldn't stop the others from loading; it stays
-      # pending and is retried on demand.
+      # A pin that fails to read leaves the rest of its source pending, to be
+      # read on demand; wrap each source so one bad source can't stop the
+      # others from prewarming.
       for (source in private$sources) {
         tryCatch(source_ensure_all(source), error = function(err) NULL)
       }

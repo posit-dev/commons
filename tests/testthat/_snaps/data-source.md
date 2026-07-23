@@ -31,6 +31,14 @@
       Error in `data_source()`:
       ! `tables` must be a named character vector of pin names.
 
+---
+
+    Code
+      data_source(board, tables = stats::setNames(character(0), character(0)))
+    Condition
+      Error in `data_source()`:
+      ! `tables` must name at least one pin.
+
 # a pin that isn't a data frame errors clearly
 
     Code

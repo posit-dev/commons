@@ -173,6 +173,9 @@ data_source_board <- function(
       call = call
     )
   }
+  if (length(tables) == 0) {
+    cli::cli_abort("{.arg tables} must name at least one pin.", call = call)
+  }
   duplicated_labels <- unique(names(tables)[duplicated(names(tables))])
   if (length(duplicated_labels)) {
     cli::cli_abort(
@@ -387,9 +390,11 @@ source_query <- function(source, sql) {
   tryCatch(
     DBI::dbGetQuery(source$con, sql),
     error = function(err) {
-      # Word matching can miss a table a query references (e.g. via an alias),
-      # so a query error while pins remain pending gets one retry after
-      # loading everything.
+      # A referenced table's name essentially always appears textually in the
+      # SQL, so pending_tables_in_sql() rarely misses one; this retry is
+      # defense against the unforeseen. It fires on any query error, including
+      # an unrelated one (e.g. a typo), but the cost is bounded: once
+      # source_ensure_all() empties `pending`, later errors just propagate.
       if (is.null(source$pending) || length(source$pending$pins) == 0) {
         stop(err)
       }
@@ -624,7 +629,10 @@ check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env(
 # One pin_list() call instead of a pin_read() per pin: fail fast on a bad pin
 # name without paying to download anything. Connect's pin_list() returns
 # owner/name full names while users typically pass the bare name, so a listed
-# name matches either in full or by its post-slash suffix.
+# name matches either in full or by its post-slash suffix. Suffix matching is a
+# heuristic: a bare name matches any owner's pin of that name, so a name that is
+# genuinely ambiguous or only resolves at read time surfaces when the pin is
+# actually read, not here.
 check_board_pins_exist <- function(board, tables, call = rlang::caller_env()) {
   listed <- tryCatch(
     pins::pin_list(board),
