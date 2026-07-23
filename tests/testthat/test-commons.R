@@ -505,6 +505,28 @@ test_that("a board source loads no pins until prewarm()", {
   expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
 })
 
+test_that("prewarm() loads healthy pins even when one pin fails", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps")
+  )
+  agent <- test_agent(data_sources = list(sales_db = src))
+
+  # One pin becomes unreadable; the other must still warm, and the failed one
+  # stays pending for an on-demand retry.
+  suppressMessages(pins::pin_delete(board, "team-orders"))
+
+  agent$prewarm()
+  expect_equal(DBI::dbListTables(src$con), "reps")
+  expect_equal(names(src$pending$pins), "orders")
+})
+
 test_that("a measure injected a board source loads its pins when it runs", {
   skip_if_not_installed("pins")
 

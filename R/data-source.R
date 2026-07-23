@@ -342,18 +342,40 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
   source_ensure_tables(source, source$tables, call = call)
 }
 
-# Pending table names appearing as whole words in the SQL, matched
-# case-insensitively via word_pattern() (the idiom dictionary_sql_entries()
-# uses). A false positive just loads an extra table, which is harmless.
-pending_tables_in_sql <- function(source, sql) {
+# Best-effort load of every pending pin, one at a time, tolerating a failure on
+# any one: it stays pending and is retried on demand. Used by prewarm(), where
+# a single bad pin must not stop the healthy ones from warming.
+source_prewarm <- function(source) {
+  if (is.null(source$pending)) {
+    return(invisible(source))
+  }
+  for (table in names(source$pending$pins)) {
+    tryCatch(source_ensure_tables(source, table), error = function(err) NULL)
+  }
+  invisible(source)
+}
+
+# The pending tables a failed query actually references, read from DuckDB's
+# own catalog error ("Table with name X does not exist!") rather than from the
+# SQL text. Matching the whole "does not exist" phrase---not the bare name,
+# which also appears in DuckDB's "Did you mean" suggestions---keeps a name in a
+# string literal, comment, or column reference from triggering a spurious read.
+pending_tables_in_error <- function(source, err) {
   pending <- source$pending
   if (is.null(pending)) {
     return(character())
   }
+  msg <- conditionMessage(err)
   labels <- names(pending$pins)
   labels[vapply(
     labels,
-    function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
+    function(table) {
+      grepl(
+        paste0("Table with name ", word_pattern(table), " does not exist"),
+        msg,
+        ignore.case = TRUE
+      )
+    },
     logical(1)
   )]
 }
@@ -386,22 +408,31 @@ source_describe <- function(source, table, n_sample = 5) {
 
 source_query <- function(source, sql) {
   check_query(sql)
-  source_ensure_tables(source, pending_tables_in_sql(source, sql))
-  tryCatch(
-    DBI::dbGetQuery(source$con, sql),
-    error = function(err) {
-      # A referenced table's name essentially always appears textually in the
-      # SQL, so pending_tables_in_sql() rarely misses one; this retry is
-      # defense against the unforeseen. It fires on any query error, including
-      # an unrelated one (e.g. a typo), but the cost is bounded: once
-      # source_ensure_all() empties `pending`, later errors just propagate.
-      if (is.null(source$pending) || length(source$pending$pins) == 0) {
-        stop(err)
-      }
-      source_ensure_all(source)
-      DBI::dbGetQuery(source$con, sql)
+  if (is.null(source$pending)) {
+    return(DBI::dbGetQuery(source$con, sql))
+  }
+
+  # Let DuckDB resolve the query's table references and drive loading off the
+  # tables it reports missing: run the query, load the pending tables its error
+  # names, and retry. This loads only tables the query genuinely references---a
+  # name in a string literal or a bad column never pulls in an unrelated
+  # pin---and a genuine error (bad column, syntax) surfaces unchanged instead
+  # of being masked by an unrelated pin failure. Bounded by the number of
+  # pending tables: each pass either loads at least one or stops.
+  repeat {
+    result <- tryCatch(
+      DBI::dbGetQuery(source$con, sql),
+      error = function(err) err
+    )
+    if (!inherits(result, "condition")) {
+      return(result)
     }
-  )
+    todo <- pending_tables_in_error(source, result)
+    if (length(todo) == 0) {
+      stop(result)
+    }
+    source_ensure_tables(source, todo)
+  }
 }
 
 # A keyword denylist, not a SQL parser: it anchors on the leading statement
@@ -629,10 +660,9 @@ check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env(
 # One pin_list() call instead of a pin_read() per pin: fail fast on a bad pin
 # name without paying to download anything. Connect's pin_list() returns
 # owner/name full names while users typically pass the bare name, so a listed
-# name matches either in full or by its post-slash suffix. Suffix matching is a
-# heuristic: a bare name matches any owner's pin of that name, so a name that is
-# genuinely ambiguous or only resolves at read time surfaces when the pin is
-# actually read, not here.
+# name matches either in full or by its post-slash suffix. A bare name that
+# suffix-matches more than one owner's pin is ambiguous---pin_read() would
+# reject it---so flag it here and ask for the qualified form.
 check_board_pins_exist <- function(board, tables, call = rlang::caller_env()) {
   listed <- tryCatch(
     pins::pin_list(board),
@@ -645,15 +675,37 @@ check_board_pins_exist <- function(board, tables, call = rlang::caller_env()) {
     }
   )
   suffixes <- sub("^.*/", "", listed)
-  exists <- vapply(
+  status <- vapply(
     tables,
-    function(pin) pin %in% listed || pin %in% suffixes,
-    logical(1)
+    function(pin) {
+      if (pin %in% listed) {
+        return("ok")
+      }
+      n_suffix <- sum(suffixes == pin)
+      if (n_suffix == 0) {
+        "missing"
+      } else if (n_suffix > 1) {
+        "ambiguous"
+      } else {
+        "ok"
+      }
+    },
+    character(1)
   )
-  missing <- unique(unname(tables[!exists]))
+  missing <- unique(unname(tables[status == "missing"]))
   if (length(missing)) {
     cli::cli_abort(
       "{.arg tables} names pin{?s} not on the board: {.val {missing}}.",
+      call = call
+    )
+  }
+  ambiguous <- unique(unname(tables[status == "ambiguous"]))
+  if (length(ambiguous)) {
+    cli::cli_abort(
+      c(
+        "{.arg tables} names pin{?s} matching more than one pin on the board: {.val {ambiguous}}.",
+        i = "Use the full {.val owner/name} form to disambiguate."
+      ),
       call = call
     )
   }

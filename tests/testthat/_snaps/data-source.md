@@ -39,6 +39,23 @@
       Error in `data_source()`:
       ! `tables` must name at least one pin.
 
+# check_board_pins_exist resolves, flags missing, and flags ambiguous names
+
+    Code
+      check_board_pins_exist(board, c(x = "nope"))
+    Condition
+      Error:
+      ! `tables` names pin not on the board: "nope".
+
+---
+
+    Code
+      check_board_pins_exist(board, c(o = "orders"))
+    Condition
+      Error:
+      ! `tables` names pin matching more than one pin on the board: "orders".
+      i Use the full "owner/name" form to disambiguate.
+
 # a pin that isn't a data frame errors clearly
 
     Code

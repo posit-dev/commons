@@ -185,17 +185,45 @@ test_that("source_query loads the tables a query references", {
   expect_equal(names(src$pending$pins), "regions")
 })
 
-test_that("source_query loads a referenced table the matcher misses", {
+test_that("source_query doesn't read a pin named only in a string literal", {
   skip_if_not_installed("pins")
 
-  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
-  src <- data_source(board, tables = c(orders = "team-orders"))
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-regions" = data.frame(region = "EMEA")
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", regions = "team-regions")
+  )
+  # An unavailable pin that the query mentions only as a string literal must
+  # not be read, so the valid query over `orders` still succeeds.
+  suppressMessages(pins::pin_delete(board, "team-regions"))
 
-  # Force the word matcher to find nothing; the query still succeeds via the
-  # load-all-and-retry fallback.
-  local_mocked_bindings(pending_tables_in_sql = function(source, sql) character(0))
-  res <- source_query(src, "SELECT count(*) AS n FROM orders")
-  expect_equal(res$n, 3)
+  res <- source_query(src, "SELECT id, 'regions' AS label FROM orders")
+  expect_equal(nrow(res), 3)
+  expect_equal(names(src$pending$pins), "regions")
+})
+
+test_that("source_query preserves a genuine query error, unmasked", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-regions" = data.frame(region = "EMEA")
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", regions = "team-regions")
+  )
+  # A bad column error must surface as itself, not be replaced by an unrelated
+  # pin's read failure.
+  suppressMessages(pins::pin_delete(board, "team-regions"))
+
+  expect_error(
+    source_query(src, "SELECT nope_col FROM orders"),
+    "nope_col"
+  )
 })
 
 test_that("data_source validates board pin names at construction", {
@@ -212,6 +240,24 @@ test_that("data_source validates board pin names at construction", {
     data_source(board, tables = stats::setNames(character(0), character(0))),
     error = TRUE
   )
+})
+
+test_that("check_board_pins_exist resolves, flags missing, and flags ambiguous names", {
+  skip_if_not_installed("pins")
+
+  local_mocked_bindings(
+    pin_list = function(board) c("alice/orders", "bob/orders", "alice/reps"),
+    .package = "pins"
+  )
+  board <- structure(list(), class = "pins_board")
+
+  # Full name and a unique suffix both resolve.
+  expect_no_error(check_board_pins_exist(board, c(o = "alice/orders")))
+  expect_no_error(check_board_pins_exist(board, c(r = "reps")))
+
+  expect_snapshot(check_board_pins_exist(board, c(x = "nope")), error = TRUE)
+  # A bare name that suffix-matches two owners' pins is ambiguous.
+  expect_snapshot(check_board_pins_exist(board, c(o = "orders")), error = TRUE)
 })
 
 test_that("a failed pin read surfaces at use and is retried, not cached", {
