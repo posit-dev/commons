@@ -34,12 +34,12 @@ format:
 <div class="arrow oblique up fragment" data-fragment-index="1">→</div>
 <div class="row fragment" data-fragment-index="1"><span class="pill-wrap"><span class="pill high">Call measure</span><span class="tag tag-trusted fragment" data-fragment-index="2"><img src="figures/trusted-icon.svg" class="tag-icon" alt="">Verified answer</span></span></div>
 
-<div class="trunk-cell"><span class="pill trunk">Search measures</span></div>
+<div class="trunk-cell fragment" data-fragment-index="1"><span class="pill trunk">Search measures</span></div>
 <div></div>
 <div></div>
 
-<div class="tier caution">(Lower trust)</div>
-<div class="arrow oblique down">→</div>
+<div class="tier caution fragment" data-fragment-index="1">(Lower trust)</div>
+<div class="arrow oblique down fragment" data-fragment-index="1">→</div>
 <div class="row"><span class="pill low">Search context</span><span class="arrow">→</span><span class="pill-wrap"><span class="pill low">Write SQL/R</span><span class="tag tag-caution fragment" data-fragment-index="2"><img src="figures/warning-icon.svg" class="tag-icon" alt="">Potentially untrusted</span></span></div>
 </div>
 :::
@@ -88,6 +88,7 @@ format:
   white-space: nowrap;
 }
 .pill-wrap { position: relative; display: inline-block; }
+.ghost { visibility: hidden; }
 .tag {
   position: absolute;
   top: 0;
@@ -104,7 +105,16 @@ format:
 }
 .tag-icon { height: 0.95em; width: 0.95em; margin: 0; vertical-align: baseline; }
 .tag-trusted { background: #f2fbf5; border: 1px solid #cfeedd; color: #286144; }
-.ghost { visibility: hidden; }
 .tag-caution { background: #fff8ec; border: 1px solid #f2ddbb; color: #6b4b1b; }
 </style>
 ```
+
+##
+
+## commons does 3 things
+
+:::incremental
+* Extract trusted calculations from existing artifacts into a data structure
+* A harness to give the right context at the right time
+* A feedback loop to push more queries up the trust ladder over time
+:::
