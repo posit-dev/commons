@@ -10,7 +10,17 @@
 #' * Named data frames are loaded into an in-process DuckDB database. Use this
 #'   when the data isn't already in a database.
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
-#'   in-process database: each pin in `tables` becomes a table.
+#'   in-process database: each pin in `tables` becomes a table. Pin names are
+#'   validated against the board at construction (a single listing call), but
+#'   each pin is downloaded only when its table is first used---by the
+#'   `describe_table` tool, a SQL query that references it, or a measure that
+#'   takes the source's connection. [commons_server()] starts a background
+#'   process right after startup that downloads the remaining pins into the
+#'   local pins cache, so a first use typically only reads an
+#'   already-downloaded file. A table reflects the pin's
+#'   value at first use and is not refreshed for the lifetime of the data
+#'   source; if a pin can't be read (e.g. a network failure), the error
+#'   surfaces at that first use and the read is retried on the next one.
 #'
 #' The resulting object gives the agent a DBI connection plus a table registry.
 #' Use [list_tables()] to list the registered tables.
@@ -89,10 +99,6 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   data_source_frames(dots, dictionary)
 }
 
-# Shared by the top-level frames path and data_source_board(), which reads a
-# board's pins into data frames and loads them the same way. Called directly
-# rather than through data_source() so a board source emits one
-# commons_data_source_create span, not a duplicate nested one.
 data_source_frames <- function(dots, dictionary, call = rlang::caller_env()) {
   check_named_frames(dots, call = call)
   local_commons_span(
@@ -166,14 +172,49 @@ data_source_board <- function(
       call = call
     )
   }
+  if (length(tables) == 0) {
+    cli::cli_abort("{.arg tables} must name at least one pin.", call = call)
+  }
+  duplicated_labels <- unique(names(tables)[duplicated(names(tables))])
+  if (length(duplicated_labels)) {
+    cli::cli_abort(
+      "{.arg tables} must not contain duplicate names: {.val {duplicated_labels}}.",
+      call = call
+    )
+  }
 
   local_commons_span(
-    "commons_data_source_read_board",
+    "commons_data_source_list_pins",
     attributes = list("commons.data_source.n_tables" = length(tables))
   )
-  frames <- lapply(tables, function(pin) pins::pin_read(board, pin))
-  names(frames) <- names(tables)
-  data_source_frames(frames, dictionary)
+  check_board_pins_exist(board, tables, call = call)
+
+  # Lock the connection down before any writes; lock_configuration() only
+  # freezes SET statements, so later dbWriteTable() from a deferred read still
+  # works.
+  con <- duckdb_connect()
+  duckdb_lock_down(con)
+  check_labels_free(con, names(tables), call = call)
+
+  new_data_source(
+    con,
+    names(tables),
+    owned = TRUE,
+    dictionary = dictionary,
+    pending = new_pending_pins(board, tables)
+  )
+}
+
+# The deferred-read state a board source carries: the board plus the pins not
+# yet loaded (named character: table label -> pin name). Shared by every copy
+# of the source, so a read through one copy is seen by all. source_prewarm()
+# also stores its background downloader's handle here ($process), so every
+# copy sees at most one live warmer.
+new_pending_pins <- function(board, tables) {
+  pending <- new.env(parent = emptyenv())
+  pending$board <- board
+  pending$pins <- tables
+  pending
 }
 
 #' List the tables an agent can query
@@ -193,7 +234,8 @@ new_data_source <- function(
   tables,
   owned,
   table_ids = table_ids_from_labels(tables),
-  dictionary = NULL
+  dictionary = NULL,
+  pending = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -214,7 +256,8 @@ new_data_source <- function(
       tables = tables,
       table_ids = table_ids,
       handle = handle,
-      dictionary = dictionary
+      dictionary = dictionary,
+      pending = pending
     ),
     class = "commons_data_source"
   )
@@ -250,6 +293,133 @@ source_dialect <- function(source) {
   info$dbms.name %||% sub("_connection$", "", class(source$con)[[1]])
 }
 
+# A pin leaves `pending` only after a successful read, so a failure surfaces
+# to the caller and the read is retried on the next touch.
+source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
+  pending <- source$pending
+  if (is.null(pending)) {
+    return(invisible(source))
+  }
+  todo <- intersect(tables, names(pending$pins))
+  if (length(todo) == 0) {
+    return(invisible(source))
+  }
+
+  local_commons_span(
+    "commons_data_source_read_board",
+    attributes = list("commons.data_source.n_tables" = length(todo))
+  )
+  for (table in todo) {
+    pin <- pending$pins[[table]]
+    value <- tryCatch(
+      pins::pin_read(pending$board, pin),
+      error = function(err) {
+        cli::cli_abort(
+          "Failed to read pin {.val {pin}} for table {.val {table}}.",
+          parent = err,
+          call = call
+        )
+      }
+    )
+    if (!is.data.frame(value)) {
+      cli::cli_abort(
+        c(
+          "Pin {.val {pin}} for table {.val {table}} is not a data frame.",
+          i = "It is {.obj_type_friendly {value}}."
+        ),
+        call = call
+      )
+    }
+    DBI::dbWriteTable(source$con, table, as.data.frame(value), overwrite = TRUE)
+    pending$pins <- pending$pins[setdiff(names(pending$pins), table)]
+  }
+  invisible(source)
+}
+
+source_ensure_all <- function(source, call = rlang::caller_env()) {
+  source_ensure_tables(source, source$tables, call = call)
+}
+
+# Warm the pins on-disk cache in a background process rather than loading into
+# DuckDB: dbWriteTable() must run in this process (where the DuckDB lives) and
+# would block every question asked during the load. The board is serialized to
+# the child, carrying its resolved cache path and auth, so the child writes to
+# the cache the parent reads even when the default cache location would
+# resolve differently (e.g. a deployment that repoints HOME).
+#
+# The handle lives on the shared pending env, so at most one child runs per
+# source; once it exits with pins still pending, a later prewarm() respawns,
+# and already-cached pins short-circuit so only genuine failures retry. A
+# failed spawn degrades to pure on-demand loading. Killing the child mid-write
+# can leave a truncated cache file pins won't re-download---the same hazard as
+# interrupting pin_read() itself.
+source_prewarm <- function(source) {
+  pending <- source$pending
+  if (is.null(pending) || length(pending$pins) == 0) {
+    return(invisible(source))
+  }
+  if (!is.null(pending$process) && pending$process$is_alive()) {
+    return(invisible(source))
+  }
+  pending$process <- tryCatch(
+    callr::r_bg(
+      prewarm_downloads,
+      args = list(board = pending$board, pins = unique(unname(pending$pins))),
+      supervise = TRUE
+    ),
+    error = function(err) NULL
+  )
+  invisible(source)
+}
+
+# Runs inside a background callr process, so it must be self-contained,
+# referencing only base R and pins:: (the same constraint as the worker_*
+# functions in run-r.R). Best-effort: a failing pin is skipped so it can't
+# stop the rest from warming. The per-pin result is unused in production but
+# makes tests deterministic.
+prewarm_downloads <- function(board, pins) {
+  vapply(
+    pins,
+    function(pin) {
+      tryCatch(
+        {
+          pins::pin_download(board, pin)
+          TRUE
+        },
+        error = function(err) FALSE
+      )
+    },
+    logical(1)
+  )
+}
+
+# The pending tables a failed query actually references, read from DuckDB's
+# own catalog error ("Table with name X does not exist!") rather than from the
+# SQL text. Anchoring on the fixed surrounding phrase---not a bare-name match,
+# which would also fire on DuckDB's "Did you mean" suggestions---keeps a name
+# in a string literal, comment, or column reference from triggering a spurious
+# read. The phrase itself does the bounding, so a label that begins or ends in
+# punctuation (which \b can't wrap) still matches.
+pending_tables_in_error <- function(source, err) {
+  pending <- source$pending
+  if (is.null(pending)) {
+    return(character())
+  }
+  msg <- conditionMessage(err)
+  labels <- names(pending$pins)
+  labels[vapply(
+    labels,
+    function(table) {
+      grepl(
+        paste0("Table with name ", escape_regex(table), " does not exist"),
+        msg,
+        ignore.case = TRUE
+      )
+    },
+    logical(1)
+  )]
+}
+
 source_describe <- function(source, table, n_sample = 5) {
   id <- source$table_ids[[table]]
   if (is.null(id)) {
@@ -258,6 +428,7 @@ source_describe <- function(source, table, n_sample = 5) {
       i = "Available tables: {.val {source$tables}}."
     ))
   }
+  source_ensure_tables(source, table)
 
   sample <- DBI::dbGetQuery(
     source$con,
@@ -277,7 +448,29 @@ source_describe <- function(source, table, n_sample = 5) {
 
 source_query <- function(source, sql) {
   check_query(sql)
-  DBI::dbGetQuery(source$con, sql)
+  if (is.null(source$pending)) {
+    return(DBI::dbGetQuery(source$con, sql))
+  }
+
+  # Let DuckDB resolve the query's table references and drive loading off the
+  # tables it reports missing: run the query, load the pending tables its
+  # error names, and retry. A genuine error (bad column, syntax) surfaces
+  # unchanged, and each pass either loads at least one table or stops, so the
+  # loop is bounded.
+  repeat {
+    result <- tryCatch(
+      DBI::dbGetQuery(source$con, sql),
+      error = function(err) err
+    )
+    if (!inherits(result, "condition")) {
+      return(result)
+    }
+    todo <- pending_tables_in_error(source, result)
+    if (length(todo) == 0) {
+      stop(result)
+    }
+    source_ensure_tables(source, todo)
+  }
 }
 
 # A keyword denylist, not a SQL parser: it anchors on the leading statement
@@ -500,6 +693,108 @@ check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env(
     "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
     call = call
   )
+}
+
+# One pin_list() call instead of a pin_read() per pin: fail fast on a bad pin
+# name without paying to download anything. Connect's pin_list() returns
+# owner/name full names while users typically pass the bare name, so a listed
+# name matches either in full or by its post-slash suffix. A bare name that
+# suffix-matches more than one owner's pin is ambiguous---pin_read() would
+# reject it---so flag it here and ask for the qualified form.
+check_board_pins_exist <- function(board, tables, call = rlang::caller_env()) {
+  listed <- tryCatch(
+    pins::pin_list(board),
+    error = function(err) {
+      cli::cli_abort(
+        "Failed to list pins on the board.",
+        parent = err,
+        call = call
+      )
+    }
+  )
+  suffixes <- sub("^.*/", "", listed)
+  status <- vapply(
+    tables,
+    function(pin) {
+      if (pin %in% listed) {
+        return("ok")
+      }
+      n_suffix <- sum(suffixes == pin)
+      if (n_suffix > 1) {
+        return("ambiguous")
+      }
+      if (n_suffix == 1) {
+        return("ok")
+      }
+      # pin_list() can be capped (Connect returns up to 1000 pins), so absence
+      # from it isn't proof the pin is missing. Confirm directly before
+      # rejecting, and stay lenient if the check itself errors---the board is
+      # reachable (pin_list() succeeded), so defer an odd per-pin failure to
+      # read time rather than blocking a valid setup.
+      exists <- tryCatch(
+        isTRUE(pins::pin_exists(board, pin)),
+        error = function(err) TRUE
+      )
+      if (exists) "ok" else "missing"
+    },
+    character(1)
+  )
+  missing <- unique(unname(tables[status == "missing"]))
+  if (length(missing)) {
+    cli::cli_abort(
+      "{.arg tables} names pin{?s} not on the board: {.val {missing}}.",
+      call = call
+    )
+  }
+  ambiguous <- unique(unname(tables[status == "ambiguous"]))
+  if (length(ambiguous)) {
+    cli::cli_abort(
+      c(
+        "{.arg tables} names pin{?s} matching more than one pin on the board: {.val {ambiguous}}.",
+        i = "Use the full {.val owner/name} form to disambiguate."
+      ),
+      call = call
+    )
+  }
+  invisible(tables)
+}
+
+# A fresh DuckDB already exposes system relations (duckdb_tables, sqlite_master,
+# pg_tables, information_schema.*, ...). A board label colliding with one is
+# unusable: the pin can't be written under that name (DuckDB won't drop the
+# built-in to overwrite it) and a query for it would silently read the built-in
+# instead. Probe with a zero-row SELECT before any pins are written---anything
+# that resolves here is a built-in---and reject the collisions.
+check_labels_free <- function(con, labels, call = rlang::caller_env()) {
+  taken <- labels[vapply(
+    labels,
+    function(label) {
+      tryCatch(
+        {
+          DBI::dbGetQuery(
+            con,
+            sprintf(
+              "SELECT 1 FROM %s WHERE 1 = 0",
+              DBI::dbQuoteIdentifier(con, label)
+            )
+          )
+          TRUE
+        },
+        error = function(err) FALSE
+      )
+    },
+    logical(1)
+  )]
+  if (length(taken)) {
+    cli::cli_abort(
+      c(
+        "{.arg tables} label{?s} {?collides/collide} with built-in database relation{?s}: {.val {taken}}.",
+        i = "{cli::qty(taken)}Rename the affected table{?s}."
+      ),
+      call = call
+    )
+  }
+  invisible(labels)
 }
 
 check_named_frames <- function(frames, call = rlang::caller_env()) {

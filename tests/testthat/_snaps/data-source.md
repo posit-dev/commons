@@ -15,13 +15,72 @@
       Error in `data_source()`:
       ! `tables` names table not on the connection: "nope".
 
-# data_source reads a pins board into queryable tables
+# data_source rejects a board label colliding with a built-in relation
+
+    Code
+      data_source(board, tables = c(duckdb_tables = "team-orders"))
+    Condition
+      Error in `data_source()`:
+      ! `tables` label collides with built-in database relation: "duckdb_tables".
+      i Rename the affected table.
+
+# data_source validates board pin names at construction
+
+    Code
+      data_source(board, tables = c(orders = "team-orders", missing = "nope"))
+    Condition
+      Error in `data_source()`:
+      ! `tables` names pin not on the board: "nope".
+
+---
 
     Code
       data_source(board)
     Condition
       Error in `data_source()`:
       ! `tables` must be a named character vector of pin names.
+
+---
+
+    Code
+      data_source(board, tables = stats::setNames(character(0), character(0)))
+    Condition
+      Error in `data_source()`:
+      ! `tables` must name at least one pin.
+
+# check_board_pins_exist resolves, flags missing, and flags ambiguous names
+
+    Code
+      check_board_pins_exist(board, c(x = "nope"))
+    Condition
+      Error:
+      ! `tables` names pin not on the board: "nope".
+
+---
+
+    Code
+      check_board_pins_exist(board, c(o = "orders"))
+    Condition
+      Error:
+      ! `tables` names pin matching more than one pin on the board: "orders".
+      i Use the full "owner/name" form to disambiguate.
+
+# check_board_pins_exist accepts a pin absent from a capped listing
+
+    Code
+      check_board_pins_exist(board, c(x = "nope"))
+    Condition
+      Error:
+      ! `tables` names pin not on the board: "nope".
+
+# a pin that isn't a data frame errors clearly
+
+    Code
+      source_describe(src, "cfg")
+    Condition
+      Error in `source_describe()`:
+      ! Pin "config" for table "cfg" is not a data frame.
+      i It is a list.
 
 # data_source rejects unnamed or non-data-frame input
 

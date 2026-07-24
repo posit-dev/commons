@@ -24,6 +24,27 @@ test_client <- function() {
   ellmer::chat_anthropic(model = "claude-sonnet-4-5")
 }
 
+# A board_temp() holding the given named values, each written as an rds pin.
+board_with_pins <- function(...) {
+  values <- rlang::list2(...)
+  board <- pins::board_temp()
+  suppressMessages(
+    for (nm in names(values)) {
+      pins::pin_write(board, values[[nm]], nm, type = "rds")
+    }
+  )
+  board
+}
+
+# Bound the wait on a prewarm child so a wedged download can't hang the suite.
+wait_for_prewarm <- function(p, timeout_ms = 30000) {
+  p$wait(timeout_ms)
+  if (p$is_alive()) {
+    p$kill()
+    skip("prewarm child did not finish in time")
+  }
+}
+
 test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,

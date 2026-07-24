@@ -274,8 +274,11 @@ Commons <- R6::R6Class(
     },
 
     #' @description Build the context layer's search index ahead of the first
-    #'   `search_context` call, e.g. during idle time right after a Shiny
-    #'   session starts. [commons_server()] does this automatically.
+    #'   `search_context` call, and start a best-effort background download of
+    #'   any board pins not yet loaded, warming the pins cache so their first
+    #'   use is fast. Returns immediately; pins are still loaded into their
+    #'   data source on demand. [commons_server()] does this automatically,
+    #'   e.g. during idle time right after a Shiny session starts.
     prewarm = function() {
       layer <- private$context_layer
       if (!is.null(layer) && length(layer$docs) > 0) {
@@ -287,6 +290,9 @@ Commons <- R6::R6Class(
           )
         )
         context_store(layer)
+      }
+      for (source in private$sources) {
+        source_prewarm(source)
       }
       invisible(self)
     }

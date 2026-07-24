@@ -49,9 +49,13 @@ flatten_inline <- function(x) {
   trimws(gsub("\\s*\\n\\s*", " ", x))
 }
 
+escape_regex <- function(x) {
+  gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
+}
+
 # Match `x` as a whole word, escaping any regex metacharacters it contains.
 word_pattern <- function(x) {
-  paste0("\\b", gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x), "\\b")
+  paste0("\\b", escape_regex(x), "\\b")
 }
 
 # Icons are decorative, so bsicons is optional.

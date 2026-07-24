@@ -485,6 +485,68 @@ test_that("prewarm() records a cache hit without a build span", {
   expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], TRUE)
 })
 
+test_that("prewarm() warms board pins in the background without loading them", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps")
+  )
+  agent <- test_agent(data_sources = list(sales_db = src))
+
+  expect_length(DBI::dbListTables(src$con), 0)
+
+  agent$prewarm()
+  p <- src$pending$process
+  expect_s3_class(p, "r_process")
+  withr::defer(p$kill())
+  wait_for_prewarm(p)
+
+  # Warming fills the pins cache only; tables still load at first use.
+  expect_length(DBI::dbListTables(src$con), 0)
+  expect_setequal(names(src$pending$pins), c("orders", "reps"))
+  source_describe(src, "orders")
+  expect_equal(DBI::dbListTables(src$con), "orders")
+})
+
+test_that("a measure injected a board source loads its pins when it runs", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  layer <- semantic_layer(
+    measure(
+      "order_count",
+      "Count of orders.",
+      function(warehouse) {
+        DBI::dbGetQuery(warehouse, "SELECT count(*) AS n FROM orders")$n
+      },
+      arguments = list()
+    )
+  )
+  agent <- test_agent(
+    semantic_layer = layer,
+    data_sources = list(warehouse = src)
+  )
+  expect_length(DBI::dbListTables(src$con), 0)
+
+  private <- agent$.__enclos_env__$private
+  res <- call_measure_tool(
+    private$registry,
+    "order_count",
+    "{}",
+    injections = private$injections,
+    sources = private$sources
+  )
+  expect_match(res@value, "3")
+  expect_equal(DBI::dbListTables(src$con), "orders")
+})
+
 test_that("commons() records an agent-creation span", {
   skip_if_not_installed("otelsdk")
 

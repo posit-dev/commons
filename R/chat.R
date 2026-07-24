@@ -54,10 +54,11 @@ commons_server <- function(id, client, ...) {
     attributes = list("commons.server.id" = id)
   )
 
-  # Build the context index during post-startup idle time (while the user
-  # reads the welcome message) rather than inside the first search. Errors are
-  # swallowed: the first search retries the build and surfaces the failure to
-  # the model.
+  # Build the context index and start the background pin-cache download
+  # during post-startup idle time (while the user reads the welcome message).
+  # Errors are swallowed: the first search retries the index build and
+  # surfaces the failure to the model, and an unwarmed pin is simply
+  # downloaded at its first use.
   later::later(function() {
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
