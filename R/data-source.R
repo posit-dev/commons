@@ -14,8 +14,10 @@
 #'   validated against the board at construction (a single listing call), but
 #'   each pin is downloaded only when its table is first used---by the
 #'   `describe_table` tool, a SQL query that references it, or a measure that
-#'   takes the source's connection. [commons_server()] reads any remaining
-#'   pins during idle time right after startup. A table reflects the pin's
+#'   takes the source's connection. [commons_server()] starts a background
+#'   process right after startup that downloads the remaining pins into the
+#'   local pins cache, so a first use typically only reads an
+#'   already-downloaded file. A table reflects the pin's
 #'   value at first use and is not refreshed for the lifetime of the data
 #'   source; if a pin can't be read (e.g. a network failure), the error
 #'   surfaces at that first use and the read is retried on the next one.
@@ -205,7 +207,9 @@ data_source_board <- function(
 
 # The deferred-read state a board source carries: the board plus the pins not
 # yet loaded (named character: table label -> pin name). Shared by every copy
-# of the source, so a read through one copy is seen by all.
+# of the source, so a read through one copy is seen by all. source_prewarm()
+# also stores its background downloader's handle here ($process), so every
+# copy sees at most one live warmer.
 new_pending_pins <- function(board, tables) {
   pending <- new.env(parent = emptyenv())
   pending$board <- board
@@ -340,17 +344,62 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
   source_ensure_tables(source, source$tables, call = call)
 }
 
-# Best-effort load of every pending pin, one at a time, tolerating a failure on
-# any one: it stays pending and is retried on demand. Used by prewarm(), where
-# a single bad pin must not stop the healthy ones from warming.
+# Prewarm doesn't load pins into DuckDB: dbWriteTable() must run in this
+# process (where the DuckDB lives) and would block every question asked during
+# the load, for minutes on a large board. Instead, warm the pins on-disk cache
+# in one background process, so the first on-demand pin_read() skips the
+# network and collapses to parse + dbWriteTable. The board is serialized to
+# the child as an argument, carrying its resolved cache path and auth, so the
+# child writes to the cache the parent reads even when the default cache
+# location would resolve differently (e.g. a deployment that repoints HOME).
+#
+# The handle lives on the shared pending env, so at most one child runs per
+# source. Once the child exits with pins still pending (a failed download, or
+# simply untouched tables), a later prewarm() respawns; already-cached pins
+# short-circuit in pins, so a respawn only retries genuine failures. A failed
+# spawn degrades to pure on-demand loading. Killing the child (source GC,
+# parent death via supervise) mid-write can leave a truncated cache file pins
+# won't re-download---the same hazard as interrupting pin_read() itself.
 source_prewarm <- function(source) {
-  if (is.null(source$pending)) {
+  pending <- source$pending
+  if (is.null(pending) || length(pending$pins) == 0) {
     return(invisible(source))
   }
-  for (table in names(source$pending$pins)) {
-    tryCatch(source_ensure_tables(source, table), error = function(err) NULL)
+  if (!is.null(pending$process) && pending$process$is_alive()) {
+    return(invisible(source))
   }
+  pending$process <- tryCatch(
+    callr::r_bg(
+      prewarm_downloads,
+      args = list(board = pending$board, pins = unique(unname(pending$pins))),
+      supervise = TRUE
+    ),
+    error = function(err) NULL
+  )
   invisible(source)
+}
+
+# Runs inside a background callr process, which resets this function's
+# environment to .GlobalEnv before serializing it: it must be self-contained,
+# referencing only base R and pins:: (the same constraint as the worker_*
+# functions in run-r.R). Best-effort: a failing pin is skipped so it can't
+# stop the healthy ones from warming; it stays pending in the parent, where
+# the first on-demand read surfaces the error and retries. The per-pin result
+# is never consumed in production but makes tests deterministic.
+prewarm_downloads <- function(board, pins) {
+  vapply(
+    pins,
+    function(pin) {
+      tryCatch(
+        {
+          pins::pin_download(board, pin)
+          TRUE
+        },
+        error = function(err) FALSE
+      )
+    },
+    logical(1)
+  )
 }
 
 # The pending tables a failed query actually references, read from DuckDB's

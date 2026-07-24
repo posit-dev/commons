@@ -323,6 +323,88 @@ test_that("a pin that isn't a data frame errors clearly", {
   expect_snapshot(source_describe(src, "cfg"), error = TRUE)
 })
 
+test_that("prewarm_downloads() downloads best-effort, tolerating a bad pin", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+  suppressMessages(pins::pin_delete(board, "team-orders"))
+
+  expect_equal(
+    prewarm_downloads(board, c("team-orders", "team-reps")),
+    c("team-orders" = FALSE, "team-reps" = TRUE)
+  )
+})
+
+test_that("source_prewarm() downloads in the background, leaving pins pending", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+  src <- data_source(
+    board,
+    tables = c(orders = "team-orders", reps = "team-reps")
+  )
+
+  source_prewarm(src)
+  p <- src$pending$process
+  expect_s3_class(p, "r_process")
+  withr::defer(p$kill())
+  wait_for_prewarm(p)
+  expect_equal(
+    p$get_result(),
+    c("team-orders" = TRUE, "team-reps" = TRUE)
+  )
+
+  # Warming touches only the pins cache: DuckDB untouched, everything pending.
+  expect_length(DBI::dbListTables(src$con), 0)
+  expect_setequal(names(src$pending$pins), c("orders", "reps"))
+
+  # First touch still loads on demand.
+  source_describe(src, "orders")
+  expect_equal(DBI::dbListTables(src$con), "orders")
+})
+
+test_that("source_prewarm() spawns at most one live process per source", {
+  skip_if_not_installed("pins")
+
+  local_mocked_bindings(prewarm_downloads = function(board, pins) Sys.sleep(30))
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  source_prewarm(src)
+  p <- src$pending$process
+  withr::defer(p$kill())
+  expect_true(p$is_alive())
+
+  # A second prewarm (e.g. another agent sharing the source) doesn't respawn.
+  source_prewarm(src)
+  expect_identical(src$pending$process, p)
+
+  # Once the child is gone with pins still pending, prewarm respawns.
+  p$kill()
+  p$wait(5000)
+  source_prewarm(src)
+  expect_false(identical(src$pending$process, p))
+  withr::defer(src$pending$process$kill())
+})
+
+test_that("source_prewarm() is a no-op without pending pins", {
+  expect_no_error(source_prewarm(test_source()))
+
+  skip_if_not_installed("pins")
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+  source_ensure_all(src)
+
+  source_prewarm(src)
+  expect_null(src$pending$process)
+})
+
 test_that("dbWriteTable works after duckdb_lock_down", {
   con <- duckdb_connect()
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))

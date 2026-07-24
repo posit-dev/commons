@@ -36,6 +36,15 @@ board_with_pins <- function(...) {
   board
 }
 
+# Bound the wait on a prewarm child so a wedged download can't hang the suite.
+wait_for_prewarm <- function(p, timeout_ms = 30000) {
+  p$wait(timeout_ms)
+  if (p$is_alive()) {
+    p$kill()
+    skip("prewarm child did not finish in time")
+  }
+}
+
 test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,

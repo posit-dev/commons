@@ -485,7 +485,7 @@ test_that("prewarm() records a cache hit without a build span", {
   expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], TRUE)
 })
 
-test_that("a board source loads no pins until prewarm()", {
+test_that("prewarm() warms board pins in the background without loading them", {
   skip_if_not_installed("pins")
 
   board <- board_with_pins(
@@ -502,10 +502,19 @@ test_that("a board source loads no pins until prewarm()", {
   expect_length(DBI::dbListTables(src$con), 0)
 
   agent$prewarm()
-  expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
+  p <- src$pending$process
+  expect_s3_class(p, "r_process")
+  withr::defer(p$kill())
+  wait_for_prewarm(p)
+
+  # Warming fills the pins cache only; tables still load at first use.
+  expect_length(DBI::dbListTables(src$con), 0)
+  expect_setequal(names(src$pending$pins), c("orders", "reps"))
+  source_describe(src, "orders")
+  expect_equal(DBI::dbListTables(src$con), "orders")
 })
 
-test_that("prewarm() loads healthy pins even when one pin fails", {
+test_that("prewarm() tolerates a failing pin and leaves everything pending", {
   skip_if_not_installed("pins")
 
   board <- board_with_pins(
@@ -518,13 +527,22 @@ test_that("prewarm() loads healthy pins even when one pin fails", {
   )
   agent <- test_agent(data_sources = list(sales_db = src))
 
-  # One pin becomes unreadable; the other must still warm, and the failed one
-  # stays pending for an on-demand retry.
+  # One pin becomes unreadable; the other must still warm, and the failure
+  # surfaces only at the failed table's first use.
   suppressMessages(pins::pin_delete(board, "team-orders"))
 
   agent$prewarm()
-  expect_equal(DBI::dbListTables(src$con), "reps")
-  expect_equal(names(src$pending$pins), "orders")
+  p <- src$pending$process
+  withr::defer(p$kill())
+  wait_for_prewarm(p)
+  expect_equal(
+    p$get_result(),
+    c("team-orders" = FALSE, "team-reps" = TRUE)
+  )
+
+  expect_setequal(names(src$pending$pins), c("orders", "reps"))
+  expect_equal(nrow(source_describe(src, "reps")$sample), 2)
+  expect_error(source_describe(src, "orders"), "Failed to read pin")
 })
 
 test_that("a measure injected a board source loads its pins when it runs", {
