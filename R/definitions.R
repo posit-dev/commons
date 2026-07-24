@@ -559,7 +559,9 @@ definitions_prompt_text <- function(registry, cap_chars = 4000) {
     if (any(!filter & ambient)) {
       paste0(
         "Expressions (use in SELECT or GROUP BY; expansion can't add an ",
-        "alias, so write `SELECT {{name}} AS name`):\n",
+        "alias, so write `SELECT {{name}} AS name`. Metric expressions ",
+        "are already aggregates --- never wrap one in SUM() or another ",
+        "aggregate):\n",
         paste(lines[!filter & ambient], collapse = "\n")
       )
     },
