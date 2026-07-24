@@ -127,9 +127,29 @@ A dictionary doesn't need to be complete to be useful: documented and undocument
 
 Together with the layers below, this gives an agent three tiers of trust: the dictionary describes what the raw data *is*, the semantic layer defines how governed metrics are *computed*, and the context layer holds the less-structured remainder.
 
+### Governed definitions
+
+A table's dictionary entry can also carry `definitions`: named, governed SQL expressions over that table's rows, each with a declared type. Boolean definitions act as filters, aggregates as metrics, and everything else as derived dimensions. An expression can reference a sibling definition by its bare name.
+
+```yaml
+tables:
+  - name: orders
+    definitions:
+      - name: realized
+        type: boolean
+        description: Orders that actually shipped (status 90).
+        expr: status_cd = 90
+      - name: net_revenue
+        type: number(quantity)
+        description: Total realized order value, net of discounts.
+        expr: SUM(total * adj_fctr) FILTER (WHERE realized)
+```
+
+The model writes a definition as a `{{name}}` token anywhere in its `run_sql` SQL --- `WHERE {{realized}}`, `SELECT {{net_revenue}} AS net_revenue` --- and commons expands the token to the governed expression before the query runs, so the trusted fragment lands byte-exact and the tool result records which definitions were applied. Each definition is validated against the live source (a typo'd column fails agent construction with the definition named), listed briefly in the system prompt, delivered in full with its table's first-touch entry, and searchable with the rest of the dictionary.
+
 ## Defining the semantic layer
 
-The semantic layer is currently composed of measures. A measure is an ordinary R function wrapped with metadata that tells the model what it computes and what arguments it accepts.
+The semantic layer is the agent's pool of trusted operations. Governed definitions (above) cover computations expressible as SQL over documented tables; measures cover everything R can do beyond that. A measure is an ordinary R function wrapped with metadata that tells the model what it computes and what arguments it accepts --- reach for one when a computation needs call-time parameters or methodology that shouldn't live in SQL (model fits, forecasts, multi-source stitching).
 
 Measures should use definitions your team already trusts: existing metric functions, SQL saved in reports, semantic-layer APIs, or calculations from production dashboards. The wrapper should be maintainable and thin. When an existing definition can be extended with a filter or grouping argument, prefer that over adding another near-duplicate measure.
 

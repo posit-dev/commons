@@ -1,11 +1,23 @@
+# Only the tools the agent's composition earns: an agent without measures
+# gets no search_measures/call_measure (nothing about its surface should
+# imply operations it doesn't have), and the definitions token surface
+# advertises itself only when a dictionary declares definitions (see
+# run_sql_description()).
 build_commons_tools <- function(self, private) {
-  list(
-    tool_search_measures(private),
-    tool_call_measure(private),
-    tool_search_context(private),
-    tool_describe_table(private),
-    tool_run_sql(private),
-    tool_run_r(private)
+  measure_tools <- if (length(private$registry) > 0) {
+    list(
+      tool_search_measures(private),
+      tool_call_measure(private)
+    )
+  }
+  c(
+    measure_tools,
+    list(
+      tool_search_context(private),
+      tool_describe_table(private),
+      tool_run_sql(private),
+      tool_run_r(private)
+    )
   )
 }
 
@@ -118,16 +130,25 @@ tool_describe_table <- function(private) {
 tool_run_sql <- function(private) {
   ellmer::tool(
     function(sql, source = NULL) {
+      src <- resolve_sql_source(private$sources, source)
+      expansion <- expand_for_run_sql(
+        private$definitions,
+        private$sources,
+        src,
+        source,
+        sql
+      )
       res <- run_sql_tool(
-        resolve_sql_source(private$sources, source),
-        sql,
+        src,
+        expansion$sql,
         source_name = source,
         tracker = private$first_touch,
-        handles = private$handles
+        handles = private$handles,
+        applied = expansion$applied
       )
       add_citation_request(res, private$citation_request)
     },
-    "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
+    run_sql_description(private$definitions, private$registry),
     arguments = list(
       sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect."),
       source = sql_source_type(private$sources)
@@ -247,15 +268,17 @@ run_sql_tool <- function(
   sql,
   source_name = NULL,
   tracker = NULL,
-  handles = NULL
+  handles = NULL,
+  applied = list()
 ) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
   display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
   advert <- register_handle(handles, res)
+  note <- applied_definitions_text(applied)
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
   tool_result(
-    paste(c(body, advert, entries), collapse = "\n\n"),
+    paste(c(body, note, advert, entries), collapse = "\n\n"),
     title = sprintf("Ran SQL%s", source_label(source_name)),
     icon = maybe_icon("code-square"),
     markdown = display_md,

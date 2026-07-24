@@ -62,6 +62,12 @@
 #' * When the agent also has a [context_layer()], the dictionary's prose is
 #'   indexed for the `search_context` tool.
 #'
+#' A table's entry can also declare `definitions`: named, governed SQL
+#' expressions with declared types that the model applies as `{{name}}`
+#' tokens in `run_sql` queries, expanded to their trusted SQL before the
+#' query runs. Definitions are validated against the live source and
+#' delivered through all three channels above.
+#'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
 #' would modify data or schema (`INSERT`, `UPDATE`, `DROP`, and similar) are

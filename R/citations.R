@@ -5,8 +5,8 @@
 # commentary shown alongside it. See derive_provenance() for how verification
 # affects an answer's provenance tag.
 
-# Everything citable: context layer docs, always-on facts, measure schemas
-# (as search_measures presents them), and dictionary entries (as first touch
+# Everything citable: context layer docs, measure schemas (as
+# search_measures presents them), and dictionary entries (as first touch
 # delivers them). Labels are user-facing; they name the source in a footnote
 # tooltip.
 build_citation_corpus <- function(context_layer, registry, sources) {
@@ -19,7 +19,6 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   }
 
   add("context layer", context_layer$docs %||% character())
-  add("context layer", context_layer$always %||% character())
   # Mirror tool_search_measures(): source lines only appear in schemas when
   # the agent has several sources, and quotes must match what was presented.
   source_names <- if (length(sources) > 1) names(sources) else character()
@@ -129,14 +128,16 @@ normalize_citation <- function(x) {
 
 # The citation request rides on the first fallback-tagged tool result of the
 # conversation rather than living in the system prompt, so conversations
-# answered entirely by measures never see it.
+# answered entirely by measures never see it. The agent stores its composed
+# request on the tracker at construction (see Commons$initialize); the
+# default here keeps direct tool use outside an agent working.
 add_citation_request <- function(result, tracker) {
   if (is.null(tracker) || isTRUE(tracker$requested)) {
     return(result)
   }
   tracker$requested <- TRUE
 
-  request <- citation_request_text()
+  request <- tracker$request %||% citation_request_text()
   if (is.character(result@value)) {
     result@value <- paste(c(result@value, request), collapse = "\n\n")
   } else {
@@ -145,12 +146,33 @@ add_citation_request <- function(result, tracker) {
   result
 }
 
-citation_request_text <- function() {
-  paste(
-    readLines(
-      system.file("prompts/citation-request.md", package = "commons"),
-      warn = FALSE
-    ),
-    collapse = "\n"
+# Composed from the agent's actual trust surface, so the request never
+# implies operations the agent doesn't have (a measure-less agent's answers
+# are all fallback; there is no "measure alone" path to contrast with).
+citation_request_text <- function(has_measures = TRUE, has_definitions = FALSE) {
+  trust_note <- if (has_measures) {
+    paste(
+      "Note: any answer in this conversation that does not come from a",
+      "registered measure alone will be presented to the user as",
+      '"Potentially untrusted" unless you cite trusted text that supports',
+      "your approach."
+    )
+  } else {
+    paste(
+      "Note: answers in this conversation will be presented to the user as",
+      '"Potentially untrusted" unless you cite trusted text that supports',
+      "your approach."
+    )
+  }
+  citable <- c(
+    "context search results",
+    if (has_measures) "measure definitions",
+    if (has_definitions) "governed definitions",
+    "data documentation"
   )
+  as.character(ellmer::interpolate_file(
+    system.file("prompts/citation-request.md", package = "commons"),
+    trust_note = trust_note,
+    citable_sources = cli::format_inline("{.or {citable}}")
+  ))
 }

@@ -10,13 +10,23 @@ tool_run_r <- function(private) {
       "Run R code in a sandboxed R session and see its output, including",
       "rendered plots, which are also shown to the user.",
       "The session persists across calls: variables you assign and packages",
-      "you load remain available. Results from call_measure and run_sql are",
-      "preloaded under their advertised handles (r1, r2, ...).",
-      "Measure definitions and their helper functions are predefined under",
-      "their own names: evaluate a measure's name to read its source.",
-      "These are source-only copies without their original environment or",
-      "database connections, so treat them as reference material; to compute",
-      "a measure, use call_measure.",
+      "you load remain available.",
+      if (length(private$registry) > 0) {
+        paste(
+          "Results from call_measure and run_sql are",
+          "preloaded under their advertised handles (r1, r2, ...).",
+          "Measure definitions and their helper functions are predefined under",
+          "their own names: evaluate a measure's name to read its source.",
+          "These are source-only copies without their original environment or",
+          "database connections, so treat them as reference material; to compute",
+          "a measure, use call_measure."
+        )
+      } else {
+        paste(
+          "Results from run_sql are preloaded under their advertised",
+          "handles (r1, r2, ...)."
+        )
+      },
       "\n\nRules:",
       "\n- Work incrementally: each call should do one small, well-defined task.",
       "\n- Create at most one figure per call.",

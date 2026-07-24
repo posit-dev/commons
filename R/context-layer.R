@@ -83,7 +83,12 @@ dictionary_context_chunks <- function(dictionary) {
     vapply(dictionary$glossary, identity, character(1))
   )
 
-  chunks <- c(dictionary$details, tables[!is.na(tables)], glossary)
+  chunks <- c(
+    dictionary$details,
+    tables[!is.na(tables)],
+    glossary,
+    definition_context_chunks(dictionary)
+  )
   chunks[nzchar(chunks)]
 }
 

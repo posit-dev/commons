@@ -40,11 +40,19 @@ new_data_dictionary <- function(raw, call = rlang::caller_env()) {
 
 normalize_dictionary_tables <- function(tables, call = rlang::caller_env()) {
   tables <- key_by_name(tables, "table", call = call)
-  lapply(tables, function(table) {
-    table <- as.list(table)
+  out <- lapply(names(tables), function(name) {
+    table <- as.list(tables[[name]])
     table$columns <- key_by_name(table$columns, "column", call = call)
+    table$definitions <- normalize_dictionary_definitions(
+      table$definitions,
+      table = name,
+      columns = names(table$columns),
+      call = call
+    )
     table
   })
+  names(out) <- names(tables)
+  out
 }
 
 # data-dict.yaml lists tables and columns as sequences with a `name` field;
@@ -126,6 +134,7 @@ dictionary_entry_parts <- function(dictionary, table, columns_text) {
     entry$description,
     entry$details,
     columns_text,
+    definitions_entry_text(entry$definitions),
     dictionary_relationships_text(dictionary, table)
   )
   c(parts, dictionary_terms_text(dictionary, paste(parts, collapse = "\n")))

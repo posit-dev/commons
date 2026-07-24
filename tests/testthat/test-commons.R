@@ -71,13 +71,23 @@ test_that("commons_exchange_provenance reads tags and text from turns", {
   expect_true(out[[2]]$citations[[1]]$verified)
 })
 
-test_that("commons() returns a Chat subclass with the six fixed tools", {
+test_that("commons() registers only the tools the agent's composition earns", {
   agent <- test_agent()
 
   expect_s3_class(agent, "Commons")
   expect_s3_class(agent, "Chat")
+  # No measures: nothing about the agent's surface should imply them.
   expect_setequal(
     vapply(agent$get_tools(), tool_name, character(1)),
+    c("search_context", "describe_table", "run_sql", "run_r")
+  )
+  expect_no_match(agent$get_system_prompt(), "search_measures")
+
+  with_measures <- test_agent(
+    semantic_layer = semantic_layer(count_measure_tool())
+  )
+  expect_setequal(
+    vapply(with_measures$get_tools(), tool_name, character(1)),
     c(
       "search_measures",
       "call_measure",

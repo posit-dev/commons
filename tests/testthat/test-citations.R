@@ -82,7 +82,9 @@ test_that("trivial quotes cannot promote an answer", {
 
 test_that("the citation corpus spans context, measures, and dictionaries", {
   skip_if_not_installed("yaml")
-  layer <- context_layer(always = "Fiscal year starts in February.")
+  fact <- withr::local_tempfile(fileext = ".md")
+  writeLines("Fiscal year starts in February.", fact)
+  layer <- context_layer(files = fact)
   registry <- list(order_count = count_measure_tool())
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
