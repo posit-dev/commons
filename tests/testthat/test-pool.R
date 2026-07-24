@@ -223,15 +223,21 @@ test_that("board-source metrics resolve their role at first query", {
 })
 
 test_that("the pool tools follow the agent's composition", {
-  # Definitions with metrics: search_pool + query_metrics, no call_measure.
+  # Definitions with metrics, all ambient in the prompt: query_metrics but
+  # no search_pool (a search over a fully visible pool is a wasted trip)
+  # and no call_measure.
   definitions_agent <- test_agent(
     data_sources = list(sales_db = pool_source())
   )
   names <- vapply(definitions_agent$get_tools(), tool_name, character(1))
-  expect_true(all(c("search_pool", "query_metrics") %in% names))
-  expect_false("call_measure" %in% names)
+  expect_true("query_metrics" %in% names)
+  expect_false(any(c("search_pool", "call_measure") %in% names))
+  expect_match(
+    definitions_agent$get_system_prompt(),
+    "the complete set of governed definitions"
+  )
 
-  # Filters/dimensions only: no query_metrics.
+  # Filters/dimensions only: no query_metrics either.
   filters_only <- test_agent(
     data_sources = list(
       sales_db = definitions_source(
@@ -244,10 +250,25 @@ test_that("the pool tools follow the agent's composition", {
     )
   )
   names <- vapply(filters_only$get_tools(), tool_name, character(1))
-  expect_true("search_pool" %in% names)
-  expect_false("query_metrics" %in% names)
+  expect_false(any(c("search_pool", "query_metrics") %in% names))
 
-  # Measures only: search_pool + call_measure, no query_metrics.
+  # A roster past the ambient cap makes the pool searchable.
+  many <- unlist(lapply(1:200, function(i) {
+    c(
+      sprintf("      - name: filter_%03d", i),
+      "        type: boolean",
+      sprintf("        expr: revenue > %d", i),
+      sprintf("        description: Filter number %d of many.", i)
+    )
+  }))
+  overflow_agent <- test_agent(
+    data_sources = list(sales_db = definitions_source(definitions = many))
+  )
+  names <- vapply(overflow_agent$get_tools(), tool_name, character(1))
+  expect_true("search_pool" %in% names)
+
+  # Measures only: search_pool + call_measure (measures are never listed
+  # in the prompt), no query_metrics.
   measures_agent <- test_agent(
     semantic_layer = semantic_layer(count_measure_tool())
   )

@@ -540,8 +540,13 @@ definitions_prompt_text <- function(registry, cap_chars = 4000) {
     character(1)
   )
   ambient <- cumsum(nchar(lines)) <= cap_chars
-  overflow <- if (!all(ambient)) {
-    "More definitions arrive with their tables' dictionary entries and via context search."
+  # Telling the model the list is complete is what saves it a verification
+  # search; when the roster overflows the cap, search_pool exists to find
+  # the rest (see pool_searchable()).
+  overflow <- if (all(ambient)) {
+    "This is the complete set of governed definitions."
+  } else {
+    "More definitions arrive with their tables' dictionary entries, via context search, and via search_pool."
   }
 
   filter <- vapply(
@@ -576,6 +581,17 @@ definitions_prompt_text <- function(registry, cap_chars = 4000) {
     "before the query runs.\n\n",
     paste(blocks, collapse = "\n\n")
   )
+}
+
+# Whether the definitions roster exceeds the ambient prompt cap, leaving
+# some discoverable only by search.
+definitions_overflow <- function(registry, cap_chars = 4000) {
+  records <- registry_records(registry)
+  if (length(records) == 0) {
+    return(FALSE)
+  }
+  lines <- vapply(records, definition_line, character(1))
+  !all(cumsum(nchar(lines)) <= cap_chars)
 }
 
 definition_line <- function(record, multi_source = FALSE) {

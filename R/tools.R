@@ -1,13 +1,14 @@
-# Only the tools the agent's composition earns: search_pool whenever the
-# semantic layer has anything in it, call_measure only when measures exist,
-# query_metrics only when a definition could be a metric. Nothing about an
-# agent's surface should imply operations it doesn't have.
+# Only the tools the agent's composition earns: call_measure only when
+# measures exist, query_metrics only when a definition could be a metric,
+# and search_pool only when something in the pool ISN'T already ambient in
+# the system prompt — measures are never listed there, and definitions
+# overflow their cap. A search tool over a fully visible pool just costs
+# the model a verification round trip. Nothing about an agent's surface
+# should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
-  has_measures <- length(private$registry) > 0
-  has_definitions <- length(registry_records(private$definitions)) > 0
   c(
-    if (has_measures || has_definitions) list(tool_search_pool(private)),
-    if (has_measures) list(tool_call_measure(private)),
+    if (pool_searchable(private)) list(tool_search_pool(private)),
+    if (length(private$registry) > 0) list(tool_call_measure(private)),
     if (registry_has_metrics(private$definitions)) {
       list(tool_query_metrics(private))
     },
@@ -18,6 +19,10 @@ build_commons_tools <- function(self, private) {
       tool_run_r(private)
     )
   )
+}
+
+pool_searchable <- function(private) {
+  length(private$registry) > 0 || definitions_overflow(private$definitions)
 }
 
 tool_search_pool <- function(private) {
@@ -84,7 +89,10 @@ tool_query_metrics <- function(private) {
         source_name = source
       )
     },
-    "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from the system prompt or search_pool; commons compiles and runs the query.",
+    sprintf(
+      "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from %s; commons compiles and runs the query.",
+      if (pool_searchable(private)) "the system prompt or search_pool" else "the system prompt"
+    ),
     arguments = list(
       metrics = ellmer::type_array(
         ellmer::type_string(),
