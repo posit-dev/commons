@@ -303,7 +303,7 @@ test_that("run_sql results note the definitions applied", {
   expect_match(res@value, "region = 'EMEA'", fixed = TRUE)
 })
 
-test_that("the system prompt carries a governed-definitions section", {
+test_that("the system prompt carries a governed-definitions index", {
   src <- definitions_source()
   registry <- validated_registry(src)
   prompt <- commons_system_prompt(
@@ -312,14 +312,35 @@ test_that("the system prompt carries a governed-definitions section", {
     registry
   )
   expect_match(prompt, "# Governed definitions", fixed = TRUE)
-  expect_match(prompt, "`{{emea}}` (sales): EMEA rows only.", fixed = TRUE)
-  expect_match(prompt, "Filters (boolean; use in WHERE)", fixed = TRUE)
-  # Full expansions are first-touch and search content, not ambient.
+  expect_match(
+    prompt,
+    "- sales: filters `{{emea}}`; dimensions `{{region_band}}`; metrics `{{big_revenue}}`",
+    fixed = TRUE
+  )
+  # Depth is first-touch and search content, not ambient: neither
+  # expansions nor descriptions appear in the prompt.
   expect_no_match(prompt, "region = 'EMEA'", fixed = TRUE)
+  expect_no_match(prompt, "EMEA rows only", fixed = TRUE)
+})
+
+test_that("a definition's label is its index hint", {
+  src <- definitions_source(
+    definitions = c(
+      "      - name: emea",
+      "        type: boolean",
+      "        label: EMEA rows",
+      "        description: The region = 'EMEA' slice of orders.",
+      "        expr: region = 'EMEA'"
+    )
+  )
+  registry <- validated_registry(src)
+  text <- definitions_prompt_text(registry)
+  expect_match(text, "`{{emea}}` (EMEA rows)", fixed = TRUE)
+  expect_no_match(text, "slice of orders", fixed = TRUE)
 })
 
 test_that("the prompt section caps like the glossary", {
-  many <- unlist(lapply(1:200, function(i) {
+  many <- unlist(lapply(1:400, function(i) {
     c(
       sprintf("      - name: filter_%03d", i),
       "        type: boolean",
@@ -329,9 +350,12 @@ test_that("the prompt section caps like the glossary", {
   }))
   src <- definitions_source(definitions = many)
   registry <- validated_registry(src)
+  expect_true(definitions_overflow(registry))
   text <- definitions_prompt_text(registry)
   expect_lt(nchar(text), 6000)
   expect_match(text, "More definitions arrive", fixed = TRUE)
+
+  expect_false(definitions_overflow(validated_registry(definitions_source())))
 })
 
 test_that("first touch delivers a table's definitions with expansions", {

@@ -253,7 +253,7 @@ test_that("the pool tools follow the agent's composition", {
   expect_false(any(c("search_pool", "query_metrics") %in% names))
 
   # A roster past the ambient cap makes the pool searchable.
-  many <- unlist(lapply(1:200, function(i) {
+  many <- unlist(lapply(1:400, function(i) {
     c(
       sprintf("      - name: filter_%03d", i),
       "        type: boolean",

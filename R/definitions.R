@@ -52,6 +52,7 @@ normalize_dictionary_definitions <- function(
       }
     }
     def$expr <- trimws(def$expr)
+    def$label <- prose_field(def$label)
     def$description <- prose_field(def$description)
     def$details <- prose_field(def$details)
     definitions[[name]] <- def
@@ -191,6 +192,7 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
           } else {
             NA_character_
           },
+          label = def$label,
           description = def$description,
           details = def$details,
           expr = def$expr,
@@ -517,98 +519,116 @@ abort_unknown_token <- function(token_text, records, call) {
 
 # ---- delivery ----------------------------------------------------------------
 
-# The ambient system-prompt section: one line per definition, grouped by
-# role, capped like the glossary so a large roster degrades to search and
-# first-touch delivery rather than bloating every prompt. Only the
-# boolean -> filter split is known from type alone at prompt time (lazy
-# sources haven't been probed yet), so non-boolean definitions group
-# together as expressions.
+# The ambient system-prompt section: a name-first index, one line per
+# table, grouped by role within the line. The prompt's job is to put names
+# in reach before the first query; depth (descriptions, expansions,
+# caveats) arrives with each table's first-touch entry and via search. A
+# definition's `label` is the index's short hint, for names that don't
+# carry their own semantics --- descriptions deliberately stay out of the
+# prompt. Capped like the glossary so a huge roster degrades to search
+# (see pool_searchable()) rather than bloating every request.
 definitions_prompt_text <- function(registry, cap_chars = 4000) {
-  records <- registry_records(registry)
-  if (length(records) == 0) {
+  lines <- definition_index_lines(registry)
+  if (length(lines) == 0) {
     return("")
   }
 
-  multi_source <- length(unique(vapply(
-    records,
-    function(record) record$source,
-    character(1)
-  ))) > 1
-  lines <- vapply(
-    records,
-    function(record) definition_line(record, multi_source),
-    character(1)
-  )
   ambient <- cumsum(nchar(lines)) <= cap_chars
   # Telling the model the list is complete is what saves it a verification
   # search; when the roster overflows the cap, search_pool exists to find
-  # the rest (see pool_searchable()).
-  overflow <- if (all(ambient)) {
+  # the rest.
+  status <- if (all(ambient)) {
     "This is the complete set of governed definitions."
   } else {
     "More definitions arrive with their tables' dictionary entries, via context search, and via search_pool."
   }
 
-  filter <- vapply(
-    records,
-    function(record) identical(record$role, "filter"),
-    logical(1)
-  )
-  blocks <- c(
-    if (any(filter & ambient)) {
-      paste0(
-        "Filters (boolean; use in WHERE):\n",
-        paste(lines[filter & ambient], collapse = "\n")
-      )
-    },
-    if (any(!filter & ambient)) {
-      paste0(
-        "Expressions (use in SELECT or GROUP BY; expansion can't add an ",
-        "alias, so write `SELECT {{name}} AS name`. Metric expressions ",
-        "are already aggregates --- never wrap one in SUM() or another ",
-        "aggregate):\n",
-        paste(lines[!filter & ambient], collapse = "\n")
-      )
-    },
-    overflow
-  )
-
   paste0(
     "\n\n# Governed definitions\n\n",
-    "Trusted expressions from the data dictionary. Write them as `{{name}}` ",
-    "tokens anywhere in `run_sql` SQL (or `{{table.name}}` when a name ",
-    "exists on several tables); each token expands to its governed SQL ",
-    "before the query runs.\n\n",
-    paste(blocks, collapse = "\n\n")
+    "Trusted expressions from the data dictionary, indexed here by table; ",
+    "each table's dictionary entry delivers its full definitions. Write ",
+    "them as `{{name}}` tokens anywhere in `run_sql` SQL (`{{table.name}}` ",
+    "when a name exists on several tables); each expands to its governed ",
+    "SQL before the query runs. Expansion can't add an alias, so write ",
+    "`SELECT {{name}} AS name`; metric expressions are already ",
+    "aggregates --- never wrap one in SUM() or another aggregate.\n\n",
+    paste(lines[ambient], collapse = "\n"),
+    "\n\n",
+    status
   )
 }
 
 # Whether the definitions roster exceeds the ambient prompt cap, leaving
 # some discoverable only by search.
 definitions_overflow <- function(registry, cap_chars = 4000) {
-  records <- registry_records(registry)
-  if (length(records) == 0) {
-    return(FALSE)
-  }
-  lines <- vapply(records, definition_line, character(1))
-  !all(cumsum(nchar(lines)) <= cap_chars)
+  lines <- definition_index_lines(registry)
+  length(lines) > 0 && !all(cumsum(nchar(lines)) <= cap_chars)
 }
 
-definition_line <- function(record, multi_source = FALSE) {
-  scope <- if (multi_source && nzchar(record$source)) {
-    sprintf("%s.%s", record$source, record$table)
-  } else {
-    record$table
+definition_index_lines <- function(registry) {
+  records <- registry_records(registry)
+  if (length(records) == 0) {
+    return(character())
   }
-  line <- sprintf("- `{{%s}}` (%s)", record$name, scope)
-  detail <- flatten_inline(paste(
-    c(record$description %||% character(), record$details %||% character()),
-    collapse = " "
-  ))
-  if (nzchar(detail)) {
-    line <- paste0(line, ": ", detail)
+  multi_source <- length(unique(vapply(
+    records,
+    function(record) record$source,
+    character(1)
+  ))) > 1
+  scopes <- vapply(
+    records,
+    function(record) {
+      if (multi_source && nzchar(record$source)) {
+        sprintf("%s.%s", record$source, record$table)
+      } else {
+        record$table
+      }
+    },
+    character(1)
+  )
+
+  vapply(
+    unique(scopes),
+    function(scope) {
+      on_scope <- records[scopes == scope]
+      roles <- vapply(
+        on_scope,
+        # Lazy sources haven't been probed at prompt time; their
+        # non-boolean definitions index as plain expressions.
+        function(record) if (is.na(record$role)) "expression" else record$role,
+        character(1)
+      )
+      groups <- c(
+        filter = "filters",
+        dimension = "dimensions",
+        metric = "metrics",
+        expression = "expressions"
+      )
+      parts <- vapply(
+        names(groups)[names(groups) %in% roles],
+        function(role) {
+          items <- vapply(
+            on_scope[roles == role],
+            definition_index_item,
+            character(1)
+          )
+          sprintf("%s %s", groups[[role]], paste(items, collapse = ", "))
+        },
+        character(1)
+      )
+      sprintf("- %s: %s", scope, paste(parts, collapse = "; "))
+    },
+    character(1)
+  )
+}
+
+definition_index_item <- function(record) {
+  item <- sprintf("`{{%s}}`", record$name)
+  label <- flatten_inline(record$label %||% "")
+  if (nzchar(label)) {
+    item <- sprintf("%s (%s)", item, label)
   }
-  line
+  item
 }
 
 # The definitions block of a table's first-touch dictionary entry, with full
