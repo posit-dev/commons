@@ -289,8 +289,6 @@ Commons <- R6::R6Class(
         )
         context_store(layer)
       }
-      # Best-effort: a pin that fails to read stays pending and is retried on
-      # demand, without stopping the other pins or sources from prewarming.
       for (source in private$sources) {
         source_prewarm(source)
       }

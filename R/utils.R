@@ -49,7 +49,6 @@ flatten_inline <- function(x) {
   trimws(gsub("\\s*\\n\\s*", " ", x))
 }
 
-# Escape any regex metacharacters in `x` so it matches literally.
 escape_regex <- function(x) {
   gsub("([][{}()+*^$|\\\\?.])", "\\\\\\1", x)
 }

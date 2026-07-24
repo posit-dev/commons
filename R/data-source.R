@@ -97,9 +97,6 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   data_source_frames(dots, dictionary)
 }
 
-# The frames path: named data frames loaded directly into an in-process
-# DuckDB. Boards take their own path (data_source_board()), deferring each
-# pin's read until its table is first used.
 data_source_frames <- function(dots, dictionary, call = rlang::caller_env()) {
   check_named_frames(dots, call = call)
   local_commons_span(
