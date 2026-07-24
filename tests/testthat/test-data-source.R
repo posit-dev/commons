@@ -179,7 +179,6 @@ test_that("source_query loads the tables a query references", {
   expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
   expect_equal(names(src$pending$pins), "regions")
 
-  # A repeated query reuses the loaded tables and leaves `regions` pending.
   source_query(src, "SELECT count(*) AS n FROM orders")
   expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
   expect_equal(names(src$pending$pins), "regions")
@@ -216,8 +215,7 @@ test_that("source_query preserves a genuine query error, unmasked", {
     board,
     tables = c(orders = "team-orders", regions = "team-regions")
   )
-  # A bad column error must surface as itself, not be replaced by an unrelated
-  # pin's read failure.
+  # The deleted pin would error if read; the bad column must surface instead.
   suppressMessages(pins::pin_delete(board, "team-regions"))
 
   expect_error(
@@ -230,8 +228,6 @@ test_that("source_query loads a pin whose label ends in punctuation", {
   skip_if_not_installed("pins")
 
   board <- board_with_pins("team-orders" = data.frame(id = 1:3))
-  # The label ends in a non-word character, which \b can't wrap; the error
-  # matcher must still recognize DuckDB's missing-table error and load the pin.
   src <- data_source(board, tables = c("orders-" = "team-orders"))
 
   res <- source_query(src, 'SELECT count(*) AS n FROM "orders-"')
@@ -336,37 +332,6 @@ test_that("prewarm_downloads() downloads best-effort, tolerating a bad pin", {
     prewarm_downloads(board, c("team-orders", "team-reps")),
     c("team-orders" = FALSE, "team-reps" = TRUE)
   )
-})
-
-test_that("source_prewarm() downloads in the background, leaving pins pending", {
-  skip_if_not_installed("pins")
-
-  board <- board_with_pins(
-    "team-orders" = data.frame(id = 1:3),
-    "team-reps" = data.frame(rep = c("Ada", "Bo"))
-  )
-  src <- data_source(
-    board,
-    tables = c(orders = "team-orders", reps = "team-reps")
-  )
-
-  source_prewarm(src)
-  p <- src$pending$process
-  expect_s3_class(p, "r_process")
-  withr::defer(p$kill())
-  wait_for_prewarm(p)
-  expect_equal(
-    p$get_result(),
-    c("team-orders" = TRUE, "team-reps" = TRUE)
-  )
-
-  # Warming touches only the pins cache: DuckDB untouched, everything pending.
-  expect_length(DBI::dbListTables(src$con), 0)
-  expect_setequal(names(src$pending$pins), c("orders", "reps"))
-
-  # First touch still loads on demand.
-  source_describe(src, "orders")
-  expect_equal(DBI::dbListTables(src$con), "orders")
 })
 
 test_that("source_prewarm() spawns at most one live process per source", {

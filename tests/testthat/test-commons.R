@@ -498,7 +498,6 @@ test_that("prewarm() warms board pins in the background without loading them", {
   )
   agent <- test_agent(data_sources = list(sales_db = src))
 
-  # Agent construction and system-prompt generation use only table labels.
   expect_length(DBI::dbListTables(src$con), 0)
 
   agent$prewarm()
@@ -512,37 +511,6 @@ test_that("prewarm() warms board pins in the background without loading them", {
   expect_setequal(names(src$pending$pins), c("orders", "reps"))
   source_describe(src, "orders")
   expect_equal(DBI::dbListTables(src$con), "orders")
-})
-
-test_that("prewarm() tolerates a failing pin and leaves everything pending", {
-  skip_if_not_installed("pins")
-
-  board <- board_with_pins(
-    "team-orders" = data.frame(id = 1:3),
-    "team-reps" = data.frame(rep = c("Ada", "Bo"))
-  )
-  src <- data_source(
-    board,
-    tables = c(orders = "team-orders", reps = "team-reps")
-  )
-  agent <- test_agent(data_sources = list(sales_db = src))
-
-  # One pin becomes unreadable; the other must still warm, and the failure
-  # surfaces only at the failed table's first use.
-  suppressMessages(pins::pin_delete(board, "team-orders"))
-
-  agent$prewarm()
-  p <- src$pending$process
-  withr::defer(p$kill())
-  wait_for_prewarm(p)
-  expect_equal(
-    p$get_result(),
-    c("team-orders" = FALSE, "team-reps" = TRUE)
-  )
-
-  expect_setequal(names(src$pending$pins), c("orders", "reps"))
-  expect_equal(nrow(source_describe(src, "reps")$sample), 2)
-  expect_error(source_describe(src, "orders"), "Failed to read pin")
 })
 
 test_that("a measure injected a board source loads its pins when it runs", {
