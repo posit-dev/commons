@@ -15,6 +15,15 @@
       Error in `data_source()`:
       ! `tables` names table not on the connection: "nope".
 
+# data_source rejects a board label colliding with a built-in relation
+
+    Code
+      data_source(board, tables = c(duckdb_tables = "team-orders"))
+    Condition
+      Error in `data_source()`:
+      ! `tables` label collides with built-in database relation: "duckdb_tables".
+      i Rename the affected table.
+
 # data_source validates board pin names at construction
 
     Code
@@ -55,6 +64,14 @@
       Error:
       ! `tables` names pin matching more than one pin on the board: "orders".
       i Use the full "owner/name" form to disambiguate.
+
+# check_board_pins_exist accepts a pin absent from a capped listing
+
+    Code
+      check_board_pins_exist(board, c(x = "nope"))
+    Condition
+      Error:
+      ! `tables` names pin not on the board: "nope".
 
 # a pin that isn't a data frame errors clearly
 

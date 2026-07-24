@@ -226,6 +226,28 @@ test_that("source_query preserves a genuine query error, unmasked", {
   )
 })
 
+test_that("source_query loads a pin whose label ends in punctuation", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  # The label ends in a non-word character, which \b can't wrap; the error
+  # matcher must still recognize DuckDB's missing-table error and load the pin.
+  src <- data_source(board, tables = c("orders-" = "team-orders"))
+
+  res <- source_query(src, 'SELECT count(*) AS n FROM "orders-"')
+  expect_equal(res$n, 3)
+})
+
+test_that("data_source rejects a board label colliding with a built-in relation", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  expect_snapshot(
+    data_source(board, tables = c(duckdb_tables = "team-orders")),
+    error = TRUE
+  )
+})
+
 test_that("data_source validates board pin names at construction", {
   skip_if_not_installed("pins")
 
@@ -247,6 +269,7 @@ test_that("check_board_pins_exist resolves, flags missing, and flags ambiguous n
 
   local_mocked_bindings(
     pin_list = function(board) c("alice/orders", "bob/orders", "alice/reps"),
+    pin_exists = function(board, name) FALSE,
     .package = "pins"
   )
   board <- structure(list(), class = "pins_board")
@@ -258,6 +281,22 @@ test_that("check_board_pins_exist resolves, flags missing, and flags ambiguous n
   expect_snapshot(check_board_pins_exist(board, c(x = "nope")), error = TRUE)
   # A bare name that suffix-matches two owners' pins is ambiguous.
   expect_snapshot(check_board_pins_exist(board, c(o = "orders")), error = TRUE)
+})
+
+test_that("check_board_pins_exist accepts a pin absent from a capped listing", {
+  skip_if_not_installed("pins")
+
+  # pin_list() caps at 1000 on Connect; a valid pin past the cap must not be
+  # rejected as missing, but a genuinely absent one still is.
+  local_mocked_bindings(
+    pin_list = function(board) paste0("owner/pin", 1:1000),
+    pin_exists = function(board, name) name == "owner/past-cap",
+    .package = "pins"
+  )
+  board <- structure(list(), class = "pins_board")
+
+  expect_no_error(check_board_pins_exist(board, c(late = "owner/past-cap")))
+  expect_snapshot(check_board_pins_exist(board, c(x = "nope")), error = TRUE)
 })
 
 test_that("a failed pin read surfaces at use and is retried, not cached", {

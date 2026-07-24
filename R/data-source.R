@@ -195,6 +195,7 @@ data_source_board <- function(
   # works.
   con <- duckdb_connect()
   duckdb_lock_down(con)
+  check_labels_free(con, names(tables), call = call)
 
   new_data_source(
     con,
@@ -357,9 +358,11 @@ source_prewarm <- function(source) {
 
 # The pending tables a failed query actually references, read from DuckDB's
 # own catalog error ("Table with name X does not exist!") rather than from the
-# SQL text. Matching the whole "does not exist" phrase---not the bare name,
-# which also appears in DuckDB's "Did you mean" suggestions---keeps a name in a
-# string literal, comment, or column reference from triggering a spurious read.
+# SQL text. Anchoring on the fixed surrounding phrase---not a bare-name match,
+# which would also fire on DuckDB's "Did you mean" suggestions---keeps a name
+# in a string literal, comment, or column reference from triggering a spurious
+# read. The phrase itself does the bounding, so a label that begins or ends in
+# punctuation (which \b can't wrap) still matches.
 pending_tables_in_error <- function(source, err) {
   pending <- source$pending
   if (is.null(pending)) {
@@ -371,7 +374,7 @@ pending_tables_in_error <- function(source, err) {
     labels,
     function(table) {
       grepl(
-        paste0("Table with name ", word_pattern(table), " does not exist"),
+        paste0("Table with name ", escape_regex(table), " does not exist"),
         msg,
         ignore.case = TRUE
       )
@@ -682,13 +685,22 @@ check_board_pins_exist <- function(board, tables, call = rlang::caller_env()) {
         return("ok")
       }
       n_suffix <- sum(suffixes == pin)
-      if (n_suffix == 0) {
-        "missing"
-      } else if (n_suffix > 1) {
-        "ambiguous"
-      } else {
-        "ok"
+      if (n_suffix > 1) {
+        return("ambiguous")
       }
+      if (n_suffix == 1) {
+        return("ok")
+      }
+      # pin_list() can be capped (Connect returns up to 1000 pins), so absence
+      # from it isn't proof the pin is missing. Confirm directly before
+      # rejecting, and stay lenient if the check itself errors---the board is
+      # reachable (pin_list() succeeded), so defer an odd per-pin failure to
+      # read time rather than blocking a valid setup.
+      exists <- tryCatch(
+        isTRUE(pins::pin_exists(board, pin)),
+        error = function(err) TRUE
+      )
+      if (exists) "ok" else "missing"
     },
     character(1)
   )
@@ -710,6 +722,44 @@ check_board_pins_exist <- function(board, tables, call = rlang::caller_env()) {
     )
   }
   invisible(tables)
+}
+
+# A fresh DuckDB already exposes system relations (duckdb_tables, sqlite_master,
+# pg_tables, information_schema.*, ...). A board label colliding with one is
+# unusable: the pin can't be written under that name (DuckDB won't drop the
+# built-in to overwrite it) and a query for it would silently read the built-in
+# instead. Probe with a zero-row SELECT before any pins are written---anything
+# that resolves here is a built-in---and reject the collisions.
+check_labels_free <- function(con, labels, call = rlang::caller_env()) {
+  taken <- labels[vapply(
+    labels,
+    function(label) {
+      tryCatch(
+        {
+          DBI::dbGetQuery(
+            con,
+            sprintf(
+              "SELECT 1 FROM %s WHERE 1 = 0",
+              DBI::dbQuoteIdentifier(con, label)
+            )
+          )
+          TRUE
+        },
+        error = function(err) FALSE
+      )
+    },
+    logical(1)
+  )]
+  if (length(taken)) {
+    cli::cli_abort(
+      c(
+        "{.arg tables} label{?s} {?collides/collide} with built-in database relation{?s}: {.val {taken}}.",
+        i = "{cli::qty(taken)}Rename the affected table{?s}."
+      ),
+      call = call
+    )
+  }
+  invisible(labels)
 }
 
 check_named_frames <- function(frames, call = rlang::caller_env()) {
