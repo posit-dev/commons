@@ -262,8 +262,11 @@ provide; not typically called directly.</p><div class="section">
 <p></p><hr><a id="method-Commons-prewarm"></a><div class="section">
 <h3 id="commons-prewarm-"><code>Commons$prewarm()</code><a class="anchor" aria-label="anchor" href="#commons-prewarm-"></a></h3>
 <p>Build the context layer's search index ahead of the first
-<code>search_context</code> call, e.g. during idle time right after a Shiny
-session starts. <code><a href="commons_ui.html">commons_server()</a></code> does this automatically.</p><div class="section">
+<code>search_context</code> call, and start a best-effort background download of
+any board pins not yet loaded, warming the pins cache so their first
+use is fast. Returns immediately; pins are still loaded into their
+data source on demand. <code><a href="commons_ui.html">commons_server()</a></code> does this automatically,
+e.g. during idle time right after a Shiny session starts.</p><div class="section">
 <h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">Commons</span><span class="op">$</span><span class="fu">prewarm</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>

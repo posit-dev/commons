@@ -264,10 +264,13 @@ directly.
 ### `Commons$prewarm()`
 
 Build the context layer's search index ahead of the first
-`search_context` call, e.g. during idle time right after a Shiny session
-starts.
+`search_context` call, and start a best-effort background download of
+any board pins not yet loaded, warming the pins cache so their first use
+is fast. Returns immediately; pins are still loaded into their data
+source on demand.
 [`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
-does this automatically.
+does this automatically, e.g. during idle time right after a Shiny
+session starts.
 
 #### Usage
 

@@ -58,7 +58,17 @@ what you pass:
 - A `pins` board, e.g.
   [`pins::board_connect()`](https://pins.rstudio.com/reference/board_connect.html),
   is read into the same in-process database: each pin in `tables`
-  becomes a table.
+  becomes a table. Pin names are validated against the board at
+  construction (a single listing call), but each pin is downloaded only
+  when its table is first used—by the `describe_table` tool, a SQL query
+  that references it, or a measure that takes the source's connection.
+  [`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
+  starts a background process right after startup that downloads the
+  remaining pins into the local pins cache, so a first use typically
+  only reads an already-downloaded file. A table reflects the pin's
+  value at first use and is not refreshed for the lifetime of the data
+  source; if a pin can't be read (e.g. a network failure), the error
+  surfaces at that first use and the read is retried on the next one.
 
 The resulting object gives the agent a DBI connection plus a table
 registry. Use
