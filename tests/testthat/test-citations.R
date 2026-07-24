@@ -135,7 +135,7 @@ test_that("corpus measure text matches multi-source presentation", {
 
   corpus <- build_citation_corpus(NULL, registry, sources)
 
-  # search_measures presents a `sources:` line to multi-source agents; a
+  # search_pool presents a `sources:` line to multi-source agents; a
   # verbatim quote spanning it must verify.
   expect_equal(
     match_citation(

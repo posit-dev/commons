@@ -1,17 +1,16 @@
-# Only the tools the agent's composition earns: an agent without measures
-# gets no search_measures/call_measure (nothing about its surface should
-# imply operations it doesn't have), and the definitions token surface
-# advertises itself only when a dictionary declares definitions (see
-# run_sql_description()).
+# Only the tools the agent's composition earns: search_pool whenever the
+# semantic layer has anything in it, call_measure only when measures exist,
+# query_metrics only when a definition could be a metric. Nothing about an
+# agent's surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
-  measure_tools <- if (length(private$registry) > 0) {
-    list(
-      tool_search_measures(private),
-      tool_call_measure(private)
-    )
-  }
+  has_measures <- length(private$registry) > 0
+  has_definitions <- length(registry_records(private$definitions)) > 0
   c(
-    measure_tools,
+    if (has_measures || has_definitions) list(tool_search_pool(private)),
+    if (has_measures) list(tool_call_measure(private)),
+    if (registry_has_metrics(private$definitions)) {
+      list(tool_query_metrics(private))
+    },
     list(
       tool_search_context(private),
       tool_describe_table(private),
@@ -21,31 +20,106 @@ build_commons_tools <- function(self, private) {
   )
 }
 
-tool_search_measures <- function(private) {
+tool_search_pool <- function(private) {
   source_names <- if (length(private$sources) > 1) {
     names(private$sources)
   } else {
     character()
   }
+  kinds <- c(
+    if (length(private$registry) > 0) "measures (run with call_measure)",
+    if (length(registry_records(private$definitions)) > 0) {
+      "governed definitions (apply as {{name}} tokens in run_sql, or through query_metrics)"
+    }
+  )
   ellmer::tool(
     function(query) {
-      body <- search_measures_text(private$registry, query, source_names)
+      body <- search_pool_text(
+        private$registry,
+        private$definitions,
+        query,
+        source_names
+      )
       tool_result(
         body,
-        title = "Searched measures",
+        title = "Searched the semantic layer",
         icon = maybe_icon("search")
       )
     },
-    "Search registered measures. Returns matching measures with their argument schemas. Use this before call_measure.",
+    sprintf(
+      "Search the semantic layer's governed operations: %s. Use this before writing your own SQL.",
+      paste(kinds, collapse = " and ")
+    ),
     arguments = list(
       query = ellmer::type_string(
-        "What you want to measure, in plain language."
+        "What you want to compute, in plain language."
       )
     ),
-    name = "search_measures",
+    name = "search_pool",
     annotations = ellmer::tool_annotations(
-      title = "Search measures",
+      title = "Search the semantic layer",
       icon = maybe_icon("search"),
+      read_only_hint = TRUE
+    )
+  )
+}
+
+tool_query_metrics <- function(private) {
+  ellmer::tool(
+    function(
+      metrics,
+      dimensions = NULL,
+      filters = NULL,
+      where = NULL,
+      source = NULL
+    ) {
+      query_metrics_impl(
+        private$definitions,
+        private$sources,
+        private$handles,
+        metrics = metrics,
+        dimensions = dimensions,
+        filters = filters,
+        where = where,
+        source_name = source
+      )
+    },
+    "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from the system prompt or search_pool; commons compiles and runs the query.",
+    arguments = list(
+      metrics = ellmer::type_array(
+        ellmer::type_string(),
+        "Metric names to compute. All metrics in one call must belong to the same table."
+      ),
+      dimensions = ellmer::type_array(
+        ellmer::type_string(),
+        "Dimension or documented column names to group by.",
+        required = FALSE
+      ),
+      filters = ellmer::type_array(
+        ellmer::type_string(),
+        "Governed filter names to apply.",
+        required = FALSE
+      ),
+      where = ellmer::type_array(
+        ellmer::type_object(
+          column = ellmer::type_string("A documented column name."),
+          op = ellmer::type_enum(
+            c("=", "!=", "<", "<=", ">", ">="),
+            "Comparison operator."
+          ),
+          value = ellmer::type_string(
+            "The comparison value; numbers and dates as plain strings."
+          )
+        ),
+        "Simple column predicates, e.g. a date range.",
+        required = FALSE
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "query_metrics",
+    annotations = ellmer::tool_annotations(
+      title = "Query metrics",
+      icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
   )
@@ -64,11 +138,11 @@ tool_call_measure <- function(private) {
       )
     },
     # For small registries, we may eventually expose each measure schema upfront
-    # instead of relying on search_measures for discovery.
-    "Run a registered measure returned by search_measures. `arguments` is a JSON object using exactly the argument names from search_measures.",
+    # instead of relying on search_pool for discovery.
+    "Run a registered measure returned by search_pool. `arguments` is a JSON object using exactly the argument names from search_pool.",
     arguments = list(
       name = ellmer::type_string(
-        "The measure name, exactly as returned by search_measures."
+        "The measure name, exactly as returned by search_pool."
       ),
       arguments = ellmer::type_string(
         "A JSON object of the measure's arguments."

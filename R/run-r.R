@@ -1,3 +1,11 @@
+handle_producing_tools <- function(private) {
+  c(
+    if (length(private$registry) > 0) "call_measure",
+    if (registry_has_metrics(private$definitions)) "query_metrics",
+    "run_sql"
+  )
+}
+
 tool_run_r <- function(private) {
   ellmer::tool(
     function(code) {
@@ -11,20 +19,17 @@ tool_run_r <- function(private) {
       "rendered plots, which are also shown to the user.",
       "The session persists across calls: variables you assign and packages",
       "you load remain available.",
+      sprintf(
+        "Results from %s are preloaded under their advertised handles (r1, r2, ...).",
+        cli::format_inline("{handle_producing_tools(private)}")
+      ),
       if (length(private$registry) > 0) {
         paste(
-          "Results from call_measure and run_sql are",
-          "preloaded under their advertised handles (r1, r2, ...).",
           "Measure definitions and their helper functions are predefined under",
           "their own names: evaluate a measure's name to read its source.",
           "These are source-only copies without their original environment or",
           "database connections, so treat them as reference material; to compute",
           "a measure, use call_measure."
-        )
-      } else {
-        paste(
-          "Results from run_sql are preloaded under their advertised",
-          "handles (r1, r2, ...)."
         )
       },
       "\n\nRules:",

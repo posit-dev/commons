@@ -6,7 +6,7 @@
 # affects an answer's provenance tag.
 
 # Everything citable: context layer docs, measure schemas (as
-# search_measures presents them), and dictionary entries (as first touch
+# search_pool presents them), and dictionary entries (as first touch
 # delivers them). Labels are user-facing; they name the source in a footnote
 # tooltip.
 build_citation_corpus <- function(context_layer, registry, sources) {
@@ -19,7 +19,7 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   }
 
   add("context layer", context_layer$docs %||% character())
-  # Mirror tool_search_measures(): source lines only appear in schemas when
+  # Mirror search_pool's measure blocks: source lines only appear in schemas when
   # the agent has several sources, and quotes must match what was presented.
   source_names <- if (length(sources) > 1) names(sources) else character()
   for (td in registry) {

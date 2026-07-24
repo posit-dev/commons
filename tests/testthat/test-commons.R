@@ -81,7 +81,7 @@ test_that("commons() registers only the tools the agent's composition earns", {
     vapply(agent$get_tools(), tool_name, character(1)),
     c("search_context", "describe_table", "run_sql", "run_r")
   )
-  expect_no_match(agent$get_system_prompt(), "search_measures")
+  expect_no_match(agent$get_system_prompt(), "search_pool")
 
   with_measures <- test_agent(
     semantic_layer = semantic_layer(count_measure_tool())
@@ -89,7 +89,7 @@ test_that("commons() registers only the tools the agent's composition earns", {
   expect_setequal(
     vapply(with_measures$get_tools(), tool_name, character(1)),
     c(
-      "search_measures",
+      "search_pool",
       "call_measure",
       "search_context",
       "describe_table",
@@ -115,7 +115,7 @@ test_that("the system prompt includes tables, the date, and measure workflow", {
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
-  expect_match(prompt, "your first tool call must be `search_measures`")
+  expect_match(prompt, "your first tool call must be `search_pool`")
   expect_match(prompt, "Do not call `run_sql` or `describe_table`")
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")
@@ -131,7 +131,7 @@ test_that("a custom system prompt replaces the packaged one", {
   prompt <- agent$get_system_prompt()
 
   expect_match(prompt, "about Acme's data", fixed = TRUE)
-  expect_no_match(prompt, "search_measures")
+  expect_no_match(prompt, "search_pool")
   expect_match(prompt, "# Available tables", fixed = TRUE)
   expect_match(prompt, "- sales", fixed = TRUE)
 })
@@ -364,7 +364,7 @@ test_that("injection parameters are hidden from the model", {
 
   expect_named(tool_properties(registry$region_revenue), "region")
   expect_no_match(
-    search_measures_text(registry, "revenue for a region"),
+    search_pool_text(registry, empty_definitions(), "revenue for a region"),
     "sales_db"
   )
 })
