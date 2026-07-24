@@ -63,6 +63,23 @@ test_that("query_metrics without dimensions returns a grand total", {
   expect_equal(get_handle(store, "r1")$big_revenue, 1950)
 })
 
+test_that("names arriving in token braces are accepted", {
+  src <- pool_source()
+  registry <- pool_registry(src)
+  store <- new_handle_store()
+
+  query_metrics_impl(
+    registry,
+    list(sales_db = src),
+    store,
+    metrics = "{{big_revenue}}",
+    dimensions = "{{region_band}}",
+    filters = "{{emea}}"
+  )
+  value <- get_handle(store, "r1")
+  expect_equal(value$big_revenue[value$region_band == "east"], 1950)
+})
+
 test_that("query_metrics validates names with actionable errors", {
   src <- pool_source()
   registry <- pool_registry(src)

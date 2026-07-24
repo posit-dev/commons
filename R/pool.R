@@ -134,7 +134,14 @@ registry_has_metrics <- function(registry) {
   ))
 }
 
+# The prompt teaches `{{name}}` for SQL, so models sometimes pass the
+# braces here too; accept both forms.
+strip_token_braces <- function(name) {
+  gsub("^\\{\\{\\s*|\\s*\\}\\}$", "", trimws(name))
+}
+
 resolve_pool_name <- function(name, records, role) {
+  name <- strip_token_braces(name)
   hits <- records[vapply(
     records,
     function(record) identical(record$name, name),
@@ -169,6 +176,7 @@ resolve_pool_name <- function(name, records, role) {
 # A dimension is either a dimension-role definition (grouped by its
 # expression) or a documented column of the metric's table.
 resolve_query_dimension <- function(name, records, columns, con) {
+  name <- strip_token_braces(name)
   hits <- records[vapply(
     records,
     function(record) identical(record$name, name),
