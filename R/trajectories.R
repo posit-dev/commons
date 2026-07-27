@@ -189,13 +189,14 @@ fetch_connect_spans <- function(client, guid, from_pushdown, n, from, to, call) 
 # newest-first stream, so an unresolved chain usually completes a page later.
 # Tracks how many lines it has already seen so each page is parsed once.
 enough_trace_lines <- function(n, from, to) {
-  spans <- list()
-  n_seen <- 0
+  state <- new.env(parent = emptyenv())
+  state$spans <- list()
+  state$n_seen <- 0
   function(lines) {
-    new_lines <- lines[rlang::seq2(n_seen + 1, length(lines))]
-    n_seen <<- length(lines)
-    spans <<- c(spans, parse_otlp_lines(new_lines))
-    kept <- filter_chat_spans(spans, from, to)
+    new_lines <- lines[rlang::seq2(state$n_seen + 1, length(lines))]
+    state$n_seen <- length(lines)
+    state$spans <- c(state$spans, parse_otlp_lines(new_lines))
+    kept <- filter_chat_spans(state$spans, from, to)
     if (has_severed_ancestry(kept)) {
       return(FALSE)
     }
