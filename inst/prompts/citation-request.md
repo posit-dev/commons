@@ -1,5 +1,5 @@
 Note: any answer in this conversation that does not come from a registered
-measure alone will be presented to the user as "Potentially untrusted"
+measure alone will be presented to the user as "Untrusted"
 unless you cite trusted text that supports your approach.
 
 If exact text you have seen in this conversation from context search

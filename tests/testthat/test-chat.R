@@ -8,7 +8,7 @@ test_that("answer pills describe trusted and uncited fallback answers", {
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
 
-  expect_match(uncited, "Potentially untrusted")
+  expect_match(uncited, "Untrusted")
   expect_match(uncited, "AI can be wrong")
   expect_match(uncited, "not produced by a governed calculation")
   expect_match(uncited, "data-commons-tooltip")

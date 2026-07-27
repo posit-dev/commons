@@ -6,7 +6,7 @@
 #' from fallback SQL or R can cite text from the agent's context, measure
 #' definitions, or data documentation; verified citations render as footnotes
 #' whose tooltips name their source. Fallback answers with no verified
-#' citation get a potentially-untrusted caution pill.
+#' citation get an untrusted caution pill.
 #'
 #' @param id The ID of the chat element; must match between `commons_ui()`
 #'   and `commons_server()`.
@@ -188,11 +188,11 @@ commons_answer_pill <- function(tag) {
     C = htmltools::tags$span(
       class = "commons-answer-pill commons-answer-pill-caution",
       title = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
-      `aria-label` = "Potentially untrusted. This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
+      `aria-label` = "Untrusted. This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
       `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
       tabindex = "0",
-      commons_pill_icon("warning-icon.svg", "Potentially untrusted"),
-      htmltools::tags$span("Potentially untrusted.")
+      commons_pill_icon("warning-icon.svg", "Untrusted"),
+      htmltools::tags$span("Untrusted.")
     ),
     NULL
   )
