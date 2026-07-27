@@ -163,23 +163,24 @@ read_connect_spans <- function(
   to,
   call = rlang::caller_env()
 ) {
-  fetch <- function(from_pushdown) {
-    parse_otlp_lines(connect_trace_lines(
-      client,
-      guid,
-      from = from_pushdown,
-      to = to,
-      enough = if (!is.null(n)) enough_trace_lines(n, from, to),
-      call = call
-    ))
-  }
-  spans <- fetch(from)
+  spans <- fetch_connect_spans(client, guid, from, n, from, to, call)
   if (
     !is.null(from) && has_severed_ancestry(filter_chat_spans(spans, from, to))
   ) {
-    spans <- fetch(NULL)
+    spans <- fetch_connect_spans(client, guid, NULL, n, from, to, call)
   }
   spans
+}
+
+fetch_connect_spans <- function(client, guid, from_pushdown, n, from, to, call) {
+  parse_otlp_lines(connect_trace_lines(
+    client,
+    guid,
+    from = from_pushdown,
+    to = to,
+    enough = if (!is.null(n)) enough_trace_lines(n, from, to),
+    call = call
+  ))
 }
 
 # Build connect_trace_lines()'s early-stop check: TRUE once the rows fetched
