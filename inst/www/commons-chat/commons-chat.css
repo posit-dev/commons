@@ -215,50 +215,6 @@ shiny-tool-request .shiny-tool-card .tool-title,
   vertical-align: text-bottom;
 }
 
-.commons-answer-pill[data-commons-tooltip]:hover::after,
-.commons-answer-pill[data-commons-tooltip]:focus::after,
-.commons-answer-pill[data-commons-tooltip]:focus-within::after {
-  background: var(--bs-body-bg, #fff);
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 6px;
-  bottom: calc(100% + 0.45rem);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
-  color: var(--bs-body-color, #212529);
-  content: attr(data-commons-tooltip);
-  font-size: 0.74rem;
-  font-weight: 400;
-  left: 50%;
-  line-height: 1.25;
-  max-width: min(18rem, 70vw);
-  padding: 0.42rem 0.55rem;
-  pointer-events: none;
-  position: absolute;
-  text-align: left;
-  transform: translateX(-50%);
-  white-space: normal;
-  width: max-content;
-  z-index: 1000;
-}
-
-.commons-answer-pill[data-commons-tooltip]:hover::before,
-.commons-answer-pill[data-commons-tooltip]:focus::before,
-.commons-answer-pill[data-commons-tooltip]:focus-within::before,
-.commons-citation:hover::before,
-.commons-citation:focus::before {
-  background: var(--bs-body-bg, #fff);
-  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
-  border-right: 1px solid var(--bs-border-color, #dee2e6);
-  bottom: calc(100% + 0.28rem);
-  content: "";
-  height: 0.55rem;
-  left: 50%;
-  pointer-events: none;
-  position: absolute;
-  transform: translateX(-50%) rotate(45deg);
-  width: 0.55rem;
-  z-index: 1000;
-}
-
 .commons-answer-pill-icon {
   flex: 0 0 auto;
   height: 0.82rem;
@@ -300,38 +256,6 @@ shiny-tool-request .shiny-tool-card .tool-title,
   color: var(--bs-primary, #007bc2);
 }
 
-/* The footnote tooltip is a real element (built in commons-chat.js) rather
- * than the pills' attr() pseudo-element, so a merged footnote can interleave
- * each citation's reason with its quoted excerpt. Box styling mirrors the
- * pill tooltips above. */
-.commons-citation-tooltip {
-  background: var(--bs-body-bg, #fff);
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 6px;
-  bottom: calc(100% + 0.45rem);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
-  color: var(--bs-body-color, #212529);
-  display: none;
-  font-size: 0.74rem;
-  font-weight: 400;
-  left: 50%;
-  line-height: 1.25;
-  max-width: min(18rem, 70vw);
-  padding: 0.42rem 0.55rem;
-  pointer-events: none;
-  position: absolute;
-  text-align: left;
-  transform: translateX(-50%);
-  white-space: normal;
-  width: max-content;
-  z-index: 1000;
-}
-
-.commons-citation:hover > .commons-citation-tooltip,
-.commons-citation:focus > .commons-citation-tooltip {
-  display: block;
-}
-
 .commons-citation-reason {
   display: block;
   font-weight: 500;
@@ -353,6 +277,76 @@ shiny-tool-request .shiny-tool-card .tool-title,
 .commons-citation-source {
   display: block;
   margin-top: 0.1rem;
+}
+
+/* ---- Provenance tooltips ---------------------------------------------- */
+
+/* Shared by pills and footnote markers. The box is a real element rather
+ * than an attr() pseudo-element so a merged footnote can interleave each
+ * citation's reason with its quoted excerpt, and so commons-chat.js can
+ * measure it; the arrow stays a pseudo-element on the marker so it keeps
+ * pointing at it while the box is nudged back inside the pane. */
+.commons-tooltip {
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 6px;
+  bottom: calc(100% + 0.45rem);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: var(--bs-body-color, #212529);
+  display: none;
+  font-size: 0.74rem;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.25;
+  max-width: min(18rem, 70vw);
+  padding: 0.42rem 0.55rem;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  transform: translateX(calc(-50% + var(--commons-tooltip-shift, 0px)));
+  white-space: normal;
+  width: max-content;
+  z-index: 1000;
+}
+
+.commons-answer-pill:hover > .commons-tooltip,
+.commons-answer-pill:focus > .commons-tooltip,
+.commons-answer-pill:focus-within > .commons-tooltip,
+.commons-citation:hover > .commons-tooltip,
+.commons-citation:focus > .commons-tooltip {
+  display: block;
+}
+
+.commons-answer-pill:hover::before,
+.commons-answer-pill:focus::before,
+.commons-answer-pill:focus-within::before,
+.commons-citation:hover::before,
+.commons-citation:focus::before {
+  background: var(--bs-body-bg, #fff);
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  border-right: 1px solid var(--bs-border-color, #dee2e6);
+  bottom: calc(100% + 0.28rem);
+  content: "";
+  height: 0.55rem;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%) rotate(45deg);
+  width: 0.55rem;
+  z-index: 1000;
+}
+
+/* Markers with too little room above open downward instead */
+.commons-tooltip-below > .commons-tooltip {
+  bottom: auto;
+  top: calc(100% + 0.45rem);
+}
+
+.commons-answer-pill.commons-tooltip-below::before,
+.commons-citation.commons-tooltip-below::before {
+  bottom: auto;
+  top: calc(100% + 0.28rem);
+  transform: translateX(-50%) rotate(225deg);
 }
 
 /* ---- Measure display ------------------------------------------------- */

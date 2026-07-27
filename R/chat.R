@@ -178,10 +178,12 @@ commons_answer_pill <- function(tag) {
       class = "commons-answer-pill commons-answer-pill-trusted",
       title = "This answer comes from a governed calculation defined by your data team.",
       `aria-label` = "Verified answer. This answer comes from a governed calculation defined by your data team.",
-      `data-commons-tooltip` = "This answer comes from a governed calculation defined by your data team.",
       tabindex = "0",
       commons_pill_icon("trusted-icon.svg", "Verified answer"),
-      htmltools::tags$span("Verified answer")
+      htmltools::tags$span("Verified answer"),
+      commons_pill_tooltip(
+        "This answer comes from a governed calculation defined by your data team."
+      )
     ),
     # Cited fallback answers ("B") get no pill: their citation footnotes are
     # the provenance UI.
@@ -189,13 +191,19 @@ commons_answer_pill <- function(tag) {
       class = "commons-answer-pill commons-answer-pill-caution",
       title = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
       `aria-label` = "Untrusted. This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
-      `data-commons-tooltip` = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
       tabindex = "0",
       commons_pill_icon("warning-icon.svg", "Untrusted"),
-      htmltools::tags$span("Untrusted.")
+      htmltools::tags$span("Untrusted."),
+      commons_pill_tooltip(
+        "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong."
+      )
     ),
     NULL
   )
+}
+
+commons_pill_tooltip <- function(text) {
+  htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
 }
 
 commons_pill_icon <- function(file, alt) {
