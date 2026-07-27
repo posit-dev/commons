@@ -97,7 +97,7 @@ check_window_bound <- function(
     }
     if (is.character(x)) {
       parsed <- parse_window_bound(x)
-      if (!is.na(parsed)) {
+      if (!is.null(parsed)) {
         return(parsed)
       }
     }
@@ -109,22 +109,24 @@ check_window_bound <- function(
   )
 }
 
-# `exact = TRUE`: lubridate's lenient parsers accept trailing garbage like
-# "2026-07-22oops".
+# as.POSIXct()'s default formats accept any parseable prefix -- reading
+# "2026-07-22T14:30:00" as midnight and "2026-07-22oops" as valid -- so try
+# explicit formats and require that formatting back reproduces the input.
 parse_window_bound <- function(x) {
-  lubridate::parse_date_time(
-    x,
-    orders = c(
-      "%Y-%m-%d %H:%M:%S",
-      "%Y-%m-%dT%H:%M:%S",
-      "%Y-%m-%d %H:%M",
-      "%Y-%m-%dT%H:%M",
-      "%Y-%m-%d"
-    ),
-    exact = TRUE,
-    tz = "",
-    quiet = TRUE
+  formats <- c(
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%dT%H:%M",
+    "%Y-%m-%d"
   )
+  for (fmt in formats) {
+    parsed <- as.POSIXct(x, format = fmt)
+    if (!is.na(parsed) && identical(format(parsed, fmt), x)) {
+      return(parsed)
+    }
+  }
+  NULL
 }
 
 # The `from`/`to` window and `n` limit are passed down to Connect so a
