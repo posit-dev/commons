@@ -141,18 +141,10 @@ parse_window_bound <- function(x) {
   )
 }
 
-# Connect reads push the `[from, to)` window down as query parameters so a
-# filtered read doesn't transfer the whole store, and stop paging early once
-# `n` conversations are on hand -- sound because Connect returns rows
-# newest-first by span start time.
-#
-# The `from` pushdown is padded for the lag between a wrapper span's start
-# and its chat spans' starts (see connect_window_param()), but a single turn
-# can outlast any fixed pad. When that happens, a kept chat span's ancestor
-# walk dead-ends on a span the server filter dropped, and its conversation
-# id -- carried by the missing wrapper -- is unrecoverable; refetch without
-# `from` to restore the ancestry. `to` needs no such rescue: ancestors start
-# before their chat spans, so the exclusive upper bound never drops one.
+# The `from`/`to` window and `n` limit are passed down to Connect so a
+# filtered read doesn't transfer the whole trace store. The server-side
+# `from` filter can still drop a parent span that carries a conversation id
+# (see connect_window_param()); when that happens, refetch without `from`.
 read_connect_spans <- function(
   client,
   guid,
@@ -181,11 +173,8 @@ fetch_connect_spans <- function(client, guid, from_pushdown, n, from, to, call) 
   ))
 }
 
-# Build connect_trace_lines()'s early-stop check: TRUE once the rows fetched
-# so far reconstruct `n` content-bearing conversations in the window, none
-# with severed ancestry -- an id-carrying wrapper trails its chat span in the
-# newest-first stream, so an unresolved chain usually completes a page later.
-# Tracks how many lines it has already seen so each page is parsed once.
+# Builds connect_trace_lines()'s early-stop check: TRUE once the lines
+# fetched so far reconstruct `n` complete conversations in the window.
 enough_trace_lines <- function(n, from, to) {
   state <- new.env(parent = emptyenv())
   state$spans <- list()
@@ -517,10 +506,9 @@ otlp_attribute_value <- function(value) {
 
 # Reconstruction ---------------------------------------------------------
 
-# Window membership matches Connect's own from/to filter: span start time,
-# `from` inclusive, `to` exclusive. Only chat spans are filtered; other
-# spans must survive regardless, since wrapper spans carry the conversation
-# ids that group the chat spans that remain.
+# Matches Connect's own from/to filter: span start time, `from` inclusive,
+# `to` exclusive. Only chat spans are filtered; parent spans must survive
+# regardless, since they carry the conversation ids that group the rest.
 filter_chat_spans <- function(spans, from, to) {
   if (is.null(from) && is.null(to)) {
     return(spans)

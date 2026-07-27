@@ -88,15 +88,11 @@ connect_trace_lines <- function(
   lines
 }
 
-# Connect silently ignores timestamps it can't parse -- including any
-# without an explicit timezone -- so format the query bounds here rather
-# than forwarding user input. The server filter is only a transfer
-# optimization (read_trajectories() applies the exact window client-side),
-# so bounds are padded outward: `from` by an hour, so that a kept chat
-# span's wrapper span -- which starts earlier and carries the conversation
-# id -- isn't dropped (read_connect_spans() refetches when a turn outlasts
-# the pad); `to` by a second, to cover the sub-second truncation in
-# formatting.
+# Connect silently ignores timestamps it can't parse, including any without
+# an explicit timezone, so always format the query bounds here. The exact
+# window is applied client-side, so bounds are padded outward: `from` by an
+# hour, to keep the earlier-starting parent spans that carry conversation
+# ids, and `to` by a second, to cover sub-second truncation in formatting.
 connect_window_param <- function(time, pad) {
   if (is.null(time)) {
     return(NULL)
