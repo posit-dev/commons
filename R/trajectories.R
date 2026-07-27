@@ -61,7 +61,7 @@ read_trajectories <- function(
   to = NULL
 ) {
   rlang::check_dots_empty()
-  check_n(n)
+  rlang::check_number_whole(n, min = 1, allow_null = TRUE)
   from <- check_window_bound(from)
   to <- check_window_bound(to)
   resolved <- resolve_trajectory_source(source)
@@ -76,20 +76,6 @@ read_trajectories <- function(
     trajectories <- utils::tail(trajectories, n)
   }
   trajectories
-}
-
-check_n <- function(n, call = rlang::caller_env()) {
-  if (is.null(n)) {
-    return(invisible(NULL))
-  }
-  ok <- is.numeric(n) && length(n) == 1 && !is.na(n) && n >= 1 && n == trunc(n)
-  if (!ok) {
-    cli::cli_abort(
-      "{.arg n} must be a single positive whole number.",
-      call = call
-    )
-  }
-  invisible(NULL)
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone

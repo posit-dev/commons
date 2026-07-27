@@ -20,7 +20,7 @@
       read_trajectories(n = 0)
     Condition
       Error in `read_trajectories()`:
-      ! `n` must be a single positive whole number.
+      ! `n` must be a whole number larger than or equal to 1 or `NULL`, not the number 0.
 
 ---
 
@@ -28,7 +28,7 @@
       read_trajectories(n = "x")
     Condition
       Error in `read_trajectories()`:
-      ! `n` must be a single positive whole number.
+      ! `n` must be a whole number or `NULL`, not the string "x".
 
 ---
 
