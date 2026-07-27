@@ -2,9 +2,6 @@
 # sandbox itself in worker_init() (run-r.R), calling the C symbol directly;
 # the parent process is never sandboxed.
 
-# Report what the running kernel supports: the Landlock ABI version (-1 when
-# unavailable), whether seccomp filters can be installed, and whether macOS
-# Seatbelt is available.
 sandbox_capabilities <- function() {
   caps <- .Call(c_sandbox_capabilities)
   list(
