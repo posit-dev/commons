@@ -324,6 +324,171 @@ test_that("Date and string window bounds mean local midnight", {
   expect_equal(check_window_bound("2026-07-22"), as.POSIXct("2026-07-22"))
 })
 
+test_that("window bound strings must parse completely", {
+  expect_equal(
+    check_window_bound("2026-07-22T14:30:00"),
+    as.POSIXct("2026-07-22 14:30:00")
+  )
+  expect_equal(
+    check_window_bound("2026-07-22 14:30"),
+    as.POSIXct("2026-07-22 14:30:00")
+  )
+  expect_error(check_window_bound("2026-07-22oops"), "must be")
+  expect_error(check_window_bound("2026-07-22 14:30:00Z"), "must be")
+})
+
+test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
+  withr::local_envvar(
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "key"
+  )
+  json <- test_turn_json()
+  wrapper <- conversation_test_span("t1", "root1", "conv-a")
+  chat <- chat_test_span(
+    "t1",
+    "chat1",
+    parent_span_id = "root1",
+    input_messages = json$input,
+    start_time = "200000000000",
+    end_time = "201000000000"
+  )
+  state <- new.env()
+  state$froms <- list()
+  local_mocked_bindings(
+    connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
+      state$froms <- c(state$froms, list(from))
+      if (is.null(from)) {
+        otlp_test_line(list(wrapper, chat))
+      } else {
+        otlp_test_line(list(chat))
+      }
+    }
+  )
+
+  trajectories <- read_trajectories(
+    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
+    from = .POSIXct(150, tz = "UTC")
+  )
+
+  expect_length(state$froms, 2)
+  expect_null(state$froms[[2]])
+  expect_named(trajectories, "conv-a")
+})
+
+test_that("a windowed Connect read with intact ancestry fetches once", {
+  withr::local_envvar(
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "key"
+  )
+  json <- test_turn_json()
+  state <- new.env()
+  state$fetches <- 0
+  local_mocked_bindings(
+    connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
+      state$fetches <- state$fetches + 1
+      otlp_test_line(list(
+        conversation_test_span("t1", "root1", "conv-a"),
+        chat_test_span(
+          "t1",
+          "chat1",
+          parent_span_id = "root1",
+          input_messages = json$input,
+          start_time = "200000000000",
+          end_time = "201000000000"
+        )
+      ))
+    }
+  )
+
+  trajectories <- read_trajectories(
+    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
+    from = .POSIXct(150, tz = "UTC")
+  )
+
+  expect_equal(state$fetches, 1)
+  expect_named(trajectories, "conv-a")
+})
+
+test_that("enough_trace_lines is satisfied once n conversations have content", {
+  lines <- staggered_test_line()
+
+  enough <- enough_trace_lines(2, NULL, NULL)
+  expect_true(enough(lines))
+
+  enough <- enough_trace_lines(5, NULL, NULL)
+  expect_false(enough(lines))
+
+  enough <- enough_trace_lines(1, .POSIXct(250, tz = "UTC"), NULL)
+  expect_true(enough(lines))
+})
+
+test_that("enough_trace_lines waits for a chat span's trailing wrapper", {
+  json <- test_turn_json()
+  chat_only <- otlp_test_line(list(
+    chat_test_span(
+      "t1",
+      "chat1",
+      parent_span_id = "root1",
+      input_messages = json$input
+    )
+  ))
+  with_wrapper <- c(
+    chat_only,
+    otlp_test_line(list(conversation_test_span("t1", "root1", "conv-a")))
+  )
+
+  enough <- enough_trace_lines(1, NULL, NULL)
+  expect_false(enough(chat_only))
+  expect_true(enough(with_wrapper))
+})
+
+test_that("read_trajectories stops Connect paging after n conversations", {
+  withr::local_envvar(
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "key"
+  )
+  json <- test_turn_json()
+  pages <- lapply(c("300", "200", "100"), function(seconds) {
+    otlp_test_line(list(chat_test_span(
+      paste0("t", seconds),
+      paste0("s", seconds),
+      input_messages = json$input,
+      start_time = paste0(seconds, "000000000"),
+      end_time = paste0(seconds, "500000000")
+    )))
+  })
+  state <- new.env()
+  state$served <- 0
+  local_mocked_bindings(
+    connect_trace_lines = function(
+      client,
+      guid,
+      from = NULL,
+      to = NULL,
+      enough = NULL,
+      ...
+    ) {
+      lines <- character()
+      for (page in pages) {
+        lines <- c(lines, page)
+        state$served <- state$served + 1
+        if (!is.null(enough) && enough(lines)) {
+          break
+        }
+      }
+      lines
+    }
+  )
+
+  trajectories <- read_trajectories(
+    "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
+    n = 1
+  )
+
+  expect_equal(state$served, 1)
+  expect_named(trajectories, "t300")
+})
+
 test_that("read_trajectories returns an empty list for a missing directory", {
   expect_equal(read_trajectories(file.path(tempdir(), "nope")), list())
 })

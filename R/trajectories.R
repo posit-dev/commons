@@ -68,9 +68,7 @@ read_trajectories <- function(
   spans <- switch(
     resolved$kind,
     local = read_local_spans(resolved$path),
-    connect = parse_otlp_lines(
-      connect_trace_lines(resolved$client, resolved$guid, from = from, to = to)
-    )
+    connect = read_connect_spans(resolved$client, resolved$guid, n, from, to)
   )
   spans <- filter_chat_spans(spans, from, to)
   trajectories <- drop_contentless(build_trajectories(spans))
@@ -112,8 +110,8 @@ check_window_bound <- function(
       return(as.POSIXct(format(x)))
     }
     if (is.character(x)) {
-      parsed <- tryCatch(as.POSIXct(x), error = function(err) NA)
-      if (!is.na(parsed)) {
+      parsed <- parse_window_bound(x)
+      if (!is.null(parsed)) {
         return(parsed)
       }
     }
@@ -123,6 +121,89 @@ check_window_bound <- function(
      datetime string like {.val 2026-07-22 14:30:00}.",
     call = call
   )
+}
+
+# as.POSIXct()'s default formats accept any parseable prefix -- reading
+# "2026-07-22T14:30:00" as midnight and "2026-07-22oops" as valid -- so try
+# explicit formats and require that formatting back reproduces the input.
+parse_window_bound <- function(x) {
+  formats <- c(
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%dT%H:%M",
+    "%Y-%m-%d"
+  )
+  for (fmt in formats) {
+    parsed <- as.POSIXct(x, format = fmt)
+    if (!is.na(parsed) && identical(format(parsed, fmt), x)) {
+      return(parsed)
+    }
+  }
+  NULL
+}
+
+# Connect reads push the `[from, to)` window down as query parameters so a
+# filtered read doesn't transfer the whole store, and stop paging early once
+# `n` conversations are on hand -- sound because Connect returns rows
+# newest-first by span start time.
+#
+# The `from` pushdown is padded for the lag between a wrapper span's start
+# and its chat spans' starts (see connect_window_param()), but a single turn
+# can outlast any fixed pad. When that happens, a kept chat span's ancestor
+# walk dead-ends on a span the server filter dropped, and its conversation
+# id -- carried by the missing wrapper -- is unrecoverable; refetch without
+# `from` to restore the ancestry. `to` needs no such rescue: ancestors start
+# before their chat spans, so the exclusive upper bound never drops one.
+read_connect_spans <- function(
+  client,
+  guid,
+  n,
+  from,
+  to,
+  call = rlang::caller_env()
+) {
+  fetch <- function(from_pushdown) {
+    parse_otlp_lines(connect_trace_lines(
+      client,
+      guid,
+      from = from_pushdown,
+      to = to,
+      enough = if (!is.null(n)) enough_trace_lines(n, from, to),
+      call = call
+    ))
+  }
+  spans <- fetch(from)
+  if (
+    !is.null(from) && has_severed_ancestry(filter_chat_spans(spans, from, to))
+  ) {
+    spans <- fetch(NULL)
+  }
+  spans
+}
+
+# Build connect_trace_lines()'s early-stop check: TRUE once the rows fetched
+# so far reconstruct `n` content-bearing conversations in the window, none
+# with severed ancestry -- an id-carrying wrapper trails its chat span in the
+# newest-first stream, so an unresolved chain usually completes a page later.
+# Tracks how many lines it has already seen so each page is parsed once.
+enough_trace_lines <- function(n, from, to) {
+  spans <- list()
+  n_seen <- 0
+  function(lines) {
+    new_lines <- lines[rlang::seq2(n_seen + 1, length(lines))]
+    n_seen <<- length(lines)
+    spans <<- c(spans, parse_otlp_lines(new_lines))
+    kept <- filter_chat_spans(spans, from, to)
+    if (has_severed_ancestry(kept)) {
+      return(FALSE)
+    }
+    latest <- latest_chat_spans(kept)
+    if (length(latest) < n) {
+      return(FALSE)
+    }
+    sum(lengths(lapply(latest, trajectory_turns)) > 0) >= n
+  }
 }
 
 # Chat spans emitted without message content -- capture was off, or the spans
@@ -448,7 +529,7 @@ filter_chat_spans <- function(spans, from, to) {
   to_key <- if (!is.null(to)) pad_nano_time(posixct_nanos(to))
   Filter(
     function(span) {
-      if (!identical(span$attributes[["gen_ai.operation.name"]], "chat")) {
+      if (!is_chat_span(span)) {
         return(TRUE)
       }
       start <- pad_nano_time(span$start_time)
@@ -459,6 +540,10 @@ filter_chat_spans <- function(spans, from, to) {
   )
 }
 
+is_chat_span <- function(span) {
+  identical(span$attributes[["gen_ai.operation.name"]], "chat")
+}
+
 posixct_nanos <- function(time) {
   sprintf("%.0f", as.numeric(time) * 1e9)
 }
@@ -467,12 +552,13 @@ posixct_nanos <- function(time) {
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
 build_trajectories <- function(spans) {
-  chat_spans <- Filter(
-    function(span) {
-      identical(span$attributes[["gen_ai.operation.name"]], "chat")
-    },
-    spans
-  )
+  lapply(latest_chat_spans(spans), trajectory_turns)
+}
+
+# The latest chat span per conversation, named by conversation id and
+# ordered oldest-first.
+latest_chat_spans <- function(spans) {
+  chat_spans <- Filter(is_chat_span, spans)
   if (length(chat_spans) == 0) {
     return(list())
   }
@@ -487,10 +573,7 @@ build_trajectories <- function(spans) {
     }
   }
 
-  latest <- latest[
-    order(vapply(latest, span_time, character(1)))
-  ]
-  lapply(latest, trajectory_turns)
+  latest[order(vapply(latest, span_time, character(1)))]
 }
 
 span_index <- function(spans) {
@@ -510,21 +593,39 @@ span_index <- function(spans) {
 # walk the ancestor chain. Chat spans with no wrapper anywhere—e.g. emitted
 # outside commons—fall back to their trace id, which still groups per turn.
 span_conversation_id <- function(span, index) {
+  conversation_id_walk(span, index)$id %||% span$trace_id
+}
+
+# `severed = TRUE` marks a walk that stopped at a parent absent from
+# `index` -- ancestry cut off by a partial fetch -- as opposed to a chain
+# that reaches its root without finding an id, which no wider fetch would
+# fix.
+conversation_id_walk <- function(span, index) {
   current <- span
   for (i in seq_len(length(index))) {
     id <- current$attributes[["gen_ai.conversation.id"]]
     if (!is.null(id)) {
-      return(as.character(id))
+      return(list(id = as.character(id), severed = FALSE))
     }
     if (!nzchar(current$parent_span_id)) {
-      break
+      return(list(id = NULL, severed = FALSE))
     }
     current <- index[[paste(span$trace_id, current$parent_span_id)]]
     if (is.null(current)) {
-      break
+      return(list(id = NULL, severed = TRUE))
     }
   }
-  span$trace_id
+  list(id = NULL, severed = FALSE)
+}
+
+has_severed_ancestry <- function(spans) {
+  index <- span_index(spans)
+  chat_spans <- Filter(is_chat_span, spans)
+  any(vapply(
+    chat_spans,
+    function(span) conversation_id_walk(span, index)$severed,
+    logical(1)
+  ))
 }
 
 span_time <- function(span) {

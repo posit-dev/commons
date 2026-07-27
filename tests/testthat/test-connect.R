@@ -57,6 +57,39 @@ test_that("connect_trace_lines pages until the total is exhausted", {
   expect_equal(state$calls, 2)
 })
 
+test_that("connect_trace_lines stops paging once `enough` is satisfied", {
+  pages <- list(
+    c("line1", "line2"),
+    "line3"
+  )
+  state <- new.env()
+  state$calls <- 0
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ...) req,
+    req_perform = function(req, ...) {
+      state$calls <- state$calls + 1
+      state$calls
+    },
+    resp_body_string = function(resp) {
+      paste(pages[[resp]], collapse = "\n")
+    },
+    resp_header = function(resp, name) "3",
+    .package = "httr2"
+  )
+
+  lines <- connect_trace_lines(
+    list(server = "s", api_key = "k"),
+    "guid",
+    enough = function(lines) length(lines) >= 2
+  )
+
+  expect_equal(lines, c("line1", "line2"))
+  expect_equal(state$calls, 1)
+})
+
 test_that("connect_trace_lines pushes a padded window down to Connect", {
   state <- new.env()
   local_mocked_bindings(

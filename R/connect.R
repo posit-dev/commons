@@ -42,14 +42,16 @@ connect_req <- function(client, ...) {
     httr2::req_headers_redacted(Authorization = paste("Key", client$api_key))
 }
 
-# Fetch all trace rows for a content item as raw OTLP NDJSON lines, paging
-# until the X-Total-Count header is exhausted. Connect filters `from`/`to`
+# Fetch trace rows for a content item as raw OTLP NDJSON lines, paging until
+# the X-Total-Count header is exhausted or `enough(lines)` returns TRUE.
+# Connect returns rows newest-first by span start time and filters `from`/`to`
 # on span start time over `[from, to)`.
 connect_trace_lines <- function(
   client,
   guid,
   from = NULL,
   to = NULL,
+  enough = NULL,
   page_size = 1000,
   call = rlang::caller_env()
 ) {
@@ -79,6 +81,9 @@ connect_trace_lines <- function(
     if (length(page) == 0 || is.na(total) || offset >= total) {
       break
     }
+    if (!is.null(enough) && enough(lines)) {
+      break
+    }
   }
   lines
 }
@@ -89,8 +94,9 @@ connect_trace_lines <- function(
 # optimization (read_trajectories() applies the exact window client-side),
 # so bounds are padded outward: `from` by an hour, so that a kept chat
 # span's wrapper span -- which starts earlier and carries the conversation
-# id -- isn't dropped; `to` by a second, to cover the sub-second truncation
-# in formatting.
+# id -- isn't dropped (read_connect_spans() refetches when a turn outlasts
+# the pad); `to` by a second, to cover the sub-second truncation in
+# formatting.
 connect_window_param <- function(time, pad) {
   if (is.null(time)) {
     return(NULL)
