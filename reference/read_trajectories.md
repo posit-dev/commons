@@ -11,7 +11,7 @@ observability store or from local trace files.
 ## Usage
 
 ``` r
-read_trajectories(source = NULL)
+read_trajectories(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 ```
 
 ## Arguments
@@ -31,6 +31,23 @@ read_trajectories(source = NULL)
     dashboard URL (`.../connect/#/apps/<guid>/`).
 
   - A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
+
+- ...:
+
+  These dots are for future extensions and must be empty.
+
+- n:
+
+  Keep only the `n` most recent conversations, after `from`/`to`
+  filtering. `NULL` (the default) keeps all of them.
+
+- from, to:
+
+  Keep only conversations with chat activity at or after `from` and
+  before `to`. Each is a `POSIXct`, a `Date`, or a single string in a
+  standard format like `"2026-07-22"` or `"2026-07-22 14:30:00"`; dates
+  and strings are interpreted in local time. A conversation that
+  continues past `to` is returned with its history as of `to`.
 
 ## Value
 

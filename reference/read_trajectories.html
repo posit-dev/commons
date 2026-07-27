@@ -51,7 +51,7 @@ trace files.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">read_trajectories</span><span class="op">(</span>source <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">read_trajectories</span><span class="op">(</span>source <span class="op">=</span> <span class="cn">NULL</span>, <span class="va">...</span>, n <span class="op">=</span> <span class="cn">NULL</span>, from <span class="op">=</span> <span class="cn">NULL</span>, to <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -67,6 +67,24 @@ directory that <code><a href="commons.html">commons()</a></code> writes to.</p><
 dashboard URL (<code>.../connect/#/apps/&lt;guid&gt;/</code>).</p></li>
 <li><p>A directory of OTLP NDJSON trace files (<code>trace-*.jsonl</code>).</p></li>
 </ul></dd>
+
+
+<dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
+<dd><p>These dots are for future extensions and must be empty.</p></dd>
+
+
+<dt id="arg-n">n<a class="anchor" aria-label="anchor" href="#arg-n"></a></dt>
+<dd><p>Keep only the <code>n</code> most recent conversations, after <code>from</code>/<code>to</code>
+filtering. <code>NULL</code> (the default) keeps all of them.</p></dd>
+
+
+<dt id="arg-from-to">from, to<a class="anchor" aria-label="anchor" href="#arg-from-to"></a></dt>
+<dd><p>Keep only conversations with chat activity at or after
+<code>from</code> and before <code>to</code>. Each is a <code>POSIXct</code>, a <code>Date</code>, or a single
+string in a standard format like <code>"2026-07-22"</code> or
+<code>"2026-07-22 14:30:00"</code>; dates and strings are interpreted in local
+time. A conversation that continues past <code>to</code> is returned with its
+history as of <code>to</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
