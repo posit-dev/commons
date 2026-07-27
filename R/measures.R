@@ -134,6 +134,9 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #'
 #' @export
 measure <- function(name, description, fn, arguments = list(), title = NULL) {
+  rlang::check_string(name)
+  rlang::check_string(description)
+  rlang::check_string(title, allow_null = TRUE)
   title <- title %||% humanize_name(name)
   ellmer::tool(
     fn,

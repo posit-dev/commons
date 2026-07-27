@@ -9,13 +9,7 @@ commons_system_prompt <- function(sources, system_prompt) {
 }
 
 check_system_prompt <- function(system_prompt, call = rlang::caller_env()) {
-  if (!rlang::is_string(system_prompt)) {
-    cli::cli_abort(
-      "{.arg system_prompt} must be a single string, e.g. from
-       {.fn ellmer::interpolate_file}.",
-      call = call
-    )
-  }
+  rlang::check_string(system_prompt, call = call)
   # A path here would silently become the literal prompt text.
   if (!grepl("\n", system_prompt, fixed = TRUE) && file.exists(system_prompt)) {
     suggestion <- sprintf('ellmer::interpolate_file("%s")', system_prompt)

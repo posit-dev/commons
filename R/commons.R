@@ -141,7 +141,7 @@ commons <- function(
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
   check_system_prompt(system_prompt)
-  check_log(log)
+  rlang::check_bool(log)
   check_share_with(share_with)
 
   Commons$new(

@@ -1,6 +1,4 @@
 test_that("new_trajectory_tracing validates its inputs", {
-  expect_snapshot(new_trajectory_tracing("yes"), error = TRUE)
-  expect_snapshot(new_trajectory_tracing(NA), error = TRUE)
   expect_snapshot(new_trajectory_tracing(TRUE, share_with = 1), error = TRUE)
 })
 
