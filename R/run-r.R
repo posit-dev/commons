@@ -423,10 +423,12 @@ plot_dimensions <- function(ratio, longest_side) {
 worker_init <- function(parent_tmp, work_dir, dll_path) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  # Off Linux there is no sandbox; run unsandboxed (local dev only). On Linux
-  # the sandbox must engage, so a missing compiled library is a hard error
-  # rather than a silent drop to unsandboxed execution.
-  if (!identical(Sys.info()[["sysname"]], "Linux")) {
+  # Only Linux (Landlock + seccomp) and macOS (Seatbelt) have sandbox
+  # implementations; elsewhere run unsandboxed (local dev only). Where a
+  # sandbox exists it must engage, so a missing compiled library is a hard
+  # error rather than a silent drop to unsandboxed execution.
+  sysname <- Sys.info()[["sysname"]]
+  if (!sysname %in% c("Linux", "Darwin")) {
     return(invisible(FALSE))
   }
   if (is.na(dll_path)) {
@@ -439,25 +441,36 @@ worker_init <- function(parent_tmp, work_dir, dll_path) {
   if (!("commons" %in% names(getLoadedDLLs()))) {
     dyn.load(dll_path)
   }
-  # Landlock resolves symlinks, and Connect's packrat library is a farm of
-  # symlinks into a shared cache, so grant the resolved package paths too.
+  resolve <- function(paths) {
+    vapply(
+      paths,
+      function(p) tryCatch(normalizePath(p), error = function(e) p),
+      character(1),
+      USE.NAMES = FALSE
+    )
+  }
+  # Both mechanisms match symlink-free paths: Connect's packrat library is a
+  # farm of symlinks into a shared cache, and macOS's /tmp and /var live
+  # under /private, so grant resolved paths alongside the originals.
   pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
-  resolved <- vapply(
-    pkg_dirs,
-    function(p) tryCatch(normalizePath(p), error = function(e) p),
-    character(1),
-    USE.NAMES = FALSE
+  os_roots <- switch(
+    sysname,
+    Linux = c("/usr", "/lib", "/lib64", "/etc", "/opt/R"),
+    Darwin = c(
+      "/usr", "/bin", "/sbin", "/System", "/Library",
+      "/private/etc", "/private/var/db", "/opt", "/dev"
+    )
   )
   read_roots <- unique(c(
     R.home(),
     .libPaths(),
-    resolved,
-    "/usr", "/lib", "/lib64", "/etc", "/opt/R"
+    resolve(pkg_dirs),
+    os_roots
   ))
-  read_roots <- read_roots[dir.exists(read_roots)]
+  read_roots <- unique(resolve(read_roots[dir.exists(read_roots)]))
   # callr writes its per-call result files into the parent's tempdir, so the
   # worker must be able to write there for results to make it back.
-  write_roots <- unique(c(parent_tmp, work_dir))
+  write_roots <- unique(resolve(c(parent_tmp, work_dir)))
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
   .Call(sym, read_roots, write_roots, NULL)
   invisible(TRUE)
