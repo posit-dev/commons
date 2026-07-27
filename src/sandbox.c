@@ -1,7 +1,8 @@
 /* Self-restriction bindings for the run_r worker process. These run once at
  * worker startup; enforcement thereafter is the kernel's, not this code's.
- * Landlock has no libc wrapper and seccomp requires prctl() with a BPF
- * program, so neither is reachable from R without this layer. */
+ * Landlock has no libc wrapper, seccomp requires prctl() with a BPF program,
+ * and macOS Seatbelt is only reachable through libSystem's sandbox_init(),
+ * so none of them is reachable from R without this layer. */
 
 #define _GNU_SOURCE
 
@@ -100,9 +101,10 @@ SEXP c_sandbox_capabilities(void) {
   long landlock_abi = syscall(__NR_landlock_create_ruleset, NULL, 0,
                               LL_CREATE_RULESET_VERSION);
   int seccomp_ok = prctl(PR_GET_SECCOMP, 0, 0, 0, 0) >= 0;
-  SEXP out = PROTECT(Rf_allocVector(INTSXP, 2));
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 3));
   INTEGER(out)[0] = (int) landlock_abi;
   INTEGER(out)[1] = seccomp_ok;
+  INTEGER(out)[2] = 0;
   UNPROTECT(1);
   return out;
 }
@@ -167,18 +169,121 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
   return R_NilValue;
 }
 
-#else /* not __linux__ */
+#elif defined(__APPLE__)
+
+#include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/resource.h>
+
+/* Seatbelt's C entry points live in libSystem. <sandbox.h> declares them
+ * deprecated (since 10.8) with no replacement for unentitled processes;
+ * declaring them directly keeps the build warning-free. */
+extern int sandbox_init(const char *profile, uint64_t flags, char **errorbuf);
+extern void sandbox_free_error(char *errorbuf);
+
+static size_t append_str(char *buf, size_t size, size_t off, const char *s) {
+  size_t n = strlen(s);
+  if (off + n + 1 > size) {
+    Rf_error("run_r sandbox: profile buffer overflow");
+  }
+  memcpy(buf + off, s, n + 1);
+  return off + n;
+}
+
+static size_t append_subpaths(char *buf, size_t size, size_t off, SEXP roots) {
+  for (int i = 0; i < Rf_length(roots); i++) {
+    const char *path = CHAR(STRING_ELT(roots, i));
+    if (strpbrk(path, "\"\\") != NULL) {
+      Rf_error("cannot sandbox: root '%s' contains a quote or backslash",
+               path);
+    }
+    off = append_str(buf, size, off, " (subpath \"");
+    off = append_str(buf, size, off, path);
+    off = append_str(buf, size, off, "\")");
+  }
+  return off;
+}
 
 SEXP c_sandbox_capabilities(void) {
-  SEXP out = PROTECT(Rf_allocVector(INTSXP, 2));
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 3));
   INTEGER(out)[0] = -1;
   INTEGER(out)[1] = 0;
+  INTEGER(out)[2] = 1;
   UNPROTECT(1);
   return out;
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
-  Rf_error("sandboxing is only supported on Linux");
+  if (memory_limit != R_NilValue) {
+    /* Accepted but not reliably enforced by the macOS kernel; kept for
+     * interface parity with the Linux branch. */
+    rlim_t bytes = (rlim_t) REAL(memory_limit)[0];
+    struct rlimit lim = { .rlim_cur = bytes, .rlim_max = bytes };
+    if (setrlimit(RLIMIT_AS, &lim) != 0) {
+      Rf_error("setrlimit(RLIMIT_AS) failed: %s", strerror(errno));
+    }
+  }
+
+  size_t size = 512;
+  for (int i = 0; i < Rf_length(read_roots); i++) {
+    size += strlen(CHAR(STRING_ELT(read_roots, i))) + 16;
+  }
+  for (int i = 0; i < Rf_length(rw_roots); i++) {
+    size += 2 * (strlen(CHAR(STRING_ELT(rw_roots, i))) + 16);
+  }
+  char *profile = R_alloc(size, 1);
+
+  /* Later rules take precedence in SBPL, so each blanket deny is followed by
+   * its allowlist; rw roots appear in both, mirroring Landlock's FS_V1_ALL.
+   * (deny network*) covers unix-domain sockets too, blocking DNS via
+   * mDNSResponder — parity with seccomp's blanket socket() denial.
+   * file-read-metadata stays allowed for path traversal: it exposes
+   * existence of files outside the roots, but not contents. */
+  size_t off = append_str(profile, size, 0,
+    "(version 1)\n"
+    "(allow default)\n"
+    "(deny network*)\n"
+    "(deny file-write*)\n"
+    "(allow file-write* (literal \"/dev/null\")");
+  off = append_subpaths(profile, size, off, rw_roots);
+  off = append_str(profile, size, off,
+    ")\n"
+    "(deny file-read*)\n"
+    "(allow file-read*");
+  off = append_subpaths(profile, size, off, read_roots);
+  off = append_subpaths(profile, size, off, rw_roots);
+  off = append_str(profile, size, off,
+    ")\n"
+    "(allow file-read-metadata)\n");
+
+  char *err = NULL;
+  if (sandbox_init(profile, 0, &err) != 0) {
+    char msg[512];
+    snprintf(msg, sizeof(msg), "%s", err ? err : "unknown error");
+    if (err) {
+      sandbox_free_error(err);
+    }
+    Rf_error("sandbox_init failed: %s", msg);
+  }
+
+  return R_NilValue;
+}
+
+#else /* not __linux__ or __APPLE__ */
+
+SEXP c_sandbox_capabilities(void) {
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 3));
+  INTEGER(out)[0] = -1;
+  INTEGER(out)[1] = 0;
+  INTEGER(out)[2] = 0;
+  UNPROTECT(1);
+  return out;
+}
+
+SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
+  Rf_error("sandboxing is only supported on Linux and macOS");
   return R_NilValue;
 }
 

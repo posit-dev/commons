@@ -3,8 +3,13 @@
 # the parent process is never sandboxed.
 
 # Report what the running kernel supports: the Landlock ABI version (-1 when
-# unavailable) and whether seccomp filters can be installed.
+# unavailable), whether seccomp filters can be installed, and whether macOS
+# Seatbelt is available.
 sandbox_capabilities <- function() {
   caps <- .Call(c_sandbox_capabilities)
-  list(landlock_abi = caps[[1]], seccomp = caps[[2]] > 0)
+  list(
+    landlock_abi = caps[[1]],
+    seccomp = caps[[2]] > 0,
+    seatbelt = caps[[3]] > 0
+  )
 }
