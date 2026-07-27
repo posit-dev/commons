@@ -43,10 +43,13 @@ connect_req <- function(client, ...) {
 }
 
 # Fetch all trace rows for a content item as raw OTLP NDJSON lines, paging
-# until the X-Total-Count header is exhausted.
+# until the X-Total-Count header is exhausted. Connect filters `from`/`to`
+# on span start time over `[from, to)`.
 connect_trace_lines <- function(
   client,
   guid,
+  from = NULL,
+  to = NULL,
   page_size = 1000,
   call = rlang::caller_env()
 ) {
@@ -55,7 +58,12 @@ connect_trace_lines <- function(
   repeat {
     resp <- tryCatch(
       connect_req(client, "content", guid, "traces") |>
-        httr2::req_url_query(limit = page_size, offset = offset) |>
+        httr2::req_url_query(
+          limit = page_size,
+          offset = offset,
+          from = connect_window_param(from, -3600),
+          to = connect_window_param(to, 1)
+        ) |>
         httr2::req_perform(),
       httr2_http_401 = function(err) trace_access_abort(err, call),
       httr2_http_403 = function(err) trace_access_abort(err, call)
@@ -73,6 +81,21 @@ connect_trace_lines <- function(
     }
   }
   lines
+}
+
+# Connect silently ignores timestamps it can't parse -- including any
+# without an explicit timezone -- so format the query bounds here rather
+# than forwarding user input. The server filter is only a transfer
+# optimization (read_trajectories() applies the exact window client-side),
+# so bounds are padded outward: `from` by an hour, so that a kept chat
+# span's wrapper span -- which starts earlier and carries the conversation
+# id -- isn't dropped; `to` by a second, to cover the sub-second truncation
+# in formatting.
+connect_window_param <- function(time, pad) {
+  if (is.null(time)) {
+    return(NULL)
+  }
+  format(time + pad, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
 }
 
 connect_content <- function(client, guid) {

@@ -16,6 +16,15 @@
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), or a
 #'     dashboard URL (`.../connect/#/apps/<guid>/`).
 #'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
+#' @param ... These dots are for future extensions and must be empty.
+#' @param n Keep only the `n` most recent conversations, after `from`/`to`
+#'   filtering. `NULL` (the default) keeps all of them.
+#' @param from,to Keep only conversations with chat activity at or after
+#'   `from` and before `to`. Each is a `POSIXct`, a `Date`, or a single
+#'   string in a standard format like `"2026-07-22"` or
+#'   `"2026-07-22 14:30:00"`; dates and strings are interpreted in local
+#'   time. A conversation that continues past `to` is returned with its
+#'   history as of `to`.
 #'
 #' @details
 #' Reading traces from Connect requires the `CONNECT_API_KEY` environment
@@ -44,16 +53,76 @@
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list of [ellmer::Turn]s.
 #' @export
-read_trajectories <- function(source = NULL) {
+read_trajectories <- function(
+  source = NULL,
+  ...,
+  n = NULL,
+  from = NULL,
+  to = NULL
+) {
+  rlang::check_dots_empty()
+  check_n(n)
+  from <- check_window_bound(from)
+  to <- check_window_bound(to)
   resolved <- resolve_trajectory_source(source)
   spans <- switch(
     resolved$kind,
     local = read_local_spans(resolved$path),
     connect = parse_otlp_lines(
-      connect_trace_lines(resolved$client, resolved$guid)
+      connect_trace_lines(resolved$client, resolved$guid, from = from, to = to)
     )
   )
-  drop_contentless(build_trajectories(spans))
+  spans <- filter_chat_spans(spans, from, to)
+  trajectories <- drop_contentless(build_trajectories(spans))
+  if (!is.null(n)) {
+    trajectories <- utils::tail(trajectories, n)
+  }
+  trajectories
+}
+
+check_n <- function(n, call = rlang::caller_env()) {
+  if (is.null(n)) {
+    return(invisible(NULL))
+  }
+  ok <- is.numeric(n) && length(n) == 1 && !is.na(n) && n >= 1 && n == trunc(n)
+  if (!ok) {
+    cli::cli_abort(
+      "{.arg n} must be a single positive whole number.",
+      call = call
+    )
+  }
+  invisible(NULL)
+}
+
+# Dates and date strings both resolve to local midnight; as.POSIXct() alone
+# would silently read a Date as UTC midnight.
+check_window_bound <- function(
+  x,
+  arg = rlang::caller_arg(x),
+  call = rlang::caller_env()
+) {
+  if (is.null(x)) {
+    return(NULL)
+  }
+  if (length(x) == 1) {
+    if (inherits(x, "POSIXct") && !is.na(x)) {
+      return(x)
+    }
+    if (inherits(x, "Date") && !is.na(x)) {
+      return(as.POSIXct(format(x)))
+    }
+    if (is.character(x)) {
+      parsed <- tryCatch(as.POSIXct(x), error = function(err) NA)
+      if (!is.na(parsed)) {
+        return(parsed)
+      }
+    }
+  }
+  cli::cli_abort(
+    "{.arg {arg}} must be a {.cls POSIXct}, a {.cls Date}, or a single
+     datetime string like {.val 2026-07-22 14:30:00}.",
+    call = call
+  )
 }
 
 # Chat spans emitted without message content -- capture was off, or the spans
@@ -367,6 +436,33 @@ otlp_attribute_value <- function(value) {
 
 # Reconstruction ---------------------------------------------------------
 
+# Window membership matches Connect's own from/to filter: span start time,
+# `from` inclusive, `to` exclusive. Only chat spans are filtered; other
+# spans must survive regardless, since wrapper spans carry the conversation
+# ids that group the chat spans that remain.
+filter_chat_spans <- function(spans, from, to) {
+  if (is.null(from) && is.null(to)) {
+    return(spans)
+  }
+  from_key <- if (!is.null(from)) pad_nano_time(posixct_nanos(from))
+  to_key <- if (!is.null(to)) pad_nano_time(posixct_nanos(to))
+  Filter(
+    function(span) {
+      if (!identical(span$attributes[["gen_ai.operation.name"]], "chat")) {
+        return(TRUE)
+      }
+      start <- pad_nano_time(span$start_time)
+      (is.null(from_key) || start >= from_key) &&
+        (is.null(to_key) || start < to_key)
+    },
+    spans
+  )
+}
+
+posixct_nanos <- function(time) {
+  sprintf("%.0f", as.numeric(time) * 1e9)
+}
+
 # ellmer's chat spans repeat the full message history, so the latest chat
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
@@ -431,11 +527,15 @@ span_conversation_id <- function(span, index) {
   span$trace_id
 }
 
+span_time <- function(span) {
+  time <- if (nzchar(span$end_time)) span$end_time else span$start_time
+  pad_nano_time(time)
+}
+
 # Unix-nano timestamps overflow doubles, so compare them as zero-padded
 # strings, which order lexicographically like the numbers they encode.
 # (Zero- rather than space-padded: some locales' collation ignores spaces.)
-span_time <- function(span) {
-  time <- if (nzchar(span$end_time)) span$end_time else span$start_time
+pad_nano_time <- function(time) {
   paste0(strrep("0", max(0, 32 - nchar(time))), time)
 }
 

@@ -57,6 +57,41 @@ test_that("connect_trace_lines pages until the total is exhausted", {
   expect_equal(state$calls, 2)
 })
 
+test_that("connect_trace_lines pushes a padded window down to Connect", {
+  state <- new.env()
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ...) {
+      state$query <- list(...)
+      req
+    },
+    req_perform = function(req, ...) {
+      force(req)
+      1
+    },
+    resp_body_string = function(resp) "",
+    resp_header = function(resp, name) "0",
+    .package = "httr2"
+  )
+
+  connect_trace_lines(
+    list(server = "s", api_key = "k"),
+    "guid",
+    from = as.POSIXct("2026-07-22 12:00:00", tz = "UTC"),
+    to = as.POSIXct("2026-07-23 12:00:00", tz = "UTC")
+  )
+
+  expect_equal(state$query$from, "2026-07-22T11:00:00Z")
+  expect_equal(state$query$to, "2026-07-23T12:00:01Z")
+
+  connect_trace_lines(list(server = "s", api_key = "k"), "guid")
+
+  expect_null(state$query$from)
+  expect_null(state$query$to)
+})
+
 test_that("connect_trace_lines explains auth failures on the traces endpoint", {
   local_mocked_bindings(
     connect_req = function(client, ...) structure(list(), class = "fake_req")

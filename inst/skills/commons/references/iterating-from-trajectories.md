@@ -23,6 +23,8 @@ The answer uses SQL with little documentation and the agent had to inspect table
 2. Load trajectories.
    Use `commons::read_trajectories()`. With no arguments it resolves automatically: on Posit Connect it reads this content's own traces, in a deployed project it reads the deployment's traces from Connect (requires the `CONNECT_API_KEY` environment variable and editor access to the content), and otherwise it reads local trace files. You can also pass a Connect content GUID, a content URL, or a directory of OTLP trace files. If resolution is unclear, inspect the project for `log =`, `COMMONS_TRACES_DIR`, `OTEL_*` environment variables, or deployment setup.
 
+   When the store is large, subset: `n` keeps the `n` most recent conversations, and `from`/`to` keep conversations with chat activity in a time window, e.g. `read_trajectories(n = 25, from = Sys.Date() - 7)`.
+
 3. Read the conversations.
    Each trajectory is a list of ellmer turns, named by conversation id.
 
