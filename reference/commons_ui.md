@@ -9,7 +9,7 @@ registered measures get a compact verified-answer pill. Answers produced
 from fallback SQL or R can cite text from the agent's context, measure
 definitions, or data documentation; verified citations render as
 footnotes whose tooltips name their source. Fallback answers with no
-verified citation get a potentially-untrusted caution pill.
+verified citation get an untrusted caution pill.
 
 ## Usage
 
