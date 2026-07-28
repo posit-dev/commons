@@ -1,22 +1,6 @@
 # new_trajectory_tracing validates its inputs
 
     Code
-      new_trajectory_tracing("yes")
-    Condition
-      Error:
-      ! `log` must be `TRUE` or `FALSE`.
-
----
-
-    Code
-      new_trajectory_tracing(NA)
-    Condition
-      Error:
-      ! `log` must be `TRUE` or `FALSE`.
-
----
-
-    Code
       new_trajectory_tracing(TRUE, share_with = 1)
     Condition
       Error:

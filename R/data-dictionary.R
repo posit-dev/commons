@@ -4,9 +4,7 @@
 # metadata), this is where the format is inferred and dispatched.
 data_dictionary <- function(path) {
   rlang::check_installed("yaml")
-  if (!is.character(path) || length(path) != 1 || is.na(path)) {
-    cli::cli_abort("{.arg path} must be the path to a data-dict.yaml file.")
-  }
+  rlang::check_string(path, allow_empty = FALSE)
   new_data_dictionary(yaml::read_yaml(path))
 }
 

@@ -154,13 +154,13 @@ citation_request_text <- function(has_measures = TRUE, has_definitions = FALSE) 
     paste(
       "Note: any answer in this conversation that does not come from a",
       "registered measure alone will be presented to the user as",
-      '"Potentially untrusted" unless you cite trusted text that supports',
+      '"Untrusted" unless you cite trusted text that supports',
       "your approach."
     )
   } else {
     paste(
       "Note: answers in this conversation will be presented to the user as",
-      '"Potentially untrusted" unless you cite trusted text that supports',
+      '"Untrusted" unless you cite trusted text that supports',
       "your approach."
     )
   }

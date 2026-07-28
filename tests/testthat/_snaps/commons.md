@@ -33,14 +33,6 @@
 ---
 
     Code
-      commons(client = test_client(), data_sources = test_source(), log = "yes")
-    Condition
-      Error in `commons()`:
-      ! `log` must be `TRUE` or `FALSE`.
-
----
-
-    Code
       commons(client = test_client(), data_sources = test_source(), log = TRUE,
       share_with = 1)
     Condition

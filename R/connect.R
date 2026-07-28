@@ -42,11 +42,16 @@ connect_req <- function(client, ...) {
     httr2::req_headers_redacted(Authorization = paste("Key", client$api_key))
 }
 
-# Fetch all trace rows for a content item as raw OTLP NDJSON lines, paging
-# until the X-Total-Count header is exhausted.
+# Fetch trace rows for a content item as raw OTLP NDJSON lines, paging until
+# the X-Total-Count header is exhausted or `enough(lines)` returns TRUE.
+# Connect returns rows newest-first by span start time and filters `from`/`to`
+# on span start time over `[from, to)`.
 connect_trace_lines <- function(
   client,
   guid,
+  from = NULL,
+  to = NULL,
+  enough = NULL,
   page_size = 1000,
   call = rlang::caller_env()
 ) {
@@ -55,7 +60,12 @@ connect_trace_lines <- function(
   repeat {
     resp <- tryCatch(
       connect_req(client, "content", guid, "traces") |>
-        httr2::req_url_query(limit = page_size, offset = offset) |>
+        httr2::req_url_query(
+          limit = page_size,
+          offset = offset,
+          from = connect_window_param(from, -3600),
+          to = connect_window_param(to, 1)
+        ) |>
         httr2::req_perform(),
       httr2_http_401 = function(err) trace_access_abort(err, call),
       httr2_http_403 = function(err) trace_access_abort(err, call)
@@ -71,8 +81,23 @@ connect_trace_lines <- function(
     if (length(page) == 0 || is.na(total) || offset >= total) {
       break
     }
+    if (!is.null(enough) && enough(lines)) {
+      break
+    }
   }
   lines
+}
+
+# Connect silently ignores timestamps it can't parse, including any without
+# an explicit timezone, so always format the query bounds here. The exact
+# window is applied client-side, so bounds are padded outward: `from` by an
+# hour, to keep the earlier-starting parent spans that carry conversation
+# ids, and `to` by a second, to cover sub-second truncation in formatting.
+connect_window_param <- function(time, pad) {
+  if (is.null(time)) {
+    return(NULL)
+  }
+  format(time + pad, "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
 }
 
 connect_content <- function(client, guid) {

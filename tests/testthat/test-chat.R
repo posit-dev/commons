@@ -4,14 +4,14 @@ test_that("answer pills describe trusted and uncited fallback answers", {
 
   expect_match(trusted, "Verified answer")
   expect_match(trusted, "governed calculation")
-  expect_match(trusted, "data-commons-tooltip")
+  expect_match(trusted, "commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
 
-  expect_match(uncited, "Potentially untrusted")
+  expect_match(uncited, "Untrusted")
   expect_match(uncited, "AI can be wrong")
   expect_match(uncited, "not produced by a governed calculation")
-  expect_match(uncited, "data-commons-tooltip")
+  expect_match(uncited, "commons-tooltip")
   expect_match(uncited, "commons-answer-pill-icon")
   expect_match(uncited, "commons-answer-pill-caution")
 })

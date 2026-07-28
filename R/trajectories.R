@@ -16,6 +16,15 @@
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), or a
 #'     dashboard URL (`.../connect/#/apps/<guid>/`).
 #'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
+#' @param ... These dots are for future extensions and must be empty.
+#' @param n Keep only the `n` most recent conversations, after `from`/`to`
+#'   filtering. `NULL` (the default) keeps all of them.
+#' @param from,to Keep only conversations with chat activity at or after
+#'   `from` and before `to`. Each is a `POSIXct`, a `Date`, or a single
+#'   string in a standard format like `"2026-07-22"` or
+#'   `"2026-07-22 14:30:00"`; dates and strings are interpreted in local
+#'   time. A conversation that continues past `to` is returned with its
+#'   history as of `to`.
 #'
 #' @details
 #' Reading traces from Connect requires the `CONNECT_API_KEY` environment
@@ -44,16 +53,134 @@
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list of [ellmer::Turn]s.
 #' @export
-read_trajectories <- function(source = NULL) {
+read_trajectories <- function(
+  source = NULL,
+  ...,
+  n = NULL,
+  from = NULL,
+  to = NULL
+) {
+  rlang::check_dots_empty()
+  rlang::check_number_whole(n, min = 1, allow_null = TRUE)
+  from <- check_window_bound(from)
+  to <- check_window_bound(to)
   resolved <- resolve_trajectory_source(source)
   spans <- switch(
     resolved$kind,
     local = read_local_spans(resolved$path),
-    connect = parse_otlp_lines(
-      connect_trace_lines(resolved$client, resolved$guid)
-    )
+    connect = read_connect_spans(resolved$client, resolved$guid, n, from, to)
   )
-  drop_contentless(build_trajectories(spans))
+  spans <- filter_chat_spans(spans, from, to)
+  trajectories <- drop_contentless(build_trajectories(spans))
+  if (!is.null(n)) {
+    trajectories <- utils::tail(trajectories, n)
+  }
+  trajectories
+}
+
+# Dates and date strings both resolve to local midnight; as.POSIXct() alone
+# would silently read a Date as UTC midnight.
+check_window_bound <- function(
+  x,
+  arg = rlang::caller_arg(x),
+  call = rlang::caller_env()
+) {
+  if (is.null(x)) {
+    return(NULL)
+  }
+  if (length(x) == 1) {
+    if (inherits(x, "POSIXct") && !is.na(x)) {
+      return(x)
+    }
+    if (inherits(x, "Date") && !is.na(x)) {
+      return(as.POSIXct(format(x)))
+    }
+    if (is.character(x)) {
+      parsed <- parse_window_bound(x)
+      if (!is.null(parsed)) {
+        return(parsed)
+      }
+    }
+  }
+  cli::cli_abort(
+    "{.arg {arg}} must be a {.cls POSIXct}, a {.cls Date}, or a single
+     datetime string like {.val 2026-07-22 14:30:00}.",
+    call = call
+  )
+}
+
+# as.POSIXct()'s default formats accept any parseable prefix -- reading
+# "2026-07-22T14:30:00" as midnight and "2026-07-22oops" as valid -- so try
+# explicit formats and require that formatting back reproduces the input.
+parse_window_bound <- function(x) {
+  formats <- c(
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%dT%H:%M",
+    "%Y-%m-%d"
+  )
+  for (fmt in formats) {
+    parsed <- as.POSIXct(x, format = fmt)
+    if (!is.na(parsed) && identical(format(parsed, fmt), x)) {
+      return(parsed)
+    }
+  }
+  NULL
+}
+
+# The `from`/`to` window and `n` limit are passed down to Connect so a
+# filtered read doesn't transfer the whole trace store. The server-side
+# `from` filter can still drop a parent span that carries a conversation id
+# (see connect_window_param()); when that happens, refetch without `from`.
+read_connect_spans <- function(
+  client,
+  guid,
+  n,
+  from,
+  to,
+  call = rlang::caller_env()
+) {
+  spans <- fetch_connect_spans(client, guid, from, n, from, to, call)
+  if (
+    !is.null(from) && has_severed_ancestry(filter_chat_spans(spans, from, to))
+  ) {
+    spans <- fetch_connect_spans(client, guid, NULL, n, from, to, call)
+  }
+  spans
+}
+
+fetch_connect_spans <- function(client, guid, from_pushdown, n, from, to, call) {
+  parse_otlp_lines(connect_trace_lines(
+    client,
+    guid,
+    from = from_pushdown,
+    to = to,
+    enough = if (!is.null(n)) enough_trace_lines(n, from, to),
+    call = call
+  ))
+}
+
+# Builds connect_trace_lines()'s early-stop check: TRUE once the lines
+# fetched so far reconstruct `n` complete conversations in the window.
+enough_trace_lines <- function(n, from, to) {
+  state <- new.env(parent = emptyenv())
+  state$spans <- list()
+  state$n_seen <- 0
+  function(lines) {
+    new_lines <- lines[rlang::seq2(state$n_seen + 1, length(lines))]
+    state$n_seen <- length(lines)
+    state$spans <- c(state$spans, parse_otlp_lines(new_lines))
+    kept <- filter_chat_spans(state$spans, from, to)
+    if (has_severed_ancestry(kept)) {
+      return(FALSE)
+    }
+    latest <- latest_chat_spans(kept)
+    if (length(latest) < n) {
+      return(FALSE)
+    }
+    sum(lengths(lapply(latest, trajectory_turns)) > 0) >= n
+  }
 }
 
 # Chat spans emitted without message content -- capture was off, or the spans
@@ -367,16 +494,47 @@ otlp_attribute_value <- function(value) {
 
 # Reconstruction ---------------------------------------------------------
 
+# Matches Connect's own from/to filter: span start time, `from` inclusive,
+# `to` exclusive. Only chat spans are filtered; parent spans must survive
+# regardless, since they carry the conversation ids that group the rest.
+filter_chat_spans <- function(spans, from, to) {
+  if (is.null(from) && is.null(to)) {
+    return(spans)
+  }
+  from_key <- if (!is.null(from)) pad_nano_time(posixct_nanos(from))
+  to_key <- if (!is.null(to)) pad_nano_time(posixct_nanos(to))
+  Filter(
+    function(span) {
+      if (!is_chat_span(span)) {
+        return(TRUE)
+      }
+      start <- pad_nano_time(span$start_time)
+      (is.null(from_key) || start >= from_key) &&
+        (is.null(to_key) || start < to_key)
+    },
+    spans
+  )
+}
+
+is_chat_span <- function(span) {
+  identical(span$attributes[["gen_ai.operation.name"]], "chat")
+}
+
+posixct_nanos <- function(time) {
+  sprintf("%.0f", as.numeric(time) * 1e9)
+}
+
 # ellmer's chat spans repeat the full message history, so the latest chat
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
 build_trajectories <- function(spans) {
-  chat_spans <- Filter(
-    function(span) {
-      identical(span$attributes[["gen_ai.operation.name"]], "chat")
-    },
-    spans
-  )
+  lapply(latest_chat_spans(spans), trajectory_turns)
+}
+
+# The latest chat span per conversation, named by conversation id and
+# ordered oldest-first.
+latest_chat_spans <- function(spans) {
+  chat_spans <- Filter(is_chat_span, spans)
   if (length(chat_spans) == 0) {
     return(list())
   }
@@ -391,10 +549,7 @@ build_trajectories <- function(spans) {
     }
   }
 
-  latest <- latest[
-    order(vapply(latest, span_time, character(1)))
-  ]
-  lapply(latest, trajectory_turns)
+  latest[order(vapply(latest, span_time, character(1)))]
 }
 
 span_index <- function(spans) {
@@ -414,28 +569,50 @@ span_index <- function(spans) {
 # walk the ancestor chain. Chat spans with no wrapper anywhere—e.g. emitted
 # outside commons—fall back to their trace id, which still groups per turn.
 span_conversation_id <- function(span, index) {
+  conversation_id_walk(span, index)$id %||% span$trace_id
+}
+
+# `severed = TRUE` marks a walk that stopped at a parent absent from
+# `index` -- ancestry cut off by a partial fetch -- as opposed to a chain
+# that reaches its root without finding an id, which no wider fetch would
+# fix.
+conversation_id_walk <- function(span, index) {
   current <- span
   for (i in seq_len(length(index))) {
     id <- current$attributes[["gen_ai.conversation.id"]]
     if (!is.null(id)) {
-      return(as.character(id))
+      return(list(id = as.character(id), severed = FALSE))
     }
     if (!nzchar(current$parent_span_id)) {
-      break
+      return(list(id = NULL, severed = FALSE))
     }
     current <- index[[paste(span$trace_id, current$parent_span_id)]]
     if (is.null(current)) {
-      break
+      return(list(id = NULL, severed = TRUE))
     }
   }
-  span$trace_id
+  list(id = NULL, severed = FALSE)
+}
+
+has_severed_ancestry <- function(spans) {
+  index <- span_index(spans)
+  chat_spans <- Filter(is_chat_span, spans)
+  any(vapply(
+    chat_spans,
+    function(span) conversation_id_walk(span, index)$severed,
+    logical(1)
+  ))
+}
+
+span_time <- function(span) {
+  time <- if (nzchar(span$end_time)) span$end_time else span$start_time
+  pad_nano_time(time)
 }
 
 # Unix-nano timestamps overflow doubles, so compare them as zero-padded
 # strings, which order lexicographically like the numbers they encode.
 # (Zero- rather than space-padded: some locales' collation ignores spaces.)
-span_time <- function(span) {
-  time <- if (nzchar(span$end_time)) span$end_time else span$start_time
+pad_nano_time <- function(time) {
   paste0(strrep("0", max(0, 32 - nchar(time))), time)
 }
 

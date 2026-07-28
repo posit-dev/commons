@@ -4,7 +4,7 @@
 \alias{read_trajectories}
 \title{Read commons trajectories}
 \usage{
-read_trajectories(source = NULL)
+read_trajectories(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 }
 \arguments{
 \item{source}{Where to read trajectories from:
@@ -17,6 +17,18 @@ directory that \code{\link[=commons]{commons()}} writes to.
 dashboard URL (\verb{.../connect/#/apps/<guid>/}).
 \item A directory of OTLP NDJSON trace files (\verb{trace-*.jsonl}).
 }}
+
+\item{...}{These dots are for future extensions and must be empty.}
+
+\item{n}{Keep only the \code{n} most recent conversations, after \code{from}/\code{to}
+filtering. \code{NULL} (the default) keeps all of them.}
+
+\item{from, to}{Keep only conversations with chat activity at or after
+\code{from} and before \code{to}. Each is a \code{POSIXct}, a \code{Date}, or a single
+string in a standard format like \code{"2026-07-22"} or
+\code{"2026-07-22 14:30:00"}; dates and strings are interpreted in local
+time. A conversation that continues past \code{to} is returned with its
+history as of \code{to}.}
 }
 \value{
 A list of conversations, named by conversation id and ordered

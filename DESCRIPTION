@@ -31,7 +31,7 @@ Imports:
     promises (>= 1.5.0),
     R6,
     ragnar,
-    rlang,
+    rlang (>= 1.2.0),
     roxygen2,
     S7,
     utils

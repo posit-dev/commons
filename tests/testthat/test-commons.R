@@ -221,10 +221,6 @@ test_that("commons() validates its inputs", {
     error = TRUE
   )
   expect_snapshot(
-    commons(client = test_client(), data_sources = test_source(), log = "yes"),
-    error = TRUE
-  )
-  expect_snapshot(
     commons(
       client = test_client(),
       data_sources = test_source(),

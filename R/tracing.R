@@ -15,7 +15,7 @@ new_trajectory_tracing <- function(
   share_with = NULL,
   call = rlang::caller_env()
 ) {
-  check_log(log, call = call)
+  rlang::check_bool(log, call = call)
   check_share_with(share_with, call = call)
 
   if (!log) {
@@ -65,16 +65,6 @@ new_trajectory_tracing <- function(
   }
 
   TRUE
-}
-
-check_log <- function(log, call = rlang::caller_env()) {
-  if (!rlang::is_bool(log)) {
-    cli::cli_abort(
-      "{.arg log} must be {.code TRUE} or {.code FALSE}.",
-      call = call
-    )
-  }
-  invisible(NULL)
 }
 
 # Start and activate a span for the calling frame's lifetime, ending when it
