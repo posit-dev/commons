@@ -39,9 +39,9 @@
 #'   Pass values for any `{{keyword}}` tokens you add as arguments to
 #'   [ellmer::interpolate_file()]. commons appends documentation of the
 #'   available tables and data dictionaries to the prompt itself, along with
-#'   workflow guidance for whichever of registered measures and governed
-#'   definitions the agent actually has; the file needn't (and shouldn't)
-#'   describe them.
+#'   a "How to answer" workflow section assembled from whichever of
+#'   registered measures and governed definitions the agent actually has;
+#'   the file needn't (and shouldn't) describe them.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -207,7 +207,7 @@ Commons <- R6::R6Class(
           "commons.agent.n_data_sources" = length(sources),
           "commons.agent.has_context_layer" = !is.null(context_layer),
           "commons.agent.n_measures" = length(semantic_layer$measures),
-          "commons.agent.n_definitions" = length(private$definitions$records)
+          "commons.agent.n_definitions" = nrow(private$definitions$defs)
         )
       )
 
@@ -220,8 +220,8 @@ Commons <- R6::R6Class(
       )
       private$citation_request <- new.env(parent = emptyenv())
       private$citation_request$request <- citation_request_text(
-        has_measures = length(private$registry) > 0,
-        has_definitions = length(private$definitions$records) > 0
+        private$registry,
+        private$definitions
       )
 
       self$register_tools(build_commons_tools(self, private))

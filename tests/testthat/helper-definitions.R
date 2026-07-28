@@ -46,3 +46,28 @@ validated_registry <- function(src) {
   validate_eager_definitions(registry, list(sales_db = src))
   registry
 }
+
+empty_definitions <- function() {
+  definitions_registry(list())
+}
+
+# A roster that overflows the ambient prompt cap.
+many_definitions <- function(n = 400) {
+  unlist(lapply(seq_len(n), function(i) {
+    c(
+      sprintf("      - name: filter_%03d", i),
+      "        type: boolean",
+      sprintf("        expr: revenue > %d", i),
+      sprintf("        description: Filter number %d of many.", i)
+    )
+  }))
+}
+
+# call_metrics_impl() with its registry and source wired up, so tests read as
+# the tool call the model would make.
+metrics_caller <- function(src = definitions_source(), store = NULL) {
+  registry <- validated_registry(src)
+  function(...) {
+    call_metrics_impl(registry, list(sales_db = src), store, ...)
+  }
+}

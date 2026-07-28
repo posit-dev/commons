@@ -20,10 +20,6 @@ test_source <- function() {
   data_source(sales = test_sales())
 }
 
-empty_definitions <- function() {
-  definitions_registry(list())
-}
-
 test_client <- function() {
   ellmer::chat_anthropic(model = "claude-sonnet-4-5")
 }

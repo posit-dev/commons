@@ -1,16 +1,13 @@
-# Only the tools the agent's composition earns: call_measure only when
-# measures exist, query_metrics only when a definition could be a metric,
-# and search_pool only when something in the pool ISN'T already ambient in
-# the system prompt — measures are never listed there, and definitions
-# overflow their cap. A search tool over a fully visible pool just costs
-# the model a verification round trip. Nothing about an agent's surface
-# should imply operations it doesn't have.
+# Register only the tools the agent's composition earns; nothing about its
+# surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
   c(
-    if (pool_searchable(private)) list(tool_search_pool(private)),
+    if (pool_searchable(private$registry, private$definitions)) {
+      list(tool_search_pool(private))
+    },
     if (length(private$registry) > 0) list(tool_call_measure(private)),
     if (registry_has_metrics(private$definitions)) {
-      list(tool_query_metrics(private))
+      list(tool_call_metrics(private))
     },
     list(
       tool_search_context(private),
@@ -21,8 +18,11 @@ build_commons_tools <- function(self, private) {
   )
 }
 
-pool_searchable <- function(private) {
-  length(private$registry) > 0 || definitions_overflow(private$definitions)
+# Measures are never listed in the system prompt, and definitions past their
+# ambient cap aren't either; a search tool over a fully visible pool would
+# just cost the model a verification round trip.
+pool_searchable <- function(measures, definitions) {
+  length(measures) > 0 || definitions_overflow(definitions)
 }
 
 tool_search_pool <- function(private) {
@@ -33,8 +33,8 @@ tool_search_pool <- function(private) {
   }
   kinds <- c(
     if (length(private$registry) > 0) "measures (run with call_measure)",
-    if (length(registry_records(private$definitions)) > 0) {
-      "governed definitions (apply as {{name}} tokens in run_sql, or through query_metrics)"
+    if (nrow(registry_defs(private$definitions)) > 0) {
+      "governed definitions (apply as {{name}} tokens in run_sql, or through call_metrics)"
     }
   )
   ellmer::tool(
@@ -69,7 +69,7 @@ tool_search_pool <- function(private) {
   )
 }
 
-tool_query_metrics <- function(private) {
+tool_call_metrics <- function(private) {
   ellmer::tool(
     function(
       metrics,
@@ -78,7 +78,7 @@ tool_query_metrics <- function(private) {
       where = NULL,
       source = NULL
     ) {
-      query_metrics_impl(
+      call_metrics_impl(
         private$definitions,
         private$sources,
         private$handles,
@@ -91,7 +91,11 @@ tool_query_metrics <- function(private) {
     },
     sprintf(
       "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from %s; commons compiles and runs the query.",
-      if (pool_searchable(private)) "the system prompt or search_pool" else "the system prompt"
+      if (pool_searchable(private$registry, private$definitions)) {
+        "the system prompt or search_pool"
+      } else {
+        "the system prompt"
+      }
     ),
     arguments = list(
       metrics = ellmer::type_array(
@@ -124,9 +128,9 @@ tool_query_metrics <- function(private) {
       ),
       source = sql_source_type(private$sources)
     ),
-    name = "query_metrics",
+    name = "call_metrics",
     annotations = ellmer::tool_annotations(
-      title = "Query metrics",
+      title = "Metrics",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -145,8 +149,6 @@ tool_call_measure <- function(private) {
         sources = private$sources
       )
     },
-    # For small registries, we may eventually expose each measure schema upfront
-    # instead of relying on search_pool for discovery.
     "Run a registered measure returned by search_pool. `arguments` is a JSON object using exactly the argument names from search_pool.",
     arguments = list(
       name = ellmer::type_string(
@@ -242,6 +244,23 @@ tool_run_sql <- function(private) {
       read_only_hint = TRUE
     )
   )
+}
+
+run_sql_description <- function(definitions, measures = list()) {
+  parts <- c(
+    "Run a read-only SELECT query against a data source.",
+    if (length(measures) > 0) {
+      "Use this when no registered measure answers the question."
+    },
+    if (!is.null(definitions) && nrow(registry_defs(definitions)) > 0) {
+      paste0(
+        "Governed definitions can be written as {{name}} tokens anywhere ",
+        "in the SQL; each expands to its trusted expression before the ",
+        "query runs."
+      )
+    }
+  )
+  paste(parts, collapse = " ")
 }
 
 # With one source there's nothing to choose, so the model never sees the
@@ -351,7 +370,7 @@ run_sql_tool <- function(
   source_name = NULL,
   tracker = NULL,
   handles = NULL,
-  applied = list()
+  applied = NULL
 ) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)

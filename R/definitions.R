@@ -1,20 +1,9 @@
-# Definitions: governed SQL expressions authored in a data dictionary's
-# per-table `definitions` field. Each is a named, parameterless expression
-# over one table's rows with a declared data-dict type; boolean definitions
-# act as filters, aggregates as metrics, everything else as dimensions. The
-# model writes them as `{{name}}` tokens in run_sql SQL and commons expands
-# each token to its governed expression before the query runs, so the
-# trusted fragment lands byte-exact and usage is machine-detectable.
-#
-# The `definitions` field anticipates the data-dict spec sketched in
-# tidyverse/data-dict#134 (envelope of name/label/description/details/expr/
-# type, plus values for enums; bare-name references to sibling definitions).
-# Two deliberate departures until that spec ships: expressions are warehouse
-# SQL rather than data-dict's constrained grammar (exprs authored in the
-# grammar, a strict SQL subset, run unchanged), and validation binds against
-# the live source rather than parsing. Revisit when data-dict cuts the spec.
-
-# ---- dictionary parsing ------------------------------------------------------
+# Governed definitions: named SQL expressions authored in a data dictionary's
+# per-table `definitions` field, anticipating the envelope sketched in
+# tidyverse/data-dict#134. The model writes them as {{name}} tokens in run_sql
+# SQL; commons expands each token to its trusted expression before the query
+# runs. Boolean definitions act as filters, aggregates as metrics, and
+# everything else as dimensions.
 
 normalize_dictionary_definitions <- function(
   definitions,
@@ -29,12 +18,11 @@ normalize_dictionary_definitions <- function(
 
   for (name in names(definitions)) {
     if (!grepl("^[A-Za-z_][A-Za-z0-9_]*$", name)) {
-      token_example <- sprintf("{{%s}}", name)
       cli::cli_abort(
         c(
           "Definition names must be identifiers (letters, digits, and
            underscores); {.val {name}} on table {.val {table}} is not.",
-          i = "Names become tokens like {.code {token_example}} in SQL and
+          i = "Names become tokens like {.code {{{{{name}}}}}} in SQL and
            bare references in sibling expressions."
         ),
         call = call
@@ -58,9 +46,8 @@ normalize_dictionary_definitions <- function(
     definitions[[name]] <- def
   }
 
-  # The spec requires names unique within their scope, including amongst the
-  # table's variables; a definition shadowing a column would silently change
-  # what sibling references to that name mean.
+  # A definition shadowing a column would silently change what sibling
+  # references to that name mean.
   shadowed <- intersect(names(definitions), columns)
   if (length(shadowed)) {
     cli::cli_abort(
@@ -75,77 +62,72 @@ normalize_dictionary_definitions <- function(
 
 # A bare name in an expr that matches a sibling definition on the same table
 # refers to it (per the #134 spec, e.g. `SUM(total) FILTER (WHERE realized)`).
-# Resolve recursively into `expanded` so every consumer splices
-# fully-resolved SQL, erroring on reference cycles.
+# Store the fully-resolved SQL as `expanded` so every consumer splices it in
+# one step.
 resolve_definition_references <- function(
   definitions,
   table,
   call = rlang::caller_env()
 ) {
-  resolving <- character()
-  expanded <- list()
+  references <- lapply(
+    definitions,
+    sibling_references,
+    siblings = names(definitions)
+  )
 
-  resolve <- function(name) {
-    if (!is.null(expanded[[name]])) {
-      return(expanded[[name]])
-    }
-    if (name %in% resolving) {
-      chain <- paste(c(resolving, name), collapse = " -> ")
+  expanded <- list()
+  pending <- names(definitions)
+  while (length(pending)) {
+    ready <- pending[vapply(
+      pending,
+      function(name) !any(references[[name]] %in% pending),
+      logical(1)
+    )]
+    if (length(ready) == 0) {
       cli::cli_abort(
         "Definitions on table {.val {table}} reference each other in a
-         cycle: {chain}.",
+         cycle: {.val {pending}}.",
         call = call
       )
     }
-    resolving <<- c(resolving, name)
-    expr <- definitions[[name]]$expr
-    for (sibling in names(definitions)) {
-      if (!grepl(word_pattern(sibling), strip_sql_literals(expr))) {
-        next
+    for (name in ready) {
+      expr <- definitions[[name]]$expr
+      for (ref in references[[name]]) {
+        expr <- gsub_outside_literals(
+          expr,
+          word_pattern(ref),
+          sprintf("(%s)", expanded[[ref]])
+        )
       }
-      expr <- gsub_outside_literals(
-        expr,
-        word_pattern(sibling),
-        sprintf("(%s)", resolve(sibling))
-      )
+      expanded[[name]] <- expr
+      definitions[[name]]$expanded <- expr
     }
-    resolving <<- setdiff(resolving, name)
-    expanded[[name]] <<- expr
-    expr
-  }
-
-  for (name in names(definitions)) {
-    definitions[[name]]$expanded <- resolve(name)
+    pending <- setdiff(pending, ready)
   }
   definitions
+}
+
+sibling_references <- function(def, siblings) {
+  code <- strip_sql_literals(def$expr)
+  hits <- vapply(
+    siblings,
+    function(sibling) grepl(word_pattern(sibling), code),
+    logical(1)
+  )
+  siblings[hits]
 }
 
 # Substitute outside single-quoted SQL string literals, so a definition
 # named like a word inside a literal ('deduplicated') is left alone.
 gsub_outside_literals <- function(x, pattern, replacement) {
-  matches <- gregexpr(sql_literal_pattern, x, perl = TRUE)[[1]]
-  # gsub replacement treats backslashes and backreferences specially; the
+  # gsub replacements treat backslashes and backreferences specially; the
   # substituted text is literal SQL.
   replacement <- gsub("\\", "\\\\", replacement, fixed = TRUE)
-  if (matches[[1]] == -1) {
-    return(gsub(pattern, replacement, x))
-  }
-
-  starts <- as.integer(matches)
-  lengths <- attr(matches, "match.length")
-  out <- character()
-  pos <- 1L
-  for (i in seq_along(starts)) {
-    code <- substr(x, pos, starts[[i]] - 1L)
-    out <- c(
-      out,
-      gsub(pattern, replacement, code),
-      substr(x, starts[[i]], starts[[i]] + lengths[[i]] - 1L)
-    )
-    pos <- starts[[i]] + lengths[[i]]
-  }
-  out <- c(out, gsub(pattern, replacement, substr(x, pos, nchar(x))))
-  paste(out, collapse = "")
+  literals <- gregexpr(sql_literal_pattern, x, perl = TRUE)
+  code <- regmatches(x, literals, invert = TRUE)[[1]]
+  regmatches(x, literals, invert = TRUE) <-
+    list(gsub(pattern, replacement, code))
+  x
 }
 
 strip_sql_literals <- function(x) {
@@ -154,22 +136,17 @@ strip_sql_literals <- function(x) {
 
 sql_literal_pattern <- "'(?:[^']|'')*'"
 
-# ---- registry ----------------------------------------------------------------
-
-# Every source's definitions in one flat list, held in an environment so
-# validation state written lazily (board sources bind at first expansion) is
-# seen by every holder. Records carry the source's label so token resolution
-# in run_sql can scope to the query's source.
+# Every source's definitions in one data frame, held in an environment so
+# validation state written lazily (board sources bind at first use) is seen
+# by every holder.
 definitions_registry <- function(sources, call = rlang::caller_env()) {
   registry <- new.env(parent = emptyenv())
-  registry$records <- list()
-
+  rows <- list(no_definitions)
   labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     source <- sources[[i]]
-    dictionary <- source$dictionary
-    for (table in names(dictionary$tables)) {
-      definitions <- dictionary$tables[[table]]$definitions
+    for (table in names(source$dictionary$tables)) {
+      definitions <- source$dictionary$tables[[table]]$definitions
       if (length(definitions) == 0) {
         next
       }
@@ -180,64 +157,68 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
           call = call
         )
       }
-      for (name in names(definitions)) {
-        def <- definitions[[name]]
-        registry$records[[length(registry$records) + 1]] <- list(
-          name = name,
-          table = table,
-          source = labels[[i]],
-          type = def$type,
-          role = if (definition_base_type(def$type) == "boolean") {
-            "filter"
-          } else {
-            NA_character_
-          },
-          label = def$label,
-          description = def$description,
-          details = def$details,
-          expr = def$expr,
-          expanded = def$expanded,
-          validated = FALSE
-        )
-      }
+      rows[[length(rows) + 1]] <- definition_rows(
+        definitions,
+        table,
+        labels[[i]]
+      )
     }
   }
+  registry$defs <- do.call(rbind, rows)
   registry
 }
 
-registry_records <- function(registry, source_label = NULL) {
-  records <- registry$records %||% list()
-  if (is.null(source_label)) {
-    return(records)
+definition_fields <- c(
+  "type",
+  "label",
+  "description",
+  "details",
+  "expr",
+  "expanded"
+)
+
+no_definitions <- data.frame(
+  c(
+    list(name = character(), table = character(), source = character()),
+    rlang::rep_named(definition_fields, list(character())),
+    list(role = character(), validated = logical())
+  )
+)
+
+definition_rows <- function(definitions, table, source) {
+  out <- data.frame(
+    name = names(definitions),
+    table = table,
+    source = source
+  )
+  for (field in definition_fields) {
+    out[[field]] <- vapply(
+      definitions,
+      function(def) def[[field]] %||% NA_character_,
+      character(1)
+    )
   }
-  records[vapply(
-    records,
-    function(record) identical(record$source, source_label),
-    logical(1)
-  )]
+  # Boolean is the one role the declared type settles; the rest need a probe.
+  out$role <- ifelse(
+    definition_base_type(out$type) == "boolean",
+    "filter",
+    NA_character_
+  )
+  out$validated <- FALSE
+  out
 }
 
-registry_update <- function(registry, record) {
-  for (i in seq_along(registry$records)) {
-    existing <- registry$records[[i]]
-    if (
-      identical(existing$source, record$source) &&
-        identical(existing$table, record$table) &&
-        identical(existing$name, record$name)
-    ) {
-      registry$records[[i]] <- record
-      break
-    }
+registry_defs <- function(registry, source = NULL) {
+  defs <- registry$defs
+  if (is.null(source)) {
+    return(defs)
   }
-  invisible(registry)
+  defs[defs$source == source, ]
 }
-
-# ---- validation --------------------------------------------------------------
 
 # Connection and frame sources already answer live queries at data_source()
-# time, so their definitions bind at agent construction too, failing fast
-# with the definition named. Board sources are skipped here: their pins load
-# lazily (#43), so they validate at first expansion instead.
+# time, so their definitions bind at agent construction too. Board sources
+# load their pins lazily (#43) and validate at first use instead.
 validate_eager_definitions <- function(
   registry,
   sources,
@@ -257,63 +238,58 @@ validate_eager_definitions <- function(
   invisible(registry)
 }
 
-# Bind a source's definitions against its live database. Runs at agent
-# construction for connection and frame sources, whose construction already
-# issues live queries; board sources load pins lazily (#43), so their
-# definitions validate at first expansion instead, with the same
-# definition-named error. Probes go through source_query() so a pending pin
-# materializes on demand.
 validate_source_definitions <- function(
   registry,
   source,
   source_label,
   call = rlang::caller_env()
 ) {
-  for (record in registry_records(registry, source_label)) {
-    if (record$validated) {
-      next
-    }
-    registry_update(registry, validate_definition(source, record, call = call))
+  defs <- registry$defs
+  for (i in which(defs$source == source_label & !defs$validated)) {
+    registry$defs$role[[i]] <- validated_role(source, defs[i, ], call = call)
+    registry$defs$validated[[i]] <- TRUE
   }
   invisible(registry)
 }
 
-validate_definition <- function(source, record, call = rlang::caller_env()) {
-  id <- DBI::dbQuoteIdentifier(source$con, source$table_ids[[record$table]])
+# Bind the definition against its live table and classify it, portably
+# across DBI backends: type-check the R class of a zero-row probe, then
+# distinguish metric from dimension by whether the expression is legal in
+# GROUP BY (aggregates are not).
+validated_role <- function(source, def, call = rlang::caller_env()) {
+  id <- DBI::dbQuoteIdentifier(source$con, source$table_ids[[def$table]])
 
-  # Portable across DBI backends, unlike DuckDB's DESCRIBE: bind the
-  # expression in a zero-row query and type-check the R class of the result.
   probe <- try_source_query(
     source,
-    sprintf("SELECT (%s) AS x FROM %s WHERE 1 = 0", record$expanded, id)
+    sprintf("SELECT (%s) AS x FROM %s WHERE 1 = 0", def$expanded, id)
   )
   if (inherits(probe, "condition")) {
     cli::cli_abort(
       c(
-        "Definition {.val {record$name}} on table {.val {record$table}}
+        "Definition {.val {def$name}} on table {.val {def$table}}
          does not bind against the data source.",
-        i = "Its expression expands to {.code {record$expanded}}."
+        i = "Its expression expands to {.code {def$expanded}}."
       ),
       parent = probe,
       call = call
     )
   }
-  check_definition_type(record, probe$x, call = call)
+  check_definition_type(def, probe$x, call = call)
 
-  if (identical(record$role, "filter")) {
+  if (identical(def$role, "filter")) {
     where <- try_source_query(
       source,
       sprintf(
         "SELECT 1 AS x FROM %s WHERE (%s) AND (1 = 0)",
         id,
-        record$expanded
+        def$expanded
       )
     )
     if (inherits(where, "condition")) {
       cli::cli_abort(
         c(
-          "Boolean definition {.val {record$name}} on table
-           {.val {record$table}} can't filter rows.",
+          "Boolean definition {.val {def$name}} on table
+           {.val {def$table}} can't filter rows.",
           i = "Its expression aggregates over rows (or uses a window
            function), so it has no per-row value. Restate it per row, or
            declare a non-boolean type."
@@ -321,24 +297,18 @@ validate_definition <- function(source, record, call = rlang::caller_env()) {
         call = call
       )
     }
-    record$validated <- TRUE
-    return(record)
+    return("filter")
   }
 
-  # Aggregates are illegal in GROUP BY, so a bind failure there classifies
-  # the expression as a metric; anything that groups is a dimension. (The
-  # constrained data-dict grammar will make this parse-level someday.)
   grouped <- try_source_query(
     source,
     sprintf(
       "SELECT 1 AS x FROM %s WHERE 1 = 0 GROUP BY (%s)",
       id,
-      record$expanded
+      def$expanded
     )
   )
-  record$role <- if (inherits(grouped, "condition")) "metric" else "dimension"
-  record$validated <- TRUE
-  record
+  if (inherits(grouped, "condition")) "metric" else "dimension"
 }
 
 try_source_query <- function(source, sql) {
@@ -348,9 +318,9 @@ try_source_query <- function(source, sql) {
 # Coarser than SQL types but portable: compare the declared data-dict type
 # against the R class of the probe column. Unknown declared types and
 # unmapped classes pass rather than guess.
-check_definition_type <- function(record, column, call = rlang::caller_env()) {
+check_definition_type <- function(def, column, call = rlang::caller_env()) {
   compatible <- switch(
-    definition_base_type(record$type),
+    definition_base_type(def$type),
     boolean = is.logical(column),
     number = is.numeric(column) || inherits(column, "integer64"),
     string = ,
@@ -362,60 +332,54 @@ check_definition_type <- function(record, column, call = rlang::caller_env()) {
   )
   if (isFALSE(compatible)) {
     cli::cli_abort(
-      "Definition {.val {record$name}} on table {.val {record$table}} is
-       declared {.val {record$type}} but its expression returns
+      "Definition {.val {def$name}} on table {.val {def$table}} is
+       declared {.val {def$type}} but its expression returns
        {.cls {class(column)[[1]]}}.",
       call = call
     )
   }
-  invisible(record)
+  invisible(def)
 }
 
 definition_base_type <- function(type) {
   tolower(sub("\\(.*$", "", trimws(type)))
 }
 
-# ---- expansion ---------------------------------------------------------------
-
 definition_token_pattern <-
   "\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\s*\\}\\}"
 
-# The expansion step of run_sql: resolve each {{name}} / {{table.name}}
-# token in the model's SQL to a definition of the query's source and splice
-# in its governed expression. Runs before check_query(), so the denylist
-# sees the SQL that will actually execute. `source_name` is the tool
-# argument, NULL when the agent has a single source.
+# The expansion step of run_sql, before check_query() so the denylist sees
+# the SQL that will actually execute.
 expand_for_run_sql <- function(registry, sources, source, source_name, sql) {
-  if (is.null(registry) || length(registry$records) == 0) {
-    return(list(sql = sql, applied = list()))
+  if (is.null(registry) || nrow(registry$defs) == 0) {
+    return(list(sql = sql, applied = NULL))
   }
   label <- source_name %||% rlang::names2(sources)[[1]]
-  expansion <- expand_definitions(sql, registry_records(registry, label))
+  expansion <- expand_definitions(sql, registry_defs(registry, label))
   # A lazy board source hasn't bound its definitions yet; do it at this
   # first use so a broken definition fails with its name, not a SQL error.
-  if (length(expansion$applied) > 0) {
+  if (NROW(expansion$applied) > 0) {
     validate_source_definitions(registry, source, label)
   }
   expansion
 }
 
-expand_definitions <- function(sql, records, call = rlang::caller_env()) {
+expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
   matches <- regmatches(
     sql,
     gregexpr(definition_token_pattern, sql, perl = TRUE)
   )[[1]]
-  if (length(matches) == 0) {
-    return(list(sql = sql, applied = list()))
-  }
-
   tokens <- unique(gsub("\\{\\{\\s*|\\s*\\}\\}", "", matches))
-  applied <- list()
+
+  applied <- NULL
   for (token in tokens) {
-    record <- resolve_definition_token(token, sql, records, call = call)
+    def <- resolve_definition_token(token, sql, defs, call = call)
+    # gsub replacement treats backslashes specially; the expansion is
+    # literal SQL.
     replacement <- gsub(
       "\\",
       "\\\\",
-      sprintf("(%s)", record$expanded),
+      sprintf("(%s)", def$expanded),
       fixed = TRUE
     )
     sql <- gsub(
@@ -423,121 +387,88 @@ expand_definitions <- function(sql, records, call = rlang::caller_env()) {
       replacement,
       sql
     )
-    applied[[length(applied) + 1]] <- record
+    applied <- rbind(applied, def)
   }
   list(sql = sql, applied = applied)
 }
 
-# A bare token resolves against the definitions whose table appears in the
-# query text (the same word-match heuristic dictionary_sql_entries() uses),
-# so same-named definitions on different tables coexist; {{table.name}} is
-# always accepted as the explicit tiebreaker. Failures are tool errors the
-# model can recover from in-conversation.
+# A bare token scopes to the definitions whose table appears in the query
+# text (the word-match heuristic dictionary_sql_entries() also uses), so
+# same-named definitions on different tables coexist. Failures are tool
+# errors the model can recover from in-conversation.
 resolve_definition_token <- function(
   token,
   sql,
-  records,
+  defs,
   call = rlang::caller_env()
 ) {
-  token_text <- sprintf("{{%s}}", token)
-
   if (grepl(".", token, fixed = TRUE)) {
     parts <- strsplit(token, ".", fixed = TRUE)[[1]]
-    hits <- records[vapply(
-      records,
-      function(record) {
-        identical(record$table, parts[[1]]) && identical(record$name, parts[[2]])
-      },
-      logical(1)
-    )]
-    if (length(hits) == 0) {
-      abort_unknown_token(token_text, records, call = call)
+    hits <- defs[defs$table == parts[[1]] & defs$name == parts[[2]], ]
+    if (nrow(hits) == 0) {
+      abort_unknown_token(token, defs, call = call)
     }
-    return(hits[[1]])
+    return(hits[1, ])
   }
 
-  named <- records[vapply(
-    records,
-    function(record) identical(record$name, token),
-    logical(1)
-  )]
-  if (length(named) == 0) {
-    abort_unknown_token(token_text, records, call = call)
+  named <- defs[defs$name == token, ]
+  if (nrow(named) == 0) {
+    abort_unknown_token(token, defs, call = call)
   }
 
-  in_scope <- named[vapply(
-    named,
-    function(record) grepl(word_pattern(record$table), sql, ignore.case = TRUE),
-    logical(1)
-  )]
-  if (length(in_scope) == 1) {
-    return(in_scope[[1]])
+  in_scope <- named[
+    vapply(
+      named$table,
+      function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
+      logical(1)
+    ),
+  ]
+  if (nrow(in_scope) == 1) {
+    return(in_scope[1, ])
   }
-
-  tables <- vapply(named, function(record) record$table, character(1))
-  if (length(in_scope) == 0) {
+  if (nrow(in_scope) == 0) {
     cli::cli_abort(
-      "{.code {token_text}} is defined on table{?s} {.val {tables}},
+      "{.code {{{{{token}}}}}} is defined on table{?s} {.val {named$table}},
        which {?does/do} not appear in this query.",
       call = call
     )
   }
-  qualified <- sprintf("`{{%s.%s}}`", tables, token)
+  qualified <- sprintf("{{%s.%s}}", in_scope$table, token)
   cli::cli_abort(
     c(
-      "{.code {token_text}} is ambiguous here: it is defined on several
+      "{.code {{{{{token}}}}}} is ambiguous here: it is defined on several
        tables in this query.",
-      i = "Qualify the token: {.or {qualified}}."
+      i = "Qualify the token: {.or {.code {qualified}}}."
     ),
     call = call
   )
 }
 
-abort_unknown_token <- function(token_text, records, call) {
-  if (length(records) == 0) {
-    cli::cli_abort(
-      c(
-        "No governed definition matches {.code {token_text}}.",
-        i = "This source has no governed definitions."
-      ),
-      call = call
-    )
+abort_unknown_token <- function(token, defs, call) {
+  available <- sprintf("{{%s}} (%s)", defs$name, defs$table)
+  detail <- if (nrow(defs) == 0) {
+    "This source has no governed definitions."
+  } else {
+    "Available definitions: {.code {available}}."
   }
-  available <- vapply(
-    records,
-    function(record) sprintf("{{%s}} (%s)", record$name, record$table),
-    character(1)
-  )
   cli::cli_abort(
-    c(
-      "No governed definition matches {.code {token_text}}.",
-      i = "Available definitions: {.code {available}}."
-    ),
+    c("No governed definition matches {.code {{{{{token}}}}}}.", i = detail),
     call = call
   )
 }
 
-# ---- delivery ----------------------------------------------------------------
-
-# The ambient system-prompt section: a name-first index, one line per
-# table, grouped by role within the line. The prompt's job is to put names
-# in reach before the first query; depth (descriptions, expansions,
-# caveats) arrives with each table's first-touch entry and via search. A
-# definition's `label` is the index's short hint, for names that don't
-# carry their own semantics --- descriptions deliberately stay out of the
-# prompt. Capped like the glossary so a huge roster degrades to search
-# (see pool_searchable()) rather than bloating every request.
+# A name-first index, one line per table: the prompt's job is to put names in
+# reach, while depth arrives with each table's first-touch entry and via
+# search. Capped like the glossary so a huge roster degrades to search rather
+# than bloating every request.
 definitions_prompt_text <- function(registry, cap_chars = 4000) {
-  lines <- definition_index_lines(registry)
-  if (length(lines) == 0) {
+  index <- definition_index_lines(registry)
+  if (length(index) == 0) {
     return("")
   }
-
-  ambient <- cumsum(nchar(lines)) <= cap_chars
-  # Telling the model the list is complete is what saves it a verification
-  # search; when the roster overflows the cap, search_pool exists to find
-  # the rest.
-  status <- if (all(ambient)) {
+  fits <- cumsum(nchar(index)) <= cap_chars
+  # Naming the roster complete saves the model a verification search.
+  status <- if (all(fits)) {
     "This is the complete set of governed definitions."
   } else {
     "More definitions arrive with their tables' dictionary entries, via context search, and via search_pool."
@@ -552,179 +483,125 @@ definitions_prompt_text <- function(registry, cap_chars = 4000) {
     "SQL before the query runs. Expansion can't add an alias, so write ",
     "`SELECT {{name}} AS name`; metric expressions are already ",
     "aggregates --- never wrap one in SUM() or another aggregate.\n\n",
-    paste(lines[ambient], collapse = "\n"),
-    "\n\n",
-    status
+    paste(c(paste(index[fits], collapse = "\n"), status), collapse = "\n\n")
   )
 }
 
-# Whether the definitions roster exceeds the ambient prompt cap, leaving
-# some discoverable only by search.
 definitions_overflow <- function(registry, cap_chars = 4000) {
-  lines <- definition_index_lines(registry)
-  length(lines) > 0 && !all(cumsum(nchar(lines)) <= cap_chars)
+  !all(cumsum(nchar(definition_index_lines(registry))) <= cap_chars)
 }
 
 definition_index_lines <- function(registry) {
-  records <- registry_records(registry)
-  if (length(records) == 0) {
+  defs <- registry_defs(registry)
+  if (nrow(defs) == 0) {
     return(character())
   }
-  multi_source <- length(unique(vapply(
-    records,
-    function(record) record$source,
-    character(1)
-  ))) > 1
-  scopes <- vapply(
-    records,
-    function(record) {
-      if (multi_source && nzchar(record$source)) {
-        sprintf("%s.%s", record$source, record$table)
-      } else {
-        record$table
-      }
-    },
-    character(1)
+
+  scope <- defs$table
+  if (length(unique(defs$source)) > 1) {
+    scope <- paste(defs$source, defs$table, sep = ".")
+  }
+  # Lazy sources haven't been probed at prompt time; their non-boolean
+  # definitions index as plain expressions.
+  role <- ifelse(is.na(defs$role), "expression", defs$role)
+  label <- flatten_inline(ifelse(is.na(defs$label), "", defs$label))
+  item <- ifelse(
+    nzchar(label),
+    sprintf("`{{%s}}` (%s)", defs$name, label),
+    sprintf("`{{%s}}`", defs$name)
   )
 
+  groups <- c(
+    filter = "filters",
+    dimension = "dimensions",
+    metric = "metrics",
+    expression = "expressions"
+  )
   vapply(
-    unique(scopes),
-    function(scope) {
-      on_scope <- records[scopes == scope]
-      roles <- vapply(
-        on_scope,
-        # Lazy sources haven't been probed at prompt time; their
-        # non-boolean definitions index as plain expressions.
-        function(record) if (is.na(record$role)) "expression" else record$role,
-        character(1)
-      )
-      groups <- c(
-        filter = "filters",
-        dimension = "dimensions",
-        metric = "metrics",
-        expression = "expressions"
-      )
+    unique(scope),
+    function(one) {
       parts <- vapply(
-        names(groups)[names(groups) %in% roles],
-        function(role) {
-          items <- vapply(
-            on_scope[roles == role],
-            definition_index_item,
-            character(1)
+        intersect(names(groups), role[scope == one]),
+        function(r) {
+          sprintf(
+            "%s %s",
+            groups[[r]],
+            paste(item[scope == one & role == r], collapse = ", ")
           )
-          sprintf("%s %s", groups[[role]], paste(items, collapse = ", "))
         },
         character(1)
       )
-      sprintf("- %s: %s", scope, paste(parts, collapse = "; "))
+      sprintf("- %s: %s", one, paste(parts, collapse = "; "))
     },
     character(1)
   )
 }
 
-definition_index_item <- function(record) {
-  item <- sprintf("`{{%s}}`", record$name)
-  label <- flatten_inline(record$label %||% "")
-  if (nzchar(label)) {
-    item <- sprintf("%s (%s)", item, label)
-  }
-  item
-}
-
-# The definitions block of a table's first-touch dictionary entry, with full
-# expansions so the model sees exactly what each token stands for without a
-# context search.
+# A table's first-touch entry carries full expansions, so the model sees
+# exactly what each token stands for without a search.
 definitions_entry_text <- function(definitions) {
   if (length(definitions) == 0) {
     return(NULL)
   }
-  lines <- vapply(
-    names(definitions),
-    function(name) {
-      def <- definitions[[name]]
-      line <- sprintf("- `{{%s}}` (%s)", name, def$type)
-      detail <- flatten_inline(paste(
-        c(def$description %||% character(), def$details %||% character()),
-        collapse = " "
-      ))
-      if (nzchar(detail)) {
-        line <- paste0(line, ": ", detail)
-      }
-      sprintf("%s Expands to `(%s)`.", line, flatten_inline(def$expanded))
-    },
-    character(1)
-  )
   paste0(
     "Governed definitions (write as `{{name}}` tokens in SQL):\n\n",
-    paste(lines, collapse = "\n")
+    paste(
+      sprintf(
+        "- `{{%s}}` %s",
+        names(definitions),
+        definition_gist(definitions)
+      ),
+      collapse = "\n"
+    )
   )
 }
 
-# One searchable chunk per definition, indexed with the rest of the
-# dictionary prose so definitions are retrievable and citable.
+# Indexed with the rest of the dictionary prose, so definitions are
+# retrievable by search and citable.
 definition_context_chunks <- function(dictionary) {
   unlist(lapply(names(dictionary$tables), function(table) {
     definitions <- dictionary$tables[[table]]$definitions
-    vapply(
+    sprintf(
+      "Governed definition `{{%s}}` on table `%s` %s",
       names(definitions),
-      function(name) {
-        def <- definitions[[name]]
-        detail <- flatten_inline(paste(
-          c(def$description %||% character(), def$details %||% character()),
-          collapse = " "
-        ))
-        sprintf(
-          "Governed definition `{{%s}}` on table `%s` (%s): %s Expands to `(%s)`.",
-          name,
-          table,
-          def$type,
-          detail,
-          flatten_inline(def$expanded)
-        )
-      },
-      character(1)
+      table,
+      definition_gist(definitions)
     )
   }))
 }
 
-# The note appended to a run_sql result confirming which definitions were
-# applied, so usage is auditable from the transcript.
-applied_definitions_text <- function(applied) {
-  if (length(applied) == 0) {
-    return(NULL)
-  }
-  lines <- vapply(
-    applied,
-    function(record) {
-      sprintf(
-        "- {{%s}} (%s) expanded to `(%s)`",
-        record$name,
-        record$table,
-        flatten_inline(record$expanded)
+definition_gist <- function(definitions) {
+  vapply(
+    definitions,
+    function(def) {
+      detail <- prose_detail(def$description, def$details)
+      paste0(
+        sprintf("(%s)", def$type),
+        if (nzchar(detail)) paste0(": ", detail),
+        sprintf(" Expands to `(%s)`.", flatten_inline(def$expanded))
       )
     },
     character(1)
   )
+}
+
+# Appended to the run_sql result so definition usage is auditable from the
+# transcript.
+applied_definitions_text <- function(applied) {
+  if (NROW(applied) == 0) {
+    return(NULL)
+  }
+  lines <- sprintf(
+    "- {{%s}} (%s) expanded to `(%s)`",
+    applied$name,
+    applied$table,
+    flatten_inline(applied$expanded)
+  )
   paste0("Applied governed definitions:\n\n", paste(lines, collapse = "\n"))
 }
 
-# Composed from what the agent actually has: the measure-fallback framing
-# only when measures exist, the token surface only when a dictionary
-# declares definitions. For a definitions-only agent, run_sql isn't a
-# fallback from the governed path --- it's the vehicle for it.
-run_sql_description <- function(definitions, measures = list()) {
-  parts <- c(
-    "Run a read-only SELECT query against a data source.",
-    if (length(measures) > 0) {
-      "Use this when no registered measure answers the question."
-    },
-    if (!is.null(definitions) && length(registry_records(definitions)) > 0) {
-      paste0(
-        "Governed definitions (see the system prompt) can be written as ",
-        "{{name}} tokens anywhere in the SQL; each expands to its trusted ",
-        "expression before the query runs."
-      )
-    }
-  )
-  paste(parts, collapse = " ")
+# Fields are absent as NULL in dictionary lists and NA in registry rows.
+prose_detail <- function(description, details) {
+  fields <- c(description, details)
+  flatten_inline(paste(fields[!is.na(fields)], collapse = " "))
 }

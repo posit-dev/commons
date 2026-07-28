@@ -44,7 +44,7 @@
         "        expr: chicken AND revenue < 10"))
     Condition
       Error in `data_dictionary()`:
-      ! Definitions on table "sales" reference each other in a cycle: chicken -> egg -> chicken.
+      ! Definitions on table "sales" reference each other in a cycle: "chicken" and "egg".
 
 # definitions on unexposed tables abort registry construction
 

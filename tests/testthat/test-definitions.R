@@ -93,17 +93,11 @@ test_that("reference cycles error at parse", {
 
 test_that("the registry records definitions with roles from validation", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  defs <- registry_defs(validated_registry(src))
 
-  records <- registry_records(registry)
-  expect_length(records, 3)
-  roles <- vapply(records, function(r) r$role, character(1))
-  names(roles) <- vapply(records, function(r) r$name, character(1))
-  expect_equal(
-    roles,
-    c(emea = "filter", big_revenue = "metric", region_band = "dimension")
-  )
-  expect_true(all(vapply(records, function(r) r$validated, logical(1))))
+  expect_equal(defs$name, c("emea", "big_revenue", "region_band"))
+  expect_equal(defs$role, c("filter", "metric", "dimension"))
+  expect_true(all(defs$validated))
 })
 
 test_that("definitions on unexposed tables abort registry construction", {
@@ -179,10 +173,7 @@ test_that("expansion splices governed expressions into model SQL", {
       "FROM sales GROUP BY (CASE WHEN (region = 'EMEA') THEN 'east' ELSE 'west' END)"
     )
   )
-  expect_equal(
-    vapply(expansion$applied, function(r) r$name, character(1)),
-    c("region_band", "big_revenue")
-  )
+  expect_equal(expansion$applied$name, c("region_band", "big_revenue"))
 
   # EMEA revenues over 600 in test_sales(): 1200 + 750.
   result <- source_query(src, expansion$sql)
@@ -193,15 +184,21 @@ test_that("SQL without tokens passes through expansion untouched", {
   src <- definitions_source()
   registry <- validated_registry(src)
   sql <- "SELECT count(*) FROM sales"
-  expansion <- expand_for_run_sql(registry, list(sales_db = src), src, NULL, sql)
+  expansion <- expand_for_run_sql(
+    registry,
+    list(sales_db = src),
+    src,
+    NULL,
+    sql
+  )
   expect_identical(expansion$sql, sql)
-  expect_length(expansion$applied, 0)
+  expect_null(expansion$applied)
 })
 
 test_that("token resolution errors are actionable", {
   src <- definitions_source()
   registry <- validated_registry(src)
-  records <- registry_records(registry)
+  records <- registry_defs(registry)
 
   expect_snapshot(
     error = TRUE,
@@ -237,7 +234,7 @@ test_that("same-named definitions on several tables disambiguate by scope", {
     dictionary = path
   )
   registry <- validated_registry(src)
-  records <- registry_records(registry)
+  records <- registry_defs(registry)
 
   scoped <- expand_definitions(
     "SELECT count(*) FROM sales WHERE {{deduplicated}}",
@@ -273,7 +270,7 @@ test_that("board-source definitions validate at first expansion", {
 
   # Lazy source: construction-time validation skips it, so no error yet.
   validate_eager_definitions(registry, list(sales_db = src))
-  expect_false(registry_records(registry)[[1]]$validated)
+  expect_false(registry_defs(registry)$validated[[1]])
 
   expect_error(
     expand_for_run_sql(
@@ -340,16 +337,7 @@ test_that("a definition's label is its index hint", {
 })
 
 test_that("the prompt section caps like the glossary", {
-  many <- unlist(lapply(1:400, function(i) {
-    c(
-      sprintf("      - name: filter_%03d", i),
-      "        type: boolean",
-      sprintf("        expr: revenue > %d", i),
-      sprintf("        description: Filter number %d of many.", i)
-    )
-  }))
-  src <- definitions_source(definitions = many)
-  registry <- validated_registry(src)
+  registry <- validated_registry(definitions_source(many_definitions()))
   expect_true(definitions_overflow(registry))
   text <- definitions_prompt_text(registry)
   expect_lt(nchar(text), 6000)

@@ -1,12 +1,9 @@
-handle_producing_tools <- function(private) {
-  c(
+tool_run_r <- function(private) {
+  handle_tools <- c(
     if (length(private$registry) > 0) "call_measure",
-    if (registry_has_metrics(private$definitions)) "query_metrics",
+    if (registry_has_metrics(private$definitions)) "call_metrics",
     "run_sql"
   )
-}
-
-tool_run_r <- function(private) {
   ellmer::tool(
     function(code) {
       promises::then(
@@ -19,9 +16,9 @@ tool_run_r <- function(private) {
       "rendered plots, which are also shown to the user.",
       "The session persists across calls: variables you assign and packages",
       "you load remain available.",
-      sprintf(
-        "Results from %s are preloaded under their advertised handles (r1, r2, ...).",
-        cli::format_inline("{handle_producing_tools(private)}")
+      cli::format_inline(
+        "Results from {handle_tools} are preloaded under their advertised
+         handles (r1, r2, ...)."
       ),
       if (length(private$registry) > 0) {
         paste(

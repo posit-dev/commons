@@ -1,16 +1,9 @@
-# The pool-facing surfaces of the semantic layer: query_metrics, the
-# compiled query tool over dictionary metrics, and search_pool, the one
-# discovery surface spanning measures and definitions.
-
-# ---- query_metrics -----------------------------------------------------------
-
-# The compiled query surface over dictionary metrics, in the shape semantic
-# layers converge on (MetricFlow's query(metrics, group_by, where),
-# Snowflake's SEMANTIC_VIEW): one tool over the pool. Metric, dimension, and
-# filter names are passed as strings and validated at call time against the
-# registry --- the call_measure convention --- so nothing depends on lazy
-# board sources being probed before tool registration.
-query_metrics_impl <- function(
+# call_metrics compiles a governed query over dictionary metrics, in the
+# shape semantic layers converge on: metrics x dimensions x filters, plus
+# simple column predicates. Names are passed as strings and validated at
+# call time, so nothing depends on lazy board sources being probed before
+# tool registration.
+call_metrics_impl <- function(
   registry,
   sources,
   handles,
@@ -23,13 +16,10 @@ query_metrics_impl <- function(
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
   validate_source_definitions(registry, source, label)
-  records <- registry_records(registry, label)
+  defs <- registry_defs(registry, label)
 
-  metric_records <- lapply(
-    metrics,
-    function(name) resolve_pool_name(name, records, role = "metric")
-  )
-  tables <- unique(vapply(metric_records, function(r) r$table, character(1)))
+  metric_defs <- resolve_pool_names(metrics, defs, role = "metric")
+  tables <- unique(metric_defs$table)
   if (length(tables) > 1) {
     cli::cli_abort(
       c(
@@ -38,30 +28,20 @@ query_metrics_impl <- function(
       )
     )
   }
-  table <- tables[[1]]
-  on_table <- records[vapply(
-    records,
-    function(record) identical(record$table, table),
-    logical(1)
-  )]
-  columns <- names(source$dictionary$tables[[table]]$columns)
-
+  on_table <- defs[defs$table == tables, ]
+  columns <- names(source$dictionary$tables[[tables]]$columns)
   con <- source$con
-  id <- DBI::dbQuoteIdentifier(con, source$table_ids[[table]])
-  dims <- lapply(
-    dimensions %||% character(),
-    function(name) resolve_query_dimension(name, on_table, columns, con)
+  id <- DBI::dbQuoteIdentifier(con, source$table_ids[[tables]])
+
+  dim_names <- strip_token_braces(dimensions %||% character())
+  dims <- vapply(
+    rlang::set_names(dim_names),
+    function(name) dimension_sql(name, on_table, columns, con),
+    character(1)
   )
-  filter_records <- lapply(
-    filters %||% character(),
-    function(name) resolve_pool_name(name, on_table, role = "filter")
-  )
+  filter_defs <- resolve_pool_names(filters, on_table, role = "filter")
   conditions <- c(
-    vapply(
-      filter_records,
-      function(record) sprintf("(%s)", record$expanded),
-      character(1)
-    ),
+    sprintf("(%s)", filter_defs$expanded),
     vapply(
       normalize_where(where),
       function(triple) compile_where_triple(triple, columns, con),
@@ -70,23 +50,11 @@ query_metrics_impl <- function(
   )
 
   select <- c(
-    vapply(
-      dims,
-      function(dim) {
-        sprintf("%s AS %s", dim$sql, DBI::dbQuoteIdentifier(con, dim$name))
-      },
-      character(1)
-    ),
-    vapply(
-      metric_records,
-      function(record) {
-        sprintf(
-          "(%s) AS %s",
-          record$expanded,
-          DBI::dbQuoteIdentifier(con, record$name)
-        )
-      },
-      character(1)
+    sprintf("%s AS %s", dims, DBI::dbQuoteIdentifier(con, names(dims))),
+    sprintf(
+      "(%s) AS %s",
+      metric_defs$expanded,
+      DBI::dbQuoteIdentifier(con, metric_defs$name)
     )
   )
   sql <- sprintf("SELECT %s FROM %s", paste(select, collapse = ", "), id)
@@ -94,11 +62,7 @@ query_metrics_impl <- function(
     sql <- sprintf("%s WHERE %s", sql, paste(conditions, collapse = " AND "))
   }
   if (length(dims)) {
-    sql <- sprintf(
-      "%s GROUP BY %s",
-      sql,
-      paste(vapply(dims, function(dim) dim$sql, character(1)), collapse = ", ")
-    )
+    sql <- sprintf("%s GROUP BY %s", sql, paste(dims, collapse = ", "))
   }
 
   result <- source_query(source, sql)
@@ -123,15 +87,11 @@ query_metrics_impl <- function(
   )
 }
 
-# Whether any definition could be a metric. Unvalidated records (lazy board
-# sources) count: their role resolves at first call, and registering the
-# tool can't wait for a probe that deliberately hasn't run.
+# Unvalidated rows (lazy board sources) count: their role resolves at first
+# call, and registering the tool can't wait for a probe that deliberately
+# hasn't run.
 registry_has_metrics <- function(registry) {
-  any(vapply(
-    registry_records(registry),
-    function(record) is.na(record$role) || identical(record$role, "metric"),
-    logical(1)
-  ))
+  any(is.na(registry$defs$role) | registry$defs$role == "metric")
 }
 
 # The prompt teaches `{{name}}` for SQL, so models sometimes pass the
@@ -140,79 +100,54 @@ strip_token_braces <- function(name) {
   gsub("^\\{\\{\\s*|\\s*\\}\\}$", "", trimws(name))
 }
 
-resolve_pool_name <- function(name, records, role) {
-  name <- strip_token_braces(name)
-  hits <- records[vapply(
-    records,
-    function(record) identical(record$name, name),
-    logical(1)
-  )]
-  matched <- hits[vapply(
-    hits,
-    function(record) identical(record$role, role),
-    logical(1)
-  )]
-  if (length(matched) >= 1) {
-    return(matched[[1]])
+resolve_pool_names <- function(names, defs, role) {
+  out <- defs[0, ]
+  for (name in strip_token_braces(names %||% character())) {
+    out <- rbind(out, resolve_pool_name(name, defs, role))
   }
-  if (length(hits)) {
-    other <- hits[[1]]
-    token <- sprintf("{{%s}}", name)
+  out
+}
+
+resolve_pool_name <- function(name, defs, role) {
+  named <- defs[defs$name == name, ]
+  matched <- named[which(named$role == role), ]
+  if (nrow(matched)) {
+    return(matched[1, ])
+  }
+  if (nrow(named)) {
     cli::cli_abort(
-      "{.val {name}} is a {other$role}, not a {role}; apply it as
-       {.code {token}} in SQL instead."
+      "{.val {name}} is a {named$role[[1]]}, not a {role}; apply it as
+       {.code {{{{{name}}}}}} in SQL instead."
     )
   }
-  available <- vapply(records, function(record) record$name, character(1))
-  roles <- vapply(records, function(record) record$role, character(1))
+  available <- defs$name[which(defs$role == role)]
   cli::cli_abort(
     c(
       "No governed {role} is named {.val {name}}.",
-      i = "Available {role}s: {.val {available[roles == role]}}."
+      i = "Available {role}s: {.val {available}}."
     )
   )
 }
 
-# A dimension is either a dimension-role definition (grouped by its
-# expression) or a documented column of the metric's table.
-resolve_query_dimension <- function(name, records, columns, con) {
-  name <- strip_token_braces(name)
-  hits <- records[vapply(
-    records,
-    function(record) identical(record$name, name),
-    logical(1)
-  )]
-  if (length(hits)) {
-    record <- hits[[1]]
-    if (!identical(record$role, "dimension")) {
+dimension_sql <- function(name, defs, columns, con) {
+  named <- defs[defs$name == name, ]
+  if (nrow(named)) {
+    if (!identical(named$role[[1]], "dimension")) {
       cli::cli_abort(
-        "{.val {name}} is a {record$role} and can't be grouped by."
+        "{.val {name}} is a {named$role[[1]]} and can't be grouped by."
       )
     }
-    return(list(sql = sprintf("(%s)", record$expanded), name = name))
+    return(sprintf("(%s)", named$expanded[[1]]))
   }
   if (name %in% columns) {
-    return(list(
-      sql = as.character(DBI::dbQuoteIdentifier(con, name)),
-      name = name
-    ))
+    return(as.character(DBI::dbQuoteIdentifier(con, name)))
   }
-  dimension_names <- vapply(
-    records[vapply(
-      records,
-      function(record) identical(record$role, "dimension"),
-      logical(1)
-    )],
-    function(record) record$name,
-    character(1)
-  )
+  dimensions <- defs$name[which(defs$role == "dimension")]
   cli::cli_abort(
     c(
       "No dimension or documented column is named {.val {name}}.",
       i = "Documented columns: {.val {columns}}.",
-      i = if (length(dimension_names)) {
-        "Governed dimensions: {.val {dimension_names}}."
-      }
+      i = if (length(dimensions)) "Governed dimensions: {.val {dimensions}}."
     )
   )
 }
@@ -273,49 +208,32 @@ compile_where_triple <- function(triple, columns, con) {
   )
 }
 
-# ---- pool search -------------------------------------------------------------
-
-# One discovery surface over the whole semantic layer: measures, metrics,
-# dimensions, and filters, each labeled with its kind and how to invoke it.
-# A metric hit carries its table's filters and dimensions alongside, as the
-# available slicers.
+# One discovery surface over the whole pool: measures and definitions ranked
+# together, so the model doesn't have to guess which kind holds its answer.
 search_pool_text <- function(
   measures,
   registry,
   query,
   source_names = character()
 ) {
-  records <- registry_records(registry)
-  if (length(measures) == 0 && length(records) == 0) {
+  defs <- registry_defs(registry)
+  if (length(measures) == 0 && nrow(defs) == 0) {
     return("The semantic layer is empty.")
   }
 
-  render <- c(
-    lapply(measures, function(td) {
-      function() measure_schema_text(td, source_names = source_names)
-    }),
-    lapply(records, function(record) {
-      function() definition_pool_text(record, records)
-    })
-  )
+  blank_na <- function(x) ifelse(is.na(x), "", x)
   catalog <- c(
     vapply(
       measures,
       function(td) paste(tool_name(td), tool_description(td)),
       character(1)
     ),
-    vapply(
-      records,
-      function(record) {
-        paste(
-          record$name,
-          record$table,
-          record$role,
-          record$description,
-          record$details
-        )
-      },
-      character(1)
+    paste(
+      defs$name,
+      defs$table,
+      blank_na(defs$role),
+      blank_na(defs$description),
+      blank_na(defs$details)
     )
   )
 
@@ -326,58 +244,64 @@ search_pool_text <- function(
       query
     ))
   }
-  blocks <- vapply(render[hits], function(f) f(), character(1))
+  blocks <- vapply(
+    hits,
+    function(hit) {
+      if (hit <= length(measures)) {
+        measure_schema_text(measures[[hit]], source_names = source_names)
+      } else {
+        definition_pool_text(defs[hit - length(measures), ], defs)
+      }
+    },
+    character(1)
+  )
   paste(blocks, collapse = "\n\n")
 }
 
-definition_pool_text <- function(record, records) {
-  role <- if (is.na(record$role)) "expression" else record$role
-  detail <- flatten_inline(paste(
-    c(record$description %||% character(), record$details %||% character()),
-    collapse = " "
-  ))
+definition_pool_text <- function(def, defs) {
+  role <- if (is.na(def$role)) "expression" else def$role
   invoke <- switch(
     role,
     filter = sprintf(
-      "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a query_metrics filter.",
-      record$name
+      "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter.",
+      def$name
     ),
     metric = sprintf(
-      "Query with query_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS %s`.",
-      record$name,
-      record$name,
-      record$name
+      "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS %s`.",
+      def$name,
+      def$name,
+      def$name
     ),
     sprintf(
-      "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a query_metrics dimension.",
-      record$name
+      "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
+      def$name
     )
   )
-  siblings <- if (identical(role, "metric")) {
-    same_table <- records[vapply(
-      records,
-      function(r) identical(r$table, record$table) && !identical(r$name, record$name),
-      logical(1)
-    )]
-    slicers <- vapply(
-      same_table,
-      function(r) {
-        sprintf("{{%s}} (%s)", r$name, if (is.na(r$role)) "expression" else r$role)
-      },
-      character(1)
-    )
-    if (length(slicers)) {
-      sprintf("Slicers on this table: %s.", paste(slicers, collapse = ", "))
+
+  siblings <- NULL
+  if (identical(role, "metric")) {
+    same_table <- defs[defs$table == def$table & defs$name != def$name, ]
+    if (nrow(same_table)) {
+      items <- sprintf(
+        "{{%s}} (%s)",
+        same_table$name,
+        ifelse(is.na(same_table$role), "expression", same_table$role)
+      )
+      siblings <- sprintf(
+        "Filters and dimensions on this table: %s.",
+        paste(items, collapse = ", ")
+      )
     }
   }
+
   paste(
     c(
       sprintf(
         "### {{%s}} --- %s on table `%s`\n%s",
-        record$name,
+        def$name,
         role,
-        record$table,
-        detail
+        def$table,
+        prose_detail(def$description, def$details)
       ),
       invoke,
       siblings
