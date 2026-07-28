@@ -1,44 +1,79 @@
-# Everything whose presence depends on the agent's composition is appended
-# here rather than written in the packaged prompt file: guidance for
-# registered measures only when the agent has measures, governed definitions
-# only when its dictionaries declare them. An agent's prompt should never
-# imply operations it doesn't have.
 commons_system_prompt <- function(
   sources,
   system_prompt,
   definitions = NULL,
   measures = list()
 ) {
+  definitions <- definitions %||% definitions_registry(sources)
   paste0(
     trimws(system_prompt, which = "right"),
-    measures_prompt_text(measures),
+    how_to_answer_text(measures, definitions),
     "\n\n# Available tables\n\n",
     sources_tables_text(sources),
     "\n",
     dictionary_prompt_text(sources),
-    definitions_prompt_text(definitions %||% definitions_registry(sources))
+    definitions_prompt_text(definitions)
   )
 }
 
-measures_prompt_text <- function(measures) {
-  if (length(measures) == 0) {
-    return("")
+# Assembled from the agent's composition rather than written in the packaged
+# prompt file, so the workflow never contradicts the tools the agent has.
+how_to_answer_text <- function(measures, definitions) {
+  has_measures <- length(measures) > 0
+  fallback <- paste0(
+    "search context with `search_context`, inspect relevant tables with ",
+    "`describe_table`, then run a read-only query with `run_sql`."
+  )
+  invoke <- c(
+    if (has_measures) "run a measure with `call_measure`",
+    if (registry_has_metrics(definitions)) {
+      "compute a metric with `call_metrics`"
+    },
+    if (nrow(registry_defs(definitions)) > 0) {
+      "apply a definition as a `{{name}}` token in `run_sql` SQL"
+    }
+  )
+
+  workflow <- if (length(invoke) == 0) {
+    paste0("Search", substring(fallback, nchar("search") + 1))
+  } else {
+    c(
+      paste0(
+        "Governed operations are the preferred way to answer data ",
+        "questions: ",
+        cli::format_inline("{invoke}"),
+        ". ",
+        if (pool_searchable(measures, definitions)) {
+          paste0(
+            "For any question that needs data, your first tool call must be ",
+            "`search_pool` with the user's question — do this even if a ",
+            "table looks easy to query directly, and use the exact names it ",
+            "returns. Do not call `run_sql` or `describe_table` until after ",
+            "you have."
+          )
+        } else {
+          "Every name you can use is indexed below."
+        }
+      ),
+      paste0("When nothing governed answers the question, ", fallback)
+    )
   }
+
+  derive <- paste0(
+    "Query results are stored under handles (`r1`, `r2`, ...) and preloaded ",
+    "into the `run_r` R session. When a result is close to the answer but ",
+    "needs a further derivation — a filter, total, ratio, or ranking — ",
+    "call `run_r` on the stored handle rather than re-deriving it in SQL. ",
+    if (has_measures) {
+      "Prefer a measure's own arguments when they can answer it directly. "
+    },
+    "When a chart would communicate the answer better than text, render ",
+    "one with `run_r`; plots are shown to the user."
+  )
+
   paste0(
-    "\n\n# Registered measures\n\n",
-    "Registered measures are the preferred way to answer data questions. ",
-    "For any question that needs data, your first tool call must be ",
-    "`search_pool` with the user's question. Do this even if a table ",
-    "looks easy to query directly. If `search_pool` returns a relevant ",
-    "measure, call `call_measure` with the exact measure name and argument ",
-    "names returned by `search_pool`.\n\n",
-    "Do not call `run_sql` or `describe_table` until after you have called ",
-    "`search_pool` for the user's question. Use SQL only when ",
-    "`search_pool` does not return a relevant measure. When a measure ",
-    "output is close to the answer but needs a further derivation, call ",
-    "`run_r` on its stored handle rather than rewriting the governed logic ",
-    "with `run_sql`, and prefer the measure's own arguments when they can ",
-    "answer the question directly."
+    "\n\n# How to answer\n\n",
+    paste(c(workflow, derive), collapse = "\n\n")
   )
 }
 
@@ -131,4 +166,3 @@ sources_tables_text <- function(sources) {
 table_bullets <- function(source) {
   paste(sprintf("- %s", list_tables(source)), collapse = "\n")
 }
-

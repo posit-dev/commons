@@ -128,9 +128,8 @@ normalize_citation <- function(x) {
 
 # The citation request rides on the first fallback-tagged tool result of the
 # conversation rather than living in the system prompt, so conversations
-# answered entirely by measures never see it. The agent stores its composed
-# request on the tracker at construction (see Commons$initialize); the
-# default here keeps direct tool use outside an agent working.
+# answered entirely by governed tools never see it. The agent composes its
+# request at construction (see Commons$initialize) and stores it here.
 add_citation_request <- function(result, tracker) {
   if (is.null(tracker) || isTRUE(tracker$requested)) {
     return(result)
@@ -146,24 +145,22 @@ add_citation_request <- function(result, tracker) {
   result
 }
 
-# Composed from the agent's actual trust surface, so the request never
-# implies operations the agent doesn't have (a measure-less agent's answers
-# are all fallback; there is no "measure alone" path to contrast with).
-citation_request_text <- function(has_measures = TRUE, has_definitions = FALSE) {
-  trust_note <- if (has_measures) {
-    paste(
-      "Note: any answer in this conversation that does not come from a",
-      "registered measure alone will be presented to the user as",
-      '"Untrusted" unless you cite trusted text that supports',
-      "your approach."
-    )
-  } else {
-    paste(
-      "Note: answers in this conversation will be presented to the user as",
-      '"Untrusted" unless you cite trusted text that supports',
-      "your approach."
-    )
+citation_request_text <- function(measures = list(), definitions = NULL) {
+  has_measures <- length(measures) > 0
+  has_definitions <- !is.null(definitions) &&
+    nrow(registry_defs(definitions)) > 0
+
+  # Without a tool that answers on its own (call_measure, call_metrics),
+  # every answer is a fallback answer: there is no governed path to contrast
+  # with, so don't imply one.
+  exception <- if (has_measures || registry_has_metrics(definitions)) {
+    " that does not come from a governed tool alone"
   }
+  trust_note <- cli::format_inline(
+    'Note: any answer in this conversation{exception} will be presented to
+     the user as "Untrusted" unless you cite trusted text that supports your
+     approach.'
+  )
   citable <- c(
     "context search results",
     if (has_measures) "measure definitions",
