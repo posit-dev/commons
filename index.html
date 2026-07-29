@@ -46,27 +46,8 @@
   </div>
 </nav><div class="container template-home">
 <div class="row">
-  <main id="main" class="col-md-9"><div class="section level1">
-<div class="page-header"><h1 id="commons">commons<a class="anchor" aria-label="anchor" href="#commons"></a>
-</h1></div>
-<!-- badges: start -->
-
-<p>commons allows you to build correct and easy-to-use self-service data science agents for your organization. For data scientists, commons agents are joyful to build, customize, and maintain, and are designed to be deployed. For end users, commons agents are a joy to use.</p>
-<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>g</mi><mi>i</mi><mi>f</mi></mrow><annotation encoding="application/x-tex">gif</annotation></semantics></math></p>
-<p>commons agents support whatever LLMs your organization has deployed already.</p>
-<p>To get started, configure a database connection with <code><a href="reference/data_source.html">data_source()</a></code> and then two layers on top of it:</p>
-<ul>
-<li>Assemble a <code><a href="reference/semantic_layer.html">semantic_layer()</a></code>, a pool of pre-vetted queries that directly use the definitions defined by your data science team. This can make use of existing semantic layers defined with other technologies, or can be assembled using existing, trusted data artifacts (like dashboards and parameterized reports). The semantic layer is the agents’ happy path, relying on existing, trusted definitions.</li>
-<li>Assemble a <code><a href="reference/context_layer.html">context_layer()</a></code>, a pool of free-text knowledge that the agent can search through when a data query is not covered by the semantic layer. This layer informs how the agent will author fallback SQL queries.</li>
-</ul>
-<p>With those two pieces, you’ve got the necessary pieces to ship on Posit Connect, in Slack/Teams, or via an email inbox. In production, the agent will search the context layer to determine the correct queries to answer user questions (or decline to answer). If you want, commons can log interactions, run live evals, collect metrics (like Thumbs up/down), and integrate with your existing data request intake flows.</p>
-<p>After this initial proof-of-concept, you’ll want to evaluate the agent. Your existing data artifacts provide a source of known-correct analysis flows; with these sources, commons provides a skill to create a set of <strong>offline evals</strong> that allow you to benchmark your agent’s correctness. With these evals in place, you can:</p>
-<ul>
-<li>Test how well various models do, optimizing for cost, correctness, and latency.</li>
-<li>Improve the agent itself. Use commons’ Critique Mode to try out test queries (or see what users have asked in production) and provide feedback on the responses, automatically updating the context layer in the process.</li>
-</ul>
-<p>commons also supports <strong>online validation</strong>, where either monitoring of production traffic for corrective language or follow-up adversarial review across all traffic can surface questionable answers to you in Critique Mode.</p>
-</div>
+  <main id="main" class="col-md-9">
+Build correct and easy-to-use self-service data science agents for your organization. Connect raw data sources and a searchable context layer that demonstrates how to interpret them, then deploy agents that answer data questions, log interactions, and can be evaluated and improved over time.
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
@@ -99,13 +80,7 @@
 </ul>
 </div>
 
-<div class="dev-status">
-<h2 data-toc-skip>Dev status</h2>
-<ul class="list-unstyled">
-<li><a href="https://lifecycle.r-lib.org/articles/stages.html#experimental" class="external-link"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="Lifecycle: experimental"></a></li>
-<li><a href="https://CRAN.R-project.org/package=commons" class="external-link"><img src="https://www.r-pkg.org/badges/version/commons" alt="CRAN status"></a></li>
-</ul>
-</div>
+
 
   </aside>
 </div>
