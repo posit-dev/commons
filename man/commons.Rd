@@ -50,8 +50,10 @@ commons(
 
 Pass values for any \code{{{keyword}}} tokens you add as arguments to
 \code{\link[ellmer:interpolate_file]{ellmer::interpolate_file()}}. commons appends documentation of the
-available tables and data dictionaries to the prompt itself; the file
-needn't (and shouldn't) describe them.}
+available tables and data dictionaries to the prompt itself, along with
+a "How to answer" workflow section assembled from whichever of
+registered measures and governed definitions the agent actually has;
+the file needn't (and shouldn't) describe them.}
 
 \item{log}{Whether to capture conversation trajectories with OpenTelemetry
 (default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content

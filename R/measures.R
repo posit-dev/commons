@@ -223,33 +223,6 @@ is_measure_list <- function(x) {
   is.list(x) && !inherits(x, "ellmer::ToolDef")
 }
 
-search_measures_text <- function(registry, query, source_names = character()) {
-  if (length(registry) == 0) {
-    return("No measures are registered.")
-  }
-
-  catalog <- vapply(
-    registry,
-    function(td) paste(tool_name(td), tool_description(td)),
-    character(1)
-  )
-  hits <- lexical_rank(query, catalog, n = 5)
-  if (length(hits) == 0) {
-    return(sprintf(
-      "No measure matches \"%s\". Consider writing a SQL query.",
-      query
-    ))
-  }
-
-  blocks <- vapply(
-    registry[hits],
-    measure_schema_text,
-    character(1),
-    source_names = source_names
-  )
-  paste(blocks, collapse = "\n\n")
-}
-
 measure_schema_text <- function(td, source_names = character()) {
   props <- tool_properties(td)
   args <- if (length(props) == 0) {

@@ -78,6 +78,12 @@ documented columns with the table's live schema.
 \item When the agent also has a \code{\link[=context_layer]{context_layer()}}, the dictionary's prose is
 indexed for the \code{search_context} tool.
 }
+
+A table's entry can also declare \code{definitions}: named, governed SQL
+expressions with declared types that the model applies as \code{{{name}}}
+tokens in \code{run_sql} queries, expanded to their trusted SQL before the
+query runs. Definitions are validated against the live source and
+delivered through all three channels above.
 }
 
 \section{Trust}{

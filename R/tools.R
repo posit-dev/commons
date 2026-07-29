@@ -1,39 +1,137 @@
+# Register only the tools the agent's composition earns; nothing about its
+# surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
-  list(
-    tool_search_measures(private),
-    tool_call_measure(private),
-    tool_search_context(private),
-    tool_describe_table(private),
-    tool_run_sql(private),
-    tool_run_r(private)
+  c(
+    if (pool_searchable(private$registry, private$definitions)) {
+      list(tool_search_pool(private))
+    },
+    if (length(private$registry) > 0) list(tool_call_measure(private)),
+    if (registry_has_metrics(private$definitions)) {
+      list(tool_call_metrics(private))
+    },
+    list(
+      tool_search_context(private),
+      tool_describe_table(private),
+      tool_run_sql(private),
+      tool_run_r(private)
+    )
   )
 }
 
-tool_search_measures <- function(private) {
+# Measures are never listed in the system prompt, and definitions past their
+# ambient cap aren't either; a search tool over a fully visible pool would
+# just cost the model a verification round trip.
+pool_searchable <- function(measures, definitions) {
+  length(measures) > 0 || definitions_overflow(definitions)
+}
+
+tool_search_pool <- function(private) {
   source_names <- if (length(private$sources) > 1) {
     names(private$sources)
   } else {
     character()
   }
+  kinds <- c(
+    if (length(private$registry) > 0) "measures (run with call_measure)",
+    if (nrow(registry_defs(private$definitions)) > 0) {
+      "governed definitions (apply as {{name}} tokens in run_sql, or through call_metrics)"
+    }
+  )
   ellmer::tool(
     function(query) {
-      body <- search_measures_text(private$registry, query, source_names)
+      body <- search_pool_text(
+        private$registry,
+        private$definitions,
+        query,
+        source_names
+      )
       tool_result(
         body,
-        title = "Searched measures",
+        title = "Searched the semantic layer",
         icon = maybe_icon("search")
       )
     },
-    "Search registered measures. Returns matching measures with their argument schemas. Use this before call_measure.",
+    sprintf(
+      "Search the semantic layer's governed operations: %s. Use this before writing your own SQL.",
+      paste(kinds, collapse = " and ")
+    ),
     arguments = list(
       query = ellmer::type_string(
-        "What you want to measure, in plain language."
+        "What you want to compute, in plain language."
       )
     ),
-    name = "search_measures",
+    name = "search_pool",
     annotations = ellmer::tool_annotations(
-      title = "Search measures",
+      title = "Search the semantic layer",
       icon = maybe_icon("search"),
+      read_only_hint = TRUE
+    )
+  )
+}
+
+tool_call_metrics <- function(private) {
+  ellmer::tool(
+    function(
+      metrics,
+      dimensions = NULL,
+      filters = NULL,
+      where = NULL,
+      source = NULL
+    ) {
+      call_metrics_impl(
+        private$definitions,
+        private$sources,
+        private$handles,
+        metrics = metrics,
+        dimensions = dimensions,
+        filters = filters,
+        where = where,
+        source_name = source
+      )
+    },
+    sprintf(
+      "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from %s; commons compiles and runs the query.",
+      if (pool_searchable(private$registry, private$definitions)) {
+        "the system prompt or search_pool"
+      } else {
+        "the system prompt"
+      }
+    ),
+    arguments = list(
+      metrics = ellmer::type_array(
+        ellmer::type_string(),
+        "Metric names to compute. All metrics in one call must belong to the same table."
+      ),
+      dimensions = ellmer::type_array(
+        ellmer::type_string(),
+        "Dimension or documented column names to group by.",
+        required = FALSE
+      ),
+      filters = ellmer::type_array(
+        ellmer::type_string(),
+        "Governed filter names to apply.",
+        required = FALSE
+      ),
+      where = ellmer::type_array(
+        ellmer::type_object(
+          column = ellmer::type_string("A documented column name."),
+          op = ellmer::type_enum(
+            c("=", "!=", "<", "<=", ">", ">="),
+            "Comparison operator."
+          ),
+          value = ellmer::type_string(
+            "The comparison value; numbers and dates as plain strings."
+          )
+        ),
+        "Simple column predicates, e.g. a date range.",
+        required = FALSE
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "call_metrics",
+    annotations = ellmer::tool_annotations(
+      title = "Metrics",
+      icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
   )
@@ -51,12 +149,10 @@ tool_call_measure <- function(private) {
         sources = private$sources
       )
     },
-    # For small registries, we may eventually expose each measure schema upfront
-    # instead of relying on search_measures for discovery.
-    "Run a registered measure returned by search_measures. `arguments` is a JSON object using exactly the argument names from search_measures.",
+    "Run a registered measure returned by search_pool. `arguments` is a JSON object using exactly the argument names from search_pool.",
     arguments = list(
       name = ellmer::type_string(
-        "The measure name, exactly as returned by search_measures."
+        "The measure name, exactly as returned by search_pool."
       ),
       arguments = ellmer::type_string(
         "A JSON object of the measure's arguments."
@@ -118,16 +214,24 @@ tool_describe_table <- function(private) {
 tool_run_sql <- function(private) {
   ellmer::tool(
     function(sql, source = NULL) {
+      src <- resolve_sql_source(private$sources, source)
+      expansion <- expand_for_run_sql(
+        private$definitions,
+        private$sources,
+        source,
+        sql
+      )
       res <- run_sql_tool(
-        resolve_sql_source(private$sources, source),
-        sql,
+        src,
+        expansion$sql,
         source_name = source,
         tracker = private$first_touch,
-        handles = private$handles
+        handles = private$handles,
+        applied = expansion$applied
       )
       add_citation_request(res, private$citation_request)
     },
-    "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question.",
+    run_sql_description(private$definitions, private$registry),
     arguments = list(
       sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect."),
       source = sql_source_type(private$sources)
@@ -139,6 +243,23 @@ tool_run_sql <- function(private) {
       read_only_hint = TRUE
     )
   )
+}
+
+run_sql_description <- function(definitions, measures = list()) {
+  parts <- c(
+    "Run a read-only SELECT query against a data source.",
+    if (length(measures) > 0) {
+      "Use this when no registered measure answers the question."
+    },
+    if (!is.null(definitions) && nrow(registry_defs(definitions)) > 0) {
+      paste0(
+        "Governed definitions can be written as {{name}} tokens anywhere ",
+        "in the SQL; each expands to its trusted expression before the ",
+        "query runs."
+      )
+    }
+  )
+  paste(parts, collapse = " ")
 }
 
 # With one source there's nothing to choose, so the model never sees the
@@ -247,15 +368,17 @@ run_sql_tool <- function(
   sql,
   source_name = NULL,
   tracker = NULL,
-  handles = NULL
+  handles = NULL,
+  applied = NULL
 ) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
   display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
   advert <- register_handle(handles, res)
+  note <- applied_definitions_text(applied)
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
   tool_result(
-    paste(c(body, advert, entries), collapse = "\n\n"),
+    paste(c(body, note, advert, entries), collapse = "\n\n"),
     title = sprintf("Ran SQL%s", source_label(source_name)),
     icon = maybe_icon("code-square"),
     markdown = display_md,

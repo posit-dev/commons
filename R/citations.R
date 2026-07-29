@@ -5,8 +5,8 @@
 # commentary shown alongside it. See derive_provenance() for how verification
 # affects an answer's provenance tag.
 
-# Everything citable: context layer docs, always-on facts, measure schemas
-# (as search_measures presents them), and dictionary entries (as first touch
+# Everything citable: context layer docs, measure schemas (as
+# search_pool presents them), and dictionary entries (as first touch
 # delivers them). Labels are user-facing; they name the source in a footnote
 # tooltip.
 build_citation_corpus <- function(context_layer, registry, sources) {
@@ -19,8 +19,7 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   }
 
   add("context layer", context_layer$docs %||% character())
-  add("context layer", context_layer$always %||% character())
-  # Mirror tool_search_measures(): source lines only appear in schemas when
+  # Mirror search_pool's measure blocks: source lines only appear in schemas when
   # the agent has several sources, and quotes must match what was presented.
   source_names <- if (length(sources) > 1) names(sources) else character()
   for (td in registry) {
@@ -129,14 +128,15 @@ normalize_citation <- function(x) {
 
 # The citation request rides on the first fallback-tagged tool result of the
 # conversation rather than living in the system prompt, so conversations
-# answered entirely by measures never see it.
+# answered entirely by governed tools never see it. The agent composes its
+# request at construction (see Commons$initialize) and stores it here.
 add_citation_request <- function(result, tracker) {
   if (is.null(tracker) || isTRUE(tracker$requested)) {
     return(result)
   }
   tracker$requested <- TRUE
 
-  request <- citation_request_text()
+  request <- tracker$request %||% citation_request_text()
   if (is.character(result@value)) {
     result@value <- paste(c(result@value, request), collapse = "\n\n")
   } else {
@@ -145,12 +145,31 @@ add_citation_request <- function(result, tracker) {
   result
 }
 
-citation_request_text <- function() {
-  paste(
-    readLines(
-      system.file("prompts/citation-request.md", package = "commons"),
-      warn = FALSE
-    ),
-    collapse = "\n"
+citation_request_text <- function(measures = list(), definitions = NULL) {
+  has_measures <- length(measures) > 0
+  has_definitions <- !is.null(definitions) &&
+    nrow(registry_defs(definitions)) > 0
+
+  # Without a tool that answers on its own (call_measure, call_metrics),
+  # every answer is a fallback answer: there is no governed path to contrast
+  # with, so don't imply one.
+  exception <- if (has_measures || registry_has_metrics(definitions)) {
+    " that does not come from a governed tool alone"
+  }
+  trust_note <- cli::format_inline(
+    'Note: any answer in this conversation{exception} will be presented to
+     the user as "Untrusted" unless you cite trusted text that supports your
+     approach.'
   )
+  citable <- c(
+    "context search results",
+    if (has_measures) "measure definitions",
+    if (has_definitions) "governed definitions",
+    "data documentation"
+  )
+  as.character(ellmer::interpolate_file(
+    system.file("prompts/citation-request.md", package = "commons"),
+    trust_note = trust_note,
+    citable_sources = cli::format_inline("{.or {citable}}")
+  ))
 }

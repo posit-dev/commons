@@ -80,6 +80,48 @@ test_that("trivial quotes cannot promote an answer", {
   expect_true(is.na(match_citation("tax", corpus)))
 })
 
+test_that("the citation corpus spans context, measures, and dictionaries", {
+  skip_if_not_installed("yaml")
+  fact <- withr::local_tempfile(fileext = ".md")
+  writeLines("Fiscal year starts in February.", fact)
+  layer <- context_layer(files = fact)
+  registry <- list(order_count = count_measure_tool())
+  path <- withr::local_tempfile(fileext = ".yaml")
+  writeLines(
+    c(
+      '$version: "0.1.0"',
+      "name: retail sales",
+      "tables:",
+      "  - name: sales",
+      "    description: One row per order line.",
+      "    columns:",
+      "      - name: revenue",
+      "        description: Booked revenue, net of discounts."
+    ),
+    path
+  )
+  source <- data_source(sales = test_sales(), dictionary = path)
+
+  corpus <- build_citation_corpus(
+    augment_context_layer(layer, list(source)),
+    registry,
+    list(source)
+  )
+
+  expect_false(is.na(match_citation("Fiscal year starts in February.", corpus)))
+  expect_equal(
+    match_citation(
+      "Count orders, optionally filtered by region and a revenue ceiling.",
+      corpus
+    ),
+    "measure 'order_count'"
+  )
+  expect_equal(
+    match_citation("Booked revenue, net of discounts.", corpus),
+    "data dictionary, table 'sales'"
+  )
+})
+
 test_that("corpus measure text matches multi-source presentation", {
   registry <- list(
     region_revenue = measure(
@@ -93,7 +135,7 @@ test_that("corpus measure text matches multi-source presentation", {
 
   corpus <- build_citation_corpus(NULL, registry, sources)
 
-  # search_measures presents a `sources:` line to multi-source agents; a
+  # search_pool presents a `sources:` line to multi-source agents; a
   # verbatim quote spanning it must verify.
   expect_equal(
     match_citation(

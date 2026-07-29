@@ -38,8 +38,10 @@
 #'
 #'   Pass values for any `{{keyword}}` tokens you add as arguments to
 #'   [ellmer::interpolate_file()]. commons appends documentation of the
-#'   available tables and data dictionaries to the prompt itself; the file
-#'   needn't (and shouldn't) describe them.
+#'   available tables and data dictionaries to the prompt itself, along with
+#'   a "How to answer" workflow section assembled from whichever of
+#'   registered measures and governed definitions the agent actually has;
+#'   the file needn't (and shouldn't) describe them.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -185,6 +187,7 @@ Commons <- R6::R6Class(
       private$sources <- sources
       private$context_layer <- augment_context_layer(context_layer, sources)
       private$first_touch <- new.env(parent = emptyenv())
+      private$definitions <- definitions_registry(sources)
       private$registry <- semantic_layer$measures
       private$fn_sources <- semantic_layer$fn_sources
       private$injections <- resolve_injections(
@@ -202,7 +205,8 @@ Commons <- R6::R6Class(
         attributes = list(
           "commons.agent.n_data_sources" = length(sources),
           "commons.agent.has_context_layer" = !is.null(context_layer),
-          "commons.agent.n_measures" = length(semantic_layer$measures)
+          "commons.agent.n_measures" = length(semantic_layer$measures),
+          "commons.agent.n_definitions" = nrow(private$definitions$defs)
         )
       )
 
@@ -214,10 +218,19 @@ Commons <- R6::R6Class(
         sources
       )
       private$citation_request <- new.env(parent = emptyenv())
+      private$citation_request$request <- citation_request_text(
+        private$registry,
+        private$definitions
+      )
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
-        commons_system_prompt(private$sources, system_prompt)
+        commons_system_prompt(
+          private$sources,
+          system_prompt,
+          private$definitions,
+          measures = private$registry
+        )
       )
     },
 
@@ -301,6 +314,7 @@ Commons <- R6::R6Class(
     sources = NULL,
     context_layer = NULL,
     registry = NULL,
+    definitions = NULL,
     fn_sources = NULL,
     injections = NULL,
     conversation_id = NULL,

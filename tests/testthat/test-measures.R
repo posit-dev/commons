@@ -94,16 +94,16 @@ test_that("validate_measure_args enforces required arguments", {
   expect_snapshot(validate_measure_args(td, list()), error = TRUE)
 })
 
-test_that("search_measures_text surfaces matches with their schema", {
+test_that("search_pool_text surfaces matches with their schema", {
   registry <- list(order_count = count_measure_tool())
-  out <- search_measures_text(registry, "how many orders")
+  out <- search_pool_text(registry, empty_definitions(), "how many orders")
 
   expect_match(out, "order_count")
   expect_match(out, "revenue_under")
   expect_match(out, "EMEA")
 })
 
-test_that("search_measures_text notes measure sources when given source names", {
+test_that("search_pool_text notes measure sources when given source names", {
   registry <- list(
     region_revenue = measure(
       "region_revenue",
@@ -113,8 +113,9 @@ test_that("search_measures_text notes measure sources when given source names", 
     )
   )
 
-  out <- search_measures_text(
+  out <- search_pool_text(
     registry,
+    empty_definitions(),
     "revenue for a region",
     source_names = c("warehouse", "finance")
   )
@@ -123,15 +124,15 @@ test_that("search_measures_text notes measure sources when given source names", 
   expect_no_match(out, "cache")
 
   expect_no_match(
-    search_measures_text(registry, "revenue for a region"),
+    search_pool_text(registry, empty_definitions(), "revenue for a region"),
     "sources:"
   )
 })
 
-test_that("search_measures_text reports when nothing matches", {
+test_that("search_pool_text reports when nothing matches", {
   registry <- list(order_count = count_measure_tool())
   expect_match(
-    search_measures_text(registry, "weather forecast"),
-    "No measure"
+    search_pool_text(registry, empty_definitions(), "weather forecast"),
+    "Nothing in the semantic layer"
   )
 })

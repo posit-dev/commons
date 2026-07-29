@@ -1,18 +1,15 @@
-Note: any answer in this conversation that does not come from a registered
-measure alone will be presented to the user as "Untrusted"
-unless you cite trusted text that supports your approach.
+{{trust_note}}
 
-If exact text you have seen in this conversation from context search
-results, measure definitions, or data documentation supports the way you
-computed an answer, end your reply with one citation per supporting excerpt:
+If exact text you have seen in this conversation from {{citable_sources}}
+supports the way you computed an answer, end your reply with one citation per
+supporting excerpt:
 
 <citation reason="Why this supports the answer">the supporting text, quoted exactly</citation>
 
 Rules:
 
 - Quote the text verbatim. Citations are verified by exact text match against
-  the agent's context, measure definitions, and data documentation, and are
-  dropped if no match is found.
+  {{citable_sources}}, and are dropped if no match is found.
 - Keep each citation on a single line.
 - Give each citation a very short reason — a phrase, not a sentence — saying
   how the quoted text supports your answer. It is shown to the user as the
