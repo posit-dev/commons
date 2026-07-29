@@ -7,56 +7,25 @@
 
 [![Lifecycle:
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-[![CRAN
-status](https://www.r-pkg.org/badges/version/commons)](https://CRAN.R-project.org/package=commons)
 <!-- badges: end -->
 
-commons allows you to build correct and easy-to-use self-service data
-science agents for your organization. For data scientists, commons
-agents are joyful to build, customize, and maintain, and are designed to
-be deployed. For end users, commons agents are a joy to use.
+> This package is highly experimental; expect its interface to change
+> rapidly.
 
-$$gif$$
+commons allows data scientists to build self-service data agents for
+their organization.
 
-commons agents support whatever LLMs your organization has deployed
-already.
+commons agents use a pool of trusted calculations drawn from your
+existing work, like Shiny apps and Quarto docs, to answer questions.
+(You can also import existing trusted calculations from semantic layers
+in Snowflake and Databricks.) When the question can’t be answered by a
+trusted calculation, the agent can search across context you’ve compiled
+to query data directly, and the response will be deterministically
+tagged as untrusted.
 
-To get started, configure a database connection with `data_source()` and
-then two layers on top of it:
+commons agents support a wide variety of LLM providers via
+[ellmer](https://ellmer.tidyverse.org/). Extracted context is stored in
+plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R`
+files.
 
-- Assemble a `semantic_layer()`, a pool of pre-vetted queries that
-  directly use the definitions defined by your data science team. This
-  can make use of existing semantic layers defined with other
-  technologies, or can be assembled using existing, trusted data
-  artifacts (like dashboards and parameterized reports). The semantic
-  layer is the agents’ happy path, relying on existing, trusted
-  definitions.
-- Assemble a `context_layer()`, a pool of free-text knowledge that the
-  agent can search through when a data query is not covered by the
-  semantic layer. This layer informs how the agent will author fallback
-  SQL queries.
-
-With those two pieces, you’ve got the necessary pieces to ship on Posit
-Connect, in Slack/Teams, or via an email inbox. In production, the agent
-will search the context layer to determine the correct queries to answer
-user questions (or decline to answer). If you want, commons can log
-interactions, run live evals, collect metrics (like Thumbs up/down), and
-integrate with your existing data request intake flows.
-
-After this initial proof-of-concept, you’ll want to evaluate the agent.
-Your existing data artifacts provide a source of known-correct analysis
-flows; with these sources, commons provides a skill to create a set of
-**offline evals** that allow you to benchmark your agent’s correctness.
-With these evals in place, you can:
-
-- Test how well various models do, optimizing for cost, correctness, and
-  latency.
-- Improve the agent itself. Use commons’ Critique Mode to try out test
-  queries (or see what users have asked in production) and provide
-  feedback on the responses, automatically updating the context layer in
-  the process.
-
-commons also supports **online validation**, where either monitoring of
-production traffic for corrective language or follow-up adversarial
-review across all traffic can surface questionable answers to you in
-Critique Mode.
+To learn more, see `vignette("commons")`.

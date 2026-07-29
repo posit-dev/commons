@@ -632,9 +632,9 @@ table_entry_id <- function(table, call = rlang::caller_env()) {
 
 table_id_label <- function(id, call = rlang::caller_env()) {
   components <- id@name
-  table <- components[["table"]]
+  table <- components["table"]
 
-  if (is.null(table) || is.na(table)) {
+  if (is.na(table)) {
     cli::cli_abort(
       "{.cls DBI::Id} entries in {.arg tables} must include a {.arg table} component.",
       call = call
