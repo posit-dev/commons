@@ -115,7 +115,12 @@ definitions of glossary terms it references. <code>describe_table</code> merges
 documented columns with the table's live schema.</p></li>
 <li><p>When the agent also has a <code><a href="context_layer.html">context_layer()</a></code>, the dictionary's prose is
 indexed for the <code>search_context</code> tool.</p></li>
-</ul></div>
+</ul><p>A table's entry can also declare <code>definitions</code>: named, governed SQL
+expressions with declared types that the model applies as <code>{{name}}</code>
+tokens in <code>run_sql</code> queries, expanded to their trusted SQL before the
+query runs. Definitions are validated against the live source and
+delivered through all three channels above.</p>
+    </div>
     <div class="section level2">
     <h2 id="trust">Trust<a class="anchor" aria-label="anchor" href="#trust"></a></h2>
 
@@ -134,7 +139,7 @@ connection, still open it in read-only mode where the backend supports it.</p>
 <span class="r-in"><span>  sales <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, revenue <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> duckdb keeps downloaded extensions and secrets in a temporary directory:</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #0000BB;">ℹ</span> /tmp/RtmpN29s7g/duckdb</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #0000BB;">ℹ</span> /tmp/RtmpRsvhBj/duckdb</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> This is removed when the R session ends.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">•</span> Extensions are re-downloaded each session.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> <span style="color: #00BBBB;">•</span> Secrets are lost.</span>

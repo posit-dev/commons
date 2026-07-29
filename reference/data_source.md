@@ -97,6 +97,12 @@ reaches the agent three ways:
   [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md),
   the dictionary's prose is indexed for the `search_context` tool.
 
+A table's entry can also declare `definitions`: named, governed SQL
+expressions with declared types that the model applies as `{{name}}`
+tokens in `run_sql` queries, expanded to their trusted SQL before the
+query runs. Definitions are validated against the live source and
+delivered through all three channels above.
+
 ## Trust
 
 The `run_sql` tool runs only read-only `SELECT` queries; statements that
@@ -114,7 +120,7 @@ src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))
 )
 #> duckdb keeps downloaded extensions and secrets in a temporary directory:
-#> ℹ /tmp/RtmpN29s7g/duckdb
+#> ℹ /tmp/RtmpRsvhBj/duckdb
 #> This is removed when the R session ends.
 #> • Extensions are re-downloaded each session.
 #> • Secrets are lost.

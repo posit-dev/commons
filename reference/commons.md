@@ -72,8 +72,10 @@ commons(
   Pass values for any `{{keyword}}` tokens you add as arguments to
   [`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html).
   commons appends documentation of the available tables and data
-  dictionaries to the prompt itself; the file needn't (and shouldn't)
-  describe them.
+  dictionaries to the prompt itself, along with a "How to answer"
+  workflow section assembled from whichever of registered measures and
+  governed definitions the agent actually has; the file needn't (and
+  shouldn't) describe them.
 
 - log:
 

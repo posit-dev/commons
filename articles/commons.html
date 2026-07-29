@@ -178,20 +178,63 @@ trust: the dictionary describes what the raw data <em>is</em>, the
 semantic layer defines how governed metrics are <em>computed</em>, and
 the context layer holds the less-structured remainder.</p>
 </div>
+<div class="section level3">
+<h3 id="governed-definitions">Governed definitions<a class="anchor" aria-label="anchor" href="#governed-definitions"></a>
+</h3>
+<p>A table’s dictionary entry can also carry <code>definitions</code>:
+named, governed SQL expressions over that table’s rows, each with a
+declared type. Boolean definitions act as filters, aggregates as
+metrics, and everything else as derived dimensions. An expression can
+reference a sibling definition by its bare name.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> orders</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="at">    </span><span class="fu">definitions</span><span class="kw">:</span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> realized</span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> boolean</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Orders that actually shipped (status 90).</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="at">        </span><span class="fu">expr</span><span class="kw">:</span><span class="at"> status_cd = 90</span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> net_revenue</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> number(quantity)</span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Total realized order value, net of discounts.</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="at">        </span><span class="fu">expr</span><span class="kw">:</span><span class="at"> SUM(total * adj_fctr) FILTER (WHERE realized)</span></span></code></pre></div>
+<p>The model writes a definition as a <code>{{name}}</code> token
+anywhere in its <code>run_sql</code> SQL —
+<code>WHERE {{realized}}</code>,
+<code>SELECT {{net_revenue}} AS net_revenue</code> — and commons expands
+the token to the governed expression before the query runs, so the
+trusted fragment lands byte-exact and the tool result records which
+definitions were applied. Each definition is validated against the live
+source (a typo’d column fails agent construction with the definition
+named), listed briefly in the system prompt, delivered in full with its
+table’s first-touch entry, and searchable with the rest of the
+dictionary.</p>
+<p>Metrics are also queryable directly: the <code>call_metrics</code>
+tool takes metric, dimension, and filter names plus simple column
+predicates, and commons compiles and runs the grouped query — a governed
+call in the shape of mainstream semantic-layer queries, with every
+identifier drawn from the dictionary. The <code>search_pool</code> tool
+searches measures and definitions together, labeling each result with
+its kind and how to invoke it.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="defining-the-semantic-layer">Defining the semantic layer<a class="anchor" aria-label="anchor" href="#defining-the-semantic-layer"></a>
 </h2>
-<p>The semantic layer is currently composed of measures. A measure is an
-ordinary R function wrapped with metadata that tells the model what it
-computes and what arguments it accepts.</p>
+<p>The semantic layer is the agent’s pool of trusted operations.
+Governed definitions (above) cover computations expressible as SQL over
+documented tables; measures cover everything R can do beyond that. A
+measure is an ordinary R function wrapped with metadata that tells the
+model what it computes and what arguments it accepts — reach for one
+when a computation needs call-time parameters or methodology that
+shouldn’t live in SQL (model fits, forecasts, multi-source
+stitching).</p>
 <p>Measures should use definitions your team already trusts: existing
 metric functions, SQL saved in reports, semantic-layer APIs, or
 calculations from production dashboards. The wrapper should be
 maintainable and thin. When an existing definition can be extended with
 a filter or grouping argument, prefer that over adding another
 near-duplicate measure.</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># R/semantic_layer.R</span></span>
 <span></span>
 <span><span class="co">#' Revenue by Region</span></span>
@@ -226,7 +269,7 @@ near-duplicate measure.</p>
 <span>  <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">warehouse</span>, <span class="va">sql</span><span class="op">)</span></span>
 <span><span class="op">}</span></span></code></pre></div>
 <p>Then collect the documented measures into a semantic layer:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent_semantics</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/semantic_layer.html">semantic_layer</a></span><span class="op">(</span><span class="st">"R/semantic_layer.R"</span><span class="op">)</span></span></code></pre></div>
 <p>commons parses roxygen blocks marked with <code>@measure</code>,
 sources the file, and registers those functions as governed tools.</p>
@@ -244,7 +287,7 @@ create the semantic layer anywhere, even before connecting to a
 database.</p>
 <p>For objects that aren’t data sources, such as a pins board or an API
 client, give the argument a default that builds the object:</p>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co">#' @param start_date `string` Start date, YYYY-MM-DD.</span></span>
 <span><span class="co">#' @measure</span></span>
 <span><span class="va">new_leads</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">start_date</span>, <span class="va">board</span> <span class="op">=</span> <span class="fu">pins</span><span class="fu">::</span><span class="fu"><a href="https://pins.rstudio.com/reference/board_connect.html" class="external-link">board_connect</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
@@ -270,7 +313,7 @@ systems such as Confluence. Structured table and column documentation is
 better attached to the data source as a dictionary (see above). Facts
 that should be in every prompt belong in the system prompt file (see
 “Customizing the system prompt” below).</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># R/context_layer.R</span></span>
 <span><span class="va">agent_context</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/context_layer.html">context_layer</a></span><span class="op">(</span></span>
 <span>  files <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
@@ -284,7 +327,7 @@ that should be in every prompt belong in the system prompt file (see
 </h2>
 <p>A minimal Shiny app wires the layers together and gives the agent a
 chat UI:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># app.R</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://shiny.posit.co/" class="external-link">shiny</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://rstudio.github.io/bslib/" class="external-link">bslib</a></span><span class="op">)</span></span>
@@ -316,7 +359,7 @@ chat UI:</p>
 </h2>
 <p>The system prompt is a markdown file you own. commons ships a
 default; copy it into your project and edit it freely:</p>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts"</span>, <span class="st">"system-prompt.md"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>,</span>
 <span>  <span class="st">"system-prompt.md"</span></span>
@@ -325,7 +368,7 @@ default; copy it into your project and edit it freely:</p>
 dictionaries to the prompt itself, so the file needn’t describe them.
 Then interpolate your copy and pass the result to
 <code>system_prompt</code>:</p>
-<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
 <span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
@@ -339,7 +382,7 @@ keyword, <code>{{date}}</code>. Continue passing in
 <code>date = Sys.Date()</code> as long as your prompt copy retains the
 <code>{{date}}</code> keyword, and supply values for any additional
 keywords that you added to your prompt:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
 <span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
@@ -372,7 +415,7 @@ automatically when no OTel exporter is set up, writing to
 reading them requires editor-level access. To let named colleagues
 review them, pass their Connect usernames to <code>share_with</code> and
 they’ll be added as collaborators on the content:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
 <span>  log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
