@@ -1,8 +1,7 @@
 # call_metrics compiles a governed query over dictionary metrics, in the
 # shape semantic layers converge on: metrics x dimensions x filters, plus
 # simple column predicates. Names are passed as strings and validated at
-# call time, so nothing depends on lazy board sources being probed before
-# tool registration.
+# call time.
 call_metrics_impl <- function(
   registry,
   sources,
@@ -15,7 +14,6 @@ call_metrics_impl <- function(
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
-  validate_source_definitions(registry, source, label)
   defs <- registry_defs(registry, label)
 
   metric_defs <- resolve_pool_names(metrics, defs, role = "metric")
@@ -87,11 +85,8 @@ call_metrics_impl <- function(
   )
 }
 
-# Unvalidated rows (lazy board sources) count: their role resolves at first
-# call, and registering the tool can't wait for a probe that deliberately
-# hasn't run.
 registry_has_metrics <- function(registry) {
-  any(is.na(registry$defs$role) | registry$defs$role == "metric")
+  any(registry$defs$role == "metric")
 }
 
 # The prompt teaches `{{name}}` for SQL, so models sometimes pass the
@@ -231,7 +226,7 @@ search_pool_text <- function(
     paste(
       defs$name,
       defs$table,
-      blank_na(defs$role),
+      defs$role,
       blank_na(defs$description),
       blank_na(defs$details)
     )
@@ -259,7 +254,7 @@ search_pool_text <- function(
 }
 
 definition_pool_text <- function(def, defs) {
-  role <- if (is.na(def$role)) "expression" else def$role
+  role <- def$role
   invoke <- switch(
     role,
     filter = sprintf(
@@ -285,7 +280,7 @@ definition_pool_text <- function(def, defs) {
       items <- sprintf(
         "{{%s}} (%s)",
         same_table$name,
-        ifelse(is.na(same_table$role), "expression", same_table$role)
+        same_table$role
       )
       siblings <- sprintf(
         "Filters and dimensions on this table: %s.",

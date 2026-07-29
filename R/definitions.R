@@ -57,7 +57,39 @@ normalize_dictionary_definitions <- function(
     )
   }
 
-  resolve_definition_references(definitions, table, call = call)
+  definitions <- resolve_definition_references(definitions, table, call = call)
+  for (name in names(definitions)) {
+    definitions[[name]]$role <- definition_role(
+      definitions[[name]],
+      name,
+      table,
+      call = call
+    )
+  }
+  definitions
+}
+
+definition_role <- function(def, name, table, call = rlang::caller_env()) {
+  aggregate <- grepl(
+    "\\b(sum|count|avg|min|max)\\s*\\(",
+    strip_sql_literals(def$expanded),
+    ignore.case = TRUE
+  )
+  if (definition_base_type(def$type) != "boolean") {
+    return(if (aggregate) "metric" else "dimension")
+  }
+  if (aggregate) {
+    cli::cli_abort(
+      c(
+        "Boolean definition {.val {name}} on table {.val {table}} can't
+         filter rows.",
+        i = "Its expression aggregates over rows, so it has no per-row
+         value. Restate it per row, or declare a non-boolean type."
+      ),
+      call = call
+    )
+  }
+  "filter"
 }
 
 # A bare name in an expr that matches a sibling definition on the same table
@@ -136,11 +168,8 @@ strip_sql_literals <- function(x) {
 
 sql_literal_pattern <- "'(?:[^']|'')*'"
 
-# Every source's definitions in one data frame, held in an environment so
-# validation state written lazily (board sources bind at first use) is seen
-# by every holder.
+# Every source's definitions in one data frame.
 definitions_registry <- function(sources, call = rlang::caller_env()) {
-  registry <- new.env(parent = emptyenv())
   rows <- list(no_definitions)
   labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
@@ -164,12 +193,12 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
       )
     }
   }
-  registry$defs <- do.call(rbind, rows)
-  registry
+  list(defs = do.call(rbind, rows))
 }
 
 definition_fields <- c(
   "type",
+  "role",
   "label",
   "description",
   "details",
@@ -180,8 +209,7 @@ definition_fields <- c(
 no_definitions <- data.frame(
   c(
     list(name = character(), table = character(), source = character()),
-    rlang::rep_named(definition_fields, list(character())),
-    list(role = character(), validated = logical())
+    rlang::rep_named(definition_fields, list(character()))
   )
 )
 
@@ -198,13 +226,6 @@ definition_rows <- function(definitions, table, source) {
       character(1)
     )
   }
-  # Boolean is the one role the declared type settles; the rest need a probe.
-  out$role <- ifelse(
-    definition_base_type(out$type) == "boolean",
-    "filter",
-    NA_character_
-  )
-  out$validated <- FALSE
   out
 }
 
@@ -216,131 +237,6 @@ registry_defs <- function(registry, source = NULL) {
   defs[defs$source == source, ]
 }
 
-# Connection and frame sources already answer live queries at data_source()
-# time, so their definitions bind at agent construction too. Board sources
-# load their pins lazily (#43) and validate at first use instead.
-validate_eager_definitions <- function(
-  registry,
-  sources,
-  call = rlang::caller_env()
-) {
-  labels <- rlang::names2(sources)
-  for (i in seq_along(sources)) {
-    if (is.null(sources[[i]]$pending)) {
-      validate_source_definitions(
-        registry,
-        sources[[i]],
-        labels[[i]],
-        call = call
-      )
-    }
-  }
-  invisible(registry)
-}
-
-validate_source_definitions <- function(
-  registry,
-  source,
-  source_label,
-  call = rlang::caller_env()
-) {
-  defs <- registry$defs
-  for (i in which(defs$source == source_label & !defs$validated)) {
-    registry$defs$role[[i]] <- validated_role(source, defs[i, ], call = call)
-    registry$defs$validated[[i]] <- TRUE
-  }
-  invisible(registry)
-}
-
-# Bind the definition against its live table and classify it, portably
-# across DBI backends: type-check the R class of a zero-row probe, then
-# distinguish metric from dimension by whether the expression is legal in
-# GROUP BY (aggregates are not).
-validated_role <- function(source, def, call = rlang::caller_env()) {
-  id <- DBI::dbQuoteIdentifier(source$con, source$table_ids[[def$table]])
-
-  probe <- try_source_query(
-    source,
-    sprintf("SELECT (%s) AS x FROM %s WHERE 1 = 0", def$expanded, id)
-  )
-  if (inherits(probe, "condition")) {
-    cli::cli_abort(
-      c(
-        "Definition {.val {def$name}} on table {.val {def$table}}
-         does not bind against the data source.",
-        i = "Its expression expands to {.code {def$expanded}}."
-      ),
-      parent = probe,
-      call = call
-    )
-  }
-  check_definition_type(def, probe$x, call = call)
-
-  if (identical(def$role, "filter")) {
-    where <- try_source_query(
-      source,
-      sprintf(
-        "SELECT 1 AS x FROM %s WHERE (%s) AND (1 = 0)",
-        id,
-        def$expanded
-      )
-    )
-    if (inherits(where, "condition")) {
-      cli::cli_abort(
-        c(
-          "Boolean definition {.val {def$name}} on table
-           {.val {def$table}} can't filter rows.",
-          i = "Its expression aggregates over rows (or uses a window
-           function), so it has no per-row value. Restate it per row, or
-           declare a non-boolean type."
-        ),
-        call = call
-      )
-    }
-    return("filter")
-  }
-
-  grouped <- try_source_query(
-    source,
-    sprintf(
-      "SELECT 1 AS x FROM %s WHERE 1 = 0 GROUP BY (%s)",
-      id,
-      def$expanded
-    )
-  )
-  if (inherits(grouped, "condition")) "metric" else "dimension"
-}
-
-try_source_query <- function(source, sql) {
-  tryCatch(source_query(source, sql), error = function(err) err)
-}
-
-# Coarser than SQL types but portable: compare the declared data-dict type
-# against the R class of the probe column. Unknown declared types and
-# unmapped classes pass rather than guess.
-check_definition_type <- function(def, column, call = rlang::caller_env()) {
-  compatible <- switch(
-    definition_base_type(def$type),
-    boolean = is.logical(column),
-    number = is.numeric(column) || inherits(column, "integer64"),
-    string = ,
-    enum = is.character(column) || is.factor(column),
-    date = inherits(column, "Date"),
-    datetime = ,
-    timestamp = inherits(column, "POSIXt"),
-    NA
-  )
-  if (isFALSE(compatible)) {
-    cli::cli_abort(
-      "Definition {.val {def$name}} on table {.val {def$table}} is
-       declared {.val {def$type}} but its expression returns
-       {.cls {class(column)[[1]]}}.",
-      call = call
-    )
-  }
-  invisible(def)
-}
-
 definition_base_type <- function(type) {
   tolower(sub("\\(.*$", "", trimws(type)))
 }
@@ -350,18 +246,12 @@ definition_token_pattern <-
 
 # The expansion step of run_sql, before check_query() so the denylist sees
 # the SQL that will actually execute.
-expand_for_run_sql <- function(registry, sources, source, source_name, sql) {
+expand_for_run_sql <- function(registry, sources, source_name, sql) {
   if (is.null(registry) || nrow(registry$defs) == 0) {
     return(list(sql = sql, applied = NULL))
   }
   label <- source_name %||% rlang::names2(sources)[[1]]
-  expansion <- expand_definitions(sql, registry_defs(registry, label))
-  # A lazy board source hasn't bound its definitions yet; do it at this
-  # first use so a broken definition fails with its name, not a SQL error.
-  if (NROW(expansion$applied) > 0) {
-    validate_source_definitions(registry, source, label)
-  }
-  expansion
+  expand_definitions(sql, registry_defs(registry, label))
 }
 
 expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
@@ -501,9 +391,7 @@ definition_index_lines <- function(registry) {
   if (length(unique(defs$source)) > 1) {
     scope <- paste(defs$source, defs$table, sep = ".")
   }
-  # Lazy sources haven't been probed at prompt time; their non-boolean
-  # definitions index as plain expressions.
-  role <- ifelse(is.na(defs$role), "expression", defs$role)
+  role <- defs$role
   label <- flatten_inline(ifelse(is.na(defs$label), "", defs$label))
   item <- ifelse(
     nzchar(label),
@@ -514,8 +402,7 @@ definition_index_lines <- function(registry) {
   groups <- c(
     filter = "filters",
     dimension = "dimensions",
-    metric = "metrics",
-    expression = "expressions"
+    metric = "metrics"
   )
   vapply(
     unique(scope),

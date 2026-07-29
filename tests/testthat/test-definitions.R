@@ -91,13 +91,12 @@ test_that("reference cycles error at parse", {
   )
 })
 
-test_that("the registry records definitions with roles from validation", {
+test_that("the registry records definitions with their roles", {
   src <- definitions_source()
-  defs <- registry_defs(validated_registry(src))
+  defs <- registry_defs(sales_registry(src))
 
   expect_equal(defs$name, c("emea", "big_revenue", "region_band"))
   expect_equal(defs$role, c("filter", "metric", "dimension"))
-  expect_true(all(defs$validated))
 })
 
 test_that("definitions on unexposed tables abort registry construction", {
@@ -117,51 +116,26 @@ test_that("definitions on unexposed tables abort registry construction", {
   expect_snapshot(error = TRUE, definitions_registry(list(sales_db = src)))
 })
 
-test_that("validation names the definition that fails to bind", {
-  src <- definitions_source(
-    definitions = c(
-      "      - name: emea",
-      "        type: boolean",
-      "        expr: reggion = 'EMEA'"
-    )
-  )
+test_that("boolean aggregates are rejected at parse", {
   expect_error(
-    validated_registry(src),
-    "\"emea\".*does not bind",
-    class = "rlang_error"
+    definitions_source(
+      definitions = c(
+        "      - name: big",
+        "        type: boolean",
+        "        expr: SUM(revenue) > 1000"
+      )
+    ),
+    "can't filter rows"
   )
-})
-
-test_that("validation checks the declared type against the bound type", {
-  src <- definitions_source(
-    definitions = c(
-      "      - name: emea",
-      "        type: boolean",
-      "        expr: revenue + 1"
-    )
-  )
-  expect_error(validated_registry(src), "declared \"boolean\"")
-})
-
-test_that("boolean aggregates are rejected at validation", {
-  src <- definitions_source(
-    definitions = c(
-      "      - name: big",
-      "        type: boolean",
-      "        expr: SUM(revenue) > 1000"
-    )
-  )
-  expect_error(validated_registry(src), "can't filter rows")
 })
 
 test_that("expansion splices governed expressions into model SQL", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
 
   expansion <- expand_for_run_sql(
     registry,
     list(sales_db = src),
-    src,
     NULL,
     "SELECT {{region_band}} AS band, {{big_revenue}} AS big FROM sales GROUP BY {{region_band}}"
   )
@@ -182,12 +156,11 @@ test_that("expansion splices governed expressions into model SQL", {
 
 test_that("SQL without tokens passes through expansion untouched", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   sql <- "SELECT count(*) FROM sales"
   expansion <- expand_for_run_sql(
     registry,
     list(sales_db = src),
-    src,
     NULL,
     sql
   )
@@ -197,7 +170,7 @@ test_that("SQL without tokens passes through expansion untouched", {
 
 test_that("token resolution errors are actionable", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   records <- registry_defs(registry)
 
   expect_snapshot(
@@ -233,7 +206,7 @@ test_that("same-named definitions on several tables disambiguate by scope", {
     reps = data.frame(rep = "Ada", n_sales = 3L),
     dictionary = path
   )
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   records <- registry_defs(registry)
 
   scoped <- expand_definitions(
@@ -256,41 +229,12 @@ test_that("same-named definitions on several tables disambiguate by scope", {
   expect_match(qualified$sql, "revenue > 0", fixed = TRUE)
 })
 
-test_that("board-source definitions validate at first expansion", {
-  board <- board_with_pins(sales = test_sales())
-  path <- local_definitions_dict(
-    definitions = c(
-      "      - name: emea",
-      "        type: boolean",
-      "        expr: reggion = 'EMEA'"
-    )
-  )
-  src <- data_source(board, tables = c(sales = "sales"), dictionary = path)
-  registry <- definitions_registry(list(sales_db = src))
-
-  # Lazy source: construction-time validation skips it, so no error yet.
-  validate_eager_definitions(registry, list(sales_db = src))
-  expect_false(registry_defs(registry)$validated[[1]])
-
-  expect_error(
-    expand_for_run_sql(
-      registry,
-      list(sales_db = src),
-      src,
-      NULL,
-      "SELECT count(*) FROM sales WHERE {{emea}}"
-    ),
-    "does not bind"
-  )
-})
-
 test_that("run_sql results note the definitions applied", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   expansion <- expand_for_run_sql(
     registry,
     list(sales_db = src),
-    src,
     NULL,
     "SELECT count(*) AS n FROM sales WHERE {{emea}}"
   )
@@ -302,7 +246,7 @@ test_that("run_sql results note the definitions applied", {
 
 test_that("the system prompt carries a governed-definitions index", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   prompt <- commons_system_prompt(
     list(sales_db = src),
     "You are a data analyst.",
@@ -330,20 +274,20 @@ test_that("a definition's label is its index hint", {
       "        expr: region = 'EMEA'"
     )
   )
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   text <- definitions_prompt_text(registry)
   expect_match(text, "`{{emea}}` (EMEA rows)", fixed = TRUE)
   expect_no_match(text, "slice of orders", fixed = TRUE)
 })
 
 test_that("the prompt section caps like the glossary", {
-  registry <- validated_registry(definitions_source(many_definitions()))
+  registry <- sales_registry(definitions_source(many_definitions()))
   expect_true(definitions_overflow(registry))
   text <- definitions_prompt_text(registry)
   expect_lt(nchar(text), 6000)
   expect_match(text, "More definitions arrive", fixed = TRUE)
 
-  expect_false(definitions_overflow(validated_registry(definitions_source())))
+  expect_false(definitions_overflow(sales_registry(definitions_source())))
 })
 
 test_that("first touch delivers a table's definitions with expansions", {
@@ -363,7 +307,7 @@ test_that("definitions are indexed as context chunks", {
 
 test_that("run_sql's description matches the agent's composition", {
   src <- definitions_source()
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   empty <- definitions_registry(list(test_source()))
 
   expect_match(run_sql_description(registry), "{{name}} tokens", fixed = TRUE)

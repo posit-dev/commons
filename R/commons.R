@@ -188,7 +188,6 @@ Commons <- R6::R6Class(
       private$context_layer <- augment_context_layer(context_layer, sources)
       private$first_touch <- new.env(parent = emptyenv())
       private$definitions <- definitions_registry(sources)
-      validate_eager_definitions(private$definitions, sources)
       private$registry <- semantic_layer$measures
       private$fn_sources <- semantic_layer$fn_sources
       private$injections <- resolve_injections(

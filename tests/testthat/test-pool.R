@@ -127,7 +127,7 @@ test_that("call_metrics quotes string predicates and passes numbers through", {
   expect_match(res@extra$display$markdown, "< 1000", fixed = TRUE)
 })
 
-test_that("board-source metrics resolve their role at first query", {
+test_that("board-source metrics query without pre-binding the board", {
   board <- board_with_pins(sales = test_sales())
   src <- data_source(
     board,
@@ -135,8 +135,7 @@ test_that("board-source metrics resolve their role at first query", {
     dictionary = local_definitions_dict()
   )
   registry <- definitions_registry(list(sales_db = src))
-  validate_eager_definitions(registry, list(sales_db = src))
-  expect_true(is.na(registry_defs(registry)$role[[2]]))
+  expect_equal(registry_defs(registry)$role[[2]], "metric")
 
   store <- new_handle_store()
   call_metrics_impl(
@@ -208,7 +207,7 @@ test_that("the pool tools follow the agent's composition", {
 })
 
 test_that("search_pool spans measures and definitions", {
-  registry <- validated_registry(definitions_source())
+  registry <- sales_registry(definitions_source())
   measures <- list(order_count = count_measure_tool())
 
   out <- search_pool_text(measures, registry, "revenue in EMEA")

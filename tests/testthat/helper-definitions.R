@@ -41,10 +41,8 @@ definitions_source <- function(...) {
   data_source(sales = test_sales(), dictionary = local_definitions_dict(...))
 }
 
-validated_registry <- function(src) {
-  registry <- definitions_registry(list(sales_db = src))
-  validate_eager_definitions(registry, list(sales_db = src))
-  registry
+sales_registry <- function(src) {
+  definitions_registry(list(sales_db = src))
 }
 
 empty_definitions <- function() {
@@ -66,7 +64,7 @@ many_definitions <- function(n = 400) {
 # call_metrics_impl() with its registry and source wired up, so tests read as
 # the tool call the model would make.
 metrics_caller <- function(src = definitions_source(), store = NULL) {
-  registry <- validated_registry(src)
+  registry <- sales_registry(src)
   function(...) {
     call_metrics_impl(registry, list(sales_db = src), store, ...)
   }

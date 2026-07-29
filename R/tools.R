@@ -218,7 +218,6 @@ tool_run_sql <- function(private) {
       expansion <- expand_for_run_sql(
         private$definitions,
         private$sources,
-        src,
         source,
         sql
       )
