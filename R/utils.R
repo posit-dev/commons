@@ -29,7 +29,7 @@ df_to_markdown <- function(df, max_rows = 50) {
   shown <- utils::head(df, max_rows)
   out <- knitr::kable(shown, format = "pipe")
   if (n > max_rows) {
-    out <- c(out, sprintf("", n - max_rows))
+    out <- c(out, "", sprintf("%d more rows not shown", n - max_rows))
   }
   paste(out, collapse = "\n")
 }
