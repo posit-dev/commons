@@ -62,6 +62,15 @@ test_that("trajectories rebuild ellmer turns from semconv messages", {
   expect_equal(turns[[5]]@text, "You rolled a 4.")
 })
 
+test_that("conversations carry their last chat activity time", {
+  trajectories <- build_trajectories(parse_otlp_lines(staggered_test_line()))
+
+  last_active <- attr(trajectories[[1]], "last_active")
+  expect_s3_class(last_active, "POSIXct")
+  # The t100 span ends at 101s past the epoch.
+  expect_equal(as.numeric(last_active), 101)
+})
+
 test_that("rebuilt turns can be set on an ellmer chat", {
   json <- test_turn_json()
   spans <- parse_otlp_lines(otlp_test_line(list(

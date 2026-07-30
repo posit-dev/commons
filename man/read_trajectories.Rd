@@ -32,7 +32,9 @@ history as of \code{to}.}
 }
 \value{
 A list of conversations, named by conversation id and ordered
-oldest-first. Each conversation is a list of \link[ellmer:Turn]{ellmer::Turn}s.
+oldest-first. Each conversation is a list of \link[ellmer:Turn]{ellmer::Turn}s and carries
+a \code{last_active} attribute: a \code{POSIXct} giving the time of the
+conversation's most recent chat activity.
 }
 \description{
 \code{read_trajectories()} reads conversation trajectories captured by

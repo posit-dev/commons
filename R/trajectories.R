@@ -51,7 +51,9 @@
 #' ```
 #'
 #' @return A list of conversations, named by conversation id and ordered
-#'   oldest-first. Each conversation is a list of [ellmer::Turn]s.
+#'   oldest-first. Each conversation is a list of [ellmer::Turn]s and carries
+#'   a `last_active` attribute: a `POSIXct` giving the time of the
+#'   conversation's most recent chat activity.
 #' @export
 read_trajectories <- function(
   source = NULL,
@@ -527,8 +529,19 @@ posixct_nanos <- function(time) {
 # ellmer's chat spans repeat the full message history, so the latest chat
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
+# That span's time is also the conversation's last activity.
 build_trajectories <- function(spans) {
-  lapply(latest_chat_spans(spans), trajectory_turns)
+  lapply(latest_chat_spans(spans), function(span) {
+    turns <- trajectory_turns(span)
+    attr(turns, "last_active") <- nano_posixct(span_time(span))
+    turns
+  })
+}
+
+# Doubles can't hold nanosecond precision, but second-level precision is all
+# a last-activity time needs. (Explicit origin: required on R < 4.3.)
+nano_posixct <- function(time) {
+  as.POSIXct(as.numeric(time) / 1e9, origin = "1970-01-01")
 }
 
 # The latest chat span per conversation, named by conversation id and

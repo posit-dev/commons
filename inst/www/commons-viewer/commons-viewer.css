@@ -1,0 +1,61 @@
+/* Read-only transcripts: the input box is hidden rather than removed so a
+ * future feedback chat can bring it back by deleting this rule. */
+.commons-viewer-transcript shiny-chat-input {
+  display: none;
+}
+
+/* ---- Conversation list ------------------------------------------------- */
+
+.commons-viewer-entry {
+  border-radius: 0.5rem;
+  color: inherit;
+  display: block;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+}
+
+.commons-viewer-entry:hover,
+.commons-viewer-entry:focus {
+  background: var(--bs-secondary-bg, #f1f3f5);
+  color: inherit;
+  text-decoration: none;
+}
+
+.commons-viewer-entry-selected,
+.commons-viewer-entry-selected:hover,
+.commons-viewer-entry-selected:focus {
+  background: var(--bs-primary-bg-subtle, #e7f1ff);
+}
+
+.commons-viewer-entry-snippet {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commons-viewer-entry-meta {
+  align-items: center;
+  color: var(--bs-secondary-color, #6c757d);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  gap: 0.4rem;
+  margin-top: 0.125rem;
+}
+
+.commons-viewer-entry-meta .commons-answer-pill {
+  font-size: 0.68rem;
+  padding: 0.12rem 0.4rem;
+}
+
+.commons-viewer-entry-meta .commons-answer-pill-icon {
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+.commons-viewer-empty {
+  color: var(--bs-secondary-color, #6c757d);
+  padding: 1rem 0;
+  text-align: center;
+}

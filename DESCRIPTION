@@ -37,6 +37,7 @@ Imports:
     utils
 Suggests:
     bsicons,
+    bslib,
     dbplyr,
     dplyr,
     glue,

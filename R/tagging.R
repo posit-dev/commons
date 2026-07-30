@@ -28,25 +28,33 @@ commons_last_provenance <- function(client) {
 # reinstate provenance pills when an existing conversation seeds a new
 # session, since pills are otherwise only injected as live turns complete.
 commons_exchange_provenance <- function(turns, corpus = list()) {
+  lapply(split_exchanges(turns), function(exchange) {
+    derive_provenance(
+      unlist(lapply(exchange, turn_tags)) %||% character(),
+      unlist(lapply(exchange, turn_text)) %||% character(),
+      corpus
+    )
+  })
+}
+
+# Turns split into question -> answer exchanges: each exchange opens at a
+# user turn carrying no tool results and runs until the next one. Turns
+# before the first such user turn (e.g. system turns) belong to no exchange.
+split_exchanges <- function(turns) {
   out <- list()
-  tags <- character()
-  text <- character()
-  started <- FALSE
+  current <- NULL
   for (turn in turns) {
     if (identical(turn@role, "user") && !turn_has_tool_result(turn)) {
-      if (started) {
-        out[[length(out) + 1]] <- derive_provenance(tags, text, corpus)
+      if (!is.null(current)) {
+        out[[length(out) + 1]] <- current
       }
-      tags <- character()
-      text <- character()
-      started <- TRUE
-    } else if (started) {
-      tags <- c(tags, turn_tags(turn))
-      text <- c(text, turn_text(turn))
+      current <- list(turn)
+    } else if (!is.null(current)) {
+      current[[length(current) + 1]] <- turn
     }
   }
-  if (started) {
-    out[[length(out) + 1]] <- derive_provenance(tags, text, corpus)
+  if (!is.null(current)) {
+    out[[length(out) + 1]] <- current
   }
   out
 }
