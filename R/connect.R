@@ -70,9 +70,7 @@ connect_trace_lines <- function(
       httr2_http_401 = function(err) trace_access_abort(err, call),
       httr2_http_403 = function(err) trace_access_abort(err, call)
     )
-    page <- httr2::resp_body_string(resp)
-    page <- strsplit(page, "\n", fixed = TRUE)[[1]]
-    page <- page[nzchar(page)]
+    page <- resp_trace_lines(resp)
     lines <- c(lines, page)
     total <- suppressWarnings(
       as.integer(httr2::resp_header(resp, "X-Total-Count"))
@@ -85,7 +83,64 @@ connect_trace_lines <- function(
       break
     }
   }
+  if (length(lines) == 0) {
+    lines <- connect_job_trace_lines(client, guid, from, enough, page_size, call)
+  }
   lines
+}
+
+# Connect 2026.07.0 moved this endpoint's store: traces recorded by earlier
+# versions live in per-job files that only the per-job endpoint still reads.
+# When the content-scoped store has nothing, sweep jobs (newest first, so the
+# `enough` early stop keeps its newest-first contract).
+connect_job_trace_lines <- function(client, guid, from, enough, page_size, call) {
+  jobs <- connect_req(client, "content", guid, "jobs") |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
+  starts <- vapply(jobs, function(job) job$start_time %||% "", character(1))
+  jobs <- jobs[order(starts, decreasing = TRUE)]
+
+  lines <- character()
+  for (job in jobs) {
+    offset <- 0
+    repeat {
+      resp <- tryCatch(
+        connect_req(client, "content", guid, "jobs", job$key, "traces") |>
+          httr2::req_url_query(
+            limit = page_size,
+            offset = offset,
+            since = connect_window_param(from, -3600)
+          ) |>
+          httr2::req_perform(),
+        httr2_http_401 = function(err) trace_access_abort(err, call),
+        httr2_http_403 = function(err) trace_access_abort(err, call)
+      )
+      page <- resp_trace_lines(resp)
+      lines <- c(lines, page)
+      total <- suppressWarnings(
+        as.integer(httr2::resp_header(resp, "X-Total-Count"))
+      )
+      offset <- offset + length(page)
+      if (length(page) == 0 || is.na(total) || offset >= total) {
+        break
+      }
+    }
+    if (!is.null(enough) && enough(lines)) {
+      break
+    }
+  }
+  lines
+}
+
+# Zero matching traces come back as a bodiless response, which
+# resp_body_string() refuses to read.
+resp_trace_lines <- function(resp) {
+  if (!httr2::resp_has_body(resp)) {
+    return(character())
+  }
+  page <- httr2::resp_body_string(resp)
+  page <- strsplit(page, "\n", fixed = TRUE)[[1]]
+  page[nzchar(page)]
 }
 
 # Connect silently ignores timestamps it can't parse, including any without
