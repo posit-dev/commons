@@ -40,8 +40,6 @@ test_that("worker_ensure validates the commons.run_r_sandbox option", {
   expect_error(worker_ensure(new_r_worker()), "commons.run_r_sandbox")
 })
 
-# Drive worker_init itself so the sandbox under test is the one run_r
-# engages, not a reimplementation of it.
 sandboxed_worker_probes <- function(sandbox_mode, env = parent.frame()) {
   outside <- file.path(
     dirname(tempdir()),

@@ -269,10 +269,6 @@ worker_ensure <- function(worker, fn_sources = character()) {
   invisible(worker)
 }
 
-# On Linux, the filesystem sandbox tries Landlock and then an unprivileged
-# user-namespace sandbox; "landlock" or "userns" forces one tier, and
-# "seccomp-only" opts out of filesystem confinement where the kernel supports
-# neither (network and process isolation still apply).
 run_r_sandbox_mode <- function(call = rlang::caller_env()) {
   mode <- getOption("commons.run_r_sandbox", "auto")
   modes <- c("auto", "landlock", "userns", "seccomp-only")
@@ -286,9 +282,7 @@ run_r_sandbox_mode <- function(call = rlang::caller_env()) {
   mode
 }
 
-# unshare(CLONE_NEWUSER) fails in a multithreaded process, so when the userns
-# tier is in play, threaded BLAS builds (e.g. EPEL R's OpenBLAS) must be
-# capped before the worker's R starts.
+# unshare(CLONE_NEWUSER) requires a single-threaded process.
 worker_single_thread <- function(sandbox_mode) {
   if (!identical(Sys.info()[["sysname"]], "Linux")) {
     return(FALSE)
@@ -475,10 +469,7 @@ plot_dimensions <- function(ratio, longest_side) {
 worker_init <- function(parent_tmp, work_dir, dll_path, sandbox_mode = "auto") {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  # Only Linux (Landlock or a user-namespace sandbox, plus seccomp) and macOS
-  # (Seatbelt) have sandbox implementations; elsewhere run unsandboxed (local
-  # dev only). Where a sandbox exists it must engage, so a missing compiled
-  # library is a hard error rather than a silent drop to unsandboxed execution.
+  # Supported platforms must engage a sandbox; others are for local development.
   sysname <- Sys.info()[["sysname"]]
   if (!sysname %in% c("Linux", "Darwin")) {
     return(invisible(FALSE))
