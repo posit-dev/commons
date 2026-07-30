@@ -2,7 +2,13 @@
  * worker startup; enforcement thereafter is the kernel's, not this code's.
  * Landlock has no libc wrapper, seccomp requires prctl() with a BPF program,
  * and macOS Seatbelt is only reachable through libSystem's sandbox_init(),
- * so none of them is reachable from R without this layer. */
+ * so none of them is reachable from R without this layer.
+ *
+ * On Linux, filesystem confinement has two interchangeable backends fed the
+ * same read/write roots: Landlock (kernel 5.13+ with the LSM enabled), and a
+ * jail built from an unprivileged user + mount namespace for older kernels
+ * (RHEL 8 and clones, RHEL 9 before 9.6) where Landlock is unavailable. The
+ * seccomp filter installs in every tier. */
 
 #define _GNU_SOURCE
 
@@ -12,14 +18,22 @@
 
 #ifdef __linux__
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
+#include <sched.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
@@ -54,17 +68,72 @@
 #define __NR_landlock_restrict_self 446
 #endif
 
+/* Syscall numbers past 424 are unified across architectures, so plain
+ * fallbacks suffice when the build headers predate them. */
+#ifndef __NR_open_tree
+#define __NR_open_tree 428
+#endif
+#ifndef __NR_move_mount
+#define __NR_move_mount 429
+#endif
+#ifndef __NR_fsopen
+#define __NR_fsopen 430
+#endif
+#ifndef __NR_fsconfig
+#define __NR_fsconfig 431
+#endif
+#ifndef __NR_fsmount
+#define __NR_fsmount 432
+#endif
+#ifndef __NR_fspick
+#define __NR_fspick 433
+#endif
+#ifndef __NR_clone3
+#define __NR_clone3 435
+#endif
+#ifndef __NR_mount_setattr
+#define __NR_mount_setattr 442
+#endif
+
+#ifndef CLONE_NEWCGROUP
+#define CLONE_NEWCGROUP 0x02000000
+#endif
+
 #define LL_CREATE_RULESET_VERSION (1U << 0)
 #define LL_RULE_PATH_BENEATH 1
 
-/* Landlock ABI v1 filesystem access rights: the 13 rights every
- * Landlock-enabled kernel understands. Later ABIs add rights we leave
- * unhandled, which the kernel treats at least as restrictively. */
+/* Landlock filesystem access rights. A ruleset only governs the rights it
+ * declares as handled: anything left out stays *unrestricted*, so the set has
+ * to be built up to whatever the running kernel understands rather than fixed
+ * at the v1 floor. Skipping that would leave truncate(2) (ABI 3) and ioctls on
+ * device files (ABI 5) unpoliced on kernels that support them. */
 #define FS_EXECUTE (1ULL << 0)
 #define FS_READ_FILE (1ULL << 2)
 #define FS_READ_DIR (1ULL << 3)
 #define FS_V1_ALL ((1ULL << 13) - 1)
+#define FS_REFER (1ULL << 13)
+#define FS_TRUNCATE (1ULL << 14)
+#define FS_IOCTL_DEV (1ULL << 15)
 #define FS_READ_ONLY (FS_EXECUTE | FS_READ_FILE | FS_READ_DIR)
+
+/* The rights this kernel can police, given its reported ABI. Read roots are
+ * granted FS_READ_ONLY regardless, so each added right is one more thing they
+ * cannot do: notably, not handling FS_REFER is what makes a cross-directory
+ * rename or link denied everywhere, and handling it grants that back only
+ * within the read-write roots. */
+static uint64_t landlock_handled(long abi) {
+  uint64_t handled = FS_V1_ALL;
+  if (abi >= 2) {
+    handled |= FS_REFER;
+  }
+  if (abi >= 3) {
+    handled |= FS_TRUNCATE;
+  }
+  if (abi >= 5) {
+    handled |= FS_IOCTL_DEV;
+  }
+  return handled;
+}
 
 struct ll_ruleset_attr {
   uint64_t handled_access_fs;
@@ -97,66 +166,353 @@ static void add_roots(int ruleset_fd, SEXP roots, uint64_t access,
   }
 }
 
-SEXP c_sandbox_capabilities(void) {
-  long landlock_abi = syscall(__NR_landlock_create_ruleset, NULL, 0,
-                              LL_CREATE_RULESET_VERSION);
-  int seccomp_ok = prctl(PR_GET_SECCOMP, 0, 0, 0, 0) >= 0;
-  SEXP out = PROTECT(Rf_allocVector(INTSXP, 3));
-  INTEGER(out)[0] = (int) landlock_abi;
-  INTEGER(out)[1] = seccomp_ok;
-  INTEGER(out)[2] = 0;
-  UNPROTECT(1);
-  return out;
-}
-
-SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
-  if (memory_limit != R_NilValue) {
-    rlim_t bytes = (rlim_t) REAL(memory_limit)[0];
-    struct rlimit lim = { .rlim_cur = bytes, .rlim_max = bytes };
-    if (setrlimit(RLIMIT_AS, &lim) != 0) {
-      Rf_error("setrlimit(RLIMIT_AS) failed: %s", strerror(errno));
-    }
+/* Returns 0 on success. A failure to create the ruleset — the probe for
+ * whether this kernel offers Landlock at all — is returned as an errno for
+ * the caller to translate into a fallback or an error; failures past that
+ * point are real and raise here. */
+static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
+  long abi = syscall(__NR_landlock_create_ruleset, NULL, 0,
+                     LL_CREATE_RULESET_VERSION);
+  if (abi < 0) {
+    return errno;
   }
-
-  struct ll_ruleset_attr attr = { .handled_access_fs = FS_V1_ALL };
+  uint64_t handled = landlock_handled(abi);
+  struct ll_ruleset_attr attr = { .handled_access_fs = handled };
   int fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
   if (fd < 0) {
-    Rf_error("landlock_create_ruleset failed: %s", strerror(errno));
+    return errno;
   }
   add_roots(fd, read_roots, FS_READ_ONLY, "read");
-  add_roots(fd, rw_roots, FS_V1_ALL, "read-write");
-
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
-    close(fd);
-    Rf_error("prctl(PR_SET_NO_NEW_PRIVS) failed: %s", strerror(errno));
-  }
+  add_roots(fd, rw_roots, handled, "read-write");
   if (syscall(__NR_landlock_restrict_self, fd, 0)) {
     close(fd);
     Rf_error("landlock_restrict_self failed: %s", strerror(errno));
   }
   close(fd);
+  return 0;
+}
 
-  /* No network, and no reading other processes' memory: the parent holds
-   * credentials the worker must never see. */
+/* --- user-namespace jail ---------------------------------------------------
+ * bubblewrap's mechanism without the bubblewrap binary: unshare into an
+ * unprivileged user + mount namespace, pivot_root onto a fresh tmpfs, bind
+ * the allowed roots across at their original paths, and detach the host root.
+ * Needs no privileges and no helper binary, so it covers the kernels without
+ * Landlock (RHEL 8 and its clones, RHEL 9 before 9.6). */
+
+/* Staging mountpoint for the new root, and where the pre-pivot root is parked
+ * while its contents are bound across. Both are gone by the time sandboxed
+ * code runs: JAIL_ROOT becomes "/", and OLD_ROOT is detached. */
+#define JAIL_ROOT "/tmp"
+#define OLD_ROOT "/.commons-oldroot"
+
+static int count_threads(void) {
+  DIR *d = opendir("/proc/self/task");
+  if (d == NULL) {
+    return -1;
+  }
+  int n = 0;
+  struct dirent *e;
+  while ((e = readdir(d)) != NULL) {
+    if (e->d_name[0] != '.') {
+      n++;
+    }
+  }
+  closedir(d);
+  return n;
+}
+
+static int write_proc(const char *path, const char *content) {
+  int fd = open(path, O_WRONLY | O_CLOEXEC);
+  if (fd < 0) {
+    return -1;
+  }
+  ssize_t n = write(fd, content, strlen(content));
+  int err = errno;
+  close(fd);
+  if (n != (ssize_t) strlen(content)) {
+    errno = err;
+    return -1;
+  }
+  return 0;
+}
+
+/* Enter a fresh user + mount namespace and map this uid/gid into it, the
+ * privilege-free prerequisite for the mount work that follows. Reports
+ * through errno rather than Rf_error so the capabilities probe can call it
+ * from a forked child. The ids must be read before unshare(), which leaves
+ * getuid() reporting the overflow uid until the map is written. */
+static int jail_map_ids(void) {
+  uid_t uid = getuid();
+  gid_t gid = getgid();
+  char map[64];
+
+  if (unshare(CLONE_NEWUSER | CLONE_NEWNS) != 0) {
+    return -1;
+  }
+  /* Denying setgroups is what lets an unprivileged process write gid_map. */
+  if (write_proc("/proc/self/setgroups", "deny") != 0) {
+    return -1;
+  }
+  snprintf(map, sizeof(map), "%u %u 1", (unsigned) uid, (unsigned) uid);
+  if (write_proc("/proc/self/uid_map", map) != 0) {
+    return -1;
+  }
+  snprintf(map, sizeof(map), "%u %u 1", (unsigned) gid, (unsigned) gid);
+  if (write_proc("/proc/self/gid_map", map) != 0) {
+    return -1;
+  }
+  return 0;
+}
+
+static void mkdir_p(char *path) {
+  for (char *p = path + 1; *p != '\0'; p++) {
+    if (*p == '/') {
+      *p = '\0';
+      if (mkdir(path, 0755) != 0 && errno != EEXIST) {
+        int err = errno;
+        *p = '/';
+        Rf_error("cannot create '%s': %s", path, strerror(err));
+      }
+      *p = '/';
+    }
+  }
+  if (mkdir(path, 0755) != 0 && errno != EEXIST) {
+    Rf_error("cannot create '%s': %s", path, strerror(errno));
+  }
+}
+
+/* Make one already-bound path read-only. A mount inherited into a user
+ * namespace is locked, so its flags (nosuid and friends) must be repeated on
+ * remount or the kernel refuses with EPERM; adding MS_RDONLY on top is
+ * allowed because it can only narrow access. */
+static void jail_readonly(const char *path) {
+  unsigned long flags = MS_REMOUNT | MS_BIND | MS_RDONLY;
+  struct statvfs sv;
+  if (statvfs(path, &sv) == 0) {
+    if (sv.f_flag & ST_NOSUID) flags |= MS_NOSUID;
+    if (sv.f_flag & ST_NODEV) flags |= MS_NODEV;
+    if (sv.f_flag & ST_NOEXEC) flags |= MS_NOEXEC;
+    if (sv.f_flag & ST_NOATIME) flags |= MS_NOATIME;
+    if (sv.f_flag & ST_NODIRATIME) flags |= MS_NODIRATIME;
+    if (sv.f_flag & ST_RELATIME) flags |= MS_RELATIME;
+  }
+  if (mount(NULL, path, NULL, flags, NULL) != 0) {
+    Rf_error("cannot make '%s' read-only in the sandbox: %s", path,
+             strerror(errno));
+  }
+}
+
+/* Bind one root at its original path inside the new root, reading it from the
+ * pre-pivot root parked at OLD_ROOT.
+ *
+ * The bind must be recursive: every mount inherited into a user namespace is
+ * locked, and the kernel rejects a non-recursive bind of a subtree that has
+ * locked children (EINVAL) so that unprivileged code can't reveal what a
+ * child mount covers. Riding along means a read-only root can contain a
+ * writable submount, so `submounts` — mount points collected before the
+ * pivot, when /proc was still readable — are narrowed to read-only too. */
+static void jail_bind(const char *root, int rdonly, const char **submounts,
+                      int n_submounts) {
+  char src[PATH_MAX];
+  char dst[PATH_MAX];
+  if (snprintf(src, sizeof(src), OLD_ROOT "%s", root) >= (int) sizeof(src) ||
+      snprintf(dst, sizeof(dst), "%s", root) >= (int) sizeof(dst)) {
+    Rf_error("sandbox root path too long: '%s'", root);
+  }
+  mkdir_p(dst);
+  if (mount(src, dst, NULL, MS_BIND | MS_REC, NULL) != 0) {
+    Rf_error("cannot bind '%s' into the sandbox: %s", root, strerror(errno));
+  }
+  if (!rdonly) {
+    return;
+  }
+  jail_readonly(dst);
+  size_t len = strlen(root);
+  int at_root = strcmp(root, "/") == 0;
+  for (int i = 0; i < n_submounts; i++) {
+    const char *sub = submounts[i];
+    if (at_root || (strncmp(sub, root, len) == 0 && sub[len] == '/')) {
+      jail_readonly(sub);
+    }
+  }
+}
+
+/* Mount points in this namespace, read from /proc/self/mountinfo, which is
+ * only reachable before the pivot. Paths are unchanged by the binds, which
+ * reuse each root's original location. */
+static const char **jail_submounts(int *n) {
+  *n = 0;
+  FILE *f = fopen("/proc/self/mountinfo", "r");
+  if (f == NULL) {
+    return NULL;
+  }
+  int cap = 64;
+  const char **out = (const char **) R_alloc(cap, sizeof(char *));
+  char line[PATH_MAX * 2];
+  while (fgets(line, sizeof(line), f) != NULL) {
+    /* Field 5 is the mount point, with spaces escaped as \040; a path
+     * containing one is not a root we grant, so such lines are skipped. */
+    char *p = line;
+    for (int field = 0; field < 4 && p != NULL; field++) {
+      p = strchr(p + 1, ' ');
+    }
+    if (p == NULL) {
+      continue;
+    }
+    char *start = p + 1;
+    char *end = strchr(start, ' ');
+    if (end == NULL || strstr(start, "\\040") != NULL) {
+      continue;
+    }
+    *end = '\0';
+    if (*n == cap) {
+      const char **bigger = (const char **) R_alloc(cap * 2, sizeof(char *));
+      memcpy(bigger, out, cap * sizeof(char *));
+      out = bigger;
+      cap *= 2;
+    }
+    char *copy = R_alloc(strlen(start) + 1, 1);
+    strcpy(copy, start);
+    out[(*n)++] = copy;
+  }
+  fclose(f);
+  return out;
+}
+
+/* Returns 0 on success, or the errno from entering the namespace — the probe
+ * for whether this host permits unprivileged user namespaces — for the caller
+ * to translate. Failures past that point raise here. */
+static int jail_engage(SEXP read_roots, SEXP rw_roots) {
+  int threads = count_threads();
+  if (threads != 1) {
+    Rf_error("cannot engage the user-namespace sandbox from a multithreaded "
+             "R process (%d threads); start the worker with "
+             "OPENBLAS_NUM_THREADS=1 and OMP_NUM_THREADS=1",
+             threads);
+  }
+
+  char cwd[PATH_MAX];
+  if (getcwd(cwd, sizeof(cwd)) == NULL) {
+    Rf_error("getcwd failed: %s", strerror(errno));
+  }
+  int n_submounts = 0;
+  const char **submounts = jail_submounts(&n_submounts);
+
+  if (jail_map_ids() != 0) {
+    return errno;
+  }
+
+  /* Keep mount events from propagating back to the host namespace, and give
+   * the jail a root nothing else references. */
+  if (mount("none", "/", NULL, MS_SLAVE | MS_REC, NULL) != 0) {
+    Rf_error("cannot make / a slave mount: %s", strerror(errno));
+  }
+  if (mount("tmpfs", JAIL_ROOT, "tmpfs", 0, "size=16m,mode=0755") != 0) {
+    Rf_error("cannot mount the sandbox root tmpfs: %s", strerror(errno));
+  }
+
+  /* Pivot before binding anything, so the roots can be copied across from
+   * the intact pre-pivot tree at OLD_ROOT. Binding beforehand would need
+   * sources under JAIL_ROOT — usually where tempdirs live — to survive the
+   * tmpfs covering them, and a bind's source has to be a real path (the
+   * kernel rejects /proc/self/fd magic symlinks with EINVAL). */
+  if (mkdir(JAIL_ROOT OLD_ROOT, 0755) != 0) {
+    Rf_error("cannot create the pivot directory: %s", strerror(errno));
+  }
+  if (syscall(SYS_pivot_root, JAIL_ROOT, JAIL_ROOT OLD_ROOT) != 0) {
+    Rf_error("pivot_root failed: %s", strerror(errno));
+  }
+  if (chdir("/") != 0) {
+    Rf_error("cannot chdir to the sandbox root: %s", strerror(errno));
+  }
+
+  int n_read = Rf_length(read_roots);
+  int n_rw = Rf_length(rw_roots);
+  for (int i = 0; i < n_read + n_rw; i++) {
+    SEXP roots = i < n_read ? read_roots : rw_roots;
+    jail_bind(
+      CHAR(STRING_ELT(roots, i < n_read ? i : i - n_read)),
+      i < n_read,
+      submounts,
+      n_submounts
+    );
+  }
+
+  if (umount2(OLD_ROOT, MNT_DETACH) != 0) {
+    Rf_error("cannot detach the host root: %s", strerror(errno));
+  }
+  rmdir(OLD_ROOT);
+  /* The tmpfs root was writable by this uid while the jail was assembled. */
+  if (mount(NULL, "/", NULL, MS_REMOUNT | MS_BIND | MS_RDONLY, NULL) != 0) {
+    Rf_error("cannot make the sandbox root read-only: %s", strerror(errno));
+  }
+  /* The worker enters with its work dir as cwd, which is always a granted
+   * root; if some other caller's cwd didn't survive the pivot, staying at "/"
+   * is a better outcome than refusing to sandbox. */
+  if (chdir(cwd) != 0) {
+    errno = 0;
+  }
+  return 0;
+}
+
+/* No network, no reading other processes' memory (the parent holds
+ * credentials the worker must never see), and no reshaping the mount or
+ * namespace topology (the userns jail leaves the worker with capabilities
+ * in its own namespace; denying the mount family makes them inert). */
+static void seccomp_engage(void) {
+#define SANDBOX_DENY(err) \
+  BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | ((err) & SECCOMP_RET_DATA))
+#define SANDBOX_SCREEN(nr) \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), 0, 1), SANDBOX_DENY(EPERM)
+
   struct sock_filter filt[] = {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
              (uint32_t) offsetof(struct seccomp_data, arch)),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SANDBOX_AUDIT_ARCH, 1, 0),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+    SANDBOX_DENY(EPERM),
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
              (uint32_t) offsetof(struct seccomp_data, nr)),
 #ifdef SANDBOX_X32_SYSCALL_BIT
     /* x32 syscalls share the x86_64 arch tag but set a high bit and index a
      * separate table, so screen them out before the number comparisons. */
     BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, SANDBOX_X32_SYSCALL_BIT, 0, 1),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
+    SANDBOX_DENY(EPERM),
 #endif
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 4, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_ptrace, 3, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_process_vm_readv, 2, 0),
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_process_vm_writev, 1, 0),
+    SANDBOX_SCREEN(__NR_socket),
+    SANDBOX_SCREEN(__NR_ptrace),
+    SANDBOX_SCREEN(__NR_process_vm_readv),
+    SANDBOX_SCREEN(__NR_process_vm_writev),
+    SANDBOX_SCREEN(__NR_mount),
+    SANDBOX_SCREEN(__NR_umount2),
+#ifdef __NR_umount
+    SANDBOX_SCREEN(__NR_umount),
+#endif
+    SANDBOX_SCREEN(__NR_pivot_root),
+    SANDBOX_SCREEN(__NR_chroot),
+    SANDBOX_SCREEN(__NR_unshare),
+    SANDBOX_SCREEN(__NR_setns),
+    SANDBOX_SCREEN(__NR_open_tree),
+    SANDBOX_SCREEN(__NR_move_mount),
+    SANDBOX_SCREEN(__NR_fsopen),
+    SANDBOX_SCREEN(__NR_fsconfig),
+    SANDBOX_SCREEN(__NR_fsmount),
+    SANDBOX_SCREEN(__NR_fspick),
+    SANDBOX_SCREEN(__NR_mount_setattr),
+    /* ENOSYS sends glibc down its clone() fallback, where the flags are
+     * screenable: clone3 passes them in a struct the filter can't read. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_clone3, 0, 1),
+    SANDBOX_DENY(ENOSYS),
+    /* fork and pthread_create pass no namespace flags and sail through; only
+     * namespace-creating clones are denied. Loads the low word of args[0],
+     * which holds every CLONE_NEW* bit on our (little-endian) arches. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_clone, 0, 3),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, args[0])),
+    BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K,
+             CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID |
+             CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWCGROUP, 0, 1),
+    SANDBOX_DENY(EPERM),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
-    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA)),
   };
   struct sock_fprog prog = {
     .len = sizeof(filt) / sizeof(filt[0]),
@@ -166,7 +522,98 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
     Rf_error("seccomp filter install failed: %s", strerror(errno));
   }
 
-  return R_NilValue;
+#undef SANDBOX_SCREEN
+#undef SANDBOX_DENY
+}
+
+SEXP c_sandbox_capabilities(void) {
+  long landlock_abi = syscall(__NR_landlock_create_ruleset, NULL, 0,
+                              LL_CREATE_RULESET_VERSION);
+  int seccomp_ok = prctl(PR_GET_SECCOMP, 0, 0, 0, 0) >= 0;
+  /* Probing userns support means creating one, so do it in a throwaway
+   * child; this also stays accurate under policies (container seccomp,
+   * AppArmor) that deny the syscall rather than the feature. The probe goes
+   * as far as writing the id maps, since unshare can succeed on hosts that
+   * then refuse the mapping — leaving the namespace useless to us. */
+  int userns_ok = 0;
+  pid_t pid = fork();
+  if (pid == 0) {
+    _exit(jail_map_ids() == 0 ? 0 : 1);
+  } else if (pid > 0) {
+    int status;
+    if (waitpid(pid, &status, 0) == pid) {
+      userns_ok = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    }
+  }
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 4));
+  INTEGER(out)[0] = (int) landlock_abi;
+  INTEGER(out)[1] = seccomp_ok;
+  INTEGER(out)[2] = 0;
+  INTEGER(out)[3] = userns_ok;
+  UNPROTECT(1);
+  return out;
+}
+
+SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
+                      SEXP mode_sexp) {
+  const char *mode = CHAR(STRING_ELT(mode_sexp, 0));
+  if (strcmp(mode, "auto") != 0 && strcmp(mode, "landlock") != 0 &&
+      strcmp(mode, "userns") != 0 && strcmp(mode, "seccomp-only") != 0) {
+    Rf_error("unknown sandbox mode '%s'", mode);
+  }
+
+  if (memory_limit != R_NilValue) {
+    rlim_t bytes = (rlim_t) REAL(memory_limit)[0];
+    struct rlimit lim = { .rlim_cur = bytes, .rlim_max = bytes };
+    if (setrlimit(RLIMIT_AS, &lim) != 0) {
+      Rf_error("setrlimit(RLIMIT_AS) failed: %s", strerror(errno));
+    }
+  }
+
+  /* Required before both landlock_restrict_self and the seccomp filter for
+   * an unprivileged process; harmless for the jail. */
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
+    Rf_error("prctl(PR_SET_NO_NEW_PRIVS) failed: %s", strerror(errno));
+  }
+
+  const char *tier = NULL;
+  if (strcmp(mode, "landlock") == 0 || strcmp(mode, "auto") == 0) {
+    int err = landlock_engage(read_roots, rw_roots);
+    if (err == 0) {
+      tier = "landlock";
+    } else if (strcmp(mode, "landlock") == 0 ||
+               /* ENOSYS: not in this kernel; EOPNOTSUPP: built but not in
+                * the boot LSM list; EPERM: denied by a container seccomp
+                * policy. Anything else is a bug worth surfacing. */
+               (err != ENOSYS && err != EOPNOTSUPP && err != EPERM)) {
+      Rf_error("landlock_create_ruleset failed: %s", strerror(err));
+    }
+  }
+  if (tier == NULL &&
+      (strcmp(mode, "userns") == 0 || strcmp(mode, "auto") == 0)) {
+    int err = jail_engage(read_roots, rw_roots);
+    if (err == 0) {
+      tier = "userns";
+    } else if (strcmp(mode, "userns") == 0) {
+      Rf_error("unshare(CLONE_NEWUSER|CLONE_NEWNS) failed: %s",
+               strerror(err));
+    } else {
+      Rf_error(
+        "cannot sandbox the run_r session: this system offers neither "
+        "Landlock nor unprivileged user namespaces "
+        "(unshare failed: %s). Set "
+        "options(commons.run_r_sandbox = \"seccomp-only\") to run with "
+        "only network and process isolation.",
+        strerror(err));
+    }
+  }
+  if (tier == NULL) {
+    tier = "seccomp-only";
+  }
+
+  seccomp_engage();
+
+  return Rf_mkString(tier);
 }
 
 #elif defined(__APPLE__)
@@ -207,15 +654,21 @@ static size_t append_subpaths(char *buf, size_t size, size_t off, SEXP roots) {
 }
 
 SEXP c_sandbox_capabilities(void) {
-  SEXP out = PROTECT(Rf_allocVector(INTSXP, 3));
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 4));
   INTEGER(out)[0] = -1;
   INTEGER(out)[1] = 0;
   INTEGER(out)[2] = 1;
+  INTEGER(out)[3] = 0;
   UNPROTECT(1);
   return out;
 }
 
-SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
+SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
+                      SEXP mode_sexp) {
+  /* The mode selects among Linux filesystem tiers; Seatbelt always applies
+   * here, which is at least as restrictive as any mode asks for. */
+  (void) mode_sexp;
+
   if (memory_limit != R_NilValue) {
     /* Accepted but not reliably enforced by the macOS kernel; kept for
      * interface parity with the Linux branch. */
@@ -268,21 +721,23 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
     Rf_error("sandbox_init failed: %s", msg);
   }
 
-  return R_NilValue;
+  return Rf_mkString("seatbelt");
 }
 
 #else /* not __linux__ or __APPLE__ */
 
 SEXP c_sandbox_capabilities(void) {
-  SEXP out = PROTECT(Rf_allocVector(INTSXP, 3));
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 4));
   INTEGER(out)[0] = -1;
   INTEGER(out)[1] = 0;
   INTEGER(out)[2] = 0;
+  INTEGER(out)[3] = 0;
   UNPROTECT(1);
   return out;
 }
 
-SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
+SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
+                      SEXP mode_sexp) {
   Rf_error("sandboxing is only supported on Linux and macOS");
   return R_NilValue;
 }
@@ -291,7 +746,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit) {
 
 static const R_CallMethodDef call_methods[] = {
   {"c_sandbox_capabilities", (DL_FUNC) &c_sandbox_capabilities, 0},
-  {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 3},
+  {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 4},
   {NULL, NULL, 0}
 };
 

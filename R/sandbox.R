@@ -7,6 +7,7 @@ sandbox_capabilities <- function() {
   list(
     landlock_abi = caps[[1]],
     seccomp = caps[[2]] > 0,
-    seatbelt = caps[[3]] > 0
+    seatbelt = caps[[3]] > 0,
+    userns = caps[[4]] > 0
   )
 }

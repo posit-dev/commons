@@ -236,10 +236,13 @@ worker_ensure <- function(worker, fn_sources = character()) {
   if (!is.null(worker$rs) && worker$rs$is_alive()) {
     return(invisible(worker))
   }
+  sandbox_mode <- run_r_sandbox_mode()
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir, recursive = TRUE)
   rs <- callr::r_session$new(
-    callr::r_session_options(env = worker_scrubbed_env(work_dir)),
+    callr::r_session_options(
+      env = worker_scrubbed_env(work_dir, worker_single_thread(sandbox_mode))
+    ),
     wait = TRUE
   )
   # callr rebinds a transferred function's environment to the worker's global
@@ -252,7 +255,8 @@ worker_ensure <- function(worker, fn_sources = character()) {
     args = list(
       parent_tmp = tempdir(),
       work_dir = work_dir,
-      dll_path = commons_dll_path()
+      dll_path = commons_dll_path(),
+      sandbox_mode = sandbox_mode
     )
   )
   # Defining sources at spawn (rather than syncing per call like handles)
@@ -263,6 +267,38 @@ worker_ensure <- function(worker, fn_sources = character()) {
   worker$rs <- rs
   worker$synced <- 0L
   invisible(worker)
+}
+
+# On Linux, the filesystem sandbox tries Landlock and then an unprivileged
+# user-namespace jail; "landlock" or "userns" forces one tier, and
+# "seccomp-only" opts out of filesystem confinement where the kernel supports
+# neither (network and process isolation still apply).
+run_r_sandbox_mode <- function(call = rlang::caller_env()) {
+  mode <- getOption("commons.run_r_sandbox", "auto")
+  modes <- c("auto", "landlock", "userns", "seccomp-only")
+  if (!is.character(mode) || length(mode) != 1 || !mode %in% modes) {
+    cli::cli_abort(
+      "The {.code commons.run_r_sandbox} option must be one of
+       {.or {.val {modes}}}.",
+      call = call
+    )
+  }
+  mode
+}
+
+# unshare(CLONE_NEWUSER) fails in a multithreaded process, so when the jail
+# tier is in play, threaded BLAS builds (e.g. EPEL R's OpenBLAS) must be
+# capped before the worker's R starts.
+worker_single_thread <- function(sandbox_mode) {
+  if (!identical(Sys.info()[["sysname"]], "Linux")) {
+    return(FALSE)
+  }
+  switch(
+    sandbox_mode,
+    userns = TRUE,
+    auto = sandbox_capabilities()$landlock_abi < 1,
+    FALSE
+  )
 }
 
 commons_dll_path <- function() {
@@ -285,7 +321,7 @@ worker_close <- function(worker) {
 # The content environment holds credentials (API keys, session tokens,
 # database URLs) that an OS sandbox can't hide, so the worker starts from an
 # allowlist: callr applies `env` with withr semantics, where an NA unsets.
-worker_scrubbed_env <- function(work_dir) {
+worker_scrubbed_env <- function(work_dir, single_thread = FALSE) {
   keep <- c(
     "PATH",
     "LANG",
@@ -305,6 +341,10 @@ worker_scrubbed_env <- function(work_dir) {
   env <- rlang::set_names(rep(NA_character_, length(drop)), drop)
   env[["TMPDIR"]] <- work_dir
   env[["HOME"]] <- work_dir
+  if (single_thread) {
+    env[["OPENBLAS_NUM_THREADS"]] <- "1"
+    env[["OMP_NUM_THREADS"]] <- "1"
+  }
   env
 }
 
@@ -432,13 +472,13 @@ plot_dimensions <- function(ratio, longest_side) {
 # environment is reset to the global env, so these reference only base R,
 # `pkg::fn`, and their own arguments — no commons internals.
 
-worker_init <- function(parent_tmp, work_dir, dll_path) {
+worker_init <- function(parent_tmp, work_dir, dll_path, sandbox_mode = "auto") {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  # Only Linux (Landlock + seccomp) and macOS (Seatbelt) have sandbox
-  # implementations; elsewhere run unsandboxed (local dev only). Where a
-  # sandbox exists it must engage, so a missing compiled library is a hard
-  # error rather than a silent drop to unsandboxed execution.
+  # Only Linux (Landlock or a user-namespace jail, plus seccomp) and macOS
+  # (Seatbelt) have sandbox implementations; elsewhere run unsandboxed (local
+  # dev only). Where a sandbox exists it must engage, so a missing compiled
+  # library is a hard error rather than a silent drop to unsandboxed execution.
   sysname <- Sys.info()[["sysname"]]
   if (!sysname %in% c("Linux", "Darwin")) {
     return(invisible(FALSE))
@@ -484,7 +524,7 @@ worker_init <- function(parent_tmp, work_dir, dll_path) {
   # worker must be able to write there for results to make it back.
   write_roots <- unique(resolve(c(parent_tmp, work_dir)))
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
-  .Call(sym, read_roots, write_roots, NULL)
+  .Call(sym, read_roots, write_roots, NULL, sandbox_mode)
   invisible(TRUE)
 }
 

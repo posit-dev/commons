@@ -1,9 +1,10 @@
 test_that("sandbox_capabilities reports all mechanisms", {
   caps <- sandbox_capabilities()
-  expect_named(caps, c("landlock_abi", "seccomp", "seatbelt"))
+  expect_named(caps, c("landlock_abi", "seccomp", "seatbelt", "userns"))
   expect_type(caps$landlock_abi, "integer")
   expect_type(caps$seccomp, "logical")
   expect_type(caps$seatbelt, "logical")
+  expect_type(caps$userns, "logical")
 })
 
 test_that("worker_init leaves the worker unsandboxed off Linux and macOS", {
@@ -34,38 +35,43 @@ test_that("worker_init errors without the compiled library", {
   )
 })
 
-test_that("an initialized worker is denied reads, writes, and sockets", {
-  skip_on_os(c("windows", "solaris"))
-  if (identical(Sys.info()[["sysname"]], "Linux")) {
-    skip_if_not(
-      sandbox_capabilities()$landlock_abi >= 1,
-      "kernel lacks Landlock"
-    )
-  }
+test_that("worker_ensure validates the commons.run_r_sandbox option", {
+  withr::local_options(commons.run_r_sandbox = "everything-everywhere")
+  expect_error(worker_ensure(new_r_worker()), "commons.run_r_sandbox")
+})
 
-  outside <- file.path(dirname(tempdir()), paste0("canary-", Sys.getpid()))
+# Drive worker_init itself so the sandbox under test is the one run_r
+# engages, not a reimplementation of it.
+sandboxed_worker_probes <- function(sandbox_mode, env = parent.frame()) {
+  outside <- file.path(
+    dirname(tempdir()),
+    paste0("canary-", Sys.getpid(), "-", sandbox_mode)
+  )
   dir.create(outside)
-  on.exit(unlink(outside, recursive = TRUE), add = TRUE)
+  withr::defer(unlink(outside, recursive = TRUE), envir = env)
   writeLines("secret", file.path(outside, "secret.txt"))
 
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir)
-  on.exit(unlink(work_dir, recursive = TRUE), add = TRUE)
+  withr::defer(unlink(work_dir, recursive = TRUE), envir = env)
 
-  # Drive worker_init itself so the sandbox under test is the one run_r
-  # engages, not a reimplementation of it.
-  rs <- callr::r_session$new()
-  on.exit(rs$close(), add = TRUE)
+  rs <- callr::r_session$new(
+    callr::r_session_options(
+      env = worker_scrubbed_env(work_dir, worker_single_thread(sandbox_mode))
+    )
+  )
+  withr::defer(rs$close(), envir = env)
   rs$run(
     worker_init,
     args = list(
       parent_tmp = tempdir(),
       work_dir = work_dir,
-      dll_path = commons_dll_path()
+      dll_path = commons_dll_path(),
+      sandbox_mode = sandbox_mode
     )
   )
 
-  probes <- rs$run(
+  rs$run(
     function(outside) {
       denied <- function(expr) {
         tryCatch(
@@ -113,10 +119,44 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
     },
     args = list(outside = outside)
   )
+}
 
+test_that("an initialized worker is denied reads, writes, and sockets", {
+  skip_on_os(c("windows", "solaris"))
+  if (identical(Sys.info()[["sysname"]], "Linux")) {
+    caps <- sandbox_capabilities()
+    skip_if_not(
+      caps$landlock_abi >= 1 || caps$userns,
+      "kernel lacks both Landlock and user namespaces"
+    )
+  }
+
+  probes <- sandboxed_worker_probes("auto")
   expect_equal(probes$read, "denied")
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
+  expect_equal(probes$compute, 55)
+})
+
+test_that("the user-namespace tier is denied reads, writes, and sockets", {
+  skip_if_not(identical(Sys.info()[["sysname"]], "Linux"))
+  skip_if_not(sandbox_capabilities()$userns, "no unprivileged user namespaces")
+
+  probes <- sandboxed_worker_probes("userns")
+  expect_equal(probes$read, "denied")
+  expect_equal(probes$write, "denied")
+  expect_equal(probes$socket, "denied")
+  expect_equal(probes$subprocess, "denied")
+  expect_equal(probes$compute, 55)
+})
+
+test_that("seccomp-only mode leaves files reachable but not the network", {
+  skip_if_not(identical(Sys.info()[["sysname"]], "Linux"))
+  skip_if_not(sandbox_capabilities()$seccomp, "no seccomp")
+
+  probes <- sandboxed_worker_probes("seccomp-only")
+  expect_equal(probes$read, "allowed")
+  expect_equal(probes$socket, "denied")
   expect_equal(probes$compute, 55)
 })
