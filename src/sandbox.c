@@ -6,7 +6,7 @@
  *
  * On Linux, filesystem confinement has two interchangeable backends fed the
  * same read/write roots: Landlock (kernel 5.13+ with the LSM enabled), and a
- * jail built from an unprivileged user + mount namespace for older kernels
+ * sandbox built from an unprivileged user + mount namespace for older kernels
  * (RHEL 8 and clones, RHEL 9 before 9.6) where Landlock is unavailable. The
  * seccomp filter installs in every tier. */
 
@@ -26,6 +26,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
@@ -36,6 +37,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <linux/audit.h>
+#include <linux/capability.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 
@@ -192,7 +194,7 @@ static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
   return 0;
 }
 
-/* --- user-namespace jail ---------------------------------------------------
+/* --- user-namespace sandbox ------------------------------------------------
  * bubblewrap's mechanism without the bubblewrap binary: unshare into an
  * unprivileged user + mount namespace, pivot_root onto a fresh tmpfs, bind
  * the allowed roots across at their original paths, and detach the host root.
@@ -201,8 +203,8 @@ static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
 
 /* Staging mountpoint for the new root, and where the pre-pivot root is parked
  * while its contents are bound across. Both are gone by the time sandboxed
- * code runs: JAIL_ROOT becomes "/", and OLD_ROOT is detached. */
-#define JAIL_ROOT "/tmp"
+ * code runs: USERNS_ROOT becomes "/", and OLD_ROOT is detached. */
+#define USERNS_ROOT "/tmp"
 #define OLD_ROOT "/.commons-oldroot"
 
 static int count_threads(void) {
@@ -241,7 +243,7 @@ static int write_proc(const char *path, const char *content) {
  * through errno rather than Rf_error so the capabilities probe can call it
  * from a forked child. The ids must be read before unshare(), which leaves
  * getuid() reporting the overflow uid until the map is written. */
-static int jail_map_ids(void) {
+static int userns_map_ids(void) {
   uid_t uid = getuid();
   gid_t gid = getgid();
   char map[64];
@@ -281,11 +283,113 @@ static void mkdir_p(char *path) {
   }
 }
 
+static int path_in_roots(const char *path, SEXP roots) {
+  for (int i = 0; i < Rf_length(roots); i++) {
+    const char *root = CHAR(STRING_ELT(roots, i));
+    size_t len = strlen(root);
+    while (len > 1 && root[len - 1] == '/') {
+      len--;
+    }
+    if (strncmp(path, root, len) == 0 &&
+        (len == 1 || path[len] == '\0' || path[len] == '/')) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static void userns_close_external_fds(SEXP read_roots, SEXP rw_roots) {
+  DIR *d = opendir("/proc/self/fd");
+  if (d == NULL) {
+    Rf_error("cannot inspect inherited file descriptors: %s", strerror(errno));
+  }
+  int scan_fd = dirfd(d);
+  int n_fds = 0;
+  int capacity = 32;
+  int *fds = (int *) R_alloc(capacity, sizeof(int));
+  struct dirent *e;
+  while ((e = readdir(d)) != NULL) {
+    char *end;
+    long value = strtol(e->d_name, &end, 10);
+    if (*e->d_name == '\0' || *end != '\0' || value < 0 || value > INT_MAX) {
+      continue;
+    }
+    int fd = (int) value;
+    if (fd <= 2 || fd == scan_fd) {
+      continue;
+    }
+    if (n_fds == capacity) {
+      int *bigger = (int *) R_alloc(capacity * 2, sizeof(int));
+      memcpy(bigger, fds, capacity * sizeof(int));
+      fds = bigger;
+      capacity *= 2;
+    }
+    fds[n_fds++] = fd;
+  }
+  closedir(d);
+
+  for (int i = 0; i < n_fds; i++) {
+    int fd = fds[i];
+    struct stat st;
+    if (fstat(fd, &st) != 0) {
+      continue;
+    }
+    if (S_ISSOCK(st.st_mode)) {
+      close(fd);
+      continue;
+    }
+    if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode) &&
+        !S_ISCHR(st.st_mode) && !S_ISBLK(st.st_mode)) {
+      continue;
+    }
+
+    char proc_path[64];
+    char target[PATH_MAX];
+    snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", fd);
+    ssize_t n = readlink(proc_path, target, sizeof(target) - 1);
+    if (n < 0) {
+      close(fd);
+      continue;
+    }
+    target[n] = '\0';
+    int flags = fcntl(fd, F_GETFL);
+    int readable_root = flags >= 0 && (flags & O_ACCMODE) == O_RDONLY &&
+                        path_in_roots(target, read_roots);
+    if (!readable_root && !path_in_roots(target, rw_roots)) {
+      close(fd);
+    }
+  }
+}
+
+static void userns_drop_capabilities(void) {
+  /* The bounding set prevents capabilities returning across exec; capset
+   * removes the capabilities held by the current process. */
+  for (int cap = 0; ; cap++) {
+    if (prctl(PR_CAPBSET_DROP, cap, 0, 0, 0) == 0) {
+      continue;
+    }
+    if (errno == EINVAL) {
+      break;
+    }
+    Rf_error("cannot drop capability %d from the bounding set: %s", cap,
+             strerror(errno));
+  }
+
+  struct __user_cap_header_struct header = {
+    .version = _LINUX_CAPABILITY_VERSION_3,
+    .pid = 0
+  };
+  struct __user_cap_data_struct data[2] = {{0}};
+  if (syscall(SYS_capset, &header, data) != 0) {
+    Rf_error("cannot clear sandbox capabilities: %s", strerror(errno));
+  }
+}
+
 /* Make one already-bound path read-only. A mount inherited into a user
  * namespace is locked, so its flags (nosuid and friends) must be repeated on
  * remount or the kernel refuses with EPERM; adding MS_RDONLY on top is
  * allowed because it can only narrow access. */
-static void jail_readonly(const char *path) {
+static void userns_readonly(const char *path) {
   unsigned long flags = MS_REMOUNT | MS_BIND | MS_RDONLY;
   struct statvfs sv;
   if (statvfs(path, &sv) == 0) {
@@ -311,8 +415,8 @@ static void jail_readonly(const char *path) {
  * child mount covers. Riding along means a read-only root can contain a
  * writable submount, so `submounts` — mount points collected before the
  * pivot, when /proc was still readable — are narrowed to read-only too. */
-static void jail_bind(const char *root, int rdonly, const char **submounts,
-                      int n_submounts) {
+static void userns_bind(const char *root, int rdonly, const char **submounts,
+                        int n_submounts) {
   char src[PATH_MAX];
   char dst[PATH_MAX];
   if (snprintf(src, sizeof(src), OLD_ROOT "%s", root) >= (int) sizeof(src) ||
@@ -326,13 +430,13 @@ static void jail_bind(const char *root, int rdonly, const char **submounts,
   if (!rdonly) {
     return;
   }
-  jail_readonly(dst);
+  userns_readonly(dst);
   size_t len = strlen(root);
   int at_root = strcmp(root, "/") == 0;
   for (int i = 0; i < n_submounts; i++) {
     const char *sub = submounts[i];
     if (at_root || (strncmp(sub, root, len) == 0 && sub[len] == '/')) {
-      jail_readonly(sub);
+      userns_readonly(sub);
     }
   }
 }
@@ -340,18 +444,34 @@ static void jail_bind(const char *root, int rdonly, const char **submounts,
 /* Mount points in this namespace, read from /proc/self/mountinfo, which is
  * only reachable before the pivot. Paths are unchanged by the binds, which
  * reuse each root's original location. */
-static const char **jail_submounts(int *n) {
+static void mountinfo_unescape(char *path) {
+  char *src = path;
+  char *dst = path;
+  while (*src != '\0') {
+    if (src[0] == '\\' && src[1] >= '0' && src[1] <= '7' &&
+        src[2] >= '0' && src[2] <= '7' &&
+        src[3] >= '0' && src[3] <= '7') {
+      *dst++ = (char) ((src[1] - '0') * 64 + (src[2] - '0') * 8 +
+                      (src[3] - '0'));
+      src += 4;
+    } else {
+      *dst++ = *src++;
+    }
+  }
+  *dst = '\0';
+}
+
+static const char **userns_submounts(int *n) {
   *n = 0;
   FILE *f = fopen("/proc/self/mountinfo", "r");
   if (f == NULL) {
-    return NULL;
+    Rf_error("cannot inspect sandbox mounts: %s", strerror(errno));
   }
   int cap = 64;
   const char **out = (const char **) R_alloc(cap, sizeof(char *));
-  char line[PATH_MAX * 2];
-  while (fgets(line, sizeof(line), f) != NULL) {
-    /* Field 5 is the mount point, with spaces escaped as \040; a path
-     * containing one is not a root we grant, so such lines are skipped. */
+  char *line = NULL;
+  size_t line_size = 0;
+  while (getline(&line, &line_size, f) >= 0) {
     char *p = line;
     for (int field = 0; field < 4 && p != NULL; field++) {
       p = strchr(p + 1, ' ');
@@ -361,10 +481,11 @@ static const char **jail_submounts(int *n) {
     }
     char *start = p + 1;
     char *end = strchr(start, ' ');
-    if (end == NULL || strstr(start, "\\040") != NULL) {
+    if (end == NULL) {
       continue;
     }
     *end = '\0';
+    mountinfo_unescape(start);
     if (*n == cap) {
       const char **bigger = (const char **) R_alloc(cap * 2, sizeof(char *));
       memcpy(bigger, out, cap * sizeof(char *));
@@ -375,14 +496,20 @@ static const char **jail_submounts(int *n) {
     strcpy(copy, start);
     out[(*n)++] = copy;
   }
+  int read_error = ferror(f);
+  int read_errno = errno;
+  free(line);
   fclose(f);
+  if (read_error) {
+    Rf_error("cannot read sandbox mounts: %s", strerror(read_errno));
+  }
   return out;
 }
 
 /* Returns 0 on success, or the errno from entering the namespace — the probe
  * for whether this host permits unprivileged user namespaces — for the caller
  * to translate. Failures past that point raise here. */
-static int jail_engage(SEXP read_roots, SEXP rw_roots) {
+static int userns_engage(SEXP read_roots, SEXP rw_roots) {
   int threads = count_threads();
   if (threads != 1) {
     Rf_error("cannot engage the user-namespace sandbox from a multithreaded "
@@ -395,31 +522,32 @@ static int jail_engage(SEXP read_roots, SEXP rw_roots) {
   if (getcwd(cwd, sizeof(cwd)) == NULL) {
     Rf_error("getcwd failed: %s", strerror(errno));
   }
-  int n_submounts = 0;
-  const char **submounts = jail_submounts(&n_submounts);
-
-  if (jail_map_ids() != 0) {
+  if (userns_map_ids() != 0) {
     return errno;
   }
 
-  /* Keep mount events from propagating back to the host namespace, and give
-   * the jail a root nothing else references. */
-  if (mount("none", "/", NULL, MS_SLAVE | MS_REC, NULL) != 0) {
-    Rf_error("cannot make / a slave mount: %s", strerror(errno));
+  /* Freeze this namespace's mount topology before taking the snapshot used
+   * to make nested mounts read-only. */
+  if (mount("none", "/", NULL, MS_PRIVATE | MS_REC, NULL) != 0) {
+    Rf_error("cannot make / a private mount: %s", strerror(errno));
   }
-  if (mount("tmpfs", JAIL_ROOT, "tmpfs", 0, "size=16m,mode=0755") != 0) {
+  int n_submounts = 0;
+  const char **submounts = userns_submounts(&n_submounts);
+  userns_close_external_fds(read_roots, rw_roots);
+
+  if (mount("tmpfs", USERNS_ROOT, "tmpfs", 0, "size=16m,mode=0755") != 0) {
     Rf_error("cannot mount the sandbox root tmpfs: %s", strerror(errno));
   }
 
   /* Pivot before binding anything, so the roots can be copied across from
    * the intact pre-pivot tree at OLD_ROOT. Binding beforehand would need
-   * sources under JAIL_ROOT — usually where tempdirs live — to survive the
+   * sources under USERNS_ROOT — usually where tempdirs live — to survive the
    * tmpfs covering them, and a bind's source has to be a real path (the
    * kernel rejects /proc/self/fd magic symlinks with EINVAL). */
-  if (mkdir(JAIL_ROOT OLD_ROOT, 0755) != 0) {
+  if (mkdir(USERNS_ROOT OLD_ROOT, 0755) != 0) {
     Rf_error("cannot create the pivot directory: %s", strerror(errno));
   }
-  if (syscall(SYS_pivot_root, JAIL_ROOT, JAIL_ROOT OLD_ROOT) != 0) {
+  if (syscall(SYS_pivot_root, USERNS_ROOT, USERNS_ROOT OLD_ROOT) != 0) {
     Rf_error("pivot_root failed: %s", strerror(errno));
   }
   if (chdir("/") != 0) {
@@ -430,7 +558,7 @@ static int jail_engage(SEXP read_roots, SEXP rw_roots) {
   int n_rw = Rf_length(rw_roots);
   for (int i = 0; i < n_read + n_rw; i++) {
     SEXP roots = i < n_read ? read_roots : rw_roots;
-    jail_bind(
+    userns_bind(
       CHAR(STRING_ELT(roots, i < n_read ? i : i - n_read)),
       i < n_read,
       submounts,
@@ -442,7 +570,7 @@ static int jail_engage(SEXP read_roots, SEXP rw_roots) {
     Rf_error("cannot detach the host root: %s", strerror(errno));
   }
   rmdir(OLD_ROOT);
-  /* The tmpfs root was writable by this uid while the jail was assembled. */
+  /* The tmpfs root was writable while the namespace was assembled. */
   if (mount(NULL, "/", NULL, MS_REMOUNT | MS_BIND | MS_RDONLY, NULL) != 0) {
     Rf_error("cannot make the sandbox root read-only: %s", strerror(errno));
   }
@@ -452,13 +580,14 @@ static int jail_engage(SEXP read_roots, SEXP rw_roots) {
   if (chdir(cwd) != 0) {
     errno = 0;
   }
+  userns_drop_capabilities();
   return 0;
 }
 
 /* No network, no reading other processes' memory (the parent holds
  * credentials the worker must never see), and no reshaping the mount or
- * namespace topology (the userns jail leaves the worker with capabilities
- * in its own namespace; denying the mount family makes them inert). */
+ * namespace topology. The namespace backend drops its capabilities too;
+ * screening these calls also prevents unprivileged namespace creation. */
 static void seccomp_engage(void) {
 #define SANDBOX_DENY(err) \
   BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | ((err) & SECCOMP_RET_DATA))
@@ -538,7 +667,7 @@ SEXP c_sandbox_capabilities(void) {
   int userns_ok = 0;
   pid_t pid = fork();
   if (pid == 0) {
-    _exit(jail_map_ids() == 0 ? 0 : 1);
+    _exit(userns_map_ids() == 0 ? 0 : 1);
   } else if (pid > 0) {
     int status;
     if (waitpid(pid, &status, 0) == pid) {
@@ -571,7 +700,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   }
 
   /* Required before both landlock_restrict_self and the seccomp filter for
-   * an unprivileged process; harmless for the jail. */
+   * an unprivileged process; harmless for the namespace sandbox. */
   if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)) {
     Rf_error("prctl(PR_SET_NO_NEW_PRIVS) failed: %s", strerror(errno));
   }
@@ -591,7 +720,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   }
   if (tier == NULL &&
       (strcmp(mode, "userns") == 0 || strcmp(mode, "auto") == 0)) {
-    int err = jail_engage(read_roots, rw_roots);
+    int err = userns_engage(read_roots, rw_roots);
     if (err == 0) {
       tier = "userns";
     } else if (strcmp(mode, "userns") == 0) {

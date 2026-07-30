@@ -49,7 +49,10 @@ sandboxed_worker_probes <- function(sandbox_mode, env = parent.frame()) {
   )
   dir.create(outside)
   withr::defer(unlink(outside, recursive = TRUE), envir = env)
-  writeLines("secret", file.path(outside, "secret.txt"))
+  writeLines(
+    c("secret", rep("padding", 20000)),
+    file.path(outside, "secret.txt")
+  )
 
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir)
@@ -61,6 +64,16 @@ sandboxed_worker_probes <- function(sandbox_mode, env = parent.frame()) {
     )
   )
   withr::defer(rs$close(), envir = env)
+  rs$run(
+    function(outside) {
+      assign(
+        ".commons_inherited_file",
+        file(file.path(outside, "secret.txt"), open = "r"),
+        envir = globalenv()
+      )
+    },
+    args = list(outside = outside)
+  )
   rs$run(
     worker_init,
     args = list(
@@ -85,6 +98,15 @@ sandboxed_worker_probes <- function(sandbox_mode, env = parent.frame()) {
       }
       list(
         read = denied(readLines(file.path(outside, "secret.txt"), n = 1)),
+        inherited = denied({
+          con <- get(".commons_inherited_file", envir = globalenv())
+          seek(con, where = 100000)
+          line <- readLines(con, n = 1)
+          if (length(line) == 0) {
+            warning("inherited descriptor was closed")
+          }
+          line
+        }),
         write = if (
           isTRUE(suppressWarnings(file.create(file.path(outside, "w"))))
         ) {
@@ -145,6 +167,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
 
   probes <- sandboxed_worker_probes("userns")
   expect_equal(probes$read, "denied")
+  expect_equal(probes$inherited, "denied")
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
