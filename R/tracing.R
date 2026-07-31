@@ -17,6 +17,7 @@ new_trajectory_tracing <- function(
 ) {
   rlang::check_bool(log, call = call)
   check_share_with(share_with, call = call)
+  repair_connect_trace_routing()
 
   if (!log) {
     if (!is.null(share_with)) {
@@ -65,6 +66,60 @@ new_trajectory_tracing <- function(
   }
 
   TRUE
+}
+
+# Connect 2026.07 can overwrite content routing with its server attributes.
+repair_connect_trace_routing <- function() {
+  if (!is_connect_runtime() || !is_installed("otel")) {
+    return(invisible(FALSE))
+  }
+
+  guid <- Sys.getenv("CONNECT_CONTENT_GUID")
+  job_key <- Sys.getenv("CONNECT_CONTENT_JOB_KEY")
+  if (!nzchar(guid) || !nzchar(job_key)) {
+    return(invisible(FALSE))
+  }
+
+  current <- Sys.getenv("OTEL_RESOURCE_ATTRIBUTES")
+  pairs <- strsplit(current, ",", fixed = TRUE)[[1]]
+  pairs <- pairs[nzchar(pairs)]
+  names <- sub("=.*$", "", pairs)
+  values <- sub("^[^=]*=", "", pairs)
+
+  correctly_routed <-
+    any(names == "content.guid" & values == guid) &&
+      any(names == "job.key" & values == job_key)
+  if (correctly_routed) {
+    return(invisible(FALSE))
+  }
+
+  pairs <- pairs[!names %in% c("content.guid", "job.key")]
+  pairs <- c(
+    pairs,
+    paste0("content.guid=", guid),
+    paste0("job.key=", job_key)
+  )
+  Sys.setenv(OTEL_RESOURCE_ATTRIBUTES = paste(pairs, collapse = ","))
+  repair_otelsdk_resource_attributes(guid, job_key)
+  reset_otel_tracer_provider()
+  refresh_ellmer_otel_cache()
+  invisible(TRUE)
+}
+
+repair_otelsdk_resource_attributes <- function(guid, job_key) {
+  if (!isNamespaceLoaded("otelsdk")) {
+    return(invisible(FALSE))
+  }
+
+  the <- asNamespace("otelsdk")$the
+  if (!is.environment(the) || !is.list(the$default_resource_attributes)) {
+    return(invisible(FALSE))
+  }
+
+  # otelsdk snapshots its environment before commons can repair it.
+  the$default_resource_attributes[["content.guid"]] <- guid
+  the$default_resource_attributes[["job.key"]] <- job_key
+  invisible(TRUE)
 }
 
 # Start and activate a span for the calling frame's lifetime, ending when it

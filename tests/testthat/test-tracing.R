@@ -96,6 +96,124 @@ test_that("an already-on observability setting warns about the restart", {
   expect_equal(state$patched, 0)
 })
 
+test_that("Connect trace routing adds content attributes", {
+  withr::local_envvar(c(
+    CONNECT_CONTENT_GUID = "59b1b5c3-a010-455f-853a-114fe7be5285",
+    CONNECT_CONTENT_JOB_KEY = "ocNixD62q2V8Zrpg",
+    OTEL_RESOURCE_ATTRIBUTES = paste0(
+      "k8s.namespace.name=datascience,",
+      "k8s.pod.name=connect-pod"
+    )
+  ))
+  state <- new.env()
+  state$sdk_repairs <- 0
+  state$provider_resets <- 0
+  state$ellmer_refreshes <- 0
+  local_mocked_bindings(
+    is_installed = function(pkg) TRUE,
+    repair_otelsdk_resource_attributes = function(guid, job_key) {
+      state$sdk_repairs <- state$sdk_repairs + 1
+    },
+    reset_otel_tracer_provider = function() {
+      state$provider_resets <- state$provider_resets + 1
+    },
+    refresh_ellmer_otel_cache = function() {
+      state$ellmer_refreshes <- state$ellmer_refreshes + 1
+    }
+  )
+
+  expect_true(repair_connect_trace_routing())
+  expect_equal(
+    Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"),
+    paste0(
+      "k8s.namespace.name=datascience,k8s.pod.name=connect-pod,",
+      "content.guid=59b1b5c3-a010-455f-853a-114fe7be5285,",
+      "job.key=ocNixD62q2V8Zrpg"
+    )
+  )
+  expect_equal(state$sdk_repairs, 1)
+  expect_equal(state$provider_resets, 1)
+  expect_equal(state$ellmer_refreshes, 1)
+})
+
+test_that("Connect trace routing replaces stale content attributes", {
+  withr::local_envvar(c(
+    CONNECT_CONTENT_GUID = "59b1b5c3-a010-455f-853a-114fe7be5285",
+    CONNECT_CONTENT_JOB_KEY = "newjob",
+    OTEL_RESOURCE_ATTRIBUTES = paste0(
+      "content.guid=old-guid,job.key=oldjob,",
+      "k8s.namespace.name=datascience"
+    )
+  ))
+  local_mocked_bindings(
+    is_installed = function(pkg) TRUE,
+    repair_otelsdk_resource_attributes = function(...) NULL,
+    reset_otel_tracer_provider = function() NULL,
+    refresh_ellmer_otel_cache = function() NULL
+  )
+
+  expect_true(repair_connect_trace_routing())
+  expect_equal(
+    Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"),
+    paste0(
+      "k8s.namespace.name=datascience,",
+      "content.guid=59b1b5c3-a010-455f-853a-114fe7be5285,",
+      "job.key=newjob"
+    )
+  )
+})
+
+test_that("Connect trace routing leaves correct attributes alone", {
+  attributes <- paste0(
+    "content.id=18910,",
+    "content.guid=59b1b5c3-a010-455f-853a-114fe7be5285,",
+    "job.key=ocNixD62q2V8Zrpg"
+  )
+  withr::local_envvar(c(
+    CONNECT_CONTENT_GUID = "59b1b5c3-a010-455f-853a-114fe7be5285",
+    CONNECT_CONTENT_JOB_KEY = "ocNixD62q2V8Zrpg",
+    OTEL_RESOURCE_ATTRIBUTES = attributes
+  ))
+  reset <- FALSE
+  local_mocked_bindings(
+    is_installed = function(pkg) TRUE,
+    reset_otel_tracer_provider = function() reset <<- TRUE
+  )
+
+  expect_false(repair_connect_trace_routing())
+  expect_false(reset)
+  expect_equal(Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"), attributes)
+})
+
+test_that("Connect trace routing repairs loaded otelsdk resources", {
+  skip_if_not_installed("otelsdk")
+  the <- asNamespace("otelsdk")$the
+  original <- the$default_resource_attributes
+  withr::defer(the$default_resource_attributes <- original)
+
+  expect_true(repair_otelsdk_resource_attributes("content-guid", "job-key"))
+  expect_equal(
+    the$default_resource_attributes[["content.guid"]],
+    "content-guid"
+  )
+  expect_equal(the$default_resource_attributes[["job.key"]], "job-key")
+})
+
+test_that("Connect trace routing requires a content GUID and job key", {
+  withr::local_envvar(c(
+    POSIT_PRODUCT = NA,
+    CONNECT_CONTENT_GUID = NA,
+    CONNECT_CONTENT_JOB_KEY = NA,
+    OTEL_RESOURCE_ATTRIBUTES = "k8s.namespace.name=datascience"
+  ))
+
+  expect_false(repair_connect_trace_routing())
+  expect_equal(
+    Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"),
+    "k8s.namespace.name=datascience"
+  )
+})
+
 test_that("enable_local_tracing configures the file exporter when unset", {
   skip_if_not_installed("otelsdk")
   dir <- withr::local_tempdir()
@@ -260,6 +378,10 @@ test_that("the internals the tracing hacks rely on still exist", {
   the <- asNamespace("otel")[["the"]]
   expect_true(is.environment(the))
   expect_true(exists("tracer_provider", envir = the, inherits = FALSE))
+
+  sdk_the <- asNamespace("otelsdk")[["the"]]
+  expect_true(is.environment(sdk_the))
+  expect_true(is.list(sdk_the$default_resource_attributes))
 })
 
 test_that("local_commons_span is a no-op without otel", {
