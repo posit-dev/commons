@@ -13,6 +13,15 @@
   display: none;
 }
 
+/* In a live commons app, commons-chat.css loads after shinychat's sheet, so
+ * its gray user bubble wins; here the order flips (shinychat's sheet rides
+ * in with the dynamically rendered chat), so restate the variables from
+ * commons-chat.css's shiny-chat-container block. */
+.commons-viewer-transcript shiny-chat-container {
+  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
+  --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
+}
+
 /* ---- Hit rate ----------------------------------------------------------- */
 
 /* Border to match the verified-answer pill; bg/fg come from the box theme. */
@@ -154,27 +163,18 @@
 }
 
 .commons-viewer-exchange-message:hover {
-  background: color-mix(
-    in srgb,
-    var(--bs-primary-bg-subtle, #e7f1ff) 45%,
-    transparent
-  );
+  background: color-mix(in srgb, #007bc2 5%, transparent);
 }
 
 .commons-viewer-exchange-message:focus-visible {
-  outline: 2px solid var(--bs-primary, #0d6efd);
+  outline: 2px solid #007bc2;
   outline-offset: 2px;
 }
 
-/* Softer than the raw selection token: over a whole exchange the full
- * strength reads much heavier than the same color on a list entry. Selected
- * (70%) sits clearly above hover (45%). */
+/* Selected (9%) sits above hover (5%): over a whole exchange even a light
+ * wash carries plenty of weight. */
 .commons-viewer-exchange-highlight {
-  background: color-mix(
-    in srgb,
-    var(--bs-primary-bg-subtle, #e7f1ff) 70%,
-    transparent
-  );
+  background: color-mix(in srgb, #007bc2 9%, transparent);
   border-radius: 0.5rem;
   display: none;
   left: 0;
@@ -233,10 +233,13 @@
   text-decoration: none;
 }
 
+/* Selections wash with the commons blue (#007bc2, the accent
+ * commons-chat.css mixes from) rather than Bootstrap's primary subtle,
+ * which reads heavier and bluer. */
 .commons-viewer-entry-selected,
 .commons-viewer-entry-selected:hover,
 .commons-viewer-entry-selected:focus {
-  background: var(--bs-primary-bg-subtle, #e7f1ff);
+  background: color-mix(in srgb, #007bc2 8%, var(--bs-body-bg, #fff));
 }
 
 .commons-viewer-entry-snippet {
