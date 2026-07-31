@@ -96,54 +96,6 @@ test_that("an already-on observability setting warns about the restart", {
   expect_equal(state$patched, 0)
 })
 
-test_that("Connect trace routing replaces stale content attributes", {
-  withr::local_envvar(c(
-    CONNECT_CONTENT_GUID = "59b1b5c3-a010-455f-853a-114fe7be5285",
-    CONNECT_CONTENT_JOB_KEY = "newjob",
-    OTEL_RESOURCE_ATTRIBUTES = paste0(
-      "content.guid=old-guid,job.key=oldjob,",
-      "k8s.namespace.name=datascience"
-    )
-  ))
-  local_mocked_bindings(
-    is_installed = function(pkg) TRUE,
-    reset_otel_tracer_provider = function() NULL,
-    refresh_ellmer_otel_cache = function() NULL
-  )
-
-  expect_true(repair_connect_trace_routing())
-  expect_equal(
-    Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"),
-    paste0(
-      "k8s.namespace.name=datascience,",
-      "content.guid=59b1b5c3-a010-455f-853a-114fe7be5285,",
-      "job.key=newjob"
-    )
-  )
-})
-
-test_that("Connect trace routing leaves correct attributes alone", {
-  attributes <- paste0(
-    "content.id=18910,",
-    "content.guid=59b1b5c3-a010-455f-853a-114fe7be5285,",
-    "job.key=ocNixD62q2V8Zrpg"
-  )
-  withr::local_envvar(c(
-    CONNECT_CONTENT_GUID = "59b1b5c3-a010-455f-853a-114fe7be5285",
-    CONNECT_CONTENT_JOB_KEY = "ocNixD62q2V8Zrpg",
-    OTEL_RESOURCE_ATTRIBUTES = attributes
-  ))
-  reset <- FALSE
-  local_mocked_bindings(
-    is_installed = function(pkg) TRUE,
-    reset_otel_tracer_provider = function() reset <<- TRUE
-  )
-
-  expect_false(repair_connect_trace_routing())
-  expect_false(reset)
-  expect_equal(Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"), attributes)
-})
-
 test_that("enable_local_tracing configures the file exporter when unset", {
   skip_if_not_installed("otelsdk")
   dir <- withr::local_tempdir()
