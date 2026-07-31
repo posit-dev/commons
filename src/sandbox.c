@@ -556,7 +556,6 @@ static void seccomp_engage(void) {
     BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, SANDBOX_X32_SYSCALL_BIT, 0, 1),
     SANDBOX_DENY(EPERM),
 #endif
-    SANDBOX_SCREEN(__NR_socket),
     SANDBOX_SCREEN(__NR_ptrace),
     SANDBOX_SCREEN(__NR_process_vm_readv),
     SANDBOX_SCREEN(__NR_process_vm_writev),
@@ -601,6 +600,31 @@ static void seccomp_engage(void) {
 #undef SANDBOX_DENY
 }
 
+static void network_engage(void) {
+  struct sock_filter filt[] = {
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, arch)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SANDBOX_AUDIT_ARCH, 1, 0),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, nr)),
+#ifdef SANDBOX_X32_SYSCALL_BIT
+    BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, SANDBOX_X32_SYSCALL_BIT, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+#endif
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+  };
+  struct sock_fprog prog = {
+    .len = sizeof(filt) / sizeof(filt[0]),
+    .filter = filt
+  };
+  if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
+    Rf_error("network filter install failed: %s", strerror(errno));
+  }
+}
+
 SEXP c_sandbox_capabilities(void) {
   long landlock_abi = syscall(__NR_landlock_create_ruleset, NULL, 0,
                               LL_CREATE_RULESET_VERSION);
@@ -626,11 +650,15 @@ SEXP c_sandbox_capabilities(void) {
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
-                      SEXP mode_sexp, SEXP preserve_fds) {
+                      SEXP mode_sexp, SEXP preserve_fds, SEXP network_sexp) {
   const char *mode = CHAR(STRING_ELT(mode_sexp, 0));
   if (strcmp(mode, "auto") != 0 && strcmp(mode, "landlock") != 0 &&
-      strcmp(mode, "userns") != 0 && strcmp(mode, "seccomp-only") != 0) {
+      strcmp(mode, "userns") != 0) {
     Rf_error("unknown sandbox mode '%s'", mode);
+  }
+  const char *network = CHAR(STRING_ELT(network_sexp, 0));
+  if (strcmp(network, "none") != 0 && strcmp(network, "full") != 0) {
+    Rf_error("unknown network access level '%s'", network);
   }
 
   if (memory_limit != R_NilValue) {
@@ -668,17 +696,15 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
       Rf_error(
         "cannot sandbox the run_r session: this system offers neither "
         "Landlock nor unprivileged user namespaces "
-        "(unshare failed: %s). Set "
-        "options(commons.run_r_sandbox = \"seccomp-only\") to run with "
-        "only network and process isolation.",
+        "(unshare failed: %s)",
         strerror(err));
     }
   }
-  if (tier == NULL) {
-    tier = "seccomp-only";
-  }
 
   seccomp_engage();
+  if (strcmp(network, "none") == 0) {
+    network_engage();
+  }
 
   return Rf_mkString(tier);
 }
@@ -731,10 +757,14 @@ SEXP c_sandbox_capabilities(void) {
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
-                      SEXP mode_sexp, SEXP preserve_fds) {
+                      SEXP mode_sexp, SEXP preserve_fds, SEXP network_sexp) {
   /* Sandbox modes select Linux backends only. */
   (void) mode_sexp;
   (void) preserve_fds;
+  const char *network = CHAR(STRING_ELT(network_sexp, 0));
+  if (strcmp(network, "none") != 0 && strcmp(network, "full") != 0) {
+    Rf_error("unknown network access level '%s'", network);
+  }
 
   if (memory_limit != R_NilValue) {
     /* Accepted but not reliably enforced by the macOS kernel; kept for
@@ -755,16 +785,17 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   }
   char *profile = R_alloc(size, 1);
 
-  /* Later rules take precedence in SBPL, so each blanket deny is followed by
-   * its allowlist; rw roots appear in both, mirroring Landlock's FS_V1_ALL.
-   * (deny network*) covers unix-domain sockets too, blocking DNS via
-   * mDNSResponder — parity with seccomp's blanket socket() denial.
-   * file-read-metadata stays allowed for path traversal: it exposes
-   * existence of files outside the roots, but not contents. */
+  /* Later rules take precedence in SBPL, so each filesystem deny is followed
+   * by its allowlist; rw roots appear in both, mirroring Landlock's FS_V1_ALL.
+   * file-read-metadata stays allowed for path traversal: it exposes existence
+   * of files outside the roots, but not contents. */
   size_t off = append_str(profile, size, 0,
     "(version 1)\n"
-    "(allow default)\n"
-    "(deny network*)\n"
+    "(allow default)\n");
+  if (strcmp(network, "none") == 0) {
+    off = append_str(profile, size, off, "(deny network*)\n");
+  }
+  off = append_str(profile, size, off,
     "(deny file-write*)\n"
     "(allow file-write* (literal \"/dev/null\")");
   off = append_subpaths(profile, size, off, rw_roots);
@@ -804,7 +835,7 @@ SEXP c_sandbox_capabilities(void) {
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
-                      SEXP mode_sexp, SEXP preserve_fds) {
+                      SEXP mode_sexp, SEXP preserve_fds, SEXP network_sexp) {
   Rf_error("sandboxing is only supported on Linux and macOS");
   return R_NilValue;
 }
@@ -813,7 +844,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
 
 static const R_CallMethodDef call_methods[] = {
   {"c_sandbox_capabilities", (DL_FUNC) &c_sandbox_capabilities, 0},
-  {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 5},
+  {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 6},
   {NULL, NULL, 0}
 };
 

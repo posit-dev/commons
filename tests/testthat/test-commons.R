@@ -99,6 +99,16 @@ test_that("commons() registers only the tools the agent's composition earns", {
   )
 })
 
+test_that("commons() configures run_r network access", {
+  restricted <- agent_tool(test_agent(), "run_r")
+  full <- agent_tool(test_agent(network = "full"), "run_r")
+
+  expect_match(tool_description(restricted), "no network access")
+  expect_match(tool_description(full), "full network access")
+  expect_false(S7::prop(restricted, "annotations")$open_world_hint)
+  expect_true(S7::prop(full, "annotations")$open_world_hint)
+})
+
 test_that("the system prompt includes tables, the date, and measure workflow", {
   agent <- test_agent(
     semantic_layer = semantic_layer(
@@ -196,6 +206,7 @@ test_that("commons() accepts an empty semantic layer", {
 })
 
 test_that("commons() validates its inputs", {
+  expect_error(test_agent(network = "partial"), "network")
   expect_snapshot(
     commons(client = "not a chat", data_sources = test_source()),
     error = TRUE

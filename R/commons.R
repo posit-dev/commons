@@ -17,6 +17,8 @@
 #'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
+#' @param network Whether the `run_r` session has network access. One of
+#'   `"none"` (the default) or `"full"`.
 #' @param system_prompt The agent's system prompt, as a single string. The
 #'   default interpolates the markdown prompt shipped with commons, filling
 #'   its `{{date}}` keyword. To customize the prompt, copy that file into
@@ -117,6 +119,7 @@ commons <- function(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  network = c("none", "full"),
   system_prompt = ellmer::interpolate_file(
     system.file("prompts/system-prompt.md", package = "commons"),
     date = Sys.Date()
@@ -142,6 +145,7 @@ commons <- function(
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
+  network <- rlang::arg_match(network)
   check_system_prompt(system_prompt)
   rlang::check_bool(log)
   check_share_with(share_with)
@@ -151,6 +155,7 @@ commons <- function(
     data_sources = data_sources,
     context_layer = context_layer,
     semantic_layer = semantic_layer,
+    network = network,
     system_prompt = system_prompt,
     log = log,
     share_with = share_with
@@ -165,13 +170,14 @@ Commons <- R6::R6Class(
   public = list(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
-    #' @param client,data_sources,context_layer,semantic_layer,system_prompt,log,share_with
+    #' @param client,data_sources,context_layer,semantic_layer,network,system_prompt,log,share_with
     #'   See [commons()].
     initialize = function(
       client,
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
+      network = c("none", "full"),
       system_prompt = ellmer::interpolate_file(
         system.file("prompts/system-prompt.md", package = "commons"),
         date = Sys.Date()
@@ -181,6 +187,7 @@ Commons <- R6::R6Class(
     ) {
       super$initialize(provider = client$get_provider(), echo = "none")
       semantic_layer <- semantic_layer %||% new_semantic_layer()
+      network <- rlang::arg_match(network)
 
       sources <- as_data_sources(data_sources)
 
@@ -211,7 +218,7 @@ Commons <- R6::R6Class(
       )
 
       private$handles <- new_handle_store()
-      private$worker <- new_r_worker()
+      private$worker <- new_r_worker(network)
       private$corpus <- build_citation_corpus(
         private$context_layer,
         private$registry,

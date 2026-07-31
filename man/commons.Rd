@@ -10,6 +10,7 @@ commons(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  network = c("none", "full"),
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
   log = FALSE,
@@ -29,6 +30,9 @@ can take a source's connection as an argument named after the source; see
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
+
+\item{network}{Whether the \code{run_r} session has network access. One of
+\code{"none"} (the default) or \code{"full"}.}
 
 \item{system_prompt}{The agent's system prompt, as a single string. The
 default interpolates the markdown prompt shipped with commons, filling
@@ -189,6 +193,7 @@ rather than this method directly.
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  network = c("none", "full"),
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
   log = FALSE,
@@ -199,7 +204,7 @@ rather than this method directly.
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{client, data_sources, context_layer, semantic_layer, system_prompt, log, share_with}}{See \code{\link[=commons]{commons()}}.}
+      \item{\code{client, data_sources, context_layer, semantic_layer, network, system_prompt, log, share_with}}{See \code{\link[=commons]{commons()}}.}
     }
     \if{html}{\out{</div>}}
   }

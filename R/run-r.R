@@ -36,8 +36,12 @@ tool_run_r <- function(private) {
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
       "\n- Return results implicitly (`x`, not `print(x)`) and prefer brief",
       "summaries (head(), summary()) over large outputs.",
-      "\n- The session has no network access and can only write to its own",
-      "temporary directory."
+      if (identical(private$worker$network, "none")) {
+        "\n- The session has no network access."
+      } else {
+        "\n- The session has full network access."
+      },
+      "\n- The session can only write to its own temporary directory."
     ),
     arguments = list(
       code = ellmer::type_string("The R code to run.")
@@ -47,7 +51,7 @@ tool_run_r <- function(private) {
       title = "R code",
       icon = maybe_icon("terminal"),
       read_only_hint = FALSE,
-      open_world_hint = FALSE
+      open_world_hint = identical(private$worker$network, "full")
     )
   )
 }
@@ -215,8 +219,9 @@ run_r_html <- function(code, segments) {
 
 # --- worker lifecycle --------------------------------------------------------
 
-new_r_worker <- function() {
+new_r_worker <- function(network = "none") {
   worker <- new.env(parent = emptyenv())
+  worker$network <- network
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
@@ -236,12 +241,11 @@ worker_ensure <- function(worker, fn_sources = character()) {
   if (!is.null(worker$rs) && worker$rs$is_alive()) {
     return(invisible(worker))
   }
-  sandbox_mode <- run_r_sandbox_mode()
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir, recursive = TRUE)
   rs <- callr::r_session$new(
     callr::r_session_options(
-      env = worker_scrubbed_env(work_dir, worker_single_thread(sandbox_mode))
+      env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
     ),
     wait = TRUE
   )
@@ -256,7 +260,7 @@ worker_ensure <- function(worker, fn_sources = character()) {
       parent_tmp = tempdir(),
       work_dir = work_dir,
       dll_path = commons_dll_path(),
-      sandbox_mode = sandbox_mode
+      network = worker$network
     )
   )
   # Defining sources at spawn (rather than syncing per call like handles)
@@ -267,19 +271,6 @@ worker_ensure <- function(worker, fn_sources = character()) {
   worker$rs <- rs
   worker$synced <- 0L
   invisible(worker)
-}
-
-run_r_sandbox_mode <- function(call = rlang::caller_env()) {
-  mode <- getOption("commons.run_r_sandbox", "auto")
-  modes <- c("auto", "landlock", "userns", "seccomp-only")
-  if (!is.character(mode) || length(mode) != 1 || !mode %in% modes) {
-    cli::cli_abort(
-      "The {.code commons.run_r_sandbox} option must be one of
-       {.or {.val {modes}}}.",
-      call = call
-    )
-  }
-  mode
 }
 
 # unshare(CLONE_NEWUSER) requires a single-threaded process.
@@ -466,7 +457,13 @@ plot_dimensions <- function(ratio, longest_side) {
 # environment is reset to the global env, so these reference only base R,
 # `pkg::fn`, and their own arguments — no commons internals.
 
-worker_init <- function(parent_tmp, work_dir, dll_path, sandbox_mode = "auto") {
+worker_init <- function(
+  parent_tmp,
+  work_dir,
+  dll_path,
+  network = "none",
+  sandbox_mode = "auto"
+) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
   # Supported platforms must engage a sandbox; others are for local development.
@@ -526,7 +523,15 @@ worker_init <- function(parent_tmp, work_dir, dll_path, sandbox_mode = "auto") {
     callr_data[[".__stderr__"]]
   )
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
-  .Call(sym, read_roots, write_roots, NULL, sandbox_mode, preserve_fds)
+  .Call(
+    sym,
+    read_roots,
+    write_roots,
+    NULL,
+    sandbox_mode,
+    preserve_fds,
+    network
+  )
   invisible(TRUE)
 }
 
