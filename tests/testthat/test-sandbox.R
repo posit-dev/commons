@@ -7,17 +7,52 @@ test_that("sandbox_capabilities reports all mechanisms", {
   expect_type(caps$userns, "logical")
 })
 
-test_that("worker_init leaves the worker unsandboxed off Linux and macOS", {
-  skip_on_os(c("linux", "mac"))
-  res <- callr::r(
-    worker_init,
-    args = list(
-      parent_tmp = tempdir(),
-      work_dir = tempdir(),
-      dll_path = NA_character_
-    )
+test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
+  capabilities <- list(
+    landlock_abi = 0L,
+    seccomp = TRUE,
+    seatbelt = FALSE,
+    userns = FALSE
   )
-  expect_false(res)
+
+  expect_error(
+    check_run_r_sandbox(capabilities, "Linux"),
+    "neither Landlock nor unprivileged user namespaces"
+  )
+  capabilities$seccomp <- FALSE
+  expect_error(
+    check_run_r_sandbox(capabilities, "Linux"),
+    "does not support seccomp"
+  )
+})
+
+test_that("check_run_r_sandbox accepts either Linux filesystem sandbox", {
+  capabilities <- list(
+    landlock_abi = 1L,
+    seccomp = TRUE,
+    seatbelt = FALSE,
+    userns = FALSE
+  )
+  expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+
+  capabilities$landlock_abi <- 0L
+  capabilities$userns <- TRUE
+  expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+})
+
+test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
+  skip_on_os(c("linux", "mac"))
+  expect_error(
+    callr::r(
+      worker_init,
+      args = list(
+        parent_tmp = tempdir(),
+        work_dir = tempdir(),
+        dll_path = NA_character_
+      )
+    ),
+    "only Linux and macOS are supported"
+  )
 })
 
 test_that("worker_init errors without the compiled library", {

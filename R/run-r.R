@@ -464,10 +464,14 @@ worker_init <- function(
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  # Supported platforms must engage a sandbox; others are for local development.
+  # Every platform that runs worker code must engage a sandbox.
   sysname <- Sys.info()[["sysname"]]
   if (!sysname %in% c("Linux", "Darwin")) {
-    return(invisible(FALSE))
+    stop(
+      "commons cannot sandbox the run_r session on ",
+      sysname,
+      "; only Linux and macOS are supported."
+    )
   }
   if (is.na(dll_path)) {
     stop(

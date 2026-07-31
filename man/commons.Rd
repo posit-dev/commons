@@ -60,7 +60,8 @@ registered measures and governed definitions the agent actually has;
 the file needn't (and shouldn't) describe them.}
 
 \item{network}{Whether the \code{run_r} session has network access. One of
-\code{"none"} (the default) or \code{"full"}.}
+\code{"none"} (the default) or \code{"full"}. The session requires Linux or macOS
+and refuses to run without filesystem sandboxing.}
 
 \item{log}{Whether to capture conversation trajectories with OpenTelemetry
 (default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content

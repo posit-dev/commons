@@ -44,7 +44,8 @@
 #'   registered measures and governed definitions the agent actually has;
 #'   the file needn't (and shouldn't) describe them.
 #' @param network Whether the `run_r` session has network access. One of
-#'   `"none"` (the default) or `"full"`.
+#'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
+#'   and refuses to run without filesystem sandboxing.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -149,6 +150,7 @@ commons <- function(
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
   network <- rlang::arg_match(network)
+  check_run_r_sandbox()
   check_system_prompt(system_prompt)
   rlang::check_bool(log)
   check_share_with(share_with)

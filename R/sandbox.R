@@ -11,3 +11,35 @@ sandbox_capabilities <- function() {
     userns = caps[[4]] > 0
   )
 }
+
+check_run_r_sandbox <- function(
+  capabilities = sandbox_capabilities(),
+  sysname = Sys.info()[["sysname"]],
+  call = rlang::caller_env()
+) {
+  if (!identical(sysname, "Linux")) {
+    return(invisible())
+  }
+
+  if (!capabilities$seccomp) {
+    cli::cli_abort(
+      "commons cannot sandbox the {.code run_r} session because this Linux
+       host does not support seccomp.",
+      call = call
+    )
+  }
+  if (capabilities$landlock_abi >= 1 || capabilities$userns) {
+    return(invisible())
+  }
+
+  cli::cli_abort(
+    c(
+      "commons cannot sandbox the {.code run_r} session because this Linux
+       host offers neither Landlock nor unprivileged user namespaces.",
+      i = "Use a kernel with Landlock, or enable unprivileged user namespaces.",
+      i = "Check {.code sysctl user.max_user_namespaces} and, in a container,
+           its seccomp profile."
+    ),
+    call = call
+  )
+}
