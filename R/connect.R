@@ -43,7 +43,8 @@ connect_req <- function(client, ...) {
 }
 
 # Fetch trace rows for a content item as raw OTLP NDJSON lines, paging until
-# the X-Total-Count header is exhausted or `enough(lines)` returns TRUE.
+# the X-Total-Count header is exhausted. On servers with a single trace store,
+# `enough(lines)` can stop paging early.
 # Connect returns rows newest-first by span start time and filters `from`/`to`
 # on span start time over `[from, to)`.
 connect_trace_lines <- function(
@@ -74,17 +75,22 @@ connect_trace_lines <- function(
     )
     if (is.null(resp)) {
       return(connect_job_trace_lines(
-        client, guid, from, enough, page_size, call
+        client, guid, from, page_size, call
       ))
     }
-    version <- version %||% connect_server_version(resp)
+    version <- version %||% connect_server_version(
+      httr2::resp_header(resp, "Server")
+    )
     page <- resp_trace_lines(resp)
     lines <- c(lines, page)
     total <- suppressWarnings(
       as.integer(httr2::resp_header(resp, "X-Total-Count"))
     )
     offset <- offset + length(page)
-    if (length(lines) > 0 && !is.null(enough) && enough(lines)) {
+    if (
+      !is.null(version) && version < numeric_version("2026.07.0") &&
+        length(lines) > 0 && !is.null(enough) && enough(lines)
+    ) {
       return(lines)
     }
     if (length(page) == 0 || is.na(total) || offset >= total) {
@@ -94,7 +100,7 @@ connect_trace_lines <- function(
   # Connect 2026.07 moved new traces without migrating the per-job files.
   if (is.null(version) || version >= numeric_version("2026.07.0")) {
     lines <- connect_job_trace_lines(
-      client, guid, from, enough, page_size, call, lines
+      client, guid, from, page_size, call, lines
     )
   }
   unique(lines)
@@ -104,7 +110,6 @@ connect_job_trace_lines <- function(
   client,
   guid,
   from,
-  enough,
   page_size,
   call,
   lines = character()
@@ -116,9 +121,6 @@ connect_job_trace_lines <- function(
     httr2_http_401 = function(err) trace_access_abort(err, call),
     httr2_http_403 = function(err) trace_access_abort(err, call)
   )
-  starts <- vapply(jobs, function(job) job$start_time %||% "", character(1))
-  jobs <- jobs[order(starts, decreasing = TRUE)]
-
   for (job in jobs) {
     offset <- 0
     repeat {
@@ -143,9 +145,6 @@ connect_job_trace_lines <- function(
         as.integer(httr2::resp_header(resp, "X-Total-Count"))
       )
       offset <- offset + length(page)
-      if (length(lines) > 0 && !is.null(enough) && enough(lines)) {
-        return(unique(lines))
-      }
       if (length(page) == 0 || is.na(total) || offset >= total) {
         break
       }
@@ -163,8 +162,7 @@ resp_trace_lines <- function(resp) {
   page[nzchar(page)]
 }
 
-connect_server_version <- function(resp) {
-  server <- httr2::resp_header(resp, "Server")
+connect_server_version <- function(server) {
   if (is.null(server)) {
     return(NULL)
   }

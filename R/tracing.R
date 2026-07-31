@@ -100,25 +100,8 @@ repair_connect_trace_routing <- function() {
     paste0("job.key=", job_key)
   )
   Sys.setenv(OTEL_RESOURCE_ATTRIBUTES = paste(pairs, collapse = ","))
-  repair_otelsdk_resource_attributes(guid, job_key)
   reset_otel_tracer_provider()
   refresh_ellmer_otel_cache()
-  invisible(TRUE)
-}
-
-repair_otelsdk_resource_attributes <- function(guid, job_key) {
-  if (!isNamespaceLoaded("otelsdk")) {
-    return(invisible(FALSE))
-  }
-
-  the <- asNamespace("otelsdk")$the
-  if (!is.environment(the) || !is.list(the$default_resource_attributes)) {
-    return(invisible(FALSE))
-  }
-
-  # otelsdk snapshots its environment before commons can repair it.
-  the$default_resource_attributes[["content.guid"]] <- guid
-  the$default_resource_attributes[["job.key"]] <- job_key
   invisible(TRUE)
 }
 

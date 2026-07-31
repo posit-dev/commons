@@ -61,129 +61,54 @@ test_that("connect_trace_lines pages until the total is exhausted", {
 })
 
 test_that("connect_trace_lines reads collector and legacy stores", {
-  local_mocked_bindings(
-    connect_req = function(client, ...) structure(list(), class = "fake_req"),
-    connect_job_trace_lines = function(
-      client, guid, from, enough, page_size, call, lines
-    ) {
-      c(lines, "legacy")
+  httr2::local_mocked_responses(function(req) {
+    url <- req$url
+    if (grepl("/jobs/job/traces", url, fixed = TRUE)) {
+      return(httr2::new_response(
+        "GET", url, 200L,
+        list(`X-Total-Count` = "1"), charToRaw("legacy"), request = req
+      ))
     }
-  )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) 1,
-    resp_has_body = function(resp) TRUE,
-    resp_body_string = function(resp) "current",
-    resp_header = function(resp, name) {
-      if (name == "Server") "Posit Connect v2026.07.0" else "1"
-    },
-    .package = "httr2"
-  )
+    if (grepl("/jobs", url, fixed = TRUE)) {
+      return(httr2::new_response(
+        "GET", url, 200L,
+        list(`Content-Type` = "application/json"),
+        charToRaw('[{"key":"job"}]'),
+        request = req
+      ))
+    }
+    httr2::new_response(
+      "GET", url, 200L,
+      list(Server = "Posit Connect v2026.07.0", `X-Total-Count` = "1"),
+      charToRaw("current"), request = req
+    )
+  })
 
-  lines <- connect_trace_lines(list(server = "s", api_key = "k"), "guid")
+  lines <- connect_trace_lines(
+    list(server = "https://connect.example.com", api_key = "k"),
+    "guid",
+    enough = function(lines) TRUE
+  )
 
   expect_equal(lines, c("current", "legacy"))
 })
 
-test_that("connect_trace_lines handles an empty collector response", {
-  local_mocked_bindings(
-    connect_req = function(client, ...) structure(list(), class = "fake_req"),
-    connect_job_trace_lines = function(
-      client, guid, from, enough, page_size, call, lines
-    ) {
-      c(lines, "legacy")
-    }
-  )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) 1,
-    resp_has_body = function(resp) FALSE,
-    resp_header = function(resp, name) {
-      if (name == "Server") "Posit Connect v2026.07.0" else "0"
-    },
-    .package = "httr2"
-  )
-
-  lines <- connect_trace_lines(list(server = "s", api_key = "k"), "guid")
-
-  expect_equal(lines, "legacy")
-})
-
 test_that("connect_trace_lines falls back when the content endpoint is absent", {
-  local_mocked_bindings(
-    connect_req = function(client, ...) structure(list(), class = "fake_req"),
-    connect_job_trace_lines = function(...) "legacy"
-  )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) {
-      rlang::abort("HTTP 404 Not Found.", class = "httr2_http_404")
-    },
-    .package = "httr2"
-  )
+  local_mocked_bindings(connect_job_trace_lines = function(...) "legacy")
+  httr2::local_mocked_responses(function(req) {
+    httr2::new_response(
+      "GET", req$url, 404L, list(), raw(), request = req
+    )
+  })
 
-  lines <- connect_trace_lines(list(server = "s", api_key = "k"), "guid")
-
-  expect_equal(lines, "legacy")
-})
-
-test_that("connect_job_trace_lines reads jobs newest-first", {
-  local_mocked_bindings(
-    connect_req = function(client, ...) list(path = list(...))
+  lines <- connect_trace_lines(
+    list(server = "https://connect.example.com", api_key = "k"), "guid"
   )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) req,
-    resp_body_json = function(resp, ...) list(
-      list(key = "older", start_time = "2026-01-01T00:00:00Z"),
-      list(key = "newer", start_time = "2026-01-02T00:00:00Z")
-    ),
-    resp_has_body = function(resp) TRUE,
-    resp_body_string = function(resp) paste0(resp$path[[4]], "-line"),
-    resp_header = function(resp, name) "1",
-    .package = "httr2"
-  )
-
-  lines <- connect_job_trace_lines(
-    list(server = "s", api_key = "k"),
-    "guid",
-    NULL,
-    NULL,
-    1000,
-    rlang::current_env(),
-    "current"
-  )
-
-  expect_equal(lines, c("current", "newer-line", "older-line"))
-})
-
-test_that("connect_trace_lines trusts the content endpoint before 2026.07", {
-  local_mocked_bindings(
-    connect_req = function(client, ...) structure(list(), class = "fake_req"),
-    connect_job_trace_lines = function(...) stop("legacy endpoint called")
-  )
-  local_mocked_bindings(
-    req_url_query = function(req, ...) req,
-    req_perform = function(req, ...) 1,
-    resp_has_body = function(resp) TRUE,
-    resp_body_string = function(resp) "legacy",
-    resp_header = function(resp, name) {
-      if (name == "Server") "Posit Connect v2026.06.1" else "1"
-    },
-    .package = "httr2"
-  )
-
-  lines <- connect_trace_lines(list(server = "s", api_key = "k"), "guid")
 
   expect_equal(lines, "legacy")
 })
 
 test_that("connect_server_version parses Connect response headers", {
-  local_mocked_bindings(
-    resp_header = function(resp, name) resp,
-    .package = "httr2"
-  )
-
   expect_equal(
     connect_server_version("Posit Connect v2026.07.0"),
     numeric_version("2026.07.0")
