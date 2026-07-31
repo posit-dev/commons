@@ -121,36 +121,76 @@ connect_job_trace_lines <- function(
     httr2_http_401 = function(err) trace_access_abort(err, call),
     httr2_http_403 = function(err) trace_access_abort(err, call)
   )
-  for (job in jobs) {
-    offset <- 0
-    repeat {
-      resp <- tryCatch(
-        connect_req(client, "content", guid, "jobs", job$key, "traces") |>
-          httr2::req_url_query(
-            limit = page_size,
-            offset = offset,
-            since = connect_window_param(from, -3600)
-          ) |>
-          httr2::req_perform(),
-        httr2_http_401 = function(err) trace_access_abort(err, call),
-        httr2_http_403 = function(err) trace_access_abort(err, call),
-        httr2_http_404 = function(err) NULL
+  job_keys <- vapply(jobs, function(job) job$key, character(1))
+  offsets <- integer(length(job_keys))
+  max_active <- 20
+
+  while (length(job_keys) > 0) {
+    requests <- vector("list", length(job_keys))
+    for (i in seq_along(job_keys)) {
+      requests[[i]] <- connect_job_trace_req(
+        job_key = job_keys[[i]],
+        offset = offsets[[i]],
+        client = client,
+        guid = guid,
+        from = from,
+        page_size = page_size,
+        max_active = max_active
       )
-      if (is.null(resp)) {
-        break
+    }
+    responses <- httr2::req_perform_parallel(
+      requests,
+      on_error = "continue",
+      progress = FALSE,
+      max_active = max_active
+    )
+    next_job_keys <- character()
+    next_offsets <- integer()
+
+    for (i in seq_along(responses)) {
+      resp <- responses[[i]]
+      if (inherits(resp, c("httr2_http_401", "httr2_http_403"))) {
+        trace_access_abort(resp, call)
+      }
+      if (inherits(resp, "httr2_http_404")) {
+        next
+      }
+      if (inherits(resp, "condition")) {
+        rlang::cnd_signal(resp)
       }
       page <- resp_trace_lines(resp)
       lines <- c(lines, page)
       total <- suppressWarnings(
         as.integer(httr2::resp_header(resp, "X-Total-Count"))
       )
-      offset <- offset + length(page)
-      if (length(page) == 0 || is.na(total) || offset >= total) {
-        break
+      offset <- offsets[[i]] + length(page)
+      if (length(page) > 0 && !is.na(total) && offset < total) {
+        next_job_keys <- c(next_job_keys, job_keys[[i]])
+        next_offsets <- c(next_offsets, offset)
       }
     }
+    job_keys <- next_job_keys
+    offsets <- next_offsets
   }
   lines
+}
+
+connect_job_trace_req <- function(
+  job_key,
+  offset,
+  client,
+  guid,
+  from,
+  page_size,
+  max_active
+) {
+  connect_req(client, "content", guid, "jobs", job_key, "traces") |>
+    httr2::req_url_query(
+      limit = page_size,
+      offset = offset,
+      since = connect_window_param(from, -3600)
+    ) |>
+    httr2::req_throttle(capacity = max_active, fill_time_s = 0.5)
 }
 
 resp_trace_lines <- function(resp) {
