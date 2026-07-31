@@ -130,6 +130,7 @@ sandboxed_worker_probes <- function(
         )
       }
       list(
+        backend = getOption("commons.sandbox_backend"),
         read = denied(readLines(file.path(outside, "secret.txt"), n = 1)),
         inherited = denied({
           con <- get(".commons_inherited_file", envir = globalenv())
@@ -189,6 +190,7 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   }
 
   probes <- sandboxed_worker_probes("auto")
+  expect_true(probes$backend %in% c("landlock", "userns", "seatbelt"))
   expect_equal(probes$read, "denied")
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
@@ -204,6 +206,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
   skip_if_not(sandbox_capabilities()$userns, "no unprivileged user namespaces")
 
   probes <- sandboxed_worker_probes("userns")
+  expect_equal(probes$backend, "userns")
   expect_equal(probes$read, "denied")
   expect_equal(probes$inherited, "denied")
   expect_equal(probes$write, "denied")

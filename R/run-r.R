@@ -525,7 +525,7 @@ worker_init <- function(
     callr_data[[".__stderr__"]]
   )
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
-  .Call(
+  sandbox_backend <- .Call(
     sym,
     read_roots,
     write_roots,
@@ -534,6 +534,7 @@ worker_init <- function(
     preserve_fds,
     network
   )
+  options(commons.sandbox_backend = sandbox_backend)
   invisible(TRUE)
 }
 
