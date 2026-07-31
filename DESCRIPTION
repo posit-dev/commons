@@ -50,6 +50,7 @@ Suggests:
     rmarkdown,
     shiny,
     shinychat (> 0.4.0),
+    shinyWidgets,
     testthat (>= 3.0.0),
     vitals,
     withr,

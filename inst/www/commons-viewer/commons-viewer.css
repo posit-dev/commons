@@ -1,6 +1,218 @@
-/* Read-only transcripts: the input box is hidden rather than removed so a
- * future feedback chat can bring it back by deleting this rule. */
-.commons-viewer-transcript shiny-chat-input {
+/* shinychat's stylesheet arrives with the dynamically rendered chat, after
+ * this one, so overrides of its rules carry an extra class of specificity
+ * to win regardless of load order. */
+
+/* shinychat falls back to a robot icon on assistant messages when no
+ * icon_assistant is configured; commons chats carry no icon. */
+.commons-viewer-transcript .shiny-chat-message .message-icon {
+  display: none;
+}
+
+/* Review notes use their own composer rather than appearing as chat turns. */
+.commons-viewer-transcript .shiny-chat-input {
+  display: none;
+}
+
+/* ---- Hit rate ----------------------------------------------------------- */
+
+/* Border to match the verified-answer pill; bg/fg come from the box theme. */
+.commons-viewer-value-verified {
+  border: 1px solid #cfeedd;
+}
+
+.commons-viewer-value-verified .value-box-showcase svg {
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+/* ---- Review ------------------------------------------------------------ */
+
+.commons-viewer-workspace {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  height: 100%;
+  min-height: 0;
+}
+
+.commons-viewer-transcript-pane {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.commons-viewer-transcript-pane > .shiny-html-output {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.commons-viewer-review-pane {
+  border-left: 1px solid var(--bs-border-color, #dee2e6);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.commons-viewer-review {
+  padding: 0.75rem 1rem;
+}
+
+.commons-viewer-review-bar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Section labels match the sidebar's Dates / Trust Level captions. */
+.commons-viewer-review-bar strong {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.commons-viewer-review-prompt {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.commons-viewer-notes {
+  display: grid;
+  gap: 0.375rem;
+  margin-top: 0.625rem;
+}
+
+.commons-viewer-note {
+  background: var(--bs-secondary-bg, #f1f3f5);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.commons-viewer-note-text {
+  white-space: pre-wrap;
+}
+
+.commons-viewer-note-meta {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.75rem;
+  margin-top: 0.125rem;
+}
+
+.commons-viewer-note-compose {
+  align-items: flex-end;
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+}
+
+.commons-viewer-note-compose .shiny-input-container {
+  margin: 0;
+  width: 100%;
+}
+
+.commons-viewer-note-compose textarea {
+  resize: vertical;
+}
+
+.commons-viewer-note-compose .btn {
+  flex: 0 0 auto;
+}
+
+.commons-viewer-flag-button,
+.commons-viewer-flag-button:hover,
+.commons-viewer-flag-button:focus,
+.commons-viewer-flag-button:active {
+  background: transparent;
+  border: none;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+}
+
+.commons-viewer-flag-button:hover,
+.commons-viewer-flag-button-on,
+.commons-viewer-flag-button-on:hover,
+.commons-viewer-flag-button-on:focus,
+.commons-viewer-flag-button-on:active {
+  color: #b54708;
+}
+
+.commons-viewer-flag {
+  color: #b54708;
+}
+
+/* Either message selects its whole question-and-answer exchange. */
+.shiny-chat-messages-content {
+  position: relative;
+}
+
+.commons-viewer-exchange-message {
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+.commons-viewer-exchange-message:hover {
+  background: color-mix(
+    in srgb,
+    var(--bs-primary-bg-subtle, #e7f1ff) 45%,
+    transparent
+  );
+}
+
+.commons-viewer-exchange-message:focus-visible {
+  outline: 2px solid var(--bs-primary, #0d6efd);
+  outline-offset: 2px;
+}
+
+/* Softer than the raw selection token: over a whole exchange the full
+ * strength reads much heavier than the same color on a list entry. Selected
+ * (70%) sits clearly above hover (45%). */
+.commons-viewer-exchange-highlight {
+  background: color-mix(
+    in srgb,
+    var(--bs-primary-bg-subtle, #e7f1ff) 70%,
+    transparent
+  );
+  border-radius: 0.5rem;
+  display: none;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 0;
+}
+
+.commons-viewer-exchange-selected:hover {
+  background: transparent;
+}
+
+@media (max-width: 900px) {
+  .commons-viewer-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(20rem, 1fr) auto;
+  }
+
+  .commons-viewer-review-pane {
+    border-left: 0;
+    border-top: 1px solid var(--bs-border-color, #dee2e6);
+    max-height: 40vh;
+  }
+}
+
+/* ---- Sidebar ------------------------------------------------------------ */
+
+.commons-viewer-sidebar .control-label {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* The view-switcher tabs carry no panel content; trim the empty content
+ * area's contribution to the gap below. */
+.commons-viewer-sidebar .tab-content:empty {
   display: none;
 }
 

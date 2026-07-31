@@ -4,11 +4,20 @@
 \alias{view_trajectories}
 \title{View commons trajectories}
 \usage{
-view_trajectories(trajectories = read_trajectories())
+view_trajectories(
+  trajectories = read_trajectories(),
+  review_file = "commons-review.jsonl"
+)
 }
 \arguments{
 \item{trajectories}{A named list of conversations, as returned by
 \code{\link[=read_trajectories]{read_trajectories()}}.}
+
+\item{review_file}{Path of the JSONL file that review actions append to:
+flags, unflags, and feedback notes, each with a timestamp, the
+conversation id, and (for questions) the exchange number. Created on
+first use; flags and notes recorded here are restored when the viewer
+reopens.}
 }
 \value{
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. Calling \code{view_trajectories()} at the
@@ -18,17 +27,27 @@ expression of an \code{app.R}.
 \description{
 \code{view_trajectories()} launches a Shiny app for browsing conversation
 trajectories read with \code{\link[=read_trajectories]{read_trajectories()}}. The app shows the rate of
-each trust level across conversations, a conversation list that can be
-filtered by date, and a read-only transcript of each conversation with the
-provenance pills the commons chat UI would show.
+each trust level across conversations, a list of conversations or of
+individual questions—filterable by date and trust level—and a transcript
+of each with the provenance pills the commons chat UI would show.
+
+Transcripts are reviewable rather than live: conversations and questions
+can be flagged for review, and selecting a question-and-answer exchange
+allows it to be annotated with notes. Both land in \code{review_file}, one JSON
+record per line, and are restored when the viewer reopens.
 
 Trajectories carry no record of how each answer was tagged when it was
 produced, so the viewer derives trust levels from the tool calls in the
 trajectory: answers backed only by governed tools (\code{call_measure},
 \code{call_metrics}) are verified, and answers that used fallback tools
 (\code{run_sql}, \code{run_r}) count as cited when they contain citation markup and
-untrusted when they don't. Citation quotes are not re-verified against the
-agent's context.
+untrusted when they don't. A cited answer's quotes render as footnotes so
+they can be reviewed, but they are not re-verified against the agent's
+context: footnotes name no source and are attributed "unverified".
+
+Logged calls that aren't part of the agent's question-and-answer record—
+shinychat's conversation-title generation, and completions with no user
+turn—are excluded from the viewer.
 }
 \examples{
 \dontrun{

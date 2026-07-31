@@ -3,20 +3,35 @@
 #' @description
 #' `view_trajectories()` launches a Shiny app for browsing conversation
 #' trajectories read with [read_trajectories()]. The app shows the rate of
-#' each trust level across conversations, a conversation list that can be
-#' filtered by date, and a read-only transcript of each conversation with the
-#' provenance pills the commons chat UI would show.
+#' each trust level across conversations, a list of conversations or of
+#' individual questions—filterable by date and trust level—and a transcript
+#' of each with the provenance pills the commons chat UI would show.
+#'
+#' Transcripts are reviewable rather than live: conversations and questions
+#' can be flagged for review, and selecting a question-and-answer exchange
+#' allows it to be annotated with notes. Both land in `review_file`, one JSON
+#' record per line, and are restored when the viewer reopens.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
 #' trajectory: answers backed only by governed tools (`call_measure`,
 #' `call_metrics`) are verified, and answers that used fallback tools
 #' (`run_sql`, `run_r`) count as cited when they contain citation markup and
-#' untrusted when they don't. Citation quotes are not re-verified against the
-#' agent's context.
+#' untrusted when they don't. A cited answer's quotes render as footnotes so
+#' they can be reviewed, but they are not re-verified against the agent's
+#' context: footnotes name no source and are attributed "unverified".
+#'
+#' Logged calls that aren't part of the agent's question-and-answer record—
+#' shinychat's conversation-title generation, and completions with no user
+#' turn—are excluded from the viewer.
 #'
 #' @param trajectories A named list of conversations, as returned by
 #'   [read_trajectories()].
+#' @param review_file Path of the JSONL file that review actions append to:
+#'   flags, unflags, and feedback notes, each with a timestamp, the
+#'   conversation id, and (for questions) the exchange number. Created on
+#'   first use; flags and notes recorded here are restored when the viewer
+#'   reopens.
 #'
 #' @return A [shiny::shinyApp()] object. Calling `view_trajectories()` at the
 #'   console launches the viewer; the result can also be served as the last
@@ -29,15 +44,24 @@
 #' view_trajectories(read_trajectories(from = "2026-07-01"))
 #' }
 #' @export
-view_trajectories <- function(trajectories = read_trajectories()) {
+view_trajectories <- function(
+  trajectories = read_trajectories(),
+  review_file = "commons-review.jsonl"
+) {
   check_viewer_packages()
   check_trajectories(trajectories)
+  rlang::check_string(review_file)
+  trajectories <- drop_side_conversations(trajectories)
   summary <- summarize_trajectories(trajectories)
-  shiny::shinyApp(viewer_ui(summary), viewer_server(trajectories, summary))
+  questions <- summarize_questions(trajectories)
+  shiny::shinyApp(
+    viewer_ui(summary),
+    viewer_server(trajectories, summary, questions, review_file)
+  )
 }
 
 check_viewer_packages <- function(call = rlang::caller_env()) {
-  pkgs <- c("bslib", "htmltools", "shiny", "shinychat")
+  pkgs <- c("bslib", "htmltools", "shiny", "shinychat", "shinyWidgets")
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
   if (length(missing)) {
@@ -65,6 +89,33 @@ check_trajectories <- function(trajectories, call = rlang::caller_env()) {
   }
 }
 
+drop_side_conversations <- function(trajectories) {
+  side <- vapply(trajectories, is_side_conversation, logical(1))
+  if (any(side)) {
+    cli::cli_inform(
+      "Excluding {sum(side)} logged call{?s} that {?isn't/aren't} part of the
+       agent's Q&A record (e.g. conversation-title generation)."
+    )
+  }
+  trajectories[!side]
+}
+
+# shinychat's conversation-title generation rides a clone of the agent's own
+# client, so its calls land in the trace store looking like one-question
+# conversations; match its system prompt (shinychat's TITLE_SYSTEM_PROMPT)
+# by prefix. Completions with no plain user turn have no question to review
+# and are side calls of one kind or another.
+shinychat_title_prompt <- "You title chat conversations."
+
+is_side_conversation <- function(turns) {
+  if (length(split_exchanges(turns)) == 0) {
+    return(TRUE)
+  }
+  system <- turns[[1]]
+  identical(system@role, "system") &&
+    startsWith(system@text, shinychat_title_prompt)
+}
+
 # Summaries ---------------------------------------------------------------
 
 # One record per conversation, in input order. A plain list of records
@@ -83,6 +134,28 @@ conversation_record <- function(id, turns) {
     tags = vapply(provenance, function(p) p$tag, character(1)),
     last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
   )
+}
+
+# One record per question -> answer exchange across all conversations, in
+# conversation order.
+summarize_questions <- function(trajectories) {
+  records <- list()
+  for (i in rlang::seq2(1, length(trajectories))) {
+    turns <- trajectories[[i]]
+    exchanges <- split_exchanges(turns)
+    provenance <- lapply(exchanges, exchange_provenance)
+    for (j in rlang::seq2(1, length(exchanges))) {
+      records[[length(records) + 1]] <- list(
+        conversation = i,
+        conversation_id = names(trajectories)[[i]],
+        exchange = j,
+        snippet = question_snippet(exchanges[[j]]),
+        tag = provenance[[j]]$tag,
+        last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
+      )
+    }
+  }
+  records
 }
 
 # The viewer re-derives what runtime tagging stores in extra$commons_tag --
@@ -133,11 +206,15 @@ first_user_snippet <- function(exchanges, max_chars = 80) {
   if (length(exchanges) == 0) {
     return("")
   }
-  text <- trimws(gsub("\\s+", " ", exchanges[[1]][[1]]@text))
+  question_snippet(exchanges[[1]], max_chars)
+}
+
+question_snippet <- function(exchange, max_chars = 80) {
+  text <- trimws(gsub("\\s+", " ", exchange[[1]]@text))
   if (nchar(text) <= max_chars) {
     return(text)
   }
-  paste0(substr(text, 1, max_chars - 1), "…")
+  paste0(substr(text, 1, max_chars - 1), "\u2026")
 }
 
 # Exchange-level counts of each trust level across a set of conversations'
@@ -164,16 +241,20 @@ hit_rate <- function(tag_sets) {
 # Tool requests are dropped, mirroring shinychat's own transcript restore
 # (each result card carries its request). `count` and `indexFromEnd` index
 # assistant messages, which is what the seed handler counts.
-trajectory_transcript <- function(turns) {
+trajectory_transcript <- function(turns, exchange_numbers = NULL) {
   exchanges <- split_exchanges(turns)
+  exchange_numbers <- exchange_numbers %||% seq_along(exchanges)
   messages <- list()
   pills <- list()
   n_assistant <- 0L
 
-  for (exchange in exchanges) {
+  for (i in seq_along(exchanges)) {
+    exchange <- exchanges[[i]]
+    exchange_number <- exchange_numbers[[i]]
     messages[[length(messages) + 1]] <- list(
       role = "user",
-      content = exchange[[1]]@text
+      content = exchange[[1]]@text,
+      exchange = exchange_number
     )
     chunks <- exchange_answer_chunks(exchange[-1])
     if (length(chunks) == 0) {
@@ -182,7 +263,8 @@ trajectory_transcript <- function(turns) {
     n_assistant <- n_assistant + 1L
     messages[[length(messages) + 1]] <- list(
       role = "assistant",
-      content = chunks
+      content = chunks,
+      exchange = exchange_number
     )
     pill <- viewer_pill(exchange_provenance(exchange), n_assistant)
     if (!is.null(pill)) {
@@ -198,16 +280,34 @@ trajectory_transcript <- function(turns) {
 
 # Exchanges whose tag is NA and whose answer attempted no citations need
 # neither a pill nor citation cleanup. Cited ("B") answers send an empty
-# pill: the client still strips their <citation> markup before finding no
-# pill to place. All citations go over unverified, so none become footnotes.
+# pill and their citations render as numbered footnotes, so a reviewer can
+# read what the answer quoted; citations on other answers are stripped, as
+# at runtime.
 viewer_pill <- function(provenance, assistant_index) {
   if (is.na(provenance$tag) && length(provenance$citations) == 0) {
     return(NULL)
   }
+  citations <- if (identical(provenance$tag, "B")) {
+    lapply(provenance$citations, viewer_citation)
+  } else {
+    lapply(provenance$citations, function(x) list(verified = FALSE))
+  }
   list(
     html = htmltools::renderTags(commons_answer_pill(provenance$tag))$html,
-    citations = lapply(provenance$citations, function(x) list(verified = FALSE)),
+    citations = citations,
     indexFromEnd = assistant_index
+  )
+}
+
+# Mirrors citations_payload() in chat.R, but for quotes the viewer can't
+# check against a corpus: the footnote attributes the quote to "unverified"
+# rather than naming a source.
+viewer_citation <- function(citation) {
+  list(
+    verified = TRUE,
+    reason = if (!is.na(citation$reason)) citation$reason,
+    quote = normalize_citation(citation$quote),
+    label = "unverified"
   )
 }
 
@@ -227,11 +327,22 @@ exchange_answer_chunks <- function(turns) {
 # Replays a conversation into a bound chat element. Assistant messages
 # stream as chunks -- the mode the pill-seed handler was designed around --
 # and the seed is sent last so pills land once the transcript settles.
-restore_transcript <- function(session, id, turns) {
-  transcript <- trajectory_transcript(turns)
+restore_transcript <- function(
+  session,
+  id,
+  turns,
+  exchange_numbers = NULL,
+  selected_exchange = NULL
+) {
+  transcript <- trajectory_transcript(turns, exchange_numbers)
   for (message in transcript$messages) {
     if (identical(message$role, "user")) {
-      shinychat::chat_append_message(id, message, chunk = FALSE, session = session)
+      shinychat::chat_append_message(
+        id,
+        message,
+        chunk = FALSE,
+        session = session
+      )
       next
     }
     shinychat::chat_append_message(
@@ -261,6 +372,21 @@ restore_transcript <- function(session, id, turns) {
       list(id = id, count = transcript$count, pills = transcript$pills)
     )
   }
+  if (length(transcript$messages) > 0) {
+    session$sendCustomMessage(
+      "commonsViewerExchangeSeed",
+      list(
+        id = id,
+        count = length(transcript$messages),
+        exchanges = vapply(
+          transcript$messages,
+          function(message) message$exchange,
+          integer(1)
+        ),
+        selected = selected_exchange
+      )
+    )
+  }
 }
 
 # App ---------------------------------------------------------------------
@@ -269,96 +395,508 @@ viewer_ui <- function(summary) {
   dates <- viewer_date_range(summary)
   htmltools::attachDependencies(
     bslib::page_sidebar(
-      title = "Conversations",
+      title = "Trajectory reviewer",
       sidebar = bslib::sidebar(
         width = 380,
-        shiny::dateRangeInput(
-          "window",
-          "Active between",
-          start = dates$min,
-          end = dates$max,
-          min = dates$min,
-          max = dates$max
+        class = "commons-viewer-sidebar",
+        # The navset is purely a switcher: its panels are empty, and the
+        # selected value arrives as input$group_by.
+        bslib::navset_underline(
+          id = "group_by",
+          bslib::nav_panel("Conversations", value = "conversation"),
+          bslib::nav_panel("Questions", value = "question")
         ),
-        shiny::uiOutput("conversations")
+        shinyWidgets::airDatepickerInput(
+          "window",
+          "Dates",
+          range = TRUE,
+          value = c(dates$min, dates$max),
+          minDate = dates$min,
+          maxDate = dates$max,
+          dateFormat = "MMM d, yyyy",
+          update_on = "close",
+          addon = "none"
+        ),
+        shiny::selectInput(
+          "trust",
+          "Trust Level",
+          trust_choices("conversation")
+        ),
+        shiny::uiOutput("entries")
       ),
       shiny::uiOutput("hit_rate"),
       bslib::card(
         fill = TRUE,
         class = "commons-viewer-transcript",
-        shiny::uiOutput("transcript", fill = TRUE)
+        htmltools::div(
+          class = "commons-viewer-workspace",
+          htmltools::div(
+            class = "commons-viewer-transcript-pane",
+            shiny::uiOutput("transcript", fill = TRUE)
+          ),
+          htmltools::div(
+            class = "commons-viewer-review-pane",
+            shiny::uiOutput("review_bar")
+          )
+        )
       )
     ),
     list(commons_chat_dependency(), commons_viewer_dependency())
   )
 }
 
-viewer_server <- function(trajectories, summary) {
+# In conversation view the trust filter keeps conversations *containing* a
+# matching answer; the option labels say so.
+trust_choices <- function(group_by) {
+  if (identical(group_by, "question")) {
+    c(
+      "All answers" = "all",
+      "Verified" = "A",
+      "Cited" = "B",
+      "Untrusted" = "C",
+      "No data tool" = "none"
+    )
+  } else {
+    c(
+      "All conversations" = "all",
+      "Has a verified answer" = "A",
+      "Has a cited answer" = "B",
+      "Has an untrusted answer" = "C",
+      "Has an answer with no data tool" = "none"
+    )
+  }
+}
+
+viewer_server <- function(trajectories, summary, questions, review_file) {
   function(input, output, session) {
     selected <- shiny::reactiveVal(NULL)
+    review_target <- shiny::reactiveVal(NULL)
+    review_records <- read_review_records(review_file)
+    flags <- shiny::reactiveVal(review_flags(review_records))
+    notes <- shiny::reactiveVal(review_notes(review_records))
 
-    visible <- shiny::reactive({
-      window <- input$window
+    shiny::observeEvent(input$group_by, {
+      shiny::updateSelectInput(
+        session,
+        "trust",
+        choices = trust_choices(input$group_by),
+        selected = input$trust
+      )
+    })
+
+    visible_conversations <- shiny::reactive({
       Filter(
-        function(i) in_window(summary[[i]], window),
+        function(i) {
+          conversation_visible(summary[[i]], input$window, input$trust)
+        },
         seq_along(summary)
       )
     })
 
+    visible_questions <- shiny::reactive({
+      Filter(
+        function(k) question_visible(questions[[k]], input$window, input$trust),
+        seq_along(questions)
+      )
+    })
+
+    # The hit rate reflects the date window but not the trust filter: it is
+    # the trust distribution the filter slices.
     output$hit_rate <- shiny::renderUI({
-      hit_rate_boxes(hit_rate(lapply(visible(), function(i) summary[[i]]$tags)))
+      in_dates <- Filter(
+        function(i) in_window(summary[[i]], input$window),
+        seq_along(summary)
+      )
+      hit_rate_boxes(hit_rate(lapply(in_dates, function(i) summary[[i]]$tags)))
     })
 
-    output$conversations <- shiny::renderUI({
-      indices <- visible()
-      if (length(indices) == 0) {
-        return(viewer_empty_note(if (length(summary) == 0) {
-          "No conversations to view."
-        } else {
-          "No conversations in this date range."
-        }))
+    output$entries <- shiny::renderUI({
+      entries <- if (identical(input$group_by, "question")) {
+        lapply(
+          visible_questions(),
+          function(k) question_entry(questions[[k]], selected(), flags())
+        )
+      } else {
+        lapply(
+          visible_conversations(),
+          function(i) conversation_entry(i, summary[[i]], selected(), flags())
+        )
       }
-      lapply(indices, function(i) {
-        conversation_entry(i, summary[[i]], selected = identical(selected(), i))
-      })
+      if (length(entries) == 0) {
+        return(viewer_empty_note(
+          if (length(summary) == 0) {
+            "No conversations to view."
+          } else {
+            "Nothing matches these filters."
+          }
+        ))
+      }
+      entries
     })
 
-    # Entry ids index into `trajectories`, which never changes, so observers
-    # registered once stay valid as the date filter re-renders the list.
-    for (i in seq_along(trajectories)) {
+    # Entry and transcript ids index into `trajectories`, which never
+    # changes, so observers registered once stay valid as the filters
+    # re-render the list.
+    all_keys <- c(
+      lapply(seq_along(trajectories), function(i) list(conversation = i)),
+      lapply(questions, function(record) record[c("conversation", "exchange")])
+    )
+    for (key in all_keys) {
       local({
-        index <- i
-        shiny::observeEvent(input[[paste0("conversation_", index)]], {
-          selected(index)
+        k <- key
+        shiny::observeEvent(input[[entry_link_id(k)]], {
+          selected(k)
+          review_target(if (is.null(k$exchange)) NULL else k)
         })
       })
     }
 
+    output$review_bar <- shiny::renderUI({
+      navigation <- selected()
+      if (is.null(navigation)) {
+        return(NULL)
+      }
+      key <- review_target()
+      flagged <- selection_review_key(key %||% navigation, summary) %in% flags()
+      if (is.null(key)) {
+        return(review_bar_prompt(flagged))
+      }
+      review_bar_notes(key, flagged, notes_for_selection(notes(), key, summary))
+    })
+
+    shiny::observeEvent(input$flag_toggle, {
+      key <- review_target() %||% selected()
+      review <- selection_review_key(key, summary)
+      flagged <- review %in% flags()
+      append_review_record(
+        review_file,
+        list(
+          time = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+          conversation = summary[[key$conversation]]$id,
+          exchange = key$exchange,
+          action = if (flagged) "unflag" else "flag"
+        )
+      )
+      flags(if (flagged) setdiff(flags(), review) else union(flags(), review))
+    })
+
+    shiny::observeEvent(input$exchange_select, {
+      navigation <- selected()
+      if (is.null(navigation)) {
+        return()
+      }
+      # A null exchange is the client deselecting (clicking the selected
+      # exchange again).
+      exchange <- as.integer(input$exchange_select$exchange)
+      if (length(exchange) != 1 || is.na(exchange)) {
+        review_target(NULL)
+        return()
+      }
+      if (
+        !exchange %in%
+          seq_along(split_exchanges(trajectories[[navigation$conversation]]))
+      ) {
+        return()
+      }
+      review_target(list(
+        conversation = navigation$conversation,
+        exchange = exchange
+      ))
+    })
+
+    # The transcript highlight follows review_target wherever it changes --
+    # including deselection by re-clicking the current entry -- so the
+    # client never shows a selection the review pane has dropped. Echoing a
+    # client-initiated selection back is harmless: re-applying it sends no
+    # input, and a message racing a fresh transcript finds no element and
+    # dies quietly (the exchange seed carries that state instead).
+    shiny::observeEvent(review_target(), ignoreNULL = FALSE, ignoreInit = TRUE, {
+      key <- selected()
+      if (is.null(key)) {
+        return()
+      }
+      target <- review_target()
+      session$sendCustomMessage(
+        "commonsViewerExchangeSelect",
+        list(
+          id = transcript_id(key),
+          exchange = if (!is.null(target)) target$exchange
+        )
+      )
+    })
+
+    shiny::observeEvent(input$save_note, {
+      key <- review_target()
+      note <- trimws(input$review_note %||% "")
+      if (is.null(key) || !nzchar(note)) {
+        return()
+      }
+      record <- review_note_record(summary, key, note)
+      append_review_record(review_file, record)
+      notes(c(notes(), list(record)))
+    })
+
     # A fresh chat element per selection: a superseded pill-seed timer from a
-    # fast conversation switch then targets a defunct element id and dies
+    # fast selection switch then targets a defunct element id and dies
     # harmlessly instead of racing the new transcript.
     output$transcript <- shiny::renderUI({
-      i <- selected()
-      if (is.null(i)) {
-        return(viewer_empty_note("Select a conversation to view its transcript."))
+      key <- selected()
+      if (is.null(key)) {
+        return(viewer_empty_note(
+          "Select a conversation to view its transcript."
+        ))
       }
-      commons_ui(paste0("transcript_", i), height = "100%")
+      commons_ui(transcript_id(key), height = "100%")
     })
 
     # onFlushed fires after the flush that delivers the new chat element, so
     # it is bound client-side before the replayed messages arrive -- the same
     # mechanism commons_server() uses to seed pills.
     shiny::observeEvent(selected(), {
-      i <- selected()
+      key <- selected()
       session$onFlushed(
         function() {
-          restore_transcript(session, paste0("transcript_", i), trajectories[[i]])
+          restore_transcript(
+            session,
+            transcript_id(key),
+            selected_turns(trajectories, key),
+            exchange_numbers = key$exchange,
+            selected_exchange = key$exchange
+          )
         },
         once = TRUE
       )
     })
   }
 }
+
+conversation_visible <- function(record, window, trust) {
+  in_window(record, window) &&
+    (identical(trust, "all") || any(tag_matches(record$tags, trust)))
+}
+
+question_visible <- function(record, window, trust) {
+  in_window(record, window) && tag_matches(record$tag, trust)
+}
+
+tag_matches <- function(tags, trust) {
+  switch(
+    trust,
+    all = rep(TRUE, length(tags)),
+    none = is.na(tags),
+    tags %in% trust
+  )
+}
+
+# A question selection restores only its own exchange; a conversation
+# selection restores the whole transcript.
+selected_turns <- function(trajectories, key) {
+  turns <- trajectories[[key$conversation]]
+  if (is.null(key$exchange)) {
+    return(turns)
+  }
+  split_exchanges(turns)[[key$exchange]]
+}
+
+entry_link_id <- function(key) {
+  paste(c("entry", key$conversation, key$exchange), collapse = "_")
+}
+
+transcript_id <- function(key) {
+  paste(c("transcript", key$conversation, key$exchange), collapse = "_")
+}
+
+# Review ------------------------------------------------------------------
+
+# The review pane before an exchange is chosen; the flag applies to the
+# whole conversation.
+review_bar_prompt <- function(flagged) {
+  htmltools::div(
+    class = "commons-viewer-review",
+    htmltools::div(
+      class = "commons-viewer-review-bar",
+      htmltools::tags$strong("Review Notes"),
+      flag_button(flagged, TRUE)
+    ),
+    htmltools::div(
+      class = "commons-viewer-review-prompt",
+      "Select a question or answer in the transcript to add a note."
+    )
+  )
+}
+
+review_bar_notes <- function(key, flagged, notes) {
+  htmltools::div(
+    class = "commons-viewer-review",
+    htmltools::div(
+      class = "commons-viewer-review-bar",
+      htmltools::tags$strong(
+        sprintf("Review Notes for Question %d", key$exchange)
+      ),
+      flag_button(flagged, FALSE)
+    ),
+    review_note_list(notes),
+    htmltools::div(
+      class = "commons-viewer-note-compose",
+      shiny::textAreaInput(
+        "review_note",
+        NULL,
+        placeholder = "Add a note about this exchange",
+        rows = 2,
+        width = "100%"
+      ),
+      shiny::actionButton(
+        "save_note",
+        "Add note",
+        class = "btn-sm btn-outline-secondary"
+      )
+    )
+  )
+}
+
+review_note_record <- function(summary, key, note) {
+  list(
+    time = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    conversation = summary[[key$conversation]]$id,
+    exchange = key$exchange,
+    action = "note",
+    note = note
+  )
+}
+
+review_note_list <- function(notes) {
+  if (length(notes) == 0) {
+    return(NULL)
+  }
+  htmltools::div(
+    class = "commons-viewer-notes",
+    lapply(notes, function(note) {
+      htmltools::div(
+        class = "commons-viewer-note",
+        htmltools::div(class = "commons-viewer-note-text", note$note),
+        note_date(note)
+      )
+    })
+  )
+}
+
+# Notes date themselves the way list entries do; a record whose time doesn't
+# parse (or predates timestamps) just goes undated.
+note_date <- function(note) {
+  time <- strptime(note$time %||% "", "%Y-%m-%dT%H:%M:%S%z")
+  if (is.na(time)) {
+    return(NULL)
+  }
+  htmltools::div(
+    class = "commons-viewer-note-meta",
+    format(time, "%b %e, %Y")
+  )
+}
+
+append_review_record <- function(file, record) {
+  line <- jsonlite::toJSON(drop_nulls(record), auto_unbox = TRUE)
+  cat(line, "\n", file = file, sep = "", append = TRUE)
+}
+
+read_review_flags <- function(file) {
+  review_flags(read_review_records(file))
+}
+
+read_review_notes <- function(file) {
+  review_notes(read_review_records(file))
+}
+
+read_review_records <- function(file) {
+  if (!file.exists(file)) {
+    return(list())
+  }
+  drop_nulls(lapply(readLines(file, warn = FALSE), function(line) {
+    tryCatch(jsonlite::fromJSON(line), error = function(err) NULL)
+  }))
+}
+
+# Flags persist as flag/unflag events; the latest event per key wins.
+review_flags <- function(records) {
+  flags <- character()
+  for (record in records) {
+    if (is.null(record$action)) {
+      next
+    }
+    key <- review_key(record$conversation, record$exchange)
+    if (identical(record$action, "flag")) {
+      flags <- union(flags, key)
+    } else if (identical(record$action, "unflag")) {
+      flags <- setdiff(flags, key)
+    }
+  }
+  flags
+}
+
+review_notes <- function(records) {
+  Filter(
+    function(record) {
+      identical(record$action, "note") &&
+        is.character(record$note) &&
+        length(record$note) == 1
+    },
+    records
+  )
+}
+
+notes_for_selection <- function(notes, key, summary) {
+  selection <- selection_review_key(key, summary)
+  Filter(
+    function(note) review_key(note$conversation, note$exchange) == selection,
+    notes
+  )
+}
+
+# Flag keys use the conversation id (not its position), so they stay stable
+# across differently filtered reads of the same trace store.
+review_key <- function(id, exchange = NULL) {
+  paste(c(id, exchange), collapse = "#")
+}
+
+selection_review_key <- function(key, summary) {
+  review_key(summary[[key$conversation]]$id, key$exchange)
+}
+
+# An icon-only toggle: the flag reads gray until flagged, then wears the
+# same orange as the list markers. State also rides in the tooltip and
+# aria-pressed, so it isn't conveyed by color alone.
+flag_button <- function(flagged, whole_conversation) {
+  what <- if (whole_conversation) "conversation" else "question"
+  title <- if (flagged) {
+    "Flagged for review \u2014 click to unflag"
+  } else {
+    sprintf("Flag this %s for review", what)
+  }
+  shiny::actionButton(
+    "flag_toggle",
+    label = "\u2691",
+    class = if (flagged) {
+      "commons-viewer-flag-button commons-viewer-flag-button-on"
+    } else {
+      "commons-viewer-flag-button"
+    },
+    title = title,
+    `aria-label` = title,
+    `aria-pressed` = if (flagged) "true" else "false"
+  )
+}
+
+flag_marker <- function(flagged) {
+  if (!flagged) {
+    return(NULL)
+  }
+  htmltools::tags$span(
+    class = "commons-viewer-flag",
+    title = "Flagged for review",
+    "\u2691"
+  )
+}
+
+# Entries -----------------------------------------------------------------
 
 viewer_levels <- c(
   A = "Verified",
@@ -368,66 +906,123 @@ viewer_levels <- c(
 )
 
 hit_rate_boxes <- function(rate) {
-  boxes <- lapply(names(viewer_levels), function(key) {
-    bslib::value_box(
-      title = viewer_levels[[key]],
-      value = rate_percent(rate$counts[[key]], rate$n),
-      htmltools::p(sprintf("%d of %d answers", rate$counts[[key]], rate$n))
-    )
-  })
+  boxes <- lapply(names(viewer_levels), function(key) level_box(key, rate))
   do.call(bslib::layout_columns, c(boxes, list(fill = FALSE)))
+}
+
+# The Verified box wears the verified-answer pill's palette (see
+# .commons-answer-pill-trusted in commons-chat.css) and its shield.
+level_box <- function(key, rate) {
+  verified <- identical(key, "A")
+  bslib::value_box(
+    title = viewer_levels[[key]],
+    value = rate_percent(rate$counts[[key]], rate$n),
+    htmltools::p(sprintf("%d of %d answers", rate$counts[[key]], rate$n)),
+    showcase = if (verified) verified_shield(),
+    theme = if (verified) {
+      bslib::value_box_theme(bg = "#f2fbf5", fg = "#286144")
+    },
+    class = if (verified) "commons-viewer-value-verified"
+  )
+}
+
+# The same shield the verified-answer pill carries, inlined so the value
+# box's showcase can size it.
+verified_shield <- function() {
+  path <- system.file("figs", "trusted-icon.svg", package = "commons")
+  svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  htmltools::HTML(sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg))
 }
 
 rate_percent <- function(count, n) {
   if (n == 0) {
-    return("—")
+    return("\u2014")
   }
   sprintf("%.0f%%", 100 * count / n)
 }
 
-conversation_entry <- function(index, record, selected = FALSE) {
+conversation_entry <- function(
+  index,
+  record,
+  selected = NULL,
+  flags = character()
+) {
+  key <- list(conversation = index)
   pills <- lapply(intersect(c("A", "C"), record$tags), commons_answer_pill)
   shiny::actionLink(
-    paste0("conversation_", index),
-    class = if (selected) {
-      "commons-viewer-entry commons-viewer-entry-selected"
-    } else {
-      "commons-viewer-entry"
-    },
+    entry_link_id(key),
+    class = entry_class(identical(selected, key)),
     label = htmltools::tagList(
       htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
       htmltools::div(
         class = "commons-viewer-entry-meta",
-        htmltools::tags$span(entry_meta(record)),
+        flag_marker(review_key(record$id) %in% flags),
+        htmltools::tags$span(conversation_meta(record)),
         pills
       )
     )
   )
 }
 
-entry_meta <- function(record) {
+question_entry <- function(record, selected = NULL, flags = character()) {
+  key <- record[c("conversation", "exchange")]
+  flagged <- review_key(record$conversation_id, record$exchange) %in% flags
+  shiny::actionLink(
+    entry_link_id(key),
+    class = entry_class(identical(selected, key)),
+    label = htmltools::tagList(
+      htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
+      htmltools::div(
+        class = "commons-viewer-entry-meta",
+        flag_marker(flagged),
+        htmltools::tags$span(entry_date(record)),
+        commons_answer_pill(record$tag)
+      )
+    )
+  )
+}
+
+entry_class <- function(selected) {
+  if (selected) {
+    "commons-viewer-entry commons-viewer-entry-selected"
+  } else {
+    "commons-viewer-entry"
+  }
+}
+
+conversation_meta <- function(record) {
   turns <- sprintf(
     "%d %s",
     record$n_user_turns,
     if (record$n_user_turns == 1) "turn" else "turns"
   )
-  date <- local_date(record$last_active)
-  if (is.na(date)) {
+  date <- entry_date(record)
+  if (is.null(date)) {
     return(turns)
   }
-  sprintf("%s · %s", turns, format(date, "%b %e, %Y"))
+  sprintf("%s \u00b7 %s", turns, date)
+}
+
+entry_date <- function(record) {
+  date <- local_date(record$last_active)
+  if (is.na(date)) {
+    return(NULL)
+  }
+  format(date, "%b %e, %Y")
 }
 
 viewer_empty_note <- function(text) {
   htmltools::div(class = "commons-viewer-empty", text)
 }
 
-# Conversations without a timestamp always pass the date filter.
+# Conversations without a timestamp always pass the date filter, as does
+# everything while the picker holds less than a complete range.
 in_window <- function(record, window) {
+  if (length(window) < 2) {
+    return(TRUE)
+  }
   date <- local_date(record$last_active)
-  is.na(date) ||
-    ((is.na(window[[1]]) || date >= window[[1]]) &&
-      (is.na(window[[2]]) || date <= window[[2]]))
+  is.na(date) || (date >= window[[1]] && date <= window[[2]])
 }
 
 # The date filter's bounds; when no conversation carries a timestamp, both
@@ -462,6 +1057,7 @@ commons_viewer_dependency <- function() {
     name = "commons-viewer",
     version = paste0("0.0.0.9000.", as.integer(stamp)),
     src = c(file = src),
-    stylesheet = "commons-viewer.css"
+    stylesheet = "commons-viewer.css",
+    script = "commons-viewer.js"
   )
 }
