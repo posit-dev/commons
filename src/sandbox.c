@@ -266,7 +266,17 @@ static int path_in_roots(const char *path, SEXP roots) {
   return 0;
 }
 
-static void userns_close_external_fds(SEXP read_roots, SEXP rw_roots) {
+static int fd_is_preserved(int fd, SEXP preserve_fds) {
+  for (int i = 0; i < Rf_length(preserve_fds); i++) {
+    if (fd == INTEGER(preserve_fds)[i]) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static void userns_close_external_fds(SEXP read_roots, SEXP rw_roots,
+                                      SEXP preserve_fds) {
   DIR *d = opendir("/proc/self/fd");
   if (d == NULL) {
     Rf_error("cannot inspect inherited file descriptors: %s", strerror(errno));
@@ -283,7 +293,7 @@ static void userns_close_external_fds(SEXP read_roots, SEXP rw_roots) {
       continue;
     }
     int fd = (int) value;
-    if (fd <= 2 || fd == scan_fd) {
+    if (fd <= 2 || fd == scan_fd || fd_is_preserved(fd, preserve_fds)) {
       continue;
     }
     if (n_fds == capacity) {
@@ -460,7 +470,7 @@ static const char **userns_submounts(int *n) {
 }
 
 /* Return availability errors so the caller can report unsupported hosts. */
-static int userns_engage(SEXP read_roots, SEXP rw_roots) {
+static int userns_engage(SEXP read_roots, SEXP rw_roots, SEXP preserve_fds) {
   int threads = count_threads();
   if (threads != 1) {
     Rf_error("cannot engage the user-namespace sandbox from a multithreaded "
@@ -483,7 +493,7 @@ static int userns_engage(SEXP read_roots, SEXP rw_roots) {
   }
   int n_submounts = 0;
   const char **submounts = userns_submounts(&n_submounts);
-  userns_close_external_fds(read_roots, rw_roots);
+  userns_close_external_fds(read_roots, rw_roots, preserve_fds);
 
   if (mount("tmpfs", USERNS_ROOT, "tmpfs", 0, "size=16m,mode=0755") != 0) {
     Rf_error("cannot mount the sandbox root tmpfs: %s", strerror(errno));
@@ -616,7 +626,7 @@ SEXP c_sandbox_capabilities(void) {
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
-                      SEXP mode_sexp) {
+                      SEXP mode_sexp, SEXP preserve_fds) {
   const char *mode = CHAR(STRING_ELT(mode_sexp, 0));
   if (strcmp(mode, "auto") != 0 && strcmp(mode, "landlock") != 0 &&
       strcmp(mode, "userns") != 0 && strcmp(mode, "seccomp-only") != 0) {
@@ -648,7 +658,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   }
   if (tier == NULL &&
       (strcmp(mode, "userns") == 0 || strcmp(mode, "auto") == 0)) {
-    int err = userns_engage(read_roots, rw_roots);
+    int err = userns_engage(read_roots, rw_roots, preserve_fds);
     if (err == 0) {
       tier = "userns";
     } else if (strcmp(mode, "userns") == 0) {
@@ -721,9 +731,10 @@ SEXP c_sandbox_capabilities(void) {
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
-                      SEXP mode_sexp) {
+                      SEXP mode_sexp, SEXP preserve_fds) {
   /* Sandbox modes select Linux backends only. */
   (void) mode_sexp;
+  (void) preserve_fds;
 
   if (memory_limit != R_NilValue) {
     /* Accepted but not reliably enforced by the macOS kernel; kept for
@@ -793,7 +804,7 @@ SEXP c_sandbox_capabilities(void) {
 }
 
 SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
-                      SEXP mode_sexp) {
+                      SEXP mode_sexp, SEXP preserve_fds) {
   Rf_error("sandboxing is only supported on Linux and macOS");
   return R_NilValue;
 }
@@ -802,7 +813,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
 
 static const R_CallMethodDef call_methods[] = {
   {"c_sandbox_capabilities", (DL_FUNC) &c_sandbox_capabilities, 0},
-  {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 4},
+  {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 5},
   {NULL, NULL, 0}
 };
 

@@ -492,13 +492,15 @@ worker_init <- function(parent_tmp, work_dir, dll_path, sandbox_mode = "auto") {
       USE.NAMES = FALSE
     )
   }
-  # Both mechanisms match symlink-free paths: Connect's packrat library is a
+  # The sandboxes match symlink-free paths: Connect's packrat library is a
   # farm of symlinks into a shared cache, and macOS's /tmp and /var live
   # under /private, so grant resolved paths alongside the originals.
   pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
   os_roots <- switch(
     sysname,
-    Linux = c("/usr", "/lib", "/lib64", "/etc", "/opt/R"),
+    Linux = c(
+      "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/opt/R"
+    ),
     Darwin = c(
       "/usr", "/bin", "/sbin", "/System", "/Library",
       "/private/etc", "/private/var/db", "/opt", "/dev"
@@ -510,12 +512,21 @@ worker_init <- function(parent_tmp, work_dir, dll_path, sandbox_mode = "auto") {
     resolve(pkg_dirs),
     os_roots
   ))
-  read_roots <- unique(resolve(read_roots[dir.exists(read_roots)]))
+  read_roots <- read_roots[dir.exists(read_roots)]
+  read_roots <- unique(c(read_roots, resolve(read_roots)))
   # callr writes its per-call result files into the parent's tempdir, so the
   # worker must be able to write there for results to make it back.
-  write_roots <- unique(resolve(c(parent_tmp, work_dir)))
+  write_roots <- c(parent_tmp, work_dir)
+  write_roots <- unique(c(write_roots, resolve(write_roots)))
+  # callr reports status on fd 3 and saves stdout/stderr while a call runs.
+  callr_data <- as.environment("tools:callr")[["__callr_data__"]]
+  preserve_fds <- c(
+    3L,
+    callr_data[[".__stdout__"]],
+    callr_data[[".__stderr__"]]
+  )
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
-  .Call(sym, read_roots, write_roots, NULL, sandbox_mode)
+  .Call(sym, read_roots, write_roots, NULL, sandbox_mode, preserve_fds)
   invisible(TRUE)
 }
 

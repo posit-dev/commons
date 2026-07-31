@@ -134,6 +134,13 @@ sandboxed_worker_probes <- function(sandbox_mode, env = parent.frame()) {
             "denied"
           }
         },
+        exec = denied({
+          status <- system2("/bin/true")
+          if (!identical(status, 0L)) {
+            warning("subprocess failed")
+          }
+          status
+        }),
         compute = sum(1:10)
       )
     },
@@ -156,6 +163,9 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
+  if (identical(Sys.info()[["sysname"]], "Linux")) {
+    expect_equal(probes$exec, "allowed")
+  }
   expect_equal(probes$compute, 55)
 })
 
@@ -169,6 +179,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
+  expect_equal(probes$exec, "allowed")
   expect_equal(probes$compute, 55)
 })
 
@@ -179,5 +190,6 @@ test_that("seccomp-only mode leaves files reachable but not the network", {
   probes <- sandboxed_worker_probes("seccomp-only")
   expect_equal(probes$read, "allowed")
   expect_equal(probes$socket, "denied")
+  expect_equal(probes$exec, "allowed")
   expect_equal(probes$compute, 55)
 })
