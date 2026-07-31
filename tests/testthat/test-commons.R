@@ -104,7 +104,7 @@ test_that("commons() configures run_r network access", {
   full <- agent_tool(test_agent(network = "full"), "run_r")
 
   expect_match(tool_description(restricted), "no network access")
-  expect_match(tool_description(full), "full network access")
+  expect_no_match(tool_description(full), "network access")
   expect_false(S7::prop(restricted, "annotations")$open_world_hint)
   expect_true(S7::prop(full, "annotations")$open_world_hint)
 })

@@ -38,8 +38,6 @@ tool_run_r <- function(private) {
       "summaries (head(), summary()) over large outputs.",
       if (identical(private$worker$network, "none")) {
         "\n- The session has no network access."
-      } else {
-        "\n- The session has full network access."
       },
       "\n- The session can only write to its own temporary directory."
     ),
