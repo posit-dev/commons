@@ -207,6 +207,10 @@ test_that("commons() accepts an empty semantic layer", {
 
 test_that("commons() validates its inputs", {
   expect_error(test_agent(network = "partial"), "network")
+  expect_error(
+    commons(test_client(), test_source(), NULL, NULL, "prompt"),
+    "must be empty"
+  )
   expect_snapshot(
     commons(client = "not a chat", data_sources = test_source()),
     error = TRUE

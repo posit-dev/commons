@@ -17,8 +17,7 @@
 #'   `describe_table` tools take a source's name as a `source` argument.
 #' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
-#' @param network Whether the `run_r` session has network access. One of
-#'   `"none"` (the default) or `"full"`.
+#' @param ... These dots are for future extensions and must be empty.
 #' @param system_prompt The agent's system prompt, as a single string. The
 #'   default interpolates the markdown prompt shipped with commons, filling
 #'   its `{{date}}` keyword. To customize the prompt, copy that file into
@@ -44,6 +43,8 @@
 #'   a "How to answer" workflow section assembled from whichever of
 #'   registered measures and governed definitions the agent actually has;
 #'   the file needn't (and shouldn't) describe them.
+#' @param network Whether the `run_r` session has network access. One of
+#'   `"none"` (the default) or `"full"`.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -119,14 +120,16 @@ commons <- function(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
-  network = c("none", "full"),
+  ...,
   system_prompt = ellmer::interpolate_file(
     system.file("prompts/system-prompt.md", package = "commons"),
     date = Sys.Date()
   ),
+  network = c("none", "full"),
   log = FALSE,
   share_with = NULL
 ) {
+  rlang::check_dots_empty()
   if (!inherits(client, "Chat")) {
     cli::cli_abort(
       "{.arg client} must be an {.cls ellmer::Chat}, e.g. from {.fn ellmer::chat_anthropic}."
@@ -170,21 +173,23 @@ Commons <- R6::R6Class(
   public = list(
     #' @description Create a Commons agent. Most users should call [commons()]
     #'   rather than this method directly.
-    #' @param client,data_sources,context_layer,semantic_layer,network,system_prompt,log,share_with
+    #' @param client,data_sources,context_layer,semantic_layer,...,system_prompt,network,log,share_with
     #'   See [commons()].
     initialize = function(
       client,
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
-      network = c("none", "full"),
+      ...,
       system_prompt = ellmer::interpolate_file(
         system.file("prompts/system-prompt.md", package = "commons"),
         date = Sys.Date()
       ),
+      network = c("none", "full"),
       log = FALSE,
       share_with = NULL
     ) {
+      rlang::check_dots_empty()
       super$initialize(provider = client$get_provider(), echo = "none")
       semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
