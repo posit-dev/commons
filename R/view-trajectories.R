@@ -715,7 +715,7 @@ review_bar_prompt <- function(flagged) {
     class = "commons-viewer-review",
     htmltools::div(
       class = "commons-viewer-review-bar",
-      htmltools::tags$strong("Review Notes"),
+      htmltools::tags$strong("Notes"),
       flag_button(flagged, TRUE)
     ),
     htmltools::div(
@@ -731,7 +731,7 @@ review_bar_notes <- function(key, flagged, notes) {
     htmltools::div(
       class = "commons-viewer-review-bar",
       htmltools::tags$strong(
-        sprintf("Review Notes for Question %d", key$exchange)
+        sprintf("Notes for Question %d", key$exchange)
       ),
       flag_button(flagged, FALSE)
     ),
