@@ -65,6 +65,9 @@
 #endif
 
 /* Syscall numbers past 424 are shared across supported architectures. */
+#ifndef __NR_io_uring_setup
+#define __NR_io_uring_setup 425
+#endif
 #ifndef __NR_open_tree
 #define __NR_open_tree 428
 #endif
@@ -613,6 +616,8 @@ static void network_engage(void) {
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
 #endif
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_io_uring_setup, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
   };
