@@ -43,7 +43,8 @@ connect_req <- function(client, ...) {
 }
 
 # Fetch trace rows for a content item as raw OTLP NDJSON lines, paging until
-# the X-Total-Count header is exhausted or `enough(lines)` returns TRUE.
+# the X-Total-Count header is exhausted. On servers with a single trace store,
+# `enough(lines)` can stop paging early.
 # Connect returns rows newest-first by span start time and filters `from`/`to`
 # on span start time over `[from, to)`.
 connect_trace_lines <- function(
@@ -57,6 +58,7 @@ connect_trace_lines <- function(
 ) {
   lines <- character()
   offset <- 0
+  version <- NULL
   repeat {
     resp <- tryCatch(
       connect_req(client, "content", guid, "traces") |>
@@ -68,24 +70,148 @@ connect_trace_lines <- function(
         ) |>
         httr2::req_perform(),
       httr2_http_401 = function(err) trace_access_abort(err, call),
-      httr2_http_403 = function(err) trace_access_abort(err, call)
+      httr2_http_403 = function(err) trace_access_abort(err, call),
+      httr2_http_404 = function(err) NULL
     )
-    page <- httr2::resp_body_string(resp)
-    page <- strsplit(page, "\n", fixed = TRUE)[[1]]
-    page <- page[nzchar(page)]
+    if (is.null(resp)) {
+      return(connect_job_trace_lines(
+        client, guid, from, page_size, call
+      ))
+    }
+    version <- version %||% connect_server_version(
+      httr2::resp_header(resp, "Server")
+    )
+    page <- resp_trace_lines(resp)
     lines <- c(lines, page)
     total <- suppressWarnings(
       as.integer(httr2::resp_header(resp, "X-Total-Count"))
     )
     offset <- offset + length(page)
+    if (
+      !is.null(version) && version < numeric_version("2026.07.0") &&
+        length(lines) > 0 && !is.null(enough) && enough(lines)
+    ) {
+      return(lines)
+    }
     if (length(page) == 0 || is.na(total) || offset >= total) {
       break
     }
-    if (!is.null(enough) && enough(lines)) {
-      break
+  }
+  # Connect 2026.07 moved new traces without migrating the per-job files.
+  if (is.null(version) || version >= numeric_version("2026.07.0")) {
+    lines <- connect_job_trace_lines(
+      client, guid, from, page_size, call, lines
+    )
+  }
+  unique(lines)
+}
+
+connect_job_trace_lines <- function(
+  client,
+  guid,
+  from,
+  page_size,
+  call,
+  lines = character()
+) {
+  jobs <- tryCatch(
+    connect_req(client, "content", guid, "jobs") |>
+      httr2::req_perform() |>
+      httr2::resp_body_json(),
+    httr2_http_401 = function(err) trace_access_abort(err, call),
+    httr2_http_403 = function(err) trace_access_abort(err, call)
+  )
+  job_keys <- vapply(jobs, function(job) job$key, character(1))
+  offsets <- integer(length(job_keys))
+  max_active <- 20
+
+  while (length(job_keys) > 0) {
+    requests <- vector("list", length(job_keys))
+    for (i in seq_along(job_keys)) {
+      requests[[i]] <- connect_job_trace_req(
+        job_key = job_keys[[i]],
+        offset = offsets[[i]],
+        client = client,
+        guid = guid,
+        from = from,
+        page_size = page_size,
+        max_active = max_active
+      )
     }
+    responses <- httr2::req_perform_parallel(
+      requests,
+      on_error = "continue",
+      progress = FALSE,
+      max_active = max_active
+    )
+    next_job_keys <- character()
+    next_offsets <- integer()
+
+    for (i in seq_along(responses)) {
+      resp <- responses[[i]]
+      if (inherits(resp, c("httr2_http_401", "httr2_http_403"))) {
+        trace_access_abort(resp, call)
+      }
+      if (inherits(resp, "httr2_http_404")) {
+        next
+      }
+      if (inherits(resp, "condition")) {
+        rlang::cnd_signal(resp)
+      }
+      page <- resp_trace_lines(resp)
+      lines <- c(lines, page)
+      total <- suppressWarnings(
+        as.integer(httr2::resp_header(resp, "X-Total-Count"))
+      )
+      offset <- offsets[[i]] + length(page)
+      if (length(page) > 0 && !is.na(total) && offset < total) {
+        next_job_keys <- c(next_job_keys, job_keys[[i]])
+        next_offsets <- c(next_offsets, offset)
+      }
+    }
+    job_keys <- next_job_keys
+    offsets <- next_offsets
   }
   lines
+}
+
+connect_job_trace_req <- function(
+  job_key,
+  offset,
+  client,
+  guid,
+  from,
+  page_size,
+  max_active
+) {
+  connect_req(client, "content", guid, "jobs", job_key, "traces") |>
+    httr2::req_url_query(
+      limit = page_size,
+      offset = offset,
+      since = connect_window_param(from, -3600)
+    ) |>
+    httr2::req_throttle(capacity = max_active, fill_time_s = 0.5)
+}
+
+resp_trace_lines <- function(resp) {
+  if (!httr2::resp_has_body(resp)) {
+    return(character())
+  }
+  page <- httr2::resp_body_string(resp)
+  page <- strsplit(page, "\n", fixed = TRUE)[[1]]
+  page[nzchar(page)]
+}
+
+connect_server_version <- function(server) {
+  if (is.null(server)) {
+    return(NULL)
+  }
+  match <- regexec("Posit Connect v([0-9]+(?:\\.[0-9]+){1,2})", server)
+  version <- regmatches(server, match)[[1]]
+  if (length(version) == 0) {
+    return(NULL)
+  }
+  numeric_version(version[[2]])
 }
 
 # Connect silently ignores timestamps it can't parse, including any without

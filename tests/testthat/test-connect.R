@@ -44,10 +44,13 @@ test_that("connect_trace_lines pages until the total is exhausted", {
       state$calls <- state$calls + 1
       state$calls
     },
+    resp_has_body = function(resp) TRUE,
     resp_body_string = function(resp) {
       paste(pages[[resp]], collapse = "\n")
     },
-    resp_header = function(resp, name) "3",
+    resp_header = function(resp, name) {
+      if (name == "Server") "Posit Connect v2026.06.1" else "3"
+    },
     .package = "httr2"
   )
 
@@ -55,6 +58,62 @@ test_that("connect_trace_lines pages until the total is exhausted", {
 
   expect_equal(lines, c("line1", "line2", "line3"))
   expect_equal(state$calls, 2)
+})
+
+test_that("connect_trace_lines reads collector and legacy stores", {
+  httr2::local_mocked_responses(function(req) {
+    url <- req$url
+    if (grepl("/jobs/job/traces", url, fixed = TRUE)) {
+      return(httr2::new_response(
+        "GET", url, 200L,
+        list(`X-Total-Count` = "1"), charToRaw("legacy"), request = req
+      ))
+    }
+    if (grepl("/jobs", url, fixed = TRUE)) {
+      return(httr2::new_response(
+        "GET", url, 200L,
+        list(`Content-Type` = "application/json"),
+        charToRaw('[{"key":"job"}]'),
+        request = req
+      ))
+    }
+    httr2::new_response(
+      "GET", url, 200L,
+      list(Server = "Posit Connect v2026.07.0", `X-Total-Count` = "1"),
+      charToRaw("current"), request = req
+    )
+  })
+
+  lines <- connect_trace_lines(
+    list(server = "https://connect.example.com", api_key = "k"),
+    "guid",
+    enough = function(lines) TRUE
+  )
+
+  expect_equal(lines, c("current", "legacy"))
+})
+
+test_that("connect_trace_lines falls back when the content endpoint is absent", {
+  local_mocked_bindings(connect_job_trace_lines = function(...) "legacy")
+  httr2::local_mocked_responses(function(req) {
+    httr2::new_response(
+      "GET", req$url, 404L, list(), raw(), request = req
+    )
+  })
+
+  lines <- connect_trace_lines(
+    list(server = "https://connect.example.com", api_key = "k"), "guid"
+  )
+
+  expect_equal(lines, "legacy")
+})
+
+test_that("connect_server_version parses Connect response headers", {
+  expect_equal(
+    connect_server_version("Posit Connect v2026.07.0"),
+    numeric_version("2026.07.0")
+  )
+  expect_null(connect_server_version("nginx"))
 })
 
 test_that("connect_trace_lines explains auth failures on the traces endpoint", {
