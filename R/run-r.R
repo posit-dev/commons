@@ -36,8 +36,10 @@ tool_run_r <- function(private) {
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
       "\n- Return results implicitly (`x`, not `print(x)`) and prefer brief",
       "summaries (head(), summary()) over large outputs.",
-      "\n- The session has no network access and can only write to its own",
-      "temporary directory."
+      if (identical(private$worker$network, "none")) {
+        "\n- The session has no network access."
+      },
+      "\n- The session can only write to its own temporary directory."
     ),
     arguments = list(
       code = ellmer::type_string("The R code to run.")
@@ -47,7 +49,7 @@ tool_run_r <- function(private) {
       title = "R code",
       icon = maybe_icon("terminal"),
       read_only_hint = FALSE,
-      open_world_hint = FALSE
+      open_world_hint = identical(private$worker$network, "full")
     )
   )
 }
@@ -215,8 +217,9 @@ run_r_html <- function(code, segments) {
 
 # --- worker lifecycle --------------------------------------------------------
 
-new_r_worker <- function() {
+new_r_worker <- function(network = "none") {
   worker <- new.env(parent = emptyenv())
+  worker$network <- network
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
@@ -239,7 +242,9 @@ worker_ensure <- function(worker, fn_sources = character()) {
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir, recursive = TRUE)
   rs <- callr::r_session$new(
-    callr::r_session_options(env = worker_scrubbed_env(work_dir)),
+    callr::r_session_options(
+      env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
+    ),
     wait = TRUE
   )
   # callr rebinds a transferred function's environment to the worker's global
@@ -252,7 +257,8 @@ worker_ensure <- function(worker, fn_sources = character()) {
     args = list(
       parent_tmp = tempdir(),
       work_dir = work_dir,
-      dll_path = commons_dll_path()
+      dll_path = commons_dll_path(),
+      network = worker$network
     )
   )
   # Defining sources at spawn (rather than syncing per call like handles)
@@ -263,6 +269,19 @@ worker_ensure <- function(worker, fn_sources = character()) {
   worker$rs <- rs
   worker$synced <- 0L
   invisible(worker)
+}
+
+# unshare(CLONE_NEWUSER) requires a single-threaded process.
+worker_single_thread <- function(sandbox_mode) {
+  if (!identical(Sys.info()[["sysname"]], "Linux")) {
+    return(FALSE)
+  }
+  switch(
+    sandbox_mode,
+    userns = TRUE,
+    auto = sandbox_capabilities()$landlock_abi < 1,
+    FALSE
+  )
 }
 
 commons_dll_path <- function() {
@@ -285,7 +304,7 @@ worker_close <- function(worker) {
 # The content environment holds credentials (API keys, session tokens,
 # database URLs) that an OS sandbox can't hide, so the worker starts from an
 # allowlist: callr applies `env` with withr semantics, where an NA unsets.
-worker_scrubbed_env <- function(work_dir) {
+worker_scrubbed_env <- function(work_dir, single_thread = FALSE) {
   keep <- c(
     "PATH",
     "LANG",
@@ -305,6 +324,10 @@ worker_scrubbed_env <- function(work_dir) {
   env <- rlang::set_names(rep(NA_character_, length(drop)), drop)
   env[["TMPDIR"]] <- work_dir
   env[["HOME"]] <- work_dir
+  if (single_thread) {
+    env[["OPENBLAS_NUM_THREADS"]] <- "1"
+    env[["OMP_NUM_THREADS"]] <- "1"
+  }
   env
 }
 
@@ -432,16 +455,23 @@ plot_dimensions <- function(ratio, longest_side) {
 # environment is reset to the global env, so these reference only base R,
 # `pkg::fn`, and their own arguments — no commons internals.
 
-worker_init <- function(parent_tmp, work_dir, dll_path) {
+worker_init <- function(
+  parent_tmp,
+  work_dir,
+  dll_path,
+  network = "none",
+  sandbox_mode = "auto"
+) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  # Only Linux (Landlock + seccomp) and macOS (Seatbelt) have sandbox
-  # implementations; elsewhere run unsandboxed (local dev only). Where a
-  # sandbox exists it must engage, so a missing compiled library is a hard
-  # error rather than a silent drop to unsandboxed execution.
+  # Every platform that runs worker code must engage a sandbox.
   sysname <- Sys.info()[["sysname"]]
   if (!sysname %in% c("Linux", "Darwin")) {
-    return(invisible(FALSE))
+    stop(
+      "commons cannot sandbox the run_r session on ",
+      sysname,
+      "; only Linux and macOS are supported."
+    )
   }
   if (is.na(dll_path)) {
     stop(
@@ -461,13 +491,15 @@ worker_init <- function(parent_tmp, work_dir, dll_path) {
       USE.NAMES = FALSE
     )
   }
-  # Both mechanisms match symlink-free paths: Connect's packrat library is a
+  # The sandboxes match symlink-free paths: Connect's packrat library is a
   # farm of symlinks into a shared cache, and macOS's /tmp and /var live
   # under /private, so grant resolved paths alongside the originals.
   pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
   os_roots <- switch(
     sysname,
-    Linux = c("/usr", "/lib", "/lib64", "/etc", "/opt/R"),
+    Linux = c(
+      "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/opt/R"
+    ),
     Darwin = c(
       "/usr", "/bin", "/sbin", "/System", "/Library",
       "/private/etc", "/private/var/db", "/opt", "/dev"
@@ -479,12 +511,29 @@ worker_init <- function(parent_tmp, work_dir, dll_path) {
     resolve(pkg_dirs),
     os_roots
   ))
-  read_roots <- unique(resolve(read_roots[dir.exists(read_roots)]))
+  read_roots <- read_roots[dir.exists(read_roots)]
+  read_roots <- unique(c(read_roots, resolve(read_roots)))
   # callr writes its per-call result files into the parent's tempdir, so the
   # worker must be able to write there for results to make it back.
-  write_roots <- unique(resolve(c(parent_tmp, work_dir)))
+  write_roots <- c(parent_tmp, work_dir)
+  write_roots <- unique(c(write_roots, resolve(write_roots)))
+  # callr reports status on fd 3 and saves stdout/stderr while a call runs.
+  callr_data <- as.environment("tools:callr")[["__callr_data__"]]
+  preserve_fds <- c(
+    3L,
+    callr_data[[".__stdout__"]],
+    callr_data[[".__stderr__"]]
+  )
   sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
-  .Call(sym, read_roots, write_roots, NULL)
+  .Call(
+    sym,
+    read_roots,
+    write_roots,
+    NULL,
+    sandbox_mode,
+    preserve_fds,
+    network
+  )
   invisible(TRUE)
 }
 

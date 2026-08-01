@@ -10,8 +10,10 @@ commons(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  ...,
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
+  network = c("none", "full"),
   log = FALSE,
   share_with = NULL
 )
@@ -29,6 +31,8 @@ can take a source's connection as an argument named after the source; see
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
+
+\item{...}{These dots are for future extensions and must be empty.}
 
 \item{system_prompt}{The agent's system prompt, as a single string. The
 default interpolates the markdown prompt shipped with commons, filling
@@ -54,6 +58,10 @@ available tables and data dictionaries to the prompt itself, along with
 a "How to answer" workflow section assembled from whichever of
 registered measures and governed definitions the agent actually has;
 the file needn't (and shouldn't) describe them.}
+
+\item{network}{Whether the \code{run_r} session has network access. One of
+\code{"none"} (the default) or \code{"full"}. The session requires Linux or macOS
+and refuses to run without filesystem sandboxing.}
 
 \item{log}{Whether to capture conversation trajectories with OpenTelemetry
 (default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content
@@ -189,8 +197,10 @@ rather than this method directly.
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  ...,
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
+  network = c("none", "full"),
   log = FALSE,
   share_with = NULL
 )}
@@ -199,7 +209,7 @@ rather than this method directly.
   \subsection{Arguments}{
     \if{html}{\out{<div class="arguments">}}
     \describe{
-      \item{\code{client, data_sources, context_layer, semantic_layer, system_prompt, log, share_with}}{See \code{\link[=commons]{commons()}}.}
+      \item{\code{client, data_sources, context_layer, semantic_layer, ..., system_prompt, network, log, share_with}}{See \code{\link[=commons]{commons()}}.}
     }
     \if{html}{\out{</div>}}
   }
