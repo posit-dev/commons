@@ -45,8 +45,8 @@ layer, context search, table inspection, and SQL queries.</p>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">commons</span><span class="op">(</span></span>
 <span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  <span class="va">data_sources</span>,</span>
-<span>  context_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  semantic_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  context_layer <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  <span class="va">...</span>,</span>
 <span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts/system-prompt.md"</span>,</span>
 <span>    package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>, date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -73,12 +73,12 @@ can take a source's connection as an argument named after the source; see
 <code>describe_table</code> tools take a source's name as a <code>source</code> argument.</p></dd>
 
 
-<dt id="arg-context-layer">context_layer<a class="anchor" aria-label="anchor" href="#arg-context-layer"></a></dt>
-<dd><p>An optional <code><a href="context_layer.html">context_layer()</a></code>.</p></dd>
-
-
 <dt id="arg-semantic-layer">semantic_layer<a class="anchor" aria-label="anchor" href="#arg-semantic-layer"></a></dt>
 <dd><p>An optional <code><a href="semantic_layer.html">semantic_layer()</a></code>.</p></dd>
+
+
+<dt id="arg-context-layer">context_layer<a class="anchor" aria-label="anchor" href="#arg-context-layer"></a></dt>
+<dd><p>An optional <code><a href="context_layer.html">context_layer()</a></code>.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

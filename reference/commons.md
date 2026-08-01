@@ -11,8 +11,8 @@ inspection, and SQL queries.
 commons(
   client = ellmer::chat_anthropic(),
   data_sources,
-  context_layer = NULL,
   semantic_layer = NULL,
+  context_layer = NULL,
   ...,
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
@@ -42,15 +42,15 @@ commons(
   When there are several sources, the `run_sql` and `describe_table`
   tools take a source's name as a `source` argument.
 
-- context_layer:
-
-  An optional
-  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md).
-
 - semantic_layer:
 
   An optional
   [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
+
+- context_layer:
+
+  An optional
+  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md).
 
 - ...:
 
