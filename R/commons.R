@@ -15,8 +15,8 @@
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()]. When there are several sources, the `run_sql` and
 #'   `describe_table` tools take a source's name as a `source` argument.
-#' @param context_layer An optional [context_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
+#' @param context_layer An optional [context_layer()].
 #' @param ... These dots are for future extensions and must be empty.
 #' @param system_prompt The agent's system prompt, as a single string. The
 #'   default interpolates the markdown prompt shipped with commons, filling
@@ -119,8 +119,8 @@
 commons <- function(
   client = ellmer::chat_anthropic(),
   data_sources,
-  context_layer = NULL,
   semantic_layer = NULL,
+  context_layer = NULL,
   ...,
   system_prompt = ellmer::interpolate_file(
     system.file("prompts/system-prompt.md", package = "commons"),
@@ -174,8 +174,8 @@ Commons <- R6::R6Class(
     initialize = function(
       client,
       data_sources,
-      context_layer = NULL,
       semantic_layer = NULL,
+      context_layer = NULL,
       ...,
       system_prompt = ellmer::interpolate_file(
         system.file("prompts/system-prompt.md", package = "commons"),

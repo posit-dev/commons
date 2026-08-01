@@ -7,8 +7,8 @@
 commons(
   client = ellmer::chat_anthropic(),
   data_sources,
-  context_layer = NULL,
   semantic_layer = NULL,
+  context_layer = NULL,
   ...,
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
@@ -27,9 +27,9 @@ can take a source's connection as an argument named after the source; see
 \code{\link[=semantic_layer]{semantic_layer()}}. When there are several sources, the \code{run_sql} and
 \code{describe_table} tools take a source's name as a \code{source} argument.}
 
-\item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
-
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
+
+\item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
 
 \item{...}{These dots are for future extensions and must be empty.}
 
