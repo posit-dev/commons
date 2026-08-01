@@ -2,10 +2,11 @@
 #'
 #' @description
 #' `view_trajectories()` launches a Shiny app for browsing conversation
-#' trajectories read with [read_trajectories()]. The app shows the rate of
-#' each trust level across conversations, a list of conversations or of
-#' individual questions—filterable by date and trust level—and a transcript
-#' of each with the provenance pills the commons chat UI would show.
+#' trajectories read with [read_trajectories()]. The app charts each trust
+#' level's share of answers over time—with the overall rates in the chart's
+#' legend—alongside a list of conversations or of individual questions,
+#' filterable by date and trust level, and a transcript of each with the
+#' provenance pills the commons chat UI would show.
 #'
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review, and selecting a question-and-answer exchange
@@ -162,10 +163,6 @@ summarize_questions <- function(trajectories) {
 # dropped by the OTLP round trip -- from the tool-call names that survive
 # it. B vs C is decided by citation *presence*: with no agent there is no
 # corpus to verify quotes against.
-trajectory_provenance <- function(turns) {
-  lapply(split_exchanges(turns), exchange_provenance)
-}
-
 exchange_provenance <- function(exchange) {
   tags <- exchange_tool_tags(exchange)
   text <- unlist(lapply(exchange, turn_text)) %||% character()
@@ -424,7 +421,7 @@ viewer_ui <- function(summary) {
         ),
         shiny::uiOutput("entries")
       ),
-      shiny::uiOutput("hit_rate"),
+      trust_timeline_card(),
       bslib::card(
         fill = TRUE,
         class = "commons-viewer-transcript",
@@ -500,14 +497,20 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
       )
     })
 
-    # The hit rate reflects the date window but not the trust filter: it is
-    # the trust distribution the filter slices.
-    output$hit_rate <- shiny::renderUI({
+    # The timeline reflects the date window but not the trust filter: it
+    # charts the trust distribution the filter slices. Its legend carries
+    # the window's overall rates -- including undated answers, which the
+    # per-day bands can't place.
+    output$timeline_legend <- shiny::renderUI({
       in_dates <- Filter(
         function(i) in_window(summary[[i]], input$window),
         seq_along(summary)
       )
-      hit_rate_boxes(hit_rate(lapply(in_dates, function(i) summary[[i]]$tags)))
+      timeline_legend(hit_rate(lapply(in_dates, function(i) summary[[i]]$tags)))
+    })
+
+    output$timeline <- shiny::renderUI({
+      trust_timeline(trust_timeline_days(questions, input$window))
     })
 
     output$entries <- shiny::renderUI({
@@ -610,20 +613,25 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     # client-initiated selection back is harmless: re-applying it sends no
     # input, and a message racing a fresh transcript finds no element and
     # dies quietly (the exchange seed carries that state instead).
-    shiny::observeEvent(review_target(), ignoreNULL = FALSE, ignoreInit = TRUE, {
-      key <- selected()
-      if (is.null(key)) {
-        return()
-      }
-      target <- review_target()
-      session$sendCustomMessage(
-        "commonsViewerExchangeSelect",
-        list(
-          id = transcript_id(key),
-          exchange = if (!is.null(target)) target$exchange
+    shiny::observeEvent(
+      review_target(),
+      ignoreNULL = FALSE,
+      ignoreInit = TRUE,
+      {
+        key <- selected()
+        if (is.null(key)) {
+          return()
+        }
+        target <- review_target()
+        session$sendCustomMessage(
+          "commonsViewerExchangeSelect",
+          list(
+            id = transcript_id(key),
+            exchange = if (!is.null(target)) target$exchange
+          )
         )
-      )
-    })
+      }
+    )
 
     shiny::observeEvent(input$save_note, {
       key <- review_target()
@@ -798,14 +806,6 @@ append_review_record <- function(file, record) {
   cat(line, "\n", file = file, sep = "", append = TRUE)
 }
 
-read_review_flags <- function(file) {
-  review_flags(read_review_records(file))
-}
-
-read_review_notes <- function(file) {
-  review_notes(read_review_records(file))
-}
-
 read_review_records <- function(file) {
   if (!file.exists(file)) {
     return(list())
@@ -904,35 +904,6 @@ viewer_levels <- c(
   C = "Untrusted",
   none = "No data tool"
 )
-
-hit_rate_boxes <- function(rate) {
-  boxes <- lapply(names(viewer_levels), function(key) level_box(key, rate))
-  do.call(bslib::layout_columns, c(boxes, list(fill = FALSE)))
-}
-
-# The Verified box wears the verified-answer pill's palette (see
-# .commons-answer-pill-trusted in commons-chat.css) and its shield.
-level_box <- function(key, rate) {
-  verified <- identical(key, "A")
-  bslib::value_box(
-    title = viewer_levels[[key]],
-    value = rate_percent(rate$counts[[key]], rate$n),
-    htmltools::p(sprintf("%d of %d answers", rate$counts[[key]], rate$n)),
-    showcase = if (verified) verified_shield(),
-    theme = if (verified) {
-      bslib::value_box_theme(bg = "#f2fbf5", fg = "#286144")
-    },
-    class = if (verified) "commons-viewer-value-verified"
-  )
-}
-
-# The same shield the verified-answer pill carries, inlined so the value
-# box's showcase can size it.
-verified_shield <- function() {
-  path <- system.file("figs", "trusted-icon.svg", package = "commons")
-  svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
-  htmltools::HTML(sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg))
-}
 
 rate_percent <- function(count, n) {
   if (n == 0) {
@@ -1044,6 +1015,160 @@ viewer_date_range <- function(summary) {
 # calendar days in the reader's local time.
 local_date <- function(time) {
   as.Date(format(time, "%Y-%m-%d"))
+}
+
+# Timeline ------------------------------------------------------------------
+
+# One fill per trust level, in stack order (Verified at the baseline). The
+# set passes the usual palette gates -- colorblind separation between stack
+# neighbors and 3:1 contrast on a white surface -- which is why "No data
+# tool" wears a muted violet rather than a gray that would read as
+# background, and Untrusted a darker amber than its pill.
+viewer_level_colors <- c(
+  A = "#2a9d64",
+  B = "#2a78d6",
+  C = "#b8860b",
+  none = "#8a72c8"
+)
+
+# The card frame and title are static; the legend and plot re-render as
+# the date window moves.
+trust_timeline_card <- function() {
+  bslib::card(
+    fill = FALSE,
+    class = "commons-viewer-timeline-card",
+    bslib::card_header(
+      class = "commons-viewer-timeline-header",
+      htmltools::tags$strong("Trust levels over time"),
+      shiny::uiOutput("timeline_legend", inline = TRUE)
+    ),
+    shiny::uiOutput("timeline")
+  )
+}
+
+# The legend doubles as the viewer's headline hit rate: each level's
+# window-wide share of answers rides its legend entry, with the counts
+# behind the percentage in the entry's tooltip.
+timeline_legend <- function(rate) {
+  htmltools::div(
+    class = "commons-viewer-timeline-legend",
+    lapply(names(viewer_levels), function(key) {
+      htmltools::tags$span(
+        class = "commons-viewer-timeline-legend-item",
+        title = sprintf(
+          "%d of %d answers",
+          rate$counts[[key]],
+          rate$n
+        ),
+        htmltools::tags$span(
+          class = "commons-viewer-timeline-swatch",
+          style = paste0("background:", viewer_level_colors[[key]])
+        ),
+        viewer_levels[[key]],
+        htmltools::tags$strong(rate_percent(rate$counts[[key]], rate$n))
+      )
+    })
+  )
+}
+
+# Per-day tag counts for the dated questions inside the window, in date
+# order. Undated questions have no x position, so the chart skips them;
+# the hit-rate boxes still count them.
+trust_timeline_days <- function(questions, window = NULL) {
+  dates <- as.Date(vapply(
+    questions,
+    function(record) as.character(local_date(record$last_active)),
+    character(1)
+  ))
+  keep <- !is.na(dates)
+  if (length(window) >= 2) {
+    keep <- keep & dates >= window[[1]] & dates <= window[[2]]
+  }
+  questions <- questions[keep]
+  dates <- dates[keep]
+
+  lapply(sort(unique(dates)), function(day) {
+    tags <- vapply(
+      questions[dates == day],
+      function(record) record$tag,
+      character(1)
+    )
+    list(
+      date = format(day, "%Y-%m-%d"),
+      label = format(day, "%b %e, %Y"),
+      n = length(tags),
+      counts = list(
+        A = sum(tags %in% "A"),
+        B = sum(tags %in% "B"),
+        C = sum(tags %in% "C"),
+        none = sum(is.na(tags))
+      )
+    )
+  })
+}
+
+# The plot itself is drawn client-side (commons-viewer.js) from the JSON
+# payload, so it can size to the card and carry the crosshair tooltip; the
+# table is the same data readable without a pointer, and is where screen
+# readers land instead of the drawing.
+trust_timeline <- function(days) {
+  if (length(days) == 0) {
+    return(viewer_empty_note("No dated questions in this date range."))
+  }
+  payload <- list(
+    levels = lapply(names(viewer_levels), function(key) {
+      list(
+        key = key,
+        label = unname(viewer_levels[[key]]),
+        color = unname(viewer_level_colors[[key]])
+      )
+    }),
+    days = days
+  )
+  htmltools::div(
+    class = "commons-viewer-timeline",
+    htmltools::tags$script(
+      type = "application/json",
+      class = "commons-viewer-timeline-data",
+      htmltools::HTML(jsonlite::toJSON(payload, auto_unbox = TRUE))
+    ),
+    htmltools::div(
+      class = "commons-viewer-timeline-plot",
+      role = "img",
+      tabindex = "0",
+      `aria-label` = paste(
+        "Chart of the share of answers at each trust level by day.",
+        "The values appear in the table that follows."
+      )
+    ),
+    timeline_table(days)
+  )
+}
+
+timeline_table <- function(days) {
+  rows <- lapply(days, function(day) {
+    htmltools::tags$tr(
+      htmltools::tags$td(day$label),
+      lapply(names(viewer_levels), function(key) {
+        htmltools::tags$td(sprintf(
+          "%s (%d)",
+          rate_percent(day$counts[[key]], day$n),
+          day$counts[[key]]
+        ))
+      }),
+      htmltools::tags$td(day$n)
+    )
+  })
+  htmltools::tags$table(
+    class = "commons-viewer-sr-only",
+    htmltools::tags$caption("Trust levels over time"),
+    htmltools::tags$thead(htmltools::tags$tr(
+      htmltools::tags$th("Date"),
+      lapply(unname(viewer_levels), htmltools::tags$th),
+      htmltools::tags$th("Answers")
+    )),
+    htmltools::tags$tbody(rows)
+  )
 }
 
 # Asset mtimes ride in the version so the dependency URL changes whenever

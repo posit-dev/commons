@@ -22,16 +22,127 @@
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
 }
 
-/* ---- Hit rate ----------------------------------------------------------- */
+/* ---- Timeline ----------------------------------------------------------- */
 
-/* Border to match the verified-answer pill; bg/fg come from the box theme. */
-.commons-viewer-value-verified {
-  border: 1px solid #cfeedd;
+.commons-viewer-timeline-card {
+  flex: 0 0 auto;
 }
 
-.commons-viewer-value-verified .value-box-showcase svg {
-  height: 2.5rem;
-  width: 2.5rem;
+.commons-viewer-timeline-card .card-body {
+  padding: 0.5rem 0.75rem 0.625rem;
+}
+
+.commons-viewer-timeline-header {
+  align-items: center;
+  background: transparent;
+  border-bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem 0;
+}
+
+/* The title matches the sidebar's Dates / Trust Level captions. */
+.commons-viewer-timeline-header strong {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.commons-viewer-timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.875rem;
+}
+
+.commons-viewer-timeline-legend-item {
+  align-items: center;
+  color: var(--bs-secondary-color, #6c757d);
+  display: inline-flex;
+  font-size: 0.75rem;
+  gap: 0.35rem;
+}
+
+/* The window-wide rate reads as the entry's value: body ink, tabular so
+ * the row doesn't shimmy as the date window moves. */
+.commons-viewer-timeline-legend-item strong {
+  color: var(--bs-body-color, #212529);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.commons-viewer-timeline-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 0.625rem;
+  width: 0.625rem;
+}
+
+.commons-viewer-timeline {
+  position: relative;
+}
+
+.commons-viewer-timeline-plot {
+  height: 11rem;
+  width: 100%;
+}
+
+.commons-viewer-timeline-plot:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid #007bc2;
+  outline-offset: 2px;
+}
+
+.commons-viewer-timeline-plot svg {
+  display: block;
+}
+
+.commons-viewer-timeline-tooltip {
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  display: none;
+  font-size: 0.75rem;
+  padding: 0.5rem 0.625rem;
+  pointer-events: none;
+  position: absolute;
+  z-index: 5;
+}
+
+.commons-viewer-timeline-tooltip-date {
+  color: var(--bs-secondary-color, #6c757d);
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+}
+
+/* Values lead: the number is the strong element, the level name follows. */
+.commons-viewer-timeline-tooltip-row {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.commons-viewer-timeline-tooltip-row strong {
+  font-variant-numeric: tabular-nums;
+  min-width: 2.25rem;
+  text-align: right;
+}
+
+/* Visually hidden, still read: the chart's table view. */
+.commons-viewer-sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 
 /* ---- Review ------------------------------------------------------------ */

@@ -15,20 +15,20 @@ test_tool_turns <- function(name, id = "c1") {
   )
 }
 
-test_that("trajectory_provenance derives tags from tool calls and citations", {
+test_that("exchange_provenance derives tags from tool calls and citations", {
   measure <- c(
     list(ellmer::UserTurn("How many orders?")),
     test_tool_turns("call_measure"),
     list(ellmer::AssistantTurn("6 orders."))
   )
-  expect_equal(trajectory_provenance(measure)[[1]]$tag, "A")
+  expect_equal(exchange_provenance(measure)$tag, "A")
 
   uncited <- c(
     list(ellmer::UserTurn("Total revenue?")),
     test_tool_turns("run_sql"),
     list(ellmer::AssistantTurn("5650."))
   )
-  expect_equal(trajectory_provenance(uncited)[[1]]$tag, "C")
+  expect_equal(exchange_provenance(uncited)$tag, "C")
 
   # Citation *presence* makes a fallback answer "B": with no agent there is
   # no corpus, so even an unverifiable quote counts.
@@ -39,7 +39,7 @@ test_that("trajectory_provenance derives tags from tool calls and citations", {
       "5650.\n\n<citation reason=\"definition\">Revenue excludes tax.</citation>"
     ))
   )
-  expect_equal(trajectory_provenance(cited)[[1]]$tag, "B")
+  expect_equal(exchange_provenance(cited)$tag, "B")
 
   mixed <- c(
     list(ellmer::UserTurn("Total revenue?")),
@@ -49,14 +49,14 @@ test_that("trajectory_provenance derives tags from tool calls and citations", {
       "5650. <citation>Revenue excludes tax.</citation>"
     ))
   )
-  expect_equal(trajectory_provenance(mixed)[[1]]$tag, "B")
+  expect_equal(exchange_provenance(mixed)$tag, "B")
 
   untagged <- c(
     list(ellmer::UserTurn("What does revenue mean?")),
     test_tool_turns("search_context"),
     list(ellmer::AssistantTurn("Revenue excludes tax."))
   )
-  expect_true(is.na(trajectory_provenance(untagged)[[1]]$tag))
+  expect_true(is.na(exchange_provenance(untagged)$tag))
 })
 
 test_that("tool names survive the OTLP round trip and drive derivation", {
@@ -76,7 +76,7 @@ test_that("tool names survive the OTLP round trip and drive derivation", {
   )))
 
   turns <- build_trajectories(spans)[[1]]
-  provenance <- trajectory_provenance(turns)
+  provenance <- lapply(split_exchanges(turns), exchange_provenance)
 
   expect_length(provenance, 1)
   expect_equal(provenance[[1]]$tag, "B")
@@ -396,9 +396,78 @@ test_that("flags and notes append to and restore from the review file", {
   expect_equal(records[[2]]$exchange, 1)
   expect_equal(records[[3]]$note, "Wrong join, should use orders.")
 
-  expect_equal(read_review_flags(review_file), c("conv1", "conv1#1"))
+  restored <- read_review_records(review_file)
+  expect_equal(review_flags(restored), c("conv1", "conv1#1"))
   expect_equal(
-    vapply(read_review_notes(review_file), `[[`, character(1), "note"),
+    vapply(review_notes(restored), `[[`, character(1), "note"),
     "Wrong join, should use orders."
   )
+})
+
+test_that("trust_timeline_days aggregates question tags by day", {
+  questions <- list(
+    list(tag = "A", last_active = as.POSIXct("2026-07-01 09:00:00")),
+    list(tag = "C", last_active = as.POSIXct("2026-07-01 15:00:00")),
+    list(tag = NA_character_, last_active = as.POSIXct("2026-07-03 10:00:00")),
+    list(tag = "B", last_active = as.POSIXct(NA))
+  )
+
+  days <- trust_timeline_days(questions)
+
+  # The undated question has no x position, so only two days chart.
+  expect_length(days, 2)
+  expect_equal(days[[1]]$date, "2026-07-01")
+  expect_equal(days[[1]]$n, 2)
+  expect_equal(days[[1]]$counts, list(A = 1L, B = 0L, C = 1L, none = 0L))
+  expect_equal(days[[2]]$counts, list(A = 0L, B = 0L, C = 0L, none = 1L))
+
+  windowed <- trust_timeline_days(
+    questions,
+    as.Date(c("2026-07-02", "2026-07-04"))
+  )
+  expect_length(windowed, 1)
+  expect_equal(windowed[[1]]$date, "2026-07-03")
+})
+
+test_that("trust_timeline renders a chart payload and its table view", {
+  skip_if_not_installed("htmltools")
+
+  empty <- as.character(trust_timeline(list()))
+  expect_match(empty, "No dated questions")
+
+  days <- trust_timeline_days(list(
+    list(tag = "A", last_active = as.POSIXct("2026-07-01 09:00:00")),
+    list(tag = "A", last_active = as.POSIXct("2026-07-02 09:00:00")),
+    list(tag = "C", last_active = as.POSIXct("2026-07-02 16:00:00"))
+  ))
+  html <- as.character(trust_timeline(days))
+
+  json <- sub(".*<script[^>]*>", "", html)
+  json <- sub("</script>.*", "", json)
+  payload <- jsonlite::fromJSON(json, simplifyVector = FALSE)
+  expect_equal(
+    vapply(payload$levels, function(level) level$key, character(1)),
+    c("A", "B", "C", "none")
+  )
+  expect_equal(payload$days[[2]]$n, 2)
+  expect_equal(payload$days[[2]]$counts$C, 1)
+
+  # The table view carries every share the tooltip shows.
+  expect_match(html, "commons-viewer-sr-only")
+  expect_match(html, "50% (1)", fixed = TRUE)
+})
+
+test_that("the timeline legend carries each level's window-wide rate", {
+  skip_if_not_installed("htmltools")
+
+  legend <- as.character(timeline_legend(
+    hit_rate(list(c("A", "C"), "B", NA_character_))
+  ))
+
+  expect_match(legend, "Verified")
+  expect_match(legend, "<strong>25%</strong>", fixed = TRUE)
+  expect_match(legend, "1 of 4 answers")
+
+  empty <- as.character(timeline_legend(hit_rate(list())))
+  expect_match(empty, "—")
 })
