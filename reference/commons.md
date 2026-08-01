@@ -13,8 +13,10 @@ commons(
   data_sources,
   context_layer = NULL,
   semantic_layer = NULL,
+  ...,
   system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
     package = "commons"), date = Sys.Date()),
+  network = c("none", "full"),
   log = FALSE,
   share_with = NULL
 )
@@ -50,6 +52,10 @@ commons(
   An optional
   [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
 
+- ...:
+
+  These dots are for future extensions and must be empty.
+
 - system_prompt:
 
   The agent's system prompt, as a single string. The default
@@ -76,6 +82,12 @@ commons(
   workflow section assembled from whichever of registered measures and
   governed definitions the agent actually has; the file needn't (and
   shouldn't) describe them.
+
+- network:
+
+  Whether the `run_r` session has network access. One of `"none"` (the
+  default) or `"full"`. The session requires Linux or macOS and refuses
+  to run without filesystem sandboxing.
 
 - log:
 
@@ -174,15 +186,17 @@ this method directly.
       data_sources,
       context_layer = NULL,
       semantic_layer = NULL,
+      ...,
       system_prompt = ellmer::interpolate_file(system.file("prompts/system-prompt.md",
         package = "commons"), date = Sys.Date()),
+      network = c("none", "full"),
       log = FALSE,
       share_with = NULL
     )
 
 #### Arguments
 
-- `client, data_sources, context_layer, semantic_layer, system_prompt, log, share_with`:
+- `client, data_sources, context_layer, semantic_layer, ..., system_prompt, network, log, share_with`:
 
   See `commons()`.
 
