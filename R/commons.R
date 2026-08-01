@@ -63,7 +63,7 @@
 #'   role is viewer cannot read traces even when named here; trace readers
 #'   need at least a publisher account.
 #'
-#' @return A `Commons` object, which subclasses [ellmer::Chat].
+#' @return An [ellmer::Chat] subclass.
 #'
 #' @examples
 #' \dontrun{
@@ -167,16 +167,10 @@ commons <- function(
   )
 }
 
-#' @rdname commons
-#' @export
 Commons <- R6::R6Class(
   "Commons",
   inherit = ellmer:::Chat,
   public = list(
-    #' @description Create a Commons agent. Most users should call [commons()]
-    #'   rather than this method directly.
-    #' @param client,data_sources,context_layer,semantic_layer,...,system_prompt,network,log,share_with
-    #'   See [commons()].
     initialize = function(
       client,
       data_sources,
@@ -248,10 +242,6 @@ Commons <- R6::R6Class(
       )
     },
 
-    #' @description Submit input and return the response. See [ellmer::Chat]
-    #'   for arguments.
-    #' @param ... Input to send to the model.
-    #' @param echo Whether to echo output; see [ellmer::Chat].
     chat = function(..., echo = NULL) {
       if (private$tracing) {
         local_conversation_turn_span(private$conversation_id)
@@ -259,12 +249,6 @@ Commons <- R6::R6Class(
       super$chat(..., echo = echo)
     },
 
-    #' @description Stream input and return the response stream. See
-    #'   [ellmer::Chat] for arguments.
-    #' @param ... Input to send to the model.
-    #' @param tool_mode Whether tool calls may run concurrently or sequentially.
-    #' @param stream Whether to stream plain text or [ellmer::Content] objects.
-    #' @param controller Optional [ellmer::stream_controller()].
     stream_async = function(
       ...,
       tool_mode = c("concurrent", "sequential"),
@@ -292,20 +276,10 @@ Commons <- R6::R6Class(
       })()
     },
 
-    #' @description Text that can back an answer's citations: context layer
-    #'   documents, measure definitions, and data dictionary entries. Used by
-    #'   [commons_server()] to verify the citations fallback answers
-    #'   provide; not typically called directly.
     citation_corpus = function() {
       private$corpus
     },
 
-    #' @description Build the context layer's search index ahead of the first
-    #'   `search_context` call, and start a best-effort background download of
-    #'   any board pins not yet loaded, warming the pins cache so their first
-    #'   use is fast. Returns immediately; pins are still loaded into their
-    #'   data source on demand. [commons_server()] does this automatically,
-    #'   e.g. during idle time right after a Shiny session starts.
     prewarm = function() {
       layer <- private$context_layer
       if (!is.null(layer) && length(layer$docs) > 0) {

@@ -129,7 +129,7 @@ normalize_citation <- function(x) {
 # The citation request rides on the first fallback-tagged tool result of the
 # conversation rather than living in the system prompt, so conversations
 # answered entirely by governed tools never see it. The agent composes its
-# request at construction (see Commons$initialize) and stores it here.
+# request at construction and stores it here.
 add_citation_request <- function(result, tracker) {
   if (is.null(tracker) || isTRUE(tracker$requested)) {
     return(result)

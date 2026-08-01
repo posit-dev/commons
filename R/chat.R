@@ -165,7 +165,7 @@ check_chat_packages <- function(call = rlang::caller_env()) {
 check_commons_client <- function(client, call = rlang::caller_env()) {
   if (!inherits(client, "Commons")) {
     cli::cli_abort(
-      "{.arg client} must be a {.cls Commons} object created by {.fn commons}.",
+      "{.arg client} must be an agent created by {.fn commons}.",
       call = call
     )
   }

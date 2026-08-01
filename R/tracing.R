@@ -8,7 +8,7 @@
 # store (enable Content Observability in the content's Advanced settings);
 # locally, they land in NDJSON files via otelsdk's file exporter.
 
-# Called once per Commons instance. Returns TRUE when tracing is live and
+# Called once per agent. Returns TRUE when tracing is live and
 # conversation spans should be stamped.
 new_trajectory_tracing <- function(
   log,

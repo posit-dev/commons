@@ -454,7 +454,7 @@ test_that("as_data_sources accepts multiple sources", {
   srcs <- as_data_sources(list(a = test_source(), b = test_source()))
   expect_named(srcs, c("a", "b"))
 
-  # Accepts its own output, since commons() and Commons$new() both call it.
+  # Accepts its own output because commons() calls it before agent construction.
   expect_identical(as_data_sources(srcs), srcs)
 })
 

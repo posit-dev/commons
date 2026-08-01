@@ -4,5 +4,5 @@
       commons_server("chat", client = test_client())
     Condition
       Error in `commons_server()`:
-      ! `client` must be a <Commons> object created by `commons()`.
+      ! `client` must be an agent created by `commons()`.
 

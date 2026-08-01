@@ -832,8 +832,8 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
 }
 
 # A bare data_source() is accepted for the quick-start path; it has no name,
-# so measures can't take its connection as an argument. commons() and
-# Commons$new() both call this, so it must accept its own output.
+# so measures can't take its connection as an argument. commons() calls this
+# before constructing the agent, so it must accept its own output.
 as_data_sources <- function(x, call = rlang::caller_env()) {
   if (inherits(x, "commons_data_source")) {
     return(list(x))

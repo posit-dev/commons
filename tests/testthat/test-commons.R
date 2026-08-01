@@ -74,7 +74,6 @@ test_that("commons_exchange_provenance reads tags and text from turns", {
 test_that("commons() registers only the tools the agent's composition earns", {
   agent <- test_agent()
 
-  expect_s3_class(agent, "Commons")
   expect_s3_class(agent, "Chat")
   # No measures: nothing about the agent's surface should imply them.
   expect_setequal(
@@ -202,7 +201,7 @@ test_that("semantic_layer stores measures off the provider tool list", {
 
 test_that("commons() accepts an empty semantic layer", {
   agent <- test_agent(semantic_layer = semantic_layer())
-  expect_s3_class(agent, "Commons")
+  expect_s3_class(agent, "Chat")
 })
 
 test_that("commons() validates its inputs", {
