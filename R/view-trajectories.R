@@ -62,7 +62,7 @@ view_trajectories <- function(
 }
 
 check_viewer_packages <- function(call = rlang::caller_env()) {
-  pkgs <- c("bslib", "htmltools", "shiny", "shinychat", "shinyWidgets")
+  pkgs <- c("bslib", "htmltools", "plotly", "shiny", "shinychat", "shinyWidgets")
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
   if (length(missing)) {
@@ -412,7 +412,10 @@ viewer_ui <- function(summary) {
           maxDate = dates$max,
           dateFormat = "MMM d, yyyy",
           update_on = "close",
-          addon = "none"
+          addon = "none",
+          # With toggling on, clicking the range's start date a second time
+          # deselects it, making a one-day window unreachable.
+          toggleSelected = FALSE
         ),
         shiny::selectInput(
           "trust",
@@ -1073,7 +1076,7 @@ timeline_legend <- function(rate) {
 
 # Per-day tag counts for the dated questions inside the window, in date
 # order. Undated questions have no x position, so the chart skips them;
-# the hit-rate boxes still count them.
+# the legend still counts them.
 trust_timeline_days <- function(questions, window = NULL) {
   dates <- as.Date(vapply(
     questions,
@@ -1107,42 +1110,130 @@ trust_timeline_days <- function(questions, window = NULL) {
   })
 }
 
-# The plot itself is drawn client-side (commons-viewer.js) from the JSON
-# payload, so it can size to the card and carry the crosshair tooltip; the
-# table is the same data readable without a pointer, and is where screen
-# readers land instead of the drawing.
+# The table is the same data as the chart, readable without a pointer, and
+# is where screen readers land instead of the drawing: role="img" on the
+# plot's wrapper keeps plotly's internals out of the accessibility tree.
 trust_timeline <- function(days) {
   if (length(days) == 0) {
     return(viewer_empty_note("No dated questions in this date range."))
   }
-  payload <- list(
-    levels = lapply(names(viewer_levels), function(key) {
-      list(
-        key = key,
-        label = unname(viewer_levels[[key]]),
-        color = unname(viewer_level_colors[[key]])
-      )
-    }),
-    days = days
-  )
   htmltools::div(
     class = "commons-viewer-timeline",
-    htmltools::tags$script(
-      type = "application/json",
-      class = "commons-viewer-timeline-data",
-      htmltools::HTML(jsonlite::toJSON(payload, auto_unbox = TRUE))
-    ),
     htmltools::div(
       class = "commons-viewer-timeline-plot",
       role = "img",
-      tabindex = "0",
       `aria-label` = paste(
         "Chart of the share of answers at each trust level by day.",
         "The values appear in the table that follows."
-      )
+      ),
+      timeline_plot(days)
     ),
     timeline_table(days)
   )
+}
+
+# A 100%-stacked area chart of each day's trust-level shares -- one stacked
+# column when only one day is dated, since a single point can't make an
+# area. Unified hover fires anywhere in the fills and mirrors the app's
+# tooltip styling: a date header, then a swatch row per level with the
+# share in bold. The card header's legend names the levels, so the
+# widget's own legend stays off.
+timeline_plot <- function(days) {
+  dates <- as.Date(vapply(days, function(day) day$date, character(1)))
+  n <- vapply(days, function(day) day$n, numeric(1))
+  plot <- plotly::plot_ly(height = 176)
+
+  for (k in seq_along(viewer_levels)) {
+    key <- names(viewer_levels)[[k]]
+    counts <- vapply(days, function(day) day$counts[[key]], numeric(1))
+    shares <- 100 * counts / n
+    hovertemplate <- paste0(
+      "<b>%{y:.0f}%</b> ", viewer_levels[[key]], "<extra></extra>"
+    )
+    plot <- if (length(days) == 1) {
+      plotly::add_bars(
+        plot,
+        x = dates,
+        y = shares,
+        name = unname(viewer_levels[[key]]),
+        hovertemplate = hovertemplate,
+        marker = list(color = viewer_level_colors[[key]]),
+        # About two hours wide, in the date axis's milliseconds; with the
+        # axis pinned a day either side, a column rather than a fill.
+        width = 7200000
+      )
+    } else {
+      plotly::add_trace(
+        plot,
+        x = dates,
+        y = shares,
+        name = unname(viewer_levels[[key]]),
+        hovertemplate = hovertemplate,
+        type = "scatter",
+        mode = "lines",
+        stackgroup = "levels",
+        fillcolor = viewer_level_colors[[key]],
+        # The surface-colored boundary line is the 2px gap keeping
+        # neighboring bands apart; the top band's boundary is the chart's
+        # edge and draws nothing.
+        line = list(
+          color = "#ffffff",
+          width = if (k == length(viewer_levels)) 0 else 2
+        )
+      )
+    }
+  }
+
+  # Ticks sit on dated days themselves rather than plotly's auto ticks,
+  # which land on empty dates between them and wrap into two lines ("Jul 2"
+  # over "2026") that the bottom margin can't fit: up to seven days, always
+  # including the first and last, as single-line month-day labels.
+  ticks <- unique(round(seq(
+    1,
+    length(dates),
+    length.out = min(length(dates), 7)
+  )))
+
+  plot <- plotly::layout(
+    plot,
+    barmode = "stack",
+    hovermode = "x unified",
+    hoverlabel = list(
+      bgcolor = "#ffffff",
+      bordercolor = "#dee2e6",
+      font = list(size = 12, color = "#212529")
+    ),
+    showlegend = FALSE,
+    margin = list(t = 8, r = 12, b = 22, l = 40),
+    paper_bgcolor = "transparent",
+    plot_bgcolor = "transparent",
+    font = list(size = 11, color = "#6c757d"),
+    xaxis = list(
+      title = FALSE,
+      type = "date",
+      showgrid = FALSE,
+      fixedrange = TRUE,
+      # Unified hover draws a spike line down to the axis by default; the
+      # tooltip alone is enough.
+      showspikes = FALSE,
+      hoverformat = "%b %e, %Y",
+      tickvals = as.list(format(dates[ticks])),
+      ticktext = as.list(format(dates[ticks], "%b %e")),
+      # A lone day gives autorange nothing but the column's own edges to
+      # work with, so it would stretch the column across the card.
+      range = if (length(days) == 1) as.list(format(dates + c(-1, 1)))
+    ),
+    yaxis = list(
+      title = FALSE,
+      range = c(0, 100),
+      tickvals = c(0, 50, 100),
+      ticksuffix = "%",
+      gridcolor = "#dee2e6",
+      zeroline = FALSE,
+      fixedrange = TRUE
+    )
+  )
+  plotly::config(plot, displayModeBar = FALSE, responsive = TRUE)
 }
 
 timeline_table <- function(days) {

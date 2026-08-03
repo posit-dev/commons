@@ -429,8 +429,9 @@ test_that("trust_timeline_days aggregates question tags by day", {
   expect_equal(windowed[[1]]$date, "2026-07-03")
 })
 
-test_that("trust_timeline renders a chart payload and its table view", {
+test_that("trust_timeline renders a chart and its table view", {
   skip_if_not_installed("htmltools")
+  skip_if_not_installed("plotly")
 
   empty <- as.character(trust_timeline(list()))
   expect_match(empty, "No dated questions")
@@ -440,18 +441,23 @@ test_that("trust_timeline renders a chart payload and its table view", {
     list(tag = "A", last_active = as.POSIXct("2026-07-02 09:00:00")),
     list(tag = "C", last_active = as.POSIXct("2026-07-02 16:00:00"))
   ))
-  html <- as.character(trust_timeline(days))
 
-  json <- sub(".*<script[^>]*>", "", html)
-  json <- sub("</script>.*", "", json)
-  payload <- jsonlite::fromJSON(json, simplifyVector = FALSE)
+  # One stacked trace per trust level, sharing each day's answers out as
+  # percentages.
+  traces <- plotly::plotly_build(timeline_plot(days))$x$data
+  expect_length(traces, length(viewer_levels))
   expect_equal(
-    vapply(payload$levels, function(level) level$key, character(1)),
-    c("A", "B", "C", "none")
+    vapply(traces, function(trace) trace$name, character(1)),
+    unname(viewer_levels)
   )
-  expect_equal(payload$days[[2]]$n, 2)
-  expect_equal(payload$days[[2]]$counts$C, 1)
+  expect_equal(as.numeric(traces[[1]]$y), c(100, 50))
+  expect_equal(as.numeric(traces[[3]]$y), c(0, 50))
 
+  # A single dated day charts as a stacked column instead of an area.
+  single <- plotly::plotly_build(timeline_plot(days[1]))$x$data
+  expect_equal(single[[1]]$type, "bar")
+
+  html <- as.character(trust_timeline(days))
   # The table view carries every share the tooltip shows.
   expect_match(html, "commons-viewer-sr-only")
   expect_match(html, "50% (1)", fixed = TRUE)

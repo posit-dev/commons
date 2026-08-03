@@ -80,56 +80,12 @@
   width: 0.625rem;
 }
 
-.commons-viewer-timeline {
-  position: relative;
-}
-
+/* The plotly widget carries a fixed 176px height (timeline_plot()); the
+ * wrapper's matching height keeps the card from collapsing before the
+ * widget renders. */
 .commons-viewer-timeline-plot {
   height: 11rem;
   width: 100%;
-}
-
-.commons-viewer-timeline-plot:focus-visible {
-  border-radius: 0.25rem;
-  outline: 2px solid #007bc2;
-  outline-offset: 2px;
-}
-
-.commons-viewer-timeline-plot svg {
-  display: block;
-}
-
-.commons-viewer-timeline-tooltip {
-  background: var(--bs-body-bg, #fff);
-  border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 0.5rem;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-  display: none;
-  font-size: 0.75rem;
-  padding: 0.5rem 0.625rem;
-  pointer-events: none;
-  position: absolute;
-  z-index: 5;
-}
-
-.commons-viewer-timeline-tooltip-date {
-  color: var(--bs-secondary-color, #6c757d);
-  margin-bottom: 0.25rem;
-  white-space: nowrap;
-}
-
-/* Values lead: the number is the strong element, the level name follows. */
-.commons-viewer-timeline-tooltip-row {
-  align-items: center;
-  display: flex;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
-.commons-viewer-timeline-tooltip-row strong {
-  font-variant-numeric: tabular-nums;
-  min-width: 2.25rem;
-  text-align: right;
 }
 
 /* Visually hidden, still read: the chart's table view. */
