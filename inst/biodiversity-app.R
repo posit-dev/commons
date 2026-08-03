@@ -83,20 +83,6 @@ greeting <- paste(
   "- <span class='suggestion'>Compare wetlands with the other habitats.</span>"
 )
 
-system_prompt <- paste(
-  readLines(
-    system.file("prompts/system-prompt.md", package = "commons"),
-    warn = FALSE
-  ),
-  collapse = "\n"
-)
-system_prompt <- paste(
-  system_prompt,
-  "When asked which sandbox backend is active, use run_r to evaluate
-  getOption(\"commons.sandbox_backend\"). Report that value directly.",
-  sep = "\n\n"
-)
-
 ui <- page_fillable(
   title = "Biodiversity explorer",
   commons_ui("chat", greeting = greeting)
@@ -111,8 +97,7 @@ server <- function(input, output, session) {
         site_area = site_area
       )
     ),
-    semantic_layer = semantics,
-    system_prompt = system_prompt
+    semantic_layer = semantics
   )
 
   commons_server("chat", agent)
