@@ -45,6 +45,7 @@ Suggests:
     otel (>= 0.2.0),
     otelsdk (>= 0.2.0),
     pins,
+    plotly,
     ragg,
     readr,
     rmarkdown,
