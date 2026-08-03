@@ -13,7 +13,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-# commons <a href="https://posit-dev.github.io/commons/"><img src="man/figures/logo.png" align="right" height="240" alt="commons website" /></a>
+# commons <a href="https://posit-dev.github.io/commons/"><img src="man/figures/logo.png" align="right" height="240" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space." /></a>
 
 <!-- badges: start -->
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
@@ -27,4 +27,13 @@ commons agents use a pool of trusted calculations drawn from your existing work,
 
 commons agents support a wide variety of LLM providers via [ellmer](https://ellmer.tidyverse.org/). Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R` files.
 
-To learn more, see `vignette("commons")`.
+## Installation
+
+To install the package, run:
+
+```r
+# install.packages("pak")
+pak::pak("posit-dev/commons")
+```
+
+To learn more, see `vignette("commons", package = "commons")`.

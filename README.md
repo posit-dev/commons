@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# commons <a href="https://posit-dev.github.io/commons/"><img src="man/figures/logo.png" align="right" height="240" alt="commons website" /></a>
+# commons <a href="https://posit-dev.github.io/commons/"><img src="man/figures/logo.png" align="right" height="240" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space." /></a>
 
 <!-- badges: start -->
 
@@ -28,4 +28,13 @@ commons agents support a wide variety of LLM providers via
 plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R`
 files.
 
-To learn more, see `vignette("commons")`.
+## Installation
+
+To install the package, run:
+
+``` r
+# install.packages("pak")
+pak::pak("posit-dev/commons")
+```
+
+To learn more, see `vignette("commons", package = "commons")`.
