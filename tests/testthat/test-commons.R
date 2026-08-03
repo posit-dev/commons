@@ -134,21 +134,21 @@ test_that("a custom system-prompt template replaces the packaged one", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
     c(
-      "You answer questions about this data.",
-      "{{ if (has_measures) \"Use registered measures first.\" else \"\" }}",
+      "You answer questions about {{organization}}'s data.",
+      "{[ if (has_measures) \"Use registered measures first.\" else \"\" ]}",
       "Tables:",
-      "{{tables}}"
+      "{[tables]}"
     ),
     path
   )
 
   agent <- test_agent(
     semantic_layer = semantic_layer(count_measure_tool()),
-    system_prompt = path
+    system_prompt = ellmer::interpolate_file(path, organization = "Acme")
   )
   prompt <- agent$get_system_prompt()
 
-  expect_match(prompt, "about this data", fixed = TRUE)
+  expect_match(prompt, "about Acme's data", fixed = TRUE)
   expect_match(prompt, "Use registered measures first", fixed = TRUE)
   expect_match(prompt, "Tables:\n- sales", fixed = TRUE)
   expect_no_match(prompt, "search_pool")

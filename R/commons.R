@@ -36,17 +36,14 @@
 #'
 #'   commons renders conditional sections from the agent's composition and
 #'   interpolates runtime values such as its table roster. Custom templates
-#'   may edit, remove, or reposition any section. To add your own substitutions,
-#'   first render them with
-#'   [glue::glue_file()](https://glue.tidyverse.org/reference/glue.html) using
-#'   different delimiters:
+#'   may edit, remove, or reposition any section. Commons expressions open
+#'   with `{[` and close with `]}`, leaving ellmer's `{{ }}` delimiters
+#'   available for your own substitutions:
 #'
 #'   ```r
-#'   system_prompt <- glue::glue_file(
+#'   system_prompt <- ellmer::interpolate_file(
 #'     "system-prompt.md",
-#'     organization = "Acme",
-#'     .open = "{[",
-#'     .close = "]}"
+#'     organization = "Acme"
 #'   )
 #'   commons(
 #'     # ...
@@ -54,9 +51,9 @@
 #'   )
 #'   ```
 #'
-#'   A `{[organization]}` expression is resolved by glue, while commons'
-#'   `{{date}}` and other template expressions remain untouched. Expressions
-#'   inside `{{ }}` are evaluated as trusted R code when the agent is created.
+#'   A `{{organization}}` expression is resolved by ellmer, while commons'
+#'   template expressions remain untouched. Commons expressions are evaluated
+#'   as trusted R code when the agent is created.
 #' @param network Whether the `run_r` session has network access. One of
 #'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
 #'   and refuses to run without filesystem sandboxing.

@@ -32,7 +32,22 @@ system_prompt_data <- function(sources, definitions, measures) {
     tables = tables_text(sources),
     dictionary_context = dictionary_context,
     glossary_context = glossary_context,
-    definition_index = definition_index_text(definitions)
+    definition_index = definition_index_text(definitions),
+    definition_action =
+      "- Apply a definition as a `{{name}}` token in `run_sql` SQL.",
+    definition_guidance = paste(
+      "# Governed definitions",
+      paste0(
+        "Trusted expressions from the data dictionary are indexed here by ",
+        "table; each table's dictionary entry delivers its full definitions. ",
+        "Write them as `{{name}}` tokens anywhere in `run_sql` SQL ",
+        "(`{{table.name}}` when a name exists on several tables); each expands ",
+        "to its governed SQL before the query runs. Expansion can't add an ",
+        "alias, so write `SELECT {{name}} AS name`. Metric expressions are ",
+        "already aggregates\u2014never wrap one in `SUM()` or another aggregate."
+      ),
+      sep = "\n\n"
+    )
   )
 }
 
@@ -41,7 +56,13 @@ render_system_prompt <- function(
   data,
   call = rlang::caller_env()
 ) {
-  out <- ellmer::interpolate(template, !!!data, .envir = baseenv())
+  envir <- list2env(data, parent = baseenv())
+  out <- glue::glue(
+    template,
+    .open = "{[",
+    .close = "]}",
+    .envir = envir
+  )
   rlang::check_string(out, arg = "rendered system prompt", call = call)
   out <- as.character(out)
   out <- gsub("(?s)<!--.*?-->", "", out, perl = TRUE)

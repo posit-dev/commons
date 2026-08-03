@@ -287,15 +287,15 @@ agent <- commons(
 )
 ```
 
-commons renders the file after it knows the agent's composition. The `{{ }}` delimiters accept R expressions, so conditional content can remain in the template:
+commons renders the file after it knows the agent's composition. The `{[ ]}` delimiters accept R expressions, so conditional content can remain in the template:
 
 ```md
-{{ if (has_measures) r"(
+{[ if (has_measures) r"(
 Prefer a measure's own arguments when they can answer the question directly.
-)" else "" }}
+)" else "" ]}
 ```
 
-The prompt template is trusted R code. Like [`ellmer::interpolate()`](https://ellmer.tidyverse.org/reference/interpolate.html), expressions in it are evaluated when the agent is created. Raw strings (`r"(...)"`) make multiline prompt content easier to read.
+The prompt template is trusted R code. Expressions inside `{[ ]}` are evaluated when the agent is created. Raw strings (`r"(...)"`) make multiline prompt content easier to read.
 
 The packaged template uses these conditions:
 
@@ -312,14 +312,38 @@ The packaged template uses these conditions:
 It interpolates computed runtime values directly:
 
 ```md
-Today's date is {{date}}.
+Today's date is {[date]}.
 
 # Available tables
 
-{{tables}}
+{[tables]}
 ```
 
-The available values are `date`, `tables`, `dictionary_context`, `glossary_context`, and `definition_index`. Double the delimiters when the rendered prompt should contain a literal token: `{{{{name}}}}` in the template becomes `{{name}}` in the system prompt. Tokens returned from an R expression are not interpolated again. Custom template values are not currently supported.
+The available values are `date`, `tables`, `dictionary_context`, `glossary_context`, `definition_index`, `definition_action`, and `definition_guidance`. Values returned from an expression are not interpolated again.
+
+The separate delimiters leave ellmer's `{{ }}` syntax available for your own substitutions. Add them to the template normally:
+
+```md
+You are a data analyst for {{organization}}.
+
+Today's date is {[date]}.
+```
+
+Then resolve them before passing the template to commons:
+
+```r
+system_prompt <- ellmer::interpolate_file(
+  "system-prompt.md",
+  organization = "Acme"
+)
+
+agent <- commons(
+  # ...
+  system_prompt = as.character(system_prompt)
+)
+```
+
+ellmer resolves `{{organization}}` and leaves commons' `{[date]}` and conditional expressions untouched.
 
 The template is fully editable: removing a conditional section or interpolation removes it from the rendered prompt. commons does not append hidden prompt content afterward. Invalid R expressions and references to unavailable runtime values fail when the agent is created. HTML comments are available for source-only documentation and are removed from the rendered prompt.
 
