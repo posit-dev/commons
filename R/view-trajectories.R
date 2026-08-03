@@ -873,17 +873,19 @@ flag_button <- function(flagged, whole_conversation) {
   } else {
     sprintf("Flag this %s for review", what)
   }
-  shiny::actionButton(
-    "flag_toggle",
-    label = "\u2691",
-    class = if (flagged) {
-      "commons-viewer-flag-button commons-viewer-flag-button-on"
-    } else {
-      "commons-viewer-flag-button"
-    },
-    title = title,
-    `aria-label` = title,
-    `aria-pressed` = if (flagged) "true" else "false"
+  bslib::tooltip(
+    shiny::actionButton(
+      "flag_toggle",
+      label = "\u2691",
+      class = if (flagged) {
+        "commons-viewer-flag-button commons-viewer-flag-button-on"
+      } else {
+        "commons-viewer-flag-button"
+      },
+      `aria-label` = title,
+      `aria-pressed` = if (flagged) "true" else "false"
+    ),
+    title
   )
 }
 
