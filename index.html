@@ -61,7 +61,15 @@
 <p>commons allows data scientists to build self-service data agents for their organization.</p>
 <p>commons agents use a pool of trusted calculations drawn from your existing work, like Shiny apps and Quarto docs, to answer questions. (You can also import existing trusted calculations from semantic layers in Snowflake and Databricks.) When the question can’t be answered by a trusted calculation, the agent can search across context you’ve compiled to query data directly, and the response will be deterministically tagged as untrusted.</p>
 <p>commons agents support a wide variety of LLM providers via <a href="https://ellmer.tidyverse.org/" class="external-link">ellmer</a>. Extracted context is stored in plain-text <a href="https://data-dict.tidyverse.org/" class="external-link">data-dict.yaml</a> and <code>.R</code> files.</p>
-<p>To learn more, see <code><a href="articles/commons.html">vignette("commons")</a></code>.</p>
+<div class="section level2">
+<h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
+</h2>
+<p>To install the package, run:</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># install.packages("pak")</span></span>
+<span><span class="fu">pak</span><span class="fu">::</span><span class="fu"><a href="https://pak.r-lib.org/reference/pak.html" class="external-link">pak</a></span><span class="op">(</span><span class="st">"posit-dev/commons"</span><span class="op">)</span></span></code></pre></div>
+<p>To learn more, see <code><a href="articles/commons.html">vignette("commons", package = "commons")</a></code>.</p>
+</div>
 </div>
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>

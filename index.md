@@ -19,5 +19,15 @@ commons agents support a wide variety of LLM providers via
 plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R`
 files.
 
+## Installation
+
+To install the package, run:
+
+``` r
+
+# install.packages("pak")
+pak::pak("posit-dev/commons")
+```
+
 To learn more, see
-[`vignette("commons")`](https://solid-adventure-ny1mpqy.pages.github.io/articles/commons.md).
+[`vignette("commons", package = "commons")`](https://solid-adventure-ny1mpqy.pages.github.io/articles/commons.md).
