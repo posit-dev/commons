@@ -315,10 +315,64 @@ exchange_answer_chunks <- function(turns) {
       if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
         next
       }
+      if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
+        content@extra$display <- content@extra$display %||%
+          viewer_tool_display(content@request, content@value)
+      }
       chunks[[length(chunks) + 1]] <- shinychat::contents_shinychat(content)
     }
   }
   drop_nulls(chunks)
+}
+
+# Runtime tool results carry display metadata (tool_result()'s
+# extra$display: the quiet row's title and icon) that the OTLP round trip
+# drops, so reconstructed results would fall back to shinychat's default
+# card under the raw function name. Re-derive it from the request's tool
+# name and arguments, mirroring the titles in tools.R; runtime-only detail
+# (source labels, measure display HTML) is beyond reconstruction. Unknown
+# tools keep the default card.
+viewer_tool_display <- function(request, value = NULL) {
+  if (is.null(request)) {
+    return(NULL)
+  }
+  arguments <- request@arguments
+  info <- switch(
+    request@name,
+    search_pool = list(title = "Searched the semantic layer", icon = "search"),
+    call_metrics = list(
+      title = sprintf(
+        "Metrics: %s",
+        html_escape(paste(unlist(arguments$metrics), collapse = ", "))
+      ),
+      icon = "shield-check"
+    ),
+    call_measure = list(
+      title = sprintf(
+        "Measure: %s",
+        html_escape(humanize_name(arguments$name %||% ""))
+      ),
+      icon = "shield-check"
+    ),
+    search_context = list(title = "Searched context", icon = "book"),
+    describe_table = list(
+      title = sprintf("Described %s", html_escape(arguments$table %||% "")),
+      icon = "table"
+    ),
+    run_sql = list(title = "Ran SQL", icon = "code-square"),
+    run_r = list(title = "Ran R code", icon = "terminal"),
+    return(NULL)
+  )
+  display <- list(title = info$title, open = FALSE, show_request = FALSE)
+  display$icon <- maybe_icon(info$icon)
+  # Expanding a SQL row shows the query above its result, as at runtime.
+  if (identical(request@name, "run_sql") && is.character(arguments$sql)) {
+    display$markdown <- paste(
+      c(sprintf("```sql\n%s\n```", arguments$sql), value),
+      collapse = "\n\n"
+    )
+  }
+  display
 }
 
 # Replays a conversation into a bound chat element. Assistant messages

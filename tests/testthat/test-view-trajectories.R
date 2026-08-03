@@ -197,6 +197,57 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
   expect_equal(transcript$pills[[2]]$indexFromEnd, 0)
 })
 
+test_that("reconstructed tool results wear the commons display again", {
+  skip_if_not_installed("shinychat")
+  skip_if_not_installed("htmltools")
+
+  display <- viewer_tool_display(
+    ellmer::ContentToolRequest(
+      id = "c1",
+      name = "run_sql",
+      arguments = list(sql = "select 1")
+    ),
+    value = "| 1 |"
+  )
+  expect_equal(display$title, "Ran SQL")
+  expect_false(display$show_request)
+  expect_equal(display$markdown, "```sql\nselect 1\n```\n\n| 1 |")
+
+  measure <- viewer_tool_display(ellmer::ContentToolRequest(
+    id = "c2",
+    name = "call_measure",
+    arguments = list(name = "biodiversity_by_site", arguments = "{}")
+  ))
+  expect_equal(measure$title, "Measure: biodiversity by site")
+
+  # Titles interpolate model-supplied arguments, so they are escaped.
+  described <- viewer_tool_display(ellmer::ContentToolRequest(
+    id = "c3",
+    name = "describe_table",
+    arguments = list(table = "<script>")
+  ))
+  expect_equal(described$title, "Described &lt;script&gt;")
+
+  # Tools the viewer doesn't know keep shinychat's default card.
+  expect_null(viewer_tool_display(ellmer::ContentToolRequest(
+    id = "c4",
+    name = "custom_tool",
+    arguments = list()
+  )))
+  expect_null(viewer_tool_display(NULL))
+
+  # The display lands on the transcript's cards, unless the result already
+  # carries one.
+  turns <- c(
+    list(ellmer::UserTurn("Total revenue?")),
+    test_tool_turns("run_sql"),
+    list(ellmer::AssistantTurn("5650."))
+  )
+  card <- trajectory_transcript(turns)$messages[[2]]$content[[1]]
+  expect_s3_class(card, "shinychat_tool_card")
+  expect_match(format(card), "Ran SQL")
+})
+
 test_that("trajectory_transcript keeps unanswered questions out of the count", {
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")
