@@ -64,14 +64,6 @@
   gap: 0.35rem;
 }
 
-/* The window-wide rate reads as the entry's value: body ink, tabular so
- * the row doesn't shimmy as the date window moves. */
-.commons-viewer-timeline-legend-item strong {
-  color: var(--bs-body-color, #212529);
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-}
-
 .commons-viewer-timeline-swatch {
   border-radius: 2px;
   display: inline-block;

@@ -27,10 +27,11 @@ expression of an \code{app.R}.
 \description{
 \code{view_trajectories()} launches a Shiny app for browsing conversation
 trajectories read with \code{\link[=read_trajectories]{read_trajectories()}}. The app charts each trust
-level's share of answers over time—with the overall rates in the chart's
-legend—alongside a list of conversations or of individual questions,
-filterable by date and trust level, and a transcript of each with the
-provenance pills the commons chat UI would show.
+level's share of answers over time—binned by day, week, or month, using
+the finest unit the volume of answers supports—alongside a list of
+conversations or of individual questions, filterable by date and trust
+level, and a transcript of each with the provenance pills the commons
+chat UI would show.
 
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the

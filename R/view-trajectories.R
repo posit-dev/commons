@@ -3,10 +3,11 @@
 #' @description
 #' `view_trajectories()` launches a Shiny app for browsing conversation
 #' trajectories read with [read_trajectories()]. The app charts each trust
-#' level's share of answers over time—with the overall rates in the chart's
-#' legend—alongside a list of conversations or of individual questions,
-#' filterable by date and trust level, and a transcript of each with the
-#' provenance pills the commons chat UI would show.
+#' level's share of answers over time—binned by day, week, or month, using
+#' the finest unit the volume of answers supports—alongside a list of
+#' conversations or of individual questions, filterable by date and trust
+#' level, and a transcript of each with the provenance pills the commons
+#' chat UI would show.
 #'
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review and annotated with notes. Notes apply to the
@@ -509,9 +510,9 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     })
 
     # The timeline reflects the date window but not the trust filter: it
-    # charts the trust distribution the filter slices. Its legend carries
-    # the window's overall rates -- including undated answers, which the
-    # per-day bands can't place.
+    # charts the trust distribution the filter slices. The legend's entry
+    # tooltips carry the window's overall rates -- including undated
+    # answers, which the per-bin bands can't place.
     output$timeline_legend <- shiny::renderUI({
       in_dates <- Filter(
         function(i) in_window(summary[[i]], input$window),
@@ -521,7 +522,7 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     })
 
     output$timeline <- shiny::renderUI({
-      trust_timeline(trust_timeline_days(questions, input$window))
+      trust_timeline(trust_timeline_bins(questions, input$window))
     })
 
     output$entries <- shiny::renderUI({
@@ -1056,9 +1057,9 @@ trust_timeline_card <- function() {
   )
 }
 
-# The legend doubles as the viewer's headline hit rate: each level's
-# window-wide share of answers rides its legend entry, with the counts
-# behind the percentage in the entry's tooltip.
+# The legend is a plain key for the chart's colors; each level's
+# window-wide share sits one hover away, in its entry's tooltip, rather
+# than inline where it read as part of the chart.
 timeline_legend <- function(rate) {
   htmltools::div(
     class = "commons-viewer-timeline-legend",
@@ -1066,25 +1067,28 @@ timeline_legend <- function(rate) {
       htmltools::tags$span(
         class = "commons-viewer-timeline-legend-item",
         title = sprintf(
-          "%d of %d answers",
+          "%d of %d answers (%s)",
           rate$counts[[key]],
-          rate$n
+          rate$n,
+          rate_percent(rate$counts[[key]], rate$n)
         ),
         htmltools::tags$span(
           class = "commons-viewer-timeline-swatch",
           style = paste0("background:", viewer_level_colors[[key]])
         ),
-        viewer_levels[[key]],
-        htmltools::tags$strong(rate_percent(rate$counts[[key]], rate$n))
+        viewer_levels[[key]]
       )
     })
   )
 }
 
-# Per-day tag counts for the dated questions inside the window, in date
+# Per-bin tag counts for the dated questions inside the window, in date
 # order. Undated questions have no x position, so the chart skips them;
-# the legend still counts them.
-trust_timeline_days <- function(questions, window = NULL) {
+# the legend still counts them. Bins are days, weeks, or months -- the
+# finest unit whose bins hold `target` answers on average -- so a sparse
+# store charts a few honest aggregates rather than a per-day sawtooth of
+# one-answer days swinging between 0% and 100%.
+trust_timeline_bins <- function(questions, window = NULL, target = 5) {
   dates <- as.Date(vapply(
     questions,
     function(record) as.character(local_date(record$last_active)),
@@ -1097,15 +1101,17 @@ trust_timeline_days <- function(questions, window = NULL) {
   questions <- questions[keep]
   dates <- dates[keep]
 
-  lapply(sort(unique(dates)), function(day) {
+  unit <- timeline_bin_unit(dates, target)
+  starts <- timeline_bin_start(dates, unit)
+  bins <- lapply(sort(unique(starts)), function(start) {
     tags <- vapply(
-      questions[dates == day],
+      questions[starts == start],
       function(record) record$tag,
       character(1)
     )
     list(
-      date = format(day, "%Y-%m-%d"),
-      label = format(day, "%b %e, %Y"),
+      date = format(start, "%Y-%m-%d"),
+      label = timeline_bin_label(start, unit),
       n = length(tags),
       counts = list(
         A = sum(tags %in% "A"),
@@ -1115,13 +1121,45 @@ trust_timeline_days <- function(questions, window = NULL) {
       )
     )
   })
+  list(unit = unit, bins = bins)
+}
+
+# Multiplication rather than mean(): zero dates make day's 0 >= 0 true, so
+# an empty window stays on the day unit instead of dividing by zero.
+timeline_bin_unit <- function(dates, target) {
+  for (unit in c("day", "week")) {
+    bins <- unique(timeline_bin_start(dates, unit))
+    if (length(dates) >= target * length(bins)) {
+      return(unit)
+    }
+  }
+  "month"
+}
+
+# Weeks start on Monday (ISO), months on the first.
+timeline_bin_start <- function(dates, unit) {
+  switch(
+    unit,
+    day = dates,
+    week = dates - (as.integer(format(dates, "%u")) - 1L),
+    month = as.Date(format(dates, "%Y-%m-01"))
+  )
+}
+
+timeline_bin_label <- function(start, unit) {
+  switch(
+    unit,
+    day = format(start, "%b %e, %Y"),
+    week = paste("Week of", format(start, "%b %e, %Y")),
+    month = format(start, "%B %Y")
+  )
 }
 
 # The table is the same data as the chart, readable without a pointer, and
 # is where screen readers land instead of the drawing: role="img" on the
 # plot's wrapper keeps plotly's internals out of the accessibility tree.
-trust_timeline <- function(days) {
-  if (length(days) == 0) {
+trust_timeline <- function(binned) {
+  if (length(binned$bins) == 0) {
     return(viewer_empty_note("No dated questions in this date range."))
   }
   htmltools::div(
@@ -1129,39 +1167,47 @@ trust_timeline <- function(days) {
     htmltools::div(
       class = "commons-viewer-timeline-plot",
       role = "img",
-      `aria-label` = paste(
-        "Chart of the share of answers at each trust level by day.",
-        "The values appear in the table that follows."
+      `aria-label` = sprintf(
+        "Chart of the share of answers at each trust level by %s.
+         The values appear in the table that follows.",
+        binned$unit
       ),
-      timeline_plot(days)
+      timeline_plot(binned$bins, binned$unit)
     ),
-    timeline_table(days)
+    timeline_table(binned$bins)
   )
 }
 
-# A 100%-stacked area chart of each day's trust-level shares -- one stacked
-# column when only one day is dated, since a single point can't make an
+# A 100%-stacked area chart of each bin's trust-level shares -- one stacked
+# column when only one bin is dated, since a single point can't make an
 # area. Unified hover fires anywhere in the fills and mirrors the app's
-# tooltip styling: a date header, then a swatch row per level with the
-# share in bold. The card header's legend names the levels, so the
-# widget's own legend stays off.
-timeline_plot <- function(days) {
-  dates <- as.Date(vapply(days, function(day) day$date, character(1)))
-  n <- vapply(days, function(day) day$n, numeric(1))
+# tooltip styling: a bin header, then a swatch row per level with the
+# share in bold, closing with the bin's answer count so a reader can judge
+# how much weight the shares deserve. The card header's legend names the
+# levels, so the widget's own legend stays off.
+timeline_plot <- function(bins, unit) {
+  dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
+  n <- vapply(bins, function(bin) bin$n, numeric(1))
   plot <- plotly::plot_ly(height = 176)
 
   for (k in seq_along(viewer_levels)) {
     key <- names(viewer_levels)[[k]]
-    counts <- vapply(days, function(day) day$counts[[key]], numeric(1))
+    counts <- vapply(bins, function(bin) bin$counts[[key]], numeric(1))
     shares <- 100 * counts / n
+    # Unified hover lists stacked traces top band first, so the sample
+    # size rides the baseline trace: it reads as the tooltip's last line.
     hovertemplate <- paste0(
-      "<b>%{y:.0f}%</b> ", viewer_levels[[key]], "<extra></extra>"
+      "<b>%{y:.0f}%</b> ",
+      viewer_levels[[key]],
+      if (k == 1) "<br>(n = %{customdata})",
+      "<extra></extra>"
     )
-    plot <- if (length(days) == 1) {
+    plot <- if (length(bins) == 1) {
       plotly::add_bars(
         plot,
         x = dates,
         y = shares,
+        customdata = n,
         name = unname(viewer_levels[[key]]),
         hovertemplate = hovertemplate,
         marker = list(color = viewer_level_colors[[key]]),
@@ -1174,6 +1220,7 @@ timeline_plot <- function(days) {
         plot,
         x = dates,
         y = shares,
+        customdata = n,
         name = unname(viewer_levels[[key]]),
         hovertemplate = hovertemplate,
         type = "scatter",
@@ -1191,10 +1238,10 @@ timeline_plot <- function(days) {
     }
   }
 
-  # Ticks sit on dated days themselves rather than plotly's auto ticks,
+  # Ticks sit on dated bins themselves rather than plotly's auto ticks,
   # which land on empty dates between them and wrap into two lines ("Jul 2"
-  # over "2026") that the bottom margin can't fit: up to seven days, always
-  # including the first and last, as single-line month-day labels.
+  # over "2026") that the bottom margin can't fit: up to seven bins, always
+  # including the first and last, as single-line labels.
   ticks <- unique(round(seq(
     1,
     length(dates),
@@ -1223,12 +1270,22 @@ timeline_plot <- function(days) {
       # Unified hover draws a spike line down to the axis by default; the
       # tooltip alone is enough.
       showspikes = FALSE,
-      hoverformat = "%b %e, %Y",
+      # d3 time formats pass literals through, so a week bin's header
+      # names itself ("Week of Jul 20, 2026").
+      hoverformat = switch(
+        unit,
+        day = "%b %e, %Y",
+        week = "Week of %b %e, %Y",
+        month = "%B %Y"
+      ),
       tickvals = as.list(format(dates[ticks])),
-      ticktext = as.list(format(dates[ticks], "%b %e")),
-      # A lone day gives autorange nothing but the column's own edges to
+      ticktext = as.list(format(
+        dates[ticks],
+        if (identical(unit, "month")) "%b %Y" else "%b %e"
+      )),
+      # A lone bin gives autorange nothing but the column's own edges to
       # work with, so it would stretch the column across the card.
-      range = if (length(days) == 1) as.list(format(dates + c(-1, 1)))
+      range = if (length(bins) == 1) as.list(format(dates + c(-1, 1)))
     ),
     yaxis = list(
       title = FALSE,
@@ -1243,18 +1300,18 @@ timeline_plot <- function(days) {
   plotly::config(plot, displayModeBar = FALSE, responsive = TRUE)
 }
 
-timeline_table <- function(days) {
-  rows <- lapply(days, function(day) {
+timeline_table <- function(bins) {
+  rows <- lapply(bins, function(bin) {
     htmltools::tags$tr(
-      htmltools::tags$td(day$label),
+      htmltools::tags$td(bin$label),
       lapply(names(viewer_levels), function(key) {
         htmltools::tags$td(sprintf(
           "%s (%d)",
-          rate_percent(day$counts[[key]], day$n),
-          day$counts[[key]]
+          rate_percent(bin$counts[[key]], bin$n),
+          bin$counts[[key]]
         ))
       }),
-      htmltools::tags$td(day$n)
+      htmltools::tags$td(bin$n)
     )
   })
   htmltools::tags$table(
