@@ -203,6 +203,17 @@
           );
         });
         selectExchange(chat, message.selected);
+        // A question entry opens the whole conversation; slide its
+        // exchange to the top of the view.
+        if (message.selected != null) {
+          var target = chat.querySelector(
+            '.commons-viewer-exchange-message[data-exchange="' +
+              message.selected + '"]'
+          );
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }
       };
 
       seed();
