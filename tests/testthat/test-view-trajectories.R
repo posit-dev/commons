@@ -520,8 +520,9 @@ test_that("trust_timeline renders a chart and its table view", {
   bins <- binned$bins
 
   # One stacked trace per trust level, sharing each bin's answers out as
-  # percentages; the top trace draws the whole hover card, with the bin's
-  # n up beside the date, and the others skip hover.
+  # percentages. Every trace carries the same hover card -- with the bin's
+  # n up beside the date -- so the card anchors to whichever band boundary
+  # sits nearest the pointer.
   traces <- plotly::plotly_build(timeline_plot(bins, binned$unit))$x$data
   expect_length(traces, length(viewer_levels))
   expect_equal(
@@ -530,11 +531,11 @@ test_that("trust_timeline renders a chart and its table view", {
   )
   expect_equal(as.numeric(traces[[1]]$y), c(100, 60))
   expect_equal(as.numeric(traces[[3]]$y), c(0, 40))
-  top <- traces[[length(traces)]]
-  expect_true(all(top$hovertemplate == "%{text}<extra></extra>"))
-  expect_match(top$text[[1]], "Jul  1, 2026</b>  (n = 5)", fixed = TRUE)
-  expect_match(top$text[[2]], "<b>60%</b> Verified", fixed = TRUE)
-  expect_true(all(traces[[1]]$hoverinfo == "skip"))
+  for (trace in traces) {
+    expect_true(all(trace$hovertemplate == "%{text}<extra></extra>"))
+    expect_match(trace$text[[1]], "Jul  1, 2026</b>  (n = 5)", fixed = TRUE)
+    expect_match(trace$text[[2]], "<b>60%</b> Verified", fixed = TRUE)
+  }
 
   # A single dated bin charts as a stacked column instead of an area.
   single <- plotly::plotly_build(timeline_plot(bins[1], binned$unit))$x$data
@@ -544,6 +545,25 @@ test_that("trust_timeline renders a chart and its table view", {
   # The table view carries every share the tooltip shows.
   expect_match(html, "commons-viewer-sr-only")
   expect_match(html, "60% (3)", fixed = TRUE)
+})
+
+test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("shinychat")
+  skip_if_not_installed("htmltools")
+  skip_if_not_installed("shinyWidgets")
+
+  # Ties between the sheets resolve by load order; the dynamically rendered
+  # chat must not deliver shinychat's sheet after commons-chat.css, or
+  # transcripts lose the commons look (quiet tool rows, gray user bubbles).
+  deps <- vapply(
+    htmltools::findDependencies(viewer_ui(list())),
+    function(dep) dep$name,
+    character(1)
+  )
+  expect_lt(match("shinychat", deps), match("commons-chat", deps))
+  expect_lt(match("commons-chat", deps), match("commons-viewer", deps))
 })
 
 test_that("the timeline legend tucks each level's rate into its tooltip", {

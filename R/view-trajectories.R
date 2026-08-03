@@ -447,7 +447,15 @@ viewer_ui <- function(summary) {
         )
       )
     ),
-    list(commons_chat_dependency(), commons_viewer_dependency())
+    c(
+      # In a live commons app, commons-chat.css loads after shinychat's
+      # stylesheet and wins its specificity ties -- the quiet tool rows,
+      # among others. Here the chat is dynamically rendered, which would
+      # deliver shinychat's sheet last; pinning it into the head restores
+      # the live app's order, so transcripts wear the same styling.
+      htmltools::findDependencies(shinychat::chat_ui("commons_viewer_probe")),
+      list(commons_chat_dependency(), commons_viewer_dependency())
+    )
   )
 }
 
@@ -978,12 +986,18 @@ conversation_meta <- function(record) {
   sprintf("%s \u00b7 %s", turns, date)
 }
 
+# Entries stamp themselves with the local time as well as the date, so
+# same-day conversations stay tellable apart in the list.
 entry_date <- function(record) {
-  date <- local_date(record$last_active)
-  if (is.na(date)) {
+  time <- record$last_active
+  if (is.na(time)) {
     return(NULL)
   }
-  format(date, "%b %e, %Y")
+  sprintf(
+    "%s %s",
+    format(time, "%b %e, %Y"),
+    sub("^0", "", format(time, "%I:%M %p"))
+  )
 }
 
 viewer_empty_note <- function(text) {
@@ -1242,46 +1256,32 @@ trust_timeline <- function(binned) {
 
 # A 100%-stacked area chart of each bin's trust-level shares -- one stacked
 # column when only one bin is dated, since a single point can't make an
-# area. The tooltip is one card drawn wholly from per-bin text: unified
-# hover's date header can't carry the bin's n beside the date, so a single
-# carrier trace renders header and swatch rows itself and the other traces
-# skip hover. The card header's legend names the levels, so the widget's
-# own legend stays off.
+# area. The tooltip is one card drawn wholly from per-bin text -- unified
+# hover's date header can't carry the bin's n beside the date -- and every
+# trace carries the same card: with closest-point hover, the label then
+# anchors to whichever band boundary sits nearest the pointer instead of
+# always to the chart's top edge. The card header's legend names the
+# levels, so the widget's own legend stays off.
 timeline_plot <- function(bins, unit) {
   dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
   n <- vapply(bins, function(bin) bin$n, numeric(1))
   tooltips <- vapply(bins, timeline_tooltip, character(1))
   plot <- plotly::plot_ly(height = 176)
 
-  # The area chart's card rides the top trace, whose cumulative y is always
-  # 100; a zero-height bar segment never fires hover, so the lone column's
-  # card rides its tallest segment instead.
-  carrier <- if (length(bins) == 1) {
-    which.max(vapply(
-      names(viewer_levels),
-      function(key) bins[[1]]$counts[[key]],
-      numeric(1)
-    ))
-  } else {
-    length(viewer_levels)
-  }
-
   for (k in seq_along(viewer_levels)) {
     key <- names(viewer_levels)[[k]]
     counts <- vapply(bins, function(bin) bin$counts[[key]], numeric(1))
     shares <- 100 * counts / n
-    carries <- k == carrier
     plot <- if (length(bins) == 1) {
       plotly::add_bars(
         plot,
         x = dates,
         y = shares,
         name = unname(viewer_levels[[key]]),
-        text = if (carries) tooltips,
+        text = tooltips,
         # Bars would print their text on the bar itself.
         textposition = "none",
-        hovertemplate = if (carries) "%{text}<extra></extra>",
-        hoverinfo = if (!carries) "skip",
+        hovertemplate = "%{text}<extra></extra>",
         marker = list(color = viewer_level_colors[[key]]),
         # About two hours wide, in the date axis's milliseconds; with the
         # axis pinned a day either side, a column rather than a fill.
@@ -1293,9 +1293,11 @@ timeline_plot <- function(bins, unit) {
         x = dates,
         y = shares,
         name = unname(viewer_levels[[key]]),
-        text = if (carries) tooltips,
-        hovertemplate = if (carries) "%{text}<extra></extra>",
-        hoverinfo = if (!carries) "skip",
+        text = tooltips,
+        hovertemplate = "%{text}<extra></extra>",
+        # Anchor to the boundary lines' points; fills would hover at a
+        # polygon centroid instead.
+        hoveron = "points",
         type = "scatter",
         mode = "lines",
         stackgroup = "levels",
@@ -1324,9 +1326,10 @@ timeline_plot <- function(bins, unit) {
   plot <- plotly::layout(
     plot,
     barmode = "stack",
-    # Hover snaps to the nearest bin's x with no pixel cutoff, so the one
-    # text-bearing trace fires anywhere in the fills, as unified hover did.
-    hovermode = "x",
+    # Closest-point hover with no pixel cutoff: the card fires anywhere in
+    # the fills and anchors to the nearest band boundary at the nearest
+    # bin, pointing at the band under the cursor rather than the top edge.
+    hovermode = "closest",
     hoverdistance = -1,
     hoverlabel = list(
       align = "left",

@@ -1,6 +1,7 @@
-/* shinychat's stylesheet arrives with the dynamically rendered chat, after
- * this one, so overrides of its rules carry an extra class of specificity
- * to win regardless of load order. */
+/* viewer_ui() pins shinychat's stylesheet into the head ahead of
+ * commons-chat.css and this sheet, so transcripts wear the same styling a
+ * live commons app shows. Overrides of shinychat rules still carry an
+ * extra class of specificity, winning even if the order regresses. */
 
 /* shinychat falls back to a robot icon on assistant messages when no
  * icon_assistant is configured; commons chats carry no icon. */
@@ -11,15 +12,6 @@
 /* Review notes use their own composer rather than appearing as chat turns. */
 .commons-viewer-transcript .shiny-chat-input {
   display: none;
-}
-
-/* In a live commons app, commons-chat.css loads after shinychat's sheet, so
- * its gray user bubble wins; here the order flips (shinychat's sheet rides
- * in with the dynamically rendered chat), so restate the variables from
- * commons-chat.css's shiny-chat-container block. */
-.commons-viewer-transcript shiny-chat-container {
-  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
-  --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
 }
 
 /* ---- Timeline ----------------------------------------------------------- */
