@@ -33,9 +33,10 @@ filterable by date and trust level, and a transcript of each with the
 provenance pills the commons chat UI would show.
 
 Transcripts are reviewable rather than live: conversations and questions
-can be flagged for review, and selecting a question-and-answer exchange
-allows it to be annotated with notes. Both land in \code{review_file}, one JSON
-record per line, and are restored when the viewer reopens.
+can be flagged for review and annotated with notes. Notes apply to the
+whole conversation, or to a single question-and-answer exchange selected
+in the transcript. Flags and notes land in \code{review_file}, one JSON record
+per line, and are restored when the viewer reopens.
 
 Trajectories carry no record of how each answer was tagged when it was
 produced, so the viewer derives trust levels from the tool calls in the

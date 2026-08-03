@@ -9,9 +9,10 @@
 #' provenance pills the commons chat UI would show.
 #'
 #' Transcripts are reviewable rather than live: conversations and questions
-#' can be flagged for review, and selecting a question-and-answer exchange
-#' allows it to be annotated with notes. Both land in `review_file`, one JSON
-#' record per line, and are restored when the viewer reopens.
+#' can be flagged for review and annotated with notes. Notes apply to the
+#' whole conversation, or to a single question-and-answer exchange selected
+#' in the transcript. Flags and notes land in `review_file`, one JSON record
+#' per line, and are restored when the viewer reopens.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
@@ -435,6 +436,13 @@ viewer_ui <- function(summary) {
             shiny::uiOutput("transcript", fill = TRUE)
           ),
           htmltools::div(
+            class = "commons-viewer-pane-resizer",
+            role = "separator",
+            `aria-orientation` = "vertical",
+            `aria-label` = "Resize the notes pane",
+            tabindex = "0"
+          ),
+          htmltools::div(
             class = "commons-viewer-review-pane",
             shiny::uiOutput("review_bar")
           )
@@ -557,16 +565,14 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
       })
     }
 
+    # With no exchange selected the pane works at conversation level: the
+    # flag and any notes cover the whole conversation.
     output$review_bar <- shiny::renderUI({
-      navigation <- selected()
-      if (is.null(navigation)) {
+      key <- review_target() %||% selected()
+      if (is.null(key)) {
         return(NULL)
       }
-      key <- review_target()
-      flagged <- selection_review_key(key %||% navigation, summary) %in% flags()
-      if (is.null(key)) {
-        return(review_bar_prompt(flagged))
-      }
+      flagged <- selection_review_key(key, summary) %in% flags()
       review_bar_notes(key, flagged, notes_for_selection(notes(), key, summary))
     })
 
@@ -637,7 +643,7 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     )
 
     shiny::observeEvent(input$save_note, {
-      key <- review_target()
+      key <- review_target() %||% selected()
       note <- trimws(input$review_note %||% "")
       if (is.null(key) || !nzchar(note)) {
         return()
@@ -719,40 +725,41 @@ transcript_id <- function(key) {
 
 # Review ------------------------------------------------------------------
 
-# The review pane before an exchange is chosen; the flag applies to the
-# whole conversation.
-review_bar_prompt <- function(flagged) {
-  htmltools::div(
-    class = "commons-viewer-review",
-    htmltools::div(
-      class = "commons-viewer-review-bar",
-      htmltools::tags$strong("Notes"),
-      flag_button(flagged, TRUE)
-    ),
-    htmltools::div(
-      class = "commons-viewer-review-prompt",
-      "Select a question or answer in the transcript to add a note."
-    )
-  )
-}
-
+# Without an exchange the pane annotates the whole conversation; selecting
+# an exchange in the transcript scopes it to that question instead.
 review_bar_notes <- function(key, flagged, notes) {
+  whole_conversation <- is.null(key$exchange)
   htmltools::div(
     class = "commons-viewer-review",
     htmltools::div(
       class = "commons-viewer-review-bar",
       htmltools::tags$strong(
-        sprintf("Notes for Question %d", key$exchange)
+        if (whole_conversation) {
+          "Notes"
+        } else {
+          sprintf("Notes for Question %d", key$exchange)
+        }
       ),
-      flag_button(flagged, FALSE)
+      flag_button(flagged, whole_conversation)
     ),
+    if (whole_conversation) {
+      htmltools::div(
+        class = "commons-viewer-review-prompt",
+        "Notes here cover the whole conversation. Select a question or
+         answer in the transcript to note that exchange."
+      )
+    },
     review_note_list(notes),
     htmltools::div(
       class = "commons-viewer-note-compose",
       shiny::textAreaInput(
         "review_note",
         NULL,
-        placeholder = "Add a note about this exchange",
+        placeholder = if (whole_conversation) {
+          "Add a note about this conversation"
+        } else {
+          "Add a note about this exchange"
+        },
         rows = 2,
         width = "100%"
       ),

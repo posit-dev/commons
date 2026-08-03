@@ -384,23 +384,35 @@ test_that("flags and notes append to and restore from the review file", {
         notes_for_selection(notes(), review_target(), summary),
         notes()
       )
+
+      # With the exchange deselected, notes cover the whole conversation.
+      session$setInputs(exchange_select = list(nonce = 2))
+      session$setInputs(review_note = "Reviewed end to end; looks fine.")
+      session$setInputs(save_note = 2)
+      expect_length(notes(), 2)
+      expect_null(notes()[[2]]$exchange)
+      expect_equal(
+        notes_for_selection(notes(), list(conversation = 1), summary),
+        notes()[2]
+      )
     }
   )
 
   records <- lapply(readLines(review_file), jsonlite::fromJSON)
   expect_equal(
     vapply(records, function(r) r$action, character(1)),
-    c("flag", "flag", "note")
+    c("flag", "flag", "note", "note")
   )
   expect_equal(records[[2]]$conversation, "conv1")
   expect_equal(records[[2]]$exchange, 1)
   expect_equal(records[[3]]$note, "Wrong join, should use orders.")
+  expect_null(records[[4]]$exchange)
 
   restored <- read_review_records(review_file)
   expect_equal(review_flags(restored), c("conv1", "conv1#1"))
   expect_equal(
     vapply(review_notes(restored), `[[`, character(1), "note"),
-    "Wrong join, should use orders."
+    c("Wrong join, should use orders.", "Reviewed end to end; looks fine.")
   )
 })
 

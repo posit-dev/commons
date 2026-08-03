@@ -103,10 +103,13 @@
 
 /* ---- Review ------------------------------------------------------------ */
 
+/* The notes pane's width is draggable (commons-viewer.js sets the variable
+ * from the divider); until then it takes the responsive default. */
 .commons-viewer-workspace {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  grid-template-columns:
+    minmax(0, 1fr) auto var(--commons-viewer-review-width, minmax(16rem, 22rem));
   height: 100%;
   min-height: 0;
 }
@@ -122,8 +125,35 @@
   min-height: 0;
 }
 
+/* The divider draws the panes' hairline rule down its center; the rest of
+ * its width is drag target. */
+.commons-viewer-pane-resizer {
+  background: linear-gradient(
+    to right,
+    transparent calc(50% - 0.5px),
+    var(--bs-border-color, #dee2e6) calc(50% - 0.5px),
+    var(--bs-border-color, #dee2e6) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+  cursor: col-resize;
+  touch-action: none;
+  width: 0.5rem;
+}
+
+.commons-viewer-pane-resizer:hover,
+.commons-viewer-pane-resizer:focus-visible,
+.commons-viewer-pane-resizing {
+  background: linear-gradient(
+    to right,
+    transparent calc(50% - 1px),
+    color-mix(in srgb, #007bc2 55%, var(--bs-body-bg, #fff)) calc(50% - 1px),
+    color-mix(in srgb, #007bc2 55%, var(--bs-body-bg, #fff)) calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+  outline: none;
+}
+
 .commons-viewer-review-pane {
-  border-left: 1px solid var(--bs-border-color, #dee2e6);
   min-width: 0;
   overflow-y: auto;
 }
@@ -260,13 +290,29 @@
 }
 
 .commons-viewer-exchange-message {
+  border-radius: 0.5rem;
   cursor: pointer;
   position: relative;
+  transition: background-color 0.15s ease;
   z-index: 1;
 }
 
-.commons-viewer-exchange-message:hover {
-  background: color-mix(in srgb, #007bc2 5%, transparent);
+.commons-viewer-exchange-message:not(.commons-viewer-exchange-selected):hover {
+  background-color: color-mix(in srgb, #007bc2 5%, transparent);
+}
+
+/* The question bubble takes the hover tint into its gray rather than
+ * trading the gray for it, so hovering shades the bubble instead of
+ * swapping its color out. */
+.commons-viewer-transcript
+  .shiny-chat-user-message.commons-viewer-exchange-message:not(
+    .commons-viewer-exchange-selected
+  ):hover {
+  background-color: color-mix(
+    in srgb,
+    #007bc2 7%,
+    var(--shiny-chat-user-message-bg, #f4f5f7)
+  );
 }
 
 .commons-viewer-exchange-message:focus-visible {
@@ -287,8 +333,11 @@
   z-index: 0;
 }
 
-.commons-viewer-exchange-selected:hover {
-  background: transparent;
+/* While selected, the question bubble cedes its gray to the highlight so
+ * the whole exchange reads as one blue region, pointer over it or not. */
+.commons-viewer-transcript
+  .shiny-chat-user-message.commons-viewer-exchange-selected {
+  background-color: transparent;
 }
 
 @media (max-width: 900px) {
@@ -297,8 +346,11 @@
     grid-template-rows: minmax(20rem, 1fr) auto;
   }
 
+  .commons-viewer-pane-resizer {
+    display: none;
+  }
+
   .commons-viewer-review-pane {
-    border-left: 0;
     border-top: 1px solid var(--bs-border-color, #dee2e6);
     max-height: 40vh;
   }

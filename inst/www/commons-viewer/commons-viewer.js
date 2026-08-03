@@ -103,6 +103,64 @@
       activateExchange(node);
     });
 
+    // The divider between the transcript and the notes pane drags (and, for
+    // keyboard users, arrows) the pane's width, within bounds that keep both
+    // panes usable.
+    var setReviewWidth = function(workspace, width) {
+      var bounds = workspace.getBoundingClientRect();
+      var min = 200;
+      var max = Math.max(min, bounds.width - 320);
+      width = Math.min(Math.max(width, min), max);
+      workspace.style.setProperty(
+        "--commons-viewer-review-width",
+        width + "px"
+      );
+    };
+
+    var resizing = null;
+    document.addEventListener("pointerdown", function(event) {
+      if (!event.target || !event.target.closest) return;
+      var resizer = event.target.closest(".commons-viewer-pane-resizer");
+      if (!resizer) return;
+      var workspace = resizer.closest(".commons-viewer-workspace");
+      if (!workspace) return;
+      event.preventDefault();
+      resizer.setPointerCapture(event.pointerId);
+      resizer.classList.add("commons-viewer-pane-resizing");
+      resizing = { resizer: resizer, workspace: workspace };
+    });
+
+    document.addEventListener("pointermove", function(event) {
+      if (!resizing) return;
+      var bounds = resizing.workspace.getBoundingClientRect();
+      setReviewWidth(resizing.workspace, bounds.right - event.clientX);
+    });
+
+    var endResize = function() {
+      if (!resizing) return;
+      resizing.resizer.classList.remove("commons-viewer-pane-resizing");
+      resizing = null;
+    };
+    document.addEventListener("pointerup", endResize);
+    document.addEventListener("pointercancel", endResize);
+
+    document.addEventListener("keydown", function(event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (!event.target || !event.target.closest) return;
+      var resizer = event.target.closest(".commons-viewer-pane-resizer");
+      if (!resizer) return;
+      var workspace = resizer.closest(".commons-viewer-workspace");
+      var pane = workspace &&
+        workspace.querySelector(".commons-viewer-review-pane");
+      if (!pane) return;
+      event.preventDefault();
+      var step = event.key === "ArrowLeft" ? 16 : -16;
+      setReviewWidth(
+        workspace,
+        pane.getBoundingClientRect().width + step
+      );
+    });
+
     // Server-driven selection state: review_target changes (including
     // deselection when navigation moves away) mirror into the transcript.
     Shiny.addCustomMessageHandler("commonsViewerExchangeSelect", function(message) {
