@@ -103,6 +103,23 @@
       activateExchange(node);
     });
 
+    // Enter saves the note like the chat box sends a message; Shift+Enter
+    // still inserts a newline. The value rides along explicitly because
+    // Shiny's own textarea updates are debounced and could arrive after
+    // the click.
+    document.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+        return;
+      }
+      var target = event.target;
+      if (!target || target.id !== "review_note") return;
+      event.preventDefault();
+      var button = document.getElementById("save_note");
+      if (!button) return;
+      Shiny.setInputValue("review_note", target.value);
+      button.click();
+    });
+
     // The divider between the transcript and the notes pane drags (and, for
     // keyboard users, arrows) the pane's width, within bounds that keep both
     // panes usable.
