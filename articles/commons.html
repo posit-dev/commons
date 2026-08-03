@@ -363,33 +363,72 @@ default; copy it into your project and edit it freely:</p>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"prompts"</span>, <span class="st">"system-prompt.md"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>,</span>
 <span>  <span class="st">"system-prompt.md"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>commons appends documentation of the available tables and data
-dictionaries to the prompt itself, so the file needn’t describe them.
-Then interpolate your copy and pass the result to
-<code>system_prompt</code>:</p>
+<p>The file contains the full potential prompt: the base role, the data
+workflow, available tables, dictionary context, and governed
+definitions. Pass your copy’s path to <code>system_prompt</code>:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
-<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
-<span>    <span class="st">"system-prompt.md"</span>,</span>
-<span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span></span>
-<span>  <span class="op">)</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="st">"system-prompt.md"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p><code>{{keyword}}</code> tokens in the file are filled by <a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link"><code>ellmer::interpolate_file()</code></a>’s
-arguments when the agent is created. The packaged prompt uses one
-keyword, <code>{{date}}</code>. Continue passing in
-<code>date = Sys.Date()</code> as long as your prompt copy retains the
-<code>{{date}}</code> keyword, and supply values for any additional
-keywords that you added to your prompt:</p>
-<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
+<p>commons renders the file after it knows the agent’s composition. The
+<code>{[ ]}</code> delimiters accept R expressions, so conditional
+content can remain in the template:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode md"><code class="sourceCode markdown"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>{[ if (has_measures) r"(</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>Prefer a measure's own arguments when they can answer the question directly.</span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>)" else "" ]}</span></code></pre></div>
+<p>The prompt template is trusted R code. Expressions inside
+<code>{[ ]}</code> are evaluated when the agent is created. Raw strings
+(<code>r"(...)"</code>) make multiline prompt content easier to
+read.</p>
+<p>The packaged template uses these conditions:</p>
+<ul>
+<li><code>has_governed_operations</code></li>
+<li><code>has_measures</code></li>
+<li><code>has_metrics</code></li>
+<li><code>has_definitions</code></li>
+<li><code>has_search_pool</code></li>
+<li><code>has_multiple_sources</code></li>
+<li><code>has_dictionary_context</code></li>
+<li><code>has_glossary_context</code></li>
+<li><code>definitions_complete</code></li>
+</ul>
+<p>It interpolates computed runtime values directly:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode md"><code class="sourceCode markdown"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>Today's date is {<span class="co">[</span><span class="ot">date</span><span class="co">]</span>}.</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a><span class="fu"># Available tables</span></span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a></span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>{<span class="co">[</span><span class="ot">tables</span><span class="co">]</span>}</span></code></pre></div>
+<p>The available values are <code>date</code>, <code>tables</code>,
+<code>dictionary_context</code>, <code>glossary_context</code>,
+<code>definition_index</code>, <code>definition_action</code>, and
+<code>definition_guidance</code>. Values returned from an expression are
+not interpolated again.</p>
+<p>The separate delimiters leave ellmer’s <code>{{ }}</code> syntax
+available for your own substitutions. Add them to the template
+normally:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode md"><code class="sourceCode markdown"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>You are a data analyst for {{organization}}.</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>Today's date is {<span class="co">[</span><span class="ot">date</span><span class="co">]</span>}.</span></code></pre></div>
+<p>Then resolve them before passing the template to commons:</p>
+<div class="sourceCode" id="cb20"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">system_prompt</span> <span class="op">&lt;-</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
+<span>  <span class="st">"system-prompt.md"</span>,</span>
+<span>  organization <span class="op">=</span> <span class="st">"Acme"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
-<span>  system_prompt <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
-<span>    <span class="st">"system-prompt.md"</span>,</span>
-<span>    date <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.Date</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>    fiscal_year_start <span class="op">=</span> <span class="st">"February"</span></span>
-<span>  <span class="op">)</span></span>
+<span>  system_prompt <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">system_prompt</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p>ellmer resolves <code>{{organization}}</code> and leaves commons’
+<code>{[date]}</code> and conditional expressions untouched.</p>
+<p>The template is fully editable: removing a conditional section or
+interpolation removes it from the rendered prompt. commons does not
+append hidden prompt content afterward. Invalid R expressions and
+references to unavailable runtime values fail when the agent is created.
+HTML comments are available for source-only documentation and are
+removed from the rendered prompt.</p>
 </div>
 <div class="section level2">
 <h2 id="logging-trajectories">Logging trajectories<a class="anchor" aria-label="anchor" href="#logging-trajectories"></a>
@@ -414,7 +453,7 @@ automatically when no OTel exporter is set up, writing to
 reading them requires editor-level access. To let named colleagues
 review them, pass their Connect usernames to <code>share_with</code> and
 they’ll be added as collaborators on the content:</p>
-<div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
 <span>  <span class="co"># ...</span></span>
 <span>  log <span class="op">=</span> <span class="cn">TRUE</span>,</span>
