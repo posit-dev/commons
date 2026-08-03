@@ -23,6 +23,8 @@ trusted calculation, the agent can search across context you’ve compiled
 to query data directly, and the response will be deterministically
 tagged as untrusted.
 
+<img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
+
 commons agents support a wide variety of LLM providers via
 [ellmer](https://ellmer.tidyverse.org/). Extracted context is stored in
 plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R`
