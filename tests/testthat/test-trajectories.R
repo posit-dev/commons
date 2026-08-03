@@ -159,6 +159,10 @@ test_that("read_trajectories reads OTLP files from a directory", {
   expect_length(trajectories, 1)
   expect_length(read_local_spans(path), 1)
   expect_s7_class(trajectories[[1]][[1]], ellmer::UserTurn)
+  expect_equal(
+    attr(trajectories, "source"),
+    list(kind = "local", path = normalizePath(path))
+  )
 })
 
 test_that("local trace files can follow a custom exporter template", {
@@ -496,10 +500,18 @@ test_that("read_trajectories stops Connect paging after n conversations", {
 
   expect_equal(state$served, 1)
   expect_named(trajectories, "t300")
+  expect_equal(
+    attr(trajectories, "source"),
+    list(
+      kind = "connect",
+      server = "https://connect.example.com",
+      content_guid = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+    )
+  )
 })
 
 test_that("read_trajectories returns an empty list for a missing directory", {
-  expect_equal(read_trajectories(file.path(tempdir(), "nope")), list())
+  expect_length(read_trajectories(file.path(tempdir(), "nope")), 0)
 })
 
 test_that("read_trajectories validates source", {

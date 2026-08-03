@@ -6,7 +6,7 @@
 \usage{
 view_trajectories(
   trajectories = read_trajectories(),
-  review_file = "commons-review.jsonl"
+  review_file = Sys.getenv("COMMONS_REVIEW_FILE", unset = "commons-review.jsonl")
 )
 }
 \arguments{
@@ -17,7 +17,7 @@ view_trajectories(
 flags, unflags, and feedback notes, each with a timestamp, the
 conversation id, and (for questions) the exchange number. Created on
 first use; flags and notes recorded here are restored when the viewer
-reopens.}
+reopens. Defaults to \code{COMMONS_REVIEW_FILE} when set.}
 }
 \value{
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. Calling \code{view_trajectories()} at the
@@ -39,6 +39,13 @@ whole conversation, or to a single question-and-answer exchange selected
 in the transcript. Flags and notes land in \code{review_file}, one JSON record
 per line, and are restored when the viewer reopens.
 
+New review records use schema version 1 and include a unique event id, UTC
+timestamp, reviewer username, trajectory source, conversation id, optional
+exchange number, action, and optional note. Exchange-level records also
+snapshot the question and trust tag. \code{\link[=read_trajectory_reviews]{read_trajectory_reviews()}} reduces
+the event log to its active flags and notes and can join them back to the
+reviewed turns.
+
 Trajectories carry no record of how each answer was tagged when it was
 produced, so the viewer derives trust levels from the tool calls in the
 trajectory: answers backed only by governed tools (\code{call_measure},
@@ -51,6 +58,13 @@ context: footnotes name no source and are attributed "unverified".
 Logged calls that aren't part of the agent's question-and-answer record—
 shinychat's conversation-title generation, and completions with no user
 turn—are excluded from the viewer.
+}
+\details{
+A single viewer app writes all of its review events to \code{review_file}. For a
+deployed app, point \code{COMMONS_REVIEW_FILE} at persistent storage: files in a
+Posit Connect app's working directory are replaced on redeployment.
+File-backed review apps should use one Connect process because separate
+processes do not coordinate file writes or in-memory review state.
 }
 \examples{
 \dontrun{

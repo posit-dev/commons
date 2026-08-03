@@ -458,6 +458,16 @@ test_that("flags and notes append to and restore from the review file", {
   expect_equal(records[[2]]$exchange, 1)
   expect_equal(records[[3]]$note, "Wrong join, should use orders.")
   expect_null(records[[4]]$exchange)
+  expect_equal(
+    records[[2]][c("schema_version", "user", "source", "question", "tag")],
+    list(
+      schema_version = 1L,
+      user = "unknown",
+      source = list(kind = "unknown"),
+      question = "One?",
+      tag = "none"
+    )
+  )
 
   restored <- read_review_records(review_file)
   expect_equal(review_flags(restored), c("conv1", "conv1#1"))

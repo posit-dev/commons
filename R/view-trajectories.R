@@ -15,6 +15,13 @@
 #' in the transcript. Flags and notes land in `review_file`, one JSON record
 #' per line, and are restored when the viewer reopens.
 #'
+#' New review records use schema version 1 and include a unique event id, UTC
+#' timestamp, reviewer username, trajectory source, conversation id, optional
+#' exchange number, action, and optional note. Exchange-level records also
+#' snapshot the question and trust tag. [read_trajectory_reviews()] reduces
+#' the event log to its active flags and notes and can join them back to the
+#' reviewed turns.
+#'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
 #' trajectory: answers backed only by governed tools (`call_measure`,
@@ -34,7 +41,14 @@
 #'   flags, unflags, and feedback notes, each with a timestamp, the
 #'   conversation id, and (for questions) the exchange number. Created on
 #'   first use; flags and notes recorded here are restored when the viewer
-#'   reopens.
+#'   reopens. Defaults to `COMMONS_REVIEW_FILE` when set.
+#'
+#' @details
+#' A single viewer app writes all of its review events to `review_file`. For a
+#' deployed app, point `COMMONS_REVIEW_FILE` at persistent storage: files in a
+#' Posit Connect app's working directory are replaced on redeployment.
+#' File-backed review apps should use one Connect process because separate
+#' processes do not coordinate file writes or in-memory review state.
 #'
 #' @return A [shiny::shinyApp()] object. Calling `view_trajectories()` at the
 #'   console launches the viewer; the result can also be served as the last
@@ -49,17 +63,21 @@
 #' @export
 view_trajectories <- function(
   trajectories = read_trajectories(),
-  review_file = "commons-review.jsonl"
+  review_file = Sys.getenv(
+    "COMMONS_REVIEW_FILE",
+    unset = "commons-review.jsonl"
+  )
 ) {
   check_viewer_packages()
   check_trajectories(trajectories)
   rlang::check_string(review_file)
+  source <- trajectory_source(trajectories)
   trajectories <- drop_side_conversations(trajectories)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
     viewer_ui(summary),
-    viewer_server(trajectories, summary, questions, review_file)
+    viewer_server(trajectories, summary, questions, review_file, source)
   )
 }
 
@@ -535,13 +553,20 @@ trust_choices <- function(group_by) {
   }
 }
 
-viewer_server <- function(trajectories, summary, questions, review_file) {
+viewer_server <- function(
+  trajectories,
+  summary,
+  questions,
+  review_file,
+  source = trajectory_source(trajectories)
+) {
   function(input, output, session) {
     selected <- shiny::reactiveVal(NULL)
     review_target <- shiny::reactiveVal(NULL)
     review_records <- read_review_records(review_file)
     flags <- shiny::reactiveVal(review_flags(review_records))
     notes <- shiny::reactiveVal(review_notes(review_records))
+    user <- review_user(session)
 
     shiny::observeEvent(input$group_by, {
       shiny::updateSelectInput(
@@ -642,15 +667,14 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
       key <- review_target() %||% selected()["conversation"]
       review <- selection_review_key(key, summary)
       flagged <- review %in% flags()
-      append_review_record(
-        review_file,
-        list(
-          time = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-          conversation = summary[[key$conversation]]$id,
-          exchange = key$exchange,
-          action = if (flagged) "unflag" else "flag"
-        )
+      record <- new_review_event(
+        trajectories,
+        key,
+        action = if (flagged) "unflag" else "flag",
+        user = user,
+        source = source
       )
+      append_review_record(review_file, record)
       flags(if (flagged) setdiff(flags(), review) else union(flags(), review))
     })
 
@@ -710,7 +734,14 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
       if (is.null(key) || !nzchar(note)) {
         return()
       }
-      record <- review_note_record(summary, key, note)
+      record <- new_review_event(
+        trajectories,
+        key,
+        action = "note",
+        user = user,
+        source = source,
+        note = note
+      )
       append_review_record(review_file, record)
       notes(c(notes(), list(record)))
     })
@@ -826,16 +857,6 @@ review_bar_notes <- function(key, flagged, notes) {
   )
 }
 
-review_note_record <- function(summary, key, note) {
-  list(
-    time = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-    conversation = summary[[key$conversation]]$id,
-    exchange = key$exchange,
-    action = "note",
-    note = note
-  )
-}
-
 review_note_list <- function(notes) {
   if (length(notes) == 0) {
     return(NULL)
@@ -855,7 +876,7 @@ review_note_list <- function(notes) {
 # Notes date themselves the way list entries do; a record whose time doesn't
 # parse (or predates timestamps) just goes undated.
 note_date <- function(note) {
-  time <- strptime(note$time %||% "", "%Y-%m-%dT%H:%M:%S%z")
+  time <- parse_review_time(note$time %||% "")
   if (is.na(time)) {
     return(NULL)
   }
@@ -865,60 +886,12 @@ note_date <- function(note) {
   )
 }
 
-append_review_record <- function(file, record) {
-  line <- jsonlite::toJSON(drop_nulls(record), auto_unbox = TRUE)
-  cat(line, "\n", file = file, sep = "", append = TRUE)
-}
-
-read_review_records <- function(file) {
-  if (!file.exists(file)) {
-    return(list())
-  }
-  drop_nulls(lapply(readLines(file, warn = FALSE), function(line) {
-    tryCatch(jsonlite::fromJSON(line), error = function(err) NULL)
-  }))
-}
-
-# Flags persist as flag/unflag events; the latest event per key wins.
-review_flags <- function(records) {
-  flags <- character()
-  for (record in records) {
-    if (is.null(record$action)) {
-      next
-    }
-    key <- review_key(record$conversation, record$exchange)
-    if (identical(record$action, "flag")) {
-      flags <- union(flags, key)
-    } else if (identical(record$action, "unflag")) {
-      flags <- setdiff(flags, key)
-    }
-  }
-  flags
-}
-
-review_notes <- function(records) {
-  Filter(
-    function(record) {
-      identical(record$action, "note") &&
-        is.character(record$note) &&
-        length(record$note) == 1
-    },
-    records
-  )
-}
-
 notes_for_selection <- function(notes, key, summary) {
   selection <- selection_review_key(key, summary)
   Filter(
     function(note) review_key(note$conversation, note$exchange) == selection,
     notes
   )
-}
-
-# Flag keys use the conversation id (not its position), so they stay stable
-# across differently filtered reads of the same trace store.
-review_key <- function(id, exchange = NULL) {
-  paste(c(id, exchange), collapse = "#")
 }
 
 selection_review_key <- function(key, summary) {

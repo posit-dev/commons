@@ -324,6 +324,49 @@ Note that a colleague whose Connect *account* role is viewer cannot read traject
 
 Read logged trajectories back with `read_trajectories()`. With no arguments, it reads this content's traces when running on Connect, the deployed content's traces when run in a project that's been deployed with rsconnect (set `CONNECT_API_KEY`), and local trace files otherwise.
 
+Review trajectories interactively with `view_trajectories()`:
+
+```r
+trajectories <- read_trajectories()
+view_trajectories(trajectories)
+```
+
+The reviewer appends every flag, unflag, and note to one JSONL review file. It
+replays that event log when a new reviewer session starts, so reviews persist
+across sessions. Set `COMMONS_REVIEW_FILE` to choose the file; otherwise it is
+`commons-review.jsonl` in the working directory. New records include a schema
+version, event id, UTC timestamp, the Connect username (or `"unknown"` when
+there is no authenticated user), the trajectory source, and the reviewed
+conversation or exchange. Exchange reviews also snapshot the question and
+trust tag.
+
+Use `read_trajectory_reviews()` to ingest the file. It removes superseded
+flag/unflag events and can join each active flag and note to its trajectory
+turns:
+
+```r
+reviews <- read_trajectory_reviews(
+  trajectories = trajectories
+)
+```
+
+To deploy a reviewer as separate Connect content, its `app.R` must identify
+the agent content explicitly:
+
+```r
+library(commons)
+
+source <- Sys.getenv("COMMONS_TRAJECTORY_SOURCE")
+trajectories <- read_trajectories(source)
+view_trajectories(trajectories)
+```
+
+Set `COMMONS_TRAJECTORY_SOURCE` to the agent content's GUID or URL. Set
+`COMMONS_REVIEW_FILE` to an absolute path on persistent storage mounted into
+the reviewer app. A file in the app working directory is lost on redeployment.
+Run a file-backed reviewer with one Connect process: separate processes neither
+coordinate appends nor share in-memory review state.
+
 ## Iterating on the agent
 
 The maintenance goal is to move recurring questions toward higher-trust paths:
