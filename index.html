@@ -60,6 +60,7 @@
 </blockquote>
 <p>commons allows data scientists to build self-service data agents for their organization.</p>
 <p>commons agents use a pool of trusted calculations drawn from your existing work, like Shiny apps and Quarto docs, to answer questions. (You can also import existing trusted calculations from semantic layers in Snowflake and Databricks.) When the question can’t be answered by a trusted calculation, the agent can search across context you’ve compiled to query data directly, and the response will be deterministically tagged as untrusted.</p>
+<p><img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%"></p>
 <p>commons agents support a wide variety of LLM providers via <a href="https://ellmer.tidyverse.org/" class="external-link">ellmer</a>. Extracted context is stored in plain-text <a href="https://data-dict.tidyverse.org/" class="external-link">data-dict.yaml</a> and <code>.R</code> files.</p>
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
