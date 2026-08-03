@@ -135,11 +135,9 @@ test_that("a custom system-prompt template replaces the packaged one", {
   writeLines(
     c(
       "You answer questions about this data.",
-      "{{#if has_measures}}",
-      "Use registered measures first.",
-      "{{/if}}",
+      "{{ if (has_measures) \"Use registered measures first.\" else \"\" }}",
       "Tables:",
-      "{{ data.tables }}"
+      "{{tables}}"
     ),
     path
   )

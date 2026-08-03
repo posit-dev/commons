@@ -287,13 +287,15 @@ agent <- commons(
 )
 ```
 
-commons renders the file after it knows the agent's composition. Conditional sections use `if` directives:
+commons renders the file after it knows the agent's composition. The `{{ }}` delimiters accept R expressions, so conditional content can remain in the template:
 
 ```md
-{{#if has_measures}}
+{{ if (has_measures) r"(
 Prefer a measure's own arguments when they can answer the question directly.
-{{/if}}
+)" else "" }}
 ```
+
+The prompt template is trusted R code. Like [`ellmer::interpolate()`](https://ellmer.tidyverse.org/reference/interpolate.html), expressions in it are evaluated when the agent is created. Raw strings (`r"(...)"`) make multiline prompt content easier to read.
 
 The packaged template uses these conditions:
 
@@ -307,19 +309,19 @@ The packaged template uses these conditions:
 - `has_glossary_context`
 - `definitions_complete`
 
-It interpolates computed runtime values with namespaced tokens such as:
+It interpolates computed runtime values directly:
 
 ```md
-Today's date is {{ data.date }}.
+Today's date is {{date}}.
 
 # Available tables
 
-{{ data.tables }}
+{{tables}}
 ```
 
-The available values are `date`, `tables`, `dictionary_context`, `glossary_context`, and `definition_index`. Other `{{...}}` text is left unchanged, including governed-definition tokens such as `{{name}}`. Custom template values are not currently supported.
+The available values are `date`, `tables`, `dictionary_context`, `glossary_context`, and `definition_index`. Double the delimiters when the rendered prompt should contain a literal token: `{{{{name}}}}` in the template becomes `{{name}}` in the system prompt. Tokens returned from an R expression are not interpolated again. Custom template values are not currently supported.
 
-The template is fully editable: removing a conditional section or interpolation removes it from the rendered prompt. commons does not append hidden prompt content afterward. Malformed directives and references to unavailable runtime values fail when the agent is created.
+The template is fully editable: removing a conditional section or interpolation removes it from the rendered prompt. commons does not append hidden prompt content afterward. Invalid R expressions and references to unavailable runtime values fail when the agent is created. HTML comments are available for source-only documentation and are removed from the rendered prompt.
 
 ## Logging trajectories
 

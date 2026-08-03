@@ -37,7 +37,8 @@
 #'   commons renders conditional sections from the agent's composition and
 #'   interpolates runtime values such as its table roster. Custom templates
 #'   may edit, remove, or reposition any section, but only commons-provided
-#'   template values are supported.
+#'   template values are supported. Expressions inside `{{ }}` are evaluated
+#'   as trusted R code when the agent is created.
 #' @param network Whether the `run_r` session has network access. One of
 #'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
 #'   and refuses to run without filesystem sandboxing.

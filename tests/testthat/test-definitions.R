@@ -253,6 +253,7 @@ test_that("the system prompt carries a governed-definitions index", {
     registry
   )
   expect_match(prompt, "# Governed definitions", fixed = TRUE)
+  expect_match(prompt, "Write them as `{{name}}` tokens", fixed = TRUE)
   expect_match(
     prompt,
     "- sales: filters `{{emea}}`; dimensions `{{region_band}}`; metrics `{{big_revenue}}`",

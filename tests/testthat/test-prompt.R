@@ -1,16 +1,9 @@
 test_that("prompt templates select conditional sections", {
   template <- paste(
     "<!-- source-only note -->",
-    "{{#if enabled}}",
-    "Enabled",
-    "{{#if nested}}",
-    "Nested",
-    "{{else}}",
-    "Not nested",
-    "{{/if}}",
-    "{{else}}",
-    "Disabled",
-    "{{/if}}",
+    "{{ if (enabled) {",
+    "  if (nested) \"Enabled\\nNested\" else \"Enabled\\nNot nested\"",
+    "} else \"Disabled\" }}",
     sep = "\n"
   )
 
@@ -24,8 +17,8 @@ test_that("prompt templates select conditional sections", {
   )
 })
 
-test_that("prompt templates interpolate only namespaced runtime data", {
-  template <- "Tables:\n{{ data.tables }}\nUse `{{name}}`."
+test_that("prompt templates interpolate runtime data and escaped tokens", {
+  template <- "Tables:\n{{tables}}\nUse `{{{{name}}}}`."
   data <- list(tables = "- sales\\daily\n- orders {{raw}}")
 
   expect_equal(
@@ -36,35 +29,22 @@ test_that("prompt templates interpolate only namespaced runtime data", {
 
 test_that("prompt templates validate their structure and values", {
   expect_error(
-    render_system_prompt(
-      "{{#if unknown}}\nx\n{{/if}}",
-      list()
-    ),
-    "Unknown system-prompt condition"
+    render_system_prompt("{{ if (unknown) \"x\" else \"\" }}", list()),
+    "object 'unknown' not found"
   )
   expect_error(
-    render_system_prompt("{{#if yes}}\nx", list(yes = TRUE)),
-    "unclosed conditional block"
+    render_system_prompt("{{ if (yes) }}", list(yes = TRUE)),
+    "Failed to parse glue component"
   )
   expect_error(
-    render_system_prompt("{{ data.unknown }}", list()),
-    "Unknown system-prompt interpolation"
-  )
-  expect_error(
-    render_system_prompt("{{#if}}", list()),
-    "Malformed system-prompt directive"
-  )
-  expect_error(
-    render_system_prompt("Text {{#if yes}}", list(yes = TRUE)),
-    "Malformed system-prompt directive"
+    render_system_prompt("{{tables}}", list(tables = c("a", "b"))),
+    "single string"
   )
 })
 
 test_that("the packaged prompt leaves no template markup", {
   prompt <- test_agent()$get_system_prompt()
 
-  expect_no_match(prompt, "{{#if", fixed = TRUE)
-  expect_no_match(prompt, "{{/if", fixed = TRUE)
   expect_no_match(prompt, "<!--", fixed = TRUE)
-  expect_no_match(prompt, "{{ data.", fixed = TRUE)
+  expect_no_match(prompt, "{{date}}", fixed = TRUE)
 })
