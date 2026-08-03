@@ -951,6 +951,9 @@ rate_percent <- function(count, n) {
   sprintf("%.0f%%", 100 * count / n)
 }
 
+# Conversation entries carry no trust pills: a conversation mixes answers
+# at different levels, which a single answer's badge misstates. The trust
+# filter, the timeline, and the transcript's own pills carry that story.
 conversation_entry <- function(
   index,
   record,
@@ -958,7 +961,6 @@ conversation_entry <- function(
   flags = character()
 ) {
   key <- list(conversation = index)
-  pills <- lapply(intersect(c("A", "C"), record$tags), commons_answer_pill)
   shiny::actionLink(
     entry_link_id(key),
     class = entry_class(identical(selected, key)),
@@ -967,8 +969,7 @@ conversation_entry <- function(
       htmltools::div(
         class = "commons-viewer-entry-meta",
         flag_marker(review_key(record$id) %in% flags),
-        htmltools::tags$span(conversation_meta(record)),
-        pills
+        htmltools::tags$span(conversation_meta(record))
       )
     )
   )
