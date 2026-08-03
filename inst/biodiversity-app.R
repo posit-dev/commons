@@ -83,15 +83,6 @@ greeting <- paste(
   "- <span class='suggestion'>Compare wetlands with the other habitats.</span>"
 )
 
-system_prompt <- paste(
-  ellmer::interpolate_file(
-    system.file("prompts/system-prompt.md", package = "commons"),
-    date = Sys.Date()
-  ),
-  "When asked which sandbox backend is active, use run_r to evaluate
-  getOption(\"commons.sandbox_backend\"). Report that value directly."
-)
-
 ui <- page_fillable(
   title = "Biodiversity explorer",
   commons_ui("chat", greeting = greeting)
@@ -106,8 +97,7 @@ server <- function(input, output, session) {
         site_area = site_area
       )
     ),
-    semantic_layer = semantics,
-    system_prompt = system_prompt
+    semantic_layer = semantics
   )
 
   commons_server("chat", agent)

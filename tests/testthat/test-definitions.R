@@ -249,10 +249,11 @@ test_that("the system prompt carries a governed-definitions index", {
   registry <- sales_registry(src)
   prompt <- commons_system_prompt(
     list(sales_db = src),
-    "You are a data analyst.",
+    default_system_prompt(),
     registry
   )
   expect_match(prompt, "# Governed definitions", fixed = TRUE)
+  expect_match(prompt, "Write them as `{{name}}` tokens", fixed = TRUE)
   expect_match(
     prompt,
     "- sales: filters `{{emea}}`; dimensions `{{region_band}}`; metrics `{{big_revenue}}`",
@@ -275,7 +276,7 @@ test_that("a definition's label is its index hint", {
     )
   )
   registry <- sales_registry(src)
-  text <- definitions_prompt_text(registry)
+  text <- definition_index_text(registry)
   expect_match(text, "`{{emea}}` (EMEA rows)", fixed = TRUE)
   expect_no_match(text, "slice of orders", fixed = TRUE)
 })
@@ -283,7 +284,11 @@ test_that("a definition's label is its index hint", {
 test_that("the prompt section caps like the glossary", {
   registry <- sales_registry(definitions_source(many_definitions()))
   expect_true(definitions_overflow(registry))
-  text <- definitions_prompt_text(registry)
+  text <- commons_system_prompt(
+    list(sales_db = definitions_source(many_definitions())),
+    default_system_prompt(),
+    registry
+  )
   expect_lt(nchar(text), 6000)
   expect_match(text, "More definitions arrive", fixed = TRUE)
 

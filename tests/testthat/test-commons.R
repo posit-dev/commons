@@ -124,25 +124,38 @@ test_that("the system prompt includes tables, the date, and measure workflow", {
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
-  expect_match(prompt, "your first tool call must be `search_pool`")
+  expect_match(prompt, "your first tool call should be `search_pool`")
   expect_match(prompt, "Do not call `run_sql` or `describe_table`")
+  expect_match(prompt, "use it rather than recreating the calculation in SQL")
+  expect_match(prompt, "inspect every referenced table with `describe_table`")
+  expect_match(prompt, "never guess column names or join keys")
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")
 })
 
-test_that("a custom system prompt replaces the packaged one", {
+test_that("a custom system-prompt template replaces the packaged one", {
   path <- withr::local_tempfile(fileext = ".md")
-  writeLines("You answer questions about {{org}}'s data.", path)
+  writeLines(
+    c(
+      "You answer questions about {{organization}}'s data.",
+      "{[ if (has_measures) \"Use registered measures first.\" else \"\" ]}",
+      "Tables:",
+      "{[tables]}"
+    ),
+    path
+  )
 
   agent <- test_agent(
-    system_prompt = ellmer::interpolate_file(path, org = "Acme")
+    semantic_layer = semantic_layer(count_measure_tool()),
+    system_prompt = ellmer::interpolate_file(path, organization = "Acme")
   )
   prompt <- agent$get_system_prompt()
 
   expect_match(prompt, "about Acme's data", fixed = TRUE)
+  expect_match(prompt, "Use registered measures first", fixed = TRUE)
+  expect_match(prompt, "Tables:\n- sales", fixed = TRUE)
   expect_no_match(prompt, "search_pool")
-  expect_match(prompt, "# Available tables", fixed = TRUE)
-  expect_match(prompt, "- sales", fixed = TRUE)
+  expect_no_match(prompt, "self-service data analyst", fixed = TRUE)
 })
 
 test_that("a system prompt already set on the client warns", {
@@ -163,9 +176,14 @@ test_that("system_prompt is validated", {
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines("A prompt.", path)
+  expect_equal(
+    test_agent(system_prompt = path)$get_system_prompt(),
+    "A prompt."
+  )
+
   expect_error(
-    test_agent(system_prompt = path),
-    "not a file path"
+    test_agent(system_prompt = "missing-prompt.md"),
+    "does not exist"
   )
 })
 
@@ -173,7 +191,10 @@ test_that("the system prompt includes schema-qualified table labels", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbExecute(con, "CREATE SCHEMA crm")
-  DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR, revenue DOUBLE)")
+  DBI::dbExecute(
+    con,
+    "CREATE TABLE crm.sales (order_id VARCHAR, revenue DOUBLE)"
+  )
 
   agent <- commons(
     test_client(),

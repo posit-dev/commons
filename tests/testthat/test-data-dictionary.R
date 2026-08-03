@@ -110,15 +110,13 @@ test_that("data_source() rejects other dictionary inputs", {
 test_that("dictionary content lands in the system prompt", {
   skip_if_not_installed("yaml")
   src <- local_dict_source()
-  prompt <- commons_system_prompt(list(src), "You are a data analyst.")
+  prompt <- commons_system_prompt(list(src), default_system_prompt())
 
   expect_match(prompt, "# About the data", fixed = TRUE)
   expect_match(prompt, "- sales", fixed = TRUE)
   expect_match(prompt, "Revenue figures exclude tax", fixed = TRUE)
   expect_match(prompt, "AOV: Average order value", fixed = TRUE)
   expect_no_match(prompt, "One row per order line", fixed = TRUE)
-
-  expect_snapshot(cat(dictionary_prompt_text(list(src))))
 })
 
 test_that("multi-source prompts label dictionary blocks by source", {
@@ -127,12 +125,16 @@ test_that("multi-source prompts label dictionary blocks by source", {
     sales_db = local_dict_source(),
     crm = data_source(accounts = data.frame(id = 1))
   )
+  prompt <- commons_system_prompt(sources, default_system_prompt())
 
-  expect_snapshot(cat(dictionary_prompt_text(sources)))
+  expect_match(prompt, "## sales_db", fixed = TRUE)
+  expect_match(prompt, "Revenue figures exclude tax", fixed = TRUE)
+  expect_match(prompt, "Definitions of domain terms", fixed = TRUE)
 })
 
 test_that("sources without dictionaries leave the prompt unchanged", {
-  expect_equal(dictionary_prompt_text(list(test_source())), "")
+  expect_equal(dictionary_context_text(list(test_source())), "")
+  expect_equal(glossary_context_text(list(test_source())), "")
 })
 
 test_that("glossary entries past the cap are co-resolved at first touch", {
@@ -262,7 +264,10 @@ test_that("agent tools share first-touch state", {
   skip_if_not_installed("yaml")
   agent <- test_agent(
     data_sources = list(
-      sales_db = data_source(sales = test_sales(), dictionary = local_dict_path())
+      sales_db = data_source(
+        sales = test_sales(),
+        dictionary = local_dict_path()
+      )
     )
   )
 
