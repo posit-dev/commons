@@ -124,7 +124,7 @@ test_that("the system prompt includes tables, the date, and measure workflow", {
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
-  expect_match(prompt, "your first tool call must be `search_pool`")
+  expect_match(prompt, "your first tool call should be `search_pool`")
   expect_match(prompt, "Do not call `run_sql` or `describe_table`")
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")

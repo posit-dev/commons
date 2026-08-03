@@ -47,7 +47,7 @@ commons(
 )
 }\if{html}{\out{</div>}}
 
-commons renders conditional sections from the agent's composition and
+commons renders some sections conditionally and
 interpolates runtime values such as its table roster. Custom templates
 may edit, remove, or reposition any section. Commons expressions open
 with \verb{\{[} and close with \verb{]\}}, leaving ellmer's \code{{{ }}} delimiters
@@ -64,8 +64,7 @@ commons(
 }\if{html}{\out{</div>}}
 
 A \code{{{organization}}} expression is resolved by ellmer, while commons'
-template expressions remain untouched. Commons expressions are evaluated
-as trusted R code when the agent is created.}
+template expressions remain untouched.}
 
 \item{network}{Whether the \code{run_r} session has network access. One of
 \code{"none"} (the default) or \code{"full"}. The session requires Linux or macOS

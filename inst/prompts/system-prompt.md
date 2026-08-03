@@ -20,7 +20,7 @@ Do not announce tool calls; before your final response to the user, you should o
 
 <!-- A searchable pool contains measures or more definitions than fit below. -->
 {[ if (has_governed_operations && has_search_pool) r"(
-For any question that needs data, your first tool call must be `search_pool` with the user's question. Do this even if a table looks easy to query directly, and use the exact names it returns. Do not call `run_sql` or `describe_table` until after you have.
+For any question that needs data, your first tool call should be `search_pool`. Do this even if a table looks easy to query directly, and use the exact names it returns. Do not call `run_sql` or `describe_table` until after you have.
 )" else "" ]}
 
 {[ if (has_governed_operations && !has_search_pool) "Every governed name you can use is indexed below." else "" ]}

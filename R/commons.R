@@ -34,7 +34,7 @@
 #'   )
 #'   ```
 #'
-#'   commons renders conditional sections from the agent's composition and
+#'   commons renders some sections conditionally and
 #'   interpolates runtime values such as its table roster. Custom templates
 #'   may edit, remove, or reposition any section. Commons expressions open
 #'   with `{[` and close with `]}`, leaving ellmer's `{{ }}` delimiters
@@ -52,8 +52,7 @@
 #'   ```
 #'
 #'   A `{{organization}}` expression is resolved by ellmer, while commons'
-#'   template expressions remain untouched. Commons expressions are evaluated
-#'   as trusted R code when the agent is created.
+#'   template expressions remain untouched.
 #' @param network Whether the `run_r` session has network access. One of
 #'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
 #'   and refuses to run without filesystem sandboxing.
