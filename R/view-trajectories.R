@@ -240,20 +240,18 @@ hit_rate <- function(tag_sets) {
 # Tool requests are dropped, mirroring shinychat's own transcript restore
 # (each result card carries its request). `count` and `indexFromEnd` index
 # assistant messages, which is what the seed handler counts.
-trajectory_transcript <- function(turns, exchange_numbers = NULL) {
+trajectory_transcript <- function(turns) {
   exchanges <- split_exchanges(turns)
-  exchange_numbers <- exchange_numbers %||% seq_along(exchanges)
   messages <- list()
   pills <- list()
   n_assistant <- 0L
 
   for (i in seq_along(exchanges)) {
     exchange <- exchanges[[i]]
-    exchange_number <- exchange_numbers[[i]]
     messages[[length(messages) + 1]] <- list(
       role = "user",
       content = exchange[[1]]@text,
-      exchange = exchange_number
+      exchange = i
     )
     chunks <- exchange_answer_chunks(exchange[-1])
     if (length(chunks) == 0) {
@@ -263,7 +261,7 @@ trajectory_transcript <- function(turns, exchange_numbers = NULL) {
     messages[[length(messages) + 1]] <- list(
       role = "assistant",
       content = chunks,
-      exchange = exchange_number
+      exchange = i
     )
     pill <- viewer_pill(exchange_provenance(exchange), n_assistant)
     if (!is.null(pill)) {
@@ -330,10 +328,9 @@ restore_transcript <- function(
   session,
   id,
   turns,
-  exchange_numbers = NULL,
   selected_exchange = NULL
 ) {
-  transcript <- trajectory_transcript(turns, exchange_numbers)
+  transcript <- trajectory_transcript(turns)
   for (message in transcript$messages) {
     if (identical(message$role, "user")) {
       shinychat::chat_append_message(
@@ -567,9 +564,11 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     }
 
     # With no exchange selected the pane works at conversation level: the
-    # flag and any notes cover the whole conversation.
+    # flag and any notes cover the whole conversation. The fallback strips
+    # any exchange from the navigation key, so deselecting an exchange
+    # lands at conversation level from a question entry too.
     output$review_bar <- shiny::renderUI({
-      key <- review_target() %||% selected()
+      key <- review_target() %||% selected()["conversation"]
       if (is.null(key)) {
         return(NULL)
       }
@@ -578,7 +577,7 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     })
 
     shiny::observeEvent(input$flag_toggle, {
-      key <- review_target() %||% selected()
+      key <- review_target() %||% selected()["conversation"]
       review <- selection_review_key(key, summary)
       flagged <- review %in% flags()
       append_review_record(
@@ -644,7 +643,7 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     )
 
     shiny::observeEvent(input$save_note, {
-      key <- review_target() %||% selected()
+      key <- review_target() %||% selected()["conversation"]
       note <- trimws(input$review_note %||% "")
       if (is.null(key) || !nzchar(note)) {
         return()
@@ -670,6 +669,9 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
     # onFlushed fires after the flush that delivers the new chat element, so
     # it is bound client-side before the replayed messages arrive -- the same
     # mechanism commons_server() uses to seed pills.
+    # Question and conversation entries open the same thing -- the whole
+    # conversation -- a question entry just arrives with its exchange
+    # selected and scrolled into view.
     shiny::observeEvent(selected(), {
       key <- selected()
       session$onFlushed(
@@ -677,8 +679,7 @@ viewer_server <- function(trajectories, summary, questions, review_file) {
           restore_transcript(
             session,
             transcript_id(key),
-            selected_turns(trajectories, key),
-            exchange_numbers = key$exchange,
+            trajectories[[key$conversation]],
             selected_exchange = key$exchange
           )
         },
@@ -704,16 +705,6 @@ tag_matches <- function(tags, trust) {
     none = is.na(tags),
     tags %in% trust
   )
-}
-
-# A question selection restores only its own exchange; a conversation
-# selection restores the whole transcript.
-selected_turns <- function(trajectories, key) {
-  turns <- trajectories[[key$conversation]]
-  if (is.null(key$exchange)) {
-    return(turns)
-  }
-  split_exchanges(turns)[[key$exchange]]
 }
 
 entry_link_id <- function(key) {
@@ -1101,7 +1092,8 @@ trust_timeline_bins <- function(questions, window = NULL, target = 5) {
   questions <- questions[keep]
   dates <- dates[keep]
 
-  unit <- timeline_bin_unit(dates, target)
+  bounds <- timeline_bounds(window, dates)
+  unit <- timeline_bin_unit(dates, bounds, target)
   starts <- timeline_bin_start(dates, unit)
   bins <- lapply(sort(unique(starts)), function(start) {
     tags <- vapply(
@@ -1110,8 +1102,10 @@ trust_timeline_bins <- function(questions, window = NULL, target = 5) {
       character(1)
     )
     list(
-      date = format(start, "%Y-%m-%d"),
-      label = timeline_bin_label(start, unit),
+      # A bin the window enters midway charts at the window's edge, not at
+      # a calendar boundary outside it.
+      date = format(max(start, bounds[[1]]), "%Y-%m-%d"),
+      label = timeline_bin_label(start, unit, bounds),
       n = length(tags),
       counts = list(
         A = sum(tags %in% "A"),
@@ -1124,16 +1118,37 @@ trust_timeline_bins <- function(questions, window = NULL, target = 5) {
   list(unit = unit, bins = bins)
 }
 
-# Multiplication rather than mean(): zero dates make day's 0 >= 0 true, so
-# an empty window stays on the day unit instead of dividing by zero.
-timeline_bin_unit <- function(dates, target) {
-  for (unit in c("day", "week")) {
+# The range the bins must respect: the picker's range when complete,
+# otherwise the dated answers' own extent.
+timeline_bounds <- function(window, dates) {
+  if (length(window) >= 2) {
+    return(as.Date(c(window[[1]], window[[2]])))
+  }
+  if (length(dates) == 0) {
+    return(NULL)
+  }
+  c(min(dates), max(dates))
+}
+
+# The finest unit whose bins hold `target` answers on average --
+# multiplication rather than mean() so zero dates stay on the day unit
+# instead of dividing by zero. Units the window doesn't span at least a
+# couple of times over aren't considered at all: a one-day selection
+# charts that day however few answers it holds, never its whole month.
+# When nothing reaches the target, the coarsest unit still in play.
+timeline_bin_unit <- function(dates, bounds, target) {
+  if (is.null(bounds)) {
+    return("day")
+  }
+  span <- as.integer(bounds[[2]] - bounds[[1]]) + 1L
+  units <- c("day", if (span >= 14) "week", if (span >= 60) "month")
+  for (unit in units) {
     bins <- unique(timeline_bin_start(dates, unit))
     if (length(dates) >= target * length(bins)) {
       return(unit)
     }
   }
-  "month"
+  units[[length(units)]]
 }
 
 # Weeks start on Monday (ISO), months on the first.
@@ -1146,13 +1161,58 @@ timeline_bin_start <- function(dates, unit) {
   )
 }
 
-timeline_bin_label <- function(start, unit) {
-  switch(
-    unit,
-    day = format(start, "%b %e, %Y"),
-    week = paste("Week of", format(start, "%b %e, %Y")),
-    month = format(start, "%B %Y")
-  )
+# Bin labels never reach outside the window: a week or month the window
+# covers only part of labels itself by the days it actually holds
+# ("Jul 2-5, 2026"), and only a fully covered month wears its plain name.
+timeline_bin_label <- function(start, unit, bounds) {
+  if (identical(unit, "day")) {
+    return(format(start, "%b %e, %Y"))
+  }
+  end <- if (identical(unit, "week")) {
+    start + 6
+  } else {
+    seq(start, by = "1 month", length.out = 2)[[2]] - 1
+  }
+  from <- max(start, bounds[[1]])
+  to <- min(end, bounds[[2]])
+  if (identical(unit, "month") && from == start && to == end) {
+    return(format(start, "%B %Y"))
+  }
+  timeline_range_label(from, to)
+}
+
+timeline_range_label <- function(from, to) {
+  day <- function(date) sub("^\\s+", "", format(date, "%e"))
+  if (from == to) {
+    format(from, "%b %e, %Y")
+  } else if (identical(format(from, "%Y-%m"), format(to, "%Y-%m"))) {
+    sprintf(
+      "%s %s\u2013%s, %s",
+      format(from, "%b"),
+      day(from),
+      day(to),
+      format(from, "%Y")
+    )
+  } else if (identical(format(from, "%Y"), format(to, "%Y"))) {
+    sprintf(
+      "%s %s \u2013 %s %s, %s",
+      format(from, "%b"),
+      day(from),
+      format(to, "%b"),
+      day(to),
+      format(from, "%Y")
+    )
+  } else {
+    sprintf(
+      "%s %s, %s \u2013 %s %s, %s",
+      format(from, "%b"),
+      day(from),
+      format(from, "%Y"),
+      format(to, "%b"),
+      day(to),
+      format(to, "%Y")
+    )
+  }
 }
 
 # The table is the same data as the chart, readable without a pointer, and
@@ -1181,32 +1241,45 @@ trust_timeline <- function(binned) {
 # A 100%-stacked area chart of each bin's trust-level shares -- one stacked
 # column when only one bin is dated, since a single point can't make an
 # area. The tooltip is one card drawn wholly from per-bin text: unified
-# hover's date header can't carry the bin's n beside the date, so the top
-# trace renders header and swatch rows itself and the traces beneath skip
-# hover. The card header's legend names the levels, so the widget's own
-# legend stays off.
+# hover's date header can't carry the bin's n beside the date, so a single
+# carrier trace renders header and swatch rows itself and the other traces
+# skip hover. The card header's legend names the levels, so the widget's
+# own legend stays off.
 timeline_plot <- function(bins, unit) {
   dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
   n <- vapply(bins, function(bin) bin$n, numeric(1))
   tooltips <- vapply(bins, timeline_tooltip, character(1))
   plot <- plotly::plot_ly(height = 176)
 
+  # The area chart's card rides the top trace, whose cumulative y is always
+  # 100; a zero-height bar segment never fires hover, so the lone column's
+  # card rides its tallest segment instead.
+  carrier <- if (length(bins) == 1) {
+    which.max(vapply(
+      names(viewer_levels),
+      function(key) bins[[1]]$counts[[key]],
+      numeric(1)
+    ))
+  } else {
+    length(viewer_levels)
+  }
+
   for (k in seq_along(viewer_levels)) {
     key <- names(viewer_levels)[[k]]
     counts <- vapply(bins, function(bin) bin$counts[[key]], numeric(1))
     shares <- 100 * counts / n
-    top <- k == length(viewer_levels)
+    carries <- k == carrier
     plot <- if (length(bins) == 1) {
       plotly::add_bars(
         plot,
         x = dates,
         y = shares,
         name = unname(viewer_levels[[key]]),
-        text = if (top) tooltips,
+        text = if (carries) tooltips,
         # Bars would print their text on the bar itself.
         textposition = "none",
-        hovertemplate = if (top) "%{text}<extra></extra>",
-        hoverinfo = if (!top) "skip",
+        hovertemplate = if (carries) "%{text}<extra></extra>",
+        hoverinfo = if (!carries) "skip",
         marker = list(color = viewer_level_colors[[key]]),
         # About two hours wide, in the date axis's milliseconds; with the
         # axis pinned a day either side, a column rather than a fill.
@@ -1218,9 +1291,9 @@ timeline_plot <- function(bins, unit) {
         x = dates,
         y = shares,
         name = unname(viewer_levels[[key]]),
-        text = if (top) tooltips,
-        hovertemplate = if (top) "%{text}<extra></extra>",
-        hoverinfo = if (!top) "skip",
+        text = if (carries) tooltips,
+        hovertemplate = if (carries) "%{text}<extra></extra>",
+        hoverinfo = if (!carries) "skip",
         type = "scatter",
         mode = "lines",
         stackgroup = "levels",
@@ -1230,7 +1303,7 @@ timeline_plot <- function(bins, unit) {
         # edge and draws nothing.
         line = list(
           color = "#ffffff",
-          width = if (top) 0 else 2
+          width = if (k == length(viewer_levels)) 0 else 2
         )
       )
     }

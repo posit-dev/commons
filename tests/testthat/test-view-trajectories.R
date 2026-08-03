@@ -448,24 +448,29 @@ test_that("trust_timeline_bins aggregates question tags by day at volume", {
 
 test_that("trust_timeline_bins widens bins until they hold enough answers", {
   # Two answers a day averages under five per day but over five per
-  # Monday-start week; Thursday July 2, 2026 through Wednesday July 8
-  # spans the weeks of Monday June 29 and Monday July 6.
+  # Monday-start week; Thursday July 2, 2026 through Friday July 17 spans
+  # three weeks, entering the first midway.
   weekly <- unlist(
-    lapply(as.character(seq(as.Date("2026-07-02"), by = 1, length.out = 7)), {
+    lapply(as.character(seq(as.Date("2026-07-02"), by = 1, length.out = 16)), {
       function(date) lapply(c("A", "C"), timeline_question, date)
     }),
     recursive = FALSE
   )
   binned <- trust_timeline_bins(weekly)
   expect_equal(binned$unit, "week")
-  expect_length(binned$bins, 2)
-  expect_equal(binned$bins[[1]]$date, "2026-06-29")
-  expect_equal(binned$bins[[1]]$label, "Week of Jun 29, 2026")
+  expect_length(binned$bins, 3)
+  # A bin the range enters midway charts and labels itself by the days the
+  # range actually covers, not its full calendar week.
+  expect_equal(binned$bins[[1]]$date, "2026-07-02")
+  expect_equal(binned$bins[[1]]$label, "Jul 2\u20135, 2026")
   expect_equal(binned$bins[[1]]$n, 8)
+  expect_equal(binned$bins[[2]]$label, "Jul 6\u201312, 2026")
+  expect_equal(binned$bins[[2]]$n, 14)
 
-  # One answer a week doesn't fill weeks either, so bins become months.
+  # One answer a week doesn't fill weeks either, so bins become months;
+  # only fully covered months wear their plain names.
   monthly <- lapply(
-    as.character(seq(as.Date("2026-06-01"), by = 7, length.out = 9)),
+    as.character(seq(as.Date("2026-06-01"), by = 7, length.out = 10)),
     timeline_question,
     tag = "A"
   )
@@ -473,11 +478,32 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
   expect_equal(binned$unit, "month")
   expect_equal(
     vapply(binned$bins, function(bin) bin$label, character(1)),
-    c("June 2026", "July 2026")
+    c("June 2026", "July 2026", "Aug 1\u20133, 2026")
   )
 
   expect_equal(trust_timeline_bins(list())$unit, "day")
   expect_length(trust_timeline_bins(list())$bins, 0)
+})
+
+test_that("bins never grow coarser than the selected window", {
+  # A one-day window charts that day however few answers it holds.
+  sparse <- lapply(c("A", "C"), timeline_question, "2026-07-01")
+  window <- as.Date(c("2026-07-01", "2026-07-01"))
+  binned <- trust_timeline_bins(sparse, window)
+  expect_equal(binned$unit, "day")
+  expect_equal(binned$bins[[1]]$label, "Jul  1, 2026")
+
+  # Without a window the answers' own one-day extent pins the unit too.
+  expect_equal(trust_timeline_bins(sparse)$unit, "day")
+
+  # A week-long window never bins by month, even when days run sparse.
+  week_window <- as.Date(c("2026-07-01", "2026-07-07"))
+  spread <- lapply(
+    c("2026-07-01", "2026-07-03", "2026-07-06"),
+    timeline_question,
+    tag = "A"
+  )
+  expect_equal(trust_timeline_bins(spread, week_window)$unit, "day")
 })
 
 test_that("trust_timeline renders a chart and its table view", {
