@@ -1,7 +1,7 @@
 #' Read trajectory reviews
 #'
-#' `read_trajectory_reviews()` reads the append-only JSONL event log written by
-#' [view_trajectories()]. It returns every note and only the currently active
+#' `trajectory_reviews_read()` reads the append-only JSONL event log written by
+#' [trajectory_review()]. It returns every note and only the currently active
 #' flags: superseded `flag` events and all `unflag` events are folded away.
 #'
 #' When `trajectories` is supplied, each returned record gains a `turns` field
@@ -24,7 +24,7 @@
 #'   currently active flags. When `trajectories` is supplied, each record also
 #'   contains `turns`.
 #' @export
-read_trajectory_reviews <- function(
+trajectory_reviews_read <- function(
   review_file = Sys.getenv(
     "COMMONS_REVIEW_FILE",
     unset = "commons-review.jsonl"

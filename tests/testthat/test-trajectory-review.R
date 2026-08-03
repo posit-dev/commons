@@ -329,7 +329,7 @@ test_that("summarize_questions flattens exchanges across conversations", {
   expect_true(is.na(questions[[3]]$tag))
 })
 
-test_that("check_trajectories accepts empty trajectories and rejects other shapes", {
+test_that("trajectory reviewer accepts empty trajectories and rejects other shapes", {
   expect_no_error(check_trajectories(list()))
   expect_snapshot(check_trajectories("nope"), error = TRUE)
   expect_snapshot(check_trajectories(list(list())), error = TRUE)

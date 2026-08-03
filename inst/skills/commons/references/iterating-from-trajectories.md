@@ -27,11 +27,11 @@ The answer uses SQL with little documentation and the agent had to inspect table
 
 3. Load reviews when they are available.
    A trajectory reviewer writes one append-only JSONL file. Read it with
-   `read_trajectory_reviews()`, supplying the trajectories so each active flag
+   `trajectory_reviews_read()`, supplying the trajectories so each active flag
    and note is joined to the conversation or exchange it reviews:
 
 ```r
-reviews <- commons::read_trajectory_reviews(
+reviews <- commons::trajectory_reviews_read(
   Sys.getenv("COMMONS_REVIEW_FILE", "commons-review.jsonl"),
   trajectories
 )

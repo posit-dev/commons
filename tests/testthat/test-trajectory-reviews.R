@@ -1,10 +1,10 @@
-test_that("read_trajectory_reviews returns notes and active flags", {
+test_that("trajectory_reviews_read returns notes and active flags", {
   turns <- list(
     ellmer::UserTurn("How many orders?"),
     ellmer::AssistantTurn("Six orders.")
   )
   trajectories <- list(conv1 = turns)
-  reviews <- read_trajectory_reviews(
+  reviews <- trajectory_reviews_read(
     test_path("fixtures", "review-v1.jsonl"),
     trajectories
   )
@@ -29,12 +29,12 @@ test_that("read_trajectory_reviews returns notes and active flags", {
   expect_equal(reviews[[1]]$turns, turns)
 })
 
-test_that("read_trajectory_reviews reads legacy records", {
+test_that("trajectory_reviews_read reads legacy records", {
   review_file <- withr::local_tempfile(
     lines = '{"time":"2026-07-31T08:02:00-0700","conversation":"conv1","exchange":1,"action":"note","note":"Legacy note."}'
   )
 
-  reviews <- read_trajectory_reviews(review_file)
+  reviews <- trajectory_reviews_read(review_file)
 
   expect_equal(
     reviews[[1]][c("action", "note")],

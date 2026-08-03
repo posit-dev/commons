@@ -1,7 +1,7 @@
-#' View commons trajectories
+#' Review commons trajectories
 #'
 #' @description
-#' `view_trajectories()` launches a Shiny app for browsing conversation
+#' `trajectory_review()` launches a Shiny app for browsing conversation
 #' trajectories read with [read_trajectories()]. The app charts each trust
 #' level's share of answers over time—binned by day, week, or month, using
 #' the finest unit the volume of answers supports—alongside a list of
@@ -18,7 +18,7 @@
 #' New review records use schema version 1 and include a unique event id, UTC
 #' timestamp, reviewer username, trajectory source, conversation id, optional
 #' exchange number, action, and optional note. Exchange-level records also
-#' snapshot the question and trust tag. [read_trajectory_reviews()] reduces
+#' snapshot the question and trust tag. [trajectory_reviews_read()] reduces
 #' the event log to its active flags and notes and can join them back to the
 #' reviewed turns.
 #'
@@ -44,24 +44,24 @@
 #'   reopens. Defaults to `COMMONS_REVIEW_FILE` when set.
 #'
 #' @details
-#' A single viewer app writes all of its review events to `review_file`. For a
+#' A single reviewer app writes all of its review events to `review_file`. For a
 #' deployed app, point `COMMONS_REVIEW_FILE` at persistent storage: files in a
 #' Posit Connect app's working directory are replaced on redeployment.
 #' File-backed review apps should use one Connect process because separate
 #' processes do not coordinate file writes or in-memory review state.
 #'
-#' @return A [shiny::shinyApp()] object. Calling `view_trajectories()` at the
-#'   console launches the viewer; the result can also be served as the last
+#' @return A [shiny::shinyApp()] object. Calling `trajectory_review()` at the
+#'   console launches the reviewer; the result can also be served as the last
 #'   expression of an `app.R`.
 #'
 #' @examples
 #' \dontrun{
-#' view_trajectories()
+#' trajectory_review()
 #'
-#' view_trajectories(read_trajectories(from = "2026-07-01"))
+#' trajectory_review(read_trajectories(from = "2026-07-01"))
 #' }
 #' @export
-view_trajectories <- function(
+trajectory_review <- function(
   trajectories = read_trajectories(),
   review_file = Sys.getenv(
     "COMMONS_REVIEW_FILE",
@@ -88,8 +88,8 @@ check_viewer_packages <- function(call = rlang::caller_env()) {
   if (length(missing)) {
     cli::cli_abort(
       c(
-        "{.fn view_trajectories} requires missing package{?s}: {.pkg {missing}}.",
-        i = "Install {.pkg {missing}} to use the trajectory viewer."
+        "{.fn trajectory_review} requires missing package{?s}: {.pkg {missing}}.",
+        i = "Install {.pkg {missing}} to use the trajectory reviewer."
       ),
       call = call
     )

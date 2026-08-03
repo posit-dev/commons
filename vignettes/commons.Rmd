@@ -324,11 +324,11 @@ Note that a colleague whose Connect *account* role is viewer cannot read traject
 
 Read logged trajectories back with `read_trajectories()`. With no arguments, it reads this content's traces when running on Connect, the deployed content's traces when run in a project that's been deployed with rsconnect (set `CONNECT_API_KEY`), and local trace files otherwise.
 
-Review trajectories interactively with `view_trajectories()`:
+Review trajectories interactively with `trajectory_review()`:
 
 ```r
 trajectories <- read_trajectories()
-view_trajectories(trajectories)
+trajectory_review(trajectories)
 ```
 
 The reviewer appends every flag, unflag, and note to one JSONL review file. It
@@ -340,12 +340,12 @@ there is no authenticated user), the trajectory source, and the reviewed
 conversation or exchange. Exchange reviews also snapshot the question and
 trust tag.
 
-Use `read_trajectory_reviews()` to ingest the file. It removes superseded
+Use `trajectory_reviews_read()` to ingest the file. It removes superseded
 flag/unflag events and can join each active flag and note to its trajectory
 turns:
 
 ```r
-reviews <- read_trajectory_reviews(
+reviews <- trajectory_reviews_read(
   trajectories = trajectories
 )
 ```
@@ -358,7 +358,7 @@ library(commons)
 
 source <- Sys.getenv("COMMONS_TRAJECTORY_SOURCE")
 trajectories <- read_trajectories(source)
-view_trajectories(trajectories)
+trajectory_review(trajectories)
 ```
 
 Set `COMMONS_TRAJECTORY_SOURCE` to the agent content's GUID or URL. Set

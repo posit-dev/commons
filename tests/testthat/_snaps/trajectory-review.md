@@ -1,4 +1,4 @@
-# check_trajectories accepts empty trajectories and rejects other shapes
+# trajectory reviewer accepts empty trajectories and rejects other shapes
 
     Code
       check_trajectories("nope")
