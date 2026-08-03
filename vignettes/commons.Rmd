@@ -277,32 +277,49 @@ file.copy(
   "system-prompt.md"
 )
 ```
-commons appends documentation of the available tables and data dictionaries to the prompt itself, so the file needn't describe them.
-Then interpolate your copy and pass the result to `system_prompt`:
+
+The file contains the full potential prompt: the base role, the data workflow, available tables, dictionary context, and governed definitions. Pass your copy's path to `system_prompt`:
 
 ```r
 agent <- commons(
   # ...
-  system_prompt = ellmer::interpolate_file(
-    "system-prompt.md",
-    date = Sys.Date()
-  )
+  system_prompt = "system-prompt.md"
 )
 ```
 
+commons renders the file after it knows the agent's composition. Conditional sections use HTML-comment directives:
 
-`{{keyword}}` tokens in the file are filled by [`ellmer::interpolate_file()`](https://ellmer.tidyverse.org/reference/interpolate.html)'s arguments when the agent is created. The packaged prompt uses one keyword, `{{date}}`. Continue passing in `date = Sys.Date()` as long as your prompt copy retains the `{{date}}` keyword, and supply values for any additional keywords that you added to your prompt:
-
-```r
-agent <- commons(
-  # ...
-  system_prompt = ellmer::interpolate_file(
-    "system-prompt.md",
-    date = Sys.Date(),
-    fiscal_year_start = "February"
-  )
-)
+```md
+<!-- commons:if has_measures -->
+Prefer a measure's own arguments when they can answer the question directly.
+<!-- commons:endif -->
 ```
+
+The packaged template uses these conditions:
+
+- `has_governed_operations`
+- `has_measures`
+- `has_metrics`
+- `has_definitions`
+- `has_search_pool`
+- `has_multiple_sources`
+- `has_dictionary_context`
+- `has_glossary_context`
+- `definitions_complete`
+
+It interpolates computed runtime values with namespaced tokens such as:
+
+```md
+Today's date is {{ data.date }}.
+
+# Available tables
+
+{{ data.tables }}
+```
+
+The available values are `date`, `tables`, `dictionary_context`, `glossary_context`, and `definition_index`. Other `{{...}}` text is left unchanged, including governed-definition tokens such as `{{name}}`. Custom template values are not currently supported.
+
+The template is fully editable: removing a conditional section or interpolation removes it from the rendered prompt. commons does not append hidden prompt content afterward. Malformed directives and references to unavailable runtime values fail when the agent is created.
 
 ## Logging trajectories
 

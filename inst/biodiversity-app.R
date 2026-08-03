@@ -84,12 +84,17 @@ greeting <- paste(
 )
 
 system_prompt <- paste(
-  ellmer::interpolate_file(
+  readLines(
     system.file("prompts/system-prompt.md", package = "commons"),
-    date = Sys.Date()
+    warn = FALSE
   ),
+  collapse = "\n"
+)
+system_prompt <- paste(
+  system_prompt,
   "When asked which sandbox backend is active, use run_r to evaluate
-  getOption(\"commons.sandbox_backend\"). Report that value directly."
+  getOption(\"commons.sandbox_backend\"). Report that value directly.",
+  sep = "\n\n"
 )
 
 ui <- page_fillable(
