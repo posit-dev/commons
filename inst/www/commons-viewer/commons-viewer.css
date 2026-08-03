@@ -290,7 +290,7 @@
 }
 
 .commons-viewer-exchange-message {
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   cursor: pointer;
   position: relative;
   transition: background-color 0.15s ease;
@@ -322,9 +322,12 @@
 
 /* Selected (9%) sits above hover (5%): over a whole exchange even a light
  * wash carries plenty of weight. */
+/* Rounder than the sidebar entries' 0.5rem: on a box this large a small
+ * radius reads as square, so the radius scales with the box to match the
+ * sidebar's perceived roundness. */
 .commons-viewer-exchange-highlight {
   background: color-mix(in srgb, #007bc2 9%, transparent);
-  border-radius: 0.5rem;
+  border-radius: 1rem;
   display: none;
   left: 0;
   pointer-events: none;
