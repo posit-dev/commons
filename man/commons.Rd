@@ -49,9 +49,26 @@ commons(
 
 commons renders conditional sections from the agent's composition and
 interpolates runtime values such as its table roster. Custom templates
-may edit, remove, or reposition any section, but only commons-provided
-template values are supported. Expressions inside \code{{{ }}} are evaluated
-as trusted R code when the agent is created.}
+may edit, remove, or reposition any section. To add your own substitutions,
+first render them with
+\href{https://glue.tidyverse.org/reference/glue.html}{glue::glue_file()} using
+different delimiters:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{system_prompt <- glue::glue_file(
+  "system-prompt.md",
+  organization = "Acme",
+  .open = "\{[",
+  .close = "]\}"
+)
+commons(
+  # ...
+  system_prompt = as.character(system_prompt)
+)
+}\if{html}{\out{</div>}}
+
+A \verb{\{[organization]\}} expression is resolved by glue, while commons'
+\code{{{date}}} and other template expressions remain untouched. Expressions
+inside \code{{{ }}} are evaluated as trusted R code when the agent is created.}
 
 \item{network}{Whether the \code{run_r} session has network access. One of
 \code{"none"} (the default) or \code{"full"}. The session requires Linux or macOS
