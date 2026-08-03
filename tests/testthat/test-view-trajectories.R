@@ -416,66 +416,111 @@ test_that("flags and notes append to and restore from the review file", {
   )
 })
 
-test_that("trust_timeline_days aggregates question tags by day", {
-  questions <- list(
-    list(tag = "A", last_active = as.POSIXct("2026-07-01 09:00:00")),
-    list(tag = "C", last_active = as.POSIXct("2026-07-01 15:00:00")),
-    list(tag = NA_character_, last_active = as.POSIXct("2026-07-03 10:00:00")),
-    list(tag = "B", last_active = as.POSIXct(NA))
+timeline_question <- function(tag, date) {
+  list(tag = tag, last_active = as.POSIXct(paste(date, "09:00:00")))
+}
+
+test_that("trust_timeline_bins aggregates question tags by day at volume", {
+  questions <- c(
+    lapply(c("A", "A", "A", "A", "C"), timeline_question, "2026-07-01"),
+    lapply(c("A", "C", "C", "C", NA), timeline_question, "2026-07-03"),
+    list(list(tag = "B", last_active = as.POSIXct(NA)))
   )
 
-  days <- trust_timeline_days(questions)
+  binned <- trust_timeline_bins(questions)
+  bins <- binned$bins
 
   # The undated question has no x position, so only two days chart.
-  expect_length(days, 2)
-  expect_equal(days[[1]]$date, "2026-07-01")
-  expect_equal(days[[1]]$n, 2)
-  expect_equal(days[[1]]$counts, list(A = 1L, B = 0L, C = 1L, none = 0L))
-  expect_equal(days[[2]]$counts, list(A = 0L, B = 0L, C = 0L, none = 1L))
+  expect_equal(binned$unit, "day")
+  expect_length(bins, 2)
+  expect_equal(bins[[1]]$date, "2026-07-01")
+  expect_equal(bins[[1]]$n, 5)
+  expect_equal(bins[[1]]$counts, list(A = 4L, B = 0L, C = 1L, none = 0L))
+  expect_equal(bins[[2]]$counts, list(A = 1L, B = 0L, C = 3L, none = 1L))
 
-  windowed <- trust_timeline_days(
+  windowed <- trust_timeline_bins(
     questions,
     as.Date(c("2026-07-02", "2026-07-04"))
   )
-  expect_length(windowed, 1)
-  expect_equal(windowed[[1]]$date, "2026-07-03")
+  expect_length(windowed$bins, 1)
+  expect_equal(windowed$bins[[1]]$date, "2026-07-03")
+})
+
+test_that("trust_timeline_bins widens bins until they hold enough answers", {
+  # Two answers a day averages under five per day but over five per
+  # Monday-start week; Thursday July 2, 2026 through Wednesday July 8
+  # spans the weeks of Monday June 29 and Monday July 6.
+  weekly <- unlist(
+    lapply(as.character(seq(as.Date("2026-07-02"), by = 1, length.out = 7)), {
+      function(date) lapply(c("A", "C"), timeline_question, date)
+    }),
+    recursive = FALSE
+  )
+  binned <- trust_timeline_bins(weekly)
+  expect_equal(binned$unit, "week")
+  expect_length(binned$bins, 2)
+  expect_equal(binned$bins[[1]]$date, "2026-06-29")
+  expect_equal(binned$bins[[1]]$label, "Week of Jun 29, 2026")
+  expect_equal(binned$bins[[1]]$n, 8)
+
+  # One answer a week doesn't fill weeks either, so bins become months.
+  monthly <- lapply(
+    as.character(seq(as.Date("2026-06-01"), by = 7, length.out = 9)),
+    timeline_question,
+    tag = "A"
+  )
+  binned <- trust_timeline_bins(monthly)
+  expect_equal(binned$unit, "month")
+  expect_equal(
+    vapply(binned$bins, function(bin) bin$label, character(1)),
+    c("June 2026", "July 2026")
+  )
+
+  expect_equal(trust_timeline_bins(list())$unit, "day")
+  expect_length(trust_timeline_bins(list())$bins, 0)
 })
 
 test_that("trust_timeline renders a chart and its table view", {
   skip_if_not_installed("htmltools")
   skip_if_not_installed("plotly")
 
-  empty <- as.character(trust_timeline(list()))
+  empty <- as.character(trust_timeline(trust_timeline_bins(list())))
   expect_match(empty, "No dated questions")
 
-  days <- trust_timeline_days(list(
-    list(tag = "A", last_active = as.POSIXct("2026-07-01 09:00:00")),
-    list(tag = "A", last_active = as.POSIXct("2026-07-02 09:00:00")),
-    list(tag = "C", last_active = as.POSIXct("2026-07-02 16:00:00"))
+  binned <- trust_timeline_bins(c(
+    lapply(rep("A", 5), timeline_question, "2026-07-01"),
+    lapply(c("A", "A", "A", "C", "C"), timeline_question, "2026-07-02")
   ))
+  bins <- binned$bins
 
-  # One stacked trace per trust level, sharing each day's answers out as
-  # percentages.
-  traces <- plotly::plotly_build(timeline_plot(days))$x$data
+  # One stacked trace per trust level, sharing each bin's answers out as
+  # percentages; the top trace draws the whole hover card, with the bin's
+  # n up beside the date, and the others skip hover.
+  traces <- plotly::plotly_build(timeline_plot(bins, binned$unit))$x$data
   expect_length(traces, length(viewer_levels))
   expect_equal(
     vapply(traces, function(trace) trace$name, character(1)),
     unname(viewer_levels)
   )
-  expect_equal(as.numeric(traces[[1]]$y), c(100, 50))
-  expect_equal(as.numeric(traces[[3]]$y), c(0, 50))
+  expect_equal(as.numeric(traces[[1]]$y), c(100, 60))
+  expect_equal(as.numeric(traces[[3]]$y), c(0, 40))
+  top <- traces[[length(traces)]]
+  expect_true(all(top$hovertemplate == "%{text}<extra></extra>"))
+  expect_match(top$text[[1]], "Jul  1, 2026</b>  (n = 5)", fixed = TRUE)
+  expect_match(top$text[[2]], "<b>60%</b> Verified", fixed = TRUE)
+  expect_true(all(traces[[1]]$hoverinfo == "skip"))
 
-  # A single dated day charts as a stacked column instead of an area.
-  single <- plotly::plotly_build(timeline_plot(days[1]))$x$data
+  # A single dated bin charts as a stacked column instead of an area.
+  single <- plotly::plotly_build(timeline_plot(bins[1], binned$unit))$x$data
   expect_equal(single[[1]]$type, "bar")
 
-  html <- as.character(trust_timeline(days))
+  html <- as.character(trust_timeline(binned))
   # The table view carries every share the tooltip shows.
   expect_match(html, "commons-viewer-sr-only")
-  expect_match(html, "50% (1)", fixed = TRUE)
+  expect_match(html, "60% (3)", fixed = TRUE)
 })
 
-test_that("the timeline legend carries each level's window-wide rate", {
+test_that("the timeline legend tucks each level's rate into its tooltip", {
   skip_if_not_installed("htmltools")
 
   legend <- as.character(timeline_legend(
@@ -483,8 +528,8 @@ test_that("the timeline legend carries each level's window-wide rate", {
   ))
 
   expect_match(legend, "Verified")
-  expect_match(legend, "<strong>25%</strong>", fixed = TRUE)
-  expect_match(legend, "1 of 4 answers")
+  expect_match(legend, "1 of 4 answers (25%)", fixed = TRUE)
+  expect_no_match(legend, "<strong>", fixed = TRUE)
 
   empty <- as.character(timeline_legend(hit_rate(list())))
   expect_match(empty, "—")

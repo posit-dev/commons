@@ -1180,36 +1180,33 @@ trust_timeline <- function(binned) {
 
 # A 100%-stacked area chart of each bin's trust-level shares -- one stacked
 # column when only one bin is dated, since a single point can't make an
-# area. Unified hover fires anywhere in the fills and mirrors the app's
-# tooltip styling: a bin header, then a swatch row per level with the
-# share in bold, closing with the bin's answer count so a reader can judge
-# how much weight the shares deserve. The card header's legend names the
-# levels, so the widget's own legend stays off.
+# area. The tooltip is one card drawn wholly from per-bin text: unified
+# hover's date header can't carry the bin's n beside the date, so the top
+# trace renders header and swatch rows itself and the traces beneath skip
+# hover. The card header's legend names the levels, so the widget's own
+# legend stays off.
 timeline_plot <- function(bins, unit) {
   dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
   n <- vapply(bins, function(bin) bin$n, numeric(1))
+  tooltips <- vapply(bins, timeline_tooltip, character(1))
   plot <- plotly::plot_ly(height = 176)
 
   for (k in seq_along(viewer_levels)) {
     key <- names(viewer_levels)[[k]]
     counts <- vapply(bins, function(bin) bin$counts[[key]], numeric(1))
     shares <- 100 * counts / n
-    # Unified hover lists stacked traces top band first, so the sample
-    # size rides the baseline trace: it reads as the tooltip's last line.
-    hovertemplate <- paste0(
-      "<b>%{y:.0f}%</b> ",
-      viewer_levels[[key]],
-      if (k == 1) "<br>(n = %{customdata})",
-      "<extra></extra>"
-    )
+    top <- k == length(viewer_levels)
     plot <- if (length(bins) == 1) {
       plotly::add_bars(
         plot,
         x = dates,
         y = shares,
-        customdata = n,
         name = unname(viewer_levels[[key]]),
-        hovertemplate = hovertemplate,
+        text = if (top) tooltips,
+        # Bars would print their text on the bar itself.
+        textposition = "none",
+        hovertemplate = if (top) "%{text}<extra></extra>",
+        hoverinfo = if (!top) "skip",
         marker = list(color = viewer_level_colors[[key]]),
         # About two hours wide, in the date axis's milliseconds; with the
         # axis pinned a day either side, a column rather than a fill.
@@ -1220,9 +1217,10 @@ timeline_plot <- function(bins, unit) {
         plot,
         x = dates,
         y = shares,
-        customdata = n,
         name = unname(viewer_levels[[key]]),
-        hovertemplate = hovertemplate,
+        text = if (top) tooltips,
+        hovertemplate = if (top) "%{text}<extra></extra>",
+        hoverinfo = if (!top) "skip",
         type = "scatter",
         mode = "lines",
         stackgroup = "levels",
@@ -1232,7 +1230,7 @@ timeline_plot <- function(bins, unit) {
         # edge and draws nothing.
         line = list(
           color = "#ffffff",
-          width = if (k == length(viewer_levels)) 0 else 2
+          width = if (top) 0 else 2
         )
       )
     }
@@ -1251,8 +1249,12 @@ timeline_plot <- function(bins, unit) {
   plot <- plotly::layout(
     plot,
     barmode = "stack",
-    hovermode = "x unified",
+    # Hover snaps to the nearest bin's x with no pixel cutoff, so the one
+    # text-bearing trace fires anywhere in the fills, as unified hover did.
+    hovermode = "x",
+    hoverdistance = -1,
     hoverlabel = list(
+      align = "left",
       bgcolor = "#ffffff",
       bordercolor = "#dee2e6",
       font = list(size = 12, color = "#212529")
@@ -1267,17 +1269,9 @@ timeline_plot <- function(bins, unit) {
       type = "date",
       showgrid = FALSE,
       fixedrange = TRUE,
-      # Unified hover draws a spike line down to the axis by default; the
+      # Hovering draws a spike line down to the axis by default; the
       # tooltip alone is enough.
       showspikes = FALSE,
-      # d3 time formats pass literals through, so a week bin's header
-      # names itself ("Week of Jul 20, 2026").
-      hoverformat = switch(
-        unit,
-        day = "%b %e, %Y",
-        week = "Week of %b %e, %Y",
-        month = "%B %Y"
-      ),
       tickvals = as.list(format(dates[ticks])),
       ticktext = as.list(format(
         dates[ticks],
@@ -1298,6 +1292,29 @@ timeline_plot <- function(bins, unit) {
     )
   )
   plotly::config(plot, displayModeBar = FALSE, responsive = TRUE)
+}
+
+# One bin's hover card, in plotly's pseudo-HTML: the bin and its answer
+# count on the header line, then a swatch row per level in legend order.
+# The swatches are colored text glyphs -- plotly hover text supports
+# color via span styles, but no real markup.
+timeline_tooltip <- function(bin) {
+  rows <- vapply(
+    names(viewer_levels),
+    function(key) {
+      sprintf(
+        "<span style=\"color: %s\">\u25a0</span> <b>%s</b> %s",
+        viewer_level_colors[[key]],
+        rate_percent(bin$counts[[key]], bin$n),
+        viewer_levels[[key]]
+      )
+    },
+    character(1)
+  )
+  paste(
+    c(sprintf("<b>%s</b>  (n = %d)", bin$label, bin$n), rows),
+    collapse = "<br>"
+  )
 }
 
 timeline_table <- function(bins) {
