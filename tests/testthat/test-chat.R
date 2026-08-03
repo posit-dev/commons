@@ -74,6 +74,7 @@ test_that("chat UI preserves shinychat's top-level fill container", {
   deps <- htmltools::findDependencies(ui)
 
   expect_equal(ui$name, "shiny-chat-container")
+  expect_identical(ui$attribs[["icon-assistant"]], "")
   # shinychat controls the width property's name (it moved from `width` to a
   # `--_chat-width` variable in 0.5.0); commons only cares that arguments in
   # `...` reach chat_ui()'s formals and the default width cap is intact.

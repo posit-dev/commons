@@ -14,23 +14,6 @@ shiny-chat-container {
   padding: 0.65rem 1.1rem;
 }
 
-/* No assistant avatar; replies sit flush with the message column */
-.shiny-chat-message {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.shiny-chat-message > .message-icon {
-  display: none;
-}
-
-/* ...except while the reply has no content yet, where the avatar slot
- * holds shinychat's pulsing-dots icon — the only progress indication
- * between submitting and the first streamed content. */
-.shiny-chat-message:has(> .shiny-chat-message-content:empty) > .message-icon {
-  border: 0;
-  display: grid;
-}
-
 .shiny-chat-input .tiptap {
   border-color: var(--bs-border-color, #dee2e6);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);

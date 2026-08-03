@@ -40,7 +40,7 @@
 #' @export
 commons_ui <- function(id, ...) {
   check_chat_packages()
-  ui <- shinychat::chat_ui(id, ...)
+  ui <- shinychat::chat_ui(id, icon_assistant = htmltools::HTML(""), ...)
   htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
 }
 
