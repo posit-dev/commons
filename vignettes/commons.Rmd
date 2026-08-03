@@ -287,12 +287,12 @@ agent <- commons(
 )
 ```
 
-commons renders the file after it knows the agent's composition. Conditional sections use HTML-comment directives:
+commons renders the file after it knows the agent's composition. Conditional sections use `if` directives:
 
 ```md
-<!-- commons:if has_measures -->
+{{#if has_measures}}
 Prefer a measure's own arguments when they can answer the question directly.
-<!-- commons:endif -->
+{{/if}}
 ```
 
 The packaged template uses these conditions:

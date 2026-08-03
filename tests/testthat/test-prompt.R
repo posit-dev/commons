@@ -1,16 +1,16 @@
 test_that("prompt templates select conditional sections", {
   template <- paste(
     "<!-- source-only note -->",
-    "<!-- commons:if enabled -->",
+    "{{#if enabled}}",
     "Enabled",
-    "<!-- commons:if nested -->",
+    "{{#if nested}}",
     "Nested",
-    "<!-- commons:else -->",
+    "{{else}}",
     "Not nested",
-    "<!-- commons:endif -->",
-    "<!-- commons:else -->",
+    "{{/if}}",
+    "{{else}}",
     "Disabled",
-    "<!-- commons:endif -->",
+    "{{/if}}",
     sep = "\n"
   )
 
@@ -37,13 +37,13 @@ test_that("prompt templates interpolate only namespaced runtime data", {
 test_that("prompt templates validate their structure and values", {
   expect_error(
     render_system_prompt(
-      "<!-- commons:if unknown -->\nx\n<!-- commons:endif -->",
+      "{{#if unknown}}\nx\n{{/if}}",
       list()
     ),
     "Unknown system-prompt condition"
   )
   expect_error(
-    render_system_prompt("<!-- commons:if yes -->\nx", list(yes = TRUE)),
+    render_system_prompt("{{#if yes}}\nx", list(yes = TRUE)),
     "unclosed conditional block"
   )
   expect_error(
@@ -51,19 +51,20 @@ test_that("prompt templates validate their structure and values", {
     "Unknown system-prompt interpolation"
   )
   expect_error(
-    render_system_prompt("<!-- commons:nope -->", list()),
-    "Malformed commons prompt directive"
+    render_system_prompt("{{#if}}", list()),
+    "Malformed system-prompt directive"
   )
   expect_error(
-    render_system_prompt("Text <!-- commons:if yes -->", list(yes = TRUE)),
-    "Malformed commons prompt directive"
+    render_system_prompt("Text {{#if yes}}", list(yes = TRUE)),
+    "Malformed system-prompt directive"
   )
 })
 
 test_that("the packaged prompt leaves no template markup", {
   prompt <- test_agent()$get_system_prompt()
 
-  expect_no_match(prompt, "commons:", fixed = TRUE)
+  expect_no_match(prompt, "{{#if", fixed = TRUE)
+  expect_no_match(prompt, "{{/if", fixed = TRUE)
   expect_no_match(prompt, "<!--", fixed = TRUE)
   expect_no_match(prompt, "{{ data.", fixed = TRUE)
 })

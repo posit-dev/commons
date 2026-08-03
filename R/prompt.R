@@ -61,17 +61,17 @@ render_system_prompt <- function(
       next
     }
 
-    if (grepl("^\\s*<!--\\s*commons:else\\s*-->\\s*$", line, perl = TRUE)) {
+    if (grepl("^\\s*\\{\\{else\\}\\}\\s*$", line, perl = TRUE)) {
       if (length(stack) == 0) {
         cli::cli_abort(
-          "Unexpected {.code commons:else} on line {i}.",
+          "Unexpected else directive on line {i}.",
           call = call
         )
       }
       frame <- stack[[length(stack)]]
       if (frame$has_else) {
         cli::cli_abort(
-          "Duplicate {.code commons:else} on line {i}.",
+          "Duplicate else directive on line {i}.",
           call = call
         )
       }
@@ -81,10 +81,10 @@ render_system_prompt <- function(
       next
     }
 
-    if (grepl("^\\s*<!--\\s*commons:endif\\s*-->\\s*$", line, perl = TRUE)) {
+    if (grepl("^\\s*\\{\\{/if\\}\\}\\s*$", line, perl = TRUE)) {
       if (length(stack) == 0) {
         cli::cli_abort(
-          "Unexpected {.code commons:endif} on line {i}.",
+          "Unexpected closing if directive on line {i}.",
           call = call
         )
       }
@@ -94,9 +94,9 @@ render_system_prompt <- function(
       next
     }
 
-    if (grepl("<!--\\s*commons:", line, perl = TRUE)) {
+    if (grepl("\\{\\{\\s*[#/]", line, perl = TRUE)) {
       cli::cli_abort(
-        "Malformed commons prompt directive on line {i}: {.code {trimws(line)}}.",
+        "Malformed system-prompt directive on line {i}: {.code {trimws(line)}}.",
         call = call
       )
     }
@@ -122,7 +122,7 @@ render_system_prompt <- function(
 
 prompt_if_directive <- function(line) {
   match <- regexec(
-    "^\\s*<!--\\s*commons:if\\s+([A-Za-z][A-Za-z0-9_]*)\\s*-->\\s*$",
+    "^\\s*\\{\\{#if\\s+([A-Za-z][A-Za-z0-9_]*)\\s*\\}\\}\\s*$",
     line,
     perl = TRUE
   )

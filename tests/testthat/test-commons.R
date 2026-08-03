@@ -135,9 +135,9 @@ test_that("a custom system-prompt template replaces the packaged one", {
   writeLines(
     c(
       "You answer questions about this data.",
-      "<!-- commons:if has_measures -->",
+      "{{#if has_measures}}",
       "Use registered measures first.",
-      "<!-- commons:endif -->",
+      "{{/if}}",
       "Tables:",
       "{{ data.tables }}"
     ),
