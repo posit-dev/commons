@@ -42,6 +42,17 @@ test_that("prompt templates validate their structure and values", {
   )
 })
 
+test_that("missing prompt paths are recognized", {
+  expect_error(check_system_prompt("missing-prompt.Rmd"), "does not exist")
+  expect_error(
+    check_system_prompt("missing-prompt.template"),
+    "does not exist"
+  )
+  expect_error(check_system_prompt("missing-dir/prompt"), "does not exist")
+  expect_no_error(check_system_prompt("You are a concise analyst."))
+  expect_no_error(check_system_prompt("Line one.\nLine two."))
+})
+
 test_that("the packaged prompt leaves no template markup", {
   prompt <- test_agent()$get_system_prompt()
 

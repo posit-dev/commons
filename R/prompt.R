@@ -71,9 +71,14 @@ read_system_prompt <- function(system_prompt) {
 }
 
 looks_like_prompt_path <- function(system_prompt) {
-  !grepl("\n", system_prompt, fixed = TRUE) &&
-    (grepl("\\.(md|txt)$", system_prompt) ||
-      (grepl("[/\\\\]", system_prompt) && dir.exists(dirname(system_prompt))))
+  if (grepl("\n", system_prompt, fixed = TRUE)) {
+    return(FALSE)
+  }
+
+  extension <- tolower(tools::file_ext(system_prompt))
+  grepl("[/\\\\]", system_prompt) ||
+    extension %in% c("md", "rmd", "txt", "prompt") ||
+    (nzchar(extension) && !grepl("[[:space:]]", system_prompt))
 }
 
 dictionary_context_text <- function(sources) {
