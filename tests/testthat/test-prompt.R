@@ -62,3 +62,9 @@ test_that("the packaged prompt leaves no template markup", {
   expect_no_match(prompt, "<!--", fixed = TRUE)
   expect_no_match(prompt, "{[date]}", fixed = TRUE)
 })
+
+test_that("the packaged prompt omits run_r result handles", {
+  prompt <- test_agent()$get_system_prompt()
+
+  expect_no_match(prompt, "r1", fixed = TRUE)
+})

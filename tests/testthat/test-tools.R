@@ -52,7 +52,7 @@ test_that("call_measure_tool registers tabular output as a handle", {
   res <- call_measure_tool(registry, "orders", "{}", handles = store)
 
   expect_equal(res@extra$commons_tag, "A")
-  expect_match(res@value, "Result stored as `r1`")
+  expect_match(res@value, "Available to `run_r` as `r1`", fixed = TRUE)
   expect_match(res@value, "A data frame with 6 rows and 5 columns")
   expect_match(res@value, "revenue: numeric")
   expect_equal(get_handle(store, "r1"), test_sales())
@@ -64,7 +64,7 @@ test_that("call_measure_tool registers scalar output as a handle", {
 
   res <- call_measure_tool(registry, "order_count", "{}", handles = store)
 
-  expect_match(res@value, "Result stored as `r1`")
+  expect_match(res@value, "Available to `run_r` as `r1`", fixed = TRUE)
   expect_equal(get_handle(store, "r1"), 6L)
 })
 
@@ -106,7 +106,7 @@ test_that("run_sql_tool registers its result as a handle", {
     handles = store
   )
 
-  expect_match(res@value, "Result stored as `r1`")
+  expect_match(res@value, "Available to `run_r` as `r1`", fixed = TRUE)
   expect_equal(nrow(get_handle(store, "r1")), 3)
 })
 

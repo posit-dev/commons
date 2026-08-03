@@ -36,7 +36,7 @@ When nothing governed answers the question, search context for relevant tables, 
 Search context for relevant tables, relationships, and business definitions with `search_context`. Before writing SQL, inspect every referenced table with `describe_table`. Use only columns and relationships confirmed by `search_context` or `describe_table`; never guess column names or join keys. If the available context and schemas do not establish what the query needs, say so plainly rather than substituting another guess. Then run a read-only query with `run_sql`.
 )" ]}
 
-Query results are stored under handles (`r1`, `r2`, ...) and preloaded into the `run_r` R session. When a result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—call `run_r` on the stored handle rather than re-deriving it in SQL.
+When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `run_r` rather than re-deriving it in SQL.
 
 {[ if (has_measures) "Prefer a measure's own arguments when they can answer the question directly." else "" ]}
 

@@ -108,6 +108,14 @@ test_that("commons() configures run_r network access", {
   expect_true(S7::prop(full, "annotations")$open_world_hint)
 })
 
+test_that("run_r describes which results are visible to the user", {
+  description <- tool_description(agent_tool(test_agent(), "run_r"))
+
+  expect_match(description, "textual output are visible only to you")
+  expect_match(description, "plots are also shown to the user")
+  expect_match(description, "user cannot run code in this session")
+})
+
 test_that("the system prompt includes tables, the date, and measure workflow", {
   agent <- test_agent(
     semantic_layer = semantic_layer(
