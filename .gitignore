@@ -12,3 +12,4 @@ src/*.dll
 rsconnect/
 CLAUDE.local.md
 AGENTS.override.md
+inst/hex/output
