@@ -593,14 +593,19 @@ test_that("trust_timeline renders a chart and its table view", {
   expect_equal(as.numeric(traces[[1]]$y), c(100, 60))
   expect_equal(as.numeric(traces[[3]]$y), c(0, 40))
   for (trace in traces) {
-    expect_true(all(trace$hovertemplate == "%{text}<extra></extra>"))
-    expect_match(trace$text[[1]], "Jul  1, 2026</b>  (n = 5)", fixed = TRUE)
-    expect_match(trace$text[[2]], "<b>60%</b> Verified", fixed = TRUE)
+    expect_match(trace$hovertemplate[[1]], "Jul  1, 2026</b>  (n = 5)", fixed = TRUE)
+    expect_match(trace$hovertemplate[[2]], "<b>60%</b> Verified", fixed = TRUE)
+    expect_match(trace$hovertemplate[[2]], "<extra></extra>", fixed = TRUE)
   }
 
-  # A single dated bin charts as a stacked column instead of an area.
+  # A single dated bin charts as a stacked column instead of an area. Its
+  # card is the hovertemplate's own content -- a lone bin's length-1
+  # per-point attributes unbox to scalars in the widget JSON, so a
+  # %{text} reference would render unsubstituted.
   single <- plotly::plotly_build(timeline_plot(bins[1], binned$unit))$x$data
   expect_equal(single[[1]]$type, "bar")
+  expect_match(single[[1]]$hovertemplate[[1]], "(n = 5)", fixed = TRUE)
+  expect_no_match(single[[1]]$hovertemplate[[1]], "%{text}", fixed = TRUE)
 
   html <- as.character(trust_timeline(binned))
   # The table view carries every share the tooltip shows.

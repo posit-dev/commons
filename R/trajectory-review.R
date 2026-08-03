@@ -1292,7 +1292,13 @@ trust_timeline <- function(binned) {
 timeline_plot <- function(bins, unit) {
   dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
   n <- vapply(bins, function(bin) bin$n, numeric(1))
-  tooltips <- vapply(bins, timeline_tooltip, character(1))
+  # The card's HTML rides in the hovertemplate itself rather than behind a
+  # %{text} reference: a lone bin's length-1 text unboxes to a scalar in
+  # the widget JSON, which plotly.js leaves unsubstituted.
+  tooltips <- paste0(
+    vapply(bins, timeline_tooltip, character(1)),
+    "<extra></extra>"
+  )
   plot <- plotly::plot_ly(height = 176)
 
   for (k in seq_along(viewer_levels)) {
@@ -1305,10 +1311,7 @@ timeline_plot <- function(bins, unit) {
         x = dates,
         y = shares,
         name = unname(viewer_levels[[key]]),
-        text = tooltips,
-        # Bars would print their text on the bar itself.
-        textposition = "none",
-        hovertemplate = "%{text}<extra></extra>",
+        hovertemplate = tooltips,
         marker = list(color = viewer_level_colors[[key]]),
         # About two hours wide, in the date axis's milliseconds; with the
         # axis pinned a day either side, a column rather than a fill.
@@ -1320,8 +1323,7 @@ timeline_plot <- function(bins, unit) {
         x = dates,
         y = shares,
         name = unname(viewer_levels[[key]]),
-        text = tooltips,
-        hovertemplate = "%{text}<extra></extra>",
+        hovertemplate = tooltips,
         # Anchor to the boundary lines' points; fills would hover at a
         # polygon centroid instead.
         hoveron = "points",
