@@ -830,8 +830,8 @@ review_bar_notes <- function(key, flagged, notes) {
     if (whole_conversation) {
       htmltools::div(
         class = "commons-viewer-review-prompt",
-        "Notes here cover the whole conversation. Select a question or
-         answer in the transcript to note that exchange."
+        "Notes here apply to the entire conversation. Select a question or
+         answer in the transcript to add a note specific to that exchange."
       )
     },
     review_note_list(notes),
