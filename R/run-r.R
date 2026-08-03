@@ -12,13 +12,14 @@ tool_run_r <- function(private) {
       )
     },
     paste(
-      "Run R code in a sandboxed R session and see its output, including",
-      "rendered plots, which are also shown to the user.",
-      "The session persists across calls: variables you assign and packages",
+      "Run R code in your sandboxed R session to analyze results or render plots.",
+      "R code and textual output are visible only to you; rendered plots are",
+      "also shown to the user.",
+      "The user cannot run code in this session themselves.",
+      "Your session persists across calls: variables you assign and packages",
       "you load remain available.",
       cli::format_inline(
-        "Results from {handle_tools} are preloaded under their advertised
-         handles (r1, r2, ...)."
+        "Results from {handle_tools} are preloaded as variables (r1, r2, ...)."
       ),
       if (length(private$registry) > 0) {
         paste(
@@ -32,7 +33,6 @@ tool_run_r <- function(private) {
       "\n\nRules:",
       "\n- Work incrementally: each call should do one small, well-defined task.",
       "\n- Create at most one figure per call.",
-      "\n- Reference stored handles (r1, r2, ...) rather than re-deriving their data.",
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
       "\n- Return results implicitly (`x`, not `print(x)`) and prefer brief",
       "summaries (head(), summary()) over large outputs.",

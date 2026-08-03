@@ -347,34 +347,13 @@ abort_unknown_token <- function(token, defs, call) {
   )
 }
 
-# A name-first index, one line per table: the prompt's job is to put names in
-# reach, while depth arrives with each table's first-touch entry and via
-# search. Capped like the glossary so a huge roster degrades to search rather
-# than bloating every request.
-definitions_prompt_text <- function(registry, cap_chars = 4000) {
+definition_index_text <- function(registry, cap_chars = 4000) {
   index <- definition_index_lines(registry)
   if (length(index) == 0) {
     return("")
   }
   fits <- cumsum(nchar(index)) <= cap_chars
-  # Naming the roster complete saves the model a verification search.
-  status <- if (all(fits)) {
-    "This is the complete set of governed definitions."
-  } else {
-    "More definitions arrive with their tables' dictionary entries, via context search, and via search_pool."
-  }
-
-  paste0(
-    "\n\n# Governed definitions\n\n",
-    "Trusted expressions from the data dictionary, indexed here by table; ",
-    "each table's dictionary entry delivers its full definitions. Write ",
-    "them as `{{name}}` tokens anywhere in `run_sql` SQL (`{{table.name}}` ",
-    "when a name exists on several tables); each expands to its governed ",
-    "SQL before the query runs. Expansion can't add an alias, so write ",
-    "`SELECT {{name}} AS name`; metric expressions are already ",
-    "aggregates --- never wrap one in SUM() or another aggregate.\n\n",
-    paste(c(paste(index[fits], collapse = "\n"), status), collapse = "\n\n")
-  )
+  paste(index[fits], collapse = "\n")
 }
 
 definitions_overflow <- function(registry, cap_chars = 4000) {

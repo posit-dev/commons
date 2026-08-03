@@ -8,11 +8,10 @@ new_handle_store <- function() {
   store
 }
 
-# Store a tool result under the next handle id and return the text
-# advertising it to the model, or NULL when there's nothing to register (no
-# store, or a NULL value). The system prompt tells the model every
-# call_measure/run_sql result is stored, so non-tabular values (e.g. scalar
-# measure results) must be registered too.
+# Store a tool result under the next handle id and tell the model how to access
+# it from run_r, or return NULL when there's nothing to register (no store, or
+# a NULL value). Non-tabular values (e.g. scalar measure results) are available
+# for further derivation too.
 register_handle <- function(store, value, max_rows = 10000L) {
   if (is.null(store) || is.null(value)) {
     return(NULL)
@@ -21,7 +20,7 @@ register_handle <- function(store, value, max_rows = 10000L) {
     store$count <- store$count + 1L
     id <- paste0("r", store$count)
     assign(id, value, envir = store$values)
-    return(sprintf("Result stored as `%s`, available in your R session.", id))
+    return(sprintf("Available to `run_r` as `%s`.", id))
   }
 
   value <- as.data.frame(value)
@@ -40,7 +39,7 @@ register_handle <- function(store, value, max_rows = 10000L) {
     ""
   }
   paste0(
-    sprintf("Result stored as `%s`, available in your R session.%s\n", id, note),
+    sprintf("Available to `run_r` as `%s`.%s\n", id, note),
     as.character(ellmer::df_schema(value))
   )
 }

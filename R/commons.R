@@ -18,10 +18,10 @@
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param ... These dots are for future extensions and must be empty.
-#' @param system_prompt The agent's system prompt, as a single string. The
-#'   default interpolates the markdown prompt shipped with commons, filling
-#'   its `{{date}}` keyword. To customize the prompt, copy that file into
-#'   your project, edit freely, and interpolate it yourself:
+#' @param system_prompt The agent's system-prompt template, as a single string
+#'   containing the template or the path to a template file. The default uses
+#'   the markdown prompt shipped with commons. To customize the full prompt,
+#'   copy that file into your project, edit it freely, and pass its path:
 #'
 #'   ```r
 #'   file.copy(
@@ -30,19 +30,29 @@
 #'   )
 #'   commons(
 #'     # ...
-#'     system_prompt = ellmer::interpolate_file(
-#'       "system-prompt.md",
-#'       date = Sys.Date()
-#'     )
+#'     system_prompt = "system-prompt.md"
 #'   )
 #'   ```
 #'
-#'   Pass values for any `{{keyword}}` tokens you add as arguments to
-#'   [ellmer::interpolate_file()]. commons appends documentation of the
-#'   available tables and data dictionaries to the prompt itself, along with
-#'   a "How to answer" workflow section assembled from whichever of
-#'   registered measures and governed definitions the agent actually has;
-#'   the file needn't (and shouldn't) describe them.
+#'   commons renders some sections conditionally and
+#'   interpolates runtime values such as its table roster. Custom templates
+#'   may edit, remove, or reposition any section. Commons expressions open
+#'   with `{[` and close with `]}`, leaving ellmer's `{{ }}` delimiters
+#'   available for your own substitutions:
+#'
+#'   ```r
+#'   system_prompt <- ellmer::interpolate_file(
+#'     "system-prompt.md",
+#'     organization = "Acme"
+#'   )
+#'   commons(
+#'     # ...
+#'     system_prompt = as.character(system_prompt)
+#'   )
+#'   ```
+#'
+#'   A `{{organization}}` expression is resolved by ellmer, while commons'
+#'   template expressions remain untouched.
 #' @param network Whether the `run_r` session has network access. One of
 #'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
 #'   and refuses to run without filesystem sandboxing.
@@ -122,10 +132,7 @@ commons <- function(
   semantic_layer = NULL,
   context_layer = NULL,
   ...,
-  system_prompt = ellmer::interpolate_file(
-    system.file("prompts/system-prompt.md", package = "commons"),
-    date = Sys.Date()
-  ),
+  system_prompt = system.file("prompts/system-prompt.md", package = "commons"),
   network = c("none", "full"),
   log = FALSE,
   share_with = NULL
@@ -177,9 +184,9 @@ Commons <- R6::R6Class(
       semantic_layer = NULL,
       context_layer = NULL,
       ...,
-      system_prompt = ellmer::interpolate_file(
-        system.file("prompts/system-prompt.md", package = "commons"),
-        date = Sys.Date()
+      system_prompt = system.file(
+        "prompts/system-prompt.md",
+        package = "commons"
       ),
       network = c("none", "full"),
       log = FALSE,
