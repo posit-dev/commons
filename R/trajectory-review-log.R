@@ -122,8 +122,8 @@ read_review_records <- function(file) {
 
   if (length(invalid) > 0) {
     cli::cli_warn(
-      "Ignoring invalid review record{?s} on line{?s} {invalid} of
-       {.file {file}}."
+      "Ignoring {cli::qty(invalid)}invalid review record{?s} on line{?s}
+       {invalid} of {.file {file}}."
     )
   }
   records
@@ -138,11 +138,14 @@ is_review_record <- function(record) {
   ) {
     return(FALSE)
   }
+  exchange <- record$exchange
   if (
-    !is.null(record$exchange) &&
-      (!is.numeric(record$exchange) ||
-        length(record$exchange) != 1 ||
-        is.na(record$exchange))
+    !is.null(exchange) &&
+      (!is.numeric(exchange) ||
+        length(exchange) != 1 ||
+        !is.finite(exchange) ||
+        exchange < 1 ||
+        exchange != trunc(exchange))
   ) {
     return(FALSE)
   }

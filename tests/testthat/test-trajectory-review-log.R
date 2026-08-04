@@ -29,6 +29,18 @@ test_that("trajectory_reviews_read returns notes and active flags", {
   expect_equal(reviews[[1]]$turns, turns)
 })
 
+test_that("read_review_records ignores malformed records", {
+  review_file <- withr::local_tempfile(
+    lines = c(
+      '{"conversation":"conv1","exchange":1.9,"action":"flag"}',
+      '{"conversation":"conv1","exchange":1,"action":"flag"}'
+    )
+  )
+
+  expect_warning(records <- read_review_records(review_file), "line 1")
+  expect_length(records, 1)
+})
+
 test_that("trajectory_reviews_read reads legacy records", {
   review_file <- withr::local_tempfile(
     lines = '{"time":"2026-07-31T08:02:00-0700","conversation":"conv1","exchange":1,"action":"note","note":"Legacy note."}'
