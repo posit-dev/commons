@@ -25,24 +25,7 @@ The answer uses SQL with little documentation and the agent had to inspect table
 
    When the store is large, subset: `n` keeps the `n` most recent conversations, and `from`/`to` keep conversations with chat activity in a time window, e.g. `read_trajectories(n = 25, from = Sys.Date() - 7)`.
 
-3. Load reviews when they are available.
-   A trajectory reviewer writes one append-only JSONL file. Read it with
-   `trajectory_reviews_read()`, supplying the trajectories so each active flag
-   and note is joined to the conversation or exchange it reviews:
-
-```r
-reviews <- commons::trajectory_reviews_read(
-  Sys.getenv("COMMONS_REVIEW_FILE", "commons-review.jsonl"),
-  trajectories
-)
-```
-
-   The reader removes superseded flag/unflag events. Each returned record is
-   therefore either a note or a currently active flag, and its `turns` field
-   contains the reviewed conversation or exchange when that trajectory is
-   available. Prioritize explicit notes and flagged exchanges during analysis.
-
-4. Read the conversations.
+3. Read the conversations.
    Each trajectory is a list of ellmer turns, named by conversation id.
 
 ```r
@@ -52,10 +35,10 @@ turns <- trajectories[[1]]
 print(turns)
 ```
 
-5. Analyze themes.
+4. Analyze themes.
    Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
 
-6. Propose changes.
+5. Propose changes.
    Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change.
 
    Prefer semantic-layer edits when the question is a stable governed metric. Prefer context-layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
@@ -66,7 +49,7 @@ print(turns)
    * **extension** — same concept, superset behavior: edit the existing measure, adding the `@param` and the provenance tag. Never create `revenue2`.
    * **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides; do not resolve silently.
 
-7. Wait before editing.
+6. Wait before editing.
    Do not make semantic-layer or context-layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.
 
    When a proposal is accepted, new measures and context land in the agent project layout defined in `SKILL.md`: measures in `measures/`, free-text in `context/`. Because these changes are born from trajectory analysis rather than an artifact, they carry the self-referencing provenance `trajectory analysis (<yyyy-mm-dd>)` — a `#' @provenance` tag on measures, YAML frontmatter on context files.

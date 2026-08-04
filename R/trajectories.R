@@ -549,6 +549,7 @@ posixct_nanos <- function(time) {
 build_trajectories <- function(spans) {
   lapply(latest_chat_spans(spans), function(span) {
     turns <- trajectory_turns(span)
+    # Keep conversations directly usable with ellmer's chat$set_turns().
     attr(turns, "last_active") <- nano_posixct(span_time(span))
     turns
   })

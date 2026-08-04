@@ -18,9 +18,7 @@
 #' New review records use schema version 1 and include a unique event id, UTC
 #' timestamp, reviewer username, trajectory source, conversation id, optional
 #' exchange number, action, and optional note. Exchange-level records also
-#' snapshot the question and trust tag. [trajectory_reviews_read()] reduces
-#' the event log to its active flags and notes and can join them back to the
-#' reviewed turns.
+#' snapshot the question and trust tag.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the

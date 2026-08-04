@@ -1,48 +1,3 @@
-#' Read trajectory reviews
-#'
-#' `trajectory_reviews_read()` reads the append-only JSONL event log written by
-#' [trajectory_review()]. It returns every note and only the currently active
-#' flags: superseded `flag` events and all `unflag` events are folded away.
-#'
-#' When `trajectories` is supplied, each returned record gains a `turns` field
-#' containing the reviewed conversation or question-and-answer exchange. This
-#' makes the result ready for analysis by a person or coding agent. Records
-#' whose trajectory is no longer available retain their logged question, tag,
-#' source, and identifiers.
-#'
-#' Review logs written before schema version 1 remain readable. Those legacy
-#' records do not have source, user, or question metadata.
-#'
-#' @param review_file Path to the review JSONL file. Defaults to the
-#'   `COMMONS_REVIEW_FILE` environment variable when set, and otherwise to
-#'   `"commons-review.jsonl"`.
-#' @param trajectories An optional named list of conversations returned by
-#'   [read_trajectories()]. When supplied, review records are joined to their
-#'   conversation or exchange.
-#'
-#' @return A list of actionable review records in file order: all notes and
-#'   currently active flags. When `trajectories` is supplied, each record also
-#'   contains `turns`.
-#' @export
-trajectory_reviews_read <- function(
-  review_file = Sys.getenv(
-    "COMMONS_REVIEW_FILE",
-    unset = "commons-review.jsonl"
-  ),
-  trajectories = NULL
-) {
-  rlang::check_string(review_file)
-  if (!is.null(trajectories)) {
-    check_trajectories(trajectories)
-  }
-
-  records <- actionable_review_records(read_review_records(review_file))
-  if (is.null(trajectories)) {
-    return(records)
-  }
-  lapply(records, enrich_review_record, trajectories = trajectories)
-}
-
 new_review_event <- function(
   trajectories,
   key,
@@ -173,33 +128,6 @@ actionable_review_records <- function(records) {
     logical(1)
   )]
   records[sort(c(note_indices, active_flag_indices))]
-}
-
-enrich_review_record <- function(record, trajectories) {
-  record["turns"] <- list(NULL)
-  conversation <- match(record$conversation, names(trajectories))
-  if (is.na(conversation)) {
-    return(record)
-  }
-
-  turns <- trajectories[[conversation]]
-  if (!is.null(record$exchange)) {
-    exchanges <- split_exchanges(turns)
-    exchange <- as.integer(record$exchange)
-    if (!exchange %in% seq_along(exchanges)) {
-      return(record)
-    }
-    turns <- exchanges[[exchange]]
-    if (is.null(record$question)) {
-      record$question <- turns[[1]]@text
-    }
-    if (is.null(record$tag)) {
-      tag <- exchange_provenance(turns)$tag
-      record$tag <- if (is.na(tag)) "none" else tag
-    }
-  }
-  record$turns <- turns
-  record
 }
 
 # The latest flag or unflag event determines each key's state.
