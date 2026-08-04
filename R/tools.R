@@ -47,7 +47,7 @@ tool_search_pool <- function(private) {
       )
       tool_result(
         body,
-        title = "Searched the semantic layer",
+        title = "Found a trusted calculation",
         icon = maybe_icon("search")
       )
     },
@@ -62,7 +62,7 @@ tool_search_pool <- function(private) {
     ),
     name = "search_pool",
     annotations = ellmer::tool_annotations(
-      title = "Search the semantic layer",
+      title = "Find a trusted calculation",
       icon = maybe_icon("search"),
       read_only_hint = TRUE
     )
@@ -130,7 +130,7 @@ tool_call_metrics <- function(private) {
     ),
     name = "call_metrics",
     annotations = ellmer::tool_annotations(
-      title = "Metrics",
+      title = "Run a trusted calculation",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -160,7 +160,7 @@ tool_call_measure <- function(private) {
     ),
     name = "call_measure",
     annotations = ellmer::tool_annotations(
-      title = "Measure",
+      title = "Run a trusted calculation",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -204,7 +204,7 @@ tool_describe_table <- function(private) {
     ),
     name = "describe_table",
     annotations = ellmer::tool_annotations(
-      title = "Describe table",
+      title = "Inspect a table",
       icon = maybe_icon("table"),
       read_only_hint = TRUE
     )
@@ -238,7 +238,7 @@ tool_run_sql <- function(private) {
     ),
     name = "run_sql",
     annotations = ellmer::tool_annotations(
-      title = "SQL",
+      title = "Grab data",
       icon = maybe_icon("code-square"),
       read_only_hint = TRUE
     )
@@ -302,7 +302,7 @@ call_measure_tool <- function(
   advert <- register_handle(handles, value)
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
-    title = sprintf("Measure: %s", html_escape(tool_title(td))),
+    title = sprintf("Ran a trusted calculation: %s", html_escape(tool_title(td))),
     icon = maybe_icon("shield-check"),
     html = measure_display_html(args, value),
     tag = "A",
@@ -357,7 +357,7 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   body <- paste(parts, collapse = "\n\n")
   tool_result(
     body,
-    title = sprintf("Described %s%s", table, source_label(source_name)),
+    title = sprintf("Inspected %s%s", table, source_label(source_name)),
     icon = maybe_icon("table"),
     markdown = body
   )
@@ -379,7 +379,7 @@ run_sql_tool <- function(
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
   tool_result(
     paste(c(body, note, advert, entries), collapse = "\n\n"),
-    title = sprintf("Ran SQL%s", source_label(source_name)),
+    title = sprintf("Grabbed data%s", source_label(source_name)),
     icon = maybe_icon("code-square"),
     markdown = display_md,
     tag = "B",
