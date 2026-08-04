@@ -5,8 +5,6 @@ viewer_levels <- c(
   none = "No data tool"
 )
 
-# Colors distinguish neighboring levels for colorblind readers and meet 3:1
-# contrast against the white plot background.
 viewer_level_colors <- c(
   A = "#2a9d64",
   B = "#2a78d6",
