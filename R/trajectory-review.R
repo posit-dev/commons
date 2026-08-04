@@ -545,7 +545,18 @@ viewer_server <- function(
   review_file,
   source = trajectory_source(trajectories)
 ) {
+  # App-level rather than per-session, so concurrent reviewer sessions in
+  # the one documented process see each other's flags and notes live;
+  # navigation and drafts stay per-session.
+  review_records <- read_review_records(review_file)
+  app_flags <- shiny::reactiveVal(review_flags(review_records))
+  app_notes <- shiny::reactiveVal(review_notes(review_records))
+
   function(input, output, session) {
+    # Aliased locally because shiny::testServer() reaches only the session
+    # function's own bindings.
+    flags <- app_flags
+    notes <- app_notes
     selected <- shiny::reactiveVal(NULL)
     review_target <- shiny::reactiveVal(NULL)
     # The review pane's subject: the selected exchange when one is chosen,
@@ -561,9 +572,6 @@ viewer_server <- function(
     draft <- shiny::reactiveVal("")
     shiny::observeEvent(input$review_note, draft(input$review_note))
     shiny::observeEvent(review_selection(), draft(""), ignoreNULL = FALSE)
-    review_records <- read_review_records(review_file)
-    flags <- shiny::reactiveVal(review_flags(review_records))
-    notes <- shiny::reactiveVal(review_notes(review_records))
     user <- review_user(session)
 
     shiny::observeEvent(input$group_by, {

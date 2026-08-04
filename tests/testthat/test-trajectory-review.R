@@ -415,9 +415,10 @@ test_that("flags and notes append to and restore from the review file", {
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   review_file <- withr::local_tempfile(fileext = ".jsonl")
+  server <- viewer_server(trajectories, summary, questions, review_file)
 
   shiny::testServer(
-    viewer_server(trajectories, summary, questions, review_file),
+    server,
     {
       session$setInputs(group_by = "conversation", trust = "all", entry_1 = 1)
       session$setInputs(flag_toggle = 1)
@@ -448,6 +449,12 @@ test_that("flags and notes append to and restore from the review file", {
       )
     }
   )
+
+  # Review state is app-level: a second session sees the first's work.
+  shiny::testServer(server, {
+    expect_equal(flags(), c("conv1", "conv1#1"))
+    expect_length(notes(), 2)
+  })
 
   records <- lapply(readLines(review_file), jsonlite::fromJSON)
   expect_equal(
