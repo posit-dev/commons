@@ -67,7 +67,6 @@ test_that("conversations carry their last chat activity time", {
 
   last_active <- attr(trajectories[[1]], "last_active")
   expect_s3_class(last_active, "POSIXct")
-  # The t100 span ends at 101s past the epoch.
   expect_equal(as.numeric(last_active), 101)
 })
 

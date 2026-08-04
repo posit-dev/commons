@@ -1,20 +1,10 @@
-/* viewer_ui() pins shinychat's stylesheet into the head ahead of
- * commons-chat.css and this sheet, so transcripts wear the same styling a
- * live commons app shows. Overrides of shinychat rules still carry an
- * extra class of specificity, winning even if the order regresses. */
-
-/* shinychat falls back to a robot icon on assistant messages when no
- * icon_assistant is configured; commons chats carry no icon. */
 .commons-viewer-transcript .shiny-chat-message .message-icon {
   display: none;
 }
 
-/* Review notes use their own composer rather than appearing as chat turns. */
 .commons-viewer-transcript .shiny-chat-input {
   display: none;
 }
-
-/* ---- Timeline ----------------------------------------------------------- */
 
 .commons-viewer-timeline-card {
   flex: 0 0 auto;
@@ -35,7 +25,6 @@
   padding: 0.75rem 0.75rem 0;
 }
 
-/* The title matches the sidebar's Dates / Trust Level captions. */
 .commons-viewer-timeline-header strong {
   color: var(--bs-secondary-color, #6c757d);
   font-size: 0.8125rem;
@@ -64,15 +53,11 @@
   width: 0.625rem;
 }
 
-/* The plotly widget carries a fixed 176px height (timeline_plot()); the
- * wrapper's matching height keeps the card from collapsing before the
- * widget renders. */
 .commons-viewer-timeline-plot {
   height: 11rem;
   width: 100%;
 }
 
-/* Visually hidden, still read: the chart's table view. */
 .commons-viewer-sr-only {
   border: 0;
   clip: rect(0, 0, 0, 0);
@@ -85,10 +70,6 @@
   width: 1px;
 }
 
-/* ---- Review ------------------------------------------------------------ */
-
-/* The notes pane's width is draggable (commons-viewer.js sets the variable
- * from the divider); until then it takes the responsive default. */
 .commons-viewer-workspace {
   display: grid;
   flex: 1 1 auto;
@@ -109,8 +90,6 @@
   min-height: 0;
 }
 
-/* The divider draws the panes' hairline rule down its center; the rest of
- * its width is drag target. */
 .commons-viewer-pane-resizer {
   background: linear-gradient(
     to right,
@@ -152,7 +131,6 @@
   justify-content: space-between;
 }
 
-/* Section labels match the sidebar's Dates / Trust Level captions. */
 .commons-viewer-review-bar strong {
   color: var(--bs-secondary-color, #6c757d);
   font-size: 0.8125rem;
@@ -165,9 +143,6 @@
   margin-top: 0.5rem;
 }
 
-/* Notes read as annotations hung off a hairline rule -- the treatment
- * citation quotes and expanded tool rows get in the transcript -- rather
- * than as chat-bubble-like boxes. */
 .commons-viewer-notes {
   display: grid;
   gap: 0.625rem;
@@ -190,10 +165,6 @@
   margin-top: 0.125rem;
 }
 
-/* The composer reads as one input surface, like the transcript's chat box:
- * the chrome (hairline border, soft shadow, focus tint) sits on the
- * container, the textarea is bare inside it, and the Add note action tucks
- * under the text. */
 .commons-viewer-note-compose {
   background: var(--bs-body-bg, #fff);
   border: 1px solid var(--bs-border-color, #dee2e6);
@@ -204,8 +175,6 @@
   padding: 0.25rem;
 }
 
-/* Focus moves to the container, softened toward the background the way the
- * chat send button treats the primary hue. */
 .commons-viewer-note-compose:focus-within {
   border-color: color-mix(in srgb, var(--bs-primary, #007bc2) 55%, var(--bs-body-bg, #fff));
 }
@@ -226,8 +195,6 @@
   resize: none;
 }
 
-/* Quiet until engaged, like the transcript's tool rows: secondary text,
- * darkening over a faint wash on hover instead of filling. */
 .commons-viewer-note-compose .btn,
 .commons-viewer-note-compose .btn:focus {
   border: 0;
@@ -268,7 +235,6 @@
   color: #b54708;
 }
 
-/* Either message selects its whole question-and-answer exchange. */
 .shiny-chat-messages-content {
   position: relative;
 }
@@ -285,9 +251,6 @@
   background-color: color-mix(in srgb, #007bc2 5%, transparent);
 }
 
-/* The question bubble takes the hover tint into its gray rather than
- * trading the gray for it, so hovering shades the bubble instead of
- * swapping its color out. */
 .commons-viewer-transcript
   .shiny-chat-user-message.commons-viewer-exchange-message:not(
     .commons-viewer-exchange-selected
@@ -304,11 +267,6 @@
   outline-offset: 2px;
 }
 
-/* Selected (9%) sits above hover (5%): over a whole exchange even a light
- * wash carries plenty of weight. */
-/* Rounder than the sidebar entries' 0.5rem: on a box this large a small
- * radius reads as square, so the radius scales with the box to match the
- * sidebar's perceived roundness. */
 .commons-viewer-exchange-highlight {
   background: color-mix(in srgb, #007bc2 9%, transparent);
   border-radius: 1rem;
@@ -320,8 +278,6 @@
   z-index: 0;
 }
 
-/* While selected, the question bubble cedes its gray to the highlight so
- * the whole exchange reads as one blue region, pointer over it or not. */
 .commons-viewer-transcript
   .shiny-chat-user-message.commons-viewer-exchange-selected {
   background-color: transparent;
@@ -343,8 +299,6 @@
   }
 }
 
-/* ---- Sidebar ------------------------------------------------------------ */
-
 .commons-viewer-sidebar .control-label {
   color: var(--bs-secondary-color, #6c757d);
   font-size: 0.8125rem;
@@ -352,13 +306,9 @@
   margin-bottom: 0.25rem;
 }
 
-/* The view-switcher tabs carry no panel content; trim the empty content
- * area's contribution to the gap below. */
 .commons-viewer-sidebar .tab-content:empty {
   display: none;
 }
-
-/* ---- Conversation list ------------------------------------------------- */
 
 .commons-viewer-entry {
   border-radius: 0.5rem;
@@ -375,9 +325,6 @@
   text-decoration: none;
 }
 
-/* Selections wash with the commons blue (#007bc2, the accent
- * commons-chat.css mixes from) rather than Bootstrap's primary subtle,
- * which reads heavier and bluer. */
 .commons-viewer-entry-selected,
 .commons-viewer-entry-selected:hover,
 .commons-viewer-entry-selected:focus {

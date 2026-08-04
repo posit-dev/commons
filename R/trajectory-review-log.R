@@ -202,7 +202,7 @@ enrich_review_record <- function(record, trajectories) {
   record
 }
 
-# Flags persist as flag/unflag events; the latest event per key wins.
+# The latest flag or unflag event determines each key's state.
 review_flags <- function(records) {
   active <- Filter(
     function(record) identical(record$action, "flag"),

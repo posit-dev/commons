@@ -1,5 +1,3 @@
-# An exchange fragment: an assistant tool call and its tool-result turn,
-# named like the tool the viewer derives trust levels from.
 test_tool_turns <- function(name, id = "c1") {
   request <- ellmer::ContentToolRequest(
     id = id,
@@ -30,8 +28,6 @@ test_that("exchange_provenance derives tags from tool calls and citations", {
   )
   expect_equal(exchange_provenance(uncited)$tag, "C")
 
-  # Citation presence, not verification, decides "B" (see
-  # exchange_provenance()).
   cited <- c(
     list(ellmer::UserTurn("Total revenue?")),
     test_tool_turns("run_sql"),
@@ -98,8 +94,6 @@ test_that("split_exchanges opens at plain user turns only", {
   exchanges <- split_exchanges(turns)
 
   expect_length(exchanges, 2)
-  # The system turn belongs to no exchange; the tool-result UserTurn stays
-  # inside its exchange rather than opening one.
   expect_length(exchanges[[1]], 4)
   expect_equal(exchanges[[1]][[1]]@text, "How many orders?")
   expect_length(exchanges[[2]], 1)
@@ -178,9 +172,6 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
   expect_s3_class(answer[[1]], "shinychat_tool_card")
   expect_equal(answer[[2]], "6 orders.")
 
-  # The verified-answer pill lands on the first answer; the cited answer
-  # sends an empty pill whose citations become unverified-but-visible
-  # footnotes.
   expect_length(transcript$pills, 2)
   expect_match(transcript$pills[[1]]$html, "commons-answer-pill-trusted")
   expect_equal(transcript$pills[[1]]$indexFromEnd, 1)
@@ -220,7 +211,6 @@ test_that("reconstructed tool results wear the commons display again", {
   ))
   expect_equal(measure$title, "Measure: biodiversity by site")
 
-  # Titles interpolate model-supplied arguments, so they are escaped.
   described <- viewer_tool_display(ellmer::ContentToolRequest(
     id = "c3",
     name = "describe_table",
@@ -228,7 +218,6 @@ test_that("reconstructed tool results wear the commons display again", {
   ))
   expect_equal(described$title, "Described &lt;script&gt;")
 
-  # Tools the viewer doesn't know keep shinychat's default card.
   expect_null(viewer_tool_display(ellmer::ContentToolRequest(
     id = "c4",
     name = "custom_tool",
@@ -236,8 +225,6 @@ test_that("reconstructed tool results wear the commons display again", {
   )))
   expect_null(viewer_tool_display(NULL))
 
-  # The display lands on the transcript's cards, unless the result already
-  # carries one.
   turns <- c(
     list(ellmer::UserTurn("Total revenue?")),
     test_tool_turns("run_sql"),
@@ -391,11 +378,9 @@ test_that("the viewer filters conversations and follows selection", {
       session$setInputs(exchange_select = list(exchange = 1, nonce = 1))
       expect_equal(review_target(), list(conversation = 1, exchange = 1L))
 
-      # Clicking the selected exchange again deselects it.
       session$setInputs(exchange_select = list(nonce = 2))
       expect_null(review_target())
 
-      # Moving to another entry drops the previous exchange selection.
       session$setInputs(exchange_select = list(exchange = 1, nonce = 3))
       expect_equal(review_target(), list(conversation = 1, exchange = 1L))
       session$setInputs(entry_2 = 1)
@@ -437,7 +422,6 @@ test_that("flags and notes append to and restore from the review file", {
         notes()
       )
 
-      # With the exchange deselected, notes cover the whole conversation.
       session$setInputs(exchange_select = list(nonce = 2))
       session$setInputs(review_note = "Reviewed end to end; looks fine.")
       session$setInputs(save_note = 2)
@@ -450,7 +434,6 @@ test_that("flags and notes append to and restore from the review file", {
     }
   )
 
-  # Review state is app-level: a second session sees the first's work.
   shiny::testServer(server, {
     expect_equal(flags(), c("conv1", "conv1#1"))
     expect_length(notes(), 2)
@@ -498,7 +481,6 @@ test_that("trust_timeline_bins aggregates question tags by day at volume", {
   binned <- trust_timeline_bins(questions)
   bins <- binned$bins
 
-  # The undated question has no x position, so only two days chart.
   expect_equal(binned$unit, "day")
   expect_length(bins, 2)
   expect_equal(bins[[1]]$date, "2026-07-01")
@@ -515,9 +497,6 @@ test_that("trust_timeline_bins aggregates question tags by day at volume", {
 })
 
 test_that("trust_timeline_bins widens bins until they hold enough answers", {
-  # Two answers a day averages under five per day but over five per
-  # Monday-start week; Thursday July 2, 2026 through Friday July 17 spans
-  # three weeks, entering the first midway.
   weekly <- unlist(
     lapply(as.character(seq(as.Date("2026-07-02"), by = 1, length.out = 16)), {
       function(date) lapply(c("A", "C"), timeline_question, date)
@@ -527,16 +506,12 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
   binned <- trust_timeline_bins(weekly)
   expect_equal(binned$unit, "week")
   expect_length(binned$bins, 3)
-  # A bin the range enters midway charts and labels itself by the days the
-  # range actually covers, not its full calendar week.
   expect_equal(binned$bins[[1]]$date, "2026-07-02")
   expect_equal(binned$bins[[1]]$label, "Jul 2\u20135, 2026")
   expect_equal(binned$bins[[1]]$n, 8)
   expect_equal(binned$bins[[2]]$label, "Jul 6\u201312, 2026")
   expect_equal(binned$bins[[2]]$n, 14)
 
-  # One answer a week doesn't fill weeks either, so bins become months;
-  # only fully covered months wear their plain names.
   monthly <- lapply(
     as.character(seq(as.Date("2026-06-01"), by = 7, length.out = 10)),
     timeline_question,
@@ -554,17 +529,14 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
 })
 
 test_that("bins never grow coarser than the selected window", {
-  # A one-day window charts that day however few answers it holds.
   sparse <- lapply(c("A", "C"), timeline_question, "2026-07-01")
   window <- as.Date(c("2026-07-01", "2026-07-01"))
   binned <- trust_timeline_bins(sparse, window)
   expect_equal(binned$unit, "day")
   expect_equal(binned$bins[[1]]$label, "Jul 1, 2026")
 
-  # Without a window the answers' own one-day extent pins the unit too.
   expect_equal(trust_timeline_bins(sparse)$unit, "day")
 
-  # A week-long window never bins by month, even when days run sparse.
   week_window <- as.Date(c("2026-07-01", "2026-07-07"))
   spread <- lapply(
     c("2026-07-01", "2026-07-03", "2026-07-06"),
@@ -587,8 +559,6 @@ test_that("trust_timeline renders a chart and its table view", {
   ))
   bins <- binned$bins
 
-  # One stacked trace per trust level; every trace carries the same per-bin
-  # hover card (see timeline_plot()).
   traces <- plotly::plotly_build(timeline_plot(bins, binned$unit))$x$data
   expect_length(traces, length(viewer_levels))
   expect_equal(
@@ -603,15 +573,12 @@ test_that("trust_timeline renders a chart and its table view", {
   expect_match(hovers[[1]][[2]], "<b>60%</b> Verified", fixed = TRUE)
   expect_match(hovers[[1]][[2]], "<extra></extra>", fixed = TRUE)
 
-  # A single dated bin charts as a stacked column, its card in the
-  # hovertemplate itself (see timeline_plot()).
   single <- plotly::plotly_build(timeline_plot(bins[1], binned$unit))$x$data
   expect_equal(single[[1]]$type, "bar")
   expect_match(single[[1]]$hovertemplate[[1]], "(n = 5)", fixed = TRUE)
   expect_no_match(single[[1]]$hovertemplate[[1]], "%{text}", fixed = TRUE)
 
   html <- as.character(trust_timeline(binned))
-  # The table view carries every share the tooltip shows.
   expect_match(html, "commons-viewer-sr-only")
   expect_match(html, "60% (3)", fixed = TRUE)
 })
@@ -623,9 +590,6 @@ test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
   skip_if_not_installed("htmltools")
   skip_if_not_installed("shinyWidgets")
 
-  # Ties between the sheets resolve by load order; the dynamically rendered
-  # chat must not deliver shinychat's sheet after commons-chat.css, or
-  # transcripts lose the commons look (quiet tool rows, gray user bubbles).
   deps <- vapply(
     htmltools::findDependencies(viewer_ui(list())),
     function(dep) dep$name,

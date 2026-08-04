@@ -37,9 +37,7 @@ commons_exchange_provenance <- function(turns, corpus = list()) {
   })
 }
 
-# Turns split into question -> answer exchanges: each exchange opens at a
-# user turn carrying no tool results and runs until the next one. Turns
-# before the first such user turn (e.g. system turns) belong to no exchange.
+# Tool-result UserTurns stay with the exchange that initiated them.
 split_exchanges <- function(turns) {
   out <- list()
   current <- NULL

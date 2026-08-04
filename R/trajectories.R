@@ -546,7 +546,6 @@ posixct_nanos <- function(time) {
 # ellmer's chat spans repeat the full message history, so the latest chat
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
-# That span's time is also the conversation's last activity.
 build_trajectories <- function(spans) {
   lapply(latest_chat_spans(spans), function(span) {
     turns <- trajectory_turns(span)
@@ -555,8 +554,7 @@ build_trajectories <- function(spans) {
   })
 }
 
-# Doubles can't hold nanosecond precision, but second-level precision is all
-# a last-activity time needs. (Explicit origin: required on R < 4.3.)
+# Second precision is sufficient; the origin supports R < 4.3.
 nano_posixct <- function(time) {
   as.POSIXct(as.numeric(time) / 1e9, origin = "1970-01-01")
 }

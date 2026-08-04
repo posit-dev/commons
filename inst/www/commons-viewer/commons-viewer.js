@@ -67,8 +67,6 @@
       });
     };
 
-    // Clicking the selected exchange again deselects it; `exchange: null`
-    // tells the server to drop its review target.
     var activateExchange = function(node) {
       var chat = node.closest("shiny-chat-container");
       var exchange = Number(node.dataset.exchange);
@@ -103,10 +101,6 @@
       activateExchange(node);
     });
 
-    // Enter saves the note like the chat box sends a message; Shift+Enter
-    // still inserts a newline. The value rides along explicitly because
-    // Shiny's own textarea updates are debounced and could arrive after
-    // the click.
     document.addEventListener("keydown", function(event) {
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
         return;
@@ -120,9 +114,6 @@
       button.click();
     });
 
-    // The divider between the transcript and the notes pane drags (and, for
-    // keyboard users, arrows) the pane's width, within bounds that keep both
-    // panes usable.
     var setReviewWidth = function(workspace, width) {
       var bounds = workspace.getBoundingClientRect();
       var min = 200;
@@ -178,8 +169,6 @@
       );
     });
 
-    // Server-driven selection state: review_target changes (including
-    // deselection when navigation moves away) mirror into the transcript.
     Shiny.addCustomMessageHandler("commonsViewerExchangeSelect", function(message) {
       var chat = document.getElementById(message.id);
       if (!chat) return;
@@ -220,8 +209,6 @@
           );
         });
         selectExchange(chat, message.selected);
-        // A question entry opens the whole conversation; slide its
-        // exchange to the top of the view.
         if (message.selected != null) {
           var target = chat.querySelector(
             '.commons-viewer-exchange-message[data-exchange="' +

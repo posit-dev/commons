@@ -1,7 +1,3 @@
-# The trajectory reviewer's "Trust levels over time" card: adaptive
-# day/week/month binning of question tags, the plotly chart, and its
-# screen-reader table.
-
 viewer_levels <- c(
   A = "Verified",
   B = "Cited",
@@ -9,11 +5,8 @@ viewer_levels <- c(
   none = "No data tool"
 )
 
-# One fill per trust level, in stack order (Verified at the baseline). The
-# set passes the usual palette gates -- colorblind separation between stack
-# neighbors and 3:1 contrast on a white surface -- which is why "No data
-# tool" wears a muted violet rather than a gray that would read as
-# background, and Untrusted a darker amber than its pill.
+# Colors distinguish neighboring levels for colorblind readers and meet 3:1
+# contrast against the white plot background.
 viewer_level_colors <- c(
   A = "#2a9d64",
   B = "#2a78d6",
@@ -21,8 +14,6 @@ viewer_level_colors <- c(
   none = "#8a72c8"
 )
 
-# The card frame and title are static; the legend and plot re-render as
-# the date window moves.
 trust_timeline_card <- function() {
   bslib::card(
     fill = FALSE,
@@ -36,9 +27,6 @@ trust_timeline_card <- function() {
   )
 }
 
-# The legend is a plain key for the chart's colors; each level's
-# window-wide share sits one hover away, in its entry's tooltip, rather
-# than inline where it read as part of the chart.
 timeline_legend <- function(rate) {
   htmltools::div(
     class = "commons-viewer-timeline-legend",
@@ -61,8 +49,6 @@ timeline_legend <- function(rate) {
   )
 }
 
-# Exchange-level counts of each trust level across a set of conversations'
-# tag vectors.
 hit_rate <- function(tag_sets) {
   tags <- unlist(tag_sets) %||% character()
   list(n = length(tags), counts = tag_counts(tags))
@@ -84,12 +70,7 @@ rate_percent <- function(count, n) {
   sprintf("%.0f%%", 100 * count / n)
 }
 
-# Per-bin tag counts for the dated questions inside the window, in date
-# order. Undated questions have no x position, so the chart skips them;
-# the legend still counts them. Bins are days, weeks, or months -- the
-# finest unit whose bins hold `target` answers on average -- so a sparse
-# store charts a few honest aggregates rather than a per-day sawtooth of
-# one-answer days swinging between 0% and 100%.
+# Undated questions affect only the legend; sparse data uses wider bins.
 trust_timeline_bins <- function(questions, window = NULL, target = 5) {
   dates <- record_dates(questions)
   keep <- !is.na(dates)
@@ -109,8 +90,6 @@ trust_timeline_bins <- function(questions, window = NULL, target = 5) {
       character(1)
     )
     list(
-      # A bin the window enters midway charts at the window's edge, not at
-      # a calendar boundary outside it.
       date = format(max(start, bounds[[1]]), "%Y-%m-%d"),
       label = timeline_bin_label(start, unit, bounds),
       n = length(tags),
@@ -120,8 +99,6 @@ trust_timeline_bins <- function(questions, window = NULL, target = 5) {
   list(unit = unit, bins = bins)
 }
 
-# The range the bins must respect: the picker's range when complete,
-# otherwise the dated answers' own extent.
 timeline_bounds <- function(window, dates) {
   if (length(window) >= 2) {
     return(as.Date(c(window[[1]], window[[2]])))
@@ -132,12 +109,7 @@ timeline_bounds <- function(window, dates) {
   c(min(dates), max(dates))
 }
 
-# The finest unit whose bins hold `target` answers on average --
-# multiplication rather than mean() so zero dates stay on the day unit
-# instead of dividing by zero. Units the window doesn't span at least a
-# couple of times over aren't considered at all: a one-day selection
-# charts that day however few answers it holds, never its whole month.
-# When nothing reaches the target, the coarsest unit still in play.
+# Do not choose a unit the selected window cannot span at least twice.
 timeline_bin_unit <- function(dates, bounds, target) {
   if (is.null(bounds)) {
     return("day")
@@ -153,7 +125,6 @@ timeline_bin_unit <- function(dates, bounds, target) {
   units[[length(units)]]
 }
 
-# Weeks start on Monday (ISO), months on the first.
 timeline_bin_start <- function(dates, unit) {
   switch(
     unit,
@@ -163,9 +134,7 @@ timeline_bin_start <- function(dates, unit) {
   )
 }
 
-# Bin labels never reach outside the window: a week or month the window
-# covers only part of labels itself by the days it actually holds
-# ("Jul 2-5, 2026"), and only a fully covered month wears its plain name.
+# Labels clip partial calendar bins to the selected window.
 timeline_bin_label <- function(start, unit, bounds) {
   if (identical(unit, "day")) {
     return(day_label(start))
@@ -217,9 +186,7 @@ timeline_range_label <- function(from, to) {
   }
 }
 
-# The table is the same data as the chart, readable without a pointer, and
-# is where screen readers land instead of the drawing: role="img" on the
-# plot's wrapper keeps plotly's internals out of the accessibility tree.
+# The hidden table exposes values without Plotly's drawing internals.
 trust_timeline <- function(binned) {
   if (length(binned$bins) == 0) {
     return(viewer_empty_note("No dated questions in this date range."))
@@ -240,20 +207,10 @@ trust_timeline <- function(binned) {
   )
 }
 
-# A 100%-stacked area chart of each bin's trust-level shares -- one stacked
-# column when only one bin is dated, since a single point can't make an
-# area. The tooltip is one card drawn wholly from per-bin text -- unified
-# hover's date header can't carry the bin's n beside the date -- and every
-# trace carries the same card: with closest-point hover, the label then
-# anchors to whichever band boundary sits nearest the pointer instead of
-# always to the chart's top edge. The card header's legend names the
-# levels, so the widget's own legend stays off.
 timeline_plot <- function(bins, unit) {
   dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
   n <- vapply(bins, function(bin) bin$n, numeric(1))
-  # The card's HTML rides in the hovertemplate itself rather than behind a
-  # %{text} reference: a lone bin's length-1 text unboxes to a scalar in
-  # the widget JSON, which plotly.js leaves unsubstituted.
+  # Plotly does not expand a length-one %{text} value serialized as a scalar.
   tooltips <- paste0(
     vapply(bins, timeline_tooltip, character(1)),
     "<extra></extra>"
@@ -272,8 +229,6 @@ timeline_plot <- function(bins, unit) {
         name = unname(viewer_levels[[key]]),
         hovertemplate = tooltips,
         marker = list(color = viewer_level_colors[[key]]),
-        # About two hours wide, in the date axis's milliseconds; with the
-        # axis pinned a day either side, a column rather than a fill.
         width = 7200000
       )
     } else {
@@ -283,16 +238,11 @@ timeline_plot <- function(bins, unit) {
         y = shares,
         name = unname(viewer_levels[[key]]),
         hovertemplate = tooltips,
-        # Anchor to the boundary lines' points; fills would hover at a
-        # polygon centroid instead.
         hoveron = "points",
         type = "scatter",
         mode = "lines",
         stackgroup = "levels",
         fillcolor = viewer_level_colors[[key]],
-        # The surface-colored boundary line is the 2px gap keeping
-        # neighboring bands apart; the top band's boundary is the chart's
-        # edge and draws nothing.
         line = list(
           color = "#ffffff",
           width = if (k == length(viewer_levels)) 0 else 2
@@ -301,10 +251,7 @@ timeline_plot <- function(bins, unit) {
     }
   }
 
-  # Ticks sit on dated bins themselves rather than plotly's auto ticks,
-  # which land on empty dates between them and wrap into two lines ("Jul 2"
-  # over "2026") that the bottom margin can't fit: up to seven bins, always
-  # including the first and last, as single-line labels.
+  # Auto ticks can land between sparse bins; label up to seven actual bins.
   ticks <- unique(round(seq(
     1,
     length(dates),
@@ -314,9 +261,6 @@ timeline_plot <- function(bins, unit) {
   plot <- plotly::layout(
     plot,
     barmode = "stack",
-    # Closest-point hover with no pixel cutoff: the card fires anywhere in
-    # the fills and anchors to the nearest band boundary at the nearest
-    # bin, pointing at the band under the cursor rather than the top edge.
     hovermode = "closest",
     hoverdistance = -1,
     hoverlabel = list(
@@ -335,16 +279,13 @@ timeline_plot <- function(bins, unit) {
       type = "date",
       showgrid = FALSE,
       fixedrange = TRUE,
-      # Hovering draws a spike line down to the axis by default; the
-      # tooltip alone is enough.
       showspikes = FALSE,
       tickvals = as.list(format(dates[ticks])),
       ticktext = as.list(format(
         dates[ticks],
         if (identical(unit, "month")) "%b %Y" else "%b %e"
       )),
-      # A lone bin gives autorange nothing but the column's own edges to
-      # work with, so it would stretch the column across the card.
+      # Prevent one bar from filling the full plot width.
       range = if (length(bins) == 1) as.list(format(dates + c(-1, 1)))
     ),
     yaxis = list(
@@ -360,10 +301,7 @@ timeline_plot <- function(bins, unit) {
   plotly::config(plot, displayModeBar = FALSE, responsive = TRUE)
 }
 
-# One bin's hover card, in plotly's pseudo-HTML: the bin and its answer
-# count on the header line, then a swatch row per level in legend order.
-# The swatches are colored text glyphs -- plotly hover text supports
-# color via span styles, but no real markup.
+# Plotly hover text supports colored text but not HTML swatches.
 timeline_tooltip <- function(bin) {
   rows <- vapply(
     names(viewer_levels),

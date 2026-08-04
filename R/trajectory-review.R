@@ -82,7 +82,14 @@ trajectory_review <- function(
 }
 
 check_viewer_packages <- function(call = rlang::caller_env()) {
-  pkgs <- c("bslib", "htmltools", "plotly", "shiny", "shinychat", "shinyWidgets")
+  pkgs <- c(
+    "bslib",
+    "htmltools",
+    "plotly",
+    "shiny",
+    "shinychat",
+    "shinyWidgets"
+  )
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
   if (length(missing)) {
@@ -121,11 +128,8 @@ drop_side_conversations <- function(trajectories) {
   trajectories[!side]
 }
 
-# shinychat's conversation-title generation rides a clone of the agent's own
-# client, so its calls land in the trace store looking like one-question
-# conversations; match its system prompt (shinychat's TITLE_SYSTEM_PROMPT)
-# by prefix. Completions with no plain user turn have no question to review
-# and are side calls of one kind or another.
+# Title generation shares the agent's client, so its calls enter the trace
+# store.
 shinychat_title_prompt <- "You title chat conversations."
 
 is_side_conversation <- function(turns) {
@@ -137,10 +141,6 @@ is_side_conversation <- function(turns) {
     startsWith(system@text, shinychat_title_prompt)
 }
 
-# Summaries ---------------------------------------------------------------
-
-# One record per conversation, in input order. A plain list of records
-# rather than a data frame: the app maps over conversations anyway.
 summarize_trajectories <- function(trajectories) {
   unname(Map(conversation_record, names(trajectories), trajectories))
 }
@@ -157,8 +157,6 @@ conversation_record <- function(id, turns) {
   )
 }
 
-# One record per question -> answer exchange across all conversations, in
-# conversation order.
 summarize_questions <- function(trajectories) {
   records <- list()
   for (i in rlang::seq2(1, length(trajectories))) {
@@ -179,10 +177,8 @@ summarize_questions <- function(trajectories) {
   records
 }
 
-# The viewer re-derives what runtime tagging stores in extra$commons_tag --
-# dropped by the OTLP round trip -- from the tool-call names that survive
-# it. B vs C is decided by citation *presence*: with no agent there is no
-# corpus to verify quotes against.
+# The OTLP round trip drops commons_tag but preserves tool names and
+# citations.
 exchange_provenance <- function(exchange) {
   tags <- exchange_tool_tags(exchange)
   text <- unlist(lapply(exchange, turn_text)) %||% character()
@@ -204,9 +200,6 @@ viewer_tool_tags <- c(
   run_r = "B"
 )
 
-# Tags come from tool requests rather than results: reconstructed histories
-# always pair them, and a request never depends on the result's back-pointer
-# having been re-linked.
 exchange_tool_tags <- function(turns) {
   calls <- unlist(lapply(turns, function(turn) {
     lapply(turn@contents, function(content) {
@@ -234,15 +227,6 @@ question_snippet <- function(exchange, max_chars = 80) {
   paste0(substr(text, 1, max_chars - 1), "\u2026")
 }
 
-# Transcripts -------------------------------------------------------------
-
-# A conversation as shinychat-ready messages plus the pill-seed payload for
-# the commonsProvenancePillSeed handler (see commons-chat.js). One user
-# message per exchange opener; the rest of each exchange merges into one
-# assistant message whose chunks are markdown strings and tool-result cards.
-# Tool requests are dropped, mirroring shinychat's own transcript restore
-# (each result card carries its request). `count` and `indexFromEnd` index
-# assistant messages, which is what the seed handler counts.
 trajectory_transcript <- function(turns) {
   exchanges <- split_exchanges(turns)
   messages <- list()
@@ -278,11 +262,8 @@ trajectory_transcript <- function(turns) {
   list(messages = messages, count = n_assistant, pills = pills)
 }
 
-# Exchanges whose tag is NA and whose answer attempted no citations need
-# neither a pill nor citation cleanup. Cited ("B") answers send an empty
-# pill and their citations render as numbered footnotes, so a reviewer can
-# read what the answer quoted; citations on other answers are stripped, as
-# at runtime.
+# Cited answers keep their quotes visible, but the viewer cannot re-verify
+# them.
 viewer_pill <- function(provenance, assistant_index) {
   if (is.na(provenance$tag) && length(provenance$citations) == 0) {
     return(NULL)
@@ -299,9 +280,6 @@ viewer_pill <- function(provenance, assistant_index) {
   )
 }
 
-# Mirrors citations_payload() in chat.R, but for quotes the viewer can't
-# check against a corpus: the footnote attributes the quote to "unverified"
-# rather than naming a source.
 viewer_citation <- function(citation) {
   list(
     verified = TRUE,
@@ -328,13 +306,7 @@ exchange_answer_chunks <- function(turns) {
   drop_nulls(chunks)
 }
 
-# Runtime tool results carry display metadata (tool_result()'s
-# extra$display: the quiet row's title and icon) that the OTLP round trip
-# drops, so reconstructed results would fall back to shinychat's default
-# card under the raw function name. Re-derive it from the request's tool
-# name and arguments, mirroring the titles in tools.R; runtime-only detail
-# (source labels, measure display HTML) is beyond reconstruction. Unknown
-# tools keep the default card.
+# Rebuild display metadata that is not retained by the OTLP round trip.
 viewer_tool_display <- function(request, value = NULL) {
   if (is.null(request)) {
     return(NULL)
@@ -368,7 +340,6 @@ viewer_tool_display <- function(request, value = NULL) {
   )
   display <- list(title = info$title, open = FALSE, show_request = FALSE)
   display$icon <- maybe_icon(info$icon)
-  # Expanding a SQL row shows the query above its result, as at runtime.
   if (identical(request@name, "run_sql") && is.character(arguments$sql)) {
     display$markdown <- paste(
       c(sprintf("```sql\n%s\n```", arguments$sql), value),
@@ -378,9 +349,7 @@ viewer_tool_display <- function(request, value = NULL) {
   display
 }
 
-# Replays a conversation into a bound chat element. Assistant messages
-# stream as chunks -- the mode the pill-seed handler was designed around --
-# and the seed is sent last so pills land once the transcript settles.
+# Pill seeding expects assistant messages to be replayed as streamed chunks.
 restore_transcript <- function(
   session,
   id,
@@ -442,8 +411,6 @@ restore_transcript <- function(
   }
 }
 
-# App ---------------------------------------------------------------------
-
 viewer_ui <- function(summary) {
   dates <- viewer_date_range(summary)
   htmltools::attachDependencies(
@@ -452,8 +419,6 @@ viewer_ui <- function(summary) {
       sidebar = bslib::sidebar(
         width = 380,
         class = "commons-viewer-sidebar",
-        # The navset is purely a switcher: its panels are empty, and the
-        # selected value arrives as input$group_by.
         bslib::navset_underline(
           id = "group_by",
           bslib::nav_panel("Conversations", value = "conversation"),
@@ -505,19 +470,13 @@ viewer_ui <- function(summary) {
       )
     ),
     c(
-      # In a live commons app, commons-chat.css loads after shinychat's
-      # stylesheet and wins its specificity ties -- the quiet tool rows,
-      # among others. Here the chat is dynamically rendered, which would
-      # deliver shinychat's sheet last; pinning it into the head restores
-      # the live app's order, so transcripts wear the same styling.
+      # Match the dependency order used by a live commons chat.
       htmltools::findDependencies(shinychat::chat_ui("commons_viewer_probe")),
       list(commons_chat_dependency(), commons_viewer_dependency())
     )
   )
 }
 
-# In conversation view the trust filter keeps conversations *containing* a
-# matching answer; the option labels say so.
 trust_choices <- function(group_by) {
   if (identical(group_by, "question")) {
     c(
@@ -545,30 +504,21 @@ viewer_server <- function(
   review_file,
   source = trajectory_source(trajectories)
 ) {
-  # App-level rather than per-session, so concurrent reviewer sessions in
-  # the one documented process see each other's flags and notes live;
-  # navigation and drafts stay per-session.
+  # Share review state across sessions in the documented single process.
   review_records <- read_review_records(review_file)
   app_flags <- shiny::reactiveVal(review_flags(review_records))
   app_notes <- shiny::reactiveVal(review_notes(review_records))
 
   function(input, output, session) {
-    # Aliased locally because shiny::testServer() reaches only the session
-    # function's own bindings.
+    # Aliases expose app-level state to testServer().
     flags <- app_flags
     notes <- app_notes
     selected <- shiny::reactiveVal(NULL)
     review_target <- shiny::reactiveVal(NULL)
-    # The review pane's subject: the selected exchange when one is chosen,
-    # otherwise the whole selected conversation. The fallback strips any
-    # exchange from the navigation key, so deselecting an exchange lands at
-    # conversation level from a question entry too.
     review_selection <- shiny::reactive({
       review_target() %||% selected()["conversation"]
     })
-    # Flag and note changes re-render the whole review pane, which would
-    # wipe a draft note mid-composition; the server keeps the draft and
-    # reseeds the composer with it. Changing targets discards the draft.
+    # Preserve drafts across review-pane renders, but not target changes.
     draft <- shiny::reactiveVal("")
     shiny::observeEvent(input$review_note, draft(input$review_note))
     shiny::observeEvent(review_selection(), draft(""), ignoreNULL = FALSE)
@@ -599,10 +549,6 @@ viewer_server <- function(
       )
     })
 
-    # The timeline reflects the date window but not the trust filter: it
-    # charts the trust distribution the filter slices. The legend's entry
-    # tooltips carry the window's overall rates -- including undated
-    # answers, which the per-bin bands can't place.
     output$timeline_legend <- shiny::renderUI({
       in_dates <- Filter(
         function(i) in_window(summary[[i]], input$window),
@@ -639,9 +585,7 @@ viewer_server <- function(
       entries
     })
 
-    # Entry and transcript ids index into `trajectories`, which never
-    # changes, so observers registered once stay valid as the filters
-    # re-render the list.
+    # Register once because filtering does not change trajectory indices.
     all_keys <- c(
       lapply(seq_along(trajectories), function(i) list(conversation = i)),
       lapply(questions, function(record) record[c("conversation", "exchange")])
@@ -656,8 +600,6 @@ viewer_server <- function(
       })
     }
 
-    # With no exchange selected the pane works at conversation level: the
-    # flag and any notes cover the whole conversation.
     output$review_bar <- shiny::renderUI({
       key <- review_selection()
       if (is.null(key)) {
@@ -695,8 +637,6 @@ viewer_server <- function(
       if (is.null(navigation)) {
         return()
       }
-      # A null exchange is the client deselecting (clicking the selected
-      # exchange again).
       exchange <- as.integer(input$exchange_select$exchange)
       if (length(exchange) != 1 || is.na(exchange)) {
         review_target(NULL)
@@ -714,12 +654,6 @@ viewer_server <- function(
       ))
     })
 
-    # The transcript highlight follows review_target wherever it changes --
-    # including deselection by re-clicking the current entry -- so the
-    # client never shows a selection the review pane has dropped. Echoing a
-    # client-initiated selection back is harmless: re-applying it sends no
-    # input, and a message racing a fresh transcript finds no element and
-    # dies quietly (the exchange seed carries that state instead).
     shiny::observeEvent(
       review_target(),
       ignoreNULL = FALSE,
@@ -759,9 +693,7 @@ viewer_server <- function(
       notes(c(notes(), list(record)))
     })
 
-    # A fresh chat element per selection: a superseded pill-seed timer from a
-    # fast selection switch then targets a defunct element id and dies
-    # harmlessly instead of racing the new transcript.
+    # A fresh id prevents stale pill timers from targeting a new transcript.
     output$transcript <- shiny::renderUI({
       key <- selected()
       if (is.null(key)) {
@@ -772,12 +704,7 @@ viewer_server <- function(
       commons_ui(transcript_id(key), height = "100%")
     })
 
-    # onFlushed fires after the flush that delivers the new chat element, so
-    # it is bound client-side before the replayed messages arrive -- the same
-    # mechanism commons_server() uses to seed pills.
-    # Question and conversation entries open the same thing -- the whole
-    # conversation -- a question entry just arrives with its exchange
-    # selected and scrolled into view.
+    # Replay only after the new chat element is bound in the browser.
     shiny::observeEvent(selected(), {
       key <- selected()
       session$onFlushed(
@@ -821,10 +748,6 @@ transcript_id <- function(key) {
   paste(c("transcript", key$conversation, key$exchange), collapse = "_")
 }
 
-# Review ------------------------------------------------------------------
-
-# Without an exchange the pane annotates the whole conversation; selecting
-# an exchange in the transcript scopes it to that question instead.
 review_bar_notes <- function(key, flagged, notes, draft = "") {
   whole_conversation <- is.null(key$exchange)
   htmltools::div(
@@ -887,9 +810,6 @@ review_note_list <- function(notes) {
   )
 }
 
-# Notes date themselves the way list entries do; a record whose time doesn't
-# parse (or predates timestamps) just goes undated. Timestamps are stored in
-# UTC; the date reads in the reviewer's local time, like the entries'.
 note_date <- function(note) {
   time <- parse_review_time(note$time %||% "")
   if (is.na(time)) {
@@ -911,9 +831,6 @@ selection_review_key <- function(key, summary) {
   review_key(summary[[key$conversation]]$id, key$exchange)
 }
 
-# An icon-only toggle: the flag reads gray until flagged, then wears the
-# same orange as the list markers. State also rides in the tooltip and
-# aria-pressed, so it isn't conveyed by color alone.
 flag_button <- function(flagged, whole_conversation) {
   what <- if (whole_conversation) "conversation" else "question"
   title <- if (flagged) {
@@ -948,11 +865,6 @@ flag_marker <- function(flagged) {
   )
 }
 
-# Entries -----------------------------------------------------------------
-
-# Conversation entries carry no trust pills: a conversation mixes answers
-# at different levels, which a single answer's badge misstates. The trust
-# filter, the timeline, and the transcript's own pills carry that story.
 conversation_entry <- function(
   index,
   record,
@@ -1013,8 +925,6 @@ conversation_meta <- function(record) {
   sprintf("%s \u00b7 %s", turns, date)
 }
 
-# Entries stamp themselves with the local time as well as the date, so
-# same-day conversations stay tellable apart in the list.
 entry_date <- function(record) {
   time <- record$last_active
   if (is.na(time)) {
@@ -1031,8 +941,6 @@ viewer_empty_note <- function(text) {
   htmltools::div(class = "commons-viewer-empty", text)
 }
 
-# Conversations without a timestamp always pass the date filter, as does
-# everything while the picker holds less than a complete range.
 in_window <- function(record, window) {
   if (length(window) < 2) {
     return(TRUE)
@@ -1041,8 +949,6 @@ in_window <- function(record, window) {
   is.na(date) || (date >= window[[1]] && date <= window[[2]])
 }
 
-# The date filter's bounds; when no conversation carries a timestamp, both
-# collapse to today and the filter is inert (NA times always pass).
 viewer_date_range <- function(summary) {
   dates <- record_dates(summary)
   dates <- dates[!is.na(dates)]
@@ -1060,21 +966,16 @@ record_dates <- function(records) {
   ))
 }
 
-# as.Date() on a POSIXct reads it in UTC; the viewer filters and displays
-# calendar days in the reader's local time.
+# as.Date.POSIXct() defaults to UTC rather than the reviewer's local day.
 local_date <- function(time) {
   as.Date(format(time, "%Y-%m-%d"))
 }
 
-# %e space-pads single-digit days; collapse the padding so dates read
-# "Jul 1, 2026", matching the timeline's range labels.
 day_label <- function(date) {
   gsub("\\s+", " ", format(date, "%b %e, %Y"))
 }
 
-# Asset mtimes ride in the version so the dependency URL changes whenever
-# the files do; browsers otherwise cache edited assets under the stable
-# version's URL indefinitely.
+# Asset mtimes invalidate browser caches during package development.
 commons_viewer_dependency <- function() {
   src <- system.file("www", "commons-viewer", package = "commons")
   stamp <- max(file.mtime(list.files(src, full.names = TRUE)))
