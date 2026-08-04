@@ -589,7 +589,6 @@ test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
   skip_if_not_installed("bslib")
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")
-  skip_if_not_installed("shinyWidgets")
 
   deps <- vapply(
     htmltools::findDependencies(viewer_ui(list())),
@@ -605,10 +604,11 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   skip_if_not_installed("bslib", minimum_version = "0.11.0")
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")
-  skip_if_not_installed("shinyWidgets")
 
   html <- as.character(viewer_ui(list()))
 
+  expect_match(html, "shiny-date-range-input")
+  expect_no_match(html, "air-datepicker")
   expect_match(html, "bslib-sidebar-layout")
   expect_match(html, "sidebar-right")
   expect_match(html, "data-resizable")

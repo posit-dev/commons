@@ -87,8 +87,7 @@ check_viewer_packages <- function(call = rlang::caller_env()) {
     "htmltools",
     "plotly",
     "shiny",
-    "shinychat",
-    "shinyWidgets"
+    "shinychat"
   )
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
@@ -424,19 +423,13 @@ viewer_ui <- function(summary) {
           bslib::nav_panel("Conversations", value = "conversation"),
           bslib::nav_panel("Questions", value = "question")
         ),
-        shinyWidgets::airDatepickerInput(
+        shiny::dateRangeInput(
           "window",
           "Dates",
-          range = TRUE,
-          value = c(dates$min, dates$max),
-          minDate = dates$min,
-          maxDate = dates$max,
-          dateFormat = "MMM d, yyyy",
-          update_on = "close",
-          addon = "none",
-          # With toggling on, clicking the range's start date a second time
-          # deselects it, making a one-day window unreachable.
-          toggleSelected = FALSE
+          start = dates$min,
+          end = dates$max,
+          min = dates$min,
+          max = dates$max
         ),
         shiny::selectInput(
           "trust",
