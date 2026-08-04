@@ -452,7 +452,27 @@ viewer_ui <- function(summary) {
         bslib::layout_sidebar(
           shiny::uiOutput("transcript", fill = TRUE),
           sidebar = bslib::sidebar(
-            shiny::uiOutput("review_bar"),
+            htmltools::div(
+              class = "commons-viewer-review-pane",
+              shiny::uiOutput("review_bar"),
+              shiny::conditionalPanel(
+                "output.review_ready === 'ready'",
+                bslib::input_submit_textarea(
+                  "review_note",
+                  placeholder = "Add a note",
+                  width = "100%",
+                  button = htmltools::tags$button(
+                    type = "button",
+                    class = "btn commons-viewer-note-submit",
+                    title = "Add note",
+                    `aria-label` = "Add note",
+                    maybe_icon("arrow-up") %||% "\u2191"
+                  ),
+                  submit_key = "enter"
+                ),
+                class = "commons-viewer-note-compose"
+              )
+            ),
             position = "right",
             width = 320,
             padding = 0,
@@ -514,11 +534,33 @@ viewer_server <- function(
     review_selection <- shiny::reactive({
       review_target() %||% selected()["conversation"]
     })
-    # Preserve drafts across review-pane renders, but not target changes.
-    draft <- shiny::reactiveVal("")
-    shiny::observeEvent(input$review_note, draft(input$review_note))
-    shiny::observeEvent(review_selection(), draft(""), ignoreNULL = FALSE)
     user <- review_user(session)
+
+    output$review_ready <- shiny::renderText({
+      if (is.null(review_selection())) "" else "ready"
+    })
+    shiny::outputOptions(output, "review_ready", suspendWhenHidden = FALSE)
+
+    shiny::observeEvent(
+      review_selection(),
+      ignoreNULL = FALSE,
+      {
+        key <- review_selection()
+        placeholder <- if (is.null(key)) {
+          "Add a note"
+        } else if (is.null(key$exchange)) {
+          "Add a note about this conversation"
+        } else {
+          "Add a note about this exchange"
+        }
+        bslib::update_submit_textarea(
+          "review_note",
+          value = "",
+          placeholder = placeholder,
+          session = session
+        )
+      }
+    )
 
     shiny::observeEvent(input$group_by, {
       shiny::updateSelectInput(
@@ -605,8 +647,7 @@ viewer_server <- function(
       review_bar_notes(
         key,
         flagged,
-        notes_for_selection(notes(), key, summary),
-        draft = shiny::isolate(draft())
+        notes_for_selection(notes(), key, summary)
       )
     })
 
@@ -670,7 +711,7 @@ viewer_server <- function(
       }
     )
 
-    shiny::observeEvent(input$save_note, {
+    shiny::observeEvent(input$review_note, {
       key <- review_selection()
       note <- trimws(input$review_note %||% "")
       if (is.null(key) || !nzchar(note)) {
@@ -685,8 +726,13 @@ viewer_server <- function(
         note = note
       )
       append_review_record(review_file, record)
-      draft("")
       notes(c(notes(), list(record)))
+      bslib::update_submit_textarea(
+        "review_note",
+        value = "",
+        focus = TRUE,
+        session = session
+      )
     })
 
     # A fresh id prevents stale pill timers from targeting a new transcript.
@@ -744,7 +790,7 @@ transcript_id <- function(key) {
   paste(c("transcript", key$conversation, key$exchange), collapse = "_")
 }
 
-review_bar_notes <- function(key, flagged, notes, draft = "") {
+review_bar_notes <- function(key, flagged, notes) {
   whole_conversation <- is.null(key$exchange)
   htmltools::div(
     class = "commons-viewer-review",
@@ -766,27 +812,7 @@ review_bar_notes <- function(key, flagged, notes, draft = "") {
          answer in the transcript to add a note specific to that exchange."
       )
     },
-    review_note_list(notes),
-    htmltools::div(
-      class = "commons-viewer-note-compose",
-      shiny::textAreaInput(
-        "review_note",
-        NULL,
-        value = draft,
-        placeholder = if (whole_conversation) {
-          "Add a note about this conversation"
-        } else {
-          "Add a note about this exchange"
-        },
-        rows = 2,
-        width = "100%"
-      ),
-      shiny::actionButton(
-        "save_note",
-        "Add note",
-        class = "btn-sm btn-outline-secondary"
-      )
-    )
+    review_note_list(notes)
   )
 }
 

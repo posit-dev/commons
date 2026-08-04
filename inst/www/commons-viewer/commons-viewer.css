@@ -115,49 +115,50 @@
 }
 
 .commons-viewer-note-compose {
-  background: var(--bs-body-bg, #fff);
-  border: 1px solid var(--bs-border-color, #dee2e6);
+  box-sizing: border-box;
+}
+
+.commons-viewer-note-compose .bslib-input-submit-textarea {
+  margin: 0 1rem 0.75rem;
+  max-width: 18rem;
+  width: calc(100% - 2rem) !important;
+}
+
+.commons-viewer-note-compose .bslib-submit-textarea-container {
   border-radius: 0.75rem;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-  display: grid;
-  margin-top: 0.75rem;
-  padding: 0.25rem;
+  overflow: hidden;
 }
 
-.commons-viewer-note-compose:focus-within {
-  border-color: color-mix(in srgb, var(--bs-primary, #007bc2) 55%, var(--bs-body-bg, #fff));
-}
-
-.commons-viewer-note-compose .shiny-input-container {
-  margin: 0;
-  width: 100%;
-}
-
-.commons-viewer-note-compose textarea,
-.commons-viewer-note-compose textarea:focus {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
+.commons-viewer-note-compose textarea {
   font-size: 0.875rem;
+}
+
+.commons-viewer-note-compose .commons-viewer-note-submit,
+.commons-viewer-note-compose .commons-viewer-note-submit:focus {
+  align-items: center;
+  background-color: var(--bs-body-color, #212529);
+  border: 0;
+  border-radius: 50%;
+  color: var(--bs-body-bg, #fff);
+  display: inline-flex;
+  flex: 0 0 1.5rem;
+  font-size: 0.6875rem;
+  height: 1.5rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 1.5rem;
+}
+
+.commons-viewer-note-compose .commons-viewer-note-submit:hover,
+.commons-viewer-note-compose .commons-viewer-note-submit:active {
+  background-color: var(--bs-primary, #007bc2);
+  color: #fff;
+}
+
+.commons-viewer-note-compose .commons-viewer-note-submit:focus-visible {
+  box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color, rgba(0, 123, 194, 0.25));
   outline: 0;
-  padding: 0.375rem 0.5rem;
-  resize: none;
-}
-
-.commons-viewer-note-compose .btn,
-.commons-viewer-note-compose .btn:focus {
-  border: 0;
-  color: var(--bs-secondary-color, #6c757d);
-  font-size: 0.8125rem;
-  justify-self: end;
-  padding: 0.25rem 0.625rem;
-}
-
-.commons-viewer-note-compose .btn:hover,
-.commons-viewer-note-compose .btn:active {
-  background-color: rgba(var(--bs-emphasis-color-rgb, 33, 37, 41), 0.045);
-  border: 0;
-  color: var(--bs-body-color, #212529);
 }
 
 .commons-viewer-flag-button,

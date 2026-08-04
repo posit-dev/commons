@@ -101,19 +101,6 @@
       activateExchange(node);
     });
 
-    document.addEventListener("keydown", function(event) {
-      if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
-        return;
-      }
-      var target = event.target;
-      if (!target || target.id !== "review_note") return;
-      event.preventDefault();
-      var button = document.getElementById("save_note");
-      if (!button) return;
-      Shiny.setInputValue("review_note", target.value);
-      button.click();
-    });
-
     Shiny.addCustomMessageHandler("commonsViewerExchangeSelect", function(message) {
       var chat = document.getElementById(message.id);
       if (!chat) return;

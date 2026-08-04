@@ -413,8 +413,10 @@ test_that("flags and notes append to and restore from the review file", {
       session$setInputs(flag_toggle = 2)
       expect_equal(flags(), c("conv1", "conv1#1"))
 
+      session$setInputs(review_note = "   ")
+      expect_length(notes(), 0)
+
       session$setInputs(review_note = "Wrong join, should use orders.")
-      session$setInputs(save_note = 1)
       expect_length(notes(), 1)
       expect_equal(notes()[[1]]$note, "Wrong join, should use orders.")
       expect_equal(
@@ -424,7 +426,6 @@ test_that("flags and notes append to and restore from the review file", {
 
       session$setInputs(exchange_select = list(nonce = 2))
       session$setInputs(review_note = "Reviewed end to end; looks fine.")
-      session$setInputs(save_note = 2)
       expect_length(notes(), 2)
       expect_null(notes()[[2]]$exchange)
       expect_equal(
@@ -611,7 +612,13 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   expect_match(html, "bslib-sidebar-layout")
   expect_match(html, "sidebar-right")
   expect_match(html, "data-resizable")
+  expect_match(html, "bslib-input-submit-textarea")
+  expect_match(html, "commons-viewer-note-submit")
+  expect_match(html, 'aria-label="Add note"')
+  expect_no_match(html, ">Submit<", fixed = TRUE)
+  expect_no_match(html, "data-needs-modifier")
   expect_no_match(html, "commons-viewer-pane-resizer")
+  expect_no_match(html, "save_note")
 })
 
 test_that("the timeline legend tucks each level's rate into its tooltip", {
