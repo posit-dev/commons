@@ -449,23 +449,19 @@ viewer_ui <- function(summary) {
       bslib::card(
         fill = TRUE,
         class = "commons-viewer-transcript",
-        htmltools::div(
-          class = "commons-viewer-workspace",
-          htmltools::div(
-            class = "commons-viewer-transcript-pane",
-            shiny::uiOutput("transcript", fill = TRUE)
+        bslib::layout_sidebar(
+          shiny::uiOutput("transcript", fill = TRUE),
+          sidebar = bslib::sidebar(
+            shiny::uiOutput("review_bar"),
+            position = "right",
+            width = 320,
+            padding = 0,
+            resizable = TRUE
           ),
-          htmltools::div(
-            class = "commons-viewer-pane-resizer",
-            role = "separator",
-            `aria-orientation` = "vertical",
-            `aria-label` = "Resize the notes pane",
-            tabindex = "0"
-          ),
-          htmltools::div(
-            class = "commons-viewer-review-pane",
-            shiny::uiOutput("review_bar")
-          )
+          border = FALSE,
+          border_radius = FALSE,
+          padding = 0,
+          gap = 0
         )
       )
     ),

@@ -70,57 +70,6 @@
   width: 1px;
 }
 
-.commons-viewer-workspace {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns:
-    minmax(0, 1fr) auto var(--commons-viewer-review-width, minmax(16rem, 22rem));
-  height: 100%;
-  min-height: 0;
-}
-
-.commons-viewer-transcript-pane {
-  display: flex;
-  min-height: 0;
-  min-width: 0;
-}
-
-.commons-viewer-transcript-pane > .shiny-html-output {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.commons-viewer-pane-resizer {
-  background: linear-gradient(
-    to right,
-    transparent calc(50% - 0.5px),
-    var(--bs-border-color, #dee2e6) calc(50% - 0.5px),
-    var(--bs-border-color, #dee2e6) calc(50% + 0.5px),
-    transparent calc(50% + 0.5px)
-  );
-  cursor: col-resize;
-  touch-action: none;
-  width: 0.5rem;
-}
-
-.commons-viewer-pane-resizer:hover,
-.commons-viewer-pane-resizer:focus-visible,
-.commons-viewer-pane-resizing {
-  background: linear-gradient(
-    to right,
-    transparent calc(50% - 1px),
-    color-mix(in srgb, #007bc2 55%, var(--bs-body-bg, #fff)) calc(50% - 1px),
-    color-mix(in srgb, #007bc2 55%, var(--bs-body-bg, #fff)) calc(50% + 1px),
-    transparent calc(50% + 1px)
-  );
-  outline: none;
-}
-
-.commons-viewer-review-pane {
-  min-width: 0;
-  overflow-y: auto;
-}
-
 .commons-viewer-review {
   padding: 0.75rem 1rem;
 }
@@ -281,22 +230,6 @@
 .commons-viewer-transcript
   .shiny-chat-user-message.commons-viewer-exchange-selected {
   background-color: transparent;
-}
-
-@media (max-width: 900px) {
-  .commons-viewer-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(20rem, 1fr) auto;
-  }
-
-  .commons-viewer-pane-resizer {
-    display: none;
-  }
-
-  .commons-viewer-review-pane {
-    border-top: 1px solid var(--bs-border-color, #dee2e6);
-    max-height: 40vh;
-  }
 }
 
 .commons-viewer-sidebar .control-label {

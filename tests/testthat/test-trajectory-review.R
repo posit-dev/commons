@@ -599,6 +599,21 @@ test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
   expect_lt(match("commons-chat", deps), match("commons-viewer", deps))
 })
 
+test_that("viewer_ui uses bslib's resizable review sidebar", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("bslib", minimum_version = "0.11.0")
+  skip_if_not_installed("shinychat")
+  skip_if_not_installed("htmltools")
+  skip_if_not_installed("shinyWidgets")
+
+  html <- as.character(viewer_ui(list()))
+
+  expect_match(html, "bslib-sidebar-layout")
+  expect_match(html, "sidebar-right")
+  expect_match(html, "data-resizable")
+  expect_no_match(html, "commons-viewer-pane-resizer")
+})
+
 test_that("the timeline legend tucks each level's rate into its tooltip", {
   skip_if_not_installed("htmltools")
 
