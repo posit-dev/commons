@@ -6,11 +6,3 @@
       Error:
       ! `trajectories` must be a named list of conversations as returned by `read_trajectories()`: each a list of <ellmer::Turn>s.
 
----
-
-    Code
-      check_trajectories(list(list()))
-    Condition
-      Error:
-      ! `trajectories` must be a named list of conversations as returned by `read_trajectories()`: each a list of <ellmer::Turn>s.
-

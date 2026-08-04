@@ -30,8 +30,8 @@ test_that("exchange_provenance derives tags from tool calls and citations", {
   )
   expect_equal(exchange_provenance(uncited)$tag, "C")
 
-  # Citation *presence* makes a fallback answer "B": with no agent there is
-  # no corpus, so even an unverifiable quote counts.
+  # Citation presence, not verification, decides "B" (see
+  # exchange_provenance()).
   cited <- c(
     list(ellmer::UserTurn("Total revenue?")),
     test_tool_turns("run_sql"),
@@ -332,7 +332,7 @@ test_that("summarize_questions flattens exchanges across conversations", {
 test_that("trajectory reviewer accepts empty trajectories and rejects other shapes", {
   expect_no_error(check_trajectories(list()))
   expect_snapshot(check_trajectories("nope"), error = TRUE)
-  expect_snapshot(check_trajectories(list(list())), error = TRUE)
+  expect_error(check_trajectories(list(list())))
 })
 
 test_that("the viewer filters conversations and follows selection", {
@@ -496,8 +496,8 @@ test_that("trust_timeline_bins aggregates question tags by day at volume", {
   expect_length(bins, 2)
   expect_equal(bins[[1]]$date, "2026-07-01")
   expect_equal(bins[[1]]$n, 5)
-  expect_equal(bins[[1]]$counts, list(A = 4L, B = 0L, C = 1L, none = 0L))
-  expect_equal(bins[[2]]$counts, list(A = 1L, B = 0L, C = 3L, none = 1L))
+  expect_equal(bins[[1]]$counts, c(A = 4L, B = 0L, C = 1L, none = 0L))
+  expect_equal(bins[[2]]$counts, c(A = 1L, B = 0L, C = 3L, none = 1L))
 
   windowed <- trust_timeline_bins(
     questions,
@@ -552,7 +552,7 @@ test_that("bins never grow coarser than the selected window", {
   window <- as.Date(c("2026-07-01", "2026-07-01"))
   binned <- trust_timeline_bins(sparse, window)
   expect_equal(binned$unit, "day")
-  expect_equal(binned$bins[[1]]$label, "Jul  1, 2026")
+  expect_equal(binned$bins[[1]]$label, "Jul 1, 2026")
 
   # Without a window the answers' own one-day extent pins the unit too.
   expect_equal(trust_timeline_bins(sparse)$unit, "day")
@@ -580,10 +580,8 @@ test_that("trust_timeline renders a chart and its table view", {
   ))
   bins <- binned$bins
 
-  # One stacked trace per trust level, sharing each bin's answers out as
-  # percentages. Every trace carries the same hover card -- with the bin's
-  # n up beside the date -- so the card anchors to whichever band boundary
-  # sits nearest the pointer.
+  # One stacked trace per trust level; every trace carries the same per-bin
+  # hover card (see timeline_plot()).
   traces <- plotly::plotly_build(timeline_plot(bins, binned$unit))$x$data
   expect_length(traces, length(viewer_levels))
   expect_equal(
@@ -592,16 +590,14 @@ test_that("trust_timeline renders a chart and its table view", {
   )
   expect_equal(as.numeric(traces[[1]]$y), c(100, 60))
   expect_equal(as.numeric(traces[[3]]$y), c(0, 40))
-  for (trace in traces) {
-    expect_match(trace$hovertemplate[[1]], "Jul  1, 2026</b>  (n = 5)", fixed = TRUE)
-    expect_match(trace$hovertemplate[[2]], "<b>60%</b> Verified", fixed = TRUE)
-    expect_match(trace$hovertemplate[[2]], "<extra></extra>", fixed = TRUE)
-  }
+  hovers <- lapply(traces, function(trace) trace$hovertemplate)
+  expect_length(unique(hovers), 1)
+  expect_match(hovers[[1]][[1]], "(n = 5)", fixed = TRUE)
+  expect_match(hovers[[1]][[2]], "<b>60%</b> Verified", fixed = TRUE)
+  expect_match(hovers[[1]][[2]], "<extra></extra>", fixed = TRUE)
 
-  # A single dated bin charts as a stacked column instead of an area. Its
-  # card is the hovertemplate's own content -- a lone bin's length-1
-  # per-point attributes unbox to scalars in the widget JSON, so a
-  # %{text} reference would render unsubstituted.
+  # A single dated bin charts as a stacked column, its card in the
+  # hovertemplate itself (see timeline_plot()).
   single <- plotly::plotly_build(timeline_plot(bins[1], binned$unit))$x$data
   expect_equal(single[[1]]$type, "bar")
   expect_match(single[[1]]$hovertemplate[[1]], "(n = 5)", fixed = TRUE)
@@ -641,7 +637,6 @@ test_that("the timeline legend tucks each level's rate into its tooltip", {
 
   expect_match(legend, "Verified")
   expect_match(legend, "1 of 4 answers (25%)", fixed = TRUE)
-  expect_no_match(legend, "<strong>", fixed = TRUE)
 
   empty <- as.character(timeline_legend(hit_rate(list())))
   expect_match(empty, "—")

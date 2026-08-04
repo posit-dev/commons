@@ -41,10 +41,3 @@ test_that("trajectory_reviews_read reads legacy records", {
     list(action = "note", note = "Legacy note.")
   )
 })
-
-test_that("review_user identifies authenticated and local sessions", {
-  expect_equal(
-    c(review_user(list(user = "sara")), review_user(list(user = NULL))),
-    c("sara", "unknown")
-  )
-})

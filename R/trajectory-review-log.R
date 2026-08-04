@@ -85,9 +85,7 @@ review_timestamp <- function() {
 
 review_user <- function(session) {
   user <- session$user
-  if (
-    !is.character(user) || length(user) != 1 || is.na(user) || !nzchar(user)
-  ) {
+  if (!rlang::is_string(user) || !nzchar(user)) {
     return("unknown")
   }
   user
@@ -134,8 +132,8 @@ read_review_records <- function(file) {
 is_review_record <- function(record) {
   if (
     !is.list(record) ||
-      !is_scalar_character(record$conversation) ||
-      !is_scalar_character(record$action) ||
+      !rlang::is_string(record$conversation) ||
+      !rlang::is_string(record$action) ||
       !record$action %in% c("flag", "unflag", "note")
   ) {
     return(FALSE)
@@ -148,11 +146,7 @@ is_review_record <- function(record) {
   ) {
     return(FALSE)
   }
-  !identical(record$action, "note") || is_scalar_character(record$note)
-}
-
-is_scalar_character <- function(x) {
-  is.character(x) && length(x) == 1 && !is.na(x)
+  !identical(record$action, "note") || rlang::is_string(record$note)
 }
 
 actionable_review_records <- function(records) {
@@ -207,16 +201,15 @@ enrich_review_record <- function(record, trajectories) {
 
 # Flags persist as flag/unflag events; the latest event per key wins.
 review_flags <- function(records) {
-  flags <- character()
-  for (record in records) {
-    key <- review_key(record$conversation, record$exchange)
-    if (identical(record$action, "flag")) {
-      flags <- union(flags, key)
-    } else if (identical(record$action, "unflag")) {
-      flags <- setdiff(flags, key)
-    }
-  }
-  flags
+  active <- Filter(
+    function(record) identical(record$action, "flag"),
+    actionable_review_records(records)
+  )
+  vapply(
+    active,
+    function(record) review_key(record$conversation, record$exchange),
+    character(1)
+  )
 }
 
 review_notes <- function(records) {
