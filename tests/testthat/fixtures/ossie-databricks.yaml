@@ -1,0 +1,69 @@
+# Adapted from Apache Ossie's Databricks converter fixture A (Apache-2.0).
+version: "0.2.0.dev0"
+future_document_field: retained
+semantic_model:
+  - name: sales
+    description: Sales orders with customer attributes
+    ai_context:
+      instructions: Use this model for governed sales analysis.
+    datasets:
+      - name: orders
+        source: samples.tpch.orders
+        primary_key: [o_orderkey]
+        description: One row per order
+        fields:
+          - name: o_orderkey
+            expression:
+              dialects:
+                - dialect: DATABRICKS
+                  expression: o_orderkey
+            datatype: Integer
+            description: Order identifier
+          - name: o_orderdate
+            expression:
+              dialects:
+                - dialect: DATABRICKS
+                  expression: o_orderdate
+                - dialect: ANSI_SQL
+                  expression: CAST(o_orderdate AS DATE)
+            datatype: Date
+            label: Order Date
+            ai_context:
+              synonyms: [order date, date]
+      - name: customer
+        source: samples.tpch.customer
+        primary_key: [c_custkey]
+        fields:
+          - name: c_name
+            expression:
+              dialects:
+                - dialect: DATABRICKS
+                  expression: c_name
+            description: Customer name
+    relationships:
+      - name: orders_to_customer
+        from: orders
+        to: customer
+        from_columns: [o_custkey]
+        to_columns: [c_custkey]
+        ai_context:
+          instructions: Each order has at most one customer.
+    metrics:
+      - name: total_revenue
+        expression:
+          dialects:
+            - dialect: DATABRICKS
+              expression: SUM(orders.o_totalprice)
+        datatype: Decimal
+        description: Total order revenue
+        ai_context:
+          synonyms: [revenue, total revenue, sales]
+      - name: order_count
+        expression:
+          dialects:
+            - dialect: DATABRICKS
+              expression: COUNT(*)
+        description: Number of orders
+    custom_extensions:
+      - vendor_name: DATABRICKS
+        data: '{"metric_view_version":"1.1","future_extension":{"keep":true}}'
