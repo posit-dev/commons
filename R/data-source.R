@@ -125,7 +125,9 @@ data_source_frames <- function(
   check_named_frames(dots, call = call)
   selected <- select_flat_names(names(dots), options, call)
   dots <- dots[selected]
-  dictionary <- catalog_scope_flat_authored(dictionary, names(dots), "frames")
+  if (!is.null(options$include) || length(options$exclude)) {
+    dictionary <- catalog_scope_flat_authored(dictionary, names(dots), "frames")
+  }
   local_commons_span(
     "commons_data_source_load_frames",
     attributes = list("commons.data_source.n_tables" = length(dots))
