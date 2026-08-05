@@ -1,0 +1,33 @@
+name: Cleanup PR Previews
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to clean up
+        required: true
+        type: number
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cleanup preview bundles (dev)
+        uses: posit-dev/connect-actions/cleanup-previews@main
+        with:
+          connect-server: ${{ secrets.CONNECT_SERVER_DEV }}
+          github-token: ${{ github.token }}
+
+      - name: Cleanup preview bundles (staging)
+        uses: posit-dev/connect-actions/cleanup-previews@main
+        with:
+          connect-server: ${{ secrets.CONNECT_SERVER_STAGING }}
+          github-token: ${{ github.token }}

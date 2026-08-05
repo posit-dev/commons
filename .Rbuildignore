@@ -14,3 +14,4 @@ CLAUDE.md
 ^pkgdown$
 ^\.github$
 inst/hex/
+inst/manifest.json

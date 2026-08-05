@@ -1,0 +1,35 @@
+name: Deploy to Connect
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Deploy to Connect (dev)
+        uses: posit-dev/connect-actions/deploy@main
+        with:
+          connect-server: ${{ secrets.CONNECT_SERVER_DEV }}
+          content-guid: d7a36cae-8f27-448b-a478-61b81fbe3942
+          path: inst
+          github-token: ${{ github.token }}
+          rsconnect-args: --title biodiversity-explorer
+
+      - name: Deploy to Connect (staging)
+        uses: posit-dev/connect-actions/deploy@main
+        with:
+          connect-server: ${{ secrets.CONNECT_SERVER_STAGING }}
+          content-guid: ad662e1b-5048-4acc-9ad7-f9478c92274e
+          path: inst
+          github-token: ${{ github.token }}
+          rsconnect-args: --title biodiversity-explorer
