@@ -4,5 +4,5 @@
       check_trajectories("nope")
     Condition
       Error:
-      ! `trajectories` must be a named list of conversations as returned by `read_trajectories()`: each a list of <ellmer::Turn>s.
+      ! `trajectories` must be a named list of conversations as returned by `trajectory_read()`: each a list of <ellmer::Turn>s.
 

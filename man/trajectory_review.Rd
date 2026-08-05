@@ -5,13 +5,13 @@
 \title{Review commons trajectories}
 \usage{
 trajectory_review(
-  trajectories = read_trajectories(),
+  trajectories = trajectory_read(),
   review_file = Sys.getenv("COMMONS_REVIEW_FILE", unset = "commons-review.jsonl")
 )
 }
 \arguments{
 \item{trajectories}{A named list of conversations, as returned by
-\code{\link[=read_trajectories]{read_trajectories()}}.}
+\code{\link[=trajectory_read]{trajectory_read()}}.}
 
 \item{review_file}{Path of the JSONL file that review actions append to:
 flags, unflags, and feedback notes, each with a timestamp, the
@@ -26,7 +26,7 @@ expression of an \code{app.R}.
 }
 \description{
 \code{trajectory_review()} launches a Shiny app for browsing conversation
-trajectories read with \code{\link[=read_trajectories]{read_trajectories()}}. The app charts each trust
+trajectories read with \code{\link[=trajectory_read]{trajectory_read()}}. The app charts each trust
 level's share of answers over time—binned by day, week, or month, using
 the finest unit the volume of answers supports—alongside a list of
 conversations or of individual questions, filterable by date and trust
@@ -68,6 +68,6 @@ processes do not coordinate file writes or in-memory review state.
 \dontrun{
 trajectory_review()
 
-trajectory_review(read_trajectories(from = "2026-07-01"))
+trajectory_review(trajectory_read(from = "2026-07-01"))
 }
 }

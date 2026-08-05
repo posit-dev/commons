@@ -79,7 +79,7 @@ Viewer); commons switches on the content's \emph{Content Observability}
 setting itself when needed, though capture only starts once the content
 restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
 automatically when no exporter is set up. Read trajectories back with
-\code{\link[=read_trajectories]{read_trajectories()}}.}
+\code{\link[=trajectory_read]{trajectory_read()}}.}
 
 \item{share_with}{An optional character vector of Connect usernames granted
 access to this content's trajectories when running on Posit Connect.

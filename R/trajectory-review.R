@@ -2,7 +2,7 @@
 #'
 #' @description
 #' `trajectory_review()` launches a Shiny app for browsing conversation
-#' trajectories read with [read_trajectories()]. The app charts each trust
+#' trajectories read with [trajectory_read()]. The app charts each trust
 #' level's share of answers over time—binned by day, week, or month, using
 #' the finest unit the volume of answers supports—alongside a list of
 #' conversations or of individual questions, filterable by date and trust
@@ -34,7 +34,7 @@
 #' turn—are excluded from the viewer.
 #'
 #' @param trajectories A named list of conversations, as returned by
-#'   [read_trajectories()].
+#'   [trajectory_read()].
 #' @param review_file Path of the JSONL file that review actions append to:
 #'   flags, unflags, and feedback notes, each with a timestamp, the
 #'   conversation id, and (for questions) the exchange number. Created on
@@ -56,11 +56,11 @@
 #' \dontrun{
 #' trajectory_review()
 #'
-#' trajectory_review(read_trajectories(from = "2026-07-01"))
+#' trajectory_review(trajectory_read(from = "2026-07-01"))
 #' }
 #' @export
 trajectory_review <- function(
-  trajectories = read_trajectories(),
+  trajectories = trajectory_read(),
   review_file = Sys.getenv(
     "COMMONS_REVIEW_FILE",
     unset = "commons-review.jsonl"
@@ -108,7 +108,7 @@ check_trajectories <- function(trajectories, call = rlang::caller_env()) {
   if (!ok) {
     cli::cli_abort(
       "{.arg trajectories} must be a named list of conversations as returned
-       by {.fn read_trajectories}: each a list of {.cls ellmer::Turn}s.",
+       by {.fn trajectory_read}: each a list of {.cls ellmer::Turn}s.",
       call = call
     )
   }

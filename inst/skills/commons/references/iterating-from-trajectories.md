@@ -21,15 +21,15 @@ The answer uses SQL with little documentation and the agent had to inspect table
    Search for `commons(`, `data_source(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure arguments without `@param` documentation are never seen by the model: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. A new measure that queries a database should take the connection this way rather than referencing a global; other objects it needs (a pins board, an API client) should come from a default written as a call, e.g. `board = pins::board_connect()`.
 
 2. Load trajectories.
-   Use `commons::read_trajectories()`. With no arguments it resolves automatically: on Posit Connect it reads this content's own traces, in a deployed project it reads the deployment's traces from Connect (requires the `CONNECT_API_KEY` environment variable and editor access to the content), and otherwise it reads local trace files. You can also pass a Connect content GUID, a content URL, or a directory of OTLP trace files. If resolution is unclear, inspect the project for `log =`, `COMMONS_TRACES_DIR`, `OTEL_*` environment variables, or deployment setup.
+   Use `commons::trajectory_read()`. With no arguments it resolves automatically: on Posit Connect it reads this content's own traces, in a deployed project it reads the deployment's traces from Connect (requires the `CONNECT_API_KEY` environment variable and editor access to the content), and otherwise it reads local trace files. You can also pass a Connect content GUID, a content URL, or a directory of OTLP trace files. If resolution is unclear, inspect the project for `log =`, `COMMONS_TRACES_DIR`, `OTEL_*` environment variables, or deployment setup.
 
-   When the store is large, subset: `n` keeps the `n` most recent conversations, and `from`/`to` keep conversations with chat activity in a time window, e.g. `read_trajectories(n = 25, from = Sys.Date() - 7)`.
+   When the store is large, subset: `n` keeps the `n` most recent conversations, and `from`/`to` keep conversations with chat activity in a time window, e.g. `trajectory_read(n = 25, from = Sys.Date() - 7)`.
 
 3. Read the conversations.
    Each trajectory is a list of ellmer turns, named by conversation id.
 
 ```r
-trajectories <- commons::read_trajectories()
+trajectories <- commons::trajectory_read()
 turns <- trajectories[[1]]
 
 print(turns)

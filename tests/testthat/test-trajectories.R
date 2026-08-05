@@ -144,7 +144,7 @@ test_that("generic parts and empty messages are dropped", {
   expect_equal(turns[[1]]@text, "Kept.")
 })
 
-test_that("read_trajectories reads OTLP files from a directory", {
+test_that("trajectory_read reads OTLP files from a directory", {
   path <- withr::local_tempdir()
   json <- test_turn_json()
   line <- otlp_test_line(list(
@@ -153,7 +153,7 @@ test_that("read_trajectories reads OTLP files from a directory", {
   writeLines(line, file.path(path, "trace-0.jsonl"))
   writeLines(line, file.path(path, "trace-latest.jsonl"))
 
-  trajectories <- read_trajectories(path)
+  trajectories <- trajectory_read(path)
 
   expect_length(trajectories, 1)
   expect_length(read_local_spans(path), 1)
@@ -204,7 +204,7 @@ test_that("the latest chat span wins across timestamp digit counts", {
   expect_equal(final@text, "You rolled a 4.")
 })
 
-test_that("read_trajectories hints when no conversation carries content", {
+test_that("trajectory_read hints when no conversation carries content", {
   path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
   line <- otlp_test_line(list(
@@ -213,11 +213,11 @@ test_that("read_trajectories hints when no conversation carries content", {
   ))
   writeLines(line, file.path(path, "trace-0.jsonl"))
 
-  expect_snapshot(.res <- read_trajectories(path))
+  expect_snapshot(.res <- trajectory_read(path))
   expect_length(.res, 0)
 })
 
-test_that("read_trajectories drops content-less conversations, keeping the rest", {
+test_that("trajectory_read drops content-less conversations, keeping the rest", {
   path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
   json <- test_turn_json()
@@ -227,7 +227,7 @@ test_that("read_trajectories drops content-less conversations, keeping the rest"
   ))
   writeLines(line, file.path(path, "trace-0.jsonl"))
 
-  expect_snapshot(.res <- read_trajectories(path))
+  expect_snapshot(.res <- trajectory_read(path))
   expect_length(.res, 1)
   expect_s7_class(.res[[1]][[1]], ellmer::UserTurn)
 })
@@ -238,15 +238,15 @@ test_that("from/to filter conversations by chat-span start time", {
   writeLines(staggered_test_line(), file.path(path, "trace-0.jsonl"))
 
   expect_named(
-    read_trajectories(path, from = .POSIXct(200, tz = "UTC")),
+    trajectory_read(path, from = .POSIXct(200, tz = "UTC")),
     c("t200", "t300")
   )
   expect_named(
-    read_trajectories(path, to = .POSIXct(200, tz = "UTC")),
+    trajectory_read(path, to = .POSIXct(200, tz = "UTC")),
     "t100"
   )
   expect_named(
-    read_trajectories(
+    trajectory_read(
       path,
       from = .POSIXct(150, tz = "UTC"),
       to = .POSIXct(250, tz = "UTC")
@@ -278,8 +278,8 @@ test_that("a conversation continuing past `to` returns history as of `to`", {
   ))
   writeLines(line, file.path(path, "trace-0.jsonl"))
 
-  full <- read_trajectories(path)
-  as_of <- read_trajectories(path, to = .POSIXct(200, tz = "UTC"))
+  full <- trajectory_read(path)
+  as_of <- trajectory_read(path, to = .POSIXct(200, tz = "UTC"))
 
   expect_s7_class(full[[1]][[length(full[[1]])]], ellmer::AssistantTurn)
   expect_length(as_of[[1]], length(full[[1]]) - 1)
@@ -302,7 +302,7 @@ test_that("wrapper spans outside the window still group conversations", {
   ))
   writeLines(line, file.path(path, "trace-0.jsonl"))
 
-  trajectories <- read_trajectories(path, from = .POSIXct(150, tz = "UTC"))
+  trajectories <- trajectory_read(path, from = .POSIXct(150, tz = "UTC"))
 
   expect_named(trajectories, "conv-a")
 })
@@ -312,20 +312,20 @@ test_that("n keeps the most recent conversations", {
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
   writeLines(staggered_test_line(), file.path(path, "trace-0.jsonl"))
 
-  expect_named(read_trajectories(path, n = 2), c("t200", "t300"))
-  expect_named(read_trajectories(path, n = 5), c("t100", "t200", "t300"))
+  expect_named(trajectory_read(path, n = 2), c("t200", "t300"))
+  expect_named(trajectory_read(path, n = 5), c("t100", "t200", "t300"))
   expect_named(
-    read_trajectories(path, n = 1, from = .POSIXct(150, tz = "UTC")),
+    trajectory_read(path, n = 1, from = .POSIXct(150, tz = "UTC")),
     "t300"
   )
 })
 
-test_that("read_trajectories validates n, from, and to", {
-  expect_snapshot(read_trajectories(n = 0), error = TRUE)
-  expect_snapshot(read_trajectories(n = "x"), error = TRUE)
-  expect_snapshot(read_trajectories(from = "not a date"), error = TRUE)
-  expect_snapshot(read_trajectories(to = 1:2), error = TRUE)
-  expect_snapshot(read_trajectories("dir", 5), error = TRUE)
+test_that("trajectory_read validates n, from, and to", {
+  expect_snapshot(trajectory_read(n = 0), error = TRUE)
+  expect_snapshot(trajectory_read(n = "x"), error = TRUE)
+  expect_snapshot(trajectory_read(from = "not a date"), error = TRUE)
+  expect_snapshot(trajectory_read(to = 1:2), error = TRUE)
+  expect_snapshot(trajectory_read("dir", 5), error = TRUE)
 })
 
 test_that("Date and string window bounds mean local midnight", {
@@ -377,7 +377,7 @@ test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
     }
   )
 
-  trajectories <- read_trajectories(
+  trajectories <- trajectory_read(
     "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
     from = .POSIXct(150, tz = "UTC")
   )
@@ -412,7 +412,7 @@ test_that("a windowed Connect read with intact ancestry fetches once", {
     }
   )
 
-  trajectories <- read_trajectories(
+  trajectories <- trajectory_read(
     "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
     from = .POSIXct(150, tz = "UTC")
   )
@@ -454,7 +454,7 @@ test_that("enough_trace_lines waits for a chat span's trailing wrapper", {
   expect_true(enough(with_wrapper))
 })
 
-test_that("read_trajectories stops Connect paging after n conversations", {
+test_that("trajectory_read stops Connect paging after n conversations", {
   withr::local_envvar(
     CONNECT_SERVER = "https://connect.example.com",
     CONNECT_API_KEY = "key"
@@ -492,7 +492,7 @@ test_that("read_trajectories stops Connect paging after n conversations", {
     }
   )
 
-  trajectories <- read_trajectories(
+  trajectories <- trajectory_read(
     "ea3c1445-cb71-42df-a2f2-bdb18874ef41",
     n = 1
   )
@@ -509,12 +509,12 @@ test_that("read_trajectories stops Connect paging after n conversations", {
   )
 })
 
-test_that("read_trajectories returns an empty list for a missing directory", {
-  expect_length(read_trajectories(file.path(tempdir(), "nope")), 0)
+test_that("trajectory_read returns an empty list for a missing directory", {
+  expect_length(trajectory_read(file.path(tempdir(), "nope")), 0)
 })
 
-test_that("read_trajectories validates source", {
-  expect_snapshot(read_trajectories(1:2), error = TRUE)
+test_that("trajectory_read validates source", {
+  expect_snapshot(trajectory_read(1:2), error = TRUE)
 })
 
 test_that("a GUID source resolves to a Connect read", {
