@@ -12,7 +12,7 @@ test_that("call_measure_tool runs a measure and tags the result", {
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_equal(res@value, "2")
   expect_equal(res@extra$commons_tag, "A")
-  expect_equal(res@extra$display$title, "Ran a trusted calculation: order count")
+  expect_equal(res@extra$display$title, "Measure: order count")
   expect_false(res@extra$display$show_request)
   expect_match(res@extra$display$html, "Region:")
   expect_match(res@extra$display$html, "EMEA")
@@ -34,7 +34,7 @@ test_that("call_measure_tool uses measure display titles", {
 
   res <- call_measure_tool(registry, "order_count", "{}")
 
-  expect_equal(res@extra$display$title, "Ran a trusted calculation: Order count")
+  expect_equal(res@extra$display$title, "Measure: Order count")
   expect_match(res@extra$display$html, "No arguments")
 })
 
@@ -91,7 +91,7 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_match(res@value, "6")
   expect_equal(res@extra$commons_tag, "B")
-  expect_equal(res@extra$display$title, "Grabbed data")
+  expect_equal(res@extra$display$title, "Ran SQL")
   expect_false(res@extra$display$open)
   expect_false(res@extra$display$show_request)
   expect_match(res@extra$display$markdown, "```sql")

@@ -73,7 +73,7 @@ call_metrics_impl <- function(
   tool_result(
     paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
     title = sprintf(
-      "Ran a trusted calculation: %s%s",
+      "Metrics: %s%s",
       html_escape(paste(metrics, collapse = ", ")),
       source_label(source_name)
     ),
