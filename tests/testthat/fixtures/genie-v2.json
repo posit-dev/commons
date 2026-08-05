@@ -1,0 +1,96 @@
+{
+  "version": 2,
+  "data_sources": {
+    "tables": [
+      {
+        "identifier": "samples.nyctaxi.trips",
+        "description": ["One row is one taxi trip."],
+        "column_configs": [
+          {
+            "column_name": "pickup_zip",
+            "description": ["Pickup postal code."]
+          },
+          {
+            "column_name": "rider_email",
+            "exclude": true
+          }
+        ],
+        "future_asset_field": {"keep": true}
+      },
+      {
+        "identifier": "samples.private.riders",
+        "description": ["This asset is deliberately outside the selection."]
+      }
+    ]
+  },
+  "instructions": {
+    "text_instructions": [
+      {
+        "id": "instruction-1",
+        "content": ["Treat cancelled rides as non-revenue trips."]
+      }
+    ],
+    "join_specs": [
+      {
+        "left": "samples.nyctaxi.trips",
+        "right": "samples.nyctaxi.zones",
+        "sql": ["trips.pickup_zip = zones.zip", "--rt=FROM_RELATIONSHIP_TYPE_MANY_TO_ONE--"]
+      }
+    ],
+    "sample_questions": [
+      {"question": ["Which pickup areas are busiest?"]}
+    ],
+    "example_question_sqls": [
+      {
+        "id": "static-example",
+        "question": ["How many trips are there?"],
+        "sql": ["SELECT count(*) FROM samples.nyctaxi.trips"]
+      },
+      {
+        "id": "parameter-example",
+        "name": "trips_by_zip",
+        "question": ["How many trips began in a postal code?"],
+        "sql": ["SELECT count(*) AS trips FROM samples.nyctaxi.trips WHERE pickup_zip = :zip"],
+        "parameters": [
+          {
+            "name": "zip",
+            "type_hint": "STRING",
+            "description": ["Pickup postal code."],
+            "default_value": {"values": ["10001"]}
+          }
+        ]
+      }
+    ],
+    "sql_snippets": {
+      "filters": [
+        {
+          "id": "completed",
+          "display_name": "completed_trips",
+          "sql": ["cancelled_at IS NULL"],
+          "comment": ["Trips that were not cancelled."]
+        }
+      ],
+      "expressions": [],
+      "measures": []
+    },
+    "sql_functions": [
+      {
+        "identifier": "samples.nyctaxi.normalize_zip",
+        "display_name": "normalize_zip",
+        "function_type": "scalar",
+        "parameters": [
+          {"name": "zip", "type_hint": "STRING"}
+        ]
+      }
+    ]
+  },
+  "benchmarks": {
+    "questions": [
+      {
+        "question": ["Benchmark question"],
+        "answer": {"sql": ["SELECT 42"]}
+      }
+    ]
+  },
+  "future_top_level_field": {"keep": true}
+}

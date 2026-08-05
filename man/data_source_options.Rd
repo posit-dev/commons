@@ -4,7 +4,12 @@
 \alias{data_source_options}
 \title{Configure a data source}
 \usage{
-data_source_options(include = NULL, exclude = NULL, sample_rows = 0L)
+data_source_options(
+  include = NULL,
+  exclude = NULL,
+  sample_rows = 0L,
+  genie = NULL
+)
 }
 \arguments{
 \item{include}{Objects or namespaces to expose. DBI sources accept exact
@@ -17,6 +22,9 @@ resolved, such as \code{"TMP_*"}.}
 
 \item{sample_rows}{The number of live rows to include when a table is
 described. The default, \code{0}, reads schema metadata only.}
+
+\item{genie}{An optional configuration from \code{\link[=genie_agent]{genie_agent()}} for importing
+context from one Databricks Genie Agent.}
 }
 \value{
 A \code{commons_data_source_options} object for \code{\link[=data_source]{data_source()}}.

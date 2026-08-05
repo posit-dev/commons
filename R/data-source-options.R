@@ -8,22 +8,29 @@
 #'   resolved, such as `"TMP_*"`.
 #' @param sample_rows The number of live rows to include when a table is
 #'   described. The default, `0`, reads schema metadata only.
+#' @param genie An optional configuration from [genie_agent()] for importing
+#'   context from one Databricks Genie Agent.
 #'
 #' @return A `commons_data_source_options` object for [data_source()].
 #' @export
 data_source_options <- function(
   include = NULL,
   exclude = NULL,
-  sample_rows = 0L
+  sample_rows = 0L,
+  genie = NULL
 ) {
   if (!is.null(exclude) && (!is.character(exclude) || anyNA(exclude))) {
     cli::cli_abort("{.arg exclude} must be a character vector without missing values.")
+  }
+  if (!is.null(genie) && !inherits(genie, "commons_genie_agent")) {
+    cli::cli_abort("{.arg genie} must come from {.fn genie_agent}.")
   }
   structure(
     list(
       include = include,
       exclude = unique(exclude[nzchar(exclude)]),
-      sample_rows = catalog_count(sample_rows, "sample_rows")
+      sample_rows = catalog_count(sample_rows, "sample_rows"),
+      genie = genie
     ),
     class = "commons_data_source_options"
   )

@@ -767,7 +767,8 @@ new_catalog_argument <- function(
   type = c("string", "integer", "number", "logical", "date", "datetime"),
   required = TRUE,
   binding = c("value", "identifier"),
-  choices = NULL
+  choices = NULL,
+  default = NULL
 ) {
   type <- rlang::arg_match(type)
   binding <- rlang::arg_match(binding)
@@ -778,12 +779,20 @@ new_catalog_argument <- function(
   if (identical(binding, "identifier") && length(choices) == 0) {
     cli::cli_abort("Identifier calculation arguments require an explicit allowlist.")
   }
+  if (!is.null(default)) {
+    default <- validate_catalog_calculation_value(
+      default,
+      list(type = type, choices = choices),
+      "default"
+    )
+  }
   structure(
     list(
       type = type,
       required = required,
       binding = binding,
-      choices = choices
+      choices = choices,
+      default = default
     ),
     class = "commons_catalog_argument"
   )

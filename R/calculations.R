@@ -217,7 +217,7 @@ validate_catalog_calculation_args <- function(
     argument <- arguments[[name]]
     value <- values[[name]]
     if (is.null(value)) {
-      out[[name]] <- NULL
+      out[[name]] <- argument$default
       next
     }
     out[[name]] <- validate_catalog_calculation_value(

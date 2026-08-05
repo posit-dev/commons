@@ -385,6 +385,7 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
       character(1),
       "name"
     )
+    relation <- genie_apply_column_overrides(relation)
     provider$catalog$relations[[relation_id]] <- relation
     return(relation)
   }
@@ -413,6 +414,7 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   relation$constraints <- metadata$constraints %||% relation$constraints
   relation$kind <- metadata$kind %||% relation$kind
   relation$access <- new_catalog_access("queryable", "zero-row metadata query")
+  relation <- genie_apply_column_overrides(relation)
   provider$catalog$relations[[relation_id]] <- relation
   relation
 }
@@ -539,6 +541,11 @@ catalog_import_backend <- function(provider) {
     snowflake_import_semantics(provider)
   } else if (identical(provider$backend, "databricks")) {
     databricks_import_semantics(provider)
+    if (!is.null(provider$options$genie)) {
+      genie_import(provider, provider$options$genie)
+    }
+  } else if (!is.null(provider$options$genie)) {
+    cli::cli_abort("{.arg genie} is supported only for Databricks connections.")
   }
   invisible(provider)
 }
