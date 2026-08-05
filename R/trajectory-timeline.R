@@ -94,7 +94,8 @@ trust_timeline_bins <- function(questions, window = NULL, target = 5) {
       counts = tag_counts(tags)
     )
   })
-  list(unit = unit, bins = bins)
+  sparse <- length(bins) > 0 && length(dates) < target * length(bins)
+  list(unit = unit, bins = bins, sparse = sparse)
 }
 
 timeline_bounds <- function(window, dates) {
@@ -199,13 +200,13 @@ trust_timeline <- function(binned) {
          The values appear in the table that follows.",
         binned$unit
       ),
-      timeline_plot(binned$bins, binned$unit)
+      timeline_plot(binned$bins, binned$unit, binned$sparse)
     ),
     timeline_table(binned$bins)
   )
 }
 
-timeline_plot <- function(bins, unit) {
+timeline_plot <- function(bins, unit, sparse = FALSE) {
   dates <- as.Date(vapply(bins, function(bin) bin$date, character(1)))
   n <- vapply(bins, function(bin) bin$n, numeric(1))
   # Plotly does not expand a length-one %{text} value serialized as a scalar.
@@ -214,12 +215,15 @@ timeline_plot <- function(bins, unit) {
     "<extra></extra>"
   )
   plot <- plotly::plot_ly(height = 176)
+  use_bars <- length(bins) == 1 ||
+    sparse ||
+    !identical(unit, "day")
 
   for (k in seq_along(viewer_levels)) {
     key <- names(viewer_levels)[[k]]
     counts <- vapply(bins, function(bin) bin$counts[[key]], numeric(1))
     shares <- 100 * counts / n
-    plot <- if (length(bins) == 1) {
+    plot <- if (use_bars) {
       plotly::add_bars(
         plot,
         x = dates,
@@ -227,7 +231,7 @@ timeline_plot <- function(bins, unit) {
         name = unname(viewer_levels[[key]]),
         hovertemplate = tooltips,
         marker = list(color = viewer_level_colors[[key]]),
-        width = 7200000
+        width = timeline_bar_width(dates, unit)
       )
     } else {
       plotly::add_trace(
@@ -249,12 +253,14 @@ timeline_plot <- function(bins, unit) {
     }
   }
 
-  # Auto ticks can land between sparse bins; label up to seven actual bins.
+  # Auto ticks can land between sparse bins; label actual bins instead.
+  max_ticks <- if (identical(unit, "day")) 7 else 5
   ticks <- unique(round(seq(
     1,
     length(dates),
-    length.out = min(length(dates), 7)
+    length.out = min(length(dates), max_ticks)
   )))
+  ticktext <- timeline_ticktext(bins, ticks, unit)
 
   plot <- plotly::layout(
     plot,
@@ -268,7 +274,12 @@ timeline_plot <- function(bins, unit) {
       font = list(size = 12, color = "#212529")
     ),
     showlegend = FALSE,
-    margin = list(t = 8, r = 12, b = 22, l = 40),
+    margin = list(
+      t = 8,
+      r = 12,
+      b = if (identical(unit, "day")) 22 else 34,
+      l = 40
+    ),
     paper_bgcolor = "transparent",
     plot_bgcolor = "transparent",
     font = list(size = 11, color = "#6c757d"),
@@ -278,11 +289,9 @@ timeline_plot <- function(bins, unit) {
       showgrid = FALSE,
       fixedrange = TRUE,
       showspikes = FALSE,
+      ticklabelposition = "outside right",
       tickvals = as.list(format(dates[ticks])),
-      ticktext = as.list(format(
-        dates[ticks],
-        if (identical(unit, "month")) "%b %Y" else "%b %e"
-      )),
+      ticktext = as.list(ticktext),
       # Prevent one bar from filling the full plot width.
       range = if (length(bins) == 1) as.list(format(dates + c(-1, 1)))
     ),
@@ -297,6 +306,23 @@ timeline_plot <- function(bins, unit) {
     )
   )
   plotly::config(plot, displayModeBar = FALSE, responsive = TRUE)
+}
+
+timeline_ticktext <- function(bins, ticks, unit) {
+  if (identical(unit, "day")) {
+    dates <- as.Date(vapply(bins[ticks], function(bin) bin$date, character(1)))
+    return(format(dates, "%b %e"))
+  }
+  vapply(bins[ticks], `[[`, character(1), "label")
+}
+
+timeline_bar_width <- function(dates, unit) {
+  if (length(dates) == 1) {
+    return(7200000)
+  }
+  unit_days <- switch(unit, day = 1, week = 7, month = 28)
+  spacing <- min(diff(as.numeric(dates)))
+  0.8 * min(unit_days, spacing) * 24 * 60 * 60 * 1000
 }
 
 # Plotly hover text supports colored text but not HTML swatches.
