@@ -15,7 +15,9 @@
   : List the tables an agent can query
 - [`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)
   : Create a measure
-- [`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md)
-  : Read commons trajectories
 - [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md)
   : Create a semantic layer
+- [`trajectory_read()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_read.md)
+  : Read commons trajectories
+- [`trajectory_review()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_review.md)
+  : Review commons trajectories

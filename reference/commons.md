@@ -106,7 +106,7 @@ commons(
   setting itself when needed, though capture only starts once the
   content restarts. Locally, commons configures otelsdk's file exporter
   automatically when no exporter is set up. Read trajectories back with
-  [`read_trajectories()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/read_trajectories.md).
+  [`trajectory_read()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_read.md).
 
 - share_with:
 
