@@ -7,6 +7,15 @@
       ! The Snowflake connection does not have both a current database and schema.
       i Set both on the connection or select a namespace with `data_source_options(include = DBI::Id(catalog = "...", schema = "..."))`.
 
+# Snowflake requires an active warehouse
+
+    Code
+      snowflake_connection_snapshot(NULL, rlang::current_env())
+    Condition
+      Error:
+      ! The Snowflake connection has no active warehouse.
+      i Configure one on the connection or run `DBI::dbExecute(con, "USE WAREHOUSE <warehouse>")` before calling `data_source()`.
+
 # Snowflake semantic-view variables are typed and quoted
 
     Code

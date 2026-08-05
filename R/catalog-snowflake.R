@@ -1,13 +1,23 @@
-snowflake_connection_snapshot <- function(con) {
+snowflake_connection_snapshot <- function(con, call = rlang::caller_env()) {
   row <- DBI::dbGetQuery(
     con,
     paste(
       "SELECT CURRENT_USER() AS principal, CURRENT_ROLE() AS role,",
       "CURRENT_DATABASE() AS database_name, CURRENT_SCHEMA() AS schema_name,",
-      "CURRENT_ACCOUNT() AS account_name"
+      "CURRENT_ACCOUNT() AS account_name, CURRENT_WAREHOUSE() AS warehouse_name"
     )
   )
   names(row) <- tolower(names(row))
+  if (!rlang::is_string(row$warehouse_name[[1]]) ||
+      !nzchar(row$warehouse_name[[1]])) {
+    cli::cli_abort(
+      c(
+        "The Snowflake connection has no active warehouse.",
+        "i" = "Configure one on the connection or run {.code DBI::dbExecute(con, \"USE WAREHOUSE <warehouse>\")} before calling {.fn data_source}."
+      ),
+      call = call
+    )
+  }
   list(
     backend = "snowflake",
     locator = list(account = row$account_name[[1]]),
@@ -30,7 +40,7 @@ snowflake_namespace <- function(database, schema) {
 }
 
 snowflake_default_objects <- function(con, call) {
-  snapshot <- snowflake_connection_snapshot(con)
+  snapshot <- snowflake_connection_snapshot(con, call)
   namespace <- snapshot$namespace
   if (!all(c("catalog", "schema") %in% names(namespace))) {
     cli::cli_abort(

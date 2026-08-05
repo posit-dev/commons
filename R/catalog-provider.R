@@ -2,7 +2,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   started_at <- Sys.time()
   backend <- catalog_backend(con)
   catalog_progress("discovering", backend, started_at)
-  snapshot <- catalog_connection_snapshot(con, backend)
+  snapshot <- catalog_connection_snapshot(con, backend, call)
   capabilities <- catalog_backend_capabilities(con, backend, snapshot)
   source_id <- catalog_id(
     "source",
@@ -153,9 +153,13 @@ catalog_backend <- function(con) {
   tolower(info$dbms.name %||% sub("Connection$", "", class(con)[[1]]))
 }
 
-catalog_connection_snapshot <- function(con, backend) {
+catalog_connection_snapshot <- function(
+  con,
+  backend,
+  call = rlang::caller_env()
+) {
   if (identical(backend, "snowflake")) {
-    return(snowflake_connection_snapshot(con))
+    return(snowflake_connection_snapshot(con, call))
   }
   if (identical(backend, "databricks")) {
     return(databricks_connection_snapshot(con))
@@ -178,7 +182,7 @@ catalog_connection_snapshot <- function(con, backend) {
 }
 
 catalog_provider_check <- function(provider, call = rlang::caller_env()) {
-  current <- catalog_connection_snapshot(provider$con, provider$backend)
+  current <- catalog_connection_snapshot(provider$con, provider$backend, call)
   if (!identical(current, provider$snapshot)) {
     cli::cli_abort(
       "The connection identity, role, or current namespace changed after catalog discovery; rebuild the data source.",

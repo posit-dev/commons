@@ -6,7 +6,8 @@ test_that("Snowflake reports a missing current namespace", {
         role = "ROLE",
         database_name = NA_character_,
         schema_name = NA_character_,
-        account_name = "ACCOUNT"
+        account_name = "ACCOUNT",
+        warehouse_name = "WAREHOUSE"
       )
     },
     .package = "DBI"
@@ -14,6 +15,27 @@ test_that("Snowflake reports a missing current namespace", {
 
   expect_snapshot(
     snowflake_default_objects(NULL, rlang::current_env()),
+    error = TRUE
+  )
+})
+
+test_that("Snowflake requires an active warehouse", {
+  local_mocked_bindings(
+    dbGetQuery = function(...) {
+      data.frame(
+        principal = "USER",
+        role = "ROLE",
+        database_name = "DATABASE",
+        schema_name = "SCHEMA",
+        account_name = "ACCOUNT",
+        warehouse_name = NA_character_
+      )
+    },
+    .package = "DBI"
+  )
+
+  expect_snapshot(
+    snowflake_connection_snapshot(NULL, rlang::current_env()),
     error = TRUE
   )
 })
