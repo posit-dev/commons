@@ -311,28 +311,28 @@ viewer_tool_display <- function(request, value = NULL) {
   arguments <- request@arguments
   info <- switch(
     request@name,
-    search_pool = list(title = "Searched the semantic layer", icon = "search"),
+    search_pool = list(title = "Found a trusted calculation", icon = "search"),
     call_metrics = list(
       title = sprintf(
-        "Metrics: %s",
+        "Ran a trusted calculation: %s",
         html_escape(paste(unlist(arguments$metrics), collapse = ", "))
       ),
       icon = "shield-check"
     ),
     call_measure = list(
       title = sprintf(
-        "Measure: %s",
+        "Ran a trusted calculation: %s",
         html_escape(humanize_name(arguments$name %||% ""))
       ),
       icon = "shield-check"
     ),
     search_context = list(title = "Searched context", icon = "book"),
     describe_table = list(
-      title = sprintf("Described %s", html_escape(arguments$table %||% "")),
+      title = sprintf("Inspected %s", html_escape(arguments$table %||% "")),
       icon = "table"
     ),
-    run_sql = list(title = "Ran SQL", icon = "code-square"),
-    run_r = list(title = "Ran R code", icon = "terminal"),
+    run_sql = list(title = "Grabbed data", icon = "code-square"),
+    run_r = list(title = "Analyzed data", icon = "terminal"),
     return(NULL)
   )
   display <- list(title = info$title, open = FALSE, show_request = FALSE)

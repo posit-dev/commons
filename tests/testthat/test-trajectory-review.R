@@ -209,7 +209,7 @@ test_that("reconstructed tool results wear the commons display again", {
     ),
     value = "| 1 |"
   )
-  expect_equal(display$title, "Ran SQL")
+  expect_equal(display$title, "Grabbed data")
   expect_false(display$show_request)
   expect_equal(display$markdown, "```sql\nselect 1\n```\n\n| 1 |")
 
@@ -218,14 +218,17 @@ test_that("reconstructed tool results wear the commons display again", {
     name = "call_measure",
     arguments = list(name = "biodiversity_by_site", arguments = "{}")
   ))
-  expect_equal(measure$title, "Measure: biodiversity by site")
+  expect_equal(
+    measure$title,
+    "Ran a trusted calculation: biodiversity by site"
+  )
 
   described <- viewer_tool_display(ellmer::ContentToolRequest(
     id = "c3",
     name = "describe_table",
     arguments = list(table = "<script>")
   ))
-  expect_equal(described$title, "Described &lt;script&gt;")
+  expect_equal(described$title, "Inspected &lt;script&gt;")
 
   expect_null(viewer_tool_display(ellmer::ContentToolRequest(
     id = "c4",
@@ -241,7 +244,7 @@ test_that("reconstructed tool results wear the commons display again", {
   )
   card <- trajectory_transcript(turns)$messages[[2]]$content[[1]]
   expect_s3_class(card, "shinychat_tool_card")
-  expect_match(format(card), "Ran SQL")
+  expect_match(format(card), "Grabbed data")
 })
 
 test_that("trajectory_transcript keeps unanswered questions out of the count", {
