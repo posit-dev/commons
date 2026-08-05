@@ -721,23 +721,16 @@ ossie_export_model <- function(catalog, model, version) {
       version
     )
   }
-  native <- Filter(Negate(is.null), model$extensions[c("snowflake", "databricks")])
-  for (vendor in names(native)) {
-    if (!vendor %in% ossie_extension_vendors(raw$custom_extensions)) {
-      raw$custom_extensions <- ossie_append_extension(
-        raw$custom_extensions,
-        toupper(vendor),
-        native[[vendor]],
-        version
-      )
-      diagnostics[[length(diagnostics) + 1]] <- new_catalog_diagnostic(
-        "ossie_native_extension",
-        sprintf("Model %s native execution metadata is represented as a %s extension.", model$name, toupper(vendor)),
-        severity = "info",
-        entity_id = model$id
-      )
-    }
-  }
+  extensions <- ossie_export_extensions(
+    raw,
+    model$extensions,
+    version,
+    "model",
+    model$name,
+    model$id
+  )
+  raw <- extensions$raw
+  diagnostics <- c(diagnostics, extensions$diagnostics)
   list(model = catalog_compact(raw), diagnostics = diagnostics)
 }
 
@@ -752,6 +745,12 @@ ossie_export_dataset <- function(catalog, model, relation, version) {
   raw$name <- relation$name
   raw$source <- ossie_relation_source(relation)
   raw$description <- relation$description
+  if (length(relation$synonyms)) {
+    ai <- raw$ai_context
+    if (is.character(ai)) ai <- list(instructions = ai)
+    ai$synonyms <- unique(c(ossie_ai_synonyms(ai), relation$synonyms))
+    raw$ai_context <- ai
+  }
   raw$ai_context <- ossie_export_ai_context(
     catalog,
     relation$id,
@@ -811,6 +810,42 @@ ossie_export_dataset <- function(catalog, model, relation, version) {
       entity_id = relation$id
     )
   }
+  extended_constraints <- Filter(
+    function(constraint) !ossie_constraint_represented(
+      constraint,
+      relation,
+      model,
+      catalog
+    ),
+    constraints
+  )
+  if (length(extended_constraints)) {
+    raw$custom_extensions <- ossie_append_extension(
+      raw$custom_extensions,
+      "COMMONS",
+      list(constraints = lapply(extended_constraints, ossie_plain)),
+      version
+    )
+    diagnostics[[length(diagnostics) + 1]] <- new_catalog_diagnostic(
+      "ossie_constraints_extension_only",
+      sprintf(
+        "Relation %s has constraint semantics preserved only in a COMMONS extension.",
+        relation$name
+      ),
+      severity = "info",
+      entity_id = relation$id
+    )
+  }
+  extensions <- ossie_export_extensions(
+    raw,
+    relation$extensions,
+    version,
+    "relation",
+    relation$name,
+    relation$id
+  )
+  raw <- extensions$raw
+  diagnostics <- c(diagnostics, extensions$diagnostics)
   list(dataset = catalog_compact(raw), diagnostics = diagnostics)
 }
 
@@ -869,7 +904,85 @@ ossie_export_definition <- function(definition, catalog, version) {
     definition$id,
     raw$ai_context
   )
+  extensions <- ossie_export_extensions(
+    raw,
+    definition$extensions,
+    version,
+    "definition",
+    definition$name,
+    definition$id
+  )
+  raw <- extensions$raw
+  diagnostics <- c(diagnostics, extensions$diagnostics)
   list(definition = catalog_compact(raw), diagnostics = diagnostics)
+}
+
+ossie_export_extensions <- function(
+  raw,
+  extensions,
+  version,
+  entity_kind,
+  entity_name,
+  entity_id
+) {
+  existing <- ossie_extension_vendors(raw$custom_extensions)
+  extension_names <- names(extensions)
+  extension_names <- extension_names[
+    !tolower(extension_names) %in% c("ossie", existing)
+  ]
+  diagnostics <- list()
+  for (name in extension_names) {
+    if (is.null(extensions[[name]])) {
+      next
+    }
+    vendor <- toupper(name)
+    raw$custom_extensions <- ossie_append_extension(
+      raw$custom_extensions,
+      vendor,
+      ossie_plain(extensions[[name]]),
+      version
+    )
+    code <- if (tolower(name) %in% c("snowflake", "databricks")) {
+      "ossie_native_extension"
+    } else {
+      "ossie_extension_only"
+    }
+    diagnostic <- new_catalog_diagnostic(
+      code,
+      sprintf(
+        "%s %s metadata is represented as a %s extension.",
+        entity_kind,
+        entity_name,
+        vendor
+      ),
+      severity = "info",
+      entity_id = entity_id
+    )
+    diagnostics[[length(diagnostics) + 1]] <- diagnostic
+  }
+  list(raw = raw, diagnostics = diagnostics)
+}
+
+ossie_constraint_represented <- function(constraint, relation, model, catalog) {
+  if (constraint$kind %in% c("primary_key", "unique")) {
+    return(identical(constraint$enforcement, "unknown"))
+  }
+  if (!identical(constraint$kind, "foreign_key") ||
+      !identical(constraint$enforcement, "unknown") ||
+      !rlang::is_string(constraint$reference$relation_id)) {
+    return(FALSE)
+  }
+  target <- catalog$relations[[constraint$reference$relation_id]]
+  if (is.null(target)) return(FALSE)
+  any(vapply(model$relationships, function(relationship) {
+    identical(relationship$from, relation$name) &&
+      identical(relationship$to, target$name) &&
+      identical(unlist(relationship$from_columns), constraint$columns) &&
+      identical(
+        unlist(relationship$to_columns),
+        constraint$reference$columns
+      )
+  }, logical(1)))
 }
 
 ossie_export_ai_context <- function(catalog, entity_id, raw) {

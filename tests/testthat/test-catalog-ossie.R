@@ -299,6 +299,9 @@ test_that("Apache Ossie export reports extension-only and omitted constructs", {
     delivery = "evaluation"
   )
   catalog$context[[evaluation$id]] <- evaluation
+  catalog$models[[1]]$extensions$genie <- list(rule = "Use fiscal years.")
+  catalog$relations[[1]]$synonyms <- "purchases"
+  catalog$relations[[1]]$constraints[[1]]$enforcement <- "asserted"
 
   exported <- catalog_to_ossie(catalog)
   codes <- vapply(exported$diagnostics, `[[`, character(1), "code")
@@ -307,4 +310,12 @@ test_that("Apache Ossie export reports extension-only and omitted constructs", {
   expect_true("ossie_term_omitted" %in% codes)
   expect_true("ossie_expression_extension_only" %in% codes)
   expect_true("ossie_context_omitted" %in% codes)
+  expect_true("ossie_extension_only" %in% codes)
+  expect_true("ossie_constraints_extension_only" %in% codes)
+  vendors <- ossie_extension_vendors(
+    exported$document$semantic_model[[1]]$custom_extensions
+  )
+  expect_true("genie" %in% vendors)
+  dataset <- exported$document$semantic_model[[1]]$datasets[[1]]
+  expect_true("purchases" %in% ossie_ai_synonyms(dataset$ai_context))
 })
