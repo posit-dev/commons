@@ -183,35 +183,35 @@ run_r_value <- function(segments) {
 }
 
 run_r_html <- function(code, segments) {
-  parts <- sprintf(
-    "<details class=\"commons-run-r-code\"><summary>Code</summary><pre><code class=\"language-r\">%s</code></pre></details>",
-    html_escape(code)
-  )
+  plot_html <- character()
+  output <- character()
   for (seg in segments) {
-    parts <- c(
-      parts,
-      switch(
-        seg$type,
-        source = NULL,
-        plot = sprintf(
-          "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" alt=\"Plot produced by R code\"/>",
-          jsonlite::base64_enc(readBin(
-            seg$path,
-            "raw",
-            file.size(seg$path)
-          ))
-        ),
-        sprintf(
-          "<pre class=\"commons-run-r-output commons-run-r-%s\"><code>%s</code></pre>",
-          seg$type,
-          html_escape(seg$text)
-        )
+    if (seg$type == "source") {
+      next
+    }
+    if (seg$type == "plot") {
+      plot_html <- c(plot_html, sprintf(
+        "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" alt=\"Plot produced by R code\"/>",
+        jsonlite::base64_enc(readBin(
+          seg$path,
+          "raw",
+          file.size(seg$path)
+        ))
+      ))
+    } else {
+      output <- c(
+        output,
+        paste0("#> ", strsplit(seg$text, "\n", fixed = TRUE)[[1]])
       )
-    )
+    }
   }
+  details_html <- sprintf(
+    "<details class=\"commons-run-r-details\"><summary>Details</summary><pre><code class=\"language-r\">%s</code></pre></details>",
+    html_escape(paste(c(code, output), collapse = "\n"))
+  )
   sprintf(
     "<div class=\"commons-run-r-display\">%s</div>",
-    paste(parts, collapse = "\n")
+    paste(c(details_html, plot_html), collapse = "\n")
   )
 }
 

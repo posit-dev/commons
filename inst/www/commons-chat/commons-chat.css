@@ -399,7 +399,7 @@ shiny-tool-request .shiny-tool-card .tool-title,
   gap: 0.6rem;
 }
 
-.commons-run-r-code > summary {
+.commons-run-r-details > summary {
   color: var(--bs-secondary-color, #6c757d);
   cursor: pointer;
   font-size: 0.72rem;
@@ -408,20 +408,10 @@ shiny-tool-request .shiny-tool-card .tool-title,
   text-transform: uppercase;
 }
 
-.commons-run-r-code > pre {
+.commons-run-r-details > pre {
   margin: 0.4rem 0 0;
-}
-
-.commons-run-r-output {
-  margin: 0;
-}
-
-.commons-run-r-warning code {
-  color: var(--bs-warning-text-emphasis, #664d03);
-}
-
-.commons-run-r-error code {
-  color: var(--bs-danger-text-emphasis, #58151c);
+  overflow-x: auto;
+  white-space: pre;
 }
 
 .commons-run-r-plot {

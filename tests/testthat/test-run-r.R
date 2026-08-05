@@ -45,7 +45,35 @@ test_that("run_r returns plots as images and opens the display", {
   )))
   expect_true(res@extra$display$open)
   expect_match(res@extra$display$html, "data:image/png;base64,")
-  expect_match(res@extra$display$html, "commons-run-r-code")
+  expect_match(res@extra$display$html, "commons-run-r-details")
+})
+
+test_that("run_r collapses code and output above plots", {
+  worker <- local_worker()
+  store <- new_handle_store()
+
+  res <- sync_promise(run_r_tool(
+    worker,
+    store,
+    "cat('private text\\n'); message('private message'); warning('private warning'); plot(1)"
+  ))
+
+  expect_match(res@value[[1]]@text, "private text")
+  expect_match(res@value[[1]]@text, "private message")
+  expect_match(res@value[[1]]@text, "private warning")
+  expect_match(
+    res@extra$display$html,
+    '<details class="commons-run-r-details"><summary>Details</summary>',
+    fixed = TRUE
+  )
+  expect_match(res@extra$display$html, "#&gt; private text", fixed = TRUE)
+  expect_match(res@extra$display$html, "#&gt; private message", fixed = TRUE)
+  expect_match(res@extra$display$html, "#&gt; private warning", fixed = TRUE)
+  expect_match(res@extra$display$html, "data:image/png;base64,")
+  expect_lt(
+    as.integer(regexpr("commons-run-r-details", res@extra$display$html)),
+    as.integer(regexpr("data:image/png;base64,", res@extra$display$html))
+  )
 })
 
 test_that("run_r preloads measure sources for reading, comments included", {
