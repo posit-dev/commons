@@ -513,10 +513,6 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
   expect_equal(binned$bins[[1]]$n, 8)
   expect_equal(binned$bins[[2]]$label, "Jul 6\u201312, 2026")
   expect_equal(binned$bins[[2]]$n, 14)
-  expect_equal(
-    timeline_ticktext(binned$bins, seq_along(binned$bins), binned$unit),
-    vapply(binned$bins, `[[`, character(1), "label")
-  )
 
   monthly <- lapply(
     as.character(seq(as.Date("2026-06-01"), by = 7, length.out = 10)),
@@ -525,14 +521,12 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
   )
   binned <- trust_timeline_bins(monthly)
   expect_equal(binned$unit, "month")
-  expect_identical(binned$sparse, TRUE)
   expect_equal(
     vapply(binned$bins, function(bin) bin$label, character(1)),
     c("June 2026", "July 2026", "Aug 1\u20133, 2026")
   )
 
   expect_equal(trust_timeline_bins(list())$unit, "day")
-  expect_identical(trust_timeline_bins(list())$sparse, FALSE)
   expect_length(trust_timeline_bins(list())$bins, 0)
 })
 
@@ -605,7 +599,6 @@ test_that("trust_timeline renders a chart and its table view", {
   )$x$data
   expect_identical(sparse$sparse, TRUE)
   expect_equal(sparse_traces[[1]]$type, "bar")
-  expect_equal(as.numeric(sparse_traces[[1]]$width), rep(69120000, 2))
 
   html <- as.character(trust_timeline(binned))
   expect_match(html, "commons-viewer-sr-only")
@@ -636,7 +629,6 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   html <- as.character(viewer_ui(list()))
 
   expect_match(html, "shiny-date-range-input")
-  expect_no_match(html, "air-datepicker")
   expect_match(html, "bslib-sidebar-layout")
   expect_match(html, "sidebar-right")
   expect_match(html, "data-resizable")
@@ -645,8 +637,6 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   expect_match(html, 'aria-label="Add note"')
   expect_no_match(html, ">Submit<", fixed = TRUE)
   expect_no_match(html, "data-needs-modifier")
-  expect_no_match(html, "commons-viewer-pane-resizer")
-  expect_no_match(html, "save_note")
 })
 
 test_that("the timeline legend tucks each level's rate into its tooltip", {

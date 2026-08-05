@@ -517,7 +517,6 @@ viewer_server <- function(
   app_notes <- shiny::reactiveVal(review_notes(review_records))
 
   function(input, output, session) {
-    # Aliases expose app-level state to testServer().
     flags <- app_flags
     notes <- app_notes
     selected <- shiny::reactiveVal(NULL)

@@ -68,7 +68,6 @@ rate_percent <- function(count, n) {
   sprintf("%.0f%%", 100 * count / n)
 }
 
-# Undated questions affect only the legend; sparse data uses wider bins.
 trust_timeline_bins <- function(questions, window = NULL, target = 5) {
   dates <- record_dates(questions)
   keep <- !is.na(dates)
@@ -133,7 +132,6 @@ timeline_bin_start <- function(dates, unit) {
   )
 }
 
-# Labels clip partial calendar bins to the selected window.
 timeline_bin_label <- function(start, unit, bounds) {
   if (identical(unit, "day")) {
     return(day_label(start))

@@ -130,7 +130,6 @@ actionable_review_records <- function(records) {
   records[sort(c(note_indices, active_flag_indices))]
 }
 
-# The latest flag or unflag event determines each key's state.
 review_flags <- function(records) {
   active <- Filter(
     function(record) identical(record$action, "flag"),
