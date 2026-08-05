@@ -549,10 +549,24 @@ resolve_pool_names <- function(names, defs, role) {
 }
 
 resolve_pool_name <- function(name, defs, role) {
-  named <- defs[defs$name == name, ]
+  aliases <- lapply(seq_len(nrow(defs)), function(i) {
+    pool_definition_aliases(defs[i, , drop = FALSE])
+  })
+  named <- defs[vapply(aliases, function(x) name %in% x, logical(1)), ]
   matched <- named[which(named$role %in% role), ]
-  if (nrow(matched)) {
-    return(matched[1, ])
+  if (nrow(matched) == 1) {
+    return(matched)
+  }
+  if (nrow(matched) > 1) {
+    choices <- vapply(
+      seq_len(nrow(matched)),
+      function(i) pool_definition_key(matched[i, , drop = FALSE]),
+      character(1)
+    )
+    cli::cli_abort(c(
+      "Governed name {.val {name}} is ambiguous.",
+      "i" = "Use a qualified name: {.val {unique(choices)}}."
+    ))
   }
   role_label <- paste(role, collapse = ", ")
   expected <- if (length(role) == 1) {
@@ -574,6 +588,32 @@ resolve_pool_name <- function(name, defs, role) {
       i = "Available values: {.val {available}}."
     )
   )
+}
+
+pool_definition_aliases <- function(def) {
+  parent <- def$native_parent[[1]]
+  parent <- if (is.na(parent) || !nzchar(parent)) NULL else parent
+  unique(c(
+    def$name[[1]],
+    if (!is.null(parent)) paste(parent, def$name[[1]], sep = "."),
+    paste(def$table[[1]], def$name[[1]], sep = "."),
+    if (!is.null(parent)) {
+      paste(def$table[[1]], parent, def$name[[1]], sep = ".")
+    }
+  ))
+}
+
+pool_definition_key <- function(def) {
+  utils::tail(pool_definition_aliases(def), 1)
+}
+
+definition_pool_reference <- function(def, defs) {
+  same <- defs[
+    defs$name == def$name[[1]] & defs$role == def$role[[1]],
+    ,
+    drop = FALSE
+  ]
+  if (nrow(same) == 1) def$name[[1]] else pool_definition_key(def)
 }
 
 dimension_sql <- function(name, defs, columns, con) {
@@ -726,15 +766,16 @@ search_pool_text <- function(
 
 definition_pool_text <- function(def, defs) {
   role <- def$role
+  reference <- definition_pool_reference(def, defs)
   invoke <- if (!identical(def$execution[[1]], "data_dictionary")) {
     switch(
       role,
       metric = sprintf(
         "Query with call_metrics (metrics = [\"%s\"]).",
-        def$name
+        reference
       ),
-      filter = sprintf("Use as a call_metrics filter: %s.", def$name),
-      sprintf("Use as a call_metrics dimension: %s.", def$name)
+      filter = sprintf("Use as a call_metrics filter: %s.", reference),
+      sprintf("Use as a call_metrics dimension: %s.", reference)
     )
   } else {
     switch(
@@ -745,7 +786,7 @@ definition_pool_text <- function(def, defs) {
       ),
       metric = sprintf(
         "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS %s`.",
-        def$name,
+        reference,
         def$name,
         def$name
       ),
@@ -760,11 +801,14 @@ definition_pool_text <- function(def, defs) {
   if (identical(role, "metric")) {
     same_table <- defs[defs$table == def$table & defs$name != def$name, ]
     if (nrow(same_table)) {
-      items <- sprintf(
-        "{{%s}} (%s)",
-        same_table$name,
-        same_table$role
-      )
+      items <- vapply(seq_len(nrow(same_table)), function(i) {
+        sibling <- same_table[i, , drop = FALSE]
+        sprintf(
+          "{{%s}} (%s)",
+          definition_pool_reference(sibling, defs),
+          sibling$role
+        )
+      }, character(1))
       siblings <- sprintf(
         "Filters and dimensions on this table: %s.",
         paste(items, collapse = ", ")

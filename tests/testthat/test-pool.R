@@ -130,6 +130,29 @@ test_that("call_metrics validates names with actionable errors", {
   )
 })
 
+test_that("native definitions require qualification only when ambiguous", {
+  defs <- data.frame(
+    name = c("REVENUE", "REVENUE"),
+    table = c("DB.PUBLIC.MODEL_A", "DB.PUBLIC.MODEL_B"),
+    role = c("metric", "metric"),
+    native_parent = c("ORDERS", "ORDERS"),
+    stringsAsFactors = FALSE
+  )
+
+  expect_snapshot(resolve_pool_name("REVENUE", defs, "metric"), error = TRUE)
+  resolved <- resolve_pool_name(
+    "DB.PUBLIC.MODEL_B.ORDERS.REVENUE",
+    defs,
+    "metric"
+  )
+
+  expect_equal(resolved$table, "DB.PUBLIC.MODEL_B")
+  expect_equal(
+    definition_pool_reference(defs[2, , drop = FALSE], defs),
+    "DB.PUBLIC.MODEL_B.ORDERS.REVENUE"
+  )
+})
+
 test_that("metrics in one call must share a table", {
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
