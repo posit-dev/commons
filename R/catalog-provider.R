@@ -427,6 +427,8 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   relation <- provider$catalog$relations[[relation_id]]
   catalog_import_relation_semantics(provider, relation_id)
   relation <- provider$catalog$relations[[relation_id]]
+  catalog_provider_authorize_hydration(provider, relation_id, table, call)
+  relation <- provider$catalog$relations[[relation_id]]
   if (length(relation$columns)) {
     return(relation)
   }
@@ -470,13 +472,12 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
       conditionMessage(metadata),
       perl = TRUE
     )
-    relation$access <- new_catalog_access("visible_only", conditionMessage(metadata))
     provider$catalog$relations[[relation_id]] <- relation
     catalog_provider_diagnostic(
       provider,
-      "catalog_relation_unqueryable",
+      "catalog_relation_metadata_unavailable",
       sprintf(
-        "Removed %s because it could not be described by this connection.",
+        "Removed %s because its metadata could not be described by this connection.",
         table
       ),
       severity = "info",
@@ -493,10 +494,59 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   relation$columns <- metadata$columns
   relation$constraints <- metadata$constraints %||% relation$constraints
   relation$kind <- metadata$kind %||% relation$kind
-  relation$access <- new_catalog_access("queryable", "zero-row metadata query")
   relation <- genie_apply_column_overrides(relation)
   provider$catalog$relations[[relation_id]] <- relation
   relation
+}
+
+catalog_provider_authorize_hydration <- function(
+  provider,
+  relation_id,
+  table,
+  call = rlang::caller_env()
+) {
+  relation <- provider$catalog$relations[[relation_id]]
+  if (identical(relation$access$state, "queryable")) {
+    return(invisible(provider))
+  }
+  started_at <- Sys.time()
+  result <- catalog_relation_queryability(provider$con, relation$path)
+  catalog_provider_record(provider, "authorize", started_at, table)
+  if (inherits(result, "condition")) {
+    result$message <- gsub(
+      "\\r?\\n[ \\t]*\\r?\\n",
+      "\n",
+      conditionMessage(result),
+      perl = TRUE
+    )
+    relation$access <- new_catalog_access(
+      "visible_only",
+      conditionMessage(result)
+    )
+    provider$catalog$relations[[relation_id]] <- relation
+    catalog_provider_diagnostic(
+      provider,
+      "catalog_relation_unqueryable",
+      sprintf(
+        "Removed %s because it could not be queried by this connection.",
+        table
+      ),
+      severity = "info",
+      entity_id = relation_id
+    )
+    catalog_provider_drop_relation(provider, relation_id)
+    cli::cli_abort(
+      "Table {.val {table}} could not be queried.",
+      parent = result,
+      call = call
+    )
+  }
+  relation$access <- new_catalog_access(
+    "queryable",
+    "zero-row authorization query"
+  )
+  provider$catalog$relations[[relation_id]] <- relation
+  invisible(provider)
 }
 
 catalog_provider_probe_authored <- function(

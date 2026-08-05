@@ -59,6 +59,16 @@
       ! No table named "warehouse_object".
       i Available tables: .
 
+# metadata visibility does not establish query access
+
+    Code
+      source_describe(fixture$source, "warehouse_object")
+    Condition
+      Error in `source_describe()`:
+      ! Table "warehouse_object" could not be queried.
+      Caused by error:
+      ! not authorized
+
 # catalog providers reject selections above their object bound
 
     Code
@@ -83,7 +93,7 @@
       source_describe(src, "nope")
     Condition
       Error in `source_describe()`:
-      ! Table "nope" could not be described.
+      ! Table "nope" could not be queried.
       Caused by error in `DBI::dbSendQuery()`:
       ! Catalog Error: Table with name nope does not exist!
       Did you mean "pg_enum"?

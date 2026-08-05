@@ -281,7 +281,7 @@ test_that("catalog telemetry covers discovery and hydration", {
     "operation"
   )
 
-  expect_equal(operations, c("discovery", "hydrate"))
+  expect_equal(operations, c("discovery", "authorize", "hydrate"))
   expect_true(all(vapply(
     source$provider$telemetry,
     function(event) event$elapsed >= 0,
@@ -366,6 +366,29 @@ test_that("failed lazy hydration removes the object for the session", {
     source_describe(fixture$source, "warehouse_object"),
     error = TRUE
   )
+  expect_equal(
+    fixture$provider$catalog$diagnostics[[1]]$code,
+    "catalog_relation_metadata_unavailable"
+  )
+})
+
+test_that("metadata visibility does not establish query access", {
+  fixture <- catalog_provider_test_source()
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  local_mocked_bindings(
+    catalog_relation_queryability = function(con, path) {
+      simpleError("not authorized")
+    },
+    catalog_relation_metadata = function(con, id) {
+      list(columns = list(id = new_catalog_column("id")))
+    }
+  )
+
+  expect_snapshot(
+    source_describe(fixture$source, "warehouse_object"),
+    error = TRUE
+  )
+  expect_length(list_tables(fixture$source), 0)
   expect_equal(
     fixture$provider$catalog$diagnostics[[1]]$code,
     "catalog_relation_unqueryable"

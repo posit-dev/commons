@@ -592,7 +592,12 @@ resolve_pool_name <- function(name, defs, role) {
 
 pool_definition_aliases <- function(def) {
   parent <- def$native_parent[[1]]
-  parent <- if (is.na(parent) || !nzchar(parent)) NULL else parent
+  parent <- if (is.null(parent) || length(parent) != 1 ||
+      is.na(parent) || !nzchar(parent)) {
+    NULL
+  } else {
+    parent
+  }
   unique(c(
     def$name[[1]],
     if (!is.null(parent)) paste(parent, def$name[[1]], sep = "."),

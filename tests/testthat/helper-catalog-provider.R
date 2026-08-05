@@ -1,5 +1,6 @@
 catalog_provider_test_source <- function(kind = "table") {
   con <- DBI::dbConnect(duckdb::duckdb())
+  DBI::dbWriteTable(con, "warehouse_object", data.frame(region = "EMEA"))
   source_record <- new_catalog_source("source:test", "duckdb")
   relation <- new_catalog_relation(
     "relation:test",
