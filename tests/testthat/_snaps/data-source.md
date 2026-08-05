@@ -27,10 +27,17 @@
 # data_source errors for tables absent from the connection
 
     Code
-      data_source(con, tables = "nope")
+      source_describe(src, "nope")
     Condition
-      Error in `data_source()`:
-      ! `tables` names table not on the connection: "nope".
+      Error in `source_describe()`:
+      ! Table "nope" could not be described.
+      Caused by error in `DBI::dbSendQuery()`:
+      ! Catalog Error: Table with name nope does not exist!
+      Did you mean "pg_enum"?
+      LINE 1: SELECT * FROM nope WHERE 1 = 0
+                            ^
+      i Context: rapi_prepare
+      i Error type: CATALOG
 
 # data_source rejects a board label colliding with a built-in relation
 

@@ -19,6 +19,7 @@ Do not announce tool calls; before your final response to the user, you should o
 
 {[ if (has_measures) "- Run a measure with `call_measure`." else "" ]}
 {[ if (has_metrics) "- Compute a metric with `call_metrics`." else "" ]}
+{[ if (has_calculations) "- Run an exact warehouse calculation with `call_calculation`." else "" ]}
 {[ if (has_definitions) definition_action else "" ]}
 
 <!-- A searchable pool contains measures or more definitions than fit below. -->

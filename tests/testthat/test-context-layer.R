@@ -77,3 +77,62 @@ test_that("context_layer skips a frontmatter-only file", {
   layer <- context_layer(files = path)
   expect_length(context_search(layer, "provenance"), 0)
 })
+
+test_that("context retrieval is scoped to a selected source", {
+  layer <- new_context_layer(
+    c(
+      "Shared fiscal calendar guidance.",
+      "Alpha renewals use booked annual value.",
+      "Beta churn uses active subscriptions."
+    ),
+    sources = list(character(), "alpha", "beta")
+  )
+
+  expect_match(context_search(layer, "renewals", source = "alpha"), "Alpha")
+  expect_length(context_search(layer, "renewals", source = "beta"), 0)
+  expect_match(context_search(layer, "fiscal", source = "beta"), "Shared")
+})
+
+test_that("merged context deduplicates text without losing source metadata", {
+  layer <- context_layer_merge(
+    docs = "Revenue excludes tax.",
+    sources = list("alpha"),
+    metadata = list(list(list(id = "context:alpha"))),
+    new_docs = "Revenue excludes tax.",
+    new_sources = list("beta"),
+    new_metadata = list(list(list(id = "context:beta")))
+  )
+
+  expect_length(layer$docs, 1)
+  expect_setequal(layer$sources[[1]], c("alpha", "beta"))
+  expect_length(layer$metadata[[1]], 2)
+})
+
+test_that("evaluation-only catalog context never enters retrieval", {
+  source <- test_source()
+  catalog_source <- new_catalog_source("source:test", "duckdb")
+  source$catalog <- new_commons_catalog(
+    sources = list(catalog_source),
+    context = list(
+      new_catalog_context(
+        "context:runtime",
+        catalog_source$id,
+        "instruction",
+        "Revenue uses booked value.",
+        delivery = "retrieval"
+      ),
+      new_catalog_context(
+        "context:benchmark",
+        catalog_source$id,
+        "benchmark",
+        "The benchmark answer is secret.",
+        delivery = "evaluation"
+      )
+    )
+  )
+
+  layer <- augment_context_layer(NULL, list(warehouse = source))
+
+  expect_match(context_search(layer, "booked"), "Revenue")
+  expect_length(context_search(layer, "benchmark secret"), 0)
+})

@@ -166,7 +166,6 @@ data_source_connection <- function(
     labels = names(provider$table_ids),
     ids = provider$table_ids
   )
-  check_table_ids_exist(con, table_registry, call = call)
   commons_span_set_attribute(
     span,
     "commons.data_source.n_tables",

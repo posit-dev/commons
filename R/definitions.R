@@ -223,7 +223,11 @@ definition_fields <- c(
   "description",
   "details",
   "expr",
-  "expanded"
+  "expanded",
+  "execution",
+  "model_id",
+  "definition_id",
+  "native_parent"
 )
 
 no_definitions <- data.frame(
@@ -246,6 +250,7 @@ definition_rows <- function(definitions, table, source) {
       character(1)
     )
   }
+  out$execution[is.na(out$execution)] <- "data_dictionary"
   out
 }
 
@@ -284,6 +289,12 @@ expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
   applied <- NULL
   for (token in tokens) {
     def <- resolve_definition_token(token, sql, defs, call = call)
+    if (!identical(def$execution[[1]], "data_dictionary")) {
+      cli::cli_abort(
+        "Governed definition {.val {token}} uses native semantic execution and cannot be expanded into free-form SQL; use {.fn call_metrics}.",
+        call = call
+      )
+    }
     # gsub replacement treats backslashes specially; the expansion is
     # literal SQL.
     replacement <- gsub(

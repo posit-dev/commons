@@ -279,7 +279,7 @@ test_that("calculations require typed adapter-owned bindings", {
     "SELECT * FROM identifier(?) WHERE month = ?",
     list(
       new_catalog_binding("month"),
-      new_catalog_binding("region", "identifier")
+      new_catalog_binding("region", "identifier", "{{region}}")
     )
   )
   calculation <- new_catalog_calculation(

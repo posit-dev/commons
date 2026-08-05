@@ -2,10 +2,17 @@
 # surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
   c(
-    if (pool_searchable(private$registry, private$definitions)) {
+    if (pool_searchable(
+      private$registry,
+      private$definitions,
+      private$calculations
+    )) {
       list(tool_search_pool(private))
     },
     if (length(private$registry) > 0) list(tool_call_measure(private)),
+    if (length(private$calculations) > 0) {
+      list(tool_call_calculation(private))
+    },
     if (registry_has_metrics(private$definitions)) {
       list(tool_call_metrics(private))
     },
@@ -71,8 +78,9 @@ tool_search_catalog <- function(private) {
 # Measures are never listed in the system prompt, and definitions past their
 # ambient cap aren't either; a search tool over a fully visible pool would
 # just cost the model a verification round trip.
-pool_searchable <- function(measures, definitions) {
-  length(measures) > 0 || definitions_overflow(definitions)
+pool_searchable <- function(measures, definitions, calculations = list()) {
+  length(measures) > 0 || length(calculations) > 0 ||
+    definitions_overflow(definitions)
 }
 
 tool_search_pool <- function(private) {
@@ -83,6 +91,9 @@ tool_search_pool <- function(private) {
   }
   kinds <- c(
     if (length(private$registry) > 0) "measures (run with call_measure)",
+    if (length(private$calculations) > 0) {
+      "trusted warehouse calculations (run with call_calculation)"
+    },
     if (nrow(registry_defs(private$definitions)) > 0) {
       "governed definitions (apply as {{name}} tokens in run_sql, or through call_metrics)"
     }
@@ -93,7 +104,8 @@ tool_search_pool <- function(private) {
         private$registry,
         private$definitions,
         query,
-        source_names
+        source_names,
+        private$calculations
       )
       tool_result(
         body,
@@ -126,6 +138,7 @@ tool_call_metrics <- function(private) {
       dimensions = NULL,
       filters = NULL,
       where = NULL,
+      arguments = "{}",
       source = NULL
     ) {
       call_metrics_impl(
@@ -136,12 +149,17 @@ tool_call_metrics <- function(private) {
         dimensions = dimensions,
         filters = filters,
         where = where,
+        arguments = arguments,
         source_name = source
       )
     },
     sprintf(
       "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from %s; commons compiles and runs the query.",
-      if (pool_searchable(private$registry, private$definitions)) {
+      if (pool_searchable(
+        private$registry,
+        private$definitions,
+        private$calculations
+      )) {
         "the system prompt or search_pool"
       } else {
         "the system prompt"
@@ -176,9 +194,43 @@ tool_call_metrics <- function(private) {
         "Simple column predicates, e.g. a date range.",
         required = FALSE
       ),
+      arguments = ellmer::type_string(
+        "A JSON object of native semantic-model parameter values.",
+        required = FALSE
+      ),
       source = sql_source_type(private$sources)
     ),
     name = "call_metrics",
+    annotations = ellmer::tool_annotations(
+      title = "Run a trusted calculation",
+      icon = maybe_icon("shield-check"),
+      read_only_hint = TRUE
+    )
+  )
+}
+
+tool_call_calculation <- function(private) {
+  ellmer::tool(
+    function(name, arguments = "{}", source = NULL) {
+      call_catalog_calculation(
+        private$calculations,
+        name,
+        arguments,
+        source,
+        private$handles
+      )
+    },
+    "Run an exact trusted warehouse calculation returned by search_pool. Arguments are typed and bound without SQL interpolation.",
+    arguments = list(
+      name = ellmer::type_string(
+        "The calculation name, exactly as returned by search_pool."
+      ),
+      arguments = ellmer::type_string(
+        "A JSON object using exactly the calculation's argument names."
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "call_calculation",
     annotations = ellmer::tool_annotations(
       title = "Run a trusted calculation",
       icon = maybe_icon("shield-check"),
@@ -219,12 +271,15 @@ tool_call_measure <- function(private) {
 
 tool_search_context <- function(private) {
   ellmer::tool(
-    function(query) search_context_tool(private$context_layer, query),
+    function(query, source = NULL) {
+      search_context_tool(private$context_layer, query, source)
+    },
     "Search context for metric definitions, data notes, and table relationships.",
     arguments = list(
       query = ellmer::type_string(
         "What you need context about, in plain language."
-      )
+      ),
+      source = sql_source_type(private$sources)
     ),
     name = "search_context",
     annotations = ellmer::tool_annotations(
@@ -301,7 +356,9 @@ run_sql_description <- function(definitions, measures = list()) {
     if (length(measures) > 0) {
       "Use this when no registered measure answers the question."
     },
-    if (!is.null(definitions) && nrow(registry_defs(definitions)) > 0) {
+    if (!is.null(definitions) && any(
+      registry_defs(definitions)$execution == "data_dictionary"
+    )) {
       paste0(
         "Governed definitions can be written as {{name}} tokens anywhere ",
         "in the SQL; each expands to its trusted expression before the ",
@@ -360,11 +417,11 @@ call_measure_tool <- function(
   )
 }
 
-search_context_tool <- function(context, query) {
+search_context_tool <- function(context, query, source = NULL) {
   if (is.null(context)) {
     return("No context layer is configured for this agent.")
   }
-  hits <- context_search(context, query)
+  hits <- context_search(context, query, source = source)
   body <- if (length(hits)) {
     paste(hits, collapse = "\n\n---\n\n")
   } else {
@@ -381,7 +438,12 @@ search_context_tool <- function(context, query) {
 describe_table_tool <- function(source, table, source_name = NULL, tracker = NULL) {
   d <- source_describe(source, table)
   dictionary <- source_runtime_dictionary(source)
-  entry <- dictionary$tables[[table]]
+  entry <- dictionary$tables[[table]] %||% NULL
+  context <- if (!table_touched(tracker, source_name, table)) {
+    catalog_first_touch_text(source, table)
+  } else {
+    character()
+  }
 
   sample <- if (nrow(d$sample)) {
     sprintf(
@@ -392,10 +454,10 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   if (is.null(entry)) {
     parts <- c(
       sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
+      context,
       sample
     )
   } else {
-    mark_table_touched(tracker, source_name, table)
     columns <- sprintf(
       "Columns of `%s`:\n\n%s",
       table,
@@ -403,9 +465,11 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
     )
     parts <- c(
       dictionary_entry_parts(dictionary, table, columns),
+      context,
       sample
     )
   }
+  mark_table_touched(tracker, source_name, table)
 
   body <- paste(parts, collapse = "\n\n")
   tool_result(
@@ -447,7 +511,7 @@ run_sql_tool <- function(
 # appends a harmless note.
 dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   dictionary <- source_runtime_dictionary(source)
-  tables <- names(dictionary$tables)
+  tables <- source$tables
   hits <- tables[vapply(
     tables,
     function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
@@ -465,11 +529,43 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   for (table in hits) {
     mark_table_touched(tracker, source_name, table)
   }
-  vapply(
+  unname(vapply(
     hits,
-    function(table) dictionary_entry_text(dictionary, table),
+    function(table) paste(
+      c(
+        if (!is.null(dictionary$tables[[table]])) {
+          dictionary_entry_text(dictionary, table)
+        },
+        catalog_first_touch_text(source, table)
+      ),
+      collapse = "\n\n"
+    ),
     character(1)
+  ))
+}
+
+catalog_first_touch_text <- function(source, table) {
+  catalog <- source$provider$catalog %||% source$catalog
+  if (!inherits(catalog, "commons_catalog")) {
+    return(character())
+  }
+  relation_ids <- names(source$relation_labels)[source$relation_labels == table]
+  if (length(relation_ids) == 0) {
+    return(character())
+  }
+  model_ids <- names(Filter(
+    function(model) any(relation_ids %in% model$exposed),
+    catalog$models
+  ))
+  scopes <- c(relation_ids, model_ids)
+  records <- Filter(
+    function(record) {
+      identical(record$delivery, "first_touch") &&
+        (length(record$scope) == 0 || any(record$scope %in% scopes))
+    },
+    catalog$context
   )
+  unique(vapply(records, `[[`, character(1), "text"))
 }
 
 # Which tables' dictionary entries this conversation has already seen, so

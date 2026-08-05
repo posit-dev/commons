@@ -2,16 +2,18 @@ commons_system_prompt <- function(
   sources,
   system_prompt,
   definitions = NULL,
-  measures = list()
+  measures = list(),
+  calculations = list()
 ) {
   definitions <- definitions %||% definitions_registry(sources)
   template <- read_system_prompt(system_prompt)
-  data <- system_prompt_data(sources, definitions, measures)
+  data <- system_prompt_data(sources, definitions, measures, calculations)
   render_system_prompt(template, data)
 }
 
-system_prompt_data <- function(sources, definitions, measures) {
+system_prompt_data <- function(sources, definitions, measures, calculations) {
   has_measures <- length(measures) > 0
+  has_calculations <- length(calculations) > 0
   has_metrics <- registry_has_metrics(definitions)
   has_definitions <- nrow(registry_defs(definitions)) > 0
   dictionary_context <- dictionary_context_text(sources)
@@ -20,10 +22,12 @@ system_prompt_data <- function(sources, definitions, measures) {
   list(
     date = as.character(Sys.Date()),
     has_measures = has_measures,
+    has_calculations = has_calculations,
     has_metrics = has_metrics,
     has_definitions = has_definitions,
-    has_governed_operations = has_measures || has_definitions,
-    has_search_pool = pool_searchable(measures, definitions),
+    has_governed_operations = has_measures || has_definitions ||
+      has_calculations,
+    has_search_pool = pool_searchable(measures, definitions, calculations),
     has_multiple_sources = length(sources) > 1,
     has_dictionary_context = nzchar(dictionary_context) ||
       nzchar(glossary_context),
@@ -33,13 +37,12 @@ system_prompt_data <- function(sources, definitions, measures) {
     dictionary_context = dictionary_context,
     glossary_context = glossary_context,
     definition_index = definition_index_text(definitions),
-    definition_action =
-      "- Apply a definition as a `{{name}}` token in `run_sql` SQL.",
+    definition_action = definition_action_text(definitions),
     definition_guidance = paste(
       "# Governed definitions",
       paste0(
-        "Trusted expressions from the data dictionary are indexed here by ",
-        "table; each table's dictionary entry delivers its full definitions. ",
+        "Governed definitions are indexed here by table. Native semantic ",
+        "metrics run through `call_metrics`. For data-dictionary expressions: ",
         "Write them as `{{name}}` tokens anywhere in `run_sql` SQL ",
         "(`{{table.name}}` when a name exists on several tables); each expands ",
         "to its governed SQL before the query runs. Expansion can't add an ",
@@ -49,6 +52,19 @@ system_prompt_data <- function(sources, definitions, measures) {
       sep = "\n\n"
     )
   )
+}
+
+definition_action_text <- function(definitions) {
+  defs <- registry_defs(definitions)
+  c(
+    if (any(defs$execution == "data_dictionary")) {
+      "- Apply a data-dictionary definition as a `{{name}}` token in `run_sql` SQL."
+    },
+    if (any(defs$execution != "data_dictionary")) {
+      "- Run native semantic metrics with `call_metrics`; do not copy their SQL expressions into `run_sql`."
+    }
+  ) |>
+    paste(collapse = "\n")
 }
 
 render_system_prompt <- function(

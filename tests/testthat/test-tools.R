@@ -128,6 +128,44 @@ test_that("describe_table_tool reports columns without sampling by default", {
   expect_no_match(res@value, "Sample rows")
 })
 
+test_that("semantic context arrives only on first table touch", {
+  source <- test_source()
+  catalog_source <- new_catalog_source("source:test", "duckdb")
+  relation <- new_catalog_relation(
+    "relation:sales",
+    catalog_source$id,
+    new_source_path(c(table = "sales"))
+  )
+  model <- new_catalog_model(
+    "model:sales",
+    catalog_source$id,
+    "sales_model",
+    datasets = relation$id,
+    exposed = relation$id
+  )
+  source$catalog <- new_commons_catalog(
+    sources = list(catalog_source),
+    relations = list(relation),
+    models = list(model),
+    context = list(new_catalog_context(
+      "context:sales",
+      catalog_source$id,
+      "instruction",
+      "Use booked revenue for sales reporting.",
+      scope = model$id,
+      delivery = "first_touch"
+    ))
+  )
+  source$relation_labels <- c("relation:sales" = "sales")
+  tracker <- new.env(parent = emptyenv())
+
+  first <- describe_table_tool(source, "sales", tracker = tracker)
+  second <- describe_table_tool(source, "sales", tracker = tracker)
+
+  expect_match(first@value, "booked revenue")
+  expect_no_match(second@value, "booked revenue")
+})
+
 test_that("search_context_tool handles a missing context layer", {
   expect_match(search_context_tool(NULL, "anything"), "No context layer")
 })

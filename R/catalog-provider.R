@@ -1,6 +1,7 @@
 new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   started_at <- Sys.time()
   backend <- catalog_backend(con)
+  catalog_progress("discovering", backend, started_at)
   snapshot <- catalog_connection_snapshot(con, backend)
   source_id <- catalog_id(
     "source",
@@ -47,6 +48,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     namespace = snapshot$namespace,
     identifier_case = catalog_identifier_case(backend),
     sample_rows = options$sample_rows,
+    version = snapshot$version,
     provenance = provenance
   )
   relations <- lapply(seq_along(ids), function(i) {
@@ -56,7 +58,9 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
       id = catalog_id("relation", source_id, catalog_source_path_key(id)),
       source_id = source_id,
       path = path,
+      kind = attr(id, "commons_kind") %||% "unknown",
       name = catalog_id_name(id),
+      description = attr(id, "commons_description"),
       access = new_catalog_access("unknown", "listed by the connection"),
       provenance = provenance
     )
@@ -76,11 +80,13 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     relations = relations,
     provider = provider
   )
+  provider$lazy <- nchar(paste(labels, collapse = "\n"), type = "bytes") > 4000L
+  catalog_import_backend(provider)
   provider$startup <- list(
     started_at = started_at,
     elapsed = as.numeric(difftime(Sys.time(), started_at, units = "secs"))
   )
-  provider$lazy <- nchar(paste(labels, collapse = "\n"), type = "bytes") > 4000L
+  catalog_progress("ready", backend, started_at)
   provider
 }
 
@@ -100,6 +106,12 @@ catalog_backend <- function(con) {
 }
 
 catalog_connection_snapshot <- function(con, backend) {
+  if (identical(backend, "snowflake")) {
+    return(snowflake_connection_snapshot(con))
+  }
+  if (identical(backend, "databricks")) {
+    return(databricks_connection_snapshot(con))
+  }
   info <- tryCatch(DBI::dbGetInfo(con), error = function(err) list())
   list(
     backend = backend,
@@ -147,6 +159,12 @@ catalog_resolve_selection <- function(con, backend, options, call) {
 }
 
 catalog_default_objects <- function(con, backend, call) {
+  if (identical(backend, "snowflake")) {
+    return(snowflake_default_objects(con, call))
+  }
+  if (identical(backend, "databricks")) {
+    return(databricks_default_objects(con, call))
+  }
   tables <- tryCatch(
     DBI::dbListTables(con),
     error = function(err) {
@@ -173,6 +191,12 @@ catalog_default_objects <- function(con, backend, call) {
 }
 
 catalog_list_namespace <- function(con, backend, prefix, call) {
+  if (identical(backend, "snowflake")) {
+    return(snowflake_list_namespace(con, prefix, call))
+  }
+  if (identical(backend, "databricks")) {
+    return(databricks_list_namespace(con, prefix, call))
+  }
   listed <- tryCatch(
     DBI::dbListObjects(con, prefix = prefix),
     error = function(err) NULL
@@ -267,28 +291,66 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   if (length(relation$columns)) {
     return(relation)
   }
+  if (identical(relation$kind, "semantic_view")) {
+    definitions <- Filter(
+      function(x) identical(x$relation_id, relation$id) &&
+        identical(x$visibility, "public"),
+      provider$catalog$definitions
+    )
+    relation$columns <- lapply(definitions, function(definition) {
+      new_catalog_column(
+        definition$name,
+        logical_type = definition$logical_type,
+        description = definition$description,
+        provenance = definition$provenance
+      )
+    })
+    names(relation$columns) <- vapply(
+      relation$columns,
+      `[[`,
+      character(1),
+      "name"
+    )
+    provider$catalog$relations[[relation_id]] <- relation
+    return(relation)
+  }
 
   metadata <- tryCatch(
     catalog_relation_metadata(provider$con, id),
     error = function(err) err
   )
   if (inherits(metadata, "condition")) {
+    metadata$message <- gsub(
+      "\\r?\\n[ \\t]*\\r?\\n",
+      "\n",
+      conditionMessage(metadata),
+      perl = TRUE
+    )
     relation$access <- new_catalog_access("visible_only", conditionMessage(metadata))
     provider$catalog$relations[[relation_id]] <- relation
     cli::cli_abort(
-      "Table {.val {table}} is visible in catalog metadata but could not be described.",
+      "Table {.val {table}} could not be described.",
       parent = metadata,
       call = call
     )
   }
 
   relation$columns <- metadata$columns
+  relation$constraints <- metadata$constraints %||% relation$constraints
+  relation$kind <- metadata$kind %||% relation$kind
   relation$access <- new_catalog_access("queryable", "zero-row metadata query")
   provider$catalog$relations[[relation_id]] <- relation
   relation
 }
 
 catalog_relation_metadata <- function(con, id) {
+  backend <- catalog_backend(con)
+  if (identical(backend, "snowflake")) {
+    return(snowflake_relation_metadata(con, id))
+  }
+  if (identical(backend, "databricks")) {
+    return(databricks_relation_metadata(con, id))
+  }
   result <- DBI::dbSendQuery(
     con,
     sprintf(
@@ -307,7 +369,7 @@ catalog_relation_metadata <- function(con, id) {
     )
   })
   names(columns) <- vapply(columns, `[[`, character(1), "name")
-  list(columns = columns)
+  list(columns = columns, constraints = list(), kind = NULL)
 }
 
 catalog_provider_search <- function(provider, query, kinds = NULL, limit = 10L) {
@@ -376,4 +438,33 @@ catalog_unique_labels <- function(labels, ids, call) {
     )
   }
   labels
+}
+
+catalog_tag_id <- function(id, kind = "table", description = NULL) {
+  attr(id, "commons_kind") <- kind
+  attr(id, "commons_description") <- description
+  id
+}
+
+catalog_progress <- function(stage, backend, started_at) {
+  condition <- structure(
+    list(
+      message = sprintf("%s catalog %s", backend, stage),
+      stage = stage,
+      backend = backend,
+      elapsed = as.numeric(difftime(Sys.time(), started_at, units = "secs"))
+    ),
+    class = c("commons_catalog_progress", "condition")
+  )
+  signalCondition(condition)
+  invisible(condition)
+}
+
+catalog_import_backend <- function(provider) {
+  if (identical(provider$backend, "snowflake")) {
+    snowflake_import_semantics(provider)
+  } else if (identical(provider$backend, "databricks")) {
+    databricks_import_semantics(provider)
+  }
+  invisible(provider)
 }

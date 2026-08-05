@@ -222,6 +222,9 @@ catalog_definition_registry <- function(
   validate_commons_catalog(catalog, call = call)
   rows <- list(no_definitions)
   for (definition in catalog$definitions) {
+    if (identical(definition$visibility, "private")) {
+      next
+    }
     relation <- catalog$relations[[definition$relation_id]]
     table <- if (relation$id %in% names(table_labels)) {
       unname(table_labels[[relation$id]])
@@ -229,17 +232,27 @@ catalog_definition_registry <- function(
       relation$name
     }
     expression <- catalog_primary_expression(definition$expressions)
+    model <- catalog$models[[definition$model_id]]
+    role <- if (identical(definition$role, "time_dimension")) {
+      "dimension"
+    } else {
+      definition$role
+    }
     rows[[length(rows) + 1]] <- data.frame(
       name = definition$name,
       table = table,
       source = source,
       type = definition$logical_type %||% NA_character_,
-      role = definition$role,
+      role = role,
       label = definition$label %||% NA_character_,
       description = definition$description %||% NA_character_,
       details = definition$details %||% NA_character_,
       expr = expression$sql,
-      expanded = expression$sql
+      expanded = expression$sql,
+      execution = model$execution$kind %||% "data_dictionary",
+      model_id = definition$model_id,
+      definition_id = definition$id,
+      native_parent = definition$native$parent %||% NA_character_
     )
   }
   list(defs = do.call(rbind, rows))
@@ -774,6 +787,12 @@ new_catalog_binding <- function(
   token = NULL
 ) {
   method <- rlang::arg_match(method)
+  if (!is.null(token)) {
+    token <- catalog_string(token, "binding token")
+  }
+  if (identical(method, "identifier") && is.null(token)) {
+    cli::cli_abort("Identifier execution bindings require an explicit token.")
+  }
   structure(
     list(
       argument = catalog_string(argument, "binding argument"),

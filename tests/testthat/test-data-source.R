@@ -186,6 +186,22 @@ test_that("connection discovery merges an authored dictionary", {
   )
 })
 
+test_that("catalog discovery exposes startup progress", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE TABLE orders (id INTEGER)")
+  stages <- character()
+
+  withCallingHandlers(
+    data_source(con),
+    commons_catalog_progress = function(condition) {
+      stages <<- c(stages, condition$stage)
+    }
+  )
+
+  expect_equal(stages, c("discovering", "ready"))
+})
+
 test_that("default connection discovery stays in the current namespace", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
@@ -200,7 +216,8 @@ test_that("data_source errors for tables absent from the connection", {
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbWriteTable(con, "sales", test_sales())
 
-  expect_snapshot(data_source(con, tables = "nope"), error = TRUE)
+  src <- suppressWarnings(data_source(con, tables = "nope"))
+  expect_snapshot(source_describe(src, "nope"), error = TRUE)
 })
 
 test_that("source_query rejects non-SELECT statements", {

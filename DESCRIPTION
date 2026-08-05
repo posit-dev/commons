@@ -35,7 +35,8 @@ Imports:
     rlang (>= 1.2.0),
     roxygen2,
     S7,
-    utils
+    utils,
+    yaml
 Suggests:
     bsicons,
     dbplyr,
@@ -51,8 +52,7 @@ Suggests:
     shinychat (> 0.4.0),
     testthat (>= 3.0.0),
     vitals,
-    withr,
-    yaml
+    withr
 VignetteBuilder: knitr
 Remotes:
     posit-dev/shinychat,
