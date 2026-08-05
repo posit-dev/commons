@@ -68,3 +68,23 @@ test_that("the packaged prompt omits run_r result handles", {
 
   expect_no_match(prompt, "r1", fixed = TRUE)
 })
+
+test_that("catalog diagnostics surface concise model-facing limitations", {
+  source <- test_source()
+  catalog_source <- new_catalog_source("source:test", "duckdb")
+  source$catalog <- new_commons_catalog(
+    sources = list(catalog_source),
+    diagnostics = list(new_catalog_diagnostic(
+      "unsupported_semantics",
+      "Skipped one unsupported governed filter."
+    ))
+  )
+
+  prompt <- commons_system_prompt(
+    list(warehouse = source),
+    default_system_prompt()
+  )
+
+  expect_match(prompt, "# Catalog limitations", fixed = TRUE)
+  expect_match(prompt, "Skipped one unsupported governed filter", fixed = TRUE)
+})

@@ -50,6 +50,10 @@ When a chart would communicate the answer better than text, render one with `run
 
 {[tables]}
 
+{[ if (has_catalog_diagnostics) "# Catalog limitations" else "" ]}
+
+{[ if (has_catalog_diagnostics) catalog_diagnostics else "" ]}
+
 <!-- Dataset-wide dictionary content is ambient; table details arrive on first touch. -->
 {[ if (has_dictionary_context) "# About the data" else "" ]}
 

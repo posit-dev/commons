@@ -154,6 +154,10 @@ call_native_metrics <- function(
   if (length(model_ids) != 1) {
     cli::cli_abort("Metrics in one query must belong to the same semantic model.")
   }
+  model <- source$provider$catalog$models[[model_ids]]
+  if (identical(model$access$state, "visible_only")) {
+    cli::cli_abort("The selected semantic model is not queryable by this connection.")
+  }
   on_model <- defs[defs$model_id == model_ids, ]
   sql <- switch(
     execution,
@@ -201,9 +205,6 @@ snowflake_metric_sql <- function(
   where,
   arguments = "{}"
 ) {
-  if (!identical(arguments, "{}") && length(parse_json_args(arguments))) {
-    cli::cli_abort("This Snowflake semantic view does not expose runtime parameters.")
-  }
   con <- source$con
   model <- source$provider$catalog$models[[model_id]]
   object <- source_path_id(model$execution$object)
@@ -224,6 +225,11 @@ snowflake_metric_sql <- function(
     paste(
       "METRICS",
       paste(native_definition_references(metrics, con), collapse = ", ")
+    ),
+    snowflake_variable_clause(
+      model$execution$variables %||% list(),
+      arguments,
+      con
     )
   )
   conditions <- c(
@@ -234,6 +240,81 @@ snowflake_metric_sql <- function(
     parts <- c(parts, paste("WHERE", paste(conditions, collapse = " AND ")))
   }
   paste0("SELECT * FROM SEMANTIC_VIEW(\n  ", paste(parts, collapse = "\n  "), "\n)")
+}
+
+snowflake_variable_clause <- function(variables, arguments, con) {
+  values <- parse_json_args(arguments %||% "{}")
+  if (length(variables) == 0) {
+    if (length(values)) {
+      cli::cli_abort("This Snowflake semantic view does not accept variables.")
+    }
+    return(NULL)
+  }
+  variable_names <- vapply(variables, `[[`, character(1), "name")
+  extra <- setdiff(names(values), variable_names)
+  required <- variable_names[!vapply(
+    variables,
+    function(variable) "default_value" %in% names(variable),
+    logical(1)
+  )]
+  missing <- setdiff(required, names(values))
+  if (length(extra) || length(missing)) {
+    cli::cli_abort(c(
+      "Semantic-view variables do not match the model.",
+      "x" = if (length(extra)) "Unknown variables: {.val {extra}}.",
+      "x" = if (length(missing)) "Missing variables: {.val {missing}}."
+    ))
+  }
+  supplied <- intersect(variable_names, names(values))
+  if (length(supplied) == 0) {
+    return(NULL)
+  }
+  sql <- vapply(supplied, function(name) {
+    variable <- variables[[match(name, variable_names)]]
+    paste(
+      DBI::dbQuoteIdentifier(con, name),
+      "=>",
+      snowflake_variable_value(values[[name]], variable$data_type, con)
+    )
+  }, character(1))
+  paste("VARIABLES", paste(sql, collapse = ", "))
+}
+
+snowflake_variable_value <- function(value, type, con) {
+  normalized <- tolower(gsub("\\s+", "", type))
+  if (grepl("^(number|decimal|numeric)(\\([0-9]+(,[0-9]+)?\\))?$", normalized) ||
+      normalized %in% c("float", "float4", "float8", "double", "real")) {
+    if (!is.numeric(value) || length(value) != 1 || !is.finite(value)) {
+      cli::cli_abort("Semantic-view variable type {.val {type}} requires a number.")
+    }
+    return(as.character(value))
+  }
+  if (normalized %in% c("boolean", "bool")) {
+    if (!is.logical(value) || length(value) != 1 || is.na(value)) {
+      cli::cli_abort("Semantic-view variable type {.val {type}} requires true or false.")
+    }
+    return(if (value) "TRUE" else "FALSE")
+  }
+  if (normalized == "date") {
+    if (!is.character(value) || length(value) != 1 || is.na(as.Date(value))) {
+      cli::cli_abort("Semantic-view date variables require an ISO date string.")
+    }
+    return(paste0("TO_DATE(", DBI::dbQuoteString(con, value), ")"))
+  }
+  if (grepl("^(timestamp|timestamp_ntz|timestamp_ltz|timestamp_tz)", normalized)) {
+    if (!is.character(value) || length(value) != 1 ||
+        !grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ]", value)) {
+      cli::cli_abort("Semantic-view timestamp variables require an ISO timestamp string.")
+    }
+    return(paste0("TO_TIMESTAMP(", DBI::dbQuoteString(con, value), ")"))
+  }
+  if (grepl("^(string|text|varchar|char)", normalized)) {
+    if (!is.character(value) || length(value) != 1 || is.na(value)) {
+      cli::cli_abort("Semantic-view variable type {.val {type}} requires a string.")
+    }
+    return(as.character(DBI::dbQuoteString(con, value)))
+  }
+  cli::cli_abort("Unsupported semantic-view variable type {.val {type}}.")
 }
 
 databricks_metric_sql <- function(
@@ -569,6 +650,7 @@ search_pool_text <- function(
   source_names = character(),
   calculations = list()
 ) {
+  calculations <- Filter(catalog_calculation_entry_available, calculations)
   defs <- registry_defs(registry)
   if (length(measures) == 0 && nrow(defs) == 0 && length(calculations) == 0) {
     return("The semantic layer is empty.")

@@ -554,7 +554,7 @@ catalog_first_touch_text <- function(source, table) {
     return(character())
   }
   model_ids <- names(Filter(
-    function(model) any(relation_ids %in% model$exposed),
+    function(model) any(relation_ids %in% c(model$exposed, model$datasets)),
     catalog$models
   ))
   scopes <- c(relation_ids, model_ids)

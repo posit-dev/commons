@@ -107,6 +107,19 @@ snowflake_import_semantics <- function(provider) {
       )
     }
     if (is.null(specification)) {
+      if (identical(relation$kind, "semantic_view")) {
+        relation$access <- new_catalog_access(
+          "visible_only",
+          "semantic metadata could not be read"
+        )
+        provider$catalog$relations[[relation$id]] <- relation
+        catalog_provider_diagnostic(
+          provider,
+          "snowflake_semantic_view_unreadable",
+          sprintf("Skipped semantic view %s because its metadata could not be read.", relation$name),
+          entity_id = relation$id
+        )
+      }
       next
     }
     relation$kind <- "semantic_view"
@@ -114,7 +127,58 @@ snowflake_import_semantics <- function(provider) {
     provider$catalog$relations[[relation_id]] <- relation
     snowflake_import_semantic_model(provider, relation, specification)
   }
+  snowflake_import_associated_semantics(provider)
   validate_commons_catalog(provider$catalog)
+  invisible(provider)
+}
+
+snowflake_import_associated_semantics <- function(provider) {
+  prefixes <- catalog_association_prefixes(provider)
+  for (prefix in prefixes) {
+    candidates <- snowflake_list_namespace(
+      provider$con,
+      prefix,
+      rlang::caller_env()
+    )
+    candidates <- Filter(
+      function(id) identical(attr(id, "commons_kind"), "semantic_view"),
+      candidates
+    )
+    for (id in candidates) {
+      relation <- catalog_add_associated_relation(
+        provider,
+        id,
+        "semantic_view"
+      )
+      imported <- any(vapply(
+        provider$catalog$models,
+        function(model) relation$id %in% model$exposed,
+        logical(1)
+      ))
+      if (imported) {
+        next
+      }
+      specification <- snowflake_read_semantic_yaml(provider$con, relation$path)
+      if (is.null(specification)) {
+        specification <- snowflake_describe_semantic_view(
+          provider$con,
+          relation$path
+        )
+      }
+      if (is.null(specification)) {
+        provider$catalog$relations[[relation$id]] <- NULL
+        catalog_provider_diagnostic(
+          provider,
+          "snowflake_associated_view_unreadable",
+          sprintf("Skipped associated semantic view %s because its metadata could not be read.", relation$name),
+          entity_id = relation$id
+        )
+        next
+      }
+      snowflake_import_semantic_model(provider, relation, specification)
+      catalog_filter_associated_model(provider, relation$id)
+    }
+  }
   invisible(provider)
 }
 
@@ -217,6 +281,7 @@ snowflake_relation_metadata <- function(con, id) {
   names(rows) <- tolower(names(rows))
   rows <- rows[toupper(rows$kind) == "COLUMN", , drop = FALSE]
   columns <- lapply(seq_len(nrow(rows)), function(i) {
+    restrictions <- snowflake_column_restrictions(rows[i, , drop = FALSE])
     new_catalog_column(
       name = rows$name[[i]],
       native_type = rows$type[[i]],
@@ -224,13 +289,95 @@ snowflake_relation_metadata <- function(con, id) {
       nullable = if ("null?" %in% names(rows)) rows[["null?"]][[i]] == "Y" else NULL,
       description = if ("comment" %in% names(rows) && !is.na(rows$comment[[i]])) {
         rows$comment[[i]]
-      }
+      },
+      display = if (length(restrictions)) "restricted",
+      restrictions = restrictions,
+      extensions = list(snowflake = as.list(rows[i, , drop = FALSE]))
     )
   })
   names(columns) <- vapply(columns, `[[`, character(1), "name")
-  constraints <- snowflake_desc_constraints(rows)
-  constraints <- c(constraints, snowflake_foreign_keys(con, id))
+  properties <- snowflake_constraint_properties(con, id)
+  constraints <- snowflake_key_constraints(properties)
+  if (length(constraints) == 0) {
+    constraints <- snowflake_desc_constraints(rows)
+  }
+  constraints <- c(
+    constraints,
+    snowflake_foreign_keys(con, id, properties)
+  )
   list(columns = columns, constraints = constraints, kind = "table")
+}
+
+snowflake_constraint_properties <- function(con, id) {
+  components <- id@name
+  if (!all(c("catalog", "schema", "table") %in% names(components))) {
+    return(NULL)
+  }
+  catalog <- components[["catalog"]]
+  constraints <- DBI::Id(
+    catalog = catalog,
+    schema = "INFORMATION_SCHEMA",
+    table = "TABLE_CONSTRAINTS"
+  )
+  columns <- DBI::Id(
+    catalog = catalog,
+    schema = "INFORMATION_SCHEMA",
+    table = "KEY_COLUMN_USAGE"
+  )
+  sql <- paste(
+    "SELECT tc.constraint_name, tc.constraint_type, tc.enforced, tc.rely,",
+    "k.column_name, k.ordinal_position",
+    "FROM", DBI::dbQuoteIdentifier(con, constraints), "tc",
+    "JOIN", DBI::dbQuoteIdentifier(con, columns), "k",
+    "ON tc.constraint_catalog = k.constraint_catalog",
+    "AND tc.constraint_schema = k.constraint_schema",
+    "AND tc.constraint_name = k.constraint_name",
+    "AND tc.table_catalog = k.table_catalog",
+    "AND tc.table_schema = k.table_schema",
+    "AND tc.table_name = k.table_name",
+    "WHERE tc.table_schema =", DBI::dbQuoteString(con, components[["schema"]]),
+    "AND tc.table_name =", DBI::dbQuoteString(con, components[["table"]]),
+    "ORDER BY tc.constraint_name, k.ordinal_position"
+  )
+  rows <- tryCatch(DBI::dbGetQuery(con, sql), error = function(err) NULL)
+  if (!is.null(rows)) names(rows) <- tolower(names(rows))
+  rows
+}
+
+snowflake_key_constraints <- function(rows) {
+  if (is.null(rows) || nrow(rows) == 0) {
+    return(list())
+  }
+  rows <- rows[rows$constraint_type != "FOREIGN KEY", , drop = FALSE]
+  lapply(split(rows, rows$constraint_name), function(group) {
+    new_catalog_constraint(
+      tolower(gsub(" ", "_", group$constraint_type[[1]])),
+      group$column_name,
+      enforcement = snowflake_constraint_enforcement(group),
+      native = group
+    )
+  })
+}
+
+snowflake_constraint_enforcement <- function(rows) {
+  if (identical(rows$enforced[[1]], "YES")) {
+    return("enforced")
+  }
+  if (identical(rows$rely[[1]], "YES")) {
+    return("asserted")
+  }
+  "informational"
+}
+
+snowflake_column_restrictions <- function(row) {
+  fields <- intersect(
+    c("policy name", "privacy domain", "masking policy"),
+    names(row)
+  )
+  fields[vapply(fields, function(field) {
+    value <- row[[field]][[1]]
+    !is.na(value) && nzchar(as.character(value))
+  }, logical(1))]
 }
 
 snowflake_desc_constraints <- function(rows) {
@@ -253,7 +400,7 @@ snowflake_desc_constraints <- function(rows) {
   out
 }
 
-snowflake_foreign_keys <- function(con, id) {
+snowflake_foreign_keys <- function(con, id, properties = NULL) {
   rows <- tryCatch(
     DBI::dbGetQuery(
       con,
@@ -267,6 +414,9 @@ snowflake_foreign_keys <- function(con, id) {
   names(rows) <- tolower(names(rows))
   groups <- split(rows, rows$fk_name)
   lapply(groups, function(group) {
+    property <- if (!is.null(properties)) {
+      properties[properties$constraint_name == group$fk_name[[1]], , drop = FALSE]
+    }
     new_catalog_constraint(
       "foreign_key",
       group$fk_column_name,
@@ -281,7 +431,11 @@ snowflake_foreign_keys <- function(con, id) {
         ),
         columns = group$pk_column_name
       ),
-      enforcement = "informational",
+      enforcement = if (!is.null(property) && nrow(property)) {
+        snowflake_constraint_enforcement(property)
+      } else {
+        "informational"
+      },
       native = group
     )
   })
@@ -337,11 +491,15 @@ snowflake_import_semantic_model <- function(provider, relation, specification) {
     relationships = specification$relationships %||% list(),
     execution = list(
       kind = "snowflake_semantic_view",
-      object = relation$path
+      object = relation$path,
+      variables = specification$variables %||% list()
     ),
     exposed = relation$id,
     dependencies = datasets,
     access = relation$access,
+    version = as.character(
+      specification$version %||% specification$semantic_model_version %||% NA_character_
+    ),
     fingerprint = catalog_fingerprint(specification),
     provenance = provenance,
     extensions = list(snowflake = specification)

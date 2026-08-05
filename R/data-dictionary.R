@@ -183,15 +183,22 @@ dictionary_columns_text <- function(columns, live = NULL) {
 
 dictionary_column_line <- function(name, spec, live_type = NULL) {
   spec <- spec %||% list()
+  restricted <- identical(spec$display, "restricted")
   qualifier <- paste(
-    c(spec$type %||% live_type, spec$units, unlist(spec$constraints)),
+    c(
+      spec$type %||% live_type,
+      spec$units,
+      unlist(spec$constraints),
+      if (restricted) "restricted"
+    ),
     collapse = ", "
   )
   facts <- c(
     spec$description,
-    dictionary_values_fact(spec$values),
-    dictionary_range_fact(spec$range),
-    dictionary_examples_fact(spec$examples),
+    if (!restricted) dictionary_values_fact(spec$values),
+    if (!restricted) dictionary_range_fact(spec$range),
+    if (!restricted) dictionary_examples_fact(spec$examples),
+    if (restricted) "Do not select or display this column by default.",
     spec$details
   )
   detail <- flatten_inline(paste(facts, collapse = " "))

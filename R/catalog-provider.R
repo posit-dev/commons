@@ -3,6 +3,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   backend <- catalog_backend(con)
   catalog_progress("discovering", backend, started_at)
   snapshot <- catalog_connection_snapshot(con, backend)
+  capabilities <- catalog_backend_capabilities(con, backend, snapshot)
   source_id <- catalog_id(
     "source",
     backend,
@@ -10,6 +11,12 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     paste(unlist(snapshot$namespace), collapse = ".")
   )
   ids <- catalog_resolve_selection(con, backend, options, call)
+  if (length(ids) > catalog_object_limit) {
+    cli::cli_abort(c(
+      "The data-source selection resolves to {length(ids)} objects, above the supported limit of {catalog_object_limit}.",
+      "i" = "Narrow {.arg include} to fewer catalog or schema prefixes."
+    ), call = call)
+  }
   if (length(ids) == 0) {
     cli::cli_abort(
       "The resolved data-source selection contains no queryable objects.",
@@ -27,7 +34,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   }
 
   keys <- vapply(ids, catalog_source_path_key, character(1))
-  ids <- ids[!duplicated(keys)]
+  ids <- catalog_collapse_selected_ids(ids, keys)
   labels <- vapply(ids, catalog_id_label, character(1))
   labels <- catalog_unique_labels(labels, ids, call)
   names(ids) <- labels
@@ -51,6 +58,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     version = snapshot$version,
     provenance = provenance
   )
+  source$extensions$capabilities <- capabilities
   relations <- lapply(seq_along(ids), function(i) {
     id <- ids[[i]]
     path <- new_source_path(id)
@@ -73,8 +81,13 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   provider$backend <- backend
   provider$options <- options
   provider$snapshot <- snapshot
+  provider$capabilities <- capabilities
   provider$table_ids <- ids
   provider$relation_labels <- relation_labels
+  provider$selection_modes <- stats::setNames(
+    vapply(ids, function(id) attr(id, "commons_selection") %||% "exact", character(1)),
+    relation_ids
+  )
   provider$catalog <- new_commons_catalog(
     sources = list(source),
     relations = relations,
@@ -88,6 +101,32 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   )
   catalog_progress("ready", backend, started_at)
   provider
+}
+
+catalog_object_limit <- 25000L
+
+catalog_backend_capabilities <- function(con, backend, snapshot) {
+  hierarchy <- if (requireNamespace("odbc", quietly = TRUE) &&
+      inherits(con, "OdbcConnection")) {
+    tryCatch(odbc::odbcListObjectTypes(con), error = function(err) NULL)
+  }
+  list(
+    odbc_hierarchy = hierarchy,
+    describe_json = if (identical(backend, "databricks")) "probe_on_use" else NULL,
+    native_semantics = backend %in% c("snowflake", "databricks"),
+    version = snapshot$version
+  )
+}
+
+catalog_odbc_objects <- function(con, catalog = NULL, schema = NULL) {
+  if (!requireNamespace("odbc", quietly = TRUE) ||
+      !inherits(con, "OdbcConnection")) {
+    return(NULL)
+  }
+  tryCatch(
+    odbc::odbcListObjects(con, catalog = catalog, schema = schema),
+    error = function(err) NULL
+  )
 }
 
 catalog_backend <- function(con) {
@@ -143,19 +182,54 @@ catalog_provider_check <- function(provider, call = rlang::caller_env()) {
 catalog_resolve_selection <- function(con, backend, options, call) {
   includes <- normalize_connection_includes(options$include, call)
   if (is.null(includes)) {
-    return(catalog_default_objects(con, backend, call))
+    objects <- catalog_default_objects(con, backend, call)
+    return(lapply(objects, catalog_selection_id, "namespace"))
   }
 
   objects <- list()
   for (include in includes) {
     if ("table" %in% names(include@name)) {
-      objects[[length(objects) + 1]] <- include
+      objects[[length(objects) + 1]] <- catalog_selection_id(include, "exact")
     } else {
       expanded <- catalog_list_namespace(con, backend, include, call)
+      expanded <- lapply(expanded, catalog_selection_id, "namespace")
       objects <- c(objects, expanded)
     }
   }
   objects
+}
+
+catalog_selection_id <- function(id, mode) {
+  attr(id, "commons_selection") <- mode
+  id
+}
+
+catalog_collapse_selected_ids <- function(ids, keys) {
+  unique_keys <- unique(keys)
+  lapply(unique_keys, function(key) {
+    matches <- which(keys == key)
+    kinds <- vapply(
+      ids[matches],
+      function(candidate) attr(candidate, "commons_kind") %||% "unknown",
+      character(1)
+    )
+    priority <- match(
+      kinds,
+      c("semantic_view", "metric_view", "view", "table", "unknown")
+    )
+    id <- ids[[matches[[which.min(priority)]]]]
+    modes <- vapply(
+      ids[matches],
+      function(candidate) attr(candidate, "commons_selection") %||% "exact",
+      character(1)
+    )
+    attr(id, "commons_selection") <- if ("namespace" %in% modes) {
+      "namespace"
+    } else {
+      "exact"
+    }
+    id
+  })
 }
 
 catalog_default_objects <- function(con, backend, call) {
@@ -467,4 +541,162 @@ catalog_import_backend <- function(provider) {
     databricks_import_semantics(provider)
   }
   invisible(provider)
+}
+
+catalog_association_prefixes <- function(provider) {
+  relation_ids <- names(provider$selection_modes)[
+    provider$selection_modes == "exact"
+  ]
+  relations <- provider$catalog$relations[relation_ids]
+  relations <- Filter(function(relation) {
+    !relation$kind %in% c("semantic_view", "metric_view") &&
+      "table" %in% relation$path$roles
+  }, relations)
+  prefixes <- lapply(relations, function(relation) {
+    keep <- relation$path$roles != "table"
+    do.call(DBI::Id, as.list(stats::setNames(
+      relation$path$components[keep],
+      relation$path$roles[keep]
+    )))
+  })
+  keys <- vapply(prefixes, catalog_source_path_key, character(1))
+  prefixes[!duplicated(keys)]
+}
+
+catalog_add_associated_relation <- function(provider, id, kind) {
+  path <- new_source_path(id)
+  existing <- Filter(
+    function(relation) identical(relation$path, path),
+    provider$catalog$relations
+  )
+  if (length(existing)) {
+    return(existing[[1]])
+  }
+  source <- provider$catalog$sources[[1]]
+  provenance <- new_catalog_provenance(
+    "discovered",
+    source$id,
+    harvested_at = Sys.time()
+  )
+  relation <- new_catalog_relation(
+    catalog_id("relation", source$id, catalog_source_path_key(id)),
+    source$id,
+    path,
+    kind = kind,
+    name = catalog_id_name(id),
+    description = attr(id, "commons_description"),
+    access = new_catalog_access("unknown", "associated semantic object"),
+    provenance = provenance
+  )
+  provider$catalog$relations[[relation$id]] <- relation
+  relation
+}
+
+catalog_filter_associated_model <- function(provider, relation_id) {
+  models <- Filter(
+    function(model) relation_id %in% model$exposed,
+    provider$catalog$models
+  )
+  if (length(models) == 0) {
+    return(invisible(provider))
+  }
+  model <- models[[1]]
+  selected <- names(provider$selection_modes)
+  selected_paths <- vapply(
+    provider$catalog$relations[selected],
+    function(relation) catalog_source_path_key(source_path_id(relation$path)),
+    character(1)
+  )
+  definitions <- Filter(
+    function(definition) identical(definition$model_id, model$id),
+    provider$catalog$definitions
+  )
+  calculations <- Filter(
+    function(calculation) model$id %in% calculation$dependencies,
+    provider$catalog$calculations
+  )
+  keep_definitions <- vapply(
+    definitions,
+    function(definition) {
+      catalog_dependencies_selected(
+        provider$catalog,
+        definition$dependencies,
+        selected_paths
+      )
+    },
+    logical(1)
+  )
+  keep_calculations <- rep(
+    catalog_dependencies_selected(
+      provider$catalog,
+      model$dependencies,
+      selected_paths
+    ),
+    length(calculations)
+  )
+  skipped <- c(
+    vapply(definitions[!keep_definitions], `[[`, character(1), "name"),
+    vapply(calculations[!keep_calculations], `[[`, character(1), "name")
+  )
+  provider$catalog$definitions <- provider$catalog$definitions[
+    !names(provider$catalog$definitions) %in% names(definitions) |
+      names(provider$catalog$definitions) %in% names(definitions)[keep_definitions]
+  ]
+  provider$catalog$calculations <- provider$catalog$calculations[
+    !names(provider$catalog$calculations) %in% names(calculations) |
+      names(provider$catalog$calculations) %in% names(calculations)[keep_calculations]
+  ]
+  if (length(skipped)) {
+    diagnostic <- new_catalog_diagnostic(
+      "semantic_dependency_out_of_scope",
+      sprintf(
+        "Skipped associated semantic assets with dependencies outside the selection: %s.",
+        paste(skipped, collapse = ", ")
+      ),
+      entity_id = model$id,
+      details = list(skipped = skipped)
+    )
+    provider$catalog$diagnostics[[length(provider$catalog$diagnostics) + 1]] <- diagnostic
+  }
+  surface <- c(names(definitions)[keep_definitions], names(calculations)[keep_calculations])
+  if (length(surface) == 0) {
+    provider$catalog$models[[model$id]] <- NULL
+    provider$catalog$relations[[relation_id]] <- NULL
+    provider$catalog$context <- Filter(
+      function(context) !model$id %in% context$scope,
+      provider$catalog$context
+    )
+  }
+  validate_commons_catalog(provider$catalog)
+  invisible(provider)
+}
+
+catalog_dependencies_selected <- function(catalog, ids, selected_paths) {
+  dependencies <- catalog$relations[ids]
+  length(dependencies) == length(ids) && all(vapply(
+    dependencies,
+    function(relation) {
+      catalog_source_path_key(source_path_id(relation$path)) %in% selected_paths
+    },
+    logical(1)
+  ))
+}
+
+catalog_provider_diagnostic <- function(
+  provider,
+  code,
+  message,
+  severity = "warning",
+  entity_id = NULL,
+  details = list()
+) {
+  diagnostic <- new_catalog_diagnostic(
+    code,
+    message,
+    severity,
+    entity_id,
+    details
+  )
+  provider$catalog$diagnostics[[length(provider$catalog$diagnostics) + 1]] <- diagnostic
+  invisible(diagnostic)
 }

@@ -112,3 +112,43 @@ test_that("Snowflake metrics compile through SEMANTIC_VIEW", {
   expect_match(sql, "METRICS", fixed = TRUE)
   expect_match(sql, "ORDERS.REVENUE", fixed = TRUE)
 })
+
+test_that("Snowflake masking metadata marks restricted columns", {
+  row <- data.frame(
+    check.names = FALSE,
+    "policy name" = "MASK_EMAIL",
+    "privacy domain" = NA_character_
+  )
+
+  expect_equal(snowflake_column_restrictions(row), "policy name")
+})
+
+test_that("Snowflake semantic-view variables are typed and quoted", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  variables <- list(
+    list(name = "threshold", data_type = "NUMBER(10,2)"),
+    list(name = "region", data_type = "VARCHAR", default_value = "all")
+  )
+
+  clause <- snowflake_variable_clause(
+    variables,
+    '{"threshold":100.5,"region":"EMEA\' OR 1=1 --"}',
+    con
+  )
+
+  expect_match(clause, "threshold => 100.5", fixed = TRUE)
+  expect_match(clause, "'EMEA'' OR 1=1 --'", fixed = TRUE)
+  expect_snapshot(
+    snowflake_variable_clause(variables, "{}", con),
+    error = TRUE
+  )
+  expect_snapshot(
+    snowflake_variable_clause(
+      variables,
+      '{"threshold":"not numeric"}',
+      con
+    ),
+    error = TRUE
+  )
+})

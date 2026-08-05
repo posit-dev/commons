@@ -98,6 +98,26 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_match(res@extra$display$markdown, "SELECT count")
 })
 
+test_that("free-form SQL stays untrusted beside governed metadata", {
+  source <- test_source()
+  catalog_source <- new_catalog_source("source:test", "duckdb")
+  source$catalog <- new_commons_catalog(
+    sources = list(catalog_source),
+    context = list(new_catalog_context(
+      "context:trusted",
+      catalog_source$id,
+      "instruction",
+      "Revenue is a certified semantic metric.",
+      delivery = "retrieval",
+      authority = list(kind = "certified")
+    ))
+  )
+
+  result <- run_sql_tool(source, "SELECT sum(revenue) AS revenue FROM sales")
+
+  expect_equal(result@extra$commons_tag, "B")
+})
+
 test_that("run_sql_tool registers its result as a handle", {
   store <- new_handle_store()
   res <- run_sql_tool(

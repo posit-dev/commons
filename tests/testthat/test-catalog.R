@@ -311,3 +311,132 @@ test_that("calculations require typed adapter-owned bindings", {
     error = TRUE
   )
 })
+
+test_that("namespace selection takes precedence over duplicate exact selection", {
+  exact <- catalog_selection_id(DBI::Id(schema = "main", table = "orders"), "exact")
+  namespace <- catalog_selection_id(
+    catalog_tag_id(DBI::Id(schema = "main", table = "orders"), "table"),
+    "namespace"
+  )
+
+  selected <- catalog_collapse_selected_ids(
+    list(exact, namespace),
+    rep(catalog_source_path_key(exact), 2)
+  )
+
+  expect_length(selected, 1)
+  expect_equal(attr(selected[[1]], "commons_selection"), "namespace")
+  expect_equal(attr(selected[[1]], "commons_kind"), "table")
+})
+
+test_that("associated semantic definitions respect physical dependency closure", {
+  catalog_source <- new_catalog_source("source:test", "snowflake")
+  orders <- new_catalog_relation(
+    "relation:orders",
+    catalog_source$id,
+    new_source_path(c("DB", "PUBLIC", "ORDERS"), c("catalog", "schema", "table"))
+  )
+  customers <- new_catalog_relation(
+    "relation:customers",
+    catalog_source$id,
+    new_source_path(c("DB", "PUBLIC", "CUSTOMERS"), c("catalog", "schema", "table"))
+  )
+  semantic <- new_catalog_relation(
+    "relation:model",
+    catalog_source$id,
+    new_source_path(c("DB", "PUBLIC", "SALES"), c("catalog", "schema", "table")),
+    kind = "semantic_view"
+  )
+  model <- new_catalog_model(
+    "model:sales",
+    catalog_source$id,
+    "SALES",
+    datasets = c(orders$id, customers$id),
+    execution = list(kind = "snowflake_semantic_view"),
+    exposed = semantic$id,
+    dependencies = c(orders$id, customers$id)
+  )
+  kept <- new_catalog_definition(
+    "definition:orders",
+    model$id,
+    semantic$id,
+    "metric",
+    "ORDER_COUNT",
+    expressions = list(new_catalog_expression("snowflake", "COUNT(*)")),
+    dependencies = orders$id
+  )
+  skipped <- new_catalog_definition(
+    "definition:customers",
+    model$id,
+    semantic$id,
+    "metric",
+    "CUSTOMER_COUNT",
+    expressions = list(new_catalog_expression("snowflake", "COUNT(*)")),
+    dependencies = customers$id
+  )
+  calculation <- new_catalog_calculation(
+    "calculation:sales",
+    catalog_source$id,
+    "sales_query",
+    dependencies = model$id,
+    execution = new_catalog_execution("verified_sql", "snowflake", "SELECT 1")
+  )
+  provider <- new.env(parent = emptyenv())
+  provider$selection_modes <- c("relation:orders" = "exact")
+  provider$catalog <- new_commons_catalog(
+    sources = list(catalog_source),
+    relations = list(orders, customers, semantic),
+    models = list(model),
+    definitions = list(kept, skipped),
+    calculations = list(calculation)
+  )
+
+  catalog_filter_associated_model(provider, semantic$id)
+
+  expect_equal(names(provider$catalog$definitions), kept$id)
+  expect_length(provider$catalog$calculations, 0)
+  expect_length(provider$catalog$models, 1)
+  expect_equal(provider$catalog$diagnostics[[1]]$code, "semantic_dependency_out_of_scope")
+  registry <- definitions_registry(list(warehouse = list(
+    catalog = provider$catalog,
+    tables = "DB.PUBLIC.ORDERS",
+    relation_labels = c("relation:orders" = "DB.PUBLIC.ORDERS")
+  )))
+  expect_equal(registry$defs$name, "ORDER_COUNT")
+})
+
+test_that("private and visible-only semantic definitions stay out of the registry", {
+  source <- new_catalog_source("source:test", "snowflake")
+  relation <- new_catalog_relation(
+    "relation:model",
+    source$id,
+    new_source_path(c(table = "MODEL"))
+  )
+  model <- new_catalog_model(
+    "model:test",
+    source$id,
+    "MODEL",
+    datasets = relation$id,
+    execution = list(kind = "snowflake_semantic_view"),
+    access = new_catalog_access("visible_only")
+  )
+  definition <- new_catalog_definition(
+    "definition:test",
+    model$id,
+    relation$id,
+    "metric",
+    "REVENUE",
+    expressions = list(new_catalog_expression("snowflake", "SUM(REVENUE)"))
+  )
+  catalog <- new_commons_catalog(
+    sources = list(source),
+    relations = list(relation),
+    models = list(model),
+    definitions = list(definition)
+  )
+
+  expect_equal(nrow(catalog_definition_registry(catalog)$defs), 0)
+  catalog$models[[model$id]]$access <- new_catalog_access("queryable")
+  catalog$definitions[[definition$id]]$visibility <- "private"
+  expect_equal(nrow(catalog_definition_registry(catalog)$defs), 0)
+})

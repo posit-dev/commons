@@ -181,7 +181,9 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
         source$relation_labels,
         call
       )
-      tables <- unique(registry$defs$table)
+      tables <- unique(registry$defs$table[
+        registry$defs$execution == "data_dictionary"
+      ])
       unknown <- setdiff(tables, source$tables)
       if (length(unknown)) {
         cli::cli_abort(

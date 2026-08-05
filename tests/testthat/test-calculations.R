@@ -53,6 +53,22 @@ test_that("catalog calculation values are bound and identifiers are allowlisted"
     ),
     error = TRUE
   )
+  expect_snapshot(
+    call_catalog_calculation(
+      registry,
+      "sales_value",
+      '{"region":"EMEA","column":"order_id","extra":1}'
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    call_catalog_calculation(
+      registry,
+      "sales_value",
+      '{"region":12,"column":"order_id"}'
+    ),
+    error = TRUE
+  )
 })
 
 test_that("catalog calculations do not trust rejected execution", {

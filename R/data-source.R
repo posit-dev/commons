@@ -522,7 +522,17 @@ source_describe <- function(source, table, n_sample = NULL) {
       schema$column
     )
   }
+  restricted <- source_restricted_columns(source, table)
+  sample <- sample[setdiff(names(sample), restricted)]
   list(schema = schema, sample = sample)
+}
+
+source_restricted_columns <- function(source, table) {
+  columns <- source_runtime_dictionary(source)$tables[[table]]$columns
+  names(Filter(
+    function(column) identical(column$display, "restricted"),
+    columns
+  ))
 }
 
 source_query <- function(source, sql) {

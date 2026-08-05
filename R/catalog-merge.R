@@ -222,7 +222,8 @@ catalog_merge_column <- function(discovered, authored) {
     "units",
     "values",
     "range",
-    "examples"
+    "examples",
+    "display"
   )
   for (field in scalar_fields) {
     fields[[field]] <- catalog_authored_value(authored[[field]], discovered[[field]])

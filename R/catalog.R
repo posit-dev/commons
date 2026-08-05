@@ -225,6 +225,10 @@ catalog_definition_registry <- function(
     if (identical(definition$visibility, "private")) {
       next
     }
+    model <- catalog$models[[definition$model_id]]
+    if (identical(model$access$state, "visible_only")) {
+      next
+    }
     relation <- catalog$relations[[definition$relation_id]]
     table <- if (relation$id %in% names(table_labels)) {
       unname(table_labels[[relation$id]])
@@ -232,7 +236,6 @@ catalog_definition_registry <- function(
       relation$name
     }
     expression <- catalog_primary_expression(definition$expressions)
-    model <- catalog$models[[definition$model_id]]
     role <- if (identical(definition$role, "time_dimension")) {
       "dimension"
     } else {
@@ -510,12 +513,16 @@ new_catalog_column <- function(
   values = NULL,
   range = NULL,
   examples = NULL,
+  display = NULL,
   restrictions = character(),
   tags = character(),
   provenance = NULL,
   field_provenance = list(),
   extensions = list()
 ) {
+  if (!is.null(display) && !identical(display, "restricted")) {
+    cli::cli_abort("Catalog column {.field display} must be {.val restricted} or null.")
+  }
   structure(
     list(
       name = catalog_string(name, "column name"),
@@ -528,6 +535,7 @@ new_catalog_column <- function(
       values = values,
       range = range,
       examples = examples,
+      display = display,
       restrictions = catalog_character(restrictions),
       tags = catalog_character(tags),
       provenance = provenance,
@@ -890,6 +898,7 @@ catalog_relation_from_dictionary <- function(
         values = column$values,
         range = column$range,
         examples = column$examples,
+        display = column$display,
         restrictions = unlist(column$constraints),
         provenance = provenance,
         field_provenance = catalog_field_provenance(
@@ -1053,6 +1062,7 @@ catalog_column_to_dictionary <- function(column) {
   out$values <- column$values
   out$range <- column$range
   out$examples <- column$examples
+  out$display <- column$display
   out$constraints <- if (length(column$restrictions)) column$restrictions
   catalog_compact(out)
 }

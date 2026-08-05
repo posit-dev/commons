@@ -281,3 +281,28 @@ test_that("agent tools share first-touch state", {
     fixed = TRUE
   )
 })
+
+test_that("restricted columns suppress representative and sampled values", {
+  dictionary <- new_data_dictionary(list(
+    tables = list(sales = list(columns = list(
+      order_id = list(type = "number"),
+      rep = list(
+        type = "string",
+        display = "restricted",
+        examples = c("Ada", "Bo")
+      )
+    )))
+  ))
+  source <- data_source(
+    sales = test_sales(),
+    dictionary = dictionary,
+    options = data_source_options(sample_rows = 2)
+  )
+
+  description <- describe_table_tool(source, "sales")
+
+  expect_match(description@value, "rep .*restricted")
+  expect_match(description@value, "Do not select or display")
+  expect_no_match(description@value, "Ada|Bo")
+  expect_false("rep" %in% names(source_describe(source, "sales")$sample))
+})

@@ -14,13 +14,6 @@ databricks_connection_snapshot <- function(con) {
     principal = row$principal[[1]],
     role = NULL,
     version = row$version[[1]],
-    capabilities = list(
-      describe_json = TRUE,
-      unity_information_schema = !identical(
-        tolower(row$catalog_name[[1]]),
-        "hive_metastore"
-      )
-    ),
     namespace = catalog_compact(list(
       catalog = row$catalog_name[[1]],
       schema = row$schema_name[[1]]
@@ -55,6 +48,14 @@ databricks_list_namespace <- function(con, prefix, call) {
   if (identical(tolower(catalog), "hive_metastore")) {
     return(databricks_list_hive_metastore(con, catalog, schema, call))
   }
+  odbc_objects <- if (!is.null(schema)) {
+    catalog_odbc_objects(con, catalog, schema)
+  }
+  odbc_types <- if (!is.null(odbc_objects) && nrow(odbc_objects)) {
+    stats::setNames(tolower(odbc_objects$type), odbc_objects$name)
+  } else {
+    character()
+  }
   predicates <- c(
     paste0("table_catalog = ", DBI::dbQuoteString(con, catalog)),
     "table_schema <> 'information_schema'",
@@ -85,7 +86,10 @@ databricks_list_namespace <- function(con, prefix, call) {
       schema = rows$table_schema[[i]],
       table = rows$table_name[[i]]
     )
-    kind <- if (grepl("VIEW", rows$table_type[[i]], ignore.case = TRUE)) {
+    odbc_type <- odbc_types[[rows$table_name[[i]]]] %||% ""
+    kind <- if (grepl("metric", odbc_type, ignore.case = TRUE)) {
+      "metric_view"
+    } else if (grepl("VIEW", rows$table_type[[i]], ignore.case = TRUE)) {
       "view"
     } else {
       "table"
@@ -130,11 +134,24 @@ databricks_import_semantics <- function(provider) {
   selected_ids <- names(provider$relation_labels)
   for (relation_id in selected_ids) {
     relation <- provider$catalog$relations[[relation_id]]
-    if (!relation$kind %in% c("view", "unknown")) {
+    if (!relation$kind %in% c("metric_view", "view", "unknown")) {
       next
     }
     specification <- databricks_read_metric_yaml(provider$con, relation$path)
     if (is.null(specification)) {
+      if (identical(relation$kind, "metric_view")) {
+        relation$access <- new_catalog_access(
+          "visible_only",
+          "metric-view metadata could not be read"
+        )
+        provider$catalog$relations[[relation$id]] <- relation
+        catalog_provider_diagnostic(
+          provider,
+          "databricks_metric_view_unreadable",
+          sprintf("Skipped metric view %s because its YAML could not be read.", relation$name),
+          entity_id = relation$id
+        )
+      }
       next
     }
     if (!databricks_metric_version_supported(specification$version)) {
@@ -156,7 +173,43 @@ databricks_import_semantics <- function(provider) {
     provider$catalog$relations[[relation_id]] <- relation
     databricks_import_metric_model(provider, relation, specification)
   }
+  databricks_import_associated_semantics(provider)
   validate_commons_catalog(provider$catalog)
+  invisible(provider)
+}
+
+databricks_import_associated_semantics <- function(provider) {
+  prefixes <- catalog_association_prefixes(provider)
+  for (prefix in prefixes) {
+    candidates <- databricks_list_namespace(
+      provider$con,
+      prefix,
+      rlang::caller_env()
+    )
+    candidates <- Filter(
+      function(id) attr(id, "commons_kind") %in% c("metric_view", "view"),
+      candidates
+    )
+    for (id in candidates) {
+      path <- new_source_path(id)
+      specification <- databricks_read_metric_yaml(provider$con, path)
+      if (is.null(specification) ||
+          !databricks_metric_version_supported(specification$version)) {
+        next
+      }
+      relation <- catalog_add_associated_relation(provider, id, "metric_view")
+      imported <- any(vapply(
+        provider$catalog$models,
+        function(model) relation$id %in% model$exposed,
+        logical(1)
+      ))
+      if (imported) {
+        next
+      }
+      databricks_import_metric_model(provider, relation, specification)
+      catalog_filter_associated_model(provider, relation$id)
+    }
+  }
   invisible(provider)
 }
 
@@ -469,6 +522,37 @@ databricks_metric_context <- function(
 }
 
 databricks_relation_metadata <- function(con, id) {
+  extended <- databricks_describe_json(con, new_source_path(id))
+  details <- extended$columns %||% list()
+  if (length(details) == 0) {
+    details <- databricks_report_columns(con, id)
+  }
+  columns <- lapply(details, function(column) {
+    restrictions <- databricks_column_restrictions(
+      extended,
+      column$name
+    )
+    type <- databricks_type_text(column$type)
+    new_catalog_column(
+      column$name,
+      native_type = type,
+      logical_type = type,
+      nullable = column$nullable,
+      description = column$comment,
+      display = if (length(restrictions)) "restricted",
+      restrictions = restrictions,
+      extensions = list(databricks = column)
+    )
+  })
+  names(columns) <- vapply(columns, `[[`, character(1), "name")
+  list(
+    columns = columns,
+    constraints = databricks_relation_constraints(con, id),
+    kind = NULL
+  )
+}
+
+databricks_report_columns <- function(con, id) {
   rows <- DBI::dbGetQuery(
     con,
     paste("DESCRIBE TABLE", DBI::dbQuoteIdentifier(con, id))
@@ -481,21 +565,38 @@ databricks_relation_metadata <- function(con, id) {
     ,
     drop = FALSE
   ]
-  columns <- lapply(seq_len(nrow(rows)), function(i) {
-    new_catalog_column(
-      rows$col_name[[i]],
-      native_type = rows$data_type[[i]],
-      logical_type = rows$data_type[[i]],
-      description = if ("comment" %in% names(rows) && !is.na(rows$comment[[i]])) {
-        rows$comment[[i]]
-      }
+  lapply(seq_len(nrow(rows)), function(i) {
+    list(
+      name = rows$col_name[[i]],
+      type = rows$data_type[[i]],
+      comment = if (!is.na(rows$comment[[i]])) rows$comment[[i]] else NULL,
+      nullable = NULL
     )
   })
-  names(columns) <- vapply(columns, `[[`, character(1), "name")
-  list(
-    columns = columns,
-    constraints = databricks_relation_constraints(con, id),
-    kind = NULL
+}
+
+databricks_column_restrictions <- function(metadata, name) {
+  masks <- metadata$column_masks %||% list()
+  matches <- Filter(
+    function(mask) identical(mask$column_name, name),
+    masks
+  )
+  if (length(matches)) "column_mask" else character()
+}
+
+databricks_type_text <- function(type) {
+  if (is.character(type)) {
+    return(type)
+  }
+  if (!is.list(type) || is.null(type$name)) {
+    return("unknown")
+  }
+  switch(
+    type$name,
+    decimal = sprintf("decimal(%s,%s)", type$precision, type$scale),
+    varchar = sprintf("varchar(%s)", type$length),
+    char = sprintf("char(%s)", type$length),
+    type$name
   )
 }
 

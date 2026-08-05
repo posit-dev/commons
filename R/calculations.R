@@ -31,6 +31,11 @@ catalog_calculation_available <- function(catalog, calculation) {
   ))
 }
 
+catalog_calculation_entry_available <- function(entry) {
+  catalog <- entry$source$provider$catalog %||% entry$source$catalog
+  catalog_calculation_available(catalog, entry$calculation)
+}
+
 calculation_pool_text <- function(entry, show_source = FALSE) {
   calculation <- entry$calculation
   arguments <- if (length(calculation$arguments)) {
@@ -72,6 +77,11 @@ call_catalog_calculation <- function(
   handles = NULL
 ) {
   entry <- resolve_catalog_calculation(registry, name, source_name)
+  if (!catalog_calculation_entry_available(entry)) {
+    cli::cli_abort(
+      "Trusted calculation {.val {name}} is not queryable by this connection."
+    )
+  }
   calculation <- entry$calculation
   values <- validate_catalog_calculation_args(
     calculation,
@@ -89,7 +99,24 @@ call_catalog_calculation <- function(
     values,
     entry$source$con
   )
-  result <- source_query_bind(entry$source, prepared$sql, prepared$params)
+  result <- tryCatch(
+    source_query_bind(entry$source, prepared$sql, prepared$params),
+    error = function(err) err
+  )
+  if (inherits(result, "condition")) {
+    state <- if (grepl(
+      "permission|not authorized|insufficient privilege|access denied",
+      conditionMessage(result),
+      ignore.case = TRUE
+    )) {
+      "visible_only"
+    } else {
+      "unknown"
+    }
+    catalog_calculation_access(entry, state, conditionMessage(result))
+    rlang::cnd_signal(result)
+  }
+  catalog_calculation_access(entry, "queryable", "trusted query succeeded")
   advert <- register_handle(handles, result)
   tool_result(
     paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
@@ -108,6 +135,32 @@ call_catalog_calculation <- function(
     tag = "A",
     show_tag = FALSE
   )
+}
+
+catalog_calculation_access <- function(entry, state, evidence) {
+  provider <- entry$source$provider
+  if (is.null(provider)) {
+    return(invisible(entry))
+  }
+  catalog <- provider$catalog
+  for (id in entry$calculation$dependencies) {
+    if (id %in% names(catalog$models)) {
+      model <- catalog$models[[id]]
+      model$access <- new_catalog_access(state, evidence)
+      catalog$models[[id]] <- model
+      for (relation_id in model$exposed) {
+        relation <- catalog$relations[[relation_id]]
+        relation$access <- new_catalog_access(state, evidence)
+        catalog$relations[[relation_id]] <- relation
+      }
+    } else if (id %in% names(catalog$relations)) {
+      relation <- catalog$relations[[id]]
+      relation$access <- new_catalog_access(state, evidence)
+      catalog$relations[[id]] <- relation
+    }
+  }
+  provider$catalog <- catalog
+  invisible(entry)
 }
 
 resolve_catalog_calculation <- function(

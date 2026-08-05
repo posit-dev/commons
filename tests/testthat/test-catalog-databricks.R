@@ -145,3 +145,24 @@ test_that("Databricks metric-view versions fail closed", {
   expect_false(databricks_metric_version_supported("9.9"))
   expect_true(databricks_metric_version_supported("1.1"))
 })
+
+test_that("Databricks JSON metadata preserves types and column masks", {
+  metadata <- list(
+    columns = list(list(
+      name = "email",
+      type = list(name = "varchar", length = 255),
+      nullable = TRUE
+    )),
+    column_masks = list(list(
+      column_name = "email",
+      mask_function = list(function_name = "mask_email")
+    ))
+  )
+
+  expect_equal(databricks_type_text(metadata$columns[[1]]$type), "varchar(255)")
+  expect_equal(
+    databricks_column_restrictions(metadata, "email"),
+    "column_mask"
+  )
+  expect_length(databricks_column_restrictions(metadata, "customer_id"), 0)
+})

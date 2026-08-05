@@ -18,6 +18,7 @@ system_prompt_data <- function(sources, definitions, measures, calculations) {
   has_definitions <- nrow(registry_defs(definitions)) > 0
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
+  diagnostics <- catalog_diagnostics_text(sources)
 
   list(
     date = as.character(Sys.Date()),
@@ -32,10 +33,12 @@ system_prompt_data <- function(sources, definitions, measures, calculations) {
     has_dictionary_context = nzchar(dictionary_context) ||
       nzchar(glossary_context),
     has_glossary_context = nzchar(glossary_context),
+    has_catalog_diagnostics = nzchar(diagnostics),
     definitions_complete = !definitions_overflow(definitions),
     tables = tables_text(sources),
     dictionary_context = dictionary_context,
     glossary_context = glossary_context,
+    catalog_diagnostics = diagnostics,
     definition_index = definition_index_text(definitions),
     definition_action = definition_action_text(definitions),
     definition_guidance = paste(
@@ -52,6 +55,31 @@ system_prompt_data <- function(sources, definitions, measures, calculations) {
       sep = "\n\n"
     )
   )
+}
+
+catalog_diagnostics_text <- function(sources) {
+  labels <- rlang::names2(sources)
+  lines <- character()
+  for (i in seq_along(sources)) {
+    catalog <- sources[[i]]$provider$catalog %||% sources[[i]]$catalog
+    if (!inherits(catalog, "commons_catalog")) {
+      next
+    }
+    diagnostics <- Filter(
+      function(diagnostic) diagnostic$severity %in% c("warning", "error"),
+      catalog$diagnostics
+    )
+    if (length(diagnostics) == 0) {
+      next
+    }
+    prefix <- if (length(sources) > 1) paste0(labels[[i]], ": ") else ""
+    lines <- c(lines, vapply(
+      diagnostics,
+      function(diagnostic) paste0("- ", prefix, diagnostic$message),
+      character(1)
+    ))
+  }
+  paste(unique(lines), collapse = "\n")
 }
 
 definition_action_text <- function(definitions) {
