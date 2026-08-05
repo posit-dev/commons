@@ -137,10 +137,22 @@ context_layer_merge <- function(
       metadata <- c(metadata, list(new_metadata[[i]]))
     } else {
       sources[[hit]] <- unique(c(sources[[hit]], new_sources[[i]]))
-      metadata[[hit]] <- c(metadata[[hit]], new_metadata[[i]])
+      metadata[[hit]] <- context_metadata_merge(
+        metadata[[hit]],
+        new_metadata[[i]]
+      )
     }
   }
   new_context_layer(docs, sources, metadata)
+}
+
+context_metadata_merge <- function(x, y) {
+  for (item in y) {
+    if (!any(vapply(x, identical, logical(1), item))) {
+      x[[length(x) + 1]] <- item
+    }
+  }
+  x
 }
 
 dictionary_context_chunks <- function(dictionary) {

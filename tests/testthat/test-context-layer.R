@@ -106,6 +106,16 @@ test_that("merged context deduplicates text without losing source metadata", {
   expect_length(layer$docs, 1)
   expect_setequal(layer$sources[[1]], c("alpha", "beta"))
   expect_length(layer$metadata[[1]], 2)
+
+  refreshed <- context_layer_merge(
+    layer$docs,
+    layer$sources,
+    layer$metadata,
+    "Revenue excludes tax.",
+    list("beta"),
+    list(list(list(id = "context:beta")))
+  )
+  expect_length(refreshed$metadata[[1]], 2)
 })
 
 test_that("evaluation-only catalog context never enters retrieval", {
