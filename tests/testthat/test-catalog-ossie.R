@@ -147,6 +147,18 @@ test_that("Apache Ossie models write to YAML and JSON", {
   expect_invisible(write_ossie(model, yaml_path, overwrite = TRUE))
 })
 
+test_that("Apache Ossie export version is selectable", {
+  model <- ossie_model(test_path("fixtures", "ossie-databricks.yaml"))
+  path <- withr::local_tempfile(fileext = ".yaml")
+
+  expect_invisible(write_ossie(model, path, version = "0.1.1"))
+  expect_equal(yaml::read_yaml(path)$version, "0.1.1")
+  expect_snapshot(
+    write_ossie(model, path, overwrite = TRUE, version = "9.9"),
+    error = TRUE
+  )
+})
+
 test_that("Snowflake Ossie extensions retain native payloads", {
   document <- list(
     version = "0.1.1",

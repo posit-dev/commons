@@ -4,7 +4,7 @@
 \alias{write_ossie}
 \title{Write an Apache Ossie semantic model}
 \usage{
-write_ossie(x, path, overwrite = FALSE)
+write_ossie(x, path, overwrite = FALSE, version = NULL)
 }
 \arguments{
 \item{x}{A commons data source or an object returned by \code{\link[=ossie_model]{ossie_model()}}.}
@@ -12,6 +12,9 @@ write_ossie(x, path, overwrite = FALSE)
 \item{path}{A destination ending in \code{.yaml}, \code{.yml}, or \code{.json}.}
 
 \item{overwrite}{Whether to replace an existing file.}
+
+\item{version}{Apache Ossie version to write. \code{NULL} preserves an imported
+model's version and otherwise writes the current commons default.}
 }
 \value{
 The export diagnostics, invisibly.

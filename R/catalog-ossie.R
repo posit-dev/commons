@@ -14,10 +14,12 @@ ossie_model <- function(path) {
 #' @param x A commons data source or an object returned by [ossie_model()].
 #' @param path A destination ending in `.yaml`, `.yml`, or `.json`.
 #' @param overwrite Whether to replace an existing file.
+#' @param version Apache Ossie version to write. `NULL` preserves an imported
+#'   model's version and otherwise writes the current commons default.
 #'
 #' @return The export diagnostics, invisibly.
 #' @export
-write_ossie <- function(x, path, overwrite = FALSE) {
+write_ossie <- function(x, path, overwrite = FALSE, version = NULL) {
   catalog <- if (inherits(x, "commons_data_source")) {
     x$provider$catalog %||% x$catalog
   } else {
@@ -34,7 +36,7 @@ write_ossie <- function(x, path, overwrite = FALSE) {
   if (file.exists(path) && !isTRUE(overwrite)) {
     cli::cli_abort("File {.path {path}} already exists; set {.arg overwrite} to true to replace it.")
   }
-  exported <- catalog_to_ossie(catalog)
+  exported <- catalog_to_ossie(catalog, version = version)
   if (grepl("\\.json$", path, ignore.case = TRUE)) {
     jsonlite::write_json(
       exported$document,

@@ -125,6 +125,7 @@ data_source_frames <- function(
   check_named_frames(dots, call = call)
   selected <- select_flat_names(names(dots), options, call)
   dots <- dots[selected]
+  dictionary <- catalog_scope_flat_authored(dictionary, names(dots), "frames")
   local_commons_span(
     "commons_data_source_load_frames",
     attributes = list("commons.data_source.n_tables" = length(dots))
@@ -232,6 +233,7 @@ data_source_board <- function(
     attributes = list("commons.data_source.n_tables" = length(tables))
   )
   check_board_pins_exist(board, tables, call = call)
+  dictionary <- catalog_scope_flat_authored(dictionary, names(tables), "board")
 
   # Lock the connection down before any writes; lock_configuration() only
   # freezes SET statements, so later dbWriteTable() from a deferred read still
@@ -298,6 +300,30 @@ source_tables <- function(source) {
 
 source_relation_labels <- function(source) {
   source$provider$relation_labels %||% source$relation_labels
+}
+
+catalog_scope_flat_authored <- function(metadata, tables, kind) {
+  authored <- catalog_from_authored_metadata(metadata)
+  if (length(authored$sources) == 0) {
+    return(authored)
+  }
+  source <- new_catalog_source(
+    catalog_id("source", kind, "selection"),
+    kind
+  )
+  relations <- lapply(tables, function(table) {
+    new_catalog_relation(
+      catalog_id("relation", source$id, table),
+      source$id,
+      new_source_path(c(table = table)),
+      name = table
+    )
+  })
+  discovered <- new_commons_catalog(
+    sources = list(source),
+    relations = relations
+  )
+  catalog_scope_authored(authored, discovered)
 }
 
 new_data_source <- function(

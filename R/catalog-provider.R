@@ -384,7 +384,8 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   if (semantic_model) {
     definitions <- Filter(
       function(x) identical(x$relation_id, relation$id) &&
-        identical(x$visibility, "public"),
+        identical(x$visibility, "public") &&
+        x$role %in% c("dimension", "time_dimension", "fact"),
       provider$catalog$definitions
     )
     relation$columns <- lapply(definitions, function(definition) {

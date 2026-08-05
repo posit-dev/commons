@@ -7,6 +7,14 @@
       ! No table named "nope".
       i Available tables: "sales".
 
+# flat selections cannot resolve to no objects
+
+    Code
+      data_source(orders = data.frame(id = 1), options = data_source_options(exclude = "*"))
+    Condition
+      Error in `data_source()`:
+      ! The resolved flat-source selection contains no objects.
+
 # DBI identifiers remain exact rather than patterns
 
     Code

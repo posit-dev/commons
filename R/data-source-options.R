@@ -123,7 +123,14 @@ select_flat_names <- function(names, options, call = rlang::caller_env()) {
   if (length(missing)) {
     cli::cli_abort("{.arg include} names unknown object{?s}: {.val {missing}}.", call = call)
   }
-  include[!catalog_excluded(unname(include), options$exclude)]
+  selected <- include[!catalog_excluded(unname(include), options$exclude)]
+  if (length(selected) == 0) {
+    cli::cli_abort(
+      "The resolved flat-source selection contains no objects.",
+      call = call
+    )
+  }
+  selected
 }
 
 catalog_excluded <- function(names, patterns) {

@@ -126,6 +126,54 @@ test_that("data_source_options applies to flat data sources", {
   expect_equal(list_tables(src), "orders")
 })
 
+test_that("flat selections also scope authored metadata", {
+  dictionary <- new_data_dictionary(list(
+    description = "Company-wide guidance.",
+    tables = list(
+      orders = list(
+        description = "Selected orders.",
+        definitions = list(order_count = list(
+          expr = "COUNT(*)",
+          type = "number"
+        ))
+      ),
+      secret = list(
+        description = "Unselected secrets.",
+        definitions = list(secret_count = list(
+          expr = "COUNT(*)",
+          type = "number"
+        ))
+      )
+    )
+  ))
+
+  source <- data_source(
+    orders = data.frame(id = 1),
+    secret = data.frame(id = 2),
+    dictionary = dictionary,
+    options = data_source_options(include = "orders")
+  )
+  context <- vapply(source$catalog$context, `[[`, character(1), "text")
+
+  expect_equal(names(source$dictionary$tables), "orders")
+  expect_equal(
+    definitions_registry(list(warehouse = source))$defs$name,
+    "order_count"
+  )
+  expect_false(any(grepl("secret", context, ignore.case = TRUE)))
+  expect_true(any(grepl("Company-wide", context, fixed = TRUE)))
+})
+
+test_that("flat selections cannot resolve to no objects", {
+  expect_snapshot(
+    data_source(
+      orders = data.frame(id = 1),
+      options = data_source_options(exclude = "*")
+    ),
+    error = TRUE
+  )
+})
+
 test_that("DBI identifiers remain exact rather than patterns", {
   expect_snapshot(
     normalize_connection_includes(DBI::Id(table = "orders*")),
@@ -217,6 +265,24 @@ test_that("lazy semantic hydration reaches runtime definitions and context", {
   expect_equal(registry$defs$name, "record_count")
   expect_true("Use the governed record count." %in% layer$docs)
   expect_null(names(fixture$source$catalog$definitions))
+})
+
+test_that("semantic hydration describes fields rather than calculations", {
+  fixture <- catalog_provider_test_source("semantic_view")
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  local_mocked_bindings(
+    catalog_import_relation_semantics = function(provider, relation_id) {
+      catalog_provider_add_metric(fixture, fields = TRUE)
+    }
+  )
+
+  described <- source_describe(fixture$source, "warehouse_object")
+
+  expect_equal(described$schema$column, "region")
+  expect_setequal(
+    definitions_registry(list(warehouse = fixture$source))$defs$name,
+    c("record_count", "region", "current_records")
+  )
 })
 
 test_that("failed lazy hydration removes the object for the session", {

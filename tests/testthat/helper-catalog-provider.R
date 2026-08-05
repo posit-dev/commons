@@ -43,7 +43,7 @@ catalog_provider_test_source <- function(kind = "table") {
   )
 }
 
-catalog_provider_add_metric <- function(fixture, context = NULL) {
+catalog_provider_add_metric <- function(fixture, context = NULL, fields = FALSE) {
   model <- new_catalog_model(
     "model:test",
     fixture$source_record$id,
@@ -67,6 +67,30 @@ catalog_provider_add_metric <- function(fixture, context = NULL) {
   )
   fixture$provider$catalog$models[[model$id]] <- model
   fixture$provider$catalog$definitions[[definition$id]] <- definition
+  if (isTRUE(fields)) {
+    definitions <- list(
+      new_catalog_definition(
+        "definition:dimension",
+        model$id,
+        fixture$relation$id,
+        "dimension",
+        "region",
+        expressions = list(new_catalog_expression("snowflake", "region"))
+      ),
+      new_catalog_definition(
+        "definition:filter",
+        model$id,
+        fixture$relation$id,
+        "filter",
+        "current_records",
+        expressions = list(new_catalog_expression("snowflake", "is_current"))
+      )
+    )
+    fixture$provider$catalog$definitions <- c(
+      fixture$provider$catalog$definitions,
+      stats::setNames(definitions, vapply(definitions, `[[`, character(1), "id"))
+    )
+  }
   if (!is.null(context)) {
     record <- new_catalog_context(
       "context:test",
