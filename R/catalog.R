@@ -16,6 +16,10 @@ catalog_from_data_dictionary <- function(
     description = dictionary$description,
     details = dictionary$details,
     provenance = provenance,
+    field_provenance = catalog_field_provenance(
+      c("label", "description", "details"),
+      provenance
+    ),
     extensions = list(data_dictionary = list(
       name = dictionary$name,
       description = dictionary$description,
@@ -46,6 +50,10 @@ catalog_from_data_dictionary <- function(
     datasets = names(relations),
     relationships = dictionary$relationships,
     provenance = provenance,
+    field_provenance = catalog_field_provenance(
+      c("name", "description", "details", "relationships"),
+      provenance
+    ),
     extensions = list(data_dictionary = list(
       relationships = dictionary$relationships
     ))
@@ -81,7 +89,11 @@ catalog_from_data_dictionary <- function(
         source_id = source_id,
         name = name,
         description = dictionary$glossary[[name]],
-        provenance = provenance
+        provenance = provenance,
+        field_provenance = catalog_field_provenance(
+          c("name", "description"),
+          provenance
+        )
       )
     }
   )
@@ -347,6 +359,7 @@ new_catalog_source <- function(
   sample_rows = 0L,
   version = NULL,
   provenance = new_catalog_provenance("unknown", id),
+  field_provenance = list(),
   extensions = list()
 ) {
   identifier_case <- rlang::arg_match(identifier_case)
@@ -367,6 +380,7 @@ new_catalog_source <- function(
       sample_rows = catalog_count(sample_rows, "sample_rows"),
       version = version,
       provenance = provenance,
+      field_provenance = field_provenance,
       extensions = extensions
     ),
     class = "commons_catalog_source"
@@ -397,6 +411,7 @@ new_catalog_relation <- function(
     cli::cli_abort("A catalog relation needs a source path.")
   }
   columns <- catalog_columns(columns)
+  constraints <- catalog_constraints(constraints)
   structure(
     list(
       id = catalog_string(id, "relation id"),
@@ -477,6 +492,7 @@ new_catalog_model <- function(
   version = NULL,
   fingerprint = NULL,
   provenance = new_catalog_provenance("unknown", source_id),
+  field_provenance = list(),
   extensions = list()
 ) {
   structure(
@@ -496,6 +512,7 @@ new_catalog_model <- function(
       version = version,
       fingerprint = fingerprint,
       provenance = provenance,
+      field_provenance = field_provenance,
       extensions = extensions
     ),
     class = "commons_catalog_model"
@@ -519,6 +536,7 @@ new_catalog_definition <- function(
   visibility = c("public", "private"),
   native = list(),
   provenance = NULL,
+  field_provenance = list(),
   extensions = list()
 ) {
   visibility <- rlang::arg_match(visibility)
@@ -541,6 +559,7 @@ new_catalog_definition <- function(
       visibility = visibility,
       native = native,
       provenance = provenance,
+      field_provenance = field_provenance,
       extensions = extensions
     ),
     class = "commons_catalog_definition"
@@ -567,8 +586,11 @@ new_catalog_calculation <- function(
   dependencies = character(),
   execution,
   provenance = NULL,
+  field_provenance = list(),
   extensions = list()
 ) {
+  arguments <- catalog_arguments(arguments)
+  execution <- catalog_execution(execution, arguments)
   structure(
     list(
       id = catalog_string(id, "calculation id"),
@@ -579,6 +601,7 @@ new_catalog_calculation <- function(
       dependencies = catalog_character(dependencies),
       execution = execution,
       provenance = provenance,
+      field_provenance = field_provenance,
       extensions = extensions
     ),
     class = "commons_catalog_calculation"
@@ -592,6 +615,7 @@ new_catalog_term <- function(
   description,
   synonyms = character(),
   provenance = NULL,
+  field_provenance = list(),
   extensions = list()
 ) {
   structure(
@@ -602,6 +626,7 @@ new_catalog_term <- function(
       description = prose_field(description),
       synonyms = catalog_character(synonyms),
       provenance = provenance,
+      field_provenance = field_provenance,
       extensions = extensions
     ),
     class = "commons_catalog_term"
@@ -617,6 +642,7 @@ new_catalog_context <- function(
   delivery = c("ambient", "first_touch", "retrieval", "evaluation"),
   authority = list(kind = "unknown"),
   provenance = NULL,
+  field_provenance = list(),
   extensions = list()
 ) {
   delivery <- rlang::arg_match(delivery)
@@ -630,6 +656,7 @@ new_catalog_context <- function(
       delivery = delivery,
       authority = authority,
       provenance = provenance,
+      field_provenance = field_provenance,
       extensions = extensions
     ),
     class = "commons_catalog_context"
@@ -642,6 +669,99 @@ new_catalog_access <- function(
 ) {
   state <- rlang::arg_match(state)
   structure(list(state = state, evidence = evidence), class = "commons_catalog_access")
+}
+
+new_catalog_constraint <- function(
+  kind,
+  columns,
+  reference = NULL,
+  enforcement = c("unknown", "informational", "asserted", "enforced"),
+  native = list(),
+  provenance = NULL
+) {
+  enforcement <- rlang::arg_match(enforcement)
+  structure(
+    list(
+      kind = catalog_string(kind, "constraint kind"),
+      columns = catalog_character(columns),
+      reference = reference,
+      enforcement = enforcement,
+      native = native,
+      provenance = provenance
+    ),
+    class = "commons_catalog_constraint"
+  )
+}
+
+new_catalog_argument <- function(
+  type = c("string", "integer", "number", "logical", "date", "datetime"),
+  required = TRUE,
+  binding = c("value", "identifier"),
+  choices = NULL
+) {
+  type <- rlang::arg_match(type)
+  binding <- rlang::arg_match(binding)
+  if (!rlang::is_bool(required)) {
+    cli::cli_abort("A calculation argument's {.field required} field must be true or false.")
+  }
+  choices <- catalog_character(choices)
+  if (identical(binding, "identifier") && length(choices) == 0) {
+    cli::cli_abort("Identifier calculation arguments require an explicit allowlist.")
+  }
+  structure(
+    list(
+      type = type,
+      required = required,
+      binding = binding,
+      choices = choices
+    ),
+    class = "commons_catalog_argument"
+  )
+}
+
+new_catalog_binding <- function(
+  argument,
+  method = c("parameter", "identifier"),
+  token = NULL
+) {
+  method <- rlang::arg_match(method)
+  structure(
+    list(
+      argument = catalog_string(argument, "binding argument"),
+      method = method,
+      token = token
+    ),
+    class = "commons_catalog_binding"
+  )
+}
+
+new_catalog_execution <- function(
+  kind = c("verified_sql", "parameterized_sql", "native_metric", "governed_function"),
+  dialect,
+  sql = NULL,
+  bindings = list(),
+  native = list()
+) {
+  kind <- rlang::arg_match(kind)
+  if (!is.null(sql)) {
+    sql <- catalog_string(sql, "execution SQL")
+  }
+  if (length(bindings)) {
+    valid <- vapply(bindings, inherits, logical(1), "commons_catalog_binding")
+    if (!all(valid)) {
+      cli::cli_abort("Every execution binding must be a catalog binding.")
+    }
+  }
+  structure(
+    list(
+      kind = kind,
+      dialect = catalog_string(dialect, "execution dialect"),
+      sql = sql,
+      bindings = bindings,
+      native = native
+    ),
+    class = "commons_catalog_execution"
+  )
 }
 
 new_catalog_provenance <- function(
@@ -704,6 +824,10 @@ catalog_relation_from_dictionary <- function(
         examples = column$examples,
         restrictions = unlist(column$constraints),
         provenance = provenance,
+        field_provenance = catalog_field_provenance(
+          names(column)[!vapply(column, is.null, logical(1))],
+          provenance
+        ),
         extensions = list(data_dictionary = column)
       )
     }
@@ -721,6 +845,10 @@ catalog_relation_from_dictionary <- function(
     columns = columns,
     access = new_catalog_access("unknown", "authored dictionary"),
     provenance = provenance,
+    field_provenance = catalog_field_provenance(
+      names(table)[!vapply(table, is.null, logical(1))],
+      provenance
+    ),
     extensions = list(data_dictionary = table)
   )
 }
@@ -748,6 +876,10 @@ catalog_definition_from_dictionary <- function(
     )),
     native = definition,
     provenance = provenance,
+    field_provenance = catalog_field_provenance(
+      names(definition)[!vapply(definition, is.null, logical(1))],
+      provenance
+    ),
     extensions = list(data_dictionary = definition)
   )
 }
@@ -777,7 +909,8 @@ catalog_context_from_dictionary <- function(
         scope = source$id,
         delivery = delivery,
         authority = list(kind = "authored"),
-        provenance = provenance
+        provenance = provenance,
+        field_provenance = catalog_field_provenance("text", provenance)
       ))
     }
   }
@@ -795,7 +928,8 @@ catalog_context_from_dictionary <- function(
         scope = relation$id,
         delivery = delivery,
         authority = list(kind = "authored"),
-        provenance = provenance
+        provenance = provenance,
+        field_provenance = catalog_field_provenance("text", provenance)
       ))
     }
   }
@@ -810,7 +944,8 @@ catalog_context_from_dictionary <- function(
         scope = term$id,
         delivery = delivery,
         authority = list(kind = "authored"),
-        provenance = provenance
+        provenance = provenance,
+        field_provenance = catalog_field_provenance("text", provenance)
       ))
     }
   }
@@ -931,6 +1066,75 @@ catalog_expressions <- function(expressions) {
   expressions
 }
 
+catalog_constraints <- function(constraints) {
+  if (length(constraints) == 0) {
+    return(list())
+  }
+  valid <- vapply(
+    constraints,
+    inherits,
+    logical(1),
+    "commons_catalog_constraint"
+  )
+  if (!all(valid)) {
+    cli::cli_abort("Every relation constraint must be a catalog constraint.")
+  }
+  constraints
+}
+
+catalog_arguments <- function(arguments) {
+  if (length(arguments) == 0) {
+    return(list())
+  }
+  if (is.null(names(arguments)) || any(!nzchar(names(arguments))) || anyDuplicated(names(arguments))) {
+    cli::cli_abort("Calculation arguments must have unique, non-empty names.")
+  }
+  valid <- vapply(
+    arguments,
+    inherits,
+    logical(1),
+    "commons_catalog_argument"
+  )
+  if (!all(valid)) {
+    cli::cli_abort("Every calculation argument must be a catalog argument.")
+  }
+  arguments
+}
+
+catalog_execution <- function(execution, arguments) {
+  if (!inherits(execution, "commons_catalog_execution")) {
+    cli::cli_abort("A catalog calculation needs a catalog execution descriptor.")
+  }
+  bindings <- execution$bindings
+  binding_names <- vapply(bindings, `[[`, character(1), "argument")
+  if (anyDuplicated(binding_names)) {
+    cli::cli_abort("Each calculation argument can have only one execution binding.")
+  }
+  unknown <- setdiff(binding_names, names(arguments))
+  missing <- setdiff(names(arguments), binding_names)
+  if (length(unknown) || length(missing)) {
+    cli::cli_abort(c(
+      "Execution bindings must correspond exactly to calculation arguments.",
+      "x" = if (length(unknown)) "Unknown bindings: {.val {unknown}}.",
+      "x" = if (length(missing)) "Missing bindings: {.val {missing}}."
+    ))
+  }
+  for (binding in bindings) {
+    argument <- arguments[[binding$argument]]
+    expected <- if (identical(argument$binding, "identifier")) {
+      "identifier"
+    } else {
+      "parameter"
+    }
+    if (!identical(binding$method, expected)) {
+      cli::cli_abort(
+        "Calculation argument {.val {binding$argument}} requires a {.val {expected}} binding."
+      )
+    }
+  }
+  execution
+}
+
 catalog_diagnostics <- function(diagnostics, call) {
   if (length(diagnostics) == 0) {
     return(list())
@@ -1003,4 +1207,9 @@ catalog_id <- function(kind, ...) {
 
 catalog_compact <- function(x) {
   x[!vapply(x, is.null, logical(1))]
+}
+
+catalog_field_provenance <- function(fields, provenance) {
+  fields <- unique(fields[nzchar(fields)])
+  stats::setNames(rep(list(provenance), length(fields)), fields)
 }

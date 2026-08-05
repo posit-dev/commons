@@ -156,3 +156,158 @@ test_that("data sources carry the dictionary catalog", {
     "total_revenue"
   )
 })
+
+test_that("authored metadata merges onto qualified discovered relations", {
+  discovered_provenance <- new_catalog_provenance(
+    "discovered",
+    "source:warehouse"
+  )
+  source <- new_catalog_source(
+    "source:warehouse",
+    "snowflake",
+    identifier_case = "upper",
+    provenance = discovered_provenance
+  )
+  relation <- new_catalog_relation(
+    "relation:orders",
+    source$id,
+    new_source_path(c(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "ORDERS"
+    )),
+    description = "Warehouse description.",
+    tags = "certified",
+    columns = list(new_catalog_column(
+      "AMOUNT",
+      native_type = "NUMBER",
+      description = "Warehouse column description.",
+      provenance = discovered_provenance
+    )),
+    access = new_catalog_access("queryable"),
+    provenance = discovered_provenance
+  )
+  discovered <- new_commons_catalog(
+    sources = list(source),
+    relations = list(relation)
+  )
+  authored <- catalog_from_data_dictionary(new_data_dictionary(list(
+    tables = list(orders = list(
+      description = "Authored description.",
+      columns = list(amount = list(
+        type = "number",
+        description = "Authored column description."
+      ))
+    ))
+  )))
+
+  merged <- catalog_merge(discovered, authored)
+  orders <- merged$relations[["relation:orders"]]
+
+  expect_equal(orders$description, "Authored description.")
+  expect_equal(orders$access$state, "queryable")
+  expect_setequal(orders$tags, "certified")
+  expect_equal(orders$columns$AMOUNT$native_type, "NUMBER")
+  expect_equal(
+    orders$columns$AMOUNT$description,
+    "Authored column description."
+  )
+  expect_equal(merged$models[[1]]$datasets, "relation:orders")
+  expect_equal(merged$context[[1]]$scope, "relation:orders")
+})
+
+test_that("relative authored relation matches must be unambiguous", {
+  source <- new_catalog_source(
+    "source:warehouse",
+    "snowflake",
+    identifier_case = "upper"
+  )
+  relations <- lapply(c("PUBLIC", "STAGING"), function(schema) {
+    new_catalog_relation(
+      paste0("relation:", schema),
+      source$id,
+      new_source_path(c(
+        catalog = "ANALYTICS",
+        schema = schema,
+        table = "ORDERS"
+      ))
+    )
+  })
+  discovered <- new_commons_catalog(
+    sources = list(source),
+    relations = relations
+  )
+  authored <- catalog_from_data_dictionary(new_data_dictionary(list(
+    tables = list(orders = list(description = "Orders."))
+  )))
+
+  expect_snapshot(catalog_merge(discovered, authored), error = TRUE)
+})
+
+test_that("constraint enforcement is distinct from constraint kind", {
+  constraint <- new_catalog_constraint(
+    "foreign_key",
+    "customer_id",
+    reference = list(table = "customers", columns = "id"),
+    enforcement = "asserted",
+    native = list(rely = TRUE)
+  )
+  source <- new_catalog_source("source:test", "test")
+  relation <- new_catalog_relation(
+    "relation:test",
+    source$id,
+    new_source_path(c(table = "orders")),
+    constraints = list(constraint)
+  )
+
+  expect_equal(relation$constraints[[1]]$kind, "foreign_key")
+  expect_equal(relation$constraints[[1]]$enforcement, "asserted")
+})
+
+test_that("calculations require typed adapter-owned bindings", {
+  arguments <- list(
+    month = new_catalog_argument("date"),
+    region = new_catalog_argument(
+      "string",
+      binding = "identifier",
+      choices = c("east", "west")
+    )
+  )
+  execution <- new_catalog_execution(
+    "parameterized_sql",
+    "snowflake",
+    "SELECT * FROM identifier(?) WHERE month = ?",
+    list(
+      new_catalog_binding("month"),
+      new_catalog_binding("region", "identifier")
+    )
+  )
+  calculation <- new_catalog_calculation(
+    "calculation:revenue",
+    "source:test",
+    "revenue",
+    arguments = arguments,
+    execution = execution
+  )
+
+  expect_equal(calculation$arguments$month$type, "date")
+  expect_snapshot(
+    new_catalog_calculation(
+      "calculation:bad",
+      "source:test",
+      "bad",
+      arguments = arguments,
+      execution = new_catalog_execution(
+        "parameterized_sql",
+        "snowflake",
+        "SELECT 1",
+        list(new_catalog_binding("month"))
+      )
+    ),
+    error = TRUE
+  )
+  expect_snapshot(
+    new_catalog_argument("string", binding = "identifier"),
+    error = TRUE
+  )
+})
