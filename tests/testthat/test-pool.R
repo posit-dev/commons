@@ -36,6 +36,59 @@ test_that("call_metrics without dimensions returns a grand total", {
   expect_equal(get_handle(store, "r1")$big_revenue, 1950)
 })
 
+test_that("native metrics become trusted only after successful execution", {
+  fixture <- catalog_provider_test_source("semantic_view")
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  catalog_provider_add_metric(fixture)
+  registry <- definitions_registry(list(warehouse = fixture$source))
+  local_mocked_bindings(
+    source_query = function(source, sql) data.frame(record_count = 3)
+  )
+
+  result <- call_metrics_impl(
+    registry,
+    list(warehouse = fixture$source),
+    new_handle_store(),
+    metrics = "record_count"
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
+  expect_equal(
+    fixture$provider$catalog$models[["model:test"]]$access$state,
+    "queryable"
+  )
+})
+
+test_that("rejected native metrics leave no trusted or callable surface", {
+  fixture <- catalog_provider_test_source("semantic_view")
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  catalog_provider_add_metric(fixture)
+  registry <- definitions_registry(list(warehouse = fixture$source))
+  local_mocked_bindings(
+    source_query = function(source, sql) cli::cli_abort("permission denied")
+  )
+
+  expect_snapshot(
+    call_metrics_impl(
+      registry,
+      list(warehouse = fixture$source),
+      new_handle_store(),
+      metrics = "record_count"
+    ),
+    error = TRUE
+  )
+
+  expect_equal(
+    fixture$provider$catalog$models[["model:test"]]$access$state,
+    "visible_only"
+  )
+  expect_length(list_tables(fixture$source), 0)
+  expect_equal(
+    nrow(definitions_registry(list(warehouse = fixture$source))$defs),
+    0
+  )
+})
+
 test_that("names arriving in token braces are accepted", {
   store <- new_handle_store()
   metrics_caller(store = store)(

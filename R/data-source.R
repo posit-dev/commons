@@ -271,7 +271,7 @@ new_pending_pins <- function(board, tables) {
 #' @export
 list_tables <- function(data_source) {
   check_data_source(data_source)
-  data_source$tables
+  source_tables(data_source)
 }
 
 source_runtime_dictionary <- function(source) {
@@ -279,9 +279,25 @@ source_runtime_dictionary <- function(source) {
     return(source$dictionary)
   }
   catalog_to_runtime_dictionary(
-    source$provider$catalog,
-    source$relation_labels
+    source_catalog(source),
+    source_relation_labels(source)
   )
+}
+
+source_catalog <- function(source) {
+  source$provider$catalog %||% source$catalog
+}
+
+source_table_ids <- function(source) {
+  source$provider$table_ids %||% source$table_ids
+}
+
+source_tables <- function(source) {
+  names(source_table_ids(source))
+}
+
+source_relation_labels <- function(source) {
+  source$provider$relation_labels %||% source$relation_labels
 }
 
 new_data_source <- function(
@@ -406,7 +422,7 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
 }
 
 source_ensure_all <- function(source, call = rlang::caller_env()) {
-  source_ensure_tables(source, source$tables, call = call)
+  source_ensure_tables(source, source_tables(source), call = call)
 }
 
 # Warm the pins on-disk cache in a background process rather than loading into
@@ -490,11 +506,11 @@ pending_tables_in_error <- function(source, err) {
 }
 
 source_describe <- function(source, table, n_sample = NULL) {
-  id <- source$table_ids[[table]]
+  id <- source_table_ids(source)[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
       "No table named {.val {table}}.",
-      i = "Available tables: {.val {source$tables}}."
+      i = "Available tables: {.val {source_tables(source)}}."
     ))
   }
   source_ensure_tables(source, table)

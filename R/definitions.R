@@ -174,17 +174,18 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
   labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     source <- sources[[i]]
-    if (inherits(source$catalog, "commons_catalog")) {
+    catalog <- source_catalog(source)
+    if (inherits(catalog, "commons_catalog")) {
       registry <- catalog_definition_registry(
-        source$catalog,
+        catalog,
         labels[[i]],
-        source$relation_labels,
+        source_relation_labels(source),
         call
       )
       tables <- unique(registry$defs$table[
         registry$defs$execution == "data_dictionary"
       ])
-      unknown <- setdiff(tables, source$tables)
+      unknown <- setdiff(tables, source_tables(source))
       if (length(unknown)) {
         cli::cli_abort(
           "The data dictionary declares definitions on table{?s} {.val {unknown}}, which the data source does not expose.",
@@ -201,7 +202,7 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
       if (length(definitions) == 0) {
         next
       }
-      if (!table %in% source$tables) {
+      if (!table %in% source_tables(source)) {
         cli::cli_abort(
           "The data dictionary declares definitions on table {.val {table}},
            which the data source does not expose.",

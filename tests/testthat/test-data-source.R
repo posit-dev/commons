@@ -200,6 +200,66 @@ test_that("catalog telemetry covers discovery and hydration", {
   )))
 })
 
+test_that("lazy semantic hydration reaches runtime definitions and context", {
+  fixture <- catalog_provider_test_source("semantic_view")
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  local_mocked_bindings(
+    catalog_import_relation_semantics = function(provider, relation_id) {
+      catalog_provider_add_metric(fixture, "Use the governed record count.")
+    }
+  )
+
+  expect_equal(nrow(definitions_registry(list(warehouse = fixture$source))$defs), 0)
+  source_describe(fixture$source, "warehouse_object")
+  registry <- definitions_registry(list(warehouse = fixture$source))
+  layer <- augment_context_layer(NULL, list(warehouse = fixture$source))
+
+  expect_equal(registry$defs$name, "record_count")
+  expect_true("Use the governed record count." %in% layer$docs)
+  expect_null(names(fixture$source$catalog$definitions))
+})
+
+test_that("failed lazy hydration removes the object for the session", {
+  fixture <- catalog_provider_test_source()
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  local_mocked_bindings(
+    catalog_relation_metadata = function(con, id) {
+      cli::cli_abort("permission denied")
+    }
+  )
+
+  expect_snapshot(
+    source_describe(fixture$source, "warehouse_object"),
+    error = TRUE
+  )
+
+  expect_length(list_tables(fixture$source), 0)
+  expect_snapshot(
+    source_describe(fixture$source, "warehouse_object"),
+    error = TRUE
+  )
+  expect_equal(
+    fixture$provider$catalog$diagnostics[[1]]$code,
+    "catalog_relation_unqueryable"
+  )
+})
+
+test_that("catalog providers reject selections above their object bound", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  local_mocked_bindings(
+    catalog_object_limit = 1L,
+    catalog_resolve_selection = function(con, backend, options, call) {
+      list(DBI::Id(table = "one"), DBI::Id(table = "two"))
+    }
+  )
+
+  expect_snapshot(
+    new_catalog_provider(con, data_source_options()),
+    error = TRUE
+  )
+})
+
 test_that("connection discovery merges an authored dictionary", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
@@ -381,6 +441,36 @@ test_that("data_source defers reading a board's pins until first use", {
   )
   expect_setequal(list_tables(src), c("orders", "reps"))
   expect_length(DBI::dbListTables(src$con), 0)
+})
+
+test_that("board selections use data_source_options mappings", {
+  skip_if_not_installed("pins")
+  board <- board_with_pins(
+    "team-orders" = data.frame(id = 1:3),
+    "team-reps" = data.frame(rep = c("Ada", "Bo"))
+  )
+
+  src <- data_source(
+    board,
+    options = data_source_options(
+      include = c(orders = "team-orders", reps = "team-reps"),
+      exclude = "reps"
+    )
+  )
+
+  expect_equal(list_tables(src), "orders")
+  expect_equal(names(src$pending$pins), "orders")
+})
+
+test_that("tables and options cannot be supplied together", {
+  expect_snapshot(
+    data_source(
+      orders = data.frame(id = 1),
+      tables = "orders",
+      options = data_source_options(include = "orders")
+    ),
+    error = TRUE
+  )
 })
 
 test_that("source_describe loads only the table it describes", {

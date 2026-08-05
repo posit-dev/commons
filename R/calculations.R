@@ -3,7 +3,7 @@ catalog_calculations_registry <- function(sources) {
   labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     source <- sources[[i]]
-    catalog <- source$provider$catalog %||% source$catalog
+    catalog <- source_catalog(source)
     if (!inherits(catalog, "commons_catalog")) {
       next
     }
@@ -32,7 +32,7 @@ catalog_calculation_available <- function(catalog, calculation) {
 }
 
 catalog_calculation_entry_available <- function(entry) {
-  catalog <- entry$source$provider$catalog %||% entry$source$catalog
+  catalog <- source_catalog(entry$source)
   catalog_calculation_available(catalog, entry$calculation)
 }
 
@@ -152,11 +152,17 @@ catalog_calculation_access <- function(entry, state, evidence) {
         relation <- catalog$relations[[relation_id]]
         relation$access <- new_catalog_access(state, evidence)
         catalog$relations[[relation_id]] <- relation
+        if (identical(state, "visible_only")) {
+          catalog_provider_drop_relation(provider, relation_id)
+        }
       }
     } else if (id %in% names(catalog$relations)) {
       relation <- catalog$relations[[id]]
       relation$access <- new_catalog_access(state, evidence)
       catalog$relations[[id]] <- relation
+      if (identical(state, "visible_only")) {
+        catalog_provider_drop_relation(provider, id)
+      }
     }
   }
   provider$catalog <- catalog

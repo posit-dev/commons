@@ -419,6 +419,17 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
     )
     relation$access <- new_catalog_access("visible_only", conditionMessage(metadata))
     provider$catalog$relations[[relation_id]] <- relation
+    catalog_provider_diagnostic(
+      provider,
+      "catalog_relation_unqueryable",
+      sprintf(
+        "Removed %s because it could not be described by this connection.",
+        table
+      ),
+      severity = "info",
+      entity_id = relation_id
+    )
+    catalog_provider_drop_relation(provider, relation_id)
     cli::cli_abort(
       "Table {.val {table}} could not be described.",
       parent = metadata,
@@ -513,20 +524,8 @@ catalog_provider_finalize_access <- function(
     function(relation) identical(relation$access$state, "visible_only"),
     logical(1)
   )]
-  if (length(visible_only)) {
-    labels <- unname(provider$relation_labels[visible_only])
-    provider$table_ids <- provider$table_ids[setdiff(
-      names(provider$table_ids),
-      labels
-    )]
-    provider$relation_labels <- provider$relation_labels[setdiff(
-      names(provider$relation_labels),
-      visible_only
-    )]
-    provider$selection_modes <- provider$selection_modes[setdiff(
-      names(provider$selection_modes),
-      visible_only
-    )]
+  for (relation_id in visible_only) {
+    catalog_provider_drop_relation(provider, relation_id)
   }
   if (length(provider$table_ids) == 0) {
     cli::cli_abort(
@@ -534,6 +533,29 @@ catalog_provider_finalize_access <- function(
       call = call
     )
   }
+  provider$lazy <- nchar(
+    paste(names(provider$table_ids), collapse = "\n"),
+    type = "bytes"
+  ) > 4000L
+  invisible(provider)
+}
+
+catalog_provider_drop_relation <- function(provider, relation_id) {
+  label <- provider$relation_labels[[relation_id]]
+  if (!is.null(label)) {
+    provider$table_ids <- provider$table_ids[setdiff(
+      names(provider$table_ids),
+      label
+    )]
+  }
+  provider$relation_labels <- provider$relation_labels[setdiff(
+    names(provider$relation_labels),
+    relation_id
+  )]
+  provider$selection_modes <- provider$selection_modes[setdiff(
+    names(provider$selection_modes),
+    relation_id
+  )]
   provider$lazy <- nchar(
     paste(names(provider$table_ids), collapse = "\n"),
     type = "bytes"
@@ -764,6 +786,11 @@ catalog_filter_associated_model <- function(provider, relation_id) {
     function(calculation) model$id %in% calculation$dependencies,
     provider$catalog$calculations
   )
+  complete_model <- catalog_dependencies_selected(
+    provider$catalog,
+    model$dependencies,
+    selected_paths
+  )
   keep_definitions <- vapply(
     definitions,
     function(definition) {
@@ -776,11 +803,7 @@ catalog_filter_associated_model <- function(provider, relation_id) {
     logical(1)
   )
   keep_calculations <- rep(
-    catalog_dependencies_selected(
-      provider$catalog,
-      model$dependencies,
-      selected_paths
-    ),
+    complete_model,
     length(calculations)
   )
   skipped <- c(
@@ -795,6 +818,14 @@ catalog_filter_associated_model <- function(provider, relation_id) {
     !names(provider$catalog$calculations) %in% names(calculations) |
       names(provider$catalog$calculations) %in% names(calculations)[keep_calculations]
   ]
+  if (!complete_model) {
+    model$relationships <- list()
+    provider$catalog$models[[model$id]] <- model
+    provider$catalog$context <- Filter(
+      function(context) !model$id %in% context$scope,
+      provider$catalog$context
+    )
+  }
   if (length(skipped)) {
     diagnostic <- new_catalog_diagnostic(
       "semantic_dependency_out_of_scope",

@@ -49,7 +49,7 @@ call_metrics_impl <- function(
   on_table <- defs[defs$table == tables, ]
   columns <- names(source_runtime_dictionary(source)$tables[[tables]]$columns)
   con <- source$con
-  id <- DBI::dbQuoteIdentifier(con, source$table_ids[[tables]])
+  id <- DBI::dbQuoteIdentifier(con, source_table_ids(source)[[tables]])
 
   dim_names <- strip_token_braces(dimensions %||% character())
   dims <- vapply(
@@ -133,6 +133,9 @@ catalog_model_access <- function(source, model_id, state, evidence) {
     relation <- source$provider$catalog$relations[[relation_id]]
     relation$access <- new_catalog_access(state, evidence)
     source$provider$catalog$relations[[relation_id]] <- relation
+    if (identical(state, "visible_only")) {
+      catalog_provider_drop_relation(source$provider, relation_id)
+    }
   }
   invisible(source)
 }

@@ -23,6 +23,34 @@
       Error in `source_query()`:
       ! The connection identity, role, or current namespace changed after catalog discovery; rebuild the data source.
 
+# failed lazy hydration removes the object for the session
+
+    Code
+      source_describe(fixture$source, "warehouse_object")
+    Condition
+      Error in `source_describe()`:
+      ! Table "warehouse_object" could not be described.
+      Caused by error in `catalog_relation_metadata()`:
+      ! permission denied
+
+---
+
+    Code
+      source_describe(fixture$source, "warehouse_object")
+    Condition
+      Error in `source_describe()`:
+      ! No table named "warehouse_object".
+      i Available tables: .
+
+# catalog providers reject selections above their object bound
+
+    Code
+      new_catalog_provider(con, data_source_options())
+    Condition
+      Error:
+      ! The data-source selection resolves to 2 objects, above the supported limit of 1.
+      i Narrow `include` to fewer catalog or schema prefixes.
+
 # default connection discovery stays in the current namespace
 
     Code
@@ -46,6 +74,15 @@
                             ^
       i Context: rapi_prepare
       i Error type: CATALOG
+
+# tables and options cannot be supplied together
+
+    Code
+      data_source(orders = data.frame(id = 1), tables = "orders", options = data_source_options(
+        include = "orders"))
+    Condition
+      Error in `data_source()`:
+      ! Supply only one of `options` and the deprecated `tables`.
 
 # data_source rejects a board label colliding with a built-in relation
 

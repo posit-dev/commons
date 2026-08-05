@@ -405,7 +405,11 @@ test_that("associated semantic definitions respect physical dependency closure",
     datasets = c(orders$id, customers$id),
     execution = list(kind = "snowflake_semantic_view"),
     exposed = semantic$id,
-    dependencies = c(orders$id, customers$id)
+    dependencies = c(orders$id, customers$id),
+    relationships = list(list(
+      left_table = "ORDERS",
+      right_table = "CUSTOMERS"
+    ))
   )
   kept <- new_catalog_definition(
     "definition:orders",
@@ -439,7 +443,15 @@ test_that("associated semantic definitions respect physical dependency closure",
     relations = list(orders, customers, semantic),
     models = list(model),
     definitions = list(kept, skipped),
-    calculations = list(calculation)
+    calculations = list(calculation),
+    context = list(new_catalog_context(
+      "context:sales",
+      catalog_source$id,
+      "instruction",
+      "Use customer tiers from the unselected table.",
+      scope = model$id,
+      delivery = "retrieval"
+    ))
   )
 
   catalog_filter_associated_model(provider, semantic$id)
@@ -447,6 +459,8 @@ test_that("associated semantic definitions respect physical dependency closure",
   expect_equal(names(provider$catalog$definitions), kept$id)
   expect_length(provider$catalog$calculations, 0)
   expect_length(provider$catalog$models, 1)
+  expect_length(provider$catalog$models[[1]]$relationships, 0)
+  expect_length(provider$catalog$context, 0)
   expect_equal(provider$catalog$diagnostics[[1]]$code, "semantic_dependency_out_of_scope")
   registry <- definitions_registry(list(warehouse = list(
     catalog = provider$catalog,

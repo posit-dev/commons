@@ -549,7 +549,7 @@ run_sql_tool <- function(
 # appends a harmless note.
 dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   dictionary <- source_runtime_dictionary(source)
-  tables <- source$tables
+  tables <- source_tables(source)
   hits <- tables[vapply(
     tables,
     function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
@@ -587,7 +587,8 @@ catalog_first_touch_text <- function(source, table) {
   if (!inherits(catalog, "commons_catalog")) {
     return(character())
   }
-  relation_ids <- names(source$relation_labels)[source$relation_labels == table]
+  labels <- source_relation_labels(source)
+  relation_ids <- names(labels)[labels == table]
   if (length(relation_ids) == 0) {
     return(character())
   }
