@@ -174,6 +174,21 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
   labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     source <- sources[[i]]
+    if (inherits(source$catalog, "commons_catalog")) {
+      registry <- catalog_definition_registry(source$catalog, labels[[i]], call)
+      tables <- unique(registry$defs$table)
+      unknown <- setdiff(tables, source$tables)
+      if (length(unknown)) {
+        cli::cli_abort(
+          "The data dictionary declares definitions on table{?s} {.val {unknown}}, which the data source does not expose.",
+          call = call
+        )
+      }
+      if (nrow(registry$defs)) {
+        rows[[length(rows) + 1]] <- registry$defs
+      }
+      next
+    }
     for (table in names(source$dictionary$tables)) {
       definitions <- source$dictionary$tables[[table]]$definitions
       if (length(definitions) == 0) {

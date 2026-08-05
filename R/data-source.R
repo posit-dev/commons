@@ -241,7 +241,8 @@ new_data_source <- function(
   owned,
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
-  pending = NULL
+  pending = NULL,
+  catalog = catalog_from_data_dictionary(dictionary)
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -263,6 +264,7 @@ new_data_source <- function(
       table_ids = table_ids,
       handle = handle,
       dictionary = dictionary,
+      catalog = catalog,
       pending = pending
     ),
     class = "commons_data_source"
