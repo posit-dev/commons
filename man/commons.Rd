@@ -5,7 +5,7 @@
 \title{Create a commons agent}
 \usage{
 commons(
-  client = ellmer::chat_anthropic(),
+  client,
   data_sources,
   semantic_layer = NULL,
   context_layer = NULL,
