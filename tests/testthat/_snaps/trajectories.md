@@ -1,68 +1,68 @@
-# read_trajectories hints when no conversation carries content
+# trajectory_read hints when no conversation carries content
 
     Code
-      .res <- read_trajectories(path)
+      .res <- trajectory_read(path)
     Condition
       Warning:
       Found 2 conversations of spans, but none carry message content; returning none.
       i Message content is captured only when the agent runs with `log = TRUE` while OpenTelemetry tracing is active. On Posit Connect, check the app's startup log for warnings from `commons()`.
 
-# read_trajectories drops content-less conversations, keeping the rest
+# trajectory_read drops content-less conversations, keeping the rest
 
     Code
-      .res <- read_trajectories(path)
+      .res <- trajectory_read(path)
     Message
       Dropping 1 conversation whose spans carry no message content.
 
-# read_trajectories validates n, from, and to
+# trajectory_read validates n, from, and to
 
     Code
-      read_trajectories(n = 0)
+      trajectory_read(n = 0)
     Condition
-      Error in `read_trajectories()`:
+      Error in `trajectory_read()`:
       ! `n` must be a whole number larger than or equal to 1 or `NULL`, not the number 0.
 
 ---
 
     Code
-      read_trajectories(n = "x")
+      trajectory_read(n = "x")
     Condition
-      Error in `read_trajectories()`:
+      Error in `trajectory_read()`:
       ! `n` must be a whole number or `NULL`, not the string "x".
 
 ---
 
     Code
-      read_trajectories(from = "not a date")
+      trajectory_read(from = "not a date")
     Condition
-      Error in `read_trajectories()`:
+      Error in `trajectory_read()`:
       ! `from` must be a <POSIXct>, a <Date>, or a single datetime string like "2026-07-22 14:30:00".
 
 ---
 
     Code
-      read_trajectories(to = 1:2)
+      trajectory_read(to = 1:2)
     Condition
-      Error in `read_trajectories()`:
+      Error in `trajectory_read()`:
       ! `to` must be a <POSIXct>, a <Date>, or a single datetime string like "2026-07-22 14:30:00".
 
 ---
 
     Code
-      read_trajectories("dir", 5)
+      trajectory_read("dir", 5)
     Condition
-      Error in `read_trajectories()`:
+      Error in `trajectory_read()`:
       ! `...` must be empty.
       x Problematic argument:
       * ..1 = 5
       i Did you forget to name an argument?
 
-# read_trajectories validates source
+# trajectory_read validates source
 
     Code
-      read_trajectories(1:2)
+      trajectory_read(1:2)
     Condition
-      Error in `read_trajectories()`:
+      Error in `trajectory_read()`:
       ! `source` must be `NULL`, a directory path, a Connect content GUID, or a Connect content URL.
 
 # a URL without a recognizable GUID errors rather than reading locally

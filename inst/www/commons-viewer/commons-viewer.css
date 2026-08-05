@@ -1,0 +1,299 @@
+.commons-viewer-transcript .shiny-chat-message .message-icon {
+  display: none;
+}
+
+.commons-viewer-transcript .shiny-chat-input {
+  display: none;
+}
+
+.commons-viewer-timeline-card {
+  flex: 0 0 auto;
+}
+
+.commons-viewer-timeline-card .card-body {
+  padding: 0.5rem 0.75rem 0.625rem;
+}
+
+.commons-viewer-timeline-header {
+  align-items: center;
+  background: transparent;
+  border-bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  justify-content: space-between;
+  padding: 0.75rem 0.75rem 0;
+}
+
+.commons-viewer-timeline-header strong {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.commons-viewer-timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.875rem;
+}
+
+.commons-viewer-timeline-legend-item {
+  align-items: center;
+  color: var(--bs-secondary-color, #6c757d);
+  display: inline-flex;
+  font-size: 0.75rem;
+  gap: 0.35rem;
+}
+
+.commons-viewer-timeline-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 0.625rem;
+  width: 0.625rem;
+}
+
+.commons-viewer-timeline-plot {
+  height: 11rem;
+  width: 100%;
+}
+
+.commons-viewer-sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.commons-viewer-review {
+  padding: 0.75rem 1rem;
+}
+
+.commons-viewer-review-bar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.commons-viewer-review-bar strong {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.commons-viewer-review-prompt {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+}
+
+.commons-viewer-notes {
+  display: grid;
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+}
+
+.commons-viewer-note {
+  border-left: 2px solid var(--bs-border-color, #dee2e6);
+  font-size: 0.875rem;
+  padding: 0.05rem 0 0.05rem 0.625rem;
+}
+
+.commons-viewer-note-text {
+  white-space: pre-wrap;
+}
+
+.commons-viewer-note-meta {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.75rem;
+  margin-top: 0.125rem;
+}
+
+.commons-viewer-note-compose {
+  box-sizing: border-box;
+}
+
+.commons-viewer-note-compose .bslib-input-submit-textarea {
+  margin: 0 1rem 0.75rem;
+  max-width: 18rem;
+  width: calc(100% - 2rem) !important;
+}
+
+.commons-viewer-note-compose .bslib-submit-textarea-container {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.commons-viewer-note-compose textarea {
+  font-size: 0.875rem;
+}
+
+.commons-viewer-note-compose .commons-viewer-note-submit,
+.commons-viewer-note-compose .commons-viewer-note-submit:focus {
+  align-items: center;
+  background-color: var(--bs-body-color, #212529);
+  border: 0;
+  border-radius: 50%;
+  color: var(--bs-body-bg, #fff);
+  display: inline-flex;
+  flex: 0 0 1.5rem;
+  font-size: 0.6875rem;
+  height: 1.5rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 1.5rem;
+}
+
+.commons-viewer-note-compose .commons-viewer-note-submit:hover,
+.commons-viewer-note-compose .commons-viewer-note-submit:active {
+  background-color: var(--bs-primary, #007bc2);
+  color: #fff;
+}
+
+.commons-viewer-note-compose .commons-viewer-note-submit:focus-visible {
+  box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color, rgba(0, 123, 194, 0.25));
+  outline: 0;
+}
+
+.commons-viewer-flag-button,
+.commons-viewer-flag-button:hover,
+.commons-viewer-flag-button:focus,
+.commons-viewer-flag-button:active {
+  background: transparent;
+  border: none;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+}
+
+.commons-viewer-flag-button:hover,
+.commons-viewer-flag-button-on,
+.commons-viewer-flag-button-on:hover,
+.commons-viewer-flag-button-on:focus,
+.commons-viewer-flag-button-on:active {
+  color: #b54708;
+}
+
+.commons-viewer-flag {
+  color: #b54708;
+}
+
+.shiny-chat-messages-content {
+  position: relative;
+}
+
+.commons-viewer-exchange-message {
+  border-radius: 1rem;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.15s ease;
+  z-index: 1;
+}
+
+.commons-viewer-exchange-message:not(.commons-viewer-exchange-selected):hover {
+  background-color: color-mix(in srgb, #007bc2 5%, transparent);
+}
+
+.commons-viewer-transcript
+  .shiny-chat-user-message.commons-viewer-exchange-message:not(
+    .commons-viewer-exchange-selected
+  ):hover {
+  background-color: color-mix(
+    in srgb,
+    #007bc2 7%,
+    var(--shiny-chat-user-message-bg, #f4f5f7)
+  );
+}
+
+.commons-viewer-exchange-message:focus-visible {
+  outline: 2px solid #007bc2;
+  outline-offset: 2px;
+}
+
+.commons-viewer-exchange-highlight {
+  background: color-mix(in srgb, #007bc2 9%, transparent);
+  border-radius: 1rem;
+  display: none;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  z-index: 0;
+}
+
+.commons-viewer-transcript
+  .shiny-chat-user-message.commons-viewer-exchange-selected {
+  background-color: transparent;
+}
+
+.commons-viewer-sidebar .control-label {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.commons-viewer-sidebar .tab-content:empty {
+  display: none;
+}
+
+.commons-viewer-entry {
+  border-radius: 0.5rem;
+  color: inherit;
+  display: block;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+}
+
+.commons-viewer-entry:hover,
+.commons-viewer-entry:focus {
+  background: var(--bs-secondary-bg, #f1f3f5);
+  color: inherit;
+  text-decoration: none;
+}
+
+.commons-viewer-entry-selected,
+.commons-viewer-entry-selected:hover,
+.commons-viewer-entry-selected:focus {
+  background: color-mix(in srgb, #007bc2 8%, var(--bs-body-bg, #fff));
+}
+
+.commons-viewer-entry-snippet {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commons-viewer-entry-meta {
+  align-items: center;
+  color: var(--bs-secondary-color, #6c757d);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  gap: 0.4rem;
+  margin-top: 0.125rem;
+}
+
+.commons-viewer-entry-meta .commons-answer-pill {
+  font-size: 0.68rem;
+  padding: 0.12rem 0.4rem;
+}
+
+.commons-viewer-entry-meta .commons-answer-pill-icon {
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+.commons-viewer-empty {
+  color: var(--bs-secondary-color, #6c757d);
+  padding: 1rem 0;
+  text-align: center;
+}

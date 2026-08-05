@@ -1,7 +1,7 @@
 #' Read commons trajectories
 #'
 #' @description
-#' `read_trajectories()` reads conversation trajectories captured by
+#' `trajectory_read()` reads conversation trajectories captured by
 #' [commons()] when `log = TRUE`. Trajectories are recorded as OpenTelemetry
 #' spans—see the `log` argument of [commons()] for how capture is enabled—and
 #' read back from Posit Connect's content observability store or from local
@@ -51,9 +51,13 @@
 #' ```
 #'
 #' @return A list of conversations, named by conversation id and ordered
-#'   oldest-first. Each conversation is a list of [ellmer::Turn]s.
+#'   oldest-first. Each conversation is a list of [ellmer::Turn]s and carries
+#'   a `last_active` attribute: a `POSIXct` giving the time of the
+#'   conversation's most recent chat activity. The list carries a `source`
+#'   attribute identifying the local trace directory or Connect content from
+#'   which it was read.
 #' @export
-read_trajectories <- function(
+trajectory_read <- function(
   source = NULL,
   ...,
   n = NULL,
@@ -75,7 +79,22 @@ read_trajectories <- function(
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
+  attr(trajectories, "source") <- trajectory_source_record(resolved)
   trajectories
+}
+
+trajectory_source_record <- function(resolved) {
+  if (identical(resolved$kind, "connect")) {
+    return(list(
+      kind = "connect",
+      server = resolved$client$server,
+      content_guid = resolved$guid
+    ))
+  }
+  list(
+    kind = "local",
+    path = normalizePath(resolved$path, mustWork = FALSE)
+  )
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone
@@ -528,7 +547,17 @@ posixct_nanos <- function(time) {
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
 build_trajectories <- function(spans) {
-  lapply(latest_chat_spans(spans), trajectory_turns)
+  lapply(latest_chat_spans(spans), function(span) {
+    turns <- trajectory_turns(span)
+    # Keep conversations directly usable with ellmer's chat$set_turns().
+    attr(turns, "last_active") <- nano_posixct(span_time(span))
+    turns
+  })
+}
+
+# Second precision is sufficient; the origin supports R < 4.3.
+nano_posixct <- function(time) {
+  as.POSIXct(as.numeric(time) / 1e9, origin = "1970-01-01")
 }
 
 # The latest chat span per conversation, named by conversation id and

@@ -1,0 +1,981 @@
+#' Review commons trajectories
+#'
+#' @description
+#' `trajectory_review()` launches a Shiny app for browsing conversation
+#' trajectories read with [trajectory_read()]. The app charts each trust
+#' level's share of answers over time—binned by day, week, or month, using
+#' the finest unit the volume of answers supports—alongside a list of
+#' conversations or of individual questions, filterable by date and trust
+#' level, and a transcript of each with the provenance pills the commons
+#' chat UI would show.
+#'
+#' Transcripts are reviewable rather than live: conversations and questions
+#' can be flagged for review and annotated with notes. Notes apply to the
+#' whole conversation, or to a single question-and-answer exchange selected
+#' in the transcript. Flags and notes land in `review_file`, one JSON record
+#' per line, and are restored when the viewer reopens.
+#'
+#' New review records use schema version 1 and include a unique event id, UTC
+#' timestamp, reviewer username, trajectory source, conversation id, optional
+#' exchange number, action, and optional note. Exchange-level records also
+#' snapshot the question and trust tag.
+#'
+#' Trajectories carry no record of how each answer was tagged when it was
+#' produced, so the viewer derives trust levels from the tool calls in the
+#' trajectory: answers backed only by governed tools (`call_measure`,
+#' `call_metrics`) are verified, and answers that used fallback tools
+#' (`run_sql`, `run_r`) count as cited when they contain citation markup and
+#' untrusted when they don't. A cited answer's quotes render as footnotes so
+#' they can be reviewed, but they are not re-verified against the agent's
+#' context: footnotes name no source and are attributed "unverified".
+#'
+#' Logged calls that aren't part of the agent's question-and-answer record—
+#' shinychat's conversation-title generation, and completions with no user
+#' turn—are excluded from the viewer.
+#'
+#' @param trajectories A named list of conversations, as returned by
+#'   [trajectory_read()].
+#' @param review_file Path of the JSONL file that review actions append to:
+#'   flags, unflags, and feedback notes, each with a timestamp, the
+#'   conversation id, and (for questions) the exchange number. Created on
+#'   first use; flags and notes recorded here are restored when the viewer
+#'   reopens. Defaults to `COMMONS_REVIEW_FILE` when set.
+#'
+#' @details
+#' A single reviewer app writes all of its review events to `review_file`. For a
+#' deployed app, point `COMMONS_REVIEW_FILE` at persistent storage: files in a
+#' Posit Connect app's working directory are replaced on redeployment.
+#' File-backed review apps should use one Connect process because separate
+#' processes do not coordinate file writes or in-memory review state.
+#'
+#' @return A [shiny::shinyApp()] object. Calling `trajectory_review()` at the
+#'   console launches the reviewer; the result can also be served as the last
+#'   expression of an `app.R`.
+#'
+#' @examples
+#' \dontrun{
+#' trajectory_review()
+#'
+#' trajectory_review(trajectory_read(from = "2026-07-01"))
+#' }
+#' @export
+trajectory_review <- function(
+  trajectories = trajectory_read(),
+  review_file = Sys.getenv(
+    "COMMONS_REVIEW_FILE",
+    unset = "commons-review.jsonl"
+  )
+) {
+  check_viewer_packages()
+  check_trajectories(trajectories)
+  rlang::check_string(review_file)
+  source <- trajectory_source(trajectories)
+  trajectories <- drop_side_conversations(trajectories)
+  summary <- summarize_trajectories(trajectories)
+  questions <- summarize_questions(trajectories)
+  shiny::shinyApp(
+    viewer_ui(summary),
+    viewer_server(trajectories, summary, questions, review_file, source)
+  )
+}
+
+check_viewer_packages <- function(call = rlang::caller_env()) {
+  pkgs <- c(
+    "bslib",
+    "htmltools",
+    "plotly",
+    "shiny",
+    "shinychat"
+  )
+  missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
+
+  if (length(missing)) {
+    cli::cli_abort(
+      c(
+        "{.fn trajectory_review} requires missing package{?s}: {.pkg {missing}}.",
+        i = "Install {.pkg {missing}} to use the trajectory reviewer."
+      ),
+      call = call
+    )
+  }
+}
+
+check_trajectories <- function(trajectories, call = rlang::caller_env()) {
+  ok <- is.list(trajectories) &&
+    (length(trajectories) == 0 || !is.null(names(trajectories))) &&
+    all(vapply(trajectories, is.list, logical(1)))
+
+  if (!ok) {
+    cli::cli_abort(
+      "{.arg trajectories} must be a named list of conversations as returned
+       by {.fn trajectory_read}: each a list of {.cls ellmer::Turn}s.",
+      call = call
+    )
+  }
+}
+
+drop_side_conversations <- function(trajectories) {
+  side <- vapply(trajectories, is_side_conversation, logical(1))
+  if (any(side)) {
+    cli::cli_inform(
+      "Excluding {sum(side)} logged call{?s} that {?isn't/aren't} part of the
+       agent's Q&A record (e.g. conversation-title generation)."
+    )
+  }
+  trajectories[!side]
+}
+
+# Title generation shares the agent's client, so its calls enter the trace
+# store.
+shinychat_title_prompt <- "You title chat conversations."
+
+is_side_conversation <- function(turns) {
+  if (length(split_exchanges(turns)) == 0) {
+    return(TRUE)
+  }
+  system <- turns[[1]]
+  identical(system@role, "system") &&
+    startsWith(system@text, shinychat_title_prompt)
+}
+
+summarize_trajectories <- function(trajectories) {
+  unname(Map(conversation_record, names(trajectories), trajectories))
+}
+
+conversation_record <- function(id, turns) {
+  exchanges <- split_exchanges(turns)
+  provenance <- lapply(exchanges, exchange_provenance)
+  list(
+    id = id,
+    snippet = first_user_snippet(exchanges),
+    n_user_turns = length(exchanges),
+    tags = vapply(provenance, function(p) p$tag, character(1)),
+    last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
+  )
+}
+
+summarize_questions <- function(trajectories) {
+  records <- list()
+  for (i in rlang::seq2(1, length(trajectories))) {
+    turns <- trajectories[[i]]
+    exchanges <- split_exchanges(turns)
+    provenance <- lapply(exchanges, exchange_provenance)
+    for (j in rlang::seq2(1, length(exchanges))) {
+      records[[length(records) + 1]] <- list(
+        conversation = i,
+        conversation_id = names(trajectories)[[i]],
+        exchange = j,
+        snippet = question_snippet(exchanges[[j]]),
+        tag = provenance[[j]]$tag,
+        last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
+      )
+    }
+  }
+  records
+}
+
+# The OTLP round trip drops commons_tag but preserves tool names and
+# citations.
+exchange_provenance <- function(exchange) {
+  tags <- exchange_tool_tags(exchange)
+  text <- unlist(lapply(exchange, turn_text)) %||% character()
+  citations <- extract_citations(text)
+  tag <- if ("B" %in% tags) {
+    if (length(citations) > 0) "B" else "C"
+  } else if ("A" %in% tags) {
+    "A"
+  } else {
+    NA_character_
+  }
+  list(tag = tag, citations = citations)
+}
+
+viewer_tool_tags <- c(
+  call_measure = "A",
+  call_metrics = "A",
+  run_sql = "B",
+  run_r = "B"
+)
+
+exchange_tool_tags <- function(turns) {
+  calls <- unlist(lapply(turns, function(turn) {
+    lapply(turn@contents, function(content) {
+      if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
+        content@name
+      }
+    })
+  }))
+  tags <- viewer_tool_tags[calls]
+  unname(tags[!is.na(tags)])
+}
+
+first_user_snippet <- function(exchanges, max_chars = 80) {
+  if (length(exchanges) == 0) {
+    return("")
+  }
+  question_snippet(exchanges[[1]], max_chars)
+}
+
+question_snippet <- function(exchange, max_chars = 80) {
+  text <- trimws(gsub("\\s+", " ", exchange[[1]]@text))
+  if (nchar(text) <= max_chars) {
+    return(text)
+  }
+  paste0(substr(text, 1, max_chars - 1), "\u2026")
+}
+
+trajectory_transcript <- function(turns) {
+  exchanges <- split_exchanges(turns)
+  messages <- list()
+  pills <- list()
+  n_assistant <- 0L
+
+  for (i in seq_along(exchanges)) {
+    exchange <- exchanges[[i]]
+    messages[[length(messages) + 1]] <- list(
+      role = "user",
+      content = exchange[[1]]@text,
+      exchange = i
+    )
+    chunks <- exchange_answer_chunks(exchange[-1])
+    if (length(chunks) == 0) {
+      next
+    }
+    n_assistant <- n_assistant + 1L
+    messages[[length(messages) + 1]] <- list(
+      role = "assistant",
+      content = chunks,
+      exchange = i
+    )
+    pill <- viewer_pill(exchange_provenance(exchange), n_assistant)
+    if (!is.null(pill)) {
+      pills[[length(pills) + 1]] <- pill
+    }
+  }
+
+  for (i in seq_along(pills)) {
+    pills[[i]]$indexFromEnd <- n_assistant - pills[[i]]$indexFromEnd
+  }
+  list(messages = messages, count = n_assistant, pills = pills)
+}
+
+# Cited answers keep their quotes visible, but the viewer cannot re-verify
+# them.
+viewer_pill <- function(provenance, assistant_index) {
+  if (is.na(provenance$tag) && length(provenance$citations) == 0) {
+    return(NULL)
+  }
+  citations <- if (identical(provenance$tag, "B")) {
+    lapply(provenance$citations, viewer_citation)
+  } else {
+    lapply(provenance$citations, function(x) list(verified = FALSE))
+  }
+  list(
+    html = htmltools::renderTags(commons_answer_pill(provenance$tag))$html,
+    citations = citations,
+    indexFromEnd = assistant_index
+  )
+}
+
+viewer_citation <- function(citation) {
+  list(
+    verified = TRUE,
+    reason = if (!is.na(citation$reason)) citation$reason,
+    quote = normalize_citation(citation$quote),
+    label = "unverified"
+  )
+}
+
+exchange_answer_chunks <- function(turns) {
+  chunks <- list()
+  for (turn in turns) {
+    for (content in turn@contents) {
+      if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
+        next
+      }
+      if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
+        content@extra$display <- content@extra$display %||%
+          viewer_tool_display(content@request, content@value)
+      }
+      chunks[[length(chunks) + 1]] <- shinychat::contents_shinychat(content)
+    }
+  }
+  drop_nulls(chunks)
+}
+
+# Rebuild display metadata that is not retained by the OTLP round trip.
+viewer_tool_display <- function(request, value = NULL) {
+  if (is.null(request)) {
+    return(NULL)
+  }
+  arguments <- request@arguments
+  info <- switch(
+    request@name,
+    search_pool = list(title = "Found a trusted calculation", icon = "search"),
+    call_metrics = list(
+      title = sprintf(
+        "Ran a trusted calculation: %s",
+        html_escape(paste(unlist(arguments$metrics), collapse = ", "))
+      ),
+      icon = "shield-check"
+    ),
+    call_measure = list(
+      title = sprintf(
+        "Ran a trusted calculation: %s",
+        html_escape(humanize_name(arguments$name %||% ""))
+      ),
+      icon = "shield-check"
+    ),
+    search_context = list(title = "Searched context", icon = "book"),
+    describe_table = list(
+      title = sprintf("Inspected %s", html_escape(arguments$table %||% "")),
+      icon = "table"
+    ),
+    run_sql = list(title = "Grabbed data", icon = "code-square"),
+    run_r = list(title = "Analyzed data", icon = "terminal"),
+    return(NULL)
+  )
+  display <- list(title = info$title, open = FALSE, show_request = FALSE)
+  display$icon <- maybe_icon(info$icon)
+  if (identical(request@name, "run_sql") && is.character(arguments$sql)) {
+    display$markdown <- paste(
+      c(sprintf("```sql\n%s\n```", arguments$sql), value),
+      collapse = "\n\n"
+    )
+  }
+  display
+}
+
+seed_transcript_decorations <- function(
+  session,
+  id,
+  transcript,
+  selected_exchange = NULL
+) {
+  if (length(transcript$pills) > 0) {
+    session$sendCustomMessage(
+      "commonsProvenancePillSeed",
+      list(id = id, count = transcript$count, pills = transcript$pills)
+    )
+  }
+  if (length(transcript$messages) > 0) {
+    session$sendCustomMessage(
+      "commonsViewerExchangeSeed",
+      list(
+        id = id,
+        count = length(transcript$messages),
+        exchanges = vapply(
+          transcript$messages,
+          function(message) message$exchange,
+          integer(1)
+        ),
+        selected = selected_exchange
+      )
+    )
+  }
+}
+
+viewer_ui <- function(summary) {
+  dates <- viewer_date_range(summary)
+  htmltools::attachDependencies(
+    bslib::page_sidebar(
+      title = "Trajectory reviewer",
+      sidebar = bslib::sidebar(
+        width = 380,
+        class = "commons-viewer-sidebar",
+        bslib::navset_underline(
+          id = "group_by",
+          bslib::nav_panel("Conversations", value = "conversation"),
+          bslib::nav_panel("Questions", value = "question")
+        ),
+        shiny::dateRangeInput(
+          "window",
+          "Dates",
+          start = dates$min,
+          end = dates$max,
+          min = dates$min,
+          max = dates$max
+        ),
+        shiny::selectInput(
+          "trust",
+          "Trust Level",
+          trust_choices("conversation")
+        ),
+        shiny::uiOutput("entries")
+      ),
+      trust_timeline_card(),
+      bslib::card(
+        fill = TRUE,
+        class = "commons-viewer-transcript",
+        bslib::layout_sidebar(
+          shiny::uiOutput("transcript", fill = TRUE),
+          sidebar = bslib::sidebar(
+            htmltools::div(
+              class = "commons-viewer-review-pane",
+              shiny::uiOutput("review_bar"),
+              shiny::conditionalPanel(
+                "output.review_ready === 'ready'",
+                bslib::input_submit_textarea(
+                  "review_note",
+                  placeholder = "Add a note",
+                  width = "100%",
+                  button = htmltools::tags$button(
+                    type = "button",
+                    class = "btn commons-viewer-note-submit",
+                    title = "Add note",
+                    `aria-label` = "Add note",
+                    maybe_icon("arrow-up") %||% "\u2191"
+                  ),
+                  submit_key = "enter"
+                ),
+                class = "commons-viewer-note-compose"
+              )
+            ),
+            position = "right",
+            width = 320,
+            padding = 0,
+            resizable = TRUE
+          ),
+          border = FALSE,
+          border_radius = FALSE,
+          padding = 0,
+          gap = 0
+        )
+      )
+    ),
+    c(
+      # Match the dependency order used by a live commons chat.
+      htmltools::findDependencies(shinychat::chat_ui("commons_viewer_probe")),
+      list(commons_chat_dependency(), commons_viewer_dependency())
+    )
+  )
+}
+
+trust_choices <- function(group_by) {
+  if (identical(group_by, "question")) {
+    c(
+      "All answers" = "all",
+      "Verified" = "A",
+      "Cited" = "B",
+      "Untrusted" = "C",
+      "No data tool" = "none"
+    )
+  } else {
+    c(
+      "All conversations" = "all",
+      "Has a verified answer" = "A",
+      "Has a cited answer" = "B",
+      "Has an untrusted answer" = "C",
+      "Has an answer with no data tool" = "none"
+    )
+  }
+}
+
+viewer_server <- function(
+  trajectories,
+  summary,
+  questions,
+  review_file,
+  source = trajectory_source(trajectories)
+) {
+  # Share review state across sessions in the documented single process.
+  review_records <- read_review_records(review_file)
+  app_flags <- shiny::reactiveVal(review_flags(review_records))
+  app_notes <- shiny::reactiveVal(review_notes(review_records))
+
+  function(input, output, session) {
+    flags <- app_flags
+    notes <- app_notes
+    selected <- shiny::reactiveVal(NULL)
+    selected_transcript <- shiny::reactive({
+      key <- selected()
+      if (is.null(key)) {
+        return(NULL)
+      }
+      trajectory_transcript(trajectories[[key$conversation]])
+    })
+    review_target <- shiny::reactiveVal(NULL)
+    review_selection <- shiny::reactive({
+      review_target() %||% selected()["conversation"]
+    })
+    user <- review_user(session)
+
+    output$review_ready <- shiny::renderText({
+      if (is.null(review_selection())) "" else "ready"
+    })
+    shiny::outputOptions(output, "review_ready", suspendWhenHidden = FALSE)
+
+    shiny::observeEvent(
+      review_selection(),
+      ignoreNULL = FALSE,
+      {
+        key <- review_selection()
+        placeholder <- if (is.null(key)) {
+          "Add a note"
+        } else if (is.null(key$exchange)) {
+          "Add a note about this conversation"
+        } else {
+          "Add a note about this exchange"
+        }
+        bslib::update_submit_textarea(
+          "review_note",
+          value = "",
+          placeholder = placeholder,
+          session = session
+        )
+      }
+    )
+
+    shiny::observeEvent(input$group_by, {
+      shiny::updateSelectInput(
+        session,
+        "trust",
+        choices = trust_choices(input$group_by),
+        selected = input$trust
+      )
+    })
+
+    visible_conversations <- shiny::reactive({
+      Filter(
+        function(i) {
+          conversation_visible(summary[[i]], input$window, input$trust)
+        },
+        seq_along(summary)
+      )
+    })
+
+    visible_questions <- shiny::reactive({
+      Filter(
+        function(k) question_visible(questions[[k]], input$window, input$trust),
+        seq_along(questions)
+      )
+    })
+
+    output$timeline_legend <- shiny::renderUI({
+      in_dates <- Filter(
+        function(i) in_window(summary[[i]], input$window),
+        seq_along(summary)
+      )
+      timeline_legend(hit_rate(lapply(in_dates, function(i) summary[[i]]$tags)))
+    })
+
+    output$timeline <- shiny::renderUI({
+      trust_timeline(trust_timeline_bins(questions, input$window))
+    })
+
+    output$entries <- shiny::renderUI({
+      entries <- if (identical(input$group_by, "question")) {
+        lapply(
+          visible_questions(),
+          function(k) question_entry(questions[[k]], selected(), flags())
+        )
+      } else {
+        lapply(
+          visible_conversations(),
+          function(i) conversation_entry(i, summary[[i]], selected(), flags())
+        )
+      }
+      if (length(entries) == 0) {
+        return(viewer_empty_note(
+          if (length(summary) == 0) {
+            "No conversations to view."
+          } else {
+            "Nothing matches these filters."
+          }
+        ))
+      }
+      entries
+    })
+
+    # Register once because filtering does not change trajectory indices.
+    all_keys <- c(
+      lapply(seq_along(trajectories), function(i) list(conversation = i)),
+      lapply(questions, function(record) record[c("conversation", "exchange")])
+    )
+    for (key in all_keys) {
+      local({
+        k <- key
+        shiny::observeEvent(input[[entry_link_id(k)]], {
+          selected(k)
+          review_target(if (is.null(k$exchange)) NULL else k)
+        })
+      })
+    }
+
+    output$review_bar <- shiny::renderUI({
+      key <- review_selection()
+      if (is.null(key)) {
+        return(NULL)
+      }
+      flagged <- selection_review_key(key, summary) %in% flags()
+      review_bar_notes(
+        key,
+        flagged,
+        notes_for_selection(notes(), key, summary)
+      )
+    })
+
+    shiny::observeEvent(input$flag_toggle, {
+      key <- review_selection()
+      if (is.null(key)) {
+        return()
+      }
+      review <- selection_review_key(key, summary)
+      flagged <- review %in% flags()
+      record <- new_review_event(
+        trajectories,
+        key,
+        action = if (flagged) "unflag" else "flag",
+        user = user,
+        source = source
+      )
+      append_review_record(review_file, record)
+      flags(if (flagged) setdiff(flags(), review) else union(flags(), review))
+    })
+
+    shiny::observeEvent(input$exchange_select, {
+      navigation <- selected()
+      if (is.null(navigation)) {
+        return()
+      }
+      exchange <- as.integer(input$exchange_select$exchange)
+      if (length(exchange) != 1 || is.na(exchange)) {
+        review_target(NULL)
+        return()
+      }
+      if (
+        !exchange %in%
+          seq_along(split_exchanges(trajectories[[navigation$conversation]]))
+      ) {
+        return()
+      }
+      review_target(list(
+        conversation = navigation$conversation,
+        exchange = exchange
+      ))
+    })
+
+    shiny::observeEvent(
+      review_target(),
+      ignoreNULL = FALSE,
+      ignoreInit = TRUE,
+      {
+        key <- selected()
+        if (is.null(key)) {
+          return()
+        }
+        target <- review_target()
+        session$sendCustomMessage(
+          "commonsViewerExchangeSelect",
+          list(
+            id = transcript_id(key),
+            exchange = if (!is.null(target)) target$exchange
+          )
+        )
+      }
+    )
+
+    shiny::observeEvent(input$review_note, {
+      key <- review_selection()
+      note <- trimws(input$review_note %||% "")
+      if (is.null(key) || !nzchar(note)) {
+        return()
+      }
+      record <- new_review_event(
+        trajectories,
+        key,
+        action = "note",
+        user = user,
+        source = source,
+        note = note
+      )
+      append_review_record(review_file, record)
+      notes(c(notes(), list(record)))
+      bslib::update_submit_textarea(
+        "review_note",
+        value = "",
+        focus = TRUE,
+        session = session
+      )
+    })
+
+    # A fresh id prevents stale pill timers from targeting a new transcript.
+    output$transcript <- shiny::renderUI({
+      key <- selected()
+      if (is.null(key)) {
+        return(viewer_empty_note(
+          "Select a conversation to view its transcript."
+        ))
+      }
+      commons_ui(
+        transcript_id(key),
+        messages = selected_transcript()$messages,
+        height = "100%"
+      )
+    })
+
+    # Seed decorations only after the new chat element is bound in the browser.
+    shiny::observeEvent(selected(), {
+      key <- selected()
+      transcript <- selected_transcript()
+      session$onFlushed(
+        function() {
+          seed_transcript_decorations(
+            session,
+            transcript_id(key),
+            transcript,
+            selected_exchange = key$exchange
+          )
+        },
+        once = TRUE
+      )
+    })
+  }
+}
+
+conversation_visible <- function(record, window, trust) {
+  in_window(record, window) &&
+    (identical(trust, "all") || any(tag_matches(record$tags, trust)))
+}
+
+question_visible <- function(record, window, trust) {
+  in_window(record, window) && tag_matches(record$tag, trust)
+}
+
+tag_matches <- function(tags, trust) {
+  switch(
+    trust,
+    all = rep(TRUE, length(tags)),
+    none = is.na(tags),
+    tags %in% trust
+  )
+}
+
+entry_link_id <- function(key) {
+  paste(c("entry", key$conversation, key$exchange), collapse = "_")
+}
+
+transcript_id <- function(key) {
+  paste(c("transcript", key$conversation, key$exchange), collapse = "_")
+}
+
+review_bar_notes <- function(key, flagged, notes) {
+  whole_conversation <- is.null(key$exchange)
+  htmltools::div(
+    class = "commons-viewer-review",
+    htmltools::div(
+      class = "commons-viewer-review-bar",
+      htmltools::tags$strong(
+        if (whole_conversation) {
+          "Notes"
+        } else {
+          sprintf("Notes for Question %d", key$exchange)
+        }
+      ),
+      flag_button(flagged, whole_conversation)
+    ),
+    if (whole_conversation) {
+      htmltools::div(
+        class = "commons-viewer-review-prompt",
+        "Notes here apply to the entire conversation. Select a question or
+         answer in the transcript to add a note specific to that exchange."
+      )
+    },
+    review_note_list(notes)
+  )
+}
+
+review_note_list <- function(notes) {
+  if (length(notes) == 0) {
+    return(NULL)
+  }
+  htmltools::div(
+    class = "commons-viewer-notes",
+    lapply(notes, function(note) {
+      htmltools::div(
+        class = "commons-viewer-note",
+        htmltools::div(class = "commons-viewer-note-text", note$note),
+        note_date(note)
+      )
+    })
+  )
+}
+
+note_date <- function(note) {
+  time <- parse_review_time(note$time %||% "")
+  if (is.na(time)) {
+    return(NULL)
+  }
+  attr(time, "tzone") <- ""
+  htmltools::div(class = "commons-viewer-note-meta", day_label(time))
+}
+
+notes_for_selection <- function(notes, key, summary) {
+  selection <- selection_review_key(key, summary)
+  Filter(
+    function(note) review_key(note$conversation, note$exchange) == selection,
+    notes
+  )
+}
+
+selection_review_key <- function(key, summary) {
+  review_key(summary[[key$conversation]]$id, key$exchange)
+}
+
+flag_button <- function(flagged, whole_conversation) {
+  what <- if (whole_conversation) "conversation" else "question"
+  title <- if (flagged) {
+    "Flagged for review \u2014 click to unflag"
+  } else {
+    sprintf("Flag this %s for review", what)
+  }
+  bslib::tooltip(
+    shiny::actionButton(
+      "flag_toggle",
+      label = "\u2691",
+      class = if (flagged) {
+        "commons-viewer-flag-button commons-viewer-flag-button-on"
+      } else {
+        "commons-viewer-flag-button"
+      },
+      `aria-label` = title,
+      `aria-pressed` = if (flagged) "true" else "false"
+    ),
+    title
+  )
+}
+
+flag_marker <- function(flagged) {
+  if (!flagged) {
+    return(NULL)
+  }
+  htmltools::tags$span(
+    class = "commons-viewer-flag",
+    title = "Flagged for review",
+    "\u2691"
+  )
+}
+
+conversation_entry <- function(
+  index,
+  record,
+  selected = NULL,
+  flags = character()
+) {
+  key <- list(conversation = index)
+  shiny::actionLink(
+    entry_link_id(key),
+    class = entry_class(identical(selected, key)),
+    label = htmltools::tagList(
+      htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
+      htmltools::div(
+        class = "commons-viewer-entry-meta",
+        flag_marker(review_key(record$id) %in% flags),
+        htmltools::tags$span(conversation_meta(record))
+      )
+    )
+  )
+}
+
+question_entry <- function(record, selected = NULL, flags = character()) {
+  key <- record[c("conversation", "exchange")]
+  flagged <- review_key(record$conversation_id, record$exchange) %in% flags
+  shiny::actionLink(
+    entry_link_id(key),
+    class = entry_class(identical(selected, key)),
+    label = htmltools::tagList(
+      htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
+      htmltools::div(
+        class = "commons-viewer-entry-meta",
+        flag_marker(flagged),
+        htmltools::tags$span(entry_date(record)),
+        commons_answer_pill(record$tag)
+      )
+    )
+  )
+}
+
+entry_class <- function(selected) {
+  if (selected) {
+    "commons-viewer-entry commons-viewer-entry-selected"
+  } else {
+    "commons-viewer-entry"
+  }
+}
+
+conversation_meta <- function(record) {
+  turns <- sprintf(
+    "%d %s",
+    record$n_user_turns,
+    if (record$n_user_turns == 1) "turn" else "turns"
+  )
+  date <- entry_date(record)
+  if (is.null(date)) {
+    return(turns)
+  }
+  sprintf("%s \u00b7 %s", turns, date)
+}
+
+entry_date <- function(record) {
+  time <- record$last_active
+  if (is.na(time)) {
+    return(NULL)
+  }
+  sprintf(
+    "%s %s",
+    day_label(time),
+    sub("^0", "", format(time, "%I:%M %p"))
+  )
+}
+
+viewer_empty_note <- function(text) {
+  htmltools::div(class = "commons-viewer-empty", text)
+}
+
+in_window <- function(record, window) {
+  if (length(window) < 2) {
+    return(TRUE)
+  }
+  date <- local_date(record$last_active)
+  is.na(date) || (date >= window[[1]] && date <= window[[2]])
+}
+
+viewer_date_range <- function(summary) {
+  dates <- record_dates(summary)
+  dates <- dates[!is.na(dates)]
+  if (length(dates) == 0) {
+    return(list(min = Sys.Date(), max = Sys.Date()))
+  }
+  list(min = min(dates), max = max(dates))
+}
+
+record_dates <- function(records) {
+  as.Date(vapply(
+    records,
+    function(record) as.character(local_date(record$last_active)),
+    character(1)
+  ))
+}
+
+# as.Date.POSIXct() defaults to UTC rather than the reviewer's local day.
+local_date <- function(time) {
+  as.Date(format(time, "%Y-%m-%d"))
+}
+
+day_label <- function(date) {
+  gsub("\\s+", " ", format(date, "%b %e, %Y"))
+}
+
+# Asset mtimes invalidate browser caches during package development.
+commons_viewer_dependency <- function() {
+  src <- system.file("www", "commons-viewer", package = "commons")
+  stamp <- max(file.mtime(list.files(src, full.names = TRUE)))
+
+  htmltools::htmlDependency(
+    name = "commons-viewer",
+    version = paste0("0.0.0.9000.", as.integer(stamp)),
+    src = c(file = src),
+    stylesheet = "commons-viewer.css",
+    script = "commons-viewer.js"
+  )
+}
