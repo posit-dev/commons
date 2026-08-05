@@ -138,7 +138,8 @@ catalog_to_data_dictionary <- function(catalog, call = rlang::caller_env()) {
   tables <- lapply(
     relations,
     catalog_relation_to_dictionary,
-    definitions = catalog$definitions
+    definitions = catalog$definitions,
+    models = catalog$models
   )
   names(tables) <- table_names
 
@@ -181,7 +182,8 @@ catalog_to_runtime_dictionary <- function(
   tables <- lapply(
     relations,
     catalog_relation_to_dictionary,
-    definitions = catalog$definitions
+    definitions = catalog$definitions,
+    models = catalog$models
   )
   names(tables) <- unname(relation_labels[relation_ids])
   glossary <- lapply(catalog$terms, `[[`, "description")
@@ -1038,7 +1040,7 @@ catalog_context_from_dictionary <- function(
   records
 }
 
-catalog_relation_to_dictionary <- function(relation, definitions) {
+catalog_relation_to_dictionary <- function(relation, definitions, models = list()) {
   entry <- relation$extensions$data_dictionary %||% list()
   entry$label <- relation$label
   entry$description <- relation$description
@@ -1047,7 +1049,9 @@ catalog_relation_to_dictionary <- function(relation, definitions) {
 
   relation_definitions <- Filter(
     function(definition) {
+      model <- models[[definition$model_id]]
       identical(definition$relation_id, relation$id) &&
+        identical(model$execution$kind %||% "data_dictionary", "data_dictionary") &&
         !definition$name %in% names(relation$columns) &&
         !is.null(definition$logical_type)
     },

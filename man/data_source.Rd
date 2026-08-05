@@ -44,8 +44,8 @@ the database directly.
 \item Named data frames are loaded into an in-process DuckDB database. Use this
 when the data isn't already in a database.
 \item A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}, is read into the same
-in-process database: each pin in \code{tables} becomes a table. Pin names are
-validated against the board at construction (a single listing call), but
+in-process database: each pin selected by \code{options} becomes a table. Pin
+names are validated against the board at construction (a single listing call), but
 each pin is downloaded only when its table is first used---by the
 \code{describe_table} tool, a SQL query that references it, or a measure that
 takes the source's connection. \code{\link[=commons_server]{commons_server()}} starts a background

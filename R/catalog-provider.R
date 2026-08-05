@@ -510,8 +510,11 @@ catalog_provider_authorize_hydration <- function(
     return(invisible(provider))
   }
   started_at <- Sys.time()
-  result <- catalog_relation_queryability(provider$con, relation$path)
+  result <- catalog_provider_queryability(provider, relation)
   catalog_provider_record(provider, "authorize", started_at, table)
+  if (identical(result, NA)) {
+    return(invisible(provider))
+  }
   if (inherits(result, "condition")) {
     result$message <- gsub(
       "\\r?\\n[ \\t]*\\r?\\n",
@@ -519,11 +522,26 @@ catalog_provider_authorize_hydration <- function(
       conditionMessage(result),
       perl = TRUE
     )
-    relation$access <- new_catalog_access(
-      "visible_only",
-      conditionMessage(result)
-    )
+    state <- catalog_query_failure_state(result)
+    relation$access <- new_catalog_access(state, conditionMessage(result))
     provider$catalog$relations[[relation_id]] <- relation
+    if (identical(state, "unknown")) {
+      catalog_provider_diagnostic(
+        provider,
+        "catalog_relation_query_unverified",
+        sprintf(
+          "Could not yet verify query access to %s; retry after the connection is ready.",
+          table
+        ),
+        severity = "info",
+        entity_id = relation_id
+      )
+      cli::cli_abort(
+        "Table {.val {table}} could not be queried.",
+        parent = result,
+        call = call
+      )
+    }
     catalog_provider_diagnostic(
       provider,
       "catalog_relation_unqueryable",
@@ -554,6 +572,7 @@ catalog_provider_probe_authored <- function(
   authored,
   call = rlang::caller_env()
 ) {
+  authorized <- character()
   for (relation in authored$relations) {
     candidates <- catalog_relation_candidates(
       relation,
@@ -561,8 +580,15 @@ catalog_provider_probe_authored <- function(
       provider$catalog$sources
     )
     if (length(candidates) != 1) next
-    catalog_provider_probe_relation(provider, candidates[[1]])
+    relation_id <- candidates[[1]]
+    catalog_provider_probe_relation(provider, relation_id)
+    discovered <- provider$catalog$relations[[relation_id]]
+    if (identical(discovered$access$state, "queryable") ||
+        discovered$kind %in% c("semantic_view", "metric_view", "governed_query")) {
+      authorized <- c(authorized, relation_id)
+    }
   }
+  provider$authored_relation_ids <- unique(authorized)
   catalog_provider_finalize_access(provider, call)
 }
 
@@ -581,17 +607,31 @@ catalog_provider_probe_relation <- function(provider, relation_id) {
     catalog_path_label(relation)
   )
   if (inherits(result, "condition")) {
-    relation$access <- new_catalog_access("visible_only", conditionMessage(result))
-    catalog_provider_diagnostic(
-      provider,
-      "authored_relation_unqueryable",
-      sprintf(
-        "Skipped authored metadata for %s because the relation is not queryable.",
-        catalog_path_label(relation)
-      ),
-      severity = "info",
-      entity_id = relation$id
-    )
+    state <- catalog_query_failure_state(result)
+    relation$access <- new_catalog_access(state, conditionMessage(result))
+    if (identical(state, "visible_only")) {
+      catalog_provider_diagnostic(
+        provider,
+        "authored_relation_unqueryable",
+        sprintf(
+          "Skipped authored metadata for %s because the relation is not queryable.",
+          catalog_path_label(relation)
+        ),
+        severity = "info",
+        entity_id = relation$id
+      )
+    } else {
+      catalog_provider_diagnostic(
+        provider,
+        "authored_relation_query_unverified",
+        sprintf(
+          "Skipped authored metadata for %s because query access could not yet be verified.",
+          catalog_path_label(relation)
+        ),
+        severity = "info",
+        entity_id = relation$id
+      )
+    }
   } else {
     relation$access <- new_catalog_access("queryable", "zero-row authorization probe")
   }
@@ -614,6 +654,118 @@ catalog_relation_queryability <- function(con, path) {
       TRUE
     },
     error = function(err) err
+  )
+}
+
+catalog_query_failure_state <- function(error) {
+  if (grepl(
+    "permission|not authorized|insufficient privilege|access denied|not permitted",
+    conditionMessage(error),
+    ignore.case = TRUE
+  )) {
+    "visible_only"
+  } else {
+    "unknown"
+  }
+}
+
+catalog_provider_queryability <- function(provider, relation) {
+  if (relation$kind %in% c("semantic_view", "metric_view") &&
+      provider$backend %in% c("snowflake", "databricks")) {
+    return(catalog_semantic_relation_queryability(provider, relation))
+  }
+  catalog_relation_queryability(provider$con, relation$path)
+}
+
+catalog_semantic_relation_queryability <- function(provider, relation) {
+  sql <- catalog_semantic_authorization_sql(provider, relation)
+  if (is.null(sql)) return(NA)
+  tryCatch(
+    {
+      result <- DBI::dbSendQuery(provider$con, sql)
+      on.exit(DBI::dbClearResult(result), add = TRUE)
+      TRUE
+    },
+    error = function(err) err
+  )
+}
+
+catalog_semantic_authorization_sql <- function(provider, relation) {
+  models <- Filter(
+    function(model) relation$id %in% model$exposed,
+    provider$catalog$models
+  )
+  if (length(models) != 1) return(NULL)
+  model <- models[[1]]
+  definitions <- Filter(
+    function(definition) {
+      identical(definition$model_id, model$id) &&
+        identical(definition$visibility, "public")
+    },
+    provider$catalog$definitions
+  )
+  fields <- Filter(
+    function(definition) definition$role %in% c("dimension", "time_dimension"),
+    definitions
+  )
+  metrics <- Filter(
+    function(definition) identical(definition$role, "metric"),
+    definitions
+  )
+  definition <- if (length(fields)) {
+    fields[[1]]
+  } else if (length(metrics)) {
+    metrics[[1]]
+  } else {
+    return(NULL)
+  }
+
+  object <- DBI::dbQuoteIdentifier(
+    provider$con,
+    source_path_id(model$execution$object)
+  )
+  name <- DBI::dbQuoteIdentifier(provider$con, definition$name)
+  if (identical(provider$backend, "databricks")) {
+    parameters <- model$execution$parameters %||% list()
+    required <- vapply(
+      parameters,
+      function(parameter) !"default" %in% names(parameter),
+      logical(1)
+    )
+    if (any(required)) return(NULL)
+    expression <- if (identical(definition$role, "metric")) {
+      paste0("MEASURE(", name, ")")
+    } else {
+      name
+    }
+    return(paste("SELECT", expression, "FROM", object, "LIMIT 0"))
+  }
+
+  variables <- model$execution$variables %||% list()
+  required <- vapply(
+    variables,
+    function(variable) !"default_value" %in% names(variable),
+    logical(1)
+  )
+  if (any(required)) return(NULL)
+  parent <- definition$native$parent
+  reference <- if (rlang::is_string(parent)) {
+    DBI::dbQuoteIdentifier(
+      provider$con,
+      DBI::Id(schema = parent, table = definition$name)
+    )
+  } else {
+    name
+  }
+  clause <- if (identical(definition$role, "metric")) "METRICS" else "DIMENSIONS"
+  paste0(
+    "SELECT * FROM SEMANTIC_VIEW(\n  ",
+    object,
+    "\n  ",
+    clause,
+    " ",
+    reference,
+    "\n) LIMIT 0"
   )
 }
 

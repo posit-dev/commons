@@ -176,7 +176,7 @@ data_source_connection <- function(
     provider$catalog <- catalog_merge(
       provider$catalog,
       authored,
-      relation_ids = names(provider$relation_labels),
+      relation_ids = provider$authored_relation_ids,
       call = call
     )
   }

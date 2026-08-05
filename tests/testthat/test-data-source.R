@@ -395,6 +395,75 @@ test_that("metadata visibility does not establish query access", {
   )
 })
 
+test_that("transient query failures remain retryable", {
+  fixture <- catalog_provider_test_source()
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  local_mocked_bindings(
+    catalog_relation_queryability = function(con, path) {
+      simpleError("warehouse is starting")
+    }
+  )
+
+  expect_error(
+    source_describe(fixture$source, "warehouse_object"),
+    "could not be queried"
+  )
+
+  expect_equal(list_tables(fixture$source), "warehouse_object")
+  expect_equal(
+    fixture$provider$catalog$relations[[fixture$relation$id]]$access$state,
+    "unknown"
+  )
+  expect_equal(
+    fixture$provider$catalog$diagnostics[[1]]$code,
+    "catalog_relation_query_unverified"
+  )
+})
+
+test_that("authored facts wait for a successful access probe", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "orders", data.frame(id = 1))
+  dictionary <- new_data_dictionary(list(tables = list(
+    orders = list(description = "Publisher-only description.")
+  )))
+  local_mocked_bindings(
+    catalog_relation_queryability = function(con, path) {
+      simpleError("warehouse is starting")
+    }
+  )
+
+  source <- data_source(
+    con,
+    dictionary = dictionary,
+    options = data_source_options(include = "orders")
+  )
+
+  expect_equal(list_tables(source), "orders")
+  expect_null(source$dictionary$tables$orders$description)
+  expect_equal(
+    source$provider$catalog$diagnostics[[1]]$code,
+    "authored_relation_query_unverified"
+  )
+})
+
+test_that("semantic authorization selects one governed field", {
+  fixture <- catalog_provider_test_source("semantic_view")
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  fixture$provider$backend <- "snowflake"
+  catalog_provider_add_metric(fixture, fields = TRUE)
+
+  sql <- catalog_semantic_authorization_sql(
+    fixture$provider,
+    fixture$relation
+  )
+
+  expect_match(sql, "SEMANTIC_VIEW", fixed = TRUE)
+  expect_match(sql, "DIMENSIONS", fixed = TRUE)
+  expect_match(sql, "region", fixed = TRUE)
+  expect_false(grepl("record_count", sql, fixed = TRUE))
+})
+
 test_that("catalog providers reject selections above their object bound", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))

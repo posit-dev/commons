@@ -506,6 +506,45 @@ test_that("private and visible-only semantic definitions stay out of the registr
   expect_equal(nrow(catalog_definition_registry(catalog)$defs), 0)
 })
 
+test_that("native semantic definitions stay out of dictionary definitions", {
+  source <- new_catalog_source("source:test", "snowflake")
+  relation <- new_catalog_relation(
+    "relation:model",
+    source$id,
+    new_source_path(c(table = "MODEL"))
+  )
+  model <- new_catalog_model(
+    "model:test",
+    source$id,
+    "MODEL",
+    datasets = relation$id,
+    execution = list(kind = "snowflake_semantic_view")
+  )
+  definition <- new_catalog_definition(
+    "definition:latitude",
+    model$id,
+    relation$id,
+    "dimension",
+    "LATITUDE",
+    logical_type = "number",
+    expressions = list(new_catalog_expression("snowflake", "LATITUDE"))
+  )
+  catalog <- new_commons_catalog(
+    sources = list(source),
+    relations = list(relation),
+    models = list(model),
+    definitions = list(definition)
+  )
+
+  dictionary <- catalog_to_runtime_dictionary(
+    catalog,
+    c("relation:model" = "MODEL")
+  )
+
+  expect_length(dictionary$tables$MODEL$definitions, 0)
+  expect_equal(catalog_definition_registry(catalog)$defs$name, "LATITUDE")
+})
+
 test_that("native semantic columns do not duplicate projected definitions", {
   source <- new_catalog_source("source:test", "snowflake")
   relation <- new_catalog_relation(
