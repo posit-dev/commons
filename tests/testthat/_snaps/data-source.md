@@ -15,6 +15,14 @@
       Error:
       ! Wildcards are not allowed inside <DBI::Id>; put unqualified globs in `exclude`.
 
+# provider identity is checked before every query
+
+    Code
+      source_query(source, "SELECT * FROM orders")
+    Condition
+      Error in `source_query()`:
+      ! The connection identity, role, or current namespace changed after catalog discovery; rebuild the data source.
+
 # default connection discovery stays in the current namespace
 
     Code

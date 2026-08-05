@@ -21,34 +21,9 @@ test_that("Databricks metric-view YAML imports governed assets", {
     sources = list(source),
     relations = list(relation)
   )
-  specification <- yaml::yaml.load(paste(
-    "version: 1.1",
-    "comment: Governed sales metrics.",
-    "source: samples.tpch.orders",
-    "parameters:",
-    "  - name: minimum_amount",
-    "    data_type: double",
-    "    default: 0",
-    "filter: o_totalprice > minimum_amount",
-    "joins:",
-    "  - name: customer",
-    "    source: samples.tpch.customer",
-    "    on: source.o_custkey = customer.c_custkey",
-    "    rely:",
-    "      at_most_one_match: true",
-    "fields:",
-    "  - name: region",
-    "    expr: customer.c_mktsegment",
-    "    comment: Customer segment.",
-    "measures:",
-    "  - name: revenue",
-    "    expr: SUM(o_totalprice)",
-    "    display_name: Total Revenue",
-    "    synonyms: [sales]",
-    "    window:",
-    "      - order: region",
-    "        range: cumulative",
-    sep = "\n"
+  specification <- yaml::read_yaml(test_path(
+    "fixtures",
+    "databricks-metric-view.yaml"
   ))
 
   databricks_import_metric_model(provider, relation, specification)
@@ -69,6 +44,74 @@ test_that("Databricks metric-view YAML imports governed assets", {
   expect_true(length(catalog$context) >= 2)
   root <- catalog$relations[[catalog$models[[1]]$datasets[[1]]]]
   expect_equal(root$constraints[[1]]$enforcement, "asserted")
+})
+
+test_that("namespace metric views hydrate their semantics lazily", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  source <- new_catalog_source(
+    "source:databricks",
+    "databricks",
+    dialect = "databricks"
+  )
+  relation <- new_catalog_relation(
+    "relation:sales_metrics",
+    source$id,
+    new_source_path(
+      c("main", "analytics", "sales_metrics"),
+      c("catalog", "schema", "table")
+    ),
+    kind = "metric_view"
+  )
+  provider <- new.env(parent = emptyenv())
+  provider$con <- con
+  provider$catalog <- new_commons_catalog(
+    sources = list(source),
+    relations = list(relation)
+  )
+  provider$relation_labels <- c(
+    "relation:sales_metrics" = "main.analytics.sales_metrics"
+  )
+  provider$selection_modes <- c("relation:sales_metrics" = "namespace")
+  reads <- 0L
+  local_mocked_bindings(
+    databricks_read_metric_yaml = function(con, path) {
+      reads <<- reads + 1L
+      yaml::read_yaml(test_path("fixtures", "databricks-metric-view.yaml"))
+    }
+  )
+
+  databricks_import_semantics(provider)
+  expect_equal(reads, 0L)
+  expect_length(provider$catalog$models, 0)
+
+  databricks_import_semantic_relation(provider, relation$id)
+  expect_equal(reads, 1L)
+  expect_length(provider$catalog$models, 1)
+  expect_true(length(provider$catalog$definitions) > 0)
+})
+
+test_that("live Databricks catalog discovery is opt in", {
+  skip_if_not(identical(Sys.getenv("COMMONS_LIVE_DATABRICKS"), "true"))
+  required <- c(
+    "COMMONS_DATABRICKS_CATALOG",
+    "COMMONS_DATABRICKS_SCHEMA",
+    "COMMONS_DATABRICKS_TABLE"
+  )
+  skip_if(any(!nzchar(Sys.getenv(required))))
+  con <- DBI::dbConnect(odbc::odbc(), "Databricks")
+  withr::defer(DBI::dbDisconnect(con))
+  source <- data_source(
+    con,
+    options = data_source_options(include = DBI::Id(
+      catalog = Sys.getenv("COMMONS_DATABRICKS_CATALOG"),
+      schema = Sys.getenv("COMMONS_DATABRICKS_SCHEMA"),
+      table = Sys.getenv("COMMONS_DATABRICKS_TABLE")
+    ))
+  )
+
+  expect_true(length(source$provider$catalog$relations) > 0)
+  expect_equal(nrow(source_describe(source, list_tables(source))$sample), 0)
 })
 
 test_that("Databricks measures compile through MEASURE", {

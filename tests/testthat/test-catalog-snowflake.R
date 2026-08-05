@@ -67,12 +67,85 @@ test_that("Snowflake semantic YAML imports governed assets", {
 
   expect_length(catalog$models, 1)
   expect_length(catalog$calculations, 1)
-  expect_length(catalog$context, 2)
+  expect_length(catalog$context, 5)
   expect_setequal(registry$defs$name, c("REGION", "REVENUE"))
   expect_false("PRIVATE_MARGIN" %in% registry$defs$name)
   dependency <- catalog$relations[[catalog$models[[1]]$datasets]]
   expect_equal(dependency$constraints[[1]]$enforcement, "asserted")
 })
+
+test_that("Snowflake imports all three recorded semantic-view shapes", {
+  recordings <- yaml::read_yaml(test_path(
+    "fixtures",
+    "snowflake-semantic-recordings.yaml"
+  ))$recordings
+
+  for (recording in recordings) {
+    provider <- snowflake_test_provider(recording$semantic_view$name)
+    relation <- provider$catalog$relations[[1]]
+    snowflake_import_semantic_model(
+      provider,
+      relation,
+      recording$semantic_view
+    )
+
+    expect_equal(
+      length(provider$catalog$models[[1]]$datasets),
+      recording$recorded_shape$tables
+    )
+    expect_true(length(provider$catalog$definitions) > 0)
+    expect_silent(validate_commons_catalog(provider$catalog))
+  }
+})
+
+test_that("Snowflake calls only read-only verified queries", {
+  provider <- snowflake_test_provider("VERIFIED_MODEL")
+  relation <- provider$catalog$relations[[1]]
+  specification <- list(
+    name = "VERIFIED_MODEL",
+    tables = list(list(
+      name = "ORDERS",
+      base_table = list(database = "DB", schema = "PUBLIC", table = "ORDERS")
+    )),
+    verified_queries = list(
+      list(name = "order_count", question = "How many orders?", sql = "SELECT COUNT(*) FROM ORDERS"),
+      list(name = "unsafe_example", question = "Refresh the table", sql = "CALL REFRESH_ORDERS()")
+    )
+  )
+
+  snowflake_import_semantic_model(provider, relation, specification)
+
+  expect_equal(
+    unname(vapply(provider$catalog$calculations, `[[`, character(1), "name")),
+    "order_count"
+  )
+  contexts <- vapply(provider$catalog$context, `[[`, character(1), "text")
+  expect_true(any(grepl("Refresh the table", contexts, fixed = TRUE)))
+})
+
+test_that("live Snowflake semantic discovery is opt in", {
+  skip_if_not(identical(Sys.getenv("COMMONS_LIVE_SNOWFLAKE"), "true"))
+  required <- c(
+    "COMMONS_SNOWFLAKE_DATABASE",
+    "COMMONS_SNOWFLAKE_SCHEMA",
+    "COMMONS_SNOWFLAKE_TABLE"
+  )
+  skip_if(any(!nzchar(Sys.getenv(required))))
+  con <- DBI::dbConnect(odbc::snowflake())
+  withr::defer(DBI::dbDisconnect(con))
+  source <- data_source(
+    con,
+    options = data_source_options(include = DBI::Id(
+      catalog = Sys.getenv("COMMONS_SNOWFLAKE_DATABASE"),
+      schema = Sys.getenv("COMMONS_SNOWFLAKE_SCHEMA"),
+      table = Sys.getenv("COMMONS_SNOWFLAKE_TABLE")
+    ))
+  )
+
+  expect_true(length(source$provider$catalog$relations) > 0)
+  expect_equal(nrow(source_describe(source, list_tables(source))$sample), 0)
+})
+
 
 test_that("Snowflake metrics compile through SEMANTIC_VIEW", {
   con <- DBI::dbConnect(duckdb::duckdb())

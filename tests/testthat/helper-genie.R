@@ -18,7 +18,8 @@ genie_test_provider <- function() {
       c("samples", "nyctaxi", "trips"),
       c("catalog", "schema", "table")
     ),
-    columns = columns
+    columns = columns,
+    access = new_catalog_access("queryable", "test fixture")
   )
   provider <- new.env(parent = emptyenv())
   provider$con <- con
@@ -28,6 +29,7 @@ genie_test_provider <- function() {
     provider = provider
   )
   provider$relation_labels <- c("relation:trips" = "trips")
+  provider$telemetry <- list()
   provider$snapshot <- list(
     principal = "executor@example.com",
     namespace = list(catalog = "samples", schema = "nyctaxi")

@@ -1,19 +1,20 @@
 # Register only the tools the agent's composition earns; nothing about its
 # surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
+  native_semantics <- catalog_semantics_possible(private$sources)
   c(
     if (pool_searchable(
       private$registry,
       private$definitions,
       private$calculations
-    )) {
+    ) || native_semantics) {
       list(tool_search_pool(private))
     },
     if (length(private$registry) > 0) list(tool_call_measure(private)),
-    if (length(private$calculations) > 0) {
+    if (length(private$calculations) > 0 || native_semantics) {
       list(tool_call_calculation(private))
     },
-    if (registry_has_metrics(private$definitions)) {
+    if (registry_has_metrics(private$definitions) || native_semantics) {
       list(tool_call_metrics(private))
     },
     if (any(vapply(
@@ -30,6 +31,13 @@ build_commons_tools <- function(self, private) {
       tool_run_r(private)
     )
   )
+}
+
+catalog_semantics_possible <- function(sources) {
+  any(vapply(sources, function(source) {
+    !is.null(source$provider) &&
+      isTRUE(source$provider$capabilities$native_semantics)
+  }, logical(1)))
 }
 
 tool_search_catalog <- function(private) {
@@ -96,16 +104,21 @@ tool_search_pool <- function(private) {
     },
     if (nrow(registry_defs(private$definitions)) > 0) {
       "governed definitions (apply as {{name}} tokens in run_sql, or through call_metrics)"
+    },
+    if (catalog_semantics_possible(private$sources)) {
+      "native semantics discovered by describe_table"
     }
   )
   ellmer::tool(
     function(query) {
+      definitions <- definitions_registry(private$sources)
+      calculations <- catalog_calculations_registry(private$sources)
       body <- search_pool_text(
         private$registry,
-        private$definitions,
+        definitions,
         query,
         source_names,
-        private$calculations
+        calculations
       )
       tool_result(
         body,
@@ -141,8 +154,9 @@ tool_call_metrics <- function(private) {
       arguments = "{}",
       source = NULL
     ) {
+      definitions <- definitions_registry(private$sources)
       call_metrics_impl(
-        private$definitions,
+        definitions,
         private$sources,
         private$handles,
         metrics = metrics,
@@ -213,7 +227,7 @@ tool_call_calculation <- function(private) {
   ellmer::tool(
     function(name, arguments = "{}", source = NULL) {
       call_catalog_calculation(
-        private$calculations,
+        catalog_calculations_registry(private$sources),
         name,
         arguments,
         source,
@@ -293,12 +307,14 @@ tool_search_context <- function(private) {
 tool_describe_table <- function(private) {
   ellmer::tool(
     function(table, source = NULL) {
-      describe_table_tool(
+      result <- describe_table_tool(
         resolve_sql_source(private$sources, source),
         table,
         source_name = source,
         tracker = private$first_touch
       )
+      catalog_runtime_refresh(private)
+      result
     },
     "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table.",
     arguments = list(
@@ -320,8 +336,9 @@ tool_run_sql <- function(private) {
   ellmer::tool(
     function(sql, source = NULL) {
       src <- resolve_sql_source(private$sources, source)
+      definitions <- definitions_registry(private$sources)
       expansion <- expand_for_run_sql(
-        private$definitions,
+        definitions,
         private$sources,
         source,
         sql
@@ -348,6 +365,27 @@ tool_run_sql <- function(private) {
       read_only_hint = TRUE
     )
   )
+}
+
+catalog_runtime_refresh <- function(private) {
+  private$definitions <- definitions_registry(private$sources)
+  private$calculations <- catalog_calculations_registry(private$sources)
+  private$context_layer <- augment_context_layer(
+    private$context_layer,
+    private$sources
+  )
+  private$corpus <- build_citation_corpus(
+    private$context_layer,
+    private$registry,
+    private$sources
+  )
+  if (!is.null(private$citation_request)) {
+    private$citation_request$request <- citation_request_text(
+      private$registry,
+      private$definitions
+    )
+  }
+  invisible(private)
 }
 
 run_sql_description <- function(definitions, measures = list()) {

@@ -1,0 +1,270 @@
+---
+title: "Database catalogs and semantic models"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Database catalogs and semantic models}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+#| include: false
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+A DBI connection is enough for commons to discover table and column metadata.
+Snowflake semantic views and Databricks metric views also contribute governed
+calculations and business context. No intermediate `data-dict.yaml` is needed.
+
+## Selecting objects
+
+Use `DBI::Id()` to distinguish identifier components. An ID with a `table`
+component selects one exact object. An ID ending at `schema` or `catalog`
+selects that namespace and its descendants.
+
+```r
+source <- data_source(
+  con,
+  options = data_source_options(
+    include = list(
+      DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC"),
+      DBI::Id(
+        catalog = "REFERENCE",
+        schema = "PUBLIC",
+        table = "CALENDAR"
+      )
+    ),
+    exclude = c("TMP_*", "BACKUP_?")
+  )
+)
+```
+
+Character values are exact table names relative to the connection's current
+namespace. Dots and wildcard characters in a character value are literal.
+Unqualified `*` and `?` globs are supported only by `exclude`.
+
+With no `include`, commons uses the current catalog/database and schema. Supply
+an explicit ID when either is unset. Snowflake calls its top identifier level a
+database; Unity Catalog calls it a catalog. `DBI::Id(catalog = ...)` is the
+portable representation for both.
+
+Discovery retains a full, session-local manifest. Small selections appear in
+the prompt; larger selections are searched with `search_catalog`. Columns and
+namespace-selected semantic documents remain lazy until `describe_table`
+touches an object; exact semantic-object selections import immediately.
+Databricks may take several
+minutes to start a stopped SQL warehouse on the first connection or query; wait
+for that call rather than retrying it.
+
+An exact physical-table selection can import an associated semantic model only
+when that model's dependencies are inside the selection. Selecting a semantic
+view or metric view exactly imports its declared dependency closure for
+compilation, but does not silently add those physical tables to the model-facing
+table list. Metadata that can be listed but not described is marked
+`visible_only`; successful hydration changes `unknown` access to `queryable`.
+
+By default, schema discovery returns no live rows. When authored metadata is
+present, commons may issue a zero-row `SELECT` to confirm that the current
+identity can query each matching physical relation before disclosing its
+table-scoped facts. Sampling is explicit and bounded:
+
+```r
+data_source(
+  con,
+  options = data_source_options(
+    include = DBI::Id(schema = "PUBLIC", table = "ORDERS"),
+    sample_rows = 3
+  )
+)
+```
+
+Restricted columns do not contribute sampled or authored example values.
+
+## Semantic context
+
+Snowflake imports semantic-view datasets, relationships, dimensions, time
+dimensions, facts, metrics, filters, instructions, variables, and read-only
+verified queries. Databricks imports metric-view sources, joins, dimensions,
+measures, filters, parameters, and supported window metadata. Native metrics
+run through the warehouse's semantic SQL syntax. Unsupported or out-of-scope
+assets are omitted with a catalog diagnostic rather than treated as trusted.
+
+To add the business context from one Databricks Genie Agent, provide its ID.
+The REST identity must be able to edit the Agent because the serialized
+definition is not available through the ordinary conversation API.
+
+```r
+source <- data_source(
+  con,
+  options = data_source_options(
+    include = DBI::Id(
+      catalog = "samples",
+      schema = "nyctaxi",
+      table = "trips"
+    ),
+    genie = genie_agent(
+      "0123456789abcdef0123456789abcdef",
+      profile = "my-databricks-profile"
+    )
+  )
+)
+```
+
+Genie prose, snippets, joins, examples, and functions are reconciled against
+the selected Unity Catalog objects. Static SQL examples are context;
+parameterized examples and governed functions are callable only when commons
+can type and bind every argument. Benchmarks remain evaluation-only. Genie
+Ontology and workspace-wide instructions are not imported because Databricks
+does not currently publish a context-export contract for them.
+
+An authored data dictionary can supplement discovery. Authored descriptions
+win when the table identity matches; discovered types and additive metadata are
+retained. Ambiguous matches fail rather than merging by guesswork. Table-scoped
+authored material is filtered against physical relations that pass a zero-row
+authorization probe under the viewer's identity. Dataset description, details,
+glossary, and other global authored context apply to every viewer of the
+application.
+
+```r
+data_source(
+  con,
+  dictionary = "data-dict.yaml",
+  options = data_source_options(
+    include = DBI::Id(schema = "PUBLIC", table = "ORDERS")
+  )
+)
+```
+
+Apache Ossie YAML or JSON can supply the same authored layer without becoming
+commons' runtime representation:
+
+```r
+source <- data_source(
+  con,
+  dictionary = ossie_model("semantic-model.yaml"),
+  options = data_source_options(
+    include = DBI::Id(schema = "PUBLIC", table = "ORDERS")
+  )
+)
+
+diagnostics <- write_ossie(source, "merged-semantic-model.yaml")
+```
+
+`write_ossie()` returns diagnostics for catalog constructs that Ossie cannot
+represent directly. Set `overwrite = TRUE` to replace an existing file.
+
+`tables` is deprecated. The mechanical migration is:
+
+```r
+# Before
+data_source(con, tables = "ORDERS")
+
+# After
+data_source(con, options = data_source_options(include = "ORDERS"))
+```
+
+## Permission boundary
+
+`include`, `exclude`, context retrieval, and evaluation-harness filtering
+control relevance and disclosure to the model. They do not revoke warehouse
+permissions. `run_sql` can query any object allowed by the DBI connection even
+when the object is absent from `include`. Use a least-privilege warehouse role
+and read-only connection when that distinction matters.
+
+Catalog prose, sampled rows, query results, and traces can leave the warehouse
+for the configured model and observability providers. Review those systems'
+retention and access policies before enabling sampling or sensitive context.
+
+## Posit Connect and Viewer OAuth
+
+Viewer OAuth gives each interactive viewer their own warehouse identity. Build
+the token, ODBC connection, data source, catalog, and commons agent inside the
+Shiny session. Do not put any of them in process-global state.
+
+```r
+server <- function(input, output, session) {
+  workspace <- paste0(
+    "https://",
+    sub("^https://|/$", "", Sys.getenv("DATABRICKS_HOST"))
+  )
+
+  con <- DBI::dbConnect(
+    odbc::databricks(),
+    httpPath = Sys.getenv("DATABRICKS_PATH")
+  )
+  session$onSessionEnded(function() DBI::dbDisconnect(con))
+
+  source <- data_source(
+    con,
+    options = data_source_options(
+      include = DBI::Id(
+        catalog = "main",
+        schema = "analytics"
+      ),
+      genie = genie_agent(
+        Sys.getenv("DATABRICKS_GENIE_AGENT_ID"),
+        workspace = workspace,
+        token = function() {
+          connectcreds::connect_viewer_token(workspace)$access_token
+        }
+      )
+    )
+  )
+
+  agent <- commons(chat, data_sources = list(warehouse = source))
+}
+```
+
+With a Viewer integration associated with the content, `odbc::databricks()`
+obtains the viewer token through `connectcreds`; the callback supplies a fresh
+token separately to the Genie REST import. Replace the first argument to
+`genie_agent()` with the Agent ID. The callback is invoked during import and
+removed from the resulting source and catalog metadata.
+
+Snowflake uses the same session pattern:
+
+```r
+con <- DBI::dbConnect(odbc::snowflake())
+```
+
+`odbc::snowflake()` likewise obtains the Viewer OAuth token automatically. Its
+account, warehouse, database, and schema can come from the deployment's
+Snowflake connection configuration or environment.
+
+Connect returns a refreshed access token on each credential exchange, but an
+existing ODBC connection does not acquire that new token automatically. A
+long-running session should handle an authentication failure by disconnecting,
+exchanging credentials again, and rebuilding the connection, source, catalog,
+and agent. Commons keeps no catalog cache across data sources, principals, or
+roles; a connection identity, role, or namespace change invalidates its
+session-local provider.
+
+Discovery is deliberately serialized within a source rather than pooled across
+viewers. A selection is capped at 25,000 objects, import failures are retained
+as diagnostics, and discovery/hydration timings stay in the session-local
+provider telemetry. This avoids a cross-principal cache; measured local startup
+was dominated by warehouse authentication and startup rather than catalog
+normalization.
+
+[Viewer integrations](https://docs.posit.co/connect/user/oauth-integrations/)
+support interactive authenticated content, not rendered/static content,
+anonymous access, or share links. Service-account integrations give every
+viewer the same warehouse identity and support interactive and rendered
+content. Databricks also supports workload identity and recommends it for
+non-interactive content because it avoids a stored long-lived secret. Snowflake
+service-account OAuth uses an external identity provider and a mapped Snowflake
+user. In every case, the effective Snowflake or Databricks grants determine
+what commons can discover and query.
+
+See the Connect administration guides for
+[Databricks](https://docs.posit.co/connect/admin/integrations/oauth-integrations/databricks/)
+and
+[Snowflake](https://docs.posit.co/connect/admin/integrations/oauth-integrations/snowflake/),
+and the vendor specifications for
+[Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/semantic-view-yaml-spec)
+and
+[Databricks metric views](https://docs.databricks.com/aws/en/metric-views/).

@@ -29,7 +29,7 @@ build_citation_corpus <- function(context_layer, registry, sources) {
     )
   }
   for (i in seq_along(sources)) {
-    dictionary <- sources[[i]]$dictionary
+    dictionary <- source_runtime_dictionary(sources[[i]])
     add(
       "data dictionary",
       c(

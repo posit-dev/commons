@@ -1,0 +1,22 @@
+version: 1.1
+comment: Governed sales metrics.
+source: samples.tpch.orders
+parameters:
+  - {name: minimum_amount, data_type: double, default: 0}
+filter: o_totalprice > minimum_amount
+joins:
+  - name: customer
+    source: samples.tpch.customer
+    on: source.o_custkey = customer.c_custkey
+    rely: {at_most_one_match: true}
+fields:
+  - name: region
+    expr: customer.c_mktsegment
+    comment: Customer segment.
+measures:
+  - name: revenue
+    expr: SUM(o_totalprice)
+    display_name: Total Revenue
+    synonyms: [sales]
+    window:
+      - {order: region, range: cumulative}

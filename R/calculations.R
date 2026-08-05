@@ -297,6 +297,7 @@ calculation_replace_token <- function(sql, token, replacement) {
 }
 
 source_query_bind <- function(source, sql, params) {
+  if (!is.null(source$provider)) catalog_provider_check(source$provider)
   if (length(params) == 0) {
     return(source_query(source, sql))
   }

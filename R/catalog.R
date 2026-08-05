@@ -1046,7 +1046,11 @@ catalog_relation_to_dictionary <- function(relation, definitions) {
   entry$columns <- lapply(relation$columns, catalog_column_to_dictionary)
 
   relation_definitions <- Filter(
-    function(definition) identical(definition$relation_id, relation$id),
+    function(definition) {
+      identical(definition$relation_id, relation$id) &&
+        !definition$name %in% names(relation$columns) &&
+        !is.null(definition$logical_type)
+    },
     definitions
   )
   entry$definitions <- lapply(

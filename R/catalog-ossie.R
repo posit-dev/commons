@@ -1,3 +1,54 @@
+#' Read an Apache Ossie semantic model
+#'
+#' @param path A YAML or JSON Apache Ossie model.
+#'
+#' @return An authored semantic model for the `dictionary` argument of
+#'   [data_source()].
+#' @export
+ossie_model <- function(path) {
+  catalog_from_ossie(path)
+}
+
+#' Write an Apache Ossie semantic model
+#'
+#' @param x A commons data source or an object returned by [ossie_model()].
+#' @param path A destination ending in `.yaml`, `.yml`, or `.json`.
+#' @param overwrite Whether to replace an existing file.
+#'
+#' @return The export diagnostics, invisibly.
+#' @export
+write_ossie <- function(x, path, overwrite = FALSE) {
+  catalog <- if (inherits(x, "commons_data_source")) {
+    x$provider$catalog %||% x$catalog
+  } else {
+    x
+  }
+  if (!inherits(catalog, "commons_catalog")) {
+    cli::cli_abort("{.arg x} must be a commons data source or Apache Ossie model.")
+  }
+  if (!rlang::is_string(path) ||
+      !grepl("\\.(yaml|yml|json)$", path, ignore.case = TRUE)) {
+    cli::cli_abort("{.arg path} must end in {.file .yaml}, {.file .yml}, or {.file .json}.")
+  }
+  rlang::check_bool(overwrite)
+  if (file.exists(path) && !isTRUE(overwrite)) {
+    cli::cli_abort("File {.path {path}} already exists; set {.arg overwrite} to true to replace it.")
+  }
+  exported <- catalog_to_ossie(catalog)
+  if (grepl("\\.json$", path, ignore.case = TRUE)) {
+    jsonlite::write_json(
+      exported$document,
+      path,
+      auto_unbox = TRUE,
+      pretty = TRUE,
+      null = "null"
+    )
+  } else {
+    yaml::write_yaml(exported$document, path)
+  }
+  invisible(exported$diagnostics)
+}
+
 catalog_from_ossie <- function(
   input,
   source_id = "source:ossie",
@@ -37,19 +88,33 @@ catalog_from_ossie <- function(
 
 catalog_to_ossie <- function(
   catalog,
-  version = "0.2.0.dev0",
+  version = NULL,
   call = rlang::caller_env()
 ) {
   validate_commons_catalog(catalog, call)
+  if (length(catalog$sources) == 0 || length(catalog$models) == 0) {
+    cli::cli_abort(
+      "An Apache Ossie export needs at least one semantic model.",
+      call = call
+    )
+  }
+  ossie_sources <- Filter(function(candidate) {
+    !is.null(candidate$extensions$ossie$document)
+  }, catalog$sources)
+  source <- if (length(ossie_sources)) ossie_sources[[1]] else catalog$sources[[1]]
+  version <- version %||% if (length(ossie_sources)) {
+    source$version
+  } else {
+    "0.2.0.dev0"
+  }
   if (!version %in% c("0.1.1", "0.2.0.dev0")) {
     cli::cli_abort("Apache Ossie version {.val {version}} is not supported.", call = call)
   }
-  source <- catalog$sources[[1]]
   document <- source$extensions$ossie$document %||% list()
   document$version <- version
   diagnostics <- list()
   exported <- lapply(catalog$models, function(model) {
-    result <- ossie_export_model(catalog, model)
+    result <- ossie_export_model(catalog, model, version)
     diagnostics <<- c(diagnostics, result$diagnostics)
     result$model
   })
@@ -179,8 +244,25 @@ ossie_import_model <- function(catalog, raw, source, provenance, call) {
   for (definition in c(definitions, metrics)) {
     catalog$definitions[[definition$id]] <- definition
   }
+  metric_context <- unlist(lapply(metrics, function(definition) {
+    ossie_ai_context_records(
+      definition$extensions$ossie$ai_context,
+      source$id,
+      definition$id,
+      "ossie_metric_context",
+      provenance
+    )
+  }), recursive = FALSE)
   contexts <- c(
     contexts,
+    metric_context,
+    ossie_ai_context_records(
+      raw$description,
+      source$id,
+      model$id,
+      "ossie_model_description",
+      provenance
+    ),
     ossie_ai_context_records(
       raw$ai_context,
       source$id,
@@ -193,6 +275,12 @@ ossie_import_model <- function(catalog, raw, source, provenance, call) {
       source$id,
       model$id,
       provenance
+    ),
+    ossie_snowflake_context(
+      model$extensions$snowflake,
+      source_id = source$id,
+      model_id = model$id,
+      provenance = provenance
     )
   )
   for (context in contexts) {
@@ -281,15 +369,18 @@ ossie_import_field <- function(field, model_id, relation_id, provenance, call) {
     cli::cli_abort("Every Apache Ossie field needs a string name.", call = call)
   }
   expressions <- ossie_import_expressions(field$expression, field$name, call)
-  is_time <- field$dimension$is_time
-  if (is.null(is_time)) {
-    is_time <- field$datatype %in% c("Date", "Time", "DateTime", "DateTimeTz")
+  role <- if (is.null(field$dimension)) {
+    "fact"
+  } else if (isTRUE(field$dimension$is_time)) {
+    "time_dimension"
+  } else {
+    "dimension"
   }
   new_catalog_definition(
     catalog_id("definition", model_id, relation_id, field$name),
     model_id,
     relation_id,
-    if (isTRUE(is_time)) "time_dimension" else "dimension",
+    role,
     field$name,
     label = field$label,
     description = field$description,
@@ -385,8 +476,10 @@ ossie_add_relationship_constraints <- function(
 
 ossie_source_path <- function(source) {
   parts <- strsplit(source, ".", fixed = TRUE)[[1]]
-  if (length(parts) == 3 && all(grepl("^[A-Za-z_][A-Za-z0-9_$]*$", parts))) {
-    return(new_source_path(parts, c("catalog", "schema", "table")))
+  valid <- all(grepl("^[A-Za-z_][A-Za-z0-9_$]*$", parts))
+  if (valid && length(parts) %in% 1:3) {
+    roles <- utils::tail(c("catalog", "schema", "table"), length(parts))
+    return(new_source_path(parts, roles))
   }
   new_source_path(c(model_dataset = catalog_fingerprint(source)), "model_dataset")
 }
@@ -410,7 +503,8 @@ ossie_ai_context_records <- function(
   source_id,
   scope,
   kind,
-  provenance
+  provenance,
+  suffix = NULL
 ) {
   if (is.null(ai_context)) return(list())
   texts <- if (is.character(ai_context)) {
@@ -423,7 +517,7 @@ ossie_ai_context_records <- function(
   for (i in seq_along(texts)) {
     for (delivery in c("first_touch", "retrieval")) {
       context <- new_catalog_context(
-        catalog_id("context", scope, kind, i, delivery),
+        catalog_id("context", scope, kind, suffix, i, delivery),
         source_id,
         kind,
         texts[[i]],
@@ -452,9 +546,62 @@ ossie_relationship_context <- function(
       source_id,
       model_id,
       "ossie_relationship_context",
-      provenance
+      provenance,
+      suffix = relationship$name
     )
+    records <- lapply(records, function(record) {
+      record$extensions$ossie_relationship <- relationship[c("from", "to")]
+      record
+    })
     out <- c(out, records)
+  }
+  out
+}
+
+ossie_snowflake_context <- function(
+  extension,
+  source_id,
+  model_id,
+  provenance
+) {
+  if (!is.list(extension)) return(list())
+  instructions <- c(
+    extension$custom_instructions,
+    unlist(extension$module_custom_instructions %||% list(), use.names = FALSE)
+  )
+  out <- ossie_ai_context_records(
+    instructions,
+    source_id,
+    model_id,
+    "snowflake_instruction",
+    provenance
+  )
+  for (i in seq_along(extension$verified_queries %||% list())) {
+    query <- extension$verified_queries[[i]]
+    if (is.list(query)) {
+      text <- c(
+        query$question %||% query$name,
+        if (rlang::is_string(query$sql) && nzchar(query$sql)) {
+          paste("Verified SQL:", query$sql)
+        }
+      )
+    } else {
+      text <- as.character(query)
+    }
+    text <- paste(text[!is.na(text) & nzchar(text)], collapse = "\n")
+    if (!nzchar(text)) next
+    context <- new_catalog_context(
+      catalog_id("context", model_id, "snowflake_verified_query", i),
+      source_id,
+      "verified_query",
+      text,
+      scope = model_id,
+      delivery = "retrieval",
+      authority = list(kind = "authored", system = "apache_ossie"),
+      provenance = provenance,
+      extensions = list(ossie = query, snowflake = query)
+    )
+    out[[context$id]] <- context
   }
   out
 }
@@ -462,8 +609,8 @@ ossie_relationship_context <- function(
 ossie_import_extensions <- function(value) {
   out <- list(ossie = value)
   for (extension in value$custom_extensions %||% list()) {
-    vendor <- tolower(extension$vendor_name %||% "")
-    data <- ossie_extension_data(extension$data)
+    vendor <- tolower(extension$vendor_name %||% extension$vendor %||% "")
+    data <- ossie_extension_data(extension$data %||% extension$content)
     if (nzchar(vendor)) out[[vendor]] <- data
   }
   out
@@ -477,7 +624,7 @@ ossie_extension_data <- function(data) {
   )
 }
 
-ossie_export_model <- function(catalog, model) {
+ossie_export_model <- function(catalog, model, version) {
   raw <- model$extensions$ossie %||% list()
   diagnostics <- list()
   raw$name <- model$name
@@ -488,7 +635,7 @@ ossie_export_model <- function(catalog, model) {
     raw$ai_context
   )
   datasets <- lapply(model$datasets, function(id) {
-    result <- ossie_export_dataset(catalog, model, catalog$relations[[id]])
+    result <- ossie_export_dataset(catalog, model, catalog$relations[[id]], version)
     diagnostics <<- c(diagnostics, result$diagnostics)
     result$dataset
   })
@@ -499,7 +646,12 @@ ossie_export_model <- function(catalog, model) {
       identical(definition$role, "metric"),
     catalog$definitions
   )
-  metric_results <- lapply(metrics, ossie_export_definition, catalog = catalog)
+  metric_results <- lapply(
+    metrics,
+    ossie_export_definition,
+    catalog = catalog,
+    version = version
+  )
   diagnostics <- c(
     diagnostics,
     unlist(lapply(metric_results, `[[`, "diagnostics"), recursive = FALSE)
@@ -517,12 +669,13 @@ ossie_export_model <- function(catalog, model) {
     raw$custom_extensions <- ossie_append_extension(
       raw$custom_extensions,
       "COMMONS",
-      list(definition = ossie_plain(definition))
+      list(definition = ossie_plain(definition)),
+      version
     )
   }
   unsupported <- Filter(
     function(definition) identical(definition$model_id, model$id) &&
-      !definition$role %in% c("metric", "dimension", "time_dimension"),
+      !definition$role %in% c("metric", "dimension", "time_dimension", "fact"),
     catalog$definitions
   )
   for (definition in unsupported) {
@@ -535,7 +688,8 @@ ossie_export_model <- function(catalog, model) {
     raw$custom_extensions <- ossie_append_extension(
       raw$custom_extensions,
       "COMMONS",
-      list(definition = ossie_plain(definition))
+      list(definition = ossie_plain(definition)),
+      version
     )
   }
   native <- Filter(Negate(is.null), model$extensions[c("snowflake", "databricks")])
@@ -544,7 +698,8 @@ ossie_export_model <- function(catalog, model) {
       raw$custom_extensions <- ossie_append_extension(
         raw$custom_extensions,
         toupper(vendor),
-        native[[vendor]]
+        native[[vendor]],
+        version
       )
       diagnostics[[length(diagnostics) + 1]] <- new_catalog_diagnostic(
         "ossie_native_extension",
@@ -559,11 +714,11 @@ ossie_export_model <- function(catalog, model) {
 
 ossie_extension_vendors <- function(extensions) {
   tolower(vapply(extensions %||% list(), function(extension) {
-    extension$vendor_name %||% ""
+    extension$vendor_name %||% extension$vendor %||% ""
   }, character(1)))
 }
 
-ossie_export_dataset <- function(catalog, model, relation) {
+ossie_export_dataset <- function(catalog, model, relation, version) {
   raw <- relation$extensions$ossie %||% list()
   raw$name <- relation$name
   raw$source <- ossie_relation_source(relation)
@@ -581,9 +736,14 @@ ossie_export_dataset <- function(catalog, model, relation) {
   fields <- Filter(function(definition) {
     identical(definition$model_id, model$id) &&
       identical(definition$relation_id, relation$id) &&
-      definition$role %in% c("dimension", "time_dimension")
+      definition$role %in% c("dimension", "time_dimension", "fact")
   }, catalog$definitions)
-  field_results <- lapply(fields, ossie_export_definition, catalog = catalog)
+  field_results <- lapply(
+    fields,
+    ossie_export_definition,
+    catalog = catalog,
+    version = version
+  )
   diagnostics <- unlist(
     lapply(field_results, `[[`, "diagnostics"),
     recursive = FALSE
@@ -601,7 +761,8 @@ ossie_export_dataset <- function(catalog, model, relation) {
     raw$custom_extensions <- ossie_append_extension(
       raw$custom_extensions,
       "COMMONS",
-      list(definition = ossie_plain(definition))
+      list(definition = ossie_plain(definition)),
+      version
     )
   }
   unrepresented <- Filter(function(column) {
@@ -611,7 +772,8 @@ ossie_export_dataset <- function(catalog, model, relation) {
     raw$custom_extensions <- ossie_append_extension(
       raw$custom_extensions,
       "COMMONS",
-      list(columns = lapply(unrepresented, ossie_plain))
+      list(columns = lapply(unrepresented, ossie_plain)),
+      version
     )
     diagnostics[[length(diagnostics) + 1]] <- new_catalog_diagnostic(
       "ossie_columns_extension_only",
@@ -623,7 +785,7 @@ ossie_export_dataset <- function(catalog, model, relation) {
   list(dataset = catalog_compact(raw), diagnostics = diagnostics)
 }
 
-ossie_export_definition <- function(definition, catalog) {
+ossie_export_definition <- function(definition, catalog, version) {
   raw <- definition$extensions$ossie %||% list()
   supported_names <- c(
     "ansi_sql", "snowflake", "mdx", "tableau", "databricks", "maql", "bigquery"
@@ -641,7 +803,8 @@ ossie_export_definition <- function(definition, catalog) {
     raw$custom_extensions <- ossie_append_extension(
       raw$custom_extensions,
       "COMMONS",
-      list(expressions = lapply(unsupported, ossie_plain))
+      list(expressions = lapply(unsupported, ossie_plain)),
+      version
     )
     diagnostics[[1]] <- new_catalog_diagnostic(
       "ossie_expression_extension_only",
@@ -715,19 +878,19 @@ ossie_relation_source <- function(relation) {
   paste(relation$path$components, collapse = ".")
 }
 
-ossie_append_extension <- function(extensions, vendor, data) {
-  c(
-    extensions %||% list(),
-    list(list(
-      vendor_name = vendor,
-      data = as.character(jsonlite::toJSON(
-        data,
-        auto_unbox = TRUE,
-        null = "null",
-        na = "null"
-      ))
-    ))
-  )
+ossie_append_extension <- function(extensions, vendor, data, version) {
+  content <- as.character(jsonlite::toJSON(
+    data,
+    auto_unbox = TRUE,
+    null = "null",
+    na = "null"
+  ))
+  extension <- if (identical(version, "0.1.1")) {
+    list(vendor = vendor, content = content)
+  } else {
+    list(vendor_name = vendor, data = content)
+  }
+  c(extensions %||% list(), list(extension))
 }
 
 ossie_plain <- function(value) {

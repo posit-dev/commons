@@ -41,8 +41,8 @@
 #'   connection's grants remain the security boundary for SQL execution.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
-#'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
-#'   `Data dictionaries` section.
+#'   [data-dict.yaml](https://data-dict.tidyverse.org/) format, or an Apache
+#'   Ossie model from [ossie_model()]. See the `Data dictionaries` section.
 #'
 #' @section Data dictionaries:
 #' A data dictionary describes a data source's tables and columns: what each
@@ -68,6 +68,11 @@
 #' query runs. Definitions are validated against the live source and
 #' delivered through all three channels above.
 #'
+#' [ossie_model()] reads Apache Ossie YAML or JSON into the same authored
+#' metadata layer. Matching and selection rules are identical to data-dict;
+#' [write_ossie()] exports the representable merged catalog and reports lossy
+#' constructs as diagnostics.
+#'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
 #' would modify data or schema (`INSERT`, `UPDATE`, `DROP`, and similar) are
@@ -92,7 +97,7 @@ data_source <- function(
   options = NULL
 ) {
   dots <- rlang::list2(...)
-  dictionary <- as_data_dictionary(dictionary)
+  dictionary <- as_authored_metadata(dictionary)
   kind <- data_source_kind(dots)
   options <- as_data_source_options(options, tables, kind)
 
@@ -162,6 +167,16 @@ data_source_connection <- function(
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
   provider <- new_catalog_provider(con, options, call)
+  authored <- catalog_from_authored_metadata(dictionary)
+  if (length(authored$sources)) {
+    catalog_provider_probe_authored(provider, authored, call = call)
+    provider$catalog <- catalog_merge(
+      provider$catalog,
+      authored,
+      relation_ids = names(provider$relation_labels),
+      call = call
+    )
+  }
   table_registry <- list(
     labels = names(provider$table_ids),
     ids = provider$table_ids
@@ -171,11 +186,6 @@ data_source_connection <- function(
     "commons.data_source.n_tables",
     length(table_registry$labels)
   )
-
-  authored <- catalog_from_data_dictionary(dictionary)
-  if (length(authored$sources)) {
-    provider$catalog <- catalog_merge(provider$catalog, authored, call = call)
-  }
   new_data_source(
     con,
     table_registry$labels,
@@ -184,7 +194,7 @@ data_source_connection <- function(
     dictionary = dictionary,
     catalog = provider$catalog,
     provider = provider,
-    options = options,
+    options = provider$options,
     relation_labels = provider$relation_labels
   )
 }
@@ -281,11 +291,17 @@ new_data_source <- function(
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
   pending = NULL,
-  catalog = catalog_from_data_dictionary(dictionary),
+  catalog = catalog_from_authored_metadata(dictionary),
   provider = NULL,
   options = data_source_options(),
   relation_labels = character()
 ) {
+  if (!is.null(provider) && length(catalog$sources)) {
+    dictionary <- catalog_to_runtime_dictionary(catalog, relation_labels)
+  } else if (inherits(dictionary, "commons_catalog")) {
+    dictionary <- catalog_to_data_dictionary(catalog)
+  }
+
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
   handle <- NULL
@@ -536,6 +552,7 @@ source_restricted_columns <- function(source, table) {
 }
 
 source_query <- function(source, sql) {
+  if (!is.null(source$provider)) catalog_provider_check(source$provider)
   check_query(sql)
   if (is.null(source$pending)) {
     return(DBI::dbGetQuery(source$con, sql))

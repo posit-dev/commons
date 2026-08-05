@@ -19,8 +19,8 @@ their local-name-to-pin-name mapping.}
 
 \item{dictionary}{An optional path to a data dictionary describing the
 source's tables and columns, in the
-\href{https://data-dict.tidyverse.org/}{data-dict.yaml} format. See the
-\verb{Data dictionaries} section.}
+\href{https://data-dict.tidyverse.org/}{data-dict.yaml} format, or an Apache
+Ossie model from \code{\link[=ossie_model]{ossie_model()}}. See the \verb{Data dictionaries} section.}
 
 \item{options}{Selection, exclusion, and sampling controls from
 \code{\link[=data_source_options]{data_source_options()}}. DBI connections discover their current namespace
@@ -85,6 +85,11 @@ expressions with declared types that the model applies as \code{{{name}}}
 tokens in \code{run_sql} queries, expanded to their trusted SQL before the
 query runs. Definitions are validated against the live source and
 delivered through all three channels above.
+
+\code{\link[=ossie_model]{ossie_model()}} reads Apache Ossie YAML or JSON into the same authored
+metadata layer. Matching and selection rules are identical to data-dict;
+\code{\link[=write_ossie]{write_ossie()}} exports the representable merged catalog and reports lossy
+constructs as diagnostics.
 }
 
 \section{Trust}{

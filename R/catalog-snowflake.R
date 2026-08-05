@@ -94,41 +94,58 @@ snowflake_list_namespace <- function(con, prefix, call) {
 
 snowflake_import_semantics <- function(provider) {
   selected_ids <- names(provider$relation_labels)
-  for (relation_id in selected_ids) {
-    relation <- provider$catalog$relations[[relation_id]]
-    if (!relation$kind %in% c("semantic_view", "unknown")) {
-      next
-    }
-    specification <- snowflake_read_semantic_yaml(provider$con, relation$path)
-    if (is.null(specification)) {
-      specification <- snowflake_describe_semantic_view(
-        provider$con,
-        relation$path
-      )
-    }
-    if (is.null(specification)) {
-      if (identical(relation$kind, "semantic_view")) {
-        relation$access <- new_catalog_access(
-          "visible_only",
-          "semantic metadata could not be read"
-        )
-        provider$catalog$relations[[relation$id]] <- relation
-        catalog_provider_diagnostic(
-          provider,
-          "snowflake_semantic_view_unreadable",
-          sprintf("Skipped semantic view %s because its metadata could not be read.", relation$name),
-          entity_id = relation$id
-        )
-      }
-      next
-    }
-    relation$kind <- "semantic_view"
-    relation$description <- specification$description %||% relation$description
-    provider$catalog$relations[[relation_id]] <- relation
-    snowflake_import_semantic_model(provider, relation, specification)
+  exact_ids <- selected_ids[provider$selection_modes[selected_ids] == "exact"]
+  for (relation_id in exact_ids) {
+    snowflake_import_semantic_relation(provider, relation_id)
   }
   snowflake_import_associated_semantics(provider)
   validate_commons_catalog(provider$catalog)
+  invisible(provider)
+}
+
+snowflake_import_semantic_relation <- function(provider, relation_id) {
+  relation <- provider$catalog$relations[[relation_id]]
+  if (is.null(relation) ||
+      !relation$kind %in% c("semantic_view", "unknown") ||
+      isTRUE(relation$extensions$commons$semantic_attempted) ||
+      any(vapply(provider$catalog$models, function(model) {
+        relation_id %in% model$exposed
+      }, logical(1)))) {
+    return(invisible(provider))
+  }
+  specification <- snowflake_read_semantic_yaml(provider$con, relation$path)
+  if (is.null(specification)) {
+    specification <- snowflake_describe_semantic_view(
+      provider$con,
+      relation$path
+    )
+  }
+  if (is.null(specification)) {
+    relation$extensions$commons$semantic_attempted <- TRUE
+    provider$catalog$relations[[relation$id]] <- relation
+    if (identical(relation$kind, "semantic_view")) {
+      relation$access <- new_catalog_access(
+        "visible_only",
+        "semantic metadata could not be read"
+      )
+      provider$catalog$relations[[relation$id]] <- relation
+      catalog_provider_diagnostic(
+        provider,
+        "snowflake_semantic_view_unreadable",
+        sprintf(
+          "Skipped semantic view %s because its metadata could not be read.",
+          relation$name
+        ),
+        entity_id = relation$id
+      )
+    }
+    return(invisible(provider))
+  }
+  relation$kind <- "semantic_view"
+  relation$description <- specification$description %||% relation$description
+  relation$extensions$commons$semantic_attempted <- TRUE
+  provider$catalog$relations[[relation_id]] <- relation
+  snowflake_import_semantic_model(provider, relation, specification)
   invisible(provider)
 }
 
@@ -522,6 +539,10 @@ snowflake_import_semantic_model <- function(provider, relation, specification) {
     source,
     provenance
   )
+  contexts <- c(
+    contexts,
+    snowflake_verified_context(specification, model, source, provenance)
+  )
   for (context in contexts) {
     catalog$context[[context$id]] <- context
   }
@@ -664,6 +685,7 @@ snowflake_semantic_context <- function(
   provenance
 ) {
   instructions <- c(
+    specification$description,
     specification$custom_instructions,
     unlist(specification$module_custom_instructions, use.names = FALSE)
   )
@@ -696,7 +718,7 @@ snowflake_verified_calculations <- function(
 ) {
   out <- list()
   for (query in specification$verified_queries %||% list()) {
-    if (is.null(query$sql) || !nzchar(query$sql)) {
+    if (!snowflake_verified_query_executable(query$sql)) {
       next
     }
     name <- query$name %||% query$question
@@ -718,6 +740,51 @@ snowflake_verified_calculations <- function(
     out[[calculation$id]] <- calculation
   }
   out
+}
+
+snowflake_verified_context <- function(
+  specification,
+  model,
+  source,
+  provenance
+) {
+  out <- list()
+  for (i in seq_along(specification$verified_queries %||% list())) {
+    query <- specification$verified_queries[[i]]
+    text <- paste(c(
+      query$question,
+      if (!is.null(query$sql) && nzchar(query$sql)) {
+        paste("Verified SQL:", query$sql)
+      }
+    ), collapse = "\n")
+    if (!nzchar(text)) next
+    context <- new_catalog_context(
+      catalog_id("context", model$id, "verified_query", i),
+      source$id,
+      "verified_query",
+      text,
+      scope = model$id,
+      delivery = "retrieval",
+      authority = list(kind = "certified"),
+      provenance = provenance,
+      extensions = list(snowflake = query)
+    )
+    out[[context$id]] <- context
+  }
+  out
+}
+
+snowflake_verified_query_executable <- function(sql) {
+  if (!is.character(sql) || length(sql) != 1 || is.na(sql) || !nzchar(sql)) {
+    return(FALSE)
+  }
+  tryCatch(
+    {
+      check_query(sql)
+      TRUE
+    },
+    error = function(err) FALSE
+  )
 }
 
 catalog_fingerprint <- function(x) {

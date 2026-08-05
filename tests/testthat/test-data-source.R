@@ -148,6 +148,58 @@ test_that("sample_rows opts into bounded live values", {
   expect_equal(nrow(source_describe(sampled, "orders")$sample), 2)
 })
 
+test_that("selection limits model context rather than connection grants", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "selected", data.frame(id = 1))
+  DBI::dbWriteTable(con, "not_selected", data.frame(id = 2))
+  source <- data_source(
+    con,
+    options = data_source_options(include = "selected")
+  )
+
+  expect_equal(list_tables(source), "selected")
+  expect_equal(source_query(source, "SELECT * FROM not_selected")$id, 2)
+})
+
+test_that("provider identity is checked before every query", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "orders", data.frame(id = 1))
+  source <- data_source(
+    con,
+    options = data_source_options(include = "orders")
+  )
+  source$provider$snapshot$principal <- "different-principal"
+
+  expect_snapshot(source_query(source, "SELECT * FROM orders"), error = TRUE)
+})
+
+test_that("catalog telemetry covers discovery and hydration", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "orders", data.frame(id = 1))
+  source <- data_source(
+    con,
+    options = data_source_options(include = "orders")
+  )
+
+  source_describe(source, "orders")
+  operations <- vapply(
+    source$provider$telemetry,
+    `[[`,
+    character(1),
+    "operation"
+  )
+
+  expect_equal(operations, c("discovery", "hydrate"))
+  expect_true(all(vapply(
+    source$provider$telemetry,
+    function(event) event$elapsed >= 0,
+    logical(1)
+  )))
+})
+
 test_that("connection discovery merges an authored dictionary", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
@@ -184,6 +236,64 @@ test_that("connection discovery merges an authored dictionary", {
     definitions_registry(list(warehouse = src))$defs$table,
     "crm.orders"
   )
+  expect_equal(
+    src$provider$catalog$relations[[names(src$relation_labels)]]$access$state,
+    "queryable"
+  )
+  expect_true("authorize" %in% vapply(
+    src$provider$telemetry,
+    `[[`,
+    character(1),
+    "operation"
+  ))
+})
+
+test_that("unqueryable relations do not receive authored metadata", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "orders", data.frame(id = 1))
+  DBI::dbWriteTable(con, "secret", data.frame(id = 1))
+  dictionary <- new_data_dictionary(list(tables = list(
+    orders = list(definitions = list(order_count = list(
+      expr = "COUNT(*)",
+      type = "number"
+    ))),
+    secret = list(
+      description = "Not available to this viewer.",
+      definitions = list(secret_count = list(
+        expr = "COUNT(*)",
+        type = "number"
+      ))
+    )
+  )))
+  local_mocked_bindings(
+    catalog_relation_queryability = function(con, path) {
+      if (identical(utils::tail(path$components, 1), "secret")) {
+        return(simpleError("not authorized"))
+      }
+      TRUE
+    }
+  )
+
+  source <- data_source(
+    con,
+    dictionary = dictionary,
+    options = data_source_options(include = c("orders", "secret"))
+  )
+  context <- vapply(
+    source$provider$catalog$context,
+    `[[`,
+    character(1),
+    "text"
+  )
+
+  expect_equal(list_tables(source), "orders")
+  expect_equal(names(source$dictionary$tables), "orders")
+  expect_equal(
+    definitions_registry(list(warehouse = source))$defs$name,
+    "order_count"
+  )
+  expect_false(any(grepl("Not available", context, fixed = TRUE)))
 })
 
 test_that("catalog discovery exposes startup progress", {

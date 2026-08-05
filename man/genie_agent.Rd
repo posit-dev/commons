@@ -4,7 +4,7 @@
 \alias{genie_agent}
 \title{Configure a Databricks Genie Agent}
 \usage{
-genie_agent(id, workspace = NULL, profile = NULL)
+genie_agent(id, workspace = NULL, profile = NULL, token = NULL)
 }
 \arguments{
 \item{id}{The Genie Agent ID.}
@@ -14,6 +14,10 @@ genie_agent(id, workspace = NULL, profile = NULL)
 
 \item{profile}{An optional Databricks CLI profile. Profile credentials remain
 in the CLI credential store and are not retained by commons.}
+
+\item{token}{An optional zero-argument function that returns a short-lived
+Databricks access token. This supports per-session credentials on Posit
+Connect without retaining the returned token in catalog metadata.}
 }
 \value{
 A configuration object for the \code{genie} argument of

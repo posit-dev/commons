@@ -1,14 +1,27 @@
 test_that("Genie Agent configuration retains no credentials", {
   config <- genie_agent(
-    "01f190d76f64158d8a1dd3618e1f10d0",
+    "0123456789abcdef0123456789abcdef",
     workspace = "https://example.cloud.databricks.com/",
     profile = "example"
   )
 
   expect_equal(config$workspace, "https://example.cloud.databricks.com")
   expect_equal(config$profile, "example")
-  expect_false(any(grepl("token|credential", names(config), ignore.case = TRUE)))
+  expect_null(config$token)
   expect_snapshot(genie_agent("not-an-id"), error = TRUE)
+})
+
+test_that("Genie token callbacks are forgotten after import", {
+  token <- function() "short-lived-token"
+  config <- genie_agent(
+    "0123456789abcdef0123456789abcdef",
+    workspace = "https://example.cloud.databricks.com",
+    token = token
+  )
+  options <- data_source_options(genie = config)
+
+  expect_identical(options$genie$token, token)
+  expect_null(catalog_forget_credentials(options)$genie$token)
 })
 
 test_that("serialized Genie context is scoped and routed by authority", {
@@ -29,7 +42,7 @@ test_that("serialized Genie context is scoped and routed by authority", {
 
   genie_import(
     provider,
-    genie_agent("01f190d76f64158d8a1dd3618e1f10d0"),
+    genie_agent("0123456789abcdef0123456789abcdef"),
     fetch = fetch
   )
 
@@ -73,7 +86,7 @@ test_that("Genie parameters are typed, defaulted, and bound", {
   )
   genie_import(
     provider,
-    genie_agent("01f190d76f64158d8a1dd3618e1f10d0"),
+    genie_agent("0123456789abcdef0123456789abcdef"),
     fetch = fetch
   )
   calculation <- Filter(
@@ -125,7 +138,7 @@ test_that("Genie changes are fetched for each provider construction", {
       principal = "executor@example.com"
     )
   }
-  config <- genie_agent("01f190d76f64158d8a1dd3618e1f10d0")
+  config <- genie_agent("0123456789abcdef0123456789abcdef")
 
   genie_import(provider, config, fetch)
   first <- provider$catalog$models[[1]]$fingerprint
@@ -146,12 +159,41 @@ test_that("Genie permission failures are independent of DBI metadata", {
   expect_snapshot(
     genie_import(
       provider,
-      genie_agent("01f190d76f64158d8a1dd3618e1f10d0"),
+      genie_agent("0123456789abcdef0123456789abcdef"),
       fetch
     ),
     error = TRUE
   )
   expect_length(provider$catalog$relations, 1)
+})
+
+test_that("Genie context requires DBI query access", {
+  fixture <- paste(
+    readLines(test_path("fixtures", "genie-v2.json"), warn = FALSE),
+    collapse = "\n"
+  )
+  provider <- genie_test_provider()
+  provider$catalog$relations[["relation:trips"]]$access <- new_catalog_access()
+  local_mocked_bindings(
+    catalog_relation_queryability = function(con, path) {
+      simpleError("not authorized")
+    }
+  )
+  fetch <- function(config) list(
+    response = list(serialized_space = fixture),
+    principal = "executor@example.com"
+  )
+
+  genie_import(
+    provider,
+    genie_agent("0123456789abcdef0123456789abcdef"),
+    fetch
+  )
+  codes <- vapply(provider$catalog$diagnostics, `[[`, character(1), "code")
+
+  expect_length(provider$catalog$models, 0)
+  expect_length(provider$catalog$context, 0)
+  expect_true("genie_asset_unqueryable" %in% codes)
 })
 
 test_that("live Genie import honors the selected relation", {

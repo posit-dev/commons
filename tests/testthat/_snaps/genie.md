@@ -26,7 +26,7 @@
 # Genie permission failures are independent of DBI metadata
 
     Code
-      genie_import(provider, genie_agent("01f190d76f64158d8a1dd3618e1f10d0"), fetch)
+      genie_import(provider, genie_agent("0123456789abcdef0123456789abcdef"), fetch)
     Condition
       Error in `fetch()`:
       ! The REST identity cannot edit this Agent.

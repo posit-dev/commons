@@ -1,0 +1,61 @@
+# Sanitized structural recordings of the three semantic views visible during development.
+recordings:
+  - recorded_shape: {tables: 2, relationships: 0, metrics: 0}
+    semantic_view:
+      name: MODEL_A
+      description: A two-dataset environmental model.
+      tables:
+        - name: OBSERVATIONS
+          base_table: {database: SOURCE_A, schema: PUBLIC, table: OBSERVATIONS}
+          dimensions:
+            - {name: REGION, expr: REGION, data_type: VARCHAR}
+            - {name: OBSERVED_AT, expr: OBSERVED_AT, data_type: TIMESTAMP}
+        - name: SPECIES
+          base_table: {database: SOURCE_A, schema: PUBLIC, table: SPECIES}
+          dimensions:
+            - {name: SPECIES_NAME, expr: SPECIES_NAME, data_type: VARCHAR}
+          facts:
+            - {name: WIDTH, expr: WIDTH, data_type: NUMBER}
+  - recorded_shape: {tables: 2, relationships: 1, metrics: 0}
+    semantic_view:
+      name: MODEL_B
+      tables:
+        - name: ENTITIES
+          base_table: {database: SOURCE_B, schema: ERP, table: ENTITIES}
+          primary_key: {columns: [ENTITY_ID]}
+          dimensions:
+            - {name: ENTITY_NAME, expr: ENTITY_NAME, data_type: VARCHAR}
+          filters:
+            - {name: ACTIVE_ENTITY, expr: IS_ACTIVE, data_type: BOOLEAN}
+        - name: EVENTS
+          base_table: {database: SOURCE_B, schema: ERP, table: EVENTS}
+          dimensions:
+            - {name: EVENT_TYPE, expr: EVENT_TYPE, data_type: VARCHAR}
+          time_dimensions:
+            - {name: EVENT_AT, expr: EVENT_AT, data_type: TIMESTAMP}
+          facts:
+            - {name: EVENT_VALUE, expr: EVENT_VALUE, data_type: NUMBER}
+          metrics:
+            - {name: EVENT_COUNT, expr: COUNT(*), data_type: NUMBER}
+      relationships:
+        - name: EVENTS_TO_ENTITIES
+          left_table: EVENTS
+          right_table: ENTITIES
+          relationship_columns:
+            - {left_column: ENTITY_ID, right_column: ENTITY_ID}
+  - recorded_shape: {tables: 1, relationships: 0, metrics: 0}
+    semantic_view:
+      name: MODEL_C
+      tables:
+        - name: RECORDS
+          base_table: {database: SOURCE_C, schema: PUBLIC, table: RECORDS}
+          primary_key: {columns: [ID]}
+          dimensions:
+            - {name: CATEGORY, expr: CATEGORY, data_type: VARCHAR}
+            - {name: STATUS, expr: STATUS, data_type: VARCHAR}
+          facts:
+            - {name: AMOUNT, expr: AMOUNT, data_type: NUMBER}
+            - {name: BALANCE, expr: BALANCE, data_type: NUMBER}
+          metrics:
+            - {name: TOTAL_RECORDS, expr: COUNT(*), data_type: NUMBER}
+            - {name: TOTAL_AMOUNT, expr: SUM(AMOUNT), data_type: NUMBER}

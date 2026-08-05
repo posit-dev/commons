@@ -132,49 +132,68 @@ databricks_list_hive_metastore <- function(con, catalog, schema, call) {
 
 databricks_import_semantics <- function(provider) {
   selected_ids <- names(provider$relation_labels)
-  for (relation_id in selected_ids) {
-    relation <- provider$catalog$relations[[relation_id]]
-    if (!relation$kind %in% c("metric_view", "view", "unknown")) {
-      next
-    }
-    specification <- databricks_read_metric_yaml(provider$con, relation$path)
-    if (is.null(specification)) {
-      if (identical(relation$kind, "metric_view")) {
-        relation$access <- new_catalog_access(
-          "visible_only",
-          "metric-view metadata could not be read"
-        )
-        provider$catalog$relations[[relation$id]] <- relation
-        catalog_provider_diagnostic(
-          provider,
-          "databricks_metric_view_unreadable",
-          sprintf("Skipped metric view %s because its YAML could not be read.", relation$name),
-          entity_id = relation$id
-        )
-      }
-      next
-    }
-    if (!databricks_metric_version_supported(specification$version)) {
-      diagnostic <- new_catalog_diagnostic(
-        "databricks_metric_view_version",
-        sprintf(
-          "Metric view %s uses unsupported YAML version %s.",
-          relation$name,
-          specification$version
-        ),
-        entity_id = relation$id,
-        details = list(version = specification$version)
-      )
-      provider$catalog$diagnostics[[length(provider$catalog$diagnostics) + 1]] <- diagnostic
-      next
-    }
-    relation$kind <- "metric_view"
-    relation$description <- specification$comment %||% relation$description
-    provider$catalog$relations[[relation_id]] <- relation
-    databricks_import_metric_model(provider, relation, specification)
+  exact_ids <- selected_ids[provider$selection_modes[selected_ids] == "exact"]
+  for (relation_id in exact_ids) {
+    databricks_import_semantic_relation(provider, relation_id)
   }
   databricks_import_associated_semantics(provider)
   validate_commons_catalog(provider$catalog)
+  invisible(provider)
+}
+
+databricks_import_semantic_relation <- function(provider, relation_id) {
+  relation <- provider$catalog$relations[[relation_id]]
+  if (is.null(relation) ||
+      !relation$kind %in% c("metric_view", "view", "unknown") ||
+      isTRUE(relation$extensions$commons$semantic_attempted) ||
+      any(vapply(provider$catalog$models, function(model) {
+        relation_id %in% model$exposed
+      }, logical(1)))) {
+    return(invisible(provider))
+  }
+  specification <- databricks_read_metric_yaml(provider$con, relation$path)
+  if (is.null(specification)) {
+    relation$extensions$commons$semantic_attempted <- TRUE
+    provider$catalog$relations[[relation$id]] <- relation
+    if (identical(relation$kind, "metric_view")) {
+      relation$access <- new_catalog_access(
+        "visible_only",
+        "metric-view metadata could not be read"
+      )
+      provider$catalog$relations[[relation$id]] <- relation
+      catalog_provider_diagnostic(
+        provider,
+        "databricks_metric_view_unreadable",
+        sprintf(
+          "Skipped metric view %s because its YAML could not be read.",
+          relation$name
+        ),
+        entity_id = relation$id
+      )
+    }
+    return(invisible(provider))
+  }
+  if (!databricks_metric_version_supported(specification$version)) {
+    relation$extensions$commons$semantic_attempted <- TRUE
+    provider$catalog$relations[[relation$id]] <- relation
+    catalog_provider_diagnostic(
+      provider,
+      "databricks_metric_view_version",
+      sprintf(
+        "Metric view %s uses unsupported YAML version %s.",
+        relation$name,
+        specification$version
+      ),
+      entity_id = relation$id,
+      details = list(version = specification$version)
+    )
+    return(invisible(provider))
+  }
+  relation$kind <- "metric_view"
+  relation$description <- specification$comment %||% relation$description
+  relation$extensions$commons$semantic_attempted <- TRUE
+  provider$catalog$relations[[relation_id]] <- relation
+  databricks_import_metric_model(provider, relation, specification)
   invisible(provider)
 }
 

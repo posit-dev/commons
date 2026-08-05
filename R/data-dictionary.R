@@ -21,6 +21,16 @@ as_data_dictionary <- function(x, call = rlang::caller_env()) {
   )
 }
 
+as_authored_metadata <- function(x, call = rlang::caller_env()) {
+  if (inherits(x, "commons_catalog")) return(x)
+  as_data_dictionary(x, call)
+}
+
+catalog_from_authored_metadata <- function(x) {
+  if (inherits(x, "commons_catalog")) return(x)
+  catalog_from_data_dictionary(x)
+}
+
 new_data_dictionary <- function(raw, call = rlang::caller_env()) {
   raw <- raw %||% list()
   structure(

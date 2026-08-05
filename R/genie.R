@@ -5,17 +5,26 @@
 #'   `DATABRICKS_HOST` or the selected Databricks CLI profile supplies it.
 #' @param profile An optional Databricks CLI profile. Profile credentials remain
 #'   in the CLI credential store and are not retained by commons.
+#' @param token An optional zero-argument function that returns a short-lived
+#'   Databricks access token. This supports per-session credentials on Posit
+#'   Connect without retaining the returned token in catalog metadata.
 #'
 #' @return A configuration object for the `genie` argument of
 #'   [data_source_options()].
 #' @export
-genie_agent <- function(id, workspace = NULL, profile = NULL) {
+genie_agent <- function(id, workspace = NULL, profile = NULL, token = NULL) {
   if (!is.character(id) || length(id) != 1 || is.na(id) ||
       !grepl("^[[:xdigit:]]{32}$", id)) {
     cli::cli_abort("{.arg id} must be a 32-character Genie Agent ID.")
   }
   workspace <- genie_optional_string(workspace, "workspace")
   profile <- genie_optional_string(profile, "profile")
+  if (!is.null(token) && !is.function(token)) {
+    cli::cli_abort("{.arg token} must be a zero-argument function or null.")
+  }
+  if (!is.null(profile) && !is.null(token)) {
+    cli::cli_abort("Supply only one of {.arg profile} and {.arg token}.")
+  }
   if (!is.null(workspace)) {
     workspace <- sub("/+$", "", workspace)
     if (!grepl("^https://", workspace)) {
@@ -23,7 +32,7 @@ genie_agent <- function(id, workspace = NULL, profile = NULL) {
     }
   }
   structure(
-    list(id = tolower(id), workspace = workspace, profile = profile),
+    list(id = tolower(id), workspace = workspace, profile = profile, token = token),
     class = "commons_genie_agent"
   )
 }
@@ -125,8 +134,13 @@ genie_cli_json <- function(command, args, action) {
 
 genie_fetch_rest <- function(config) {
   workspace <- config$workspace %||% Sys.getenv("DATABRICKS_HOST", unset = NA)
-  token <- Sys.getenv("DATABRICKS_TOKEN", unset = NA)
-  if (is.na(workspace) || !nzchar(workspace) || is.na(token) || !nzchar(token)) {
+  token <- if (is.function(config$token)) {
+    config$token()
+  } else {
+    Sys.getenv("DATABRICKS_TOKEN", unset = NA)
+  }
+  if (is.na(workspace) || !nzchar(workspace) || !rlang::is_string(token) ||
+      is.na(token) || !nzchar(token)) {
     cli::cli_abort(c(
       "Genie import needs Databricks REST credentials.",
       "i" = "Supply {.arg profile}, or set {.envvar DATABRICKS_HOST} and {.envvar DATABRICKS_TOKEN}."
@@ -214,6 +228,23 @@ genie_import_assets <- function(provider, specification, provenance) {
         "genie_asset_out_of_scope",
         sprintf("Skipped Genie data source %s because it is outside the selection.", identifier %||% "<unknown>"),
         details = list(identifier = identifier)
+      )
+      next
+    }
+    catalog_import_relation_semantics(provider, relation$id)
+    relation <- provider$catalog$relations[[relation$id]]
+    catalog_provider_probe_relation(provider, relation$id)
+    relation <- provider$catalog$relations[[relation$id]]
+    if (identical(relation$access$state, "visible_only")) {
+      catalog_provider_diagnostic(
+        provider,
+        "genie_asset_unqueryable",
+        sprintf(
+          "Skipped Genie data source %s because the DBI identity cannot query it.",
+          identifier
+        ),
+        severity = "info",
+        entity_id = relation$id
       )
       next
     }
@@ -594,7 +625,7 @@ genie_import_functions <- function(
     } else {
       sprintf("SELECT %s(%s) AS value", quoted, placeholders)
     }
-    name <- genie_calculation_name(item$display_name %||% tail(strsplit(identifier, ".", fixed = TRUE)[[1]], 1))
+    name <- genie_calculation_name(item$display_name %||% utils::tail(strsplit(identifier, ".", fixed = TRUE)[[1]], 1))
     calculation <- new_catalog_calculation(
       catalog_id("calculation", model$id, agent_id, name),
       model$source_id,

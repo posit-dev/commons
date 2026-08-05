@@ -49,7 +49,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     kind = backend,
     dialect = backend,
     locator = snapshot$locator,
-    selection = options,
+    selection = catalog_forget_credentials(options),
     principal = snapshot$principal,
     role = snapshot$role,
     namespace = snapshot$namespace,
@@ -88,6 +88,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     vapply(ids, function(id) attr(id, "commons_selection") %||% "exact", character(1)),
     relation_ids
   )
+  provider$telemetry <- list()
   provider$catalog <- new_commons_catalog(
     sources = list(source),
     relations = relations,
@@ -95,12 +96,20 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   )
   provider$lazy <- nchar(paste(labels, collapse = "\n"), type = "bytes") > 4000L
   catalog_import_backend(provider)
+  catalog_provider_finalize_access(provider, call)
+  provider$options <- catalog_forget_credentials(provider$options)
   provider$startup <- list(
     started_at = started_at,
     elapsed = as.numeric(difftime(Sys.time(), started_at, units = "secs"))
   )
+  catalog_provider_record(provider, "discovery", started_at)
   catalog_progress("ready", backend, started_at)
   provider
+}
+
+catalog_forget_credentials <- function(options) {
+  if (!is.null(options$genie)) options$genie$token <- NULL
+  options
 }
 
 catalog_object_limit <- 25000L
@@ -349,6 +358,8 @@ catalog_id_has_prefix <- function(id, prefix) {
 }
 
 catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()) {
+  started_at <- Sys.time()
+  on.exit(catalog_provider_record(provider, "hydrate", started_at, table), add = TRUE)
   catalog_provider_check(provider, call)
   id <- provider$table_ids[[table]]
   if (is.null(id)) {
@@ -362,10 +373,15 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   }
   relation_id <- names(provider$relation_labels)[provider$relation_labels == table]
   relation <- provider$catalog$relations[[relation_id]]
+  catalog_import_relation_semantics(provider, relation_id)
+  relation <- provider$catalog$relations[[relation_id]]
   if (length(relation$columns)) {
     return(relation)
   }
-  if (identical(relation$kind, "semantic_view")) {
+  semantic_model <- any(vapply(provider$catalog$models, function(model) {
+    relation$id %in% model$exposed
+  }, logical(1)))
+  if (semantic_model) {
     definitions <- Filter(
       function(x) identical(x$relation_id, relation$id) &&
         identical(x$visibility, "public"),
@@ -417,6 +433,123 @@ catalog_provider_hydrate <- function(provider, table, call = rlang::caller_env()
   relation <- genie_apply_column_overrides(relation)
   provider$catalog$relations[[relation_id]] <- relation
   relation
+}
+
+catalog_provider_probe_authored <- function(
+  provider,
+  authored,
+  call = rlang::caller_env()
+) {
+  for (relation in authored$relations) {
+    candidates <- catalog_relation_candidates(
+      relation,
+      provider$catalog$relations[names(provider$relation_labels)],
+      provider$catalog$sources
+    )
+    if (length(candidates) != 1) next
+    catalog_provider_probe_relation(provider, candidates[[1]])
+  }
+  catalog_provider_finalize_access(provider, call)
+}
+
+catalog_provider_probe_relation <- function(provider, relation_id) {
+  relation <- provider$catalog$relations[[relation_id]]
+  if (relation$access$state != "unknown" ||
+      relation$kind %in% c("semantic_view", "governed_query")) {
+    return(invisible(provider))
+  }
+  started_at <- Sys.time()
+  result <- catalog_relation_queryability(provider$con, relation$path)
+  catalog_provider_record(
+    provider,
+    "authorize",
+    started_at,
+    catalog_path_label(relation)
+  )
+  if (inherits(result, "condition")) {
+    relation$access <- new_catalog_access("visible_only", conditionMessage(result))
+    catalog_provider_diagnostic(
+      provider,
+      "authored_relation_unqueryable",
+      sprintf(
+        "Skipped authored metadata for %s because the relation is not queryable.",
+        catalog_path_label(relation)
+      ),
+      severity = "info",
+      entity_id = relation$id
+    )
+  } else {
+    relation$access <- new_catalog_access("queryable", "zero-row authorization probe")
+  }
+  provider$catalog$relations[[relation$id]] <- relation
+  invisible(provider)
+}
+
+catalog_relation_queryability <- function(con, path) {
+  tryCatch(
+    {
+      result <- DBI::dbSendQuery(
+        con,
+        paste(
+          "SELECT * FROM",
+          DBI::dbQuoteIdentifier(con, source_path_id(path)),
+          "WHERE 1 = 0"
+        )
+      )
+      on.exit(DBI::dbClearResult(result), add = TRUE)
+      TRUE
+    },
+    error = function(err) err
+  )
+}
+
+catalog_provider_finalize_access <- function(
+  provider,
+  call = rlang::caller_env()
+) {
+  selected <- names(provider$relation_labels)
+  visible_only <- selected[vapply(
+    provider$catalog$relations[selected],
+    function(relation) identical(relation$access$state, "visible_only"),
+    logical(1)
+  )]
+  if (length(visible_only)) {
+    labels <- unname(provider$relation_labels[visible_only])
+    provider$table_ids <- provider$table_ids[setdiff(
+      names(provider$table_ids),
+      labels
+    )]
+    provider$relation_labels <- provider$relation_labels[setdiff(
+      names(provider$relation_labels),
+      visible_only
+    )]
+    provider$selection_modes <- provider$selection_modes[setdiff(
+      names(provider$selection_modes),
+      visible_only
+    )]
+  }
+  if (length(provider$table_ids) == 0) {
+    cli::cli_abort(
+      "The resolved data-source selection contains no accessible objects.",
+      call = call
+    )
+  }
+  provider$lazy <- nchar(
+    paste(names(provider$table_ids), collapse = "\n"),
+    type = "bytes"
+  ) > 4000L
+  invisible(provider)
+}
+
+catalog_provider_record <- function(provider, operation, started_at, object = NULL) {
+  provider$telemetry[[length(provider$telemetry) + 1]] <- list(
+    operation = operation,
+    object = object,
+    elapsed = as.numeric(difftime(Sys.time(), started_at, units = "secs")),
+    principal = provider$snapshot$principal,
+    role = provider$snapshot$role
+  )
+  invisible(provider)
 }
 
 catalog_relation_metadata <- function(con, id) {
@@ -546,6 +679,15 @@ catalog_import_backend <- function(provider) {
     }
   } else if (!is.null(provider$options$genie)) {
     cli::cli_abort("{.arg genie} is supported only for Databricks connections.")
+  }
+  invisible(provider)
+}
+
+catalog_import_relation_semantics <- function(provider, relation_id) {
+  if (identical(provider$backend, "snowflake")) {
+    snowflake_import_semantic_relation(provider, relation_id)
+  } else if (identical(provider$backend, "databricks")) {
+    databricks_import_semantic_relation(provider, relation_id)
   }
   invisible(provider)
 }

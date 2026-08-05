@@ -244,6 +244,57 @@ test_that("relative authored relation matches must be unambiguous", {
   expect_snapshot(catalog_merge(discovered, authored), error = TRUE)
 })
 
+test_that("authored metadata is limited to selected discovered relations", {
+  source <- new_catalog_source(
+    "source:warehouse",
+    "snowflake",
+    identifier_case = "upper"
+  )
+  orders <- new_catalog_relation(
+    "relation:orders",
+    source$id,
+    new_source_path(c(catalog = "DB", schema = "PUBLIC", table = "ORDERS"))
+  )
+  discovered <- new_commons_catalog(
+    sources = list(source),
+    relations = list(orders)
+  )
+  authored <- catalog_from_data_dictionary(new_data_dictionary(list(
+    description = "Company-wide definitions.",
+    tables = list(
+      orders = list(
+        description = "Selected orders.",
+        definitions = list(order_count = list(
+          expr = "COUNT(*)",
+          type = "number"
+        ))
+      ),
+      secret = list(
+        description = "Unselected secrets.",
+        definitions = list(secret_count = list(
+          expr = "COUNT(*)",
+          type = "number"
+        ))
+      )
+    ),
+    relationships = list(list(join = "orders.secret_id = secret.id")),
+    glossary = list(company = "Applies across the source.")
+  )))
+
+  merged <- catalog_merge(discovered, authored)
+  text <- vapply(merged$context, `[[`, character(1), "text")
+
+  expect_equal(names(merged$relations), orders$id)
+  expect_equal(
+    unname(vapply(merged$definitions, `[[`, character(1), "name")),
+    "order_count"
+  )
+  expect_length(merged$models[[1]]$relationships, 0)
+  expect_false(any(grepl("secret", text, ignore.case = TRUE)))
+  expect_true(any(grepl("Company-wide", text, fixed = TRUE)))
+  expect_true(any(grepl("Applies across", text, fixed = TRUE)))
+})
+
 test_that("constraint enforcement is distinct from constraint kind", {
   constraint <- new_catalog_constraint(
     "foreign_key",
@@ -439,4 +490,36 @@ test_that("private and visible-only semantic definitions stay out of the registr
   catalog$models[[model$id]]$access <- new_catalog_access("queryable")
   catalog$definitions[[definition$id]]$visibility <- "private"
   expect_equal(nrow(catalog_definition_registry(catalog)$defs), 0)
+})
+
+test_that("native semantic columns do not duplicate projected definitions", {
+  source <- new_catalog_source("source:test", "snowflake")
+  relation <- new_catalog_relation(
+    "relation:model",
+    source$id,
+    new_source_path(c(table = "MODEL")),
+    columns = list(new_catalog_column("REGION"))
+  )
+  model <- new_catalog_model(
+    "model:test",
+    source$id,
+    "MODEL",
+    datasets = relation$id
+  )
+  definition <- new_catalog_definition(
+    "definition:region",
+    model$id,
+    relation$id,
+    "dimension",
+    "REGION",
+    expressions = list(new_catalog_expression("snowflake", "REGION"))
+  )
+
+  table <- catalog_relation_to_dictionary(
+    relation,
+    stats::setNames(list(definition), definition$id)
+  )
+
+  expect_equal(names(table$columns), "REGION")
+  expect_length(table$definitions, 0)
 })

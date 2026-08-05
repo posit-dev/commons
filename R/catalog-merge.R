@@ -1,14 +1,23 @@
-catalog_merge <- function(discovered, authored, call = rlang::caller_env()) {
+catalog_merge <- function(
+  discovered,
+  authored,
+  relation_ids = names(discovered$relations),
+  call = rlang::caller_env()
+) {
   validate_commons_catalog(discovered, call = call)
   validate_commons_catalog(authored, call = call)
+  candidates <- discovered
+  candidates$relations <- candidates$relations[relation_ids]
+  authored <- catalog_scope_authored(authored, candidates)
 
-  reconciled <- catalog_reconcile_relations(discovered, authored, call)
+  reconciled <- catalog_reconcile_relations(
+    discovered,
+    authored,
+    call,
+    relation_ids
+  )
   relation_map <- reconciled$map
   authored <- catalog_remap_catalog(authored, relation_map)
-  retained_authored <- authored$relations[setdiff(
-    names(authored$relations),
-    names(relation_map)
-  )]
 
   new_commons_catalog(
     sources = catalog_combine_records(
@@ -19,7 +28,7 @@ catalog_merge <- function(discovered, authored, call = rlang::caller_env()) {
     ),
     relations = catalog_combine_records(
       reconciled$relations,
-      retained_authored,
+      list(),
       "relation",
       call
     ),
@@ -59,7 +68,144 @@ catalog_merge <- function(discovered, authored, call = rlang::caller_env()) {
   )
 }
 
-catalog_reconcile_relations <- function(discovered, authored, call) {
+catalog_scope_authored <- function(authored, discovered) {
+  relation_names <- vapply(
+    authored$relations,
+    `[[`,
+    character(1),
+    "name"
+  )
+  keep_relations <- names(authored$relations)[vapply(
+    authored$relations,
+    function(relation) {
+      length(catalog_relation_candidates(
+        relation,
+        discovered$relations,
+        discovered$sources
+      )) > 0
+    },
+    logical(1)
+  )]
+  dropped_relations <- setdiff(names(authored$relations), keep_relations)
+  dropped_relation_names <- unname(relation_names[dropped_relations])
+  authored$relations <- authored$relations[keep_relations]
+  authored$relations <- lapply(
+    authored$relations,
+    catalog_scope_relation_constraints,
+    dropped_relation_ids = dropped_relations,
+    dropped_relation_names = dropped_relation_names
+  )
+
+  keep_models <- logical(length(authored$models))
+  names(keep_models) <- names(authored$models)
+  for (id in names(authored$models)) {
+    model <- authored$models[[id]]
+    for (field in c("datasets", "exposed", "dependencies")) {
+      model[[field]] <- setdiff(model[[field]], dropped_relations)
+    }
+    dataset_names <- vapply(
+      authored$relations[model$datasets],
+      `[[`,
+      character(1),
+      "name"
+    )
+    keep_relationships <- vapply(
+      model$relationships,
+      catalog_relationship_in_scope,
+      logical(1),
+      dataset_names = dataset_names,
+      dropped_dataset_names = dropped_relation_names
+    )
+    model$relationships <- model$relationships[keep_relationships]
+    keep_models[[id]] <- length(model$datasets) > 0 || length(model$exposed) > 0
+    authored$models[[id]] <- model
+  }
+  dropped_models <- names(keep_models)[!keep_models]
+  authored$models <- authored$models[keep_models]
+
+  keep_definitions <- vapply(authored$definitions, function(definition) {
+    definition$relation_id %in% keep_relations &&
+      definition$model_id %in% names(authored$models) &&
+      !any(definition$dependencies %in% c(dropped_relations, dropped_models))
+  }, logical(1))
+  dropped_definitions <- names(authored$definitions)[!keep_definitions]
+  authored$definitions <- authored$definitions[keep_definitions]
+
+  authored$calculations <- Filter(function(calculation) {
+    !any(calculation$dependencies %in% c(
+      dropped_relations,
+      dropped_models,
+      dropped_definitions
+    ))
+  }, authored$calculations)
+  dropped <- c(dropped_relations, dropped_models, dropped_definitions)
+  authored$context <- Filter(function(context) {
+    !any(context$scope %in% dropped) &&
+      catalog_relationship_context_in_scope(context, authored)
+  }, authored$context)
+  validate_commons_catalog(authored)
+  authored
+}
+
+catalog_relationship_context_in_scope <- function(context, catalog) {
+  relationship <- context$extensions$ossie_relationship
+  if (is.null(relationship)) return(TRUE)
+  model_ids <- intersect(context$scope, names(catalog$models))
+  if (length(model_ids) != 1) return(FALSE)
+  model <- catalog$models[[model_ids[[1]]]]
+  dataset_names <- vapply(
+    catalog$relations[model$datasets],
+    `[[`,
+    character(1),
+    "name"
+  )
+  all(c(relationship$from, relationship$to) %in% dataset_names)
+}
+
+catalog_scope_relation_constraints <- function(
+  relation,
+  dropped_relation_ids,
+  dropped_relation_names
+) {
+  keep <- vapply(relation$constraints, function(constraint) {
+    reference <- constraint$reference
+    if (is.null(reference)) return(TRUE)
+    !any(reference$relation_id %in% dropped_relation_ids) &&
+      !any(reference$table %in% dropped_relation_names)
+  }, logical(1))
+  relation$constraints <- relation$constraints[keep]
+  relation
+}
+
+catalog_relationship_in_scope <- function(
+  relationship,
+  dataset_names,
+  dropped_dataset_names
+) {
+  endpoints <- unlist(c(relationship$from, relationship$to), use.names = FALSE)
+  if (length(endpoints)) {
+    return(all(endpoints %in% dataset_names))
+  }
+  text <- paste(unlist(
+    relationship[c("join", "condition", "sql")],
+    use.names = FALSE
+  ), collapse = " ")
+  !any(vapply(dropped_dataset_names, function(name) {
+    pattern <- paste0(
+      "(?<![[:alnum:]_$])",
+      escape_regex(name),
+      "(?![[:alnum:]_$])"
+    )
+    grepl(pattern, text, ignore.case = TRUE, perl = TRUE)
+  }, logical(1)))
+}
+
+catalog_reconcile_relations <- function(
+  discovered,
+  authored,
+  call,
+  relation_ids = names(discovered$relations)
+) {
   relations <- discovered$relations
   relation_map <- character()
   claimed <- character()
@@ -67,7 +213,7 @@ catalog_reconcile_relations <- function(discovered, authored, call) {
   for (relation in authored$relations) {
     candidates <- catalog_relation_candidates(
       relation,
-      discovered$relations,
+      discovered$relations[relation_ids],
       discovered$sources
     )
     if (length(candidates) == 0) {
@@ -109,6 +255,10 @@ catalog_relation_candidates <- function(authored, discovered, sources) {
   if (length(discovered) == 0) {
     return(character())
   }
+  discovered <- Filter(
+    function(relation) !identical(relation$access$state, "visible_only"),
+    discovered
+  )
   ids <- names(discovered)
   matched <- vapply(discovered, function(candidate) {
     source <- sources[[candidate$source_id]]
