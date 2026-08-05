@@ -139,6 +139,7 @@ test_that("hit_rate counts exchange tags across conversations", {
 })
 
 test_that("trajectory_transcript merges each exchange into chat messages", {
+  skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")
 
@@ -186,6 +187,14 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
     ))
   )
   expect_equal(transcript$pills[[2]]$indexFromEnd, 0)
+
+  html <- as.character(commons_ui("transcript", messages = transcript$messages))
+  expect_match(
+    html,
+    'data-role="user" content="How many orders?"',
+    fixed = TRUE
+  )
+  expect_match(html, 'data-role="assistant"', fixed = TRUE)
 })
 
 test_that("reconstructed tool results wear the commons display again", {

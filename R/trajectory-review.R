@@ -346,45 +346,12 @@ viewer_tool_display <- function(request, value = NULL) {
   display
 }
 
-# Pill seeding expects assistant messages to be replayed as streamed chunks.
-restore_transcript <- function(
+seed_transcript_decorations <- function(
   session,
   id,
-  turns,
+  transcript,
   selected_exchange = NULL
 ) {
-  transcript <- trajectory_transcript(turns)
-  for (message in transcript$messages) {
-    if (identical(message$role, "user")) {
-      shinychat::chat_append_message(
-        id,
-        message,
-        chunk = FALSE,
-        session = session
-      )
-      next
-    }
-    shinychat::chat_append_message(
-      id,
-      list(role = "assistant", content = ""),
-      chunk = "start",
-      session = session
-    )
-    for (chunk in message$content) {
-      shinychat::chat_append_message(
-        id,
-        list(role = "assistant", content = chunk),
-        chunk = TRUE,
-        session = session
-      )
-    }
-    shinychat::chat_append_message(
-      id,
-      list(role = "assistant", content = ""),
-      chunk = "end",
-      session = session
-    )
-  }
   if (length(transcript$pills) > 0) {
     session$sendCustomMessage(
       "commonsProvenancePillSeed",
@@ -520,6 +487,13 @@ viewer_server <- function(
     flags <- app_flags
     notes <- app_notes
     selected <- shiny::reactiveVal(NULL)
+    selected_transcript <- shiny::reactive({
+      key <- selected()
+      if (is.null(key)) {
+        return(NULL)
+      }
+      trajectory_transcript(trajectories[[key$conversation]])
+    })
     review_target <- shiny::reactiveVal(NULL)
     review_selection <- shiny::reactive({
       review_target() %||% selected()["conversation"]
@@ -733,18 +707,23 @@ viewer_server <- function(
           "Select a conversation to view its transcript."
         ))
       }
-      commons_ui(transcript_id(key), height = "100%")
+      commons_ui(
+        transcript_id(key),
+        messages = selected_transcript()$messages,
+        height = "100%"
+      )
     })
 
-    # Replay only after the new chat element is bound in the browser.
+    # Seed decorations only after the new chat element is bound in the browser.
     shiny::observeEvent(selected(), {
       key <- selected()
+      transcript <- selected_transcript()
       session$onFlushed(
         function() {
-          restore_transcript(
+          seed_transcript_decorations(
             session,
             transcript_id(key),
-            trajectories[[key$conversation]],
+            transcript,
             selected_exchange = key$exchange
           )
         },
