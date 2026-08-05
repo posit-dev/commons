@@ -28,6 +28,8 @@ Authors:
 - Simon Couch <simon.couch@posit.co>
   ([ORCID](https://orcid.org/0000-0001-5676-5107))
 
+- Sara Altman <sara.altman@posit.co>
+
 Other contributors:
 
 - Posit Software, PBC ([ROR](https://ror.org/03wc8by49)) \[copyright
