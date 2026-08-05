@@ -284,6 +284,27 @@ test_that("catalog telemetry covers discovery and hydration", {
   )))
 })
 
+test_that("catalog search exposes only relevant selected objects", {
+  fixture <- catalog_provider_test_source()
+  withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))
+  fixture$provider$catalog$relations[[fixture$relation$id]]$description <-
+    "Public order activity."
+  internal <- new_catalog_relation(
+    "relation:internal",
+    fixture$source_record$id,
+    new_source_path(c(table = "internal_customers")),
+    description = "Secret customer details."
+  )
+  fixture$provider$catalog$relations[[internal$id]] <- internal
+
+  expect_equal(
+    names(catalog_provider_search(fixture$provider, "order")),
+    fixture$relation$id
+  )
+  expect_length(catalog_provider_search(fixture$provider, "secret"), 0)
+  expect_length(catalog_provider_search(fixture$provider, ""), 0)
+})
+
 test_that("lazy semantic hydration reaches runtime definitions and context", {
   fixture <- catalog_provider_test_source("semantic_view")
   withr::defer(DBI::dbDisconnect(fixture$con, shutdown = TRUE))

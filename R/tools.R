@@ -50,7 +50,7 @@ tool_search_catalog <- function(private) {
       results <- catalog_provider_search(src$provider, query, kinds)
       body <- if (length(results)) {
         paste(vapply(results, function(relation) {
-          label <- src$relation_labels[[relation$id]] %||% relation$name
+          label <- source_relation_labels(src)[[relation$id]] %||% relation$name
           summary <- relation$description %||% relation$label %||% "No description."
           sprintf("- `%s` (%s): %s", label, relation$kind, summary)
         }, character(1)), collapse = "\n")

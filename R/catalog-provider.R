@@ -658,7 +658,7 @@ catalog_relation_metadata <- function(con, id) {
 
 catalog_provider_search <- function(provider, query, kinds = NULL, limit = 10L) {
   catalog_provider_check(provider)
-  relations <- provider$catalog$relations
+  relations <- provider$catalog$relations[names(provider$relation_labels)]
   if (!is.null(kinds)) {
     relations <- Filter(function(x) x$kind %in% kinds, relations)
   }
@@ -670,6 +670,9 @@ catalog_provider_search <- function(provider, query, kinds = NULL, limit = 10L) 
     return(relations)
   }
   query_terms <- catalog_search_terms(query)
+  if (length(query_terms) == 0) {
+    return(list())
+  }
   scores <- vapply(relations, function(relation) {
     text <- paste(
       relation$name,
@@ -684,6 +687,11 @@ catalog_provider_search <- function(provider, query, kinds = NULL, limit = 10L) 
       tolower(text)
     ))
   }, numeric(1))
+  relations <- relations[scores > 0]
+  scores <- scores[scores > 0]
+  if (length(relations) == 0) {
+    return(relations)
+  }
   order <- order(scores, decreasing = TRUE)
   relations[utils::head(order, limit)]
 }
