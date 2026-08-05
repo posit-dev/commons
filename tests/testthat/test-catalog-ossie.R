@@ -134,6 +134,37 @@ test_that("Apache Ossie dependencies are filtered with selected datasets", {
   expect_false("ossie_relationship_context" %in% kinds)
 })
 
+test_that("cross-dataset Ossie metrics remain interchange-only", {
+  document <- list(
+    version = "0.1.1",
+    semantic_model = list(list(
+      name = "sales",
+      datasets = list(
+        list(name = "orders", source = "db.public.orders"),
+        list(name = "customers", source = "db.public.customers")
+      ),
+      metrics = list(list(
+        name = "blended_value",
+        expression = list(dialects = list(list(
+          dialect = "ANSI_SQL",
+          expression = "SUM(orders.amount) + SUM(customers.value)"
+        )))
+      ))
+    ))
+  )
+
+  catalog <- catalog_from_ossie(document)
+  definition <- catalog$definitions[[1]]
+
+  expect_equal(definition$visibility, "private")
+  expect_equal(nrow(catalog_definition_registry(catalog)$defs), 0)
+  expect_equal(
+    catalog$diagnostics[[1]]$code,
+    "ossie_metric_not_callable"
+  )
+  expect_length(catalog_to_ossie(catalog)$document$semantic_model[[1]]$metrics, 1)
+})
+
 test_that("Apache Ossie models write to YAML and JSON", {
   model <- ossie_model(test_path("fixtures", "ossie-databricks.yaml"))
   yaml_path <- withr::local_tempfile(fileext = ".yaml")

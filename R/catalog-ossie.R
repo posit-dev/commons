@@ -245,6 +245,18 @@ ossie_import_model <- function(catalog, raw, source, provenance, call) {
   })
   for (definition in c(definitions, metrics)) {
     catalog$definitions[[definition$id]] <- definition
+    if (identical(definition$native$callable, FALSE)) {
+      diagnostic <- new_catalog_diagnostic(
+        "ossie_metric_not_callable",
+        sprintf(
+          "Metric %s spans an unresolved Apache Ossie dataset scope and remains interchange-only.",
+          definition$name
+        ),
+        severity = "info",
+        entity_id = definition$id
+      )
+      catalog$diagnostics[[length(catalog$diagnostics) + 1]] <- diagnostic
+    }
   }
   metric_context <- unlist(lapply(metrics, function(definition) {
     ossie_ai_context_records(
@@ -401,6 +413,8 @@ ossie_import_metric <- function(metric, model, dataset_map, provenance, call) {
   }
   expressions <- ossie_import_expressions(metric$expression, metric$name, call)
   relation_id <- ossie_metric_relation(expressions, dataset_map)
+  callable <- !is.null(relation_id)
+  relation_id <- relation_id %||% unname(dataset_map[[1]])
   new_catalog_definition(
     catalog_id("definition", model$id, "metric", metric$name),
     model$id,
@@ -412,6 +426,8 @@ ossie_import_metric <- function(metric, model, dataset_map, provenance, call) {
     logical_type = metric$datatype,
     expressions = expressions,
     dependencies = model$datasets,
+    visibility = if (callable) "public" else "private",
+    native = list(callable = callable),
     provenance = provenance,
     extensions = ossie_import_extensions(metric)
   )
@@ -489,9 +505,20 @@ ossie_source_path <- function(source) {
 ossie_metric_relation <- function(expressions, dataset_map) {
   sql <- paste(vapply(expressions, `[[`, character(1), "sql"), collapse = "\n")
   matches <- names(dataset_map)[vapply(names(dataset_map), function(name) {
-    grepl(paste0("\\b", name, "\\s*\\."), strip_sql_literals(sql), perl = TRUE)
+    grepl(
+      paste0("\\b", escape_regex(name), "\\s*\\."),
+      strip_sql_literals(sql),
+      ignore.case = TRUE,
+      perl = TRUE
+    )
   }, logical(1))]
-  if (length(matches) == 1) dataset_map[[matches]] else unname(dataset_map[[1]])
+  if (length(matches) == 1) {
+    return(dataset_map[[matches]])
+  }
+  if (length(dataset_map) == 1) {
+    return(unname(dataset_map[[1]]))
+  }
+  NULL
 }
 
 ossie_definition_is_column <- function(definition) {
