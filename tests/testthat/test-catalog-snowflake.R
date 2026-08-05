@@ -1,3 +1,23 @@
+test_that("Snowflake reports a missing current namespace", {
+  local_mocked_bindings(
+    dbGetQuery = function(...) {
+      data.frame(
+        principal = "USER",
+        role = "ROLE",
+        database_name = NA_character_,
+        schema_name = NA_character_,
+        account_name = "ACCOUNT"
+      )
+    },
+    .package = "DBI"
+  )
+
+  expect_snapshot(
+    snowflake_default_objects(NULL, rlang::current_env()),
+    error = TRUE
+  )
+})
+
 test_that("Snowflake semantic YAML imports governed assets", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))

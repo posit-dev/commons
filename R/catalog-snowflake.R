@@ -13,11 +13,20 @@ snowflake_connection_snapshot <- function(con) {
     locator = list(account = row$account_name[[1]]),
     principal = row$principal[[1]],
     role = row$role[[1]],
-    namespace = catalog_compact(list(
-      catalog = row$database_name[[1]],
-      schema = row$schema_name[[1]]
-    ))
+    namespace = snowflake_namespace(
+      row$database_name[[1]],
+      row$schema_name[[1]]
+    )
   )
+}
+
+snowflake_namespace <- function(database, schema) {
+  namespace <- list(catalog = database, schema = schema)
+  namespace[vapply(
+    namespace,
+    function(value) rlang::is_string(value) && nzchar(value),
+    logical(1)
+  )]
 }
 
 snowflake_default_objects <- function(con, call) {
@@ -26,8 +35,8 @@ snowflake_default_objects <- function(con, call) {
   if (!all(c("catalog", "schema") %in% names(namespace))) {
     cli::cli_abort(
       c(
-        "The Snowflake connection has no current database and schema.",
-        "i" = "Set both on the connection or supply {.arg options} with explicit {.arg include} IDs."
+        "The Snowflake connection does not have both a current database and schema.",
+        "i" = "Set both on the connection or select a namespace with {.code data_source_options(include = DBI::Id(catalog = \"...\", schema = \"...\"))}."
       ),
       call = call
     )

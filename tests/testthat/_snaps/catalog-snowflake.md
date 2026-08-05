@@ -1,3 +1,12 @@
+# Snowflake reports a missing current namespace
+
+    Code
+      snowflake_default_objects(NULL, rlang::current_env())
+    Condition
+      Error:
+      ! The Snowflake connection does not have both a current database and schema.
+      i Set both on the connection or select a namespace with `data_source_options(include = DBI::Id(catalog = "...", schema = "..."))`.
+
 # Snowflake semantic-view variables are typed and quoted
 
     Code
