@@ -28,17 +28,17 @@
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
 #'   a table name the agent can query.
-#' @param tables Which tables to expose, used when a connection or a board is
-#'   supplied.
+#' @param tables Deprecated. Use `options = data_source_options(include = ...)`.
 #'
-#'   For a connection, a character vector of table names, schema-qualified
-#'   strings like `"schema.table"`, or `DBI::Id` objects. Defaults to every
-#'   table returned by [DBI::dbListTables()]. Strings containing dots are
-#'   interpreted as schema-qualified names; use `DBI::Id(table = "a.b")` for
-#'   literal table names containing dots.
+#'   Existing connection values retain their former behavior: strings with
+#'   dots are treated as schema-qualified names. Existing board values retain
+#'   their local-name-to-pin-name mapping.
+#' @param options Selection, exclusion, and sampling controls from
+#'   [data_source_options()]. DBI connections discover their current namespace
+#'   by default. Boards require an explicit named `include` mapping.
 #'
-#'   For a board, a named character vector of pins to read: the names become
-#'   table names, and the values are pin names passed to [pins::pin_read()].
+#'   Selection controls which objects commons describes to the model. The
+#'   connection's grants remain the security boundary for SQL execution.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
 #'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
@@ -85,10 +85,16 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL, dictionary = NULL) {
+data_source <- function(
+  ...,
+  tables = NULL,
+  dictionary = NULL,
+  options = NULL
+) {
   dots <- rlang::list2(...)
   dictionary <- as_data_dictionary(dictionary)
   kind <- data_source_kind(dots)
+  options <- as_data_source_options(options, tables, kind)
 
   local_commons_span(
     "commons_data_source_create",
@@ -96,17 +102,24 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   )
 
   if (kind == "connection") {
-    return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
+    return(data_source_connection(dots[[1]], options, dictionary = dictionary))
   }
   if (kind == "board") {
-    return(data_source_board(dots[[1]], tables, dictionary = dictionary))
+    return(data_source_board(dots[[1]], options, dictionary = dictionary))
   }
 
-  data_source_frames(dots, dictionary)
+  data_source_frames(dots, dictionary, options)
 }
 
-data_source_frames <- function(dots, dictionary, call = rlang::caller_env()) {
+data_source_frames <- function(
+  dots,
+  dictionary,
+  options,
+  call = rlang::caller_env()
+) {
   check_named_frames(dots, call = call)
+  selected <- select_flat_names(names(dots), options, call)
+  dots <- dots[selected]
   local_commons_span(
     "commons_data_source_load_frames",
     attributes = list("commons.data_source.n_tables" = length(dots))
@@ -122,7 +135,13 @@ data_source_frames <- function(dots, dictionary, call = rlang::caller_env()) {
   }
   duckdb_lock_down(con)
 
-  new_data_source(con, names(dots), owned = TRUE, dictionary = dictionary)
+  new_data_source(
+    con,
+    names(dots),
+    owned = TRUE,
+    dictionary = dictionary,
+    options = options
+  )
 }
 
 data_source_kind <- function(dots) {
@@ -137,19 +156,16 @@ data_source_kind <- function(dots) {
 
 data_source_connection <- function(
   con,
-  tables,
+  options,
   dictionary = NULL,
   call = rlang::caller_env()
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
-
-  if (is.null(tables)) {
-    listed <- DBI::dbListTables(con)
-    commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
-    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
-  }
-
-  table_registry <- normalize_table_registry(tables, call = call)
+  provider <- new_catalog_provider(con, options, call)
+  table_registry <- list(
+    labels = names(provider$table_ids),
+    ids = provider$table_ids
+  )
   check_table_ids_exist(con, table_registry, call = call)
   commons_span_set_attribute(
     span,
@@ -157,36 +173,49 @@ data_source_connection <- function(
     length(table_registry$labels)
   )
 
+  authored <- catalog_from_data_dictionary(dictionary)
+  if (length(authored$sources)) {
+    provider$catalog <- catalog_merge(provider$catalog, authored, call = call)
+  }
   new_data_source(
     con,
     table_registry$labels,
     owned = FALSE,
     table_ids = table_registry$ids,
-    dictionary = dictionary
+    dictionary = dictionary,
+    catalog = provider$catalog,
+    provider = provider,
+    options = options,
+    relation_labels = provider$relation_labels
   )
 }
 
 data_source_board <- function(
   board,
-  tables,
+  options,
   dictionary = NULL,
   call = rlang::caller_env()
 ) {
+  tables <- options$include
   if (!rlang::is_named(tables) || !is.character(tables)) {
     cli::cli_abort(
-      "{.arg tables} must be a named character vector of pin names.",
+      "Board {.arg include} must be a named character vector of pin names.",
       call = call
     )
   }
   if (length(tables) == 0) {
-    cli::cli_abort("{.arg tables} must name at least one pin.", call = call)
+    cli::cli_abort("Board {.arg include} must name at least one pin.", call = call)
   }
   duplicated_labels <- unique(names(tables)[duplicated(names(tables))])
   if (length(duplicated_labels)) {
     cli::cli_abort(
-      "{.arg tables} must not contain duplicate names: {.val {duplicated_labels}}.",
+      "Board {.arg include} must not contain duplicate names: {.val {duplicated_labels}}.",
       call = call
     )
+  }
+  tables <- tables[!catalog_excluded(names(tables), options$exclude)]
+  if (length(tables) == 0) {
+    cli::cli_abort("{.arg exclude} removes every selected pin.", call = call)
   }
 
   local_commons_span(
@@ -207,7 +236,8 @@ data_source_board <- function(
     names(tables),
     owned = TRUE,
     dictionary = dictionary,
-    pending = new_pending_pins(board, tables)
+    pending = new_pending_pins(board, tables),
+    options = options
   )
 }
 
@@ -235,6 +265,16 @@ list_tables <- function(data_source) {
   data_source$tables
 }
 
+source_runtime_dictionary <- function(source) {
+  if (is.null(source$provider)) {
+    return(source$dictionary)
+  }
+  catalog_to_runtime_dictionary(
+    source$provider$catalog,
+    source$relation_labels
+  )
+}
+
 new_data_source <- function(
   con,
   tables,
@@ -242,7 +282,10 @@ new_data_source <- function(
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
   pending = NULL,
-  catalog = catalog_from_data_dictionary(dictionary)
+  catalog = catalog_from_data_dictionary(dictionary),
+  provider = NULL,
+  options = data_source_options(),
+  relation_labels = character()
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -265,6 +308,9 @@ new_data_source <- function(
       handle = handle,
       dictionary = dictionary,
       catalog = catalog,
+      provider = provider,
+      options = options,
+      relation_labels = relation_labels,
       pending = pending
     ),
     class = "commons_data_source"
@@ -428,7 +474,7 @@ pending_tables_in_error <- function(source, err) {
   )]
 }
 
-source_describe <- function(source, table, n_sample = 5) {
+source_describe <- function(source, table, n_sample = NULL) {
   id <- source$table_ids[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
@@ -437,20 +483,46 @@ source_describe <- function(source, table, n_sample = 5) {
     ))
   }
   source_ensure_tables(source, table)
-
-  sample <- DBI::dbGetQuery(
-    source$con,
-    sprintf(
-      "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(source$con, id),
-      n_sample
+  n_sample <- n_sample %||% source$options$sample_rows
+  n_sample <- catalog_count(n_sample, "sample_rows")
+  if (!is.null(source$provider)) {
+    relation <- catalog_provider_hydrate(source$provider, table)
+    schema <- data.frame(
+      column = names(relation$columns),
+      type = vapply(
+        relation$columns,
+        function(x) x$logical_type %||% x$native_type %||% "unknown",
+        character(1)
+      ),
+      row.names = NULL
     )
-  )
-  schema <- data.frame(
-    column = names(sample),
-    type = vapply(sample, function(x) class(x)[[1]], character(1)),
-    row.names = NULL
-  )
+  } else {
+    metadata <- catalog_relation_metadata(source$con, id)
+    schema <- data.frame(
+      column = names(metadata$columns),
+      type = vapply(
+        metadata$columns,
+        function(x) x$logical_type %||% x$native_type %||% "unknown",
+        character(1)
+      ),
+      row.names = NULL
+    )
+  }
+  sample <- if (n_sample > 0) {
+    DBI::dbGetQuery(
+      source$con,
+      sprintf(
+        "SELECT * FROM %s LIMIT %d",
+        DBI::dbQuoteIdentifier(source$con, id),
+        n_sample
+      )
+    )
+  } else {
+    stats::setNames(
+      as.data.frame(rep(list(logical()), nrow(schema))),
+      schema$column
+    )
+  }
   list(schema = schema, sample = sample)
 }
 

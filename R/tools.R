@@ -9,11 +9,61 @@ build_commons_tools <- function(self, private) {
     if (registry_has_metrics(private$definitions)) {
       list(tool_call_metrics(private))
     },
+    if (any(vapply(
+      private$sources,
+      catalog_provider_searchable,
+      logical(1)
+    ))) {
+      list(tool_search_catalog(private))
+    },
     list(
       tool_search_context(private),
       tool_describe_table(private),
       tool_run_sql(private),
       tool_run_r(private)
+    )
+  )
+}
+
+tool_search_catalog <- function(private) {
+  ellmer::tool(
+    function(query, kinds = NULL, source = NULL) {
+      src <- resolve_sql_source(private$sources, source)
+      if (is.null(src$provider)) {
+        return("This data source does not have a searchable catalog.")
+      }
+      results <- catalog_provider_search(src$provider, query, kinds)
+      body <- if (length(results)) {
+        paste(vapply(results, function(relation) {
+          label <- src$relation_labels[[relation$id]] %||% relation$name
+          summary <- relation$description %||% relation$label %||% "No description."
+          sprintf("- `%s` (%s): %s", label, relation$kind, summary)
+        }, character(1)), collapse = "\n")
+      } else {
+        sprintf("No catalog objects found for \"%s\".", query)
+      }
+      tool_result(
+        body,
+        title = "Searched the data catalog",
+        icon = maybe_icon("search"),
+        markdown = body
+      )
+    },
+    "Search the selected data catalog by business meaning, object name, tags, and synonyms. Results are stable object names for describe_table.",
+    arguments = list(
+      query = ellmer::type_string("The data you need, in plain language."),
+      kinds = ellmer::type_array(
+        ellmer::type_string(),
+        "Optional object kinds such as table or view.",
+        required = FALSE
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "search_catalog",
+    annotations = ellmer::tool_annotations(
+      title = "Search the data catalog",
+      icon = maybe_icon("search"),
+      read_only_hint = TRUE
     )
   )
 }
@@ -330,12 +380,15 @@ search_context_tool <- function(context, query) {
 
 describe_table_tool <- function(source, table, source_name = NULL, tracker = NULL) {
   d <- source_describe(source, table)
-  entry <- source$dictionary$tables[[table]]
+  dictionary <- source_runtime_dictionary(source)
+  entry <- dictionary$tables[[table]]
 
-  sample <- sprintf(
-    "Sample rows:\n\n%s",
-    df_to_markdown(d$sample, max_rows = 5)
-  )
+  sample <- if (nrow(d$sample)) {
+    sprintf(
+      "Sample rows:\n\n%s",
+      df_to_markdown(d$sample, max_rows = 5)
+    )
+  }
   if (is.null(entry)) {
     parts <- c(
       sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
@@ -349,7 +402,7 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
       dictionary_columns_text(entry$columns, live = d$schema)
     )
     parts <- c(
-      dictionary_entry_parts(source$dictionary, table, columns),
+      dictionary_entry_parts(dictionary, table, columns),
       sample
     )
   }
@@ -393,7 +446,7 @@ run_sql_tool <- function(
 # text, which is reliable in a way column matching is not; a false positive
 # appends a harmless note.
 dictionary_sql_entries <- function(source, sql, source_name, tracker) {
-  dictionary <- source$dictionary
+  dictionary <- source_runtime_dictionary(source)
   tables <- names(dictionary$tables)
   hits <- tables[vapply(
     tables,

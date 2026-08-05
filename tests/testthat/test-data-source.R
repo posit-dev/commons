@@ -31,7 +31,10 @@ test_that("data_source wraps an existing connection without copying", {
   expect_identical(src$con, con)
   expect_setequal(list_tables(src), c("sales", "reps"))
 
-  src_one <- data_source(con, tables = "sales")
+  expect_warning(
+    src_one <- data_source(con, tables = "sales"),
+    "deprecated"
+  )
   expect_equal(list_tables(src_one), "sales")
 })
 
@@ -42,7 +45,13 @@ test_that("data_source supports schema-qualified connection tables", {
   DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR, revenue DOUBLE)")
   DBI::dbExecute(con, "INSERT INTO crm.sales VALUES ('o01', 100)")
 
-  src <- data_source(con, tables = "crm.sales")
+  src <- data_source(
+    con,
+    options = data_source_options(
+      include = DBI::Id(schema = "crm", table = "sales"),
+      sample_rows = 5
+    )
+  )
 
   expect_equal(list_tables(src), "crm.sales")
   d <- source_describe(src, "crm.sales")
@@ -59,7 +68,10 @@ test_that("data_source supports explicit DBI identifiers", {
 
   src <- data_source(
     con,
-    tables = list(DBI::Id(schema = "crm", table = "sales"))
+    options = data_source_options(
+      include = DBI::Id(schema = "crm", table = "sales"),
+      sample_rows = 5
+    )
   )
 
   expect_equal(list_tables(src), "crm.sales")
@@ -67,15 +79,120 @@ test_that("data_source supports explicit DBI identifiers", {
   expect_equal(d$sample$order_id, "o01")
 })
 
-test_that("data_source keeps default connection discovery unvalidated", {
+test_that("data_source_options selects exact objects and namespace prefixes", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.customers (id INTEGER)")
+  DBI::dbExecute(con, "CREATE TABLE crm.TMP_IMPORT (id INTEGER)")
+  DBI::dbExecute(con, 'CREATE TABLE "literal.dot" (id INTEGER)')
+
+  namespace <- data_source(
+    con,
+    options = data_source_options(
+      include = DBI::Id(schema = "crm"),
+      exclude = "TMP_*"
+    )
+  )
+  literal <- data_source(
+    con,
+    options = data_source_options(include = "literal.dot")
+  )
+  three_level <- data_source(
+    con,
+    options = data_source_options(
+      include = DBI::Id(catalog = "memory", schema = "crm"),
+      exclude = "TMP_*"
+    )
+  )
+
+  expect_equal(list_tables(namespace), "crm.customers")
+  expect_equal(list_tables(literal), "literal.dot")
+  expect_equal(list_tables(three_level), "memory.crm.customers")
+  expect_equal(source_describe(literal, "literal.dot")$schema$column, "id")
+})
+
+test_that("data_source_options applies to flat data sources", {
+  src <- data_source(
+    orders = data.frame(id = 1),
+    TMP_IMPORT = data.frame(id = 2),
+    customers = data.frame(id = 3),
+    options = data_source_options(
+      include = c("orders", "TMP_IMPORT"),
+      exclude = "TMP_*"
+    )
+  )
+
+  expect_equal(list_tables(src), "orders")
+})
+
+test_that("DBI identifiers remain exact rather than patterns", {
+  expect_snapshot(
+    normalize_connection_includes(DBI::Id(table = "orders*")),
+    error = TRUE
+  )
+})
+
+test_that("sample_rows opts into bounded live values", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "orders", data.frame(id = 1:5))
+
+  metadata_only <- data_source(con)
+  sampled <- data_source(
+    con,
+    options = data_source_options(include = "orders", sample_rows = 2)
+  )
+
+  expect_equal(nrow(source_describe(metadata_only, "orders")$sample), 0)
+  expect_equal(nrow(source_describe(sampled, "orders")$sample), 2)
+})
+
+test_that("connection discovery merges an authored dictionary", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.orders (amount DOUBLE)")
+  dictionary <- new_data_dictionary(list(
+    tables = list(orders = list(
+      description = "One row per order.",
+      columns = list(amount = list(
+        type = "number",
+        description = "Booked revenue."
+      )),
+      definitions = list(revenue = list(
+        expr = "SUM(amount)",
+        type = "number"
+      ))
+    ))
+  ))
+
+  src <- data_source(
+    con,
+    options = data_source_options(
+      include = DBI::Id(schema = "crm", table = "orders")
+    ),
+    dictionary = dictionary
+  )
+
+  runtime <- source_runtime_dictionary(src)
+  expect_equal(
+    runtime$tables[["crm.orders"]]$description,
+    "One row per order."
+  )
+  expect_equal(
+    definitions_registry(list(warehouse = src))$defs$table,
+    "crm.orders"
+  )
+})
+
+test_that("default connection discovery stays in the current namespace", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbExecute(con, "CREATE SCHEMA crm")
   DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR)")
 
-  src <- data_source(con)
-
-  expect_equal(list_tables(src), "sales")
+  expect_snapshot(data_source(con), error = TRUE)
 })
 
 test_that("data_source errors for tables absent from the connection", {
@@ -307,7 +424,7 @@ test_that("a failed pin read surfaces at use and is retried, not cached", {
   suppressMessages(
     pins::pin_write(board, data.frame(id = 1:5), "team-orders", type = "rds")
   )
-  expect_equal(nrow(source_describe(src, "orders")$sample), 5)
+  expect_equal(nrow(source_describe(src, "orders", n_sample = 5)$sample), 5)
 })
 
 test_that("a pin that isn't a data frame errors clearly", {

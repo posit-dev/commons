@@ -181,5 +181,8 @@ tables_text <- function(sources) {
 }
 
 table_bullets <- function(source) {
+  if (catalog_provider_searchable(source)) {
+    return("The selected catalog is large. Use `search_catalog` to find tables before calling `describe_table`.")
+  }
   paste(sprintf("- %s", list_tables(source)), collapse = "\n")
 }

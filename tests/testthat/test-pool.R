@@ -131,7 +131,7 @@ test_that("board-source metrics query without pre-binding the board", {
   board <- board_with_pins(sales = test_sales())
   src <- data_source(
     board,
-    tables = c(sales = "sales"),
+    options = data_source_options(include = c(sales = "sales")),
     dictionary = local_definitions_dict()
   )
   registry <- definitions_registry(list(sales_db = src))

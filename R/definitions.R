@@ -175,7 +175,12 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
   for (i in seq_along(sources)) {
     source <- sources[[i]]
     if (inherits(source$catalog, "commons_catalog")) {
-      registry <- catalog_definition_registry(source$catalog, labels[[i]], call)
+      registry <- catalog_definition_registry(
+        source$catalog,
+        labels[[i]],
+        source$relation_labels,
+        call
+      )
       tables <- unique(registry$defs$table)
       unknown <- setdiff(tables, source$tables)
       if (length(unknown)) {

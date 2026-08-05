@@ -4,29 +4,30 @@
 \alias{data_source}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL, dictionary = NULL)
+data_source(..., tables = NULL, dictionary = NULL, options = NULL)
 }
 \arguments{
 \item{...}{A single DBI connection, a single \code{pins} board, or named data
 frames to register as tables. When passing data frames, each name becomes
 a table name the agent can query.}
 
-\item{tables}{Which tables to expose, used when a connection or a board is
-supplied.
+\item{tables}{Deprecated. Use \code{options = data_source_options(include = ...)}.
 
-For a connection, a character vector of table names, schema-qualified
-strings like \code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every
-table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are
-interpreted as schema-qualified names; use \code{DBI::Id(table = "a.b")} for
-literal table names containing dots.
-
-For a board, a named character vector of pins to read: the names become
-table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
+Existing connection values retain their former behavior: strings with
+dots are treated as schema-qualified names. Existing board values retain
+their local-name-to-pin-name mapping.}
 
 \item{dictionary}{An optional path to a data dictionary describing the
 source's tables and columns, in the
 \href{https://data-dict.tidyverse.org/}{data-dict.yaml} format. See the
 \verb{Data dictionaries} section.}
+
+\item{options}{Selection, exclusion, and sampling controls from
+\code{\link[=data_source_options]{data_source_options()}}. DBI connections discover their current namespace
+by default. Boards require an explicit named \code{include} mapping.
+
+Selection controls which objects commons describes to the model. The
+connection's grants remain the security boundary for SQL execution.}
 }
 \value{
 A \code{commons_data_source} object.

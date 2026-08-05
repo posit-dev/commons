@@ -170,19 +170,68 @@ catalog_to_data_dictionary <- function(catalog, call = rlang::caller_env()) {
   )
 }
 
+catalog_to_runtime_dictionary <- function(
+  catalog,
+  relation_labels,
+  call = rlang::caller_env()
+) {
+  validate_commons_catalog(catalog, call = call)
+  relation_ids <- intersect(names(relation_labels), names(catalog$relations))
+  relations <- catalog$relations[relation_ids]
+  tables <- lapply(
+    relations,
+    catalog_relation_to_dictionary,
+    definitions = catalog$definitions
+  )
+  names(tables) <- unname(relation_labels[relation_ids])
+  glossary <- lapply(catalog$terms, `[[`, "description")
+  names(glossary) <- vapply(catalog$terms, `[[`, character(1), "name")
+  relationships <- unlist(
+    lapply(catalog$models, `[[`, "relationships"),
+    use.names = FALSE,
+    recursive = FALSE
+  )
+  authored_source <- Filter(
+    function(source) identical(source$kind, "data_dictionary"),
+    catalog$sources
+  )
+  source <- if (length(authored_source)) {
+    authored_source[[1]]
+  } else {
+    catalog$sources[[1]]
+  }
+  new_data_dictionary(
+    list(
+      name = source$label,
+      description = source$description,
+      details = source$details,
+      tables = tables,
+      relationships = relationships,
+      glossary = glossary
+    ),
+    call = call
+  )
+}
+
 catalog_definition_registry <- function(
   catalog,
   source = "",
+  table_labels = NULL,
   call = rlang::caller_env()
 ) {
   validate_commons_catalog(catalog, call = call)
   rows <- list(no_definitions)
   for (definition in catalog$definitions) {
     relation <- catalog$relations[[definition$relation_id]]
+    table <- if (relation$id %in% names(table_labels)) {
+      unname(table_labels[[relation$id]])
+    } else {
+      relation$name
+    }
     expression <- catalog_primary_expression(definition$expressions)
     rows[[length(rows) + 1]] <- data.frame(
       name = definition$name,
-      table = relation$name,
+      table = table,
       source = source,
       type = definition$logical_type %||% NA_character_,
       role = definition$role,

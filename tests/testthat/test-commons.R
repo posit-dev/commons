@@ -98,6 +98,28 @@ test_that("commons() registers only the tools the agent's composition earns", {
   )
 })
 
+test_that("large connection catalogs are searched and hydrated lazily", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE TABLE subscriptions (renewal_date DATE)")
+  src <- data_source(con)
+  relation_id <- names(src$provider$catalog$relations)[[1]]
+  relation <- src$provider$catalog$relations[[relation_id]]
+  relation$description <- "Customer renewals and recurring revenue."
+  src$provider$catalog$relations[[relation_id]] <- relation
+  src$provider$lazy <- TRUE
+
+  agent <- test_agent(data_sources = src)
+  search <- agent_tool(agent, "search_catalog")
+  result <- search("customer renewals")
+
+  expect_match(result@value, "subscriptions")
+  expect_match(agent$get_system_prompt(), "search_catalog")
+  expect_length(src$provider$catalog$relations[[relation_id]]$columns, 0)
+  agent_tool(agent, "describe_table")("subscriptions")
+  expect_length(src$provider$catalog$relations[[relation_id]]$columns, 1)
+})
+
 test_that("commons() configures run_r network access", {
   restricted <- agent_tool(test_agent(), "run_r")
   full <- agent_tool(test_agent(network = "full"), "run_r")
@@ -206,7 +228,12 @@ test_that("the system prompt includes schema-qualified table labels", {
 
   agent <- commons(
     test_client(),
-    data_sources = data_source(con, tables = "crm.sales")
+    data_sources = data_source(
+      con,
+      options = data_source_options(
+        include = DBI::Id(schema = "crm", table = "sales")
+      )
+    )
   )
 
   expect_match(agent$get_system_prompt(), "- crm.sales", fixed = TRUE)
@@ -543,7 +570,9 @@ test_that("prewarm() warms board pins in the background without loading them", {
   )
   src <- data_source(
     board,
-    tables = c(orders = "team-orders", reps = "team-reps")
+    options = data_source_options(
+      include = c(orders = "team-orders", reps = "team-reps")
+    )
   )
   agent <- test_agent(data_sources = list(sales_db = src))
 
@@ -566,7 +595,10 @@ test_that("a measure injected a board source loads its pins when it runs", {
   skip_if_not_installed("pins")
 
   board <- board_with_pins("team-orders" = data.frame(id = 1:3))
-  src <- data_source(board, tables = c(orders = "team-orders"))
+  src <- data_source(
+    board,
+    options = data_source_options(include = c(orders = "team-orders"))
+  )
 
   layer <- semantic_layer(
     measure(

@@ -122,10 +122,10 @@ test_that("format_measure_value collects a lazy dbplyr table", {
   expect_match(out, "EMEA")
 })
 
-test_that("describe_table_tool reports columns and samples", {
+test_that("describe_table_tool reports columns without sampling by default", {
   res <- describe_table_tool(test_source(), "sales")
   expect_match(res@value, "order_id")
-  expect_match(res@value, "Sample rows")
+  expect_no_match(res@value, "Sample rows")
 })
 
 test_that("search_context_tool handles a missing context layer", {

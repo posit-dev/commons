@@ -7,6 +7,23 @@
       ! No table named "nope".
       i Available tables: "sales".
 
+# DBI identifiers remain exact rather than patterns
+
+    Code
+      normalize_connection_includes(DBI::Id(table = "orders*"))
+    Condition
+      Error:
+      ! Wildcards are not allowed inside <DBI::Id>; put unqualified globs in `exclude`.
+
+# default connection discovery stays in the current namespace
+
+    Code
+      data_source(con)
+    Condition
+      Error in `data_source()`:
+      ! The connection has no current-namespace objects.
+      i Set a current catalog/database and schema, or supply `options` with explicit `include` IDs.
+
 # data_source errors for tables absent from the connection
 
     Code
@@ -38,7 +55,7 @@
       data_source(board)
     Condition
       Error in `data_source()`:
-      ! `tables` must be a named character vector of pin names.
+      ! Board data sources require `options` with an explicit `include` mapping.
 
 ---
 
@@ -46,7 +63,7 @@
       data_source(board, tables = stats::setNames(character(0), character(0)))
     Condition
       Error in `data_source()`:
-      ! `tables` must name at least one pin.
+      ! Board `include` must name at least one pin.
 
 # check_board_pins_exist resolves, flags missing, and flags ambiguous names
 
