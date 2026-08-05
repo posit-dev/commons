@@ -55,7 +55,7 @@ augment_context_layer <- function(context_layer, sources) {
     label <- labels[[i]]
     dictionary <- source_runtime_dictionary(source)
     dictionary_chunks <- dictionary_context_chunks(dictionary)
-    catalog <- source$provider$catalog %||% source$catalog
+    catalog <- source_catalog(source)
     records <- if (inherits(catalog, "commons_catalog")) {
       Filter(
         function(record) identical(record$delivery, "retrieval"),

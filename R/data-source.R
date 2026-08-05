@@ -287,10 +287,12 @@ source_runtime_dictionary <- function(source) {
 }
 
 source_catalog <- function(source) {
+  source_provider_check(source)
   source$provider$catalog %||% source$catalog
 }
 
 source_table_ids <- function(source) {
+  source_provider_check(source)
   source$provider$table_ids %||% source$table_ids
 }
 
@@ -300,6 +302,20 @@ source_tables <- function(source) {
 
 source_relation_labels <- function(source) {
   source$provider$relation_labels %||% source$relation_labels
+}
+
+source_provider_check <- function(source, call = rlang::caller_env()) {
+  if (!is.null(source$provider)) {
+    catalog_provider_check(source$provider, call)
+  }
+  invisible(source)
+}
+
+catalog_sources_check <- function(sources, call = rlang::caller_env()) {
+  for (source in sources) {
+    source_provider_check(source, call)
+  }
+  invisible(sources)
 }
 
 catalog_scope_flat_authored <- function(metadata, tables, kind) {

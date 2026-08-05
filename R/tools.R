@@ -256,6 +256,7 @@ tool_call_calculation <- function(private) {
 tool_call_measure <- function(private) {
   ellmer::tool(
     function(name, arguments = "{}") {
+      catalog_sources_check(private$sources)
       call_measure_tool(
         private$registry,
         name,
@@ -286,6 +287,7 @@ tool_call_measure <- function(private) {
 tool_search_context <- function(private) {
   ellmer::tool(
     function(query, source = NULL) {
+      catalog_sources_check(private$sources)
       search_context_tool(private$context_layer, query, source)
     },
     "Search context for metric definitions, data notes, and table relationships.",
@@ -583,7 +585,7 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
 }
 
 catalog_first_touch_text <- function(source, table) {
-  catalog <- source$provider$catalog %||% source$catalog
+  catalog <- source_catalog(source)
   if (!inherits(catalog, "commons_catalog")) {
     return(character())
   }

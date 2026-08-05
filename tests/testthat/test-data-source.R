@@ -257,6 +257,11 @@ test_that("provider identity is checked before every query", {
   source$provider$snapshot$principal <- "different-principal"
 
   expect_snapshot(source_query(source, "SELECT * FROM orders"), error = TRUE)
+  expect_error(list_tables(source), "identity, role, or current namespace changed")
+  expect_error(
+    definitions_registry(list(warehouse = source)),
+    "identity, role, or current namespace changed"
+  )
 })
 
 test_that("catalog telemetry covers discovery and hydration", {

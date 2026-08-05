@@ -253,6 +253,7 @@ Commons <- R6::R6Class(
     },
 
     chat = function(..., echo = NULL) {
+      catalog_sources_check(private$sources)
       if (private$tracing) {
         local_conversation_turn_span(private$conversation_id)
       }
@@ -265,6 +266,7 @@ Commons <- R6::R6Class(
       stream = c("text", "content"),
       controller = NULL
     ) {
+      catalog_sources_check(private$sources)
       stream <- super$stream_async(
         ...,
         tool_mode = tool_mode,
