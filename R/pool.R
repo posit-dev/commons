@@ -775,6 +775,10 @@ definition_pool_text <- function(def, defs) {
         reference
       ),
       filter = sprintf("Use as a call_metrics filter: %s.", reference),
+      fact = sprintf(
+        "Use in a call_metrics where predicate as column %s.",
+        reference
+      ),
       sprintf("Use as a call_metrics dimension: %s.", reference)
     )
   } else {
@@ -799,7 +803,13 @@ definition_pool_text <- function(def, defs) {
 
   siblings <- NULL
   if (identical(role, "metric")) {
-    same_table <- defs[defs$table == def$table & defs$name != def$name, ]
+    same_table <- defs[
+      defs$table == def$table &
+        defs$name != def$name &
+        defs$role %in% c("filter", "dimension", "fact"),
+      ,
+      drop = FALSE
+    ]
     if (nrow(same_table)) {
       items <- vapply(seq_len(nrow(same_table)), function(i) {
         sibling <- same_table[i, , drop = FALSE]
@@ -810,7 +820,7 @@ definition_pool_text <- function(def, defs) {
         )
       }, character(1))
       siblings <- sprintf(
-        "Filters and dimensions on this table: %s.",
+        "Related governed fields on this table: %s.",
         paste(items, collapse = ", ")
       )
     }

@@ -196,7 +196,9 @@ tool_call_metrics <- function(private) {
       ),
       where = ellmer::type_array(
         ellmer::type_object(
-          column = ellmer::type_string("A documented column name."),
+          column = ellmer::type_string(
+            "A documented column or governed dimension or fact name."
+          ),
           op = ellmer::type_enum(
             c("=", "!=", "<", "<=", ">", ">="),
             "Comparison operator."

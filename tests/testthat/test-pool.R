@@ -153,6 +153,24 @@ test_that("native definitions require qualification only when ambiguous", {
   )
 })
 
+test_that("native facts are advertised as predicates rather than dimensions", {
+  def <- data.frame(
+    name = "ORDER_TOTAL",
+    table = "DB.PUBLIC.MODEL",
+    role = "fact",
+    native_parent = "ORDERS",
+    execution = "snowflake_semantic_view",
+    description = NA_character_,
+    details = NA_character_,
+    stringsAsFactors = FALSE
+  )
+
+  text <- definition_pool_text(def, def)
+
+  expect_match(text, "where predicate", fixed = TRUE)
+  expect_no_match(text, "dimension", fixed = TRUE)
+})
+
 test_that("metrics in one call must share a table", {
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
@@ -290,7 +308,7 @@ test_that("search_pool spans measures and definitions", {
   expect_match(out, "{{big_revenue}} --- metric on table `sales`", fixed = TRUE)
   expect_match(out, "call_metrics", fixed = TRUE)
   # A metric hit advertises what it can be sliced by.
-  expect_match(out, "Filters and dimensions on this table", fixed = TRUE)
+  expect_match(out, "Related governed fields on this table", fixed = TRUE)
   expect_match(out, "{{emea}} (filter)", fixed = TRUE)
 
   out <- search_pool_text(measures, registry, "how many orders")
