@@ -161,6 +161,12 @@ snowflake_import_associated_semantics <- function(provider) {
       function(id) identical(attr(id, "commons_kind"), "semantic_view"),
       candidates
     )
+    candidates <- catalog_bound_semantic_candidates(
+      provider,
+      candidates,
+      prefix,
+      "Snowflake"
+    )
     for (id in candidates) {
       relation <- catalog_add_associated_relation(
         provider,

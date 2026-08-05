@@ -209,6 +209,12 @@ databricks_import_associated_semantics <- function(provider) {
       function(id) attr(id, "commons_kind") %in% c("metric_view", "view"),
       candidates
     )
+    candidates <- catalog_bound_semantic_candidates(
+      provider,
+      candidates,
+      prefix,
+      "Databricks"
+    )
     for (id in candidates) {
       path <- new_source_path(id)
       specification <- databricks_read_metric_yaml(provider$con, path)

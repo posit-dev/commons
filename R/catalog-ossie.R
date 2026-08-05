@@ -721,6 +721,16 @@ ossie_export_model <- function(catalog, model, version) {
       version
     )
   }
+  metadata <- ossie_export_commons_metadata(
+    raw,
+    list(label = model$label, details = model$details),
+    version,
+    "model",
+    model$name,
+    model$id
+  )
+  raw <- metadata$raw
+  diagnostics <- c(diagnostics, metadata$diagnostics)
   extensions <- ossie_export_extensions(
     raw,
     model$extensions,
@@ -836,6 +846,21 @@ ossie_export_dataset <- function(catalog, model, relation, version) {
       entity_id = relation$id
     )
   }
+  metadata <- ossie_export_commons_metadata(
+    raw,
+    list(
+      label = relation$label,
+      details = relation$details,
+      aliases = relation$aliases,
+      tags = relation$tags
+    ),
+    version,
+    "relation",
+    relation$name,
+    relation$id
+  )
+  raw <- metadata$raw
+  diagnostics <- c(diagnostics, metadata$diagnostics)
   extensions <- ossie_export_extensions(
     raw,
     relation$extensions,
@@ -904,6 +929,23 @@ ossie_export_definition <- function(definition, catalog, version) {
     definition$id,
     raw$ai_context
   )
+  metadata <- ossie_export_commons_metadata(
+    raw,
+    list(
+      details = definition$details,
+      aggregation = definition$aggregation,
+      visibility = if (!identical(definition$visibility, "public") &&
+          is.null(definition$extensions$ossie)) {
+        definition$visibility
+      }
+    ),
+    version,
+    "definition",
+    definition$name,
+    definition$id
+  )
+  raw <- metadata$raw
+  diagnostics <- c(diagnostics, metadata$diagnostics)
   extensions <- ossie_export_extensions(
     raw,
     definition$extensions,
@@ -961,6 +1003,41 @@ ossie_export_extensions <- function(
     diagnostics[[length(diagnostics) + 1]] <- diagnostic
   }
   list(raw = raw, diagnostics = diagnostics)
+}
+
+ossie_export_commons_metadata <- function(
+  raw,
+  metadata,
+  version,
+  entity_kind,
+  entity_name,
+  entity_id
+) {
+  metadata <- metadata[vapply(
+    metadata,
+    function(value) !is.null(value) && length(value) > 0,
+    logical(1)
+  )]
+  if (length(metadata) == 0) {
+    return(list(raw = raw, diagnostics = list()))
+  }
+  raw$custom_extensions <- ossie_append_extension(
+    raw$custom_extensions,
+    "COMMONS",
+    list(metadata = ossie_plain(metadata)),
+    version
+  )
+  diagnostic <- new_catalog_diagnostic(
+    "ossie_metadata_extension_only",
+    sprintf(
+      "%s %s metadata is preserved only in a COMMONS extension.",
+      entity_kind,
+      entity_name
+    ),
+    severity = "info",
+    entity_id = entity_id
+  )
+  list(raw = raw, diagnostics = list(diagnostic))
 }
 
 ossie_constraint_represented <- function(constraint, relation, model, catalog) {

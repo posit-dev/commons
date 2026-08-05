@@ -977,6 +977,27 @@ catalog_import_relation_semantics <- function(provider, relation_id) {
   invisible(provider)
 }
 
+catalog_bound_semantic_candidates <- function(
+  provider,
+  candidates,
+  prefix,
+  backend
+) {
+  if (length(candidates) <= catalog_object_limit) return(candidates)
+  catalog_provider_diagnostic(
+    provider,
+    "semantic_candidate_limit",
+    sprintf(
+      "Skipped associated %s semantic discovery in %s because it contains more than %s candidates; select the semantic object explicitly.",
+      backend,
+      paste(prefix@name, collapse = "."),
+      catalog_object_limit
+    ),
+    severity = "info"
+  )
+  list()
+}
+
 catalog_association_prefixes <- function(provider) {
   relation_ids <- names(provider$selection_modes)[
     provider$selection_modes == "exact"

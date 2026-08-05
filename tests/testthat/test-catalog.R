@@ -470,6 +470,26 @@ test_that("associated semantic definitions respect physical dependency closure",
   expect_equal(registry$defs$name, "ORDER_COUNT")
 })
 
+test_that("associated semantic candidate inspection is bounded", {
+  provider <- new.env(parent = emptyenv())
+  provider$catalog <- new_commons_catalog()
+  candidates <- list(DBI::Id(table = "one"), DBI::Id(table = "two"))
+  local_mocked_bindings(catalog_object_limit = 1L)
+
+  bounded <- catalog_bound_semantic_candidates(
+    provider,
+    candidates,
+    DBI::Id(schema = "public"),
+    "Test"
+  )
+
+  expect_length(bounded, 0)
+  expect_equal(
+    provider$catalog$diagnostics[[1]]$code,
+    "semantic_candidate_limit"
+  )
+})
+
 test_that("private and visible-only semantic definitions stay out of the registry", {
   source <- new_catalog_source("source:test", "snowflake")
   relation <- new_catalog_relation(

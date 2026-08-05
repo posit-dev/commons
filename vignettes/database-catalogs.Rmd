@@ -60,6 +60,12 @@ Databricks may take several
 minutes to start a stopped SQL warehouse on the first connection or query; wait
 for that call rather than retrying it.
 
+Snowflake can list catalog and semantic metadata without an active warehouse,
+but zero-row authorization probes and native semantic queries require one.
+Configure a warehouse on the connection or run `USE WAREHOUSE` before the first
+description or metric call. A missing or starting warehouse leaves access
+`unknown` and retryable; it is not cached as a permission denial.
+
 An exact physical-table selection can import an associated semantic model only
 when that model's dependencies are inside the selection. Selecting a semantic
 view or metric view exactly imports its declared dependency closure for
