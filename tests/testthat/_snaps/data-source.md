@@ -7,6 +7,15 @@
       ! No table named "nope".
       i Available tables: "sales".
 
+# warehouse IDs resolve against the current namespace
+
+    Code
+      catalog_complete_connection_id(DBI::Id(catalog = "ANALYTICS", table = "ORDERS"),
+      "snowflake", snapshot, call)
+    Condition
+      Error:
+      ! A <DBI::Id> with a catalog/database and table must also contain a schema.
+
 # flat selections cannot resolve to no objects
 
     Code

@@ -214,7 +214,7 @@ snowflake_metric_sql <- function(
   dimension_defs <- resolve_pool_names(
     dimensions,
     defs,
-    role = "dimension"
+    role = c("dimension", "time_dimension")
   )
   filter_defs <- resolve_pool_names(filters, defs, role = "filter")
   parts <- c(
@@ -345,7 +345,7 @@ databricks_metric_sql <- function(
   dimension_defs <- resolve_pool_names(
     dimensions,
     defs,
-    role = "dimension"
+    role = c("dimension", "time_dimension")
   )
   dimension_names <- vapply(
     dimension_defs$name,
@@ -481,7 +481,11 @@ native_where_conditions <- function(where, defs, con) {
     if (!triple$op %in% where_ops) {
       cli::cli_abort("{.arg where} operator must be one of {.val {where_ops}}.")
     }
-    dimension <- resolve_pool_name(triple$column, defs, "dimension")
+    dimension <- resolve_pool_name(
+      triple$column,
+      defs,
+      c("dimension", "time_dimension", "fact")
+    )
     reference <- native_definition_references(dimension, con)
     value <- if (grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)) {
       triple$value
@@ -546,21 +550,28 @@ resolve_pool_names <- function(names, defs, role) {
 
 resolve_pool_name <- function(name, defs, role) {
   named <- defs[defs$name == name, ]
-  matched <- named[which(named$role == role), ]
+  matched <- named[which(named$role %in% role), ]
   if (nrow(matched)) {
     return(matched[1, ])
   }
+  role_label <- paste(role, collapse = ", ")
+  expected <- if (length(role) == 1) {
+    paste("a", role)
+  } else {
+    paste("one of", role_label)
+  }
   if (nrow(named)) {
     cli::cli_abort(
-      "{.val {name}} is a {named$role[[1]]}, not a {role}; apply it as
+      "{.val {name}} is a {named$role[[1]]}, not {expected}; apply it as
        {.code {{{{{name}}}}}} in SQL instead."
     )
   }
-  available <- defs$name[which(defs$role == role)]
+  available <- defs$name[which(defs$role %in% role)]
+  governed <- if (length(role) == 1) role else role_label
   cli::cli_abort(
     c(
-      "No governed {role} is named {.val {name}}.",
-      i = "Available {role}s: {.val {available}}."
+      "No governed {governed} is named {.val {name}}.",
+      i = "Available values: {.val {available}}."
     )
   )
 }

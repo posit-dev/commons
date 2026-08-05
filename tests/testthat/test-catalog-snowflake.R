@@ -186,6 +186,43 @@ test_that("Snowflake metrics compile through SEMANTIC_VIEW", {
   expect_match(sql, "ORDERS.REVENUE", fixed = TRUE)
 })
 
+test_that("Snowflake native queries accept time dimensions and facts", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  path <- new_source_path(
+    c("ANALYTICS", "PUBLIC", "SALES_MODEL"),
+    c("catalog", "schema", "table")
+  )
+  provider <- new.env(parent = emptyenv())
+  provider$catalog <- new_commons_catalog()
+  provider$catalog$models[["model:sales"]] <- new_catalog_model(
+    "model:sales",
+    "source:test",
+    "SALES_MODEL",
+    execution = list(kind = "snowflake_semantic_view", object = path)
+  )
+  source <- list(con = con, provider = provider)
+  defs <- data.frame(
+    name = c("REVENUE", "ORDER_DATE", "ORDER_TOTAL"),
+    role = c("metric", "time_dimension", "fact"),
+    native_parent = rep("ORDERS", 3),
+    stringsAsFactors = FALSE
+  )
+
+  sql <- snowflake_metric_sql(
+    source,
+    "model:sales",
+    defs[1, , drop = FALSE],
+    defs,
+    dimensions = "ORDER_DATE",
+    filters = NULL,
+    where = list(list(column = "ORDER_TOTAL", op = ">", value = "10"))
+  )
+
+  expect_match(sql, "ORDERS.ORDER_DATE", fixed = TRUE)
+  expect_match(sql, "ORDERS.ORDER_TOTAL", fixed = TRUE)
+})
+
 test_that("Snowflake masking metadata marks restricted columns", {
   row <- data.frame(
     check.names = FALSE,

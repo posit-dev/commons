@@ -10,7 +10,7 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     snapshot$principal %||% "unknown",
     paste(unlist(snapshot$namespace), collapse = ".")
   )
-  ids <- catalog_resolve_selection(con, backend, options, call)
+  ids <- catalog_resolve_selection(con, backend, snapshot, options, call)
   if (length(ids) > catalog_object_limit) {
     cli::cli_abort(c(
       "The data-source selection resolves to {length(ids)} objects, above the supported limit of {catalog_object_limit}.",
@@ -188,7 +188,7 @@ catalog_provider_check <- function(provider, call = rlang::caller_env()) {
   invisible(provider)
 }
 
-catalog_resolve_selection <- function(con, backend, options, call) {
+catalog_resolve_selection <- function(con, backend, snapshot, options, call) {
   includes <- normalize_connection_includes(options$include, call)
   if (is.null(includes)) {
     objects <- catalog_default_objects(con, backend, call)
@@ -197,6 +197,12 @@ catalog_resolve_selection <- function(con, backend, options, call) {
 
   objects <- list()
   for (include in includes) {
+    include <- catalog_complete_connection_id(
+      include,
+      backend,
+      snapshot,
+      call
+    )
     if ("table" %in% names(include@name)) {
       objects[[length(objects) + 1]] <- catalog_selection_id(include, "exact")
     } else {
@@ -206,6 +212,52 @@ catalog_resolve_selection <- function(con, backend, options, call) {
     }
   }
   objects
+}
+
+catalog_complete_connection_id <- function(id, backend, snapshot, call) {
+  if (!backend %in% c("snowflake", "databricks")) {
+    return(id)
+  }
+  components <- as.list(id@name)
+  top_roles <- intersect(c("catalog", "database"), names(components))
+  if (length(top_roles) > 1) {
+    cli::cli_abort(
+      "A {.cls DBI::Id} cannot contain both {.field catalog} and {.field database}.",
+      call = call
+    )
+  }
+  current_top <- snapshot$namespace$catalog %||%
+    snapshot$namespace$database
+  if ("schema" %in% names(components) && length(top_roles) == 0) {
+    if (is.null(current_top)) {
+      cli::cli_abort(
+        "A relative {.cls DBI::Id} needs a current catalog/database or an explicit {.field catalog} component.",
+        call = call
+      )
+    }
+    components <- c(list(catalog = current_top), components)
+    top_roles <- "catalog"
+  }
+  if ("table" %in% names(components) && !"schema" %in% names(components)) {
+    if (length(top_roles)) {
+      cli::cli_abort(
+        "A {.cls DBI::Id} with a catalog/database and table must also contain a {.field schema}.",
+        call = call
+      )
+    }
+    current_schema <- snapshot$namespace$schema
+    if (is.null(current_top) || is.null(current_schema)) {
+      cli::cli_abort(
+        "A relative table {.cls DBI::Id} needs a current catalog/database and schema.",
+        call = call
+      )
+    }
+    components <- c(
+      list(catalog = current_top, schema = current_schema),
+      components
+    )
+  }
+  do.call(DBI::Id, components)
 }
 
 catalog_selection_id <- function(id, mode) {

@@ -112,6 +112,42 @@ test_that("data_source_options selects exact objects and namespace prefixes", {
   expect_equal(source_describe(literal, "literal.dot")$schema$column, "id")
 })
 
+test_that("warehouse IDs resolve against the current namespace", {
+  snapshot <- list(namespace = list(catalog = "ANALYTICS", schema = "PUBLIC"))
+  call <- rlang::caller_env()
+
+  table <- catalog_complete_connection_id(
+    DBI::Id(table = "ORDERS"),
+    "snowflake",
+    snapshot,
+    call
+  )
+  schema_table <- catalog_complete_connection_id(
+    DBI::Id(schema = "FINANCE", table = "LEDGER"),
+    "databricks",
+    snapshot,
+    call
+  )
+
+  expect_equal(
+    table@name,
+    c(catalog = "ANALYTICS", schema = "PUBLIC", table = "ORDERS")
+  )
+  expect_equal(
+    schema_table@name,
+    c(catalog = "ANALYTICS", schema = "FINANCE", table = "LEDGER")
+  )
+  expect_snapshot(
+    catalog_complete_connection_id(
+      DBI::Id(catalog = "ANALYTICS", table = "ORDERS"),
+      "snowflake",
+      snapshot,
+      call
+    ),
+    error = TRUE
+  )
+})
+
 test_that("data_source_options applies to flat data sources", {
   src <- data_source(
     orders = data.frame(id = 1),
@@ -315,7 +351,7 @@ test_that("catalog providers reject selections above their object bound", {
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   local_mocked_bindings(
     catalog_object_limit = 1L,
-    catalog_resolve_selection = function(con, backend, options, call) {
+    catalog_resolve_selection = function(con, backend, snapshot, options, call) {
       list(DBI::Id(table = "one"), DBI::Id(table = "two"))
     }
   )
