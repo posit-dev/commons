@@ -11,12 +11,6 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
     paste(unlist(snapshot$namespace), collapse = ".")
   )
   ids <- catalog_resolve_selection(con, backend, snapshot, options, call)
-  if (length(ids) > catalog_object_limit) {
-    cli::cli_abort(c(
-      "The data-source selection resolves to {length(ids)} objects, above the supported limit of {catalog_object_limit}.",
-      "i" = "Narrow {.arg include} to fewer catalog or schema prefixes."
-    ), call = call)
-  }
   if (length(ids) == 0) {
     cli::cli_abort(
       "The resolved data-source selection contains no queryable objects.",
@@ -26,6 +20,12 @@ new_catalog_provider <- function(con, options, call = rlang::caller_env()) {
   names <- vapply(ids, catalog_id_name, character(1))
   keep <- !catalog_excluded(names, options$exclude)
   ids <- ids[keep]
+  if (length(ids) > catalog_object_limit) {
+    cli::cli_abort(c(
+      "The data-source selection resolves to {length(ids)} objects, above the supported limit of {catalog_object_limit}.",
+      "i" = "Narrow {.arg include} or {.arg exclude} to fewer objects."
+    ), call = call)
+  }
   if (length(ids) == 0) {
     cli::cli_abort(
       "{.arg exclude} removes every object in the data-source selection.",

@@ -10,8 +10,8 @@
 #' * Named data frames are loaded into an in-process DuckDB database. Use this
 #'   when the data isn't already in a database.
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
-#'   in-process database: each pin in `tables` becomes a table. Pin names are
-#'   validated against the board at construction (a single listing call), but
+#'   in-process database: each pin selected by `options` becomes a table. Pin
+#'   names are validated against the board at construction (a single listing call), but
 #'   each pin is downloaded only when its table is first used---by the
 #'   `describe_table` tool, a SQL query that references it, or a measure that
 #'   takes the source's connection. [commons_server()] starts a background

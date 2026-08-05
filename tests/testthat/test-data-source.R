@@ -386,6 +386,11 @@ test_that("catalog providers reject selections above their object bound", {
     new_catalog_provider(con, data_source_options()),
     error = TRUE
   )
+  provider <- new_catalog_provider(
+    con,
+    data_source_options(exclude = "two")
+  )
+  expect_equal(names(provider$table_ids), "one")
 })
 
 test_that("connection discovery merges an authored dictionary", {

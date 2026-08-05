@@ -66,7 +66,7 @@
     Condition
       Error:
       ! The data-source selection resolves to 2 objects, above the supported limit of 1.
-      i Narrow `include` to fewer catalog or schema prefixes.
+      i Narrow `include` or `exclude` to fewer objects.
 
 # default connection discovery stays in the current namespace
 
