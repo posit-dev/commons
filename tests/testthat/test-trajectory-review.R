@@ -483,6 +483,7 @@ test_that("trust_timeline_bins aggregates question tags by day at volume", {
   bins <- binned$bins
 
   expect_equal(binned$unit, "day")
+  expect_identical(binned$sparse, FALSE)
   expect_length(bins, 2)
   expect_equal(bins[[1]]$date, "2026-07-01")
   expect_equal(bins[[1]]$n, 5)
@@ -512,6 +513,10 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
   expect_equal(binned$bins[[1]]$n, 8)
   expect_equal(binned$bins[[2]]$label, "Jul 6\u201312, 2026")
   expect_equal(binned$bins[[2]]$n, 14)
+  expect_equal(
+    timeline_ticktext(binned$bins, seq_along(binned$bins), binned$unit),
+    vapply(binned$bins, `[[`, character(1), "label")
+  )
 
   monthly <- lapply(
     as.character(seq(as.Date("2026-06-01"), by = 7, length.out = 10)),
@@ -520,12 +525,14 @@ test_that("trust_timeline_bins widens bins until they hold enough answers", {
   )
   binned <- trust_timeline_bins(monthly)
   expect_equal(binned$unit, "month")
+  expect_identical(binned$sparse, TRUE)
   expect_equal(
     vapply(binned$bins, function(bin) bin$label, character(1)),
     c("June 2026", "July 2026", "Aug 1\u20133, 2026")
   )
 
   expect_equal(trust_timeline_bins(list())$unit, "day")
+  expect_identical(trust_timeline_bins(list())$sparse, FALSE)
   expect_length(trust_timeline_bins(list())$bins, 0)
 })
 
@@ -560,8 +567,12 @@ test_that("trust_timeline renders a chart and its table view", {
   ))
   bins <- binned$bins
 
-  traces <- plotly::plotly_build(timeline_plot(bins, binned$unit))$x$data
+  plot <- plotly::plotly_build(
+    timeline_plot(bins, binned$unit, binned$sparse)
+  )$x
+  traces <- plot$data
   expect_length(traces, length(viewer_levels))
+  expect_equal(plot$layout$xaxis$ticklabelposition, "outside right")
   expect_equal(
     vapply(traces, function(trace) trace$name, character(1)),
     unname(viewer_levels)
@@ -573,11 +584,28 @@ test_that("trust_timeline renders a chart and its table view", {
   expect_match(hovers[[1]][[1]], "(n = 5)", fixed = TRUE)
   expect_match(hovers[[1]][[2]], "<b>60%</b> Verified", fixed = TRUE)
   expect_match(hovers[[1]][[2]], "<extra></extra>", fixed = TRUE)
+  expect_equal(traces[[1]]$type, "scatter")
+
+  weekly <- plotly::plotly_build(
+    timeline_plot(bins, "week", sparse = FALSE)
+  )$x$data
+  expect_equal(weekly[[1]]$type, "bar")
 
   single <- plotly::plotly_build(timeline_plot(bins[1], binned$unit))$x$data
   expect_equal(single[[1]]$type, "bar")
   expect_match(single[[1]]$hovertemplate[[1]], "(n = 5)", fixed = TRUE)
   expect_no_match(single[[1]]$hovertemplate[[1]], "%{text}", fixed = TRUE)
+
+  sparse <- trust_timeline_bins(c(
+    list(timeline_question("A", "2026-07-01")),
+    list(timeline_question("C", "2026-07-03"))
+  ))
+  sparse_traces <- plotly::plotly_build(
+    timeline_plot(sparse$bins, sparse$unit, sparse$sparse)
+  )$x$data
+  expect_identical(sparse$sparse, TRUE)
+  expect_equal(sparse_traces[[1]]$type, "bar")
+  expect_equal(as.numeric(sparse_traces[[1]]$width), rep(69120000, 2))
 
   html <- as.character(trust_timeline(binned))
   expect_match(html, "commons-viewer-sr-only")
