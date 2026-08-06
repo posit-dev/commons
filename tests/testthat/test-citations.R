@@ -172,17 +172,25 @@ test_that("dataset-level dictionary prose is citable", {
   )
 })
 
-test_that("add_citation_request appends once per conversation", {
+test_that("add_citation_request appends full instructions once, then reminders", {
   tracker <- new.env(parent = emptyenv())
+  tracker$request <- "FULL CITATION INSTRUCTIONS"
+  tracker$reminder <- "SHORT CITATION REMINDER"
   first <- tool_result("6 rows", title = "Ran SQL", tag = "B")
   second <- tool_result("3 rows", title = "Ran SQL", tag = "B")
+  third <- tool_result("2 rows", title = "Ran SQL", tag = "B")
 
   first <- add_citation_request(first, tracker)
   second <- add_citation_request(second, tracker)
+  tracker$requested <- FALSE
+  third <- add_citation_request(third, tracker)
 
   expect_match(first@value, "6 rows")
-  expect_match(first@value, "<citation ", fixed = TRUE)
+  expect_match(first@value, "FULL CITATION INSTRUCTIONS", fixed = TRUE)
+  expect_no_match(first@value, "SHORT CITATION REMINDER", fixed = TRUE)
   expect_equal(second@value, "3 rows")
+  expect_match(third@value, "SHORT CITATION REMINDER", fixed = TRUE)
+  expect_no_match(third@value, "FULL CITATION INSTRUCTIONS", fixed = TRUE)
 })
 
 test_that("add_citation_request appends ContentText to content lists", {
@@ -197,4 +205,25 @@ test_that("add_citation_request appends ContentText to content lists", {
 
   expect_length(result@value, 2)
   expect_match(result@value[[2]]@text, "<citation ", fixed = TRUE)
+})
+
+test_that("user messages reset citation requests but tool results do not", {
+  agent <- test_agent()
+  tracker <- agent$.__enclos_env__$private$citation_request
+  tracker$requested <- TRUE
+
+  agent$add_turn(
+    ellmer::UserTurn("How many orders are there?"),
+    ellmer::AssistantTurn("I'll check."),
+    log_tokens = FALSE
+  )
+  expect_false(tracker$requested)
+
+  tracker$requested <- TRUE
+  agent$add_turn(
+    ellmer::UserTurn(list(tool_result("6 rows", title = "Ran SQL", tag = "B"))),
+    ellmer::AssistantTurn("There are 6 orders."),
+    log_tokens = FALSE
+  )
+  expect_true(tracker$requested)
 })

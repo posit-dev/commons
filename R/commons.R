@@ -237,6 +237,7 @@ Commons <- R6::R6Class(
         private$registry,
         private$definitions
       )
+      private$citation_request$reminder <- citation_reminder_text()
 
       self$register_tools(build_commons_tools(self, private))
       self$set_system_prompt(
@@ -246,6 +247,13 @@ Commons <- R6::R6Class(
           private$definitions
         )
       )
+    },
+
+    add_turn = function(user, assistant, log_tokens = TRUE) {
+      if (turn_has_user_message(user)) {
+        private$citation_request$requested <- FALSE
+      }
+      super$add_turn(user, assistant, log_tokens = log_tokens)
     },
 
     chat = function(..., echo = NULL) {
@@ -320,6 +328,10 @@ Commons <- R6::R6Class(
     citation_request = NULL
   )
 )
+
+turn_has_user_message <- function(turn) {
+  any(!vapply(turn@contents, is_tool_result_content, logical(1)))
+}
 
 # Measures can take a named source's connection as an argument.
 measure_injectables <- function(sources) {

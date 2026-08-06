@@ -126,23 +126,38 @@ normalize_citation <- function(x) {
   trimws(gsub("\\s+", " ", x))
 }
 
-# The citation request rides on the first fallback-tagged tool result of the
-# conversation rather than living in the system prompt, so conversations
-# answered entirely by governed tools never see it. The agent composes its
-# request at construction and stores it here.
+# The full citation request rides on the conversation's first fallback-tagged
+# tool result; later user turns get a shorter reminder on their first fallback.
+# Conversations answered entirely by governed tools never see either prompt.
 add_citation_request <- function(result, tracker) {
   if (is.null(tracker) || isTRUE(tracker$requested)) {
     return(result)
   }
   tracker$requested <- TRUE
 
-  request <- tracker$request %||% citation_request_text()
+  if (isTRUE(tracker$full_sent)) {
+    request <- tracker$reminder %||% citation_reminder_text()
+  } else {
+    request <- tracker$request %||% citation_request_text()
+    tracker$full_sent <- TRUE
+  }
   if (is.character(result@value)) {
     result@value <- paste(c(result@value, request), collapse = "\n\n")
   } else {
     result@value <- c(result@value, list(ellmer::ContentText(text = request)))
   }
   result
+}
+
+citation_reminder_text <- function() {
+  paste(
+    "With this most recent tool call, this turn is now based on outputs",
+    "beyond trusted calculations.",
+    "If trusted text you have seen supports your final answer,",
+    "end your reply with `<citation reason=\"Short reason\">exact supporting",
+    "text</citation>` elements, following the citation rules given earlier.",
+    "Otherwise, provide no citations."
+  )
 }
 
 citation_request_text <- function(measures = list(), definitions = NULL) {
@@ -154,7 +169,7 @@ citation_request_text <- function(measures = list(), definitions = NULL) {
   # every answer is a fallback answer: there is no governed path to contrast
   # with, so don't imply one.
   exception <- if (has_measures || registry_has_metrics(definitions)) {
-    " that does not come from a governed tool alone"
+    " that does not come from a trusted calculation alone"
   }
   trust_note <- cli::format_inline(
     'Note: any answer in this conversation{exception} will be presented to
