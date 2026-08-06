@@ -5,7 +5,7 @@
 #'
 #' Files are chunked and indexed with \pkg{ragnar} when the agent first
 #' searches its context. Facts that should be in every prompt belong in the
-#' `system_prompt` passed to [commons()], not here.
+#' `instructions` passed to [commons()], not here.
 #'
 #' @param files Character vector of paths to text/markdown files to index.
 #'

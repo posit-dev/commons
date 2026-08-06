@@ -37,7 +37,7 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 |   |-- semantic_layer.R
 |   `-- context_layer.R
 |-- app.R
-|-- system-prompt.md
+|-- instructions.md
 `-- context/
     `-- metrics.md
 ```

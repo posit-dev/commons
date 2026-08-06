@@ -1,15 +1,16 @@
 commons_system_prompt <- function(
   sources,
-  system_prompt,
-  definitions = NULL
+  definitions = NULL,
+  instructions = NULL
 ) {
   definitions <- definitions %||% definitions_registry(sources)
-  template <- read_system_prompt(system_prompt)
-  data <- system_prompt_data(sources, definitions)
+  instructions <- read_instructions(instructions)
+  template <- read_system_prompt()
+  data <- system_prompt_data(sources, definitions, instructions)
   render_system_prompt(template, data)
 }
 
-system_prompt_data <- function(sources, definitions) {
+system_prompt_data <- function(sources, definitions, instructions = NULL) {
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
 
@@ -23,7 +24,9 @@ system_prompt_data <- function(sources, definitions) {
     tables = tables_text(sources),
     dictionary_context = dictionary_context,
     glossary_context = glossary_context,
-    definition_index = definition_index_text(definitions)
+    definition_index = definition_index_text(definitions),
+    has_instructions = nzchar(instructions %||% ""),
+    instructions = instructions %||% ""
   )
 }
 
@@ -33,12 +36,7 @@ render_system_prompt <- function(
   call = rlang::caller_env()
 ) {
   envir <- list2env(data, parent = baseenv())
-  out <- glue::glue(
-    template,
-    .open = "{[",
-    .close = "]}",
-    .envir = envir
-  )
+  out <- glue::glue(template, .envir = envir)
   rlang::check_string(out, arg = "rendered system prompt", call = call)
   out <- as.character(out)
   out <- gsub("(?s)<!--.*?-->", "", out, perl = TRUE)
@@ -46,36 +44,47 @@ render_system_prompt <- function(
   trimws(out)
 }
 
-check_system_prompt <- function(system_prompt, call = rlang::caller_env()) {
-  rlang::check_string(system_prompt, call = call)
-  if (looks_like_prompt_path(system_prompt) && !file.exists(system_prompt)) {
+check_instructions <- function(instructions, call = rlang::caller_env()) {
+  rlang::check_string(instructions, allow_null = TRUE, call = call)
+  if (is.null(instructions)) {
+    return(invisible(instructions))
+  }
+  if (looks_like_instructions_path(instructions) && !file.exists(instructions)) {
     cli::cli_abort(
-      "System-prompt file {.path {system_prompt}} does not exist.",
+      "Instructions file {.path {instructions}} does not exist.",
       call = call
     )
   }
-  invisible(system_prompt)
+  invisible(instructions)
 }
 
-read_system_prompt <- function(system_prompt) {
-  if (!file.exists(system_prompt)) {
-    return(system_prompt)
-  }
+read_system_prompt <- function() {
+  path <- system.file("prompts/system-prompt.md", package = "commons")
   paste(
-    readLines(system_prompt, warn = FALSE, encoding = "UTF-8"),
+    readLines(path, warn = FALSE, encoding = "UTF-8"),
     collapse = "\n"
   )
 }
 
-looks_like_prompt_path <- function(system_prompt) {
-  if (grepl("\n", system_prompt, fixed = TRUE)) {
+read_instructions <- function(instructions) {
+  if (is.null(instructions) || !file.exists(instructions)) {
+    return(instructions)
+  }
+  paste(
+    readLines(instructions, warn = FALSE, encoding = "UTF-8"),
+    collapse = "\n"
+  )
+}
+
+looks_like_instructions_path <- function(instructions) {
+  if (grepl("\n", instructions, fixed = TRUE)) {
     return(FALSE)
   }
 
-  extension <- tolower(tools::file_ext(system_prompt))
-  grepl("[/\\\\]", system_prompt) ||
+  extension <- tolower(tools::file_ext(instructions))
+  grepl("[/\\\\]", instructions) ||
     extension %in% c("md", "rmd", "txt", "prompt") ||
-    (nzchar(extension) && !grepl("[[:space:]]", system_prompt))
+    (nzchar(extension) && !grepl("[[:space:]]", instructions))
 }
 
 dictionary_context_text <- function(sources) {

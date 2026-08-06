@@ -110,7 +110,7 @@ test_that("data_source() rejects other dictionary inputs", {
 test_that("dictionary content lands in the system prompt", {
   skip_if_not_installed("yaml")
   src <- local_dict_source()
-  prompt <- commons_system_prompt(list(src), default_system_prompt())
+  prompt <- commons_system_prompt(list(src))
 
   expect_match(prompt, "# About the data", fixed = TRUE)
   expect_match(prompt, "- sales", fixed = TRUE)
@@ -125,7 +125,7 @@ test_that("multi-source prompts label dictionary blocks by source", {
     sales_db = local_dict_source(),
     crm = data_source(accounts = data.frame(id = 1))
   )
-  prompt <- commons_system_prompt(sources, default_system_prompt())
+  prompt <- commons_system_prompt(sources)
 
   expect_match(prompt, "## sales_db", fixed = TRUE)
   expect_match(prompt, "Revenue figures exclude tax", fixed = TRUE)

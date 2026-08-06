@@ -136,29 +136,26 @@ test_that("the system prompt includes tables and the date", {
   expect_no_match(prompt, "tagged B")
 })
 
-test_that("a custom system-prompt template replaces the packaged one", {
-  path <- withr::local_tempfile(fileext = ".md")
-  writeLines(
-    c(
-      "You answer questions about {{organization}}'s data.",
-      "{[ if (!has_multiple_sources) \"One data source.\" else \"Several data sources.\" ]}",
-      "Tables:",
-      "{[tables]}"
-    ),
-    path
-  )
-
-  agent <- test_agent(
-    semantic_layer = semantic_layer(count_measure_tool()),
-    system_prompt = ellmer::interpolate_file(path, organization = "Acme")
-  )
+test_that("instructions are appended to the packaged system prompt", {
+  instructions <- "Use the organization's fiscal-year conventions."
+  agent <- test_agent(instructions = instructions)
   prompt <- agent$get_system_prompt()
 
-  expect_match(prompt, "about Acme's data", fixed = TRUE)
-  expect_match(prompt, "One data source", fixed = TRUE)
-  expect_match(prompt, "Tables:\n- sales", fixed = TRUE)
-  expect_no_match(prompt, "search_pool")
-  expect_no_match(prompt, "self-service data analyst", fixed = TRUE)
+  expect_match(prompt, "Your task is to thoughtfully", fixed = TRUE)
+  expect_match(
+    prompt,
+    paste("## Additional instructions", instructions, sep = "\n\n"),
+    fixed = TRUE
+  )
+  expect_true(endsWith(prompt, instructions))
+})
+
+test_that("instructions can be read from a file", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Prefer fiscal-year comparisons.", path)
+  prompt <- test_agent(instructions = path)$get_system_prompt()
+
+  expect_true(endsWith(prompt, "Prefer fiscal-year comparisons."))
 })
 
 test_that("a system prompt already set on the client warns", {
@@ -171,21 +168,14 @@ test_that("a system prompt already set on the client warns", {
   )
 })
 
-test_that("system_prompt is validated", {
+test_that("instructions are validated", {
   expect_error(
-    test_agent(system_prompt = c("a", "b")),
+    test_agent(instructions = c("a", "b")),
     "single string"
   )
 
-  path <- withr::local_tempfile(fileext = ".md")
-  writeLines("A prompt.", path)
-  expect_equal(
-    test_agent(system_prompt = path)$get_system_prompt(),
-    "A prompt."
-  )
-
   expect_error(
-    test_agent(system_prompt = "missing-prompt.md"),
+    test_agent(instructions = "missing-instructions.md"),
     "does not exist"
   )
 })

@@ -1,9 +1,9 @@
 test_that("prompt templates select conditional sections", {
   template <- paste(
     "<!-- source-only note -->",
-    "{[ if (enabled) {",
+    "{if (enabled) {",
     "  if (nested) \"Enabled\\nNested\" else \"Enabled\\nNot nested\"",
-    "} else \"Disabled\" ]}",
+    "} else \"Disabled\"}",
     sep = "\n"
   )
 
@@ -18,49 +18,59 @@ test_that("prompt templates select conditional sections", {
 })
 
 test_that("prompt templates interpolate runtime data without recursion", {
-  template <- "Tables:\n{[tables]}\nUse `{[definition_token]}`."
+  template <- paste(
+    "Tables:\n{tables}\nUse `{definition_token}`.",
+    "Write a literal `{{{{name}}}}` token."
+  )
   data <- list(tables = "- sales\\daily\n- orders {{raw}}")
   data$definition_token <- "{{name}}"
 
   expect_equal(
     render_system_prompt(template, data),
-    "Tables:\n- sales\\daily\n- orders {{raw}}\nUse `{{name}}`."
+    paste(
+      "Tables:\n- sales\\daily\n- orders {{raw}}\nUse `{{name}}`.",
+      "Write a literal `{{name}}` token."
+    )
   )
 })
 
 test_that("prompt templates validate their structure and values", {
   expect_error(
-    render_system_prompt("{[ if (unknown) \"x\" else \"\" ]}", list()),
+    render_system_prompt("{if (unknown) \"x\" else \"\"}", list()),
     "object 'unknown' not found"
   )
   expect_error(
-    render_system_prompt("{[ if (yes) ]}", list(yes = TRUE)),
+    render_system_prompt("{if (yes) }", list(yes = TRUE)),
     "Failed to parse glue component"
   )
   expect_error(
-    render_system_prompt("{[tables]}", list(tables = c("a", "b"))),
+    render_system_prompt("{tables}", list(tables = c("a", "b"))),
     "single string"
   )
 })
 
-test_that("missing prompt paths are recognized", {
-  expect_error(check_system_prompt("missing-prompt.Rmd"), "does not exist")
+test_that("missing instruction paths are recognized", {
   expect_error(
-    check_system_prompt("missing-prompt.template"),
+    check_instructions("missing-instructions.Rmd"),
     "does not exist"
   )
-  expect_error(check_system_prompt("missing-dir/prompt"), "does not exist")
-  expect_no_error(check_system_prompt("You are a concise analyst."))
-  expect_no_error(check_system_prompt("Line one.\nLine two."))
+  expect_error(
+    check_instructions("missing-instructions.template"),
+    "does not exist"
+  )
+  expect_error(check_instructions("missing-dir/instructions"), "does not exist")
+  expect_no_error(check_instructions("Be concise."))
+  expect_no_error(check_instructions("Line one.\nLine two."))
+  expect_no_error(check_instructions(NULL))
 })
 
 test_that("the packaged prompt leaves no template markup", {
-  template <- read_system_prompt(default_system_prompt())
+  template <- read_system_prompt()
   prompt <- test_agent()$get_system_prompt()
 
   expect_match(template, "{{name}}", fixed = TRUE)
   expect_no_match(prompt, "<!--", fixed = TRUE)
-  expect_no_match(prompt, "{[", fixed = TRUE)
+  expect_no_match(prompt, "{date}", fixed = TRUE)
   expect_no_match(prompt, "# Governed definitions", fixed = TRUE)
 })
 
@@ -79,9 +89,18 @@ test_that("system prompt data contains facts and runtime content", {
       "tables",
       "dictionary_context",
       "glossary_context",
-      "definition_index"
+      "definition_index",
+      "has_instructions",
+      "instructions"
     )
   )
+})
+
+test_that("instructions are not interpreted as prompt template expressions", {
+  instructions <- "Use `{tables}` exactly as written."
+  prompt <- test_agent(instructions = instructions)$get_system_prompt()
+
+  expect_true(endsWith(prompt, instructions))
 })
 
 test_that("the packaged prompt omits run_r result handles", {
