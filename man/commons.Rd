@@ -32,7 +32,8 @@ can take a source's connection as an argument named after the source; see
 
 \item{...}{These dots are for future extensions and must be empty.}
 
-\item{instructions}{Optional instructions appended to commons' built-in
+\item{instructions}{Optional instructions placed under an
+\verb{## Additional instructions} heading at the end of commons' built-in
 system prompt, as a single string or the path to a text or Markdown file.
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{commons(

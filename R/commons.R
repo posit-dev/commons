@@ -18,7 +18,8 @@
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param ... These dots are for future extensions and must be empty.
-#' @param instructions Optional instructions appended to commons' built-in
+#' @param instructions Optional instructions placed under an
+#'   `## Additional instructions` heading at the end of commons' built-in
 #'   system prompt, as a single string or the path to a text or Markdown file.
 #'
 #'   ```r
