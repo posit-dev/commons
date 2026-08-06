@@ -21,7 +21,7 @@ Imports:
     cli,
     coro,
     DBI,
-    duckdb,
+    duckdb (>= 1.5.4.2),
     ellmer (>= 0.4.1),
     evaluate,
     glue,
@@ -58,8 +58,7 @@ Suggests:
     yaml
 VignetteBuilder: knitr
 Remotes:
-    posit-dev/shinychat/pkg-r,
-    simonpcouch/ragnar@writable-extensions
+    posit-dev/shinychat/pkg-r
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
