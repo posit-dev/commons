@@ -58,9 +58,30 @@ test_that("the packaged prompt leaves no template markup", {
   template <- read_system_prompt(default_system_prompt())
   prompt <- test_agent()$get_system_prompt()
 
-  expect_no_match(template, "{{", fixed = TRUE)
+  expect_match(template, "{{name}}", fixed = TRUE)
   expect_no_match(prompt, "<!--", fixed = TRUE)
-  expect_no_match(prompt, "{[date]}", fixed = TRUE)
+  expect_no_match(prompt, "{[", fixed = TRUE)
+  expect_no_match(prompt, "# Governed definitions", fixed = TRUE)
+})
+
+test_that("system prompt data contains facts and runtime content", {
+  sources <- list(sales_db = test_source())
+  data <- system_prompt_data(sources, definitions_registry(sources))
+
+  expect_named(
+    data,
+    c(
+      "date",
+      "has_multiple_sources",
+      "has_dictionary_context",
+      "has_glossary_context",
+      "definitions_complete",
+      "tables",
+      "dictionary_context",
+      "glossary_context",
+      "definition_index"
+    )
+  )
 })
 
 test_that("the packaged prompt omits run_r result handles", {

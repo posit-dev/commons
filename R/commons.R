@@ -34,9 +34,9 @@
 #'   )
 #'   ```
 #'
-#'   commons renders some sections conditionally and
-#'   interpolates runtime values such as its table roster. Custom templates
-#'   may edit, remove, or reposition any section. Commons expressions open
+#'   commons interpolates runtime facts and content, such as the number of data
+#'   sources and their table roster. The template owns the surrounding prose,
+#'   and may edit, remove, or reposition any section. Commons expressions open
 #'   with `{[` and close with `]}`, leaving ellmer's `{{ }}` delimiters
 #'   available for your own substitutions:
 #'
@@ -243,8 +243,7 @@ Commons <- R6::R6Class(
         commons_system_prompt(
           private$sources,
           system_prompt,
-          private$definitions,
-          measures = private$registry
+          private$definitions
         )
       )
     },

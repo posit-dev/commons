@@ -52,7 +52,12 @@ tool_search_pool <- function(private) {
       )
     },
     sprintf(
-      "Search the semantic layer's governed operations: %s. Use this before writing your own SQL.",
+      paste(
+        "Search the semantic layer's trusted calculations: %s.",
+        "For every data question, use this before any other data",
+        "tool, even if a table looks easy to query directly. Use the exact",
+        "names it returns."
+      ),
       paste(kinds, collapse = " and ")
     ),
     arguments = list(
@@ -90,7 +95,11 @@ tool_call_metrics <- function(private) {
       )
     },
     sprintf(
-      "Compute governed metrics, optionally grouped and filtered. Metric, dimension, and filter names come from %s; commons compiles and runs the query.",
+      paste(
+        "Compute trusted calculations from governed metrics, optionally",
+        "grouped and filtered. Metric, dimension, and filter names come from",
+        "%s; commons compiles and runs the query."
+      ),
       if (pool_searchable(private$registry, private$definitions)) {
         "the system prompt or search_pool"
       } else {
@@ -149,7 +158,12 @@ tool_call_measure <- function(private) {
         sources = private$sources
       )
     },
-    "Run a registered measure returned by search_pool. `arguments` is a JSON object using exactly the argument names from search_pool.",
+    paste(
+      "Run trusted calculations returned by",
+      "search_pool. `arguments` is a JSON object using exactly the argument",
+      "names from search_pool. Prefer a measure's own arguments when they can",
+      "answer the question directly."
+    ),
     arguments = list(
       name = ellmer::type_string(
         "The measure name, exactly as returned by search_pool."

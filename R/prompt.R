@@ -1,29 +1,20 @@
 commons_system_prompt <- function(
   sources,
   system_prompt,
-  definitions = NULL,
-  measures = list()
+  definitions = NULL
 ) {
   definitions <- definitions %||% definitions_registry(sources)
   template <- read_system_prompt(system_prompt)
-  data <- system_prompt_data(sources, definitions, measures)
+  data <- system_prompt_data(sources, definitions)
   render_system_prompt(template, data)
 }
 
-system_prompt_data <- function(sources, definitions, measures) {
-  has_measures <- length(measures) > 0
-  has_metrics <- registry_has_metrics(definitions)
-  has_definitions <- nrow(registry_defs(definitions)) > 0
+system_prompt_data <- function(sources, definitions) {
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
 
   list(
     date = as.character(Sys.Date()),
-    has_measures = has_measures,
-    has_metrics = has_metrics,
-    has_definitions = has_definitions,
-    has_governed_operations = has_measures || has_definitions,
-    has_search_pool = pool_searchable(measures, definitions),
     has_multiple_sources = length(sources) > 1,
     has_dictionary_context = nzchar(dictionary_context) ||
       nzchar(glossary_context),
@@ -32,22 +23,7 @@ system_prompt_data <- function(sources, definitions, measures) {
     tables = tables_text(sources),
     dictionary_context = dictionary_context,
     glossary_context = glossary_context,
-    definition_index = definition_index_text(definitions),
-    definition_action =
-      "- Apply a definition as a `{{name}}` token in `run_sql` SQL.",
-    definition_guidance = paste(
-      "# Governed definitions",
-      paste0(
-        "Trusted expressions from the data dictionary are indexed here by ",
-        "table; each table's dictionary entry delivers its full definitions. ",
-        "Write them as `{{name}}` tokens anywhere in `run_sql` SQL ",
-        "(`{{table.name}}` when a name exists on several tables); each expands ",
-        "to its governed SQL before the query runs. Expansion can't add an ",
-        "alias, so write `SELECT {{name}} AS name`. Metric expressions are ",
-        "already aggregates\u2014never wrap one in `SUM()` or another aggregate."
-      ),
-      sep = "\n\n"
-    )
+    definition_index = definition_index_text(definitions)
   )
 }
 

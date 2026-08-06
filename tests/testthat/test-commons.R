@@ -116,7 +116,7 @@ test_that("run_r describes which results are visible to the user", {
   expect_match(description, "user cannot run code in this session")
 })
 
-test_that("the system prompt includes tables, the date, and measure workflow", {
+test_that("the system prompt includes tables and the date", {
   agent <- test_agent(
     semantic_layer = semantic_layer(
       measure(
@@ -132,11 +132,6 @@ test_that("the system prompt includes tables, the date, and measure workflow", {
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
-  expect_match(prompt, "your first tool call should be `search_pool`")
-  expect_match(prompt, "Do not call `run_sql` or `describe_table`")
-  expect_match(prompt, "use it rather than recreating the calculation in SQL")
-  expect_match(prompt, "inspect every referenced table with `describe_table`")
-  expect_match(prompt, "never guess column names or join keys")
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")
 })
@@ -146,7 +141,7 @@ test_that("a custom system-prompt template replaces the packaged one", {
   writeLines(
     c(
       "You answer questions about {{organization}}'s data.",
-      "{[ if (has_measures) \"Use registered measures first.\" else \"\" ]}",
+      "{[ if (!has_multiple_sources) \"One data source.\" else \"Several data sources.\" ]}",
       "Tables:",
       "{[tables]}"
     ),
@@ -160,7 +155,7 @@ test_that("a custom system-prompt template replaces the packaged one", {
   prompt <- agent$get_system_prompt()
 
   expect_match(prompt, "about Acme's data", fixed = TRUE)
-  expect_match(prompt, "Use registered measures first", fixed = TRUE)
+  expect_match(prompt, "One data source", fixed = TRUE)
   expect_match(prompt, "Tables:\n- sales", fixed = TRUE)
   expect_no_match(prompt, "search_pool")
   expect_no_match(prompt, "self-service data analyst", fixed = TRUE)
