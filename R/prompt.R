@@ -36,12 +36,7 @@ render_system_prompt <- function(
   call = rlang::caller_env()
 ) {
   envir <- list2env(data, parent = baseenv())
-  out <- glue::glue(
-    template,
-    .open = "{[",
-    .close = "]}",
-    .envir = envir
-  )
+  out <- glue::glue(template, .envir = envir)
   rlang::check_string(out, arg = "rendered system prompt", call = call)
   out <- as.character(out)
   out <- gsub("(?s)<!--.*?-->", "", out, perl = TRUE)

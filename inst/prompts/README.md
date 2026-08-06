@@ -14,9 +14,10 @@ construction balances a few goals:
 - Keep ambient context useful but bounded. Detailed table and definition
   context arrives through tools when needed.
 
-Commons template expressions use `{[` and `]}`. This leaves `{{ }}` available
-for governed-definition tokens. HTML comments are removed from the rendered
-prompt. App-authored instructions occupy the final section.
+Commons template expressions use glue's standard `{` and `}` delimiters.
+Literal braces in template prose are doubled. Expression results are inserted
+without recursive interpolation, preserving governed-definition tokens and
+app-authored instructions. HTML comments are removed from the rendered prompt.
 
 `citation-request.md` is delivered only when citations may be needed, rather
 than occupying every system prompt.

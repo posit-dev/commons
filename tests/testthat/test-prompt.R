@@ -1,9 +1,9 @@
 test_that("prompt templates select conditional sections", {
   template <- paste(
     "<!-- source-only note -->",
-    "{[ if (enabled) {",
+    "{if (enabled) {",
     "  if (nested) \"Enabled\\nNested\" else \"Enabled\\nNot nested\"",
-    "} else \"Disabled\" ]}",
+    "} else \"Disabled\"}",
     sep = "\n"
   )
 
@@ -18,27 +18,33 @@ test_that("prompt templates select conditional sections", {
 })
 
 test_that("prompt templates interpolate runtime data without recursion", {
-  template <- "Tables:\n{[tables]}\nUse `{[definition_token]}`."
+  template <- paste(
+    "Tables:\n{tables}\nUse `{definition_token}`.",
+    "Write a literal `{{{{name}}}}` token."
+  )
   data <- list(tables = "- sales\\daily\n- orders {{raw}}")
   data$definition_token <- "{{name}}"
 
   expect_equal(
     render_system_prompt(template, data),
-    "Tables:\n- sales\\daily\n- orders {{raw}}\nUse `{{name}}`."
+    paste(
+      "Tables:\n- sales\\daily\n- orders {{raw}}\nUse `{{name}}`.",
+      "Write a literal `{{name}}` token."
+    )
   )
 })
 
 test_that("prompt templates validate their structure and values", {
   expect_error(
-    render_system_prompt("{[ if (unknown) \"x\" else \"\" ]}", list()),
+    render_system_prompt("{if (unknown) \"x\" else \"\"}", list()),
     "object 'unknown' not found"
   )
   expect_error(
-    render_system_prompt("{[ if (yes) ]}", list(yes = TRUE)),
+    render_system_prompt("{if (yes) }", list(yes = TRUE)),
     "Failed to parse glue component"
   )
   expect_error(
-    render_system_prompt("{[tables]}", list(tables = c("a", "b"))),
+    render_system_prompt("{tables}", list(tables = c("a", "b"))),
     "single string"
   )
 })
@@ -64,7 +70,7 @@ test_that("the packaged prompt leaves no template markup", {
 
   expect_match(template, "{{name}}", fixed = TRUE)
   expect_no_match(prompt, "<!--", fixed = TRUE)
-  expect_no_match(prompt, "{[", fixed = TRUE)
+  expect_no_match(prompt, "{date}", fixed = TRUE)
   expect_no_match(prompt, "# Governed definitions", fixed = TRUE)
 })
 
@@ -91,7 +97,7 @@ test_that("system prompt data contains facts and runtime content", {
 })
 
 test_that("instructions are not interpreted as prompt template expressions", {
-  instructions <- "Use `{[tables]}` exactly as written."
+  instructions <- "Use `{tables}` exactly as written."
   prompt <- test_agent(instructions = instructions)$get_system_prompt()
 
   expect_true(endsWith(prompt, instructions))
