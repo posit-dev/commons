@@ -58,6 +58,7 @@ Suggests:
     yaml
 VignetteBuilder: knitr
 Remotes:
+    tidyverse/ellmer,
     posit-dev/shinychat/pkg-r
 Config/testthat/edition: 3
 Encoding: UTF-8

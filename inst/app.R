@@ -1,5 +1,5 @@
 library(bslib)
-library(commons)
+devtools::load_all()
 library(shiny)
 library(shinychat)
 

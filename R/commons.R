@@ -151,7 +151,7 @@ commons <- function(
 
 Commons <- R6::R6Class(
   "Commons",
-  inherit = ellmer:::Chat,
+  inherit = ellmer::Chat,
   public = list(
     initialize = function(
       client,
