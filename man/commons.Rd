@@ -10,7 +10,7 @@ commons(
   semantic_layer = NULL,
   context_layer = NULL,
   ...,
-  system_prompt = system.file("prompts/system-prompt.md", package = "commons"),
+  instructions = NULL,
   network = c("none", "full"),
   log = FALSE,
   share_with = NULL
@@ -19,7 +19,7 @@ commons(
 \arguments{
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
 \code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}. A system prompt already set on the client is
-ignored, with a warning; use \code{system_prompt} instead.}
+ignored, with a warning; use \code{instructions} to add to commons' prompt.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
@@ -32,39 +32,14 @@ can take a source's connection as an argument named after the source; see
 
 \item{...}{These dots are for future extensions and must be empty.}
 
-\item{system_prompt}{The agent's system-prompt template, as a single string
-containing the template or the path to a template file. The default uses
-the markdown prompt shipped with commons. To customize the full prompt,
-copy that file into your project, edit it freely, and pass its path:
+\item{instructions}{Optional instructions appended to commons' built-in
+system prompt, as a single string or the path to a text or Markdown file.
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{file.copy(
-  system.file("prompts/system-prompt.md", package = "commons"),
-  "system-prompt.md"
-)
-commons(
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{commons(
   # ...
-  system_prompt = "system-prompt.md"
+  instructions = "Use the organization's fiscal-year conventions."
 )
-}\if{html}{\out{</div>}}
-
-commons interpolates runtime facts and content, such as the number of data
-sources and their table roster. The template owns the surrounding prose,
-and may edit, remove, or reposition any section. Commons expressions open
-with \verb{\{[} and close with \verb{]\}}, leaving ellmer's \code{{{ }}} delimiters
-available for your own substitutions:
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{system_prompt <- ellmer::interpolate_file(
-  "system-prompt.md",
-  organization = "Acme"
-)
-commons(
-  # ...
-  system_prompt = as.character(system_prompt)
-)
-}\if{html}{\out{</div>}}
-
-A \code{{{organization}}} expression is resolved by ellmer, while commons'
-template expressions remain untouched.}
+}\if{html}{\out{</div>}}}
 
 \item{network}{Whether the \code{run_r} session has network access. One of
 \code{"none"} (the default) or \code{"full"}. The session requires Linux or macOS

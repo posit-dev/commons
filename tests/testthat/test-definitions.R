@@ -249,8 +249,7 @@ test_that("the system prompt carries a governed-definitions index", {
   registry <- sales_registry(src)
   prompt <- commons_system_prompt(
     list(sales_db = src),
-    default_system_prompt(),
-    registry
+    definitions = registry
   )
   expect_match(prompt, "# Governed definitions", fixed = TRUE)
   expect_match(prompt, "Write them as `{{name}}` tokens", fixed = TRUE)
@@ -286,8 +285,7 @@ test_that("the prompt section caps like the glossary", {
   expect_true(definitions_overflow(registry))
   text <- commons_system_prompt(
     list(sales_db = definitions_source(many_definitions())),
-    default_system_prompt(),
-    registry
+    definitions = registry
   )
   expect_lt(nchar(text), 6000)
   expect_match(text, "More definitions arrive", fixed = TRUE)

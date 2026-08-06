@@ -58,3 +58,7 @@ Trusted calculations from the data dictionary are indexed here by table; each ta
 
 {[ if (nzchar(definition_index) && definitions_complete) "This is the complete set of governed definitions." else "" ]}
 {[ if (!definitions_complete) "More definitions arrive with their tables' dictionary entries, via context search, and via `search_pool`." else "" ]}
+
+{[ if (has_instructions) "## Additional instructions" else "" ]}
+
+{[instructions]}

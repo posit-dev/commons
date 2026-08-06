@@ -15,8 +15,8 @@ construction balances a few goals:
   context arrives through tools when needed.
 
 Commons template expressions use `{[` and `]}`. This leaves `{{ }}` available
-for user substitutions and governed-definition tokens. HTML comments are
-removed from the rendered prompt.
+for governed-definition tokens. HTML comments are removed from the rendered
+prompt. App-authored instructions occupy the final section.
 
 `citation-request.md` is delivered only when citations may be needed, rather
 than occupying every system prompt.

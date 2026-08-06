@@ -10,7 +10,7 @@
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
-#'   ignored, with a warning; use `system_prompt` instead.
+#'   ignored, with a warning; use `instructions` to add to commons' prompt.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()]. When there are several sources, the `run_sql` and
@@ -18,41 +18,15 @@
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param ... These dots are for future extensions and must be empty.
-#' @param system_prompt The agent's system-prompt template, as a single string
-#'   containing the template or the path to a template file. The default uses
-#'   the markdown prompt shipped with commons. To customize the full prompt,
-#'   copy that file into your project, edit it freely, and pass its path:
+#' @param instructions Optional instructions appended to commons' built-in
+#'   system prompt, as a single string or the path to a text or Markdown file.
 #'
 #'   ```r
-#'   file.copy(
-#'     system.file("prompts/system-prompt.md", package = "commons"),
-#'     "system-prompt.md"
-#'   )
 #'   commons(
 #'     # ...
-#'     system_prompt = "system-prompt.md"
+#'     instructions = "Use the organization's fiscal-year conventions."
 #'   )
 #'   ```
-#'
-#'   commons interpolates runtime facts and content, such as the number of data
-#'   sources and their table roster. The template owns the surrounding prose,
-#'   and may edit, remove, or reposition any section. Commons expressions open
-#'   with `{[` and close with `]}`, leaving ellmer's `{{ }}` delimiters
-#'   available for your own substitutions:
-#'
-#'   ```r
-#'   system_prompt <- ellmer::interpolate_file(
-#'     "system-prompt.md",
-#'     organization = "Acme"
-#'   )
-#'   commons(
-#'     # ...
-#'     system_prompt = as.character(system_prompt)
-#'   )
-#'   ```
-#'
-#'   A `{{organization}}` expression is resolved by ellmer, while commons'
-#'   template expressions remain untouched.
 #' @param network Whether the `run_r` session has network access. One of
 #'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
 #'   and refuses to run without filesystem sandboxing.
@@ -132,7 +106,7 @@ commons <- function(
   semantic_layer = NULL,
   context_layer = NULL,
   ...,
-  system_prompt = system.file("prompts/system-prompt.md", package = "commons"),
+  instructions = NULL,
   network = c("none", "full"),
   log = FALSE,
   share_with = NULL
@@ -148,7 +122,7 @@ commons <- function(
       c(
         "The system prompt set on {.arg client} is ignored; commons builds
          its own.",
-        i = "Pass it to the {.arg system_prompt} argument instead."
+        i = "Use {.arg instructions} to add to commons' prompt."
       )
     )
   }
@@ -158,7 +132,7 @@ commons <- function(
   check_semantic_layer(semantic_layer)
   network <- rlang::arg_match(network)
   check_run_r_sandbox()
-  check_system_prompt(system_prompt)
+  check_instructions(instructions)
   rlang::check_bool(log)
   check_share_with(share_with)
 
@@ -168,7 +142,7 @@ commons <- function(
     context_layer = context_layer,
     semantic_layer = semantic_layer,
     network = network,
-    system_prompt = system_prompt,
+    instructions = instructions,
     log = log,
     share_with = share_with
   )
@@ -184,10 +158,7 @@ Commons <- R6::R6Class(
       semantic_layer = NULL,
       context_layer = NULL,
       ...,
-      system_prompt = system.file(
-        "prompts/system-prompt.md",
-        package = "commons"
-      ),
+      instructions = NULL,
       network = c("none", "full"),
       log = FALSE,
       share_with = NULL
@@ -243,8 +214,8 @@ Commons <- R6::R6Class(
       self$set_system_prompt(
         commons_system_prompt(
           private$sources,
-          system_prompt,
-          private$definitions
+          definitions = private$definitions,
+          instructions = instructions
         )
       )
     },

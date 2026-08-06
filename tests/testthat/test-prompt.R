@@ -43,19 +43,23 @@ test_that("prompt templates validate their structure and values", {
   )
 })
 
-test_that("missing prompt paths are recognized", {
-  expect_error(check_system_prompt("missing-prompt.Rmd"), "does not exist")
+test_that("missing instruction paths are recognized", {
   expect_error(
-    check_system_prompt("missing-prompt.template"),
+    check_instructions("missing-instructions.Rmd"),
     "does not exist"
   )
-  expect_error(check_system_prompt("missing-dir/prompt"), "does not exist")
-  expect_no_error(check_system_prompt("You are a concise analyst."))
-  expect_no_error(check_system_prompt("Line one.\nLine two."))
+  expect_error(
+    check_instructions("missing-instructions.template"),
+    "does not exist"
+  )
+  expect_error(check_instructions("missing-dir/instructions"), "does not exist")
+  expect_no_error(check_instructions("Be concise."))
+  expect_no_error(check_instructions("Line one.\nLine two."))
+  expect_no_error(check_instructions(NULL))
 })
 
 test_that("the packaged prompt leaves no template markup", {
-  template <- read_system_prompt(default_system_prompt())
+  template <- read_system_prompt()
   prompt <- test_agent()$get_system_prompt()
 
   expect_match(template, "{{name}}", fixed = TRUE)
@@ -79,9 +83,18 @@ test_that("system prompt data contains facts and runtime content", {
       "tables",
       "dictionary_context",
       "glossary_context",
-      "definition_index"
+      "definition_index",
+      "has_instructions",
+      "instructions"
     )
   )
+})
+
+test_that("instructions are not interpreted as prompt template expressions", {
+  instructions <- "Use `{[tables]}` exactly as written."
+  prompt <- test_agent(instructions = instructions)$get_system_prompt()
+
+  expect_true(endsWith(prompt, instructions))
 })
 
 test_that("the packaged prompt omits run_r result handles", {

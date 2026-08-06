@@ -24,10 +24,6 @@ test_client <- function() {
   ellmer::chat_anthropic(model = "claude-sonnet-4-5")
 }
 
-default_system_prompt <- function() {
-  system.file("prompts/system-prompt.md", package = "commons")
-}
-
 # A board_temp() holding the given named values, each written as an rds pin.
 board_with_pins <- function(...) {
   values <- rlang::list2(...)
