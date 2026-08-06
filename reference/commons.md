@@ -71,11 +71,11 @@ commons(
         system_prompt = "system-prompt.md"
       )
 
-  commons renders some sections conditionally and interpolates runtime
-  values such as its table roster. Custom templates may edit, remove, or
-  reposition any section. Commons expressions open with `{[` and close
-  with `]}`, leaving ellmer's `{{ }}` delimiters available for your own
-  substitutions:
+  commons interpolates runtime facts and content, such as the number of
+  data sources and their table roster. The template owns the surrounding
+  prose, and may edit, remove, or reposition any section. Commons
+  expressions open with `{[` and close with `]}`, leaving ellmer's
+  `{{ }}` delimiters available for your own substitutions:
 
       system_prompt <- ellmer::interpolate_file(
         "system-prompt.md",

@@ -96,9 +96,9 @@ copy that file into your project, edit it freely, and pass its path:</p>
 <span>  <span class="co"># ...</span></span>
 <span>  system_prompt <span class="op">=</span> <span class="st">"system-prompt.md"</span></span>
 <span><span class="op">)</span></span></code></pre><p></p></div>
-<p>commons renders some sections conditionally and
-interpolates runtime values such as its table roster. Custom templates
-may edit, remove, or reposition any section. Commons expressions open
+<p>commons interpolates runtime facts and content, such as the number of data
+sources and their table roster. The template owns the surrounding prose,
+and may edit, remove, or reposition any section. Commons expressions open
 with <code>{[</code> and close with <code>]}</code>, leaving ellmer's <code>{{ }}</code> delimiters
 available for your own substitutions:</p>
 <p></p><div class="sourceCode r"><pre><code><span><span class="va">system_prompt</span> <span class="op">&lt;-</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/interpolate.html" class="external-link">interpolate_file</a></span><span class="op">(</span></span>
