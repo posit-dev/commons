@@ -14,7 +14,7 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 
 commons helps data scientists build trustworthy data agents. It provides
 a meta-harness; you bring your data and understanding of how to do
-calculations on it, and the package situates that in a set of prompt and
+calculations on it, and the package situates that in a set of prompts and
 tools that make for a more accurate, fast, and cost-effective agent than
 a regular coding agent provided with the same information.
 
