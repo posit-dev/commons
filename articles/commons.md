@@ -21,7 +21,7 @@ files:
 |   |-- semantic_layer.R
 |   `-- context_layer.R
 |-- app.R
-|-- system-prompt.md
+|-- instructions.md
 `-- context/
     `-- metrics.md
 ```

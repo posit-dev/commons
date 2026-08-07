@@ -3,8 +3,11 @@
 > This package is highly experimental; expect its interface to change
 > rapidly.
 
-commons allows data scientists to build self-service data agents for
-their organization.
+commons helps data scientists build trustworthy data agents. It provides
+a meta-harness; you bring your data and understanding of how to do
+calculations on it, and the package situates that in a set of prompt and
+tools that make for a more accurate, fast, and cost-effective agent than
+a regular coding agent provided with the same information.
 
 commons agents use a pool of trusted calculations drawn from your
 existing work, like Shiny apps and Quarto docs, to answer questions.

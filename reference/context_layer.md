@@ -24,7 +24,7 @@ A `commons_context_layer` object.
 
 Files are chunked and indexed with ragnar when the agent first searches
 its context. Facts that should be in every prompt belong in the
-`system_prompt` passed to
+`instructions` passed to
 [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md),
 not here.
 

@@ -14,7 +14,7 @@ commons(
   semantic_layer = NULL,
   context_layer = NULL,
   ...,
-  system_prompt = system.file("prompts/system-prompt.md", package = "commons"),
+  instructions = NULL,
   network = c("none", "full"),
   log = FALSE,
   share_with = NULL
@@ -29,7 +29,7 @@ commons(
   giving the provider and model to use, e.g.
   [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
   A system prompt already set on the client is ignored, with a warning;
-  use `system_prompt` instead.
+  use `instructions` to add to commons' prompt.
 
 - data_sources:
 
@@ -55,39 +55,16 @@ commons(
 
   These dots are for future extensions and must be empty.
 
-- system_prompt:
+- instructions:
 
-  The agent's system-prompt template, as a single string containing the
-  template or the path to a template file. The default uses the markdown
-  prompt shipped with commons. To customize the full prompt, copy that
-  file into your project, edit it freely, and pass its path:
+  Optional instructions placed under an `## Additional instructions`
+  heading at the end of commons' built-in system prompt, as a single
+  string or the path to a text or Markdown file.
 
-      file.copy(
-        system.file("prompts/system-prompt.md", package = "commons"),
-        "system-prompt.md"
-      )
       commons(
         # ...
-        system_prompt = "system-prompt.md"
+        instructions = "Use the organization's fiscal-year conventions."
       )
-
-  commons interpolates runtime facts and content, such as the number of
-  data sources and their table roster. The template owns the surrounding
-  prose, and may edit, remove, or reposition any section. Commons
-  expressions open with `{[` and close with `]}`, leaving ellmer's
-  `{{ }}` delimiters available for your own substitutions:
-
-      system_prompt <- ellmer::interpolate_file(
-        "system-prompt.md",
-        organization = "Acme"
-      )
-      commons(
-        # ...
-        system_prompt = as.character(system_prompt)
-      )
-
-  A `{{organization}}` expression is resolved by ellmer, while commons'
-  template expressions remain untouched.
 
 - network:
 
