@@ -79,6 +79,10 @@ tool or a SQL query---the table's full dictionary entry rides along with
 the tool result: its prose, documented columns, relationships, and
 definitions of glossary terms it references. \code{describe_table} merges
 documented columns with the table's live schema.
+\item For Snowflake and Databricks sources, a fully qualified dictionary table
+name matches the same selected relation. A relative name is accepted when
+it matches only one selected relation. Authored prose takes precedence,
+while warehouse column types remain authoritative.
 \item When the agent also has a \code{\link[=context_layer]{context_layer()}}, the dictionary's prose is
 indexed for the \code{search_context} tool.
 }

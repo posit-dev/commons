@@ -347,7 +347,7 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   entry <- source$dictionary$tables[[table]]
   relation <- c(
     if (!is.null(d$kind)) sprintf("Relation type: %s.", d$kind),
-    d$description
+    if (is.null(entry)) d$description
   )
 
   sample <- sprintf(

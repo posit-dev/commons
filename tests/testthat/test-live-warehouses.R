@@ -20,7 +20,9 @@ test_that("live Snowflake discovers and describes catalog relations", {
   names(session) <- tolower(names(session))
   label <- table_id_label(table)
 
-  exact <- data_source(con, tables = table)
+  column <- names(rows)[[1]]
+  dictionary <- warehouse_test_dictionary(label, column)
+  exact <- data_source(con, tables = table, dictionary = dictionary)
   described <- source_describe(exact, label)
 
   namespace <- DBI::Id(
@@ -62,6 +64,18 @@ test_that("live Snowflake discovers and describes catalog relations", {
   )
   expect_true(nrow(described$sample) <= 5)
   expect_equal(names(described$sample), described$schema$column)
+  expect_equal(
+    exact$dictionary$tables[[label]]$description,
+    "Authored live table description."
+  )
+  expect_equal(
+    exact$dictionary$tables[[label]]$columns[[column]]$type,
+    described$schema$type[match(column, described$schema$column)]
+  )
+  expect_equal(
+    exact$dictionary$tables[[label]]$columns[[column]]$description,
+    "Authored live column description."
+  )
   expect_true(exact$relations[[label]]$kind %in% c("table", "view"))
   expect_true(label %in% list_tables(schema_source))
   expect_true(label %in% list_tables(catalog_source))
@@ -76,6 +90,46 @@ test_that("live Snowflake discovers and describes catalog relations", {
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
   expect_match(tool@value, "Sample summary")
+})
+
+test_that("live Snowflake rejects an ambiguous relative dictionary table", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  catalog <- table@name[["catalog"]]
+  relations <- snowflake_list_relations(
+    con,
+    DBI::Id(catalog = catalog)
+  )
+  relation_names <- vapply(
+    relations,
+    function(relation) relation$id@name[["table"]],
+    character(1)
+  )
+  duplicated_names <- unique(relation_names[
+    duplicated(relation_names) | duplicated(relation_names, fromLast = TRUE)
+  ])
+  skip_if(
+    length(duplicated_names) == 0L,
+    "The selected Snowflake catalog has no ambiguous relation names"
+  )
+
+  authored_name <- duplicated_names[[1]]
+  selected <- relations[relation_names == authored_name][1:2]
+  dictionary <- new_data_dictionary(list(
+    tables = stats::setNames(
+      list(list(description = "Ambiguous authored description.")),
+      authored_name
+    )
+  ))
+
+  expect_error(
+    data_source(
+      con,
+      tables = lapply(selected, `[[`, "id"),
+      dictionary = dictionary
+    ),
+    "matches more than one selected relation"
+  )
 })
 
 test_that("live Databricks discovers and describes catalog relations", {
@@ -99,7 +153,12 @@ test_that("live Databricks discovers and describes catalog relations", {
   names(session) <- tolower(names(session))
   label <- table_id_label(table)
 
-  exact <- data_source(con, tables = table)
+  column <- names(rows)[[1]]
+  dictionary <- warehouse_test_dictionary(
+    components[["table"]],
+    column
+  )
+  exact <- data_source(con, tables = table, dictionary = dictionary)
   described <- source_describe(exact, label)
 
   namespace <- DBI::Id(
@@ -127,6 +186,18 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_false(anyNA(described$schema$nullable))
   expect_true(nrow(described$sample) <= 5)
   expect_equal(names(described$sample), described$schema$column)
+  expect_equal(
+    exact$dictionary$tables[[label]]$description,
+    "Authored live table description."
+  )
+  expect_equal(
+    exact$dictionary$tables[[label]]$columns[[column]]$type,
+    described$schema$type[match(column, described$schema$column)]
+  )
+  expect_equal(
+    exact$dictionary$tables[[label]]$columns[[column]]$description,
+    "Authored live column description."
+  )
   expect_true(exact$relations[[label]]$kind %in% c("table", "view"))
   expect_true(label %in% list_tables(schema_source))
   expect_true(label %in% list_tables(catalog_source))

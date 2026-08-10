@@ -42,6 +42,16 @@ local_dict_source <- function(env = parent.frame()) {
   data_source(sales = test_sales(), dictionary = local_dict_path(env))
 }
 
+catalog_test_columns <- function() {
+  data.frame(
+    column = c("AMOUNT", "ORDER_ID"),
+    type = c("NUMBER(38,2)", "NUMBER(38,0)"),
+    nullable = c(TRUE, FALSE),
+    description = c("Warehouse amount description.", "Warehouse key."),
+    row.names = NULL
+  )
+}
+
 test_that("data_dictionary() reads and keys tables and columns", {
   skip_if_not_installed("yaml")
   dict <- data_dictionary(local_dict_path())
@@ -167,6 +177,164 @@ test_that("describe_table merges the dictionary with the live schema", {
   expect_match(res@value, "not present in the table: booked_at", fixed = TRUE)
   expect_match(res@value, "sales.rep = reps.name (many-to-one)", fixed = TRUE)
   expect_match(res@value, "Sample summary", fixed = TRUE)
+})
+
+test_that("warehouse metadata supplements an authored dictionary", {
+  relations <- list(
+    "ANALYTICS.PUBLIC.ORDERS" = list(
+      id = DBI::Id(
+        catalog = "ANALYTICS",
+        schema = "PUBLIC",
+        table = "ORDERS"
+      ),
+      kind = "table",
+      description = "Warehouse table description."
+    )
+  )
+  dictionary <- new_data_dictionary(list(
+    tables = list(
+      orders = list(
+        description = "Authored table description.",
+        columns = list(
+          amount = list(
+            type = "number(quantity)",
+            units = "USD",
+            description = "Authored column description."
+          ),
+          missing = list(description = "Not in the warehouse.")
+        )
+      ),
+      unselected = list(description = "Not selected.")
+    )
+  ))
+
+  merged <- catalog_merge_dictionary(
+    dictionary,
+    relations,
+    NULL,
+    function(...) catalog_test_columns(),
+    "upper"
+  )
+  table <- merged$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]
+
+  expect_named(merged$dictionary$tables, "ANALYTICS.PUBLIC.ORDERS")
+  expect_equal(table$description, "Authored table description.")
+  expect_equal(table$kind, "table")
+  expect_named(table$columns, c("AMOUNT", "ORDER_ID", "missing"))
+  expect_equal(table$columns$AMOUNT$type, "NUMBER(38,2)")
+  expect_true(table$columns$AMOUNT$nullable)
+  expect_equal(table$columns$AMOUNT$units, "USD")
+  expect_equal(
+    table$columns$AMOUNT$description,
+    "Authored column description."
+  )
+  expect_equal(table$columns$ORDER_ID$description, "Warehouse key.")
+  rendered <- dictionary_columns_text(table$columns, catalog_test_columns())
+  expect_match(rendered, "AMOUNT (NUMBER(38,2), nullable, USD)", fixed = TRUE)
+  expect_no_match(rendered, "Warehouse amount description.", fixed = TRUE)
+  expect_equal(
+    merged$relations[["ANALYTICS.PUBLIC.ORDERS"]]$columns,
+    catalog_test_columns()
+  )
+})
+
+test_that("fully qualified authored names match before relative names", {
+  relations <- list(
+    "ANALYTICS.PUBLIC.ORDERS" = list(
+      id = DBI::Id(
+        catalog = "ANALYTICS",
+        schema = "PUBLIC",
+        table = "ORDERS"
+      ),
+      kind = "table",
+      description = NULL
+    ),
+    "ANALYTICS.STAGING.ORDERS" = list(
+      id = DBI::Id(
+        catalog = "ANALYTICS",
+        schema = "STAGING",
+        table = "ORDERS"
+      ),
+      kind = "table",
+      description = NULL
+    )
+  )
+  dictionary <- new_data_dictionary(list(
+    tables = list(
+      "analytics.public.orders" = list(description = "Public orders.")
+    )
+  ))
+  merged <- catalog_merge_dictionary(
+    dictionary,
+    relations,
+    NULL,
+    function(...) catalog_test_columns()[1, ],
+    "upper"
+  )
+
+  expect_named(merged$dictionary$tables, "ANALYTICS.PUBLIC.ORDERS")
+})
+
+test_that("relative authored table names must be unambiguous", {
+  relations <- lapply(c("PUBLIC", "STAGING"), function(schema) {
+    list(
+      id = DBI::Id(
+        catalog = "ANALYTICS",
+        schema = schema,
+        table = "ORDERS"
+      ),
+      kind = "table",
+      description = NULL
+    )
+  })
+  names(relations) <- c(
+    "ANALYTICS.PUBLIC.ORDERS",
+    "ANALYTICS.STAGING.ORDERS"
+  )
+  dictionary <- new_data_dictionary(list(
+    tables = list(orders = list(description = "Orders."))
+  ))
+
+  expect_snapshot(
+    catalog_merge_dictionary(
+      dictionary,
+      relations,
+      NULL,
+      function(...) NULL,
+      "upper"
+    ),
+    error = TRUE
+  )
+})
+
+test_that("discovered columns cannot shadow governed definitions", {
+  relations <- list(
+    "ANALYTICS.PUBLIC.ORDERS" = list(
+      id = DBI::Id(
+        catalog = "ANALYTICS",
+        schema = "PUBLIC",
+        table = "ORDERS"
+      ),
+      kind = "table",
+      description = NULL
+    )
+  )
+  dictionary <- new_data_dictionary(list(
+    tables = list(orders = list(definitions = list(
+      order_id = list(expr = "ORDER_ID", type = "number")
+    )))
+  ))
+
+  expect_snapshot(
+    catalog_merge_dictionary(
+      dictionary,
+      relations,
+      NULL,
+      function(...) catalog_test_columns(),
+      "upper"
+    ),
+    error = TRUE
+  )
 })
 
 test_that("a SQL query delivers a table's entry once", {
