@@ -35,7 +35,10 @@
 #'   strings like `"schema.table"`, or `DBI::Id` objects. Defaults to every
 #'   table returned by [DBI::dbListTables()]. Strings containing dots are
 #'   interpreted as schema-qualified names; use `DBI::Id(table = "a.b")` for
-#'   literal table names containing dots.
+#'   literal table names containing dots. For Snowflake connections, a
+#'   `DBI::Id` ending in `catalog` or `schema` selects every table and view in
+#'   that namespace. Leaving `tables` unset selects the current Snowflake
+#'   schema.
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
@@ -143,6 +146,26 @@ data_source_connection <- function(
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
 
+  if (is_snowflake_connection(con)) {
+    table_registry <- snowflake_table_registry(con, tables, call = call)
+    if (length(table_registry$validate$labels)) {
+      check_table_ids_exist(con, table_registry$validate, call = call)
+    }
+    commons_span_set_attribute(
+      span,
+      "commons.data_source.n_tables",
+      length(table_registry$labels)
+    )
+    return(new_data_source(
+      con,
+      table_registry$labels,
+      owned = FALSE,
+      table_ids = table_registry$ids,
+      dictionary = dictionary,
+      snowflake_relations = table_registry$relations
+    ))
+  }
+
   if (is.null(tables)) {
     listed <- DBI::dbListTables(con)
     commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
@@ -241,7 +264,8 @@ new_data_source <- function(
   owned,
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
-  pending = NULL
+  pending = NULL,
+  snowflake_relations = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -263,7 +287,8 @@ new_data_source <- function(
       table_ids = table_ids,
       handle = handle,
       dictionary = dictionary,
-      pending = pending
+      pending = pending,
+      snowflake_relations = snowflake_relations
     ),
     class = "commons_data_source"
   )
@@ -426,7 +451,12 @@ pending_tables_in_error <- function(source, err) {
   )]
 }
 
-source_describe <- function(source, table, n_sample = 5) {
+source_describe <- function(
+  source,
+  table,
+  n_sample = 5,
+  call = rlang::caller_env()
+) {
   id <- source$table_ids[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
@@ -444,12 +474,22 @@ source_describe <- function(source, table, n_sample = 5) {
       n_sample
     )
   )
-  schema <- data.frame(
-    column = names(sample),
-    type = vapply(sample, function(x) class(x)[[1]], character(1)),
-    row.names = NULL
+  relation <- source$snowflake_relations[[table]]
+  if (is.null(source$snowflake_relations)) {
+    schema <- data.frame(
+      column = names(sample),
+      type = vapply(sample, function(x) class(x)[[1]], character(1)),
+      row.names = NULL
+    )
+  } else {
+    schema <- snowflake_describe_relation(source$con, id, call = call)
+  }
+  list(
+    schema = schema,
+    sample = sample,
+    kind = relation$kind,
+    description = relation$description
   )
-  list(schema = schema, sample = sample)
 }
 
 source_query <- function(source, sql) {

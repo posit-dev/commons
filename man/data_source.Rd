@@ -18,7 +18,10 @@ For a connection, a character vector of table names, schema-qualified
 strings like \code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every
 table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are
 interpreted as schema-qualified names; use \code{DBI::Id(table = "a.b")} for
-literal table names containing dots.
+literal table names containing dots. For Snowflake connections, a
+\code{DBI::Id} ending in \code{catalog} or \code{schema} selects every table and view in
+that namespace. Leaving \code{tables} unset selects the current Snowflake
+schema.
 
 For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}

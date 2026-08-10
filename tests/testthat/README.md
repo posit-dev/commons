@@ -25,6 +25,8 @@ options(commons.test.databricks = DBI::Id(
 ))
 ```
 
-Each test queries the current identity and namespace, then reads at most one row
-from the configured table. If a backend's option is absent, its test skips. Once
-enabled, connection and query failures fail the test.
+The Snowflake test exercises exact table selection, schema and catalog
+expansion, current-schema discovery, native column metadata, and sample rows.
+The Databricks test queries the current identity and namespace, then reads at
+most one row from the configured table. If a backend's option is absent, its
+test skips. Once enabled, connection and query failures fail the test.
