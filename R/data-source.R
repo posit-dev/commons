@@ -39,8 +39,8 @@
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
-#' @param options Database selection and future sampling controls from
-#'   [data_source_options()]. This argument is supported only when `...` is a
+#' @param options Database selection controls from [data_source_options()].
+#'   This argument is supported only when `...` is a
 #'   DBI connection. Supply only one of `tables` and `options`.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the

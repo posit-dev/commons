@@ -28,8 +28,8 @@ source's tables and columns, in the
 \href{https://data-dict.tidyverse.org/}{data-dict.yaml} format. See the
 \verb{Data dictionaries} section.}
 
-\item{options}{Database selection and future sampling controls from
-\code{\link[=data_source_options]{data_source_options()}}. This argument is supported only when \code{...} is a
+\item{options}{Database selection controls from \code{\link[=data_source_options]{data_source_options()}}.
+This argument is supported only when \code{...} is a
 DBI connection. Supply only one of \code{tables} and \code{options}.}
 }
 \value{

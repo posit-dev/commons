@@ -4,16 +4,13 @@
 \alias{data_source_options}
 \title{Configure a database data source}
 \usage{
-data_source_options(include = NULL, sample_rows = 0L)
+data_source_options(include = NULL)
 }
 \arguments{
 \item{include}{Exact tables to expose: a character vector, a \code{\link[DBI:Id]{DBI::Id()}}, or
 a list of \code{DBI::Id()} objects. An ID without a \code{table} component represents
 a namespace; namespace expansion requires backend catalog support and is
 not yet available.}
-
-\item{sample_rows}{A non-negative integer recording how many rows to sample
-when describing a table. Table descriptions do not yet apply this value.}
 }
 \value{
 A \code{commons_data_source_options} object for \code{\link[=data_source]{data_source()}}.

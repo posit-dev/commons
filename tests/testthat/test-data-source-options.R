@@ -1,16 +1,11 @@
 test_that("data_source_options normalizes exact selectors", {
-  options <- data_source_options(
-    include = c("sales", "crm.sales"),
-    sample_rows = 2
-  )
+  options <- data_source_options(include = c("sales", "crm.sales"))
 
   expect_s3_class(options, "commons_data_source_options")
   expect_identical(
     lapply(options$include, function(id) id@name),
     list(c(table = "sales"), c(table = "crm.sales"))
   )
-  expect_identical(options$sample_rows, 2L)
-
   qualified <- DBI::Id(catalog = "analytics", schema = "crm", table = "sales")
   expect_identical(data_source_options(qualified)$include[[1]], qualified)
 })
@@ -34,14 +29,6 @@ test_that("data_source_options validates its values", {
     data_source_options(include = DBI::Id(schema = "")),
     "non-empty components"
   )
-
-  invalid_rows <- list(-1, 1.5, NA_real_, Inf, "1", c(1, 2))
-  for (sample_rows in invalid_rows) {
-    expect_error(
-      data_source_options(sample_rows = sample_rows),
-      "one non-negative integer"
-    )
-  }
 })
 
 test_that("options character selectors are literal table names", {
@@ -52,12 +39,11 @@ test_that("options character selectors are literal table names", {
 
   src <- data_source(
     con,
-    options = data_source_options(include = "crm.sales", sample_rows = 1L)
+    options = data_source_options(include = "crm.sales")
   )
 
   expect_equal(list_tables(src), "crm.sales")
   expect_identical(src$table_ids[["crm.sales"]]@name, c(table = "crm.sales"))
-  expect_identical(src$options$sample_rows, 1L)
   expect_equal(
     source_describe(src, "crm.sales", n_sample = 1)$sample$order_id,
     "o01"

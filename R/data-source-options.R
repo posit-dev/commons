@@ -8,17 +8,11 @@
 #'   a list of `DBI::Id()` objects. An ID without a `table` component represents
 #'   a namespace; namespace expansion requires backend catalog support and is
 #'   not yet available.
-#' @param sample_rows A non-negative integer recording how many rows to sample
-#'   when describing a table. Table descriptions do not yet apply this value.
-#'
 #' @return A `commons_data_source_options` object for [data_source()].
 #' @export
-data_source_options <- function(include = NULL, sample_rows = 0L) {
+data_source_options <- function(include = NULL) {
   structure(
-    list(
-      include = normalize_connection_includes(include),
-      sample_rows = check_sample_rows(sample_rows)
-    ),
+    list(include = normalize_connection_includes(include)),
     class = "commons_data_source_options"
   )
 }
@@ -107,23 +101,6 @@ normalize_connection_includes <- function(
   }
 
   entries
-}
-
-check_sample_rows <- function(sample_rows, call = rlang::caller_env()) {
-  valid <- is.numeric(sample_rows) &&
-    length(sample_rows) == 1 &&
-    !is.na(sample_rows) &&
-    is.finite(sample_rows) &&
-    sample_rows >= 0 &&
-    sample_rows <= .Machine$integer.max &&
-    sample_rows == as.integer(sample_rows)
-  if (!valid) {
-    cli::cli_abort(
-      "{.arg sample_rows} must be one non-negative integer.",
-      call = call
-    )
-  }
-  as.integer(sample_rows)
 }
 
 check_exact_connection_includes <- function(
