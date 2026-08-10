@@ -5,7 +5,10 @@ local_warehouse_connection <- function(backend, env = parent.frame()) {
 
   con <- switch(
     backend,
-    snowflake = DBI::dbConnect(odbc::snowflake()),
+    snowflake = DBI::dbConnect(
+      odbc::snowflake(),
+      warehouse = live_warehouse_setting("COMMONS_SNOWFLAKE_WAREHOUSE")
+    ),
     databricks = DBI::dbConnect(
       odbc::odbc(),
       Sys.getenv("COMMONS_DATABRICKS_DSN", unset = "Databricks")
@@ -13,6 +16,14 @@ local_warehouse_connection <- function(backend, env = parent.frame()) {
   )
   withr::defer(DBI::dbDisconnect(con), envir = env)
   con
+}
+
+live_warehouse_setting <- function(name) {
+  value <- Sys.getenv(name, unset = NA_character_)
+  if (is.na(value) || !nzchar(value)) {
+    skip(paste("Missing live warehouse configuration:", name))
+  }
+  value
 }
 
 warehouse_test_objects <- function(backend) {
