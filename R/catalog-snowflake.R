@@ -145,17 +145,22 @@ snowflake_exact_relation <- function(con, id, call = rlang::caller_env()) {
       )
     }
   )
-  matches <- snowflake_relations_from_show(rows)
-  matches <- Filter(
-    function(x) identical(x$id@name[["table"]], components[["table"]]),
-    matches
+  relations <- snowflake_relations_from_show(rows)
+  requested_name <- components[["table"]]
+  is_requested <- vapply(
+    relations,
+    function(relation) {
+      identical(relation$id@name[["table"]], requested_name)
+    },
+    logical(1)
   )
-  if (length(matches)) {
-    relation <- matches[[1]]
-    relation$id <- id
-    return(relation)
+  if (!any(is_requested)) {
+    return(list(id = id, kind = NULL, description = NULL))
   }
-  list(id = id, kind = NULL, description = NULL)
+
+  relation <- relations[[which(is_requested)[[1]]]]
+  relation$id <- id
+  relation
 }
 
 snowflake_relations_from_show <- function(rows) {
