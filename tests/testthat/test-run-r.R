@@ -31,6 +31,20 @@ test_that("run_r session state persists across calls, and handles sync lazily", 
   expect_match(res@value, "48")
 })
 
+test_that("run_r loads integer64 methods for stored handles", {
+  skip_if_not_installed("bit64")
+  worker <- local_worker()
+  store <- new_handle_store()
+  register_handle(
+    store,
+    data.frame(n = bit64::as.integer64(c(326, 338)))
+  )
+
+  res <- sync_promise(run_r_tool(worker, store, "as.numeric(r1$n)"))
+
+  expect_match(res@value, "[1] 326 338", fixed = TRUE)
+})
+
 test_that("run_r returns plots as images and opens the display", {
   worker <- local_worker()
   store <- new_handle_store()

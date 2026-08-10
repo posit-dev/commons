@@ -38,6 +38,7 @@ Imports:
     S7,
     utils
 Suggests:
+    bit64,
     bsicons,
     bslib (>= 0.11.0),
     dbplyr,
