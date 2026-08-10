@@ -1,5 +1,5 @@
 test_that("live Snowflake connection reads a configured table", {
-  objects <- warehouse_test_objects("snowflake")
+  table <- warehouse_test_table("snowflake")
   con <- local_warehouse_connection("snowflake")
 
   session <- DBI::dbGetQuery(
@@ -11,7 +11,7 @@ test_that("live Snowflake connection reads a configured table", {
       "CURRENT_SCHEMA() AS schema"
     )
   )
-  rows <- warehouse_read_one(con, objects$table)
+  rows <- warehouse_read_one(con, table)
   names(session) <- tolower(names(session))
 
   expect_equal(nrow(session), 1)
@@ -22,7 +22,7 @@ test_that("live Snowflake connection reads a configured table", {
 })
 
 test_that("live Databricks connection reads a configured table", {
-  objects <- warehouse_test_objects("databricks")
+  table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
 
   session <- DBI::dbGetQuery(
@@ -33,7 +33,7 @@ test_that("live Databricks connection reads a configured table", {
       "CURRENT_SCHEMA() AS schema"
     )
   )
-  rows <- warehouse_read_one(con, objects$table)
+  rows <- warehouse_read_one(con, table)
   names(session) <- tolower(names(session))
 
   expect_equal(nrow(session), 1)
