@@ -98,6 +98,11 @@ reaches the agent three ways:
   definitions of glossary terms it references. `describe_table` merges
   documented columns with the table's live schema.
 
+- For Snowflake and Databricks sources, a fully qualified dictionary
+  table name matches the same selected relation. A relative name is
+  accepted when it matches only one selected relation. Authored prose
+  takes precedence, while warehouse column types remain authoritative.
+
 - When the agent also has a
   [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md),
   the dictionary's prose is indexed for the `search_context` tool.
@@ -125,7 +130,7 @@ src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))
 )
 #> duckdb keeps downloaded extensions and secrets in a temporary directory:
-#> ℹ /tmp/RtmpwQwuUq/duckdb
+#> ℹ /tmp/Rtmpezluw6/duckdb
 #> This is removed when the R session ends.
 #> • Extensions are re-downloaded each session.
 #> • Secrets are lost.
