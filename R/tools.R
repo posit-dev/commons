@@ -345,6 +345,10 @@ search_context_tool <- function(context, query) {
 describe_table_tool <- function(source, table, source_name = NULL, tracker = NULL) {
   d <- source_describe(source, table)
   entry <- source$dictionary$tables[[table]]
+  relation <- c(
+    if (!is.null(d$kind)) sprintf("Relation type: %s.", d$kind),
+    d$description
+  )
 
   sample <- sprintf(
     "Sample rows:\n\n%s",
@@ -352,6 +356,7 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   )
   if (is.null(entry)) {
     parts <- c(
+      relation,
       sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
       sample
     )
@@ -363,6 +368,7 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
       dictionary_columns_text(entry$columns, live = d$schema)
     )
     parts <- c(
+      relation,
       dictionary_entry_parts(source$dictionary, table, columns),
       sample
     )
