@@ -309,6 +309,7 @@ catalog_merge_dictionary_table <- function(
     call = call
   )
   if (!identical(authored_name, selected_name)) {
+    # Preserve the authored alias for first-touch and relationship matching after re-keying.
     authored$.authored_name <- authored_name
   }
 
