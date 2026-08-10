@@ -28,7 +28,11 @@ data_source(..., tables = NULL, dictionary = NULL)
   to every table returned by
   [`DBI::dbListTables()`](https://dbi.r-dbi.org/reference/dbListTables.html).
   Strings containing dots are interpreted as schema-qualified names; use
-  `DBI::Id(table = "a.b")` for literal table names containing dots.
+  `DBI::Id(table = "a.b")` for literal table names containing dots. For
+  Snowflake connections, a
+  [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) ending in
+  `catalog` or `schema` selects every table and view in that namespace.
+  Leaving `tables` unset selects the current Snowflake schema.
 
   For a board, a named character vector of pins to read: the names
   become table names, and the values are pin names passed to
@@ -120,7 +124,7 @@ src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))
 )
 #> duckdb keeps downloaded extensions and secrets in a temporary directory:
-#> ℹ /tmp/RtmpthxXQN/duckdb
+#> ℹ /tmp/RtmpxmhJce/duckdb
 #> This is removed when the R session ends.
 #> • Extensions are re-downloaded each session.
 #> • Secrets are lost.
