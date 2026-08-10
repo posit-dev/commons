@@ -61,8 +61,8 @@ test_that("Snowflake current namespace requires a database and schema", {
     .package = "DBI"
   )
 
-  expect_error(
+  expect_snapshot(
     snowflake_current_namespace(NULL),
-    "no current database and schema"
+    error = TRUE
   )
 })
