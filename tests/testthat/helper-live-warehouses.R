@@ -44,12 +44,3 @@ skip_unless_live_warehouse <- function(backend) {
     paste0("Set ", variable, "=true to run live warehouse tests")
   )
 }
-
-warehouse_read_one <- function(con, id) {
-  sql <- paste(
-    "SELECT * FROM",
-    DBI::dbQuoteIdentifier(con, id),
-    "LIMIT 1"
-  )
-  DBI::dbGetQuery(con, sql)
-}

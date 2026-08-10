@@ -4,7 +4,7 @@
 \alias{data_source}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL, dictionary = NULL)
+data_source(..., tables = NULL, dictionary = NULL, options = NULL)
 }
 \arguments{
 \item{...}{A single DBI connection, a single \code{pins} board, or named data
@@ -27,6 +27,10 @@ table names, and the values are pin names passed to \code{\link[pins:pin_read]{p
 source's tables and columns, in the
 \href{https://data-dict.tidyverse.org/}{data-dict.yaml} format. See the
 \verb{Data dictionaries} section.}
+
+\item{options}{Database selection and future sampling controls from
+\code{\link[=data_source_options]{data_source_options()}}. This argument is supported only when \code{...} is a
+DBI connection. Supply only one of \code{tables} and \code{options}.}
 }
 \value{
 A \code{commons_data_source} object.

@@ -39,6 +39,9 @@
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
+#' @param options Database selection and future sampling controls from
+#'   [data_source_options()]. This argument is supported only when `...` is a
+#'   DBI connection. Supply only one of `tables` and `options`.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
 #'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
@@ -85,10 +88,11 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL, dictionary = NULL) {
+data_source <- function(..., tables = NULL, dictionary = NULL, options = NULL) {
   dots <- rlang::list2(...)
   dictionary <- as_data_dictionary(dictionary)
   kind <- data_source_kind(dots)
+  options <- check_data_source_options(options, tables, kind)
 
   local_commons_span(
     "commons_data_source_create",
@@ -96,7 +100,12 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   )
 
   if (kind == "connection") {
-    return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
+    return(data_source_connection(
+      dots[[1]],
+      tables,
+      dictionary = dictionary,
+      options = options
+    ))
   }
   if (kind == "board") {
     return(data_source_board(dots[[1]], tables, dictionary = dictionary))
@@ -139,18 +148,39 @@ data_source_connection <- function(
   con,
   tables,
   dictionary = NULL,
+  options = NULL,
   call = rlang::caller_env()
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
 
-  if (is.null(tables)) {
+  include <- options$include %||% tables
+  if (is.null(include)) {
     listed <- DBI::dbListTables(con)
     commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
-    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
+    return(new_data_source(
+      con,
+      listed,
+      owned = FALSE,
+      dictionary = dictionary,
+      options = options
+    ))
   }
 
-  table_registry <- normalize_table_registry(tables, call = call)
-  check_table_ids_exist(con, table_registry, call = call)
+  if (!is.null(options)) {
+    check_exact_connection_includes(include, call = call)
+  }
+  argument <- if (is.null(options)) "tables" else "include"
+  table_registry <- normalize_table_registry(
+    include,
+    call = call,
+    argument = argument
+  )
+  check_table_ids_exist(
+    con,
+    table_registry,
+    call = call,
+    argument = argument
+  )
   commons_span_set_attribute(
     span,
     "commons.data_source.n_tables",
@@ -162,7 +192,8 @@ data_source_connection <- function(
     table_registry$labels,
     owned = FALSE,
     table_ids = table_registry$ids,
-    dictionary = dictionary
+    dictionary = dictionary,
+    options = options
   )
 }
 
@@ -241,7 +272,8 @@ new_data_source <- function(
   owned,
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
-  pending = NULL
+  pending = NULL,
+  options = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -263,7 +295,8 @@ new_data_source <- function(
       table_ids = table_ids,
       handle = handle,
       dictionary = dictionary,
-      pending = pending
+      pending = pending,
+      options = options
     ),
     class = "commons_data_source"
   )
@@ -561,7 +594,11 @@ duckdb_connect <- function() {
   con
 }
 
-normalize_table_registry <- function(tables, call = rlang::caller_env()) {
+normalize_table_registry <- function(
+  tables,
+  call = rlang::caller_env(),
+  argument = "tables"
+) {
   entries <- table_entries(tables, call = call)
   ids <- lapply(entries, table_entry_id, call = call)
   labels <- vapply(ids, table_id_label, character(1), call = call)
@@ -569,7 +606,7 @@ normalize_table_registry <- function(tables, call = rlang::caller_env()) {
   duplicated_labels <- unique(labels[duplicated(labels)])
   if (length(duplicated_labels)) {
     cli::cli_abort(
-      "{.arg tables} must not contain duplicate labels: {.val {duplicated_labels}}.",
+      "{.arg {argument}} must not contain duplicate labels: {.val {duplicated_labels}}.",
       call = call
     )
   }
@@ -661,7 +698,12 @@ table_ids_from_labels <- function(tables) {
 # startup against a remote warehouse. Probe every table in a single zero-row
 # query instead, and fall back to per-table checks only to name the missing
 # tables when that probe fails.
-check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env()) {
+check_table_ids_exist <- function(
+  con,
+  table_registry,
+  call = rlang::caller_env(),
+  argument = "tables"
+) {
   probes <- vapply(
     table_registry$ids,
     function(id) {
@@ -689,14 +731,14 @@ check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env(
 
   if (length(missing) == 0) {
     cli::cli_abort(
-      "Failed to verify {.arg tables} against the connection.",
+      "Failed to verify {.arg {argument}} against the connection.",
       parent = probe_error,
       call = call
     )
   }
 
   cli::cli_abort(
-    "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
+    "{.arg {argument}} names table{?s} not on the connection: {.val {missing}}.",
     call = call
   )
 }
