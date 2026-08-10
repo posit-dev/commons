@@ -351,8 +351,8 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   )
 
   sample <- sprintf(
-    "Sample rows:\n\n%s",
-    df_to_markdown(d$sample, max_rows = 5)
+    "Sample summary:\n\n%s",
+    ellmer::df_schema(d$sample, max_cols = ncol(d$sample))
   )
   if (is.null(entry)) {
     parts <- c(

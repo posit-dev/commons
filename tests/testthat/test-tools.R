@@ -125,7 +125,12 @@ test_that("format_measure_value collects a lazy dbplyr table", {
 test_that("describe_table_tool reports columns and samples", {
   res <- describe_table_tool(test_source(), "sales")
   expect_match(res@value, "order_id")
-  expect_match(res@value, "Sample rows")
+  expect_match(res@value, "Sample summary")
+  expect_match(
+    res@value,
+    '* order_id: character with 0 NAs, and 5 unique values',
+    fixed = TRUE
+  )
 })
 
 test_that("search_context_tool handles a missing context layer", {

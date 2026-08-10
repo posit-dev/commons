@@ -75,7 +75,7 @@ test_that("live Snowflake discovers and describes catalog relations", {
   tool <- describe_table_tool(exact, label)
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
-  expect_match(tool@value, "Sample rows")
+  expect_match(tool@value, "Sample summary")
 })
 
 test_that("live Databricks connection reads a configured table", {
