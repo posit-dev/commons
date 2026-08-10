@@ -52,3 +52,45 @@ catalog_table_registry <- function(
     validate = list(labels = validate_labels, ids = validate)
   )
 }
+
+catalog_id_type <- function(id, backend, call = rlang::caller_env()) {
+  components <- id@name
+  roles <- names(components)
+  valid <- list(
+    c("catalog"),
+    c("schema"),
+    c("catalog", "schema"),
+    c("table"),
+    c("schema", "table"),
+    c("catalog", "schema", "table")
+  )
+  if (
+    !any(vapply(valid, identical, logical(1), roles)) ||
+      any(is.na(components) | !nzchar(components))
+  ) {
+    cli::cli_abort(
+      "{backend} {.cls DBI::Id} entries in {.arg tables} must follow
+       catalog, schema, and table order without skipped or empty components.",
+      call = call
+    )
+  }
+  if ("table" %in% roles) "relation" else "namespace"
+}
+
+catalog_match_exact_relation <- function(relations, id) {
+  requested_name <- id@name[["table"]]
+  is_requested <- vapply(
+    relations,
+    function(relation) {
+      identical(relation$id@name[["table"]], requested_name)
+    },
+    logical(1)
+  )
+  if (!any(is_requested)) {
+    return(list(id = id, kind = NULL, description = NULL))
+  }
+
+  relation <- relations[[which(is_requested)[[1]]]]
+  relation$id <- id
+  relation
+}

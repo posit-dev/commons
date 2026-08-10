@@ -138,21 +138,7 @@ databricks_exact_relation <- function(con, id, call = rlang::caller_env()) {
   } else {
     databricks_list_unity_relations(con, complete, call = call)
   }
-  requested_name <- components[["table"]]
-  is_requested <- vapply(
-    relations,
-    function(relation) {
-      identical(relation$id@name[["table"]], requested_name)
-    },
-    logical(1)
-  )
-  if (!any(is_requested)) {
-    return(list(id = id, kind = NULL, description = NULL))
-  }
-
-  relation <- relations[[which(is_requested)[[1]]]]
-  relation$id <- id
-  relation
+  catalog_match_exact_relation(relations, id)
 }
 
 databricks_relations_from_information_schema <- function(rows) {
@@ -348,25 +334,5 @@ databricks_complete_relation <- function(
 }
 
 databricks_id_type <- function(id, call = rlang::caller_env()) {
-  components <- id@name
-  roles <- names(components)
-  valid <- list(
-    c("catalog"),
-    c("schema"),
-    c("catalog", "schema"),
-    c("table"),
-    c("schema", "table"),
-    c("catalog", "schema", "table")
-  )
-  if (
-    !any(vapply(valid, identical, logical(1), roles)) ||
-      any(is.na(components) | !nzchar(components))
-  ) {
-    cli::cli_abort(
-      "Databricks {.cls DBI::Id} entries in {.arg tables} must follow
-       catalog, schema, and table order without skipped or empty components.",
-      call = call
-    )
-  }
-  if ("table" %in% roles) "relation" else "namespace"
+  catalog_id_type(id, "Databricks", call = call)
 }
