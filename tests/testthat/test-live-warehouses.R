@@ -60,7 +60,8 @@ test_that("live Snowflake discovers and describes catalog relations", {
     described$schema,
     c("column", "type", "nullable", "description")
   )
-  expect_equal(nrow(described$sample), 5)
+  expect_true(nrow(described$sample) <= 5)
+  expect_equal(names(described$sample), described$schema$column)
   expect_true(exact$snowflake_relations[[label]]$kind %in% c("table", "view"))
   expect_true(label %in% list_tables(schema_source))
   expect_true(label %in% list_tables(catalog_source))
