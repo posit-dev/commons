@@ -113,6 +113,10 @@ catalog_merge_dictionary <- function(
     identifier_case,
     call = call
   )
+  dictionary$relationships <- catalog_scope_dictionary_relationships(
+    dictionary,
+    matches
+  )
   tables <- list()
   for (authored_name in names(matches)) {
     label <- matches[[authored_name]]
@@ -136,6 +140,36 @@ catalog_merge_dictionary <- function(
   dictionary$tables <- tables
 
   list(dictionary = dictionary, relations = relations)
+}
+
+catalog_scope_dictionary_relationships <- function(dictionary, matches) {
+  dropped <- names(matches)[is.na(matches)]
+  if (length(dropped) == 0L) {
+    return(dictionary$relationships)
+  }
+  keep <- vapply(
+    dictionary$relationships,
+    catalog_dictionary_relationship_in_scope,
+    logical(1),
+    dropped = dropped,
+    dictionary = dictionary
+  )
+  dictionary$relationships[keep]
+}
+
+catalog_dictionary_relationship_in_scope <- function(
+  relationship,
+  dropped,
+  dictionary
+) {
+  text <- paste(c(relationship$join, relationship$description), collapse = " ")
+  !any(vapply(
+    dropped,
+    dictionary_table_mentioned,
+    logical(1),
+    dictionary = dictionary,
+    text = text
+  ))
 }
 
 catalog_dictionary_matches <- function(

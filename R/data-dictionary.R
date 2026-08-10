@@ -250,16 +250,11 @@ dictionary_examples_fact <- function(examples) {
 
 dictionary_relationships_text <- function(dictionary, table) {
   relationships <- dictionary$relationships
-  table_names <- c(table, dictionary$tables[[table]][[".authored_name"]])
   mentions <- vapply(
     relationships,
     function(rel) {
       text <- paste(c(rel$join, rel$description), collapse = " ")
-      any(vapply(
-        table_names,
-        function(name) grepl(word_pattern(name), text, ignore.case = TRUE),
-        logical(1)
-      ))
+      dictionary_table_mentioned(table, dictionary, text)
     },
     logical(1)
   )
@@ -286,6 +281,15 @@ dictionary_relationships_text <- function(dictionary, table) {
     character(1)
   )
   paste0("Relationships:\n\n", paste(lines, collapse = "\n"))
+}
+
+dictionary_table_mentioned <- function(table, dictionary, text) {
+  table_names <- c(table, dictionary$tables[[table]][[".authored_name"]])
+  any(vapply(
+    table_names,
+    function(name) grepl(word_pattern(name), text, ignore.case = TRUE),
+    logical(1)
+  ))
 }
 
 # Definitions of glossary terms the entry references but the system prompt

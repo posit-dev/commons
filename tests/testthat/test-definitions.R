@@ -227,6 +227,17 @@ test_that("same-named definitions on several tables disambiguate by scope", {
     records
   )
   expect_match(qualified$sql, "revenue > 0", fixed = TRUE)
+
+  qualified_records <- records[records$table == "sales", , drop = FALSE]
+  qualified_records$table <- "ANALYTICS.PUBLIC.SALES"
+  qualified <- expand_definitions(
+    paste(
+      "SELECT count(*) FROM ANALYTICS.PUBLIC.SALES",
+      "WHERE {{ANALYTICS.PUBLIC.SALES.deduplicated}}"
+    ),
+    qualified_records
+  )
+  expect_match(qualified$sql, "revenue > 0", fixed = TRUE)
 })
 
 test_that("run_sql results note the definitions applied", {

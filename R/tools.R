@@ -417,8 +417,10 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   tables <- names(dictionary$tables)
   hits <- tables[vapply(
     tables,
-    function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
-    logical(1)
+    dictionary_table_mentioned,
+    logical(1),
+    dictionary = dictionary,
+    text = sql
   )]
   hits <- hits[!vapply(
     hits,

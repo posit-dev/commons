@@ -205,6 +205,10 @@ test_that("warehouse metadata supplements an authored dictionary", {
         )
       ),
       unselected = list(description = "Not selected.")
+    ),
+    relationships = list(
+      list(join = "orders.order_id = unselected.order_id"),
+      list(join = "orders.order_id = external.order_id")
     )
   ))
 
@@ -236,6 +240,20 @@ test_that("warehouse metadata supplements an authored dictionary", {
     merged$relations[["ANALYTICS.PUBLIC.ORDERS"]]$columns,
     catalog_test_columns()
   )
+  expect_length(merged$dictionary$relationships, 1L)
+  entry <- dictionary_entry_text(
+    merged$dictionary,
+    "ANALYTICS.PUBLIC.ORDERS"
+  )
+  expect_match(entry, "external.order_id", fixed = TRUE)
+  expect_no_match(entry, "unselected.order_id", fixed = TRUE)
+  sql_entry <- dictionary_sql_entries(
+    list(dictionary = merged$dictionary),
+    "SELECT * FROM orders",
+    NULL,
+    NULL
+  )
+  expect_match(sql_entry, "Authored table description.", fixed = TRUE)
 })
 
 test_that("fully qualified authored names match before relative names", {
