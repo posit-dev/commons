@@ -42,3 +42,19 @@ warehouse_read_one <- function(con, id) {
   )
   DBI::dbGetQuery(con, sql)
 }
+
+warehouse_test_dictionary <- function(table, column) {
+  new_data_dictionary(list(tables = stats::setNames(
+    list(list(
+      description = "Authored live table description.",
+      columns = stats::setNames(
+        list(list(
+          type = "authored_type",
+          description = "Authored live column description."
+        )),
+        column
+      )
+    )),
+    table
+  )))
+}

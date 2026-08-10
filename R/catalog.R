@@ -94,3 +94,307 @@ catalog_match_exact_relation <- function(relations, id) {
   relation$id <- id
   relation
 }
+
+catalog_merge_dictionary <- function(
+  dictionary,
+  relations,
+  con,
+  describe_relation,
+  identifier_case,
+  call = rlang::caller_env()
+) {
+  if (is.null(dictionary) || length(dictionary$tables) == 0L) {
+    return(list(dictionary = dictionary, relations = relations))
+  }
+
+  matches <- catalog_dictionary_matches(
+    dictionary,
+    relations,
+    identifier_case,
+    call = call
+  )
+  dictionary$relationships <- catalog_scope_dictionary_relationships(
+    dictionary,
+    matches
+  )
+  tables <- list()
+  for (authored_name in names(matches)) {
+    label <- matches[[authored_name]]
+    if (is.na(label)) {
+      next
+    }
+    relation <- relations[[label]]
+    columns <- describe_relation(con, relation$id, call = call)
+    relation$columns <- columns
+    relations[[label]] <- relation
+    tables[[label]] <- catalog_merge_dictionary_table(
+      dictionary$tables[[authored_name]],
+      authored_name,
+      label,
+      relation,
+      columns,
+      identifier_case,
+      call = call
+    )
+  }
+  dictionary$tables <- tables
+
+  list(dictionary = dictionary, relations = relations)
+}
+
+catalog_scope_dictionary_relationships <- function(dictionary, matches) {
+  dropped <- names(matches)[is.na(matches)]
+  if (length(dropped) == 0L) {
+    return(dictionary$relationships)
+  }
+  keep <- vapply(
+    dictionary$relationships,
+    catalog_dictionary_relationship_in_scope,
+    logical(1),
+    dropped = dropped,
+    dictionary = dictionary
+  )
+  dictionary$relationships[keep]
+}
+
+catalog_dictionary_relationship_in_scope <- function(
+  relationship,
+  dropped,
+  dictionary
+) {
+  text <- paste(c(relationship$join, relationship$description), collapse = " ")
+  !any(vapply(
+    dropped,
+    dictionary_table_mentioned,
+    logical(1),
+    dictionary = dictionary,
+    text = text
+  ))
+}
+
+catalog_dictionary_matches <- function(
+  dictionary,
+  relations,
+  identifier_case,
+  call = rlang::caller_env()
+) {
+  matches <- stats::setNames(
+    rep(NA_character_, length(dictionary$tables)),
+    names(dictionary$tables)
+  )
+  claimed <- character()
+  for (authored_name in names(dictionary$tables)) {
+    label <- catalog_dictionary_match(
+      authored_name,
+      relations,
+      identifier_case,
+      call = call
+    )
+    if (is.null(label)) {
+      next
+    }
+    if (label %in% claimed) {
+      other <- names(matches)[which(matches == label)]
+      cli::cli_abort(
+        "Authored tables {.val {c(other, authored_name)}} both match selected
+         relation {.val {label}}.",
+        call = call
+      )
+    }
+    matches[[authored_name]] <- label
+    claimed <- c(claimed, label)
+  }
+  matches
+}
+
+catalog_dictionary_match <- function(
+  authored_name,
+  relations,
+  identifier_case,
+  call = rlang::caller_env()
+) {
+  labels <- names(relations)
+  exact <- labels[labels == authored_name]
+  if (length(exact) == 1L) {
+    return(exact)
+  }
+
+  authored <- catalog_normalize_identifier(authored_name, identifier_case)
+  normalized_labels <- catalog_normalize_identifier(labels, identifier_case)
+  exact <- labels[normalized_labels == authored]
+  if (length(exact) == 1L) {
+    return(exact)
+  }
+  if (length(exact) > 1L) {
+    catalog_abort_ambiguous_dictionary_table(
+      authored_name,
+      exact,
+      call = call
+    )
+  }
+
+  relation_names <- vapply(
+    relations,
+    function(relation) relation$id@name[["table"]],
+    character(1)
+  )
+  relative <- labels[
+    catalog_normalize_identifier(relation_names, identifier_case) == authored
+  ]
+  if (length(relative) == 0L && grepl(".", authored_name, fixed = TRUE)) {
+    authored_path <- strsplit(authored_name, ".", fixed = TRUE)[[1]]
+    relative <- labels[vapply(
+      relations,
+      catalog_relation_has_suffix,
+      logical(1),
+      suffix = authored_path,
+      identifier_case = identifier_case
+    )]
+  }
+  if (length(relative) > 1L) {
+    catalog_abort_ambiguous_dictionary_table(
+      authored_name,
+      relative,
+      call = call
+    )
+  }
+  if (length(relative) == 1L) relative else NULL
+}
+
+catalog_relation_has_suffix <- function(relation, suffix, identifier_case) {
+  path <- unname(relation$id@name)
+  if (length(suffix) > length(path)) {
+    return(FALSE)
+  }
+  path <- utils::tail(path, length(suffix))
+  identical(
+    catalog_normalize_identifier(path, identifier_case),
+    catalog_normalize_identifier(suffix, identifier_case)
+  )
+}
+
+catalog_abort_ambiguous_dictionary_table <- function(
+  authored_name,
+  matches,
+  call = rlang::caller_env()
+) {
+  cli::cli_abort(
+    c(
+      "Authored table {.val {authored_name}} matches more than one selected
+       relation: {.val {matches}}.",
+      "i" = "Use its fully qualified name in the data dictionary."
+    ),
+    call = call
+  )
+}
+
+catalog_merge_dictionary_table <- function(
+  authored,
+  authored_name,
+  selected_name,
+  relation,
+  columns,
+  identifier_case,
+  call = rlang::caller_env()
+) {
+  authored$description <- catalog_authored_prose(
+    authored$description,
+    relation$description
+  )
+  authored$kind <- relation$kind %||% authored$kind
+  authored$columns <- catalog_merge_dictionary_columns(
+    authored$columns,
+    columns,
+    identifier_case,
+    call = call
+  )
+  if (!identical(authored_name, selected_name)) {
+    # Preserve the authored alias for first-touch and relationship matching after re-keying.
+    authored$.authored_name <- authored_name
+  }
+
+  definition_names <- names(authored$definitions)
+  shadowed <- definition_names[
+    catalog_normalize_identifier(definition_names, identifier_case) %in%
+      catalog_normalize_identifier(names(authored$columns), identifier_case)
+  ]
+  if (length(shadowed)) {
+    cli::cli_abort(
+      "Definitions on table {.val {selected_name}} must not share a name with
+       its discovered columns: {.val {shadowed}}.",
+      call = call
+    )
+  }
+  authored
+}
+
+catalog_merge_dictionary_columns <- function(
+  authored,
+  discovered,
+  identifier_case,
+  call = rlang::caller_env()
+) {
+  out <- lapply(seq_len(nrow(discovered)), function(i) {
+    catalog_dictionary_column(discovered, i)
+  })
+  names(out) <- discovered$column
+
+  normalized <- catalog_normalize_identifier(names(out), identifier_case)
+  for (authored_name in names(authored)) {
+    exact <- which(names(out) == authored_name)
+    candidates <- if (length(exact) == 1L) {
+      exact
+    } else {
+      which(
+        normalized ==
+          catalog_normalize_identifier(authored_name, identifier_case)
+      )
+    }
+    if (length(candidates) > 1L) {
+      cli::cli_abort(
+        "Authored column {.val {authored_name}} matches more than one discovered
+         column: {.val {names(out)[candidates]}}.",
+        call = call
+      )
+    }
+    if (length(candidates) == 0L) {
+      out[[authored_name]] <- authored[[authored_name]]
+      next
+    }
+
+    discovered_name <- names(out)[[candidates]]
+    column <- utils::modifyList(
+      out[[discovered_name]],
+      authored[[authored_name]],
+      keep.null = TRUE
+    )
+    column$type <- out[[discovered_name]]$type
+    column$nullable <- out[[discovered_name]]$nullable
+    column$description <- catalog_authored_prose(
+      authored[[authored_name]]$description,
+      out[[discovered_name]]$description
+    )
+    out[[discovered_name]] <- column
+  }
+  out
+}
+
+catalog_dictionary_column <- function(discovered, i) {
+  description <- discovered$description[[i]]
+  if (is.na(description) || !nzchar(description)) {
+    description <- NULL
+  }
+  list(
+    type = discovered$type[[i]],
+    nullable = discovered$nullable[[i]],
+    description = description
+  )
+}
+
+catalog_authored_prose <- function(authored, discovered) {
+  if (is.null(authored) || !nzchar(authored)) discovered else authored
+}
+
+catalog_normalize_identifier <- function(x, identifier_case) {
+  switch(identifier_case, upper = toupper(x), lower = tolower(x), x)
+}

@@ -63,6 +63,10 @@
 #'   the tool result: its prose, documented columns, relationships, and
 #'   definitions of glossary terms it references. `describe_table` merges
 #'   documented columns with the table's live schema.
+#' * For Snowflake and Databricks sources, a fully qualified dictionary table
+#'   name matches the same selected relation. A relative name is accepted when
+#'   it matches only one selected relation. Authored prose takes precedence,
+#'   while warehouse column types remain authoritative.
 #' * When the agent also has a [context_layer()], the dictionary's prose is
 #'   indexed for the `search_context` tool.
 #'
@@ -152,6 +156,16 @@ data_source_connection <- function(
     if (length(table_registry$validate$labels)) {
       check_table_ids_exist(con, table_registry$validate, call = call)
     }
+    merged <- catalog_merge_dictionary(
+      dictionary,
+      table_registry$relations,
+      con,
+      snowflake_describe_relation,
+      "upper",
+      call = call
+    )
+    dictionary <- merged$dictionary
+    table_registry$relations <- merged$relations
     commons_span_set_attribute(
       span,
       "commons.data_source.n_tables",
@@ -172,6 +186,16 @@ data_source_connection <- function(
     if (length(table_registry$validate$labels)) {
       check_table_ids_exist(con, table_registry$validate, call = call)
     }
+    merged <- catalog_merge_dictionary(
+      dictionary,
+      table_registry$relations,
+      con,
+      databricks_describe_relation,
+      "lower",
+      call = call
+    )
+    dictionary <- merged$dictionary
+    table_registry$relations <- merged$relations
     commons_span_set_attribute(
       span,
       "commons.data_source.n_tables",
@@ -502,6 +526,8 @@ source_describe <- function(
       type = vapply(sample, function(x) class(x)[[1]], character(1)),
       row.names = NULL
     )
+  } else if (!is.null(relation$columns)) {
+    schema <- relation$columns
   } else if (is_snowflake_connection(source$con)) {
     schema <- snowflake_describe_relation(source$con, id, call = call)
   } else {

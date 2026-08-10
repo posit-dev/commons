@@ -184,7 +184,12 @@ dictionary_columns_text <- function(columns, live = NULL) {
 dictionary_column_line <- function(name, spec, live_type = NULL) {
   spec <- spec %||% list()
   qualifier <- paste(
-    c(spec$type %||% live_type, spec$units, unlist(spec$constraints)),
+    c(
+      spec$type %||% live_type,
+      dictionary_nullability_fact(spec$nullable),
+      spec$units,
+      unlist(spec$constraints)
+    ),
     collapse = ", "
   )
   facts <- c(
@@ -204,6 +209,13 @@ dictionary_column_line <- function(name, spec, live_type = NULL) {
     line <- sprintf("%s: %s", line, detail)
   }
   line
+}
+
+dictionary_nullability_fact <- function(nullable) {
+  if (!is.logical(nullable) || length(nullable) != 1L || is.na(nullable)) {
+    return(NULL)
+  }
+  if (nullable) "nullable" else "not nullable"
 }
 
 # `values` can be a sequence ([M, F]) or a map of value to meaning
@@ -242,7 +254,7 @@ dictionary_relationships_text <- function(dictionary, table) {
     relationships,
     function(rel) {
       text <- paste(c(rel$join, rel$description), collapse = " ")
-      grepl(word_pattern(table), text, ignore.case = TRUE)
+      dictionary_table_mentioned(table, dictionary, text)
     },
     logical(1)
   )
@@ -269,6 +281,15 @@ dictionary_relationships_text <- function(dictionary, table) {
     character(1)
   )
   paste0("Relationships:\n\n", paste(lines, collapse = "\n"))
+}
+
+dictionary_table_mentioned <- function(table, dictionary, text) {
+  table_names <- c(table, dictionary$tables[[table]][[".authored_name"]])
+  any(vapply(
+    table_names,
+    function(name) grepl(word_pattern(name), text, ignore.case = TRUE),
+    logical(1)
+  ))
 }
 
 # Definitions of glossary terms the entry references but the system prompt

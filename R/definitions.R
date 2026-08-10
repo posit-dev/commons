@@ -242,7 +242,7 @@ definition_base_type <- function(type) {
 }
 
 definition_token_pattern <-
-  "\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\s*\\}\\}"
+  "\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)\\s*\\}\\}"
 
 # The expansion step of run_sql, before check_query() so the denylist sees
 # the SQL that will actually execute.
@@ -294,7 +294,9 @@ resolve_definition_token <- function(
 ) {
   if (grepl(".", token, fixed = TRUE)) {
     parts <- strsplit(token, ".", fixed = TRUE)[[1]]
-    hits <- defs[defs$table == parts[[1]] & defs$name == parts[[2]], ]
+    name <- utils::tail(parts, 1L)
+    table <- paste(utils::head(parts, -1L), collapse = ".")
+    hits <- defs[defs$table == table & defs$name == name, ]
     if (nrow(hits) == 0) {
       abort_unknown_token(token, defs, call = call)
     }

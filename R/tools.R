@@ -347,7 +347,7 @@ describe_table_tool <- function(source, table, source_name = NULL, tracker = NUL
   entry <- source$dictionary$tables[[table]]
   relation <- c(
     if (!is.null(d$kind)) sprintf("Relation type: %s.", d$kind),
-    d$description
+    if (is.null(entry)) d$description
   )
 
   sample <- sprintf(
@@ -417,8 +417,10 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   tables <- names(dictionary$tables)
   hits <- tables[vapply(
     tables,
-    function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
-    logical(1)
+    dictionary_table_mentioned,
+    logical(1),
+    dictionary = dictionary,
+    text = sql
   )]
   hits <- hits[!vapply(
     hits,
