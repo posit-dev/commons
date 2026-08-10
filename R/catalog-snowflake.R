@@ -224,10 +224,8 @@ snowflake_id_type <- function(id, call = rlang::caller_env()) {
       any(is.na(components) | !nzchar(components))
   ) {
     cli::cli_abort(
-      paste0(
-        "Snowflake {.cls DBI::Id} entries in {.arg tables} must follow ",
-        "catalog, schema, and table order without skipped or empty components."
-      ),
+      "Snowflake {.cls DBI::Id} entries in {.arg tables} must follow
+       catalog, schema, and table order without skipped or empty components.",
       call = call
     )
   }
