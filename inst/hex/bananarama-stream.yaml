@@ -1,0 +1,44 @@
+output-dir: output
+
+# commons-bird-ref.png anchors the mascot's look across prompts (referenced
+# below as [commons-bird-ref]).
+
+defaults:
+  aspect-ratio: "1:1"
+  resolution: "4K"
+  model: gemini-3-pro-image-preview
+  n: 2
+
+images:
+  - name: commons-stream-simple
+    description: >
+      Take the mascot kingfisher exactly as it appears in
+      [commons-bird-ref] — same pose, proportions, plumage colours, and
+      rendering style — and place it, unchanged, perched on top of a
+      weathered wooden bench rail. The rail must run the full width of
+      the frame, edge to edge, like a real bench backrest — not a short
+      plank that ends mid-air — so a placard mounted on it reads as
+      structurally sound. A polished silver placard is mounted centred on
+      the rail, engraved with "commons" in a crisp lowercase serif face.
+
+      Behind the bird, keep the scene simple and bold rather than
+      detailed: a single willow tree leans in from one side with long
+      branches trailing toward a calm stream, and open water is clearly
+      visible. Include one set of reeds near the river. Beyond that,
+      just open meadow and sky — no second or third background tree,
+      no fine reeds or flowers; if any marginal
+      vegetation appears at all, keep it to one or two simple clumps of
+      grass, small enough not to compete with the willow and the bird.
+      Favor a small number of large, clear shapes over intricate detail,
+      so the scene stays legible even at very small print sizes. Keep
+      the whole background crisp and in sharp focus, with the same warm,
+      cheerful finish as the bird.
+    style: >
+      Build the whole illustration from a deliberately limited, cohesive
+      palette so it prints cleanly: a small set of greens for meadow and
+      willow foliage, a calm blue for sky and water, warm woody browns for
+      the rail, cool neutral grey-silver for the placard, and the
+      kingfisher's plumage providing the main pop of contrast. Use bold,
+      simple shapes and avoid fine noisy detail — this needs to read
+      clearly at hex-sticker scale (roughly 1 inch across), not just at
+      full resolution. Plain rectangular image, no border or frame.

@@ -1,44 +1,19 @@
 output-dir: output
 
-# commons-bird-ref.png anchors the mascot's look across prompts (referenced
-# below as [commons-bird-ref]).
-
 defaults:
   aspect-ratio: "1:1"
   resolution: "4K"
   model: gemini-3-pro-image-preview
-  n: 2
 
 images:
-  - name: commons-stream-simple
+  - name: commons
     description: >
-      Take the mascot kingfisher exactly as it appears in
-      [commons-bird-ref] — same pose, proportions, plumage colours, and
-      rendering style — and place it, unchanged, perched on top of a
-      weathered wooden bench rail. The rail must run the full width of
-      the frame, edge to edge, like a real bench backrest — not a short
-      plank that ends mid-air — so a placard mounted on it reads as
-      structurally sound. A polished silver placard is mounted centred on
-      the rail, engraved with "commons" in a crisp lowercase serif face.
+      A warm, hand-illustrated cartoon scene in a soft, rounded, painterly style — cute-forward and full of personality, like a whimsical children's-book illustration. Fill the whole frame edge to edge as a single immersive diorama, a little window into a place.
 
-      Behind the bird, keep the scene simple and bold rather than
-      detailed: a single willow tree leans in from one side with long
-      branches trailing toward a calm stream, and open water is clearly
-      visible. Include one set of reeds near the river. Beyond that,
-      just open meadow and sky — no second or third background tree,
-      no fine reeds or flowers; if any marginal
-      vegetation appears at all, keep it to one or two simple clumps of
-      grass, small enough not to compete with the willow and the bird.
-      Favor a small number of large, clear shapes over intricate detail,
-      so the scene stays legible even at very small print sizes. Keep
-      the whole background crisp and in sharp focus, with the same warm,
-      cheerful finish as the bird.
-    style: >
-      Build the whole illustration from a deliberately limited, cohesive
-      palette so it prints cleanly: a small set of greens for meadow and
-      willow foliage, a calm blue for sky and water, warm woody browns for
-      the rail, cool neutral grey-silver for the placard, and the
-      kingfisher's plumage providing the main pop of contrast. Use bold,
-      simple shapes and avoid fine noisy detail — this needs to read
-      clearly at hex-sticker scale (roughly 1 inch across), not just at
-      full resolution. Plain rectangular image, no border or frame.
+      The composition is anchored in the foreground by a classic wooden park bench — the kind of slatted public bench you'd find on a village green — shown large and close, running across the lower portion of the frame. The whole of the bench may not be in frame; zoom in further than that. Sitting cheerfully on the top of the bench itself is the mascot: a single Common Kingfisher, plump, big-eyed, and endearing, with an oversized friendly head in a cute cartoon style rather than a realistic bird. It perches on the top of the bench slats in the foreground, bright-eyed and full of character, greeting the viewer.
+
+      Behind the bench, the setting is an idyllic English village green, with soft grass stretching back to a single spreading oak on the horizon under a calm sky. Keep the background softer and less detailed so the bench and bird stay the clear focus.
+
+      Mount a polished silver placard on the backrest of the bench, clearly legible across the middle of the frame, engraved with the package name "commons" in a friendly lowercase. The placard should be a real focal element, the engraved letters crisp and easy to read. **The placard should not stretch across more than one bench slat;** it should only stretch across most of one board vertically. In terms of position, the bird should be roughly centered with the center of the placard.
+
+      Crucially, build the whole illustration from a deliberately limited, cohesive palette so it prints cleanly: a small set of warm greens for the grass and foliage, a calm blue for the sky, warm woody browns for the bench and post, cool neutral grey-silver for the placard, and the kingfisher's signature accent of teal-blue plumage with a warm orange breast providing the one pop of contrast against the greens. Avoid gradients with many intermediate hues, avoid fine noisy detail, and avoid a broad rainbow of colors — keep areas as flat-ish blocks of a few well-chosen tones with light, clean shading, so the mascot reads instantly and the print stays crisp. Cheerful, warm, inviting, and unmistakably a friendly place everyone can draw from. Plain rectangular image, no border or frame.
