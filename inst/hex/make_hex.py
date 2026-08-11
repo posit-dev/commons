@@ -149,9 +149,7 @@ if __name__ == "__main__":
     written["01-wide-brown"] = make("01-wide-brown", *WIDE, BROWN_DARK)
 
     # 2. medium crop, teal border pulled from the kingfisher  <- chosen
-    written["02-mid-teal"] = make(
-        "02-mid-teal", 1.15, (0.40, 0.50), TEAL_DARK
-    )
+    written["02-mid-teal"] = make("02-mid-teal", *MID, TEAL_DARK)
 
     # 3. close crop, brown border + cream keyline
     written["03-tight-keyline"] = make("03-tight-keyline", *CLOSE, BROWN_DARK,
