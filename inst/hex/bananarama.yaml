@@ -12,12 +12,6 @@ output-dir: output
 #                          [commons-bird], because bananarama overwrites
 #                          (downscales to 512x512) any file used as a
 #                          [tag] reference.
-# This already corrupted the master once when the two weren't separated
-# (see git history of commons-restyle-1-keep.png) — keep them separate.
-#
-# Earlier directions (bench+silver placard, and two pre-simplification
-# stream/willow layouts) are archived in archive/bananarama-archive.yaml,
-# not deleted — see that file for provenance if revisiting them.
 
 defaults:
   aspect-ratio: "1:1"
@@ -26,14 +20,6 @@ defaults:
   n: 2
 
 images:
-  # The chosen direction. Full-res source kept at
-  # commons-stream-simple-2-keep.png; inst/hex/commons.png (the tracked
-  # hex sticker) is cropped from it by make_hex.py.
-  #
-  # Fixes an illogical short rail (a placard can't sit on a bench that
-  # ends mid-air) and keeps background detail sparse enough to stay
-  # legible at real hex-sticker size (~1 inch), while keeping the willow
-  # as the one distinctive kingfisher-habitat cue.
   - name: commons-stream-simple
     description: >
       Take the mascot kingfisher exactly as it appears in
