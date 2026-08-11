@@ -1,17 +1,7 @@
 output-dir: output
 
-# Reference-image setup (for reproducibility without relying on a fragile
-# scratch file):
-#   commons-bird.png      permanent, git-tracked master of the chosen
-#                          mascot bird. NEVER reference this directly in a
-#                          [tag] below or in generation — see next note.
-#   commons-bird-ref.png  disposable working copy of commons-bird.png,
-#                          gitignored, regenerate before use with:
-#                            cp commons-bird.png commons-bird-ref.png
-#                          Prompts reference [commons-bird-ref] here, not
-#                          [commons-bird], because bananarama overwrites
-#                          (downscales to 512x512) any file used as a
-#                          [tag] reference.
+# commons-bird-ref.png anchors the mascot's look across prompts (referenced
+# below as [commons-bird-ref]).
 
 defaults:
   aspect-ratio: "1:1"
