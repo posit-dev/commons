@@ -25,7 +25,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 HERE = Path(__file__).resolve().parent
-SRC = HERE / "commons-bg.png"   # source illustration (4096 x 4096)
+SRC = HERE / "commons-stream-bg.png"   # source illustration (4096 x 4096)
 OUT = HERE / "output"           # gitignored; scratch space for the riffs
 
 # The variant we settled on. Copied up to inst/hex/commons.png, which sits
