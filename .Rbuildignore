@@ -16,3 +16,4 @@ CLAUDE.md
 inst/hex/
 ^commons-review\.jsonl$
 inst/manifest.json
+^sandbox$

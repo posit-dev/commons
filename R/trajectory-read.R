@@ -169,7 +169,15 @@ read_connect_spans <- function(
   spans
 }
 
-fetch_connect_spans <- function(client, guid, from_pushdown, n, from, to, call) {
+fetch_connect_spans <- function(
+  client,
+  guid,
+  from_pushdown,
+  n,
+  from,
+  to,
+  call
+) {
   parse_otlp_lines(connect_trace_lines(
     client,
     guid,
@@ -194,7 +202,8 @@ enough_trace_lines <- function(n, from, to) {
     if (has_severed_ancestry(kept)) {
       return(FALSE)
     }
-    latest <- latest_chat_spans(kept)
+    index <- span_index(kept)
+    latest <- latest_chat_spans(Filter(is_chat_span, kept), index)
     if (length(latest) < n) {
       return(FALSE)
     }
@@ -539,6 +548,99 @@ is_chat_span <- function(span) {
   identical(span$attributes[["gen_ai.operation.name"]], "chat")
 }
 
+split_exchanges <- function(turns) {
+  out <- list()
+  current <- NULL
+  for (turn in turns) {
+    if (identical(turn@role, "user") && !turn_has_tool_result(turn)) {
+      if (!is.null(current)) {
+        out[[length(out) + 1]] <- current
+      }
+      current <- list(turn)
+    } else if (!is.null(current)) {
+      current[[length(current) + 1]] <- turn
+    }
+  }
+  if (!is.null(current)) {
+    out[[length(out) + 1]] <- current
+  }
+  out
+}
+
+turn_has_tool_result <- function(turn) {
+  any(vapply(turn@contents, is_tool_result_content, logical(1)))
+}
+
+exchange_signature <- function(exchange) {
+  lapply(exchange, turn_signature)
+}
+
+turn_signature <- function(turn) {
+  list(
+    role = turn@role,
+    contents = lapply(turn@contents, content_signature)
+  )
+}
+
+content_signature <- function(content) {
+  if (S7::S7_inherits(content, ellmer::ContentText)) {
+    return(list(type = "text", text = content@text))
+  }
+  if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
+    return(list(
+      type = "tool_request",
+      id = content@id,
+      name = content@name,
+      arguments = canonical_semantic_value(content@arguments)
+    ))
+  }
+  if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
+    request_id <- if (is.null(content@request)) {
+      NA_character_
+    } else {
+      content@request@id
+    }
+    return(list(
+      type = "tool_result",
+      id = request_id,
+      value = canonical_semantic_value(content@value)
+    ))
+  }
+  list(type = class(content)[[1]])
+}
+
+canonical_semantic_value <- function(value) {
+  if (!is.list(value)) {
+    return(value)
+  }
+  value <- lapply(value, canonical_semantic_value)
+  if (!is.null(names(value))) {
+    value <- value[order(names(value))]
+  }
+  value
+}
+
+exchange_prefix_matches <- function(candidate, canonical) {
+  length(candidate) > 0 &&
+    length(candidate) <= length(canonical) &&
+    identical(candidate, canonical[seq_along(candidate)])
+}
+
+exchange_is_complete <- function(exchange) {
+  if (length(exchange) < 2) {
+    return(FALSE)
+  }
+  final <- exchange[[length(exchange)]]
+  identical(final@role, "assistant") &&
+    !any(vapply(
+      final@contents,
+      function(content) {
+        S7::S7_inherits(content, ellmer::ContentToolRequest)
+      },
+      logical(1)
+    ))
+}
+
 posixct_nanos <- function(time) {
   sprintf("%.0f", as.numeric(time) * 1e9)
 }
@@ -547,12 +649,35 @@ posixct_nanos <- function(time) {
 # span in a conversation carries the whole trajectory: group chat spans by
 # conversation, keep the last one, and parse its GenAI-semconv messages.
 build_trajectories <- function(spans) {
-  lapply(latest_chat_spans(spans), function(span) {
-    turns <- trajectory_turns(span)
-    # Keep conversations directly usable with ellmer's chat$set_turns().
-    attr(turns, "last_active") <- nano_posixct(span_time(span))
-    turns
-  })
+  index <- span_index(spans)
+  chat_spans <- Filter(is_chat_span, spans)
+  if (length(chat_spans) == 0) {
+    return(list())
+  }
+  latest <- latest_chat_spans(chat_spans, index)
+  calls <- latest_recorded_call_spans(chat_spans, index)
+  selected <- c(
+    unname(latest),
+    lapply(calls, function(call) call$chat_span)
+  )
+  parsed <- parse_chat_spans_once(selected)
+  candidates <- recorded_call_candidates(calls, parsed)
+
+  Map(
+    function(span, id) {
+      turns <- parsed[[exchange_key(span)]]
+      exchanges <- split_exchanges(turns)
+      attr(turns, "last_active") <- nano_posixct(span_time(span))
+      attr(turns, "provenance") <- associate_exchange_provenance(
+        exchanges,
+        candidates[[id]],
+        id
+      )
+      turns
+    },
+    latest,
+    names(latest)
+  )
 }
 
 # Second precision is sufficient; the origin supports R < 4.3.
@@ -562,13 +687,11 @@ nano_posixct <- function(time) {
 
 # The latest chat span per conversation, named by conversation id and
 # ordered oldest-first.
-latest_chat_spans <- function(spans) {
-  chat_spans <- Filter(is_chat_span, spans)
+latest_chat_spans <- function(chat_spans, index) {
   if (length(chat_spans) == 0) {
     return(list())
   }
 
-  index <- span_index(spans)
   latest <- list()
   for (span in chat_spans) {
     id <- span_conversation_id(span, index)
@@ -579,6 +702,160 @@ latest_chat_spans <- function(spans) {
   }
 
   latest[order(vapply(latest, span_time, character(1)))]
+}
+
+empty_turn_provenance <- function() {
+  list(provenance_tag = NA_character_, citation_decisions = list())
+}
+
+latest_recorded_call_spans <- function(chat_spans, index) {
+  latest <- list()
+  for (span in chat_spans) {
+    turn_span <- conversation_turn_ancestor(span, index)
+    if (is.null(turn_span)) {
+      next
+    }
+    key <- exchange_key(turn_span)
+    previous <- latest[[key]]
+    if (
+      is.null(previous) ||
+        span_time(span) > span_time(previous$chat_span)
+    ) {
+      latest[[key]] <- list(
+        conversation_id = span_conversation_id(span, index),
+        turn_span = turn_span,
+        chat_span = span
+      )
+    }
+  }
+  latest
+}
+
+parse_chat_spans_once <- function(spans) {
+  keys <- vapply(spans, exchange_key, character(1))
+  spans <- spans[!duplicated(keys)]
+  rlang::set_names(lapply(spans, trajectory_turns), keys[!duplicated(keys)])
+}
+
+recorded_call_candidates <- function(call_spans, parsed_turns) {
+  candidates <- list()
+  for (call in call_spans) {
+    turns <- parsed_turns[[exchange_key(call$chat_span)]]
+    exchanges <- split_exchanges(turns)
+    if (
+      length(exchanges) == 0 ||
+        !exchange_is_complete(exchanges[[length(exchanges)]])
+    ) {
+      next
+    }
+    id <- call$conversation_id
+    candidates[[id]] <- c(
+      candidates[[id]],
+      list(list(
+        signature = lapply(exchanges, exchange_signature),
+        provenance = turn_span_provenance(call$turn_span)
+      ))
+    )
+  }
+  candidates
+}
+
+associate_exchange_provenance <- function(
+  exchanges,
+  candidates,
+  conversation_id
+) {
+  records <- rep(list(empty_turn_provenance()), length(exchanges))
+  canonical <- lapply(exchanges, exchange_signature)
+  claims <- vector("list", length(exchanges))
+
+  for (candidate in candidates %||% list()) {
+    if (!exchange_prefix_matches(candidate$signature, canonical)) {
+      next
+    }
+    index <- length(candidate$signature)
+    claims[[index]] <- c(claims[[index]], list(candidate$provenance))
+  }
+
+  ambiguous <- FALSE
+  for (i in seq_along(claims)) {
+    distinct <- distinct_provenance_records(claims[[i]])
+    if (length(distinct) == 1) {
+      records[[i]] <- distinct[[1]]
+    } else if (length(distinct) > 1) {
+      ambiguous <- TRUE
+    }
+  }
+
+  if (ambiguous) {
+    cli::cli_warn(
+      "Ignoring conflicting audit records in conversation
+       {.val {conversation_id}}."
+    )
+  }
+  records
+}
+
+distinct_provenance_records <- function(records) {
+  out <- list()
+  for (record in records) {
+    duplicate <- any(vapply(
+      out,
+      function(existing) identical(existing, record),
+      logical(1)
+    ))
+    if (!duplicate) {
+      out[[length(out) + 1]] <- record
+    }
+  }
+  out
+}
+
+exchange_key <- function(span) {
+  paste(span$trace_id, span$span_id)
+}
+
+# The provenance recorded (by stream_async(), see commons.R) on a chat
+# span's nearest commons_conversation_turn ancestor. No such ancestor
+# (`turn_span` is NULL), or no attribute on it -- tracing was off for that
+# call, or it wasn't a commons streamed exchange at all -- reports the same
+# absent defaults; provenance is read back verbatim, never reconstructed
+# from turn content. (Not named exchange_provenance(): trajectory-review.R
+# already uses that name for its own, unrelated, turn-text-based
+# heuristic.)
+turn_span_provenance <- function(turn_span) {
+  tag <- turn_span$attributes[["commons.provenance.tag"]]
+  candidates <- turn_span$attributes[["commons.citation.candidates"]]
+  list(
+    provenance_tag = if (is.null(tag)) NA_character_ else as.character(tag),
+    citation_decisions = if (is.null(candidates)) {
+      list()
+    } else {
+      tryCatch(
+        jsonlite::fromJSON(candidates, simplifyVector = FALSE) %||% list(),
+        error = function(...) list()
+      )
+    }
+  )
+}
+
+# Mirrors conversation_id_walk()'s ancestor walk, bounded the same way, but
+# stopping at a span's name rather than one of its attributes.
+conversation_turn_ancestor <- function(span, index) {
+  current <- span
+  for (i in seq_len(length(index))) {
+    if (identical(current$name, "commons_conversation_turn")) {
+      return(current)
+    }
+    if (!nzchar(current$parent_span_id)) {
+      return(NULL)
+    }
+    current <- index[[paste(span$trace_id, current$parent_span_id)]]
+    if (is.null(current)) {
+      return(NULL)
+    }
+  }
+  NULL
 }
 
 span_index <- function(spans) {

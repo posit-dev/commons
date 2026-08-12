@@ -20,9 +20,12 @@ new_review_event <- function(
   )
 
   if (!is.null(exchange)) {
-    turns <- split_exchanges(trajectories[[key$conversation]])[[exchange]]
-    provenance <- exchange_provenance(turns)
-    record$question <- turns[[1]]@text
+    turns <- trajectories[[key$conversation]]
+    exchange_turns <- split_exchanges(turns)[[exchange]]
+    provenance_record <- (attr(turns, "provenance") %||% list())[exchange][[1]] %||%
+      list(provenance_tag = NA_character_, citation_decisions = list())
+    provenance <- exchange_provenance(provenance_record)
+    record$question <- exchange_turns[[1]]@text
     record$tag <- if (is.na(provenance$tag)) "none" else provenance$tag
   }
 

@@ -1,12 +1,12 @@
 #' Shiny chat UI and server for commons agents
 #'
 #' These functions wrap [shinychat::chat_ui()] and [shinychat::chat_server()]
-#' with commons-specific answer provenance UI. Answers produced from
-#' registered measures get a compact verified-answer pill. Answers produced
-#' from fallback SQL or R can cite text from the agent's context, measure
-#' definitions, or data documentation; verified citations render as footnotes
-#' whose tooltips name their source. Fallback answers with no verified
-#' citation get an untrusted caution pill.
+#' for commons agents. The server verifies each `<commons-citation>` the
+#' model writes against its own context, measure definitions, and data
+#' documentation as the answer streams, and rewrites verified citations
+#' inline as server-authored `<shiny-aside>` elements naming their source.
+#' A compact provenance aside follows the answer when it was produced by a
+#' governed calculation, or when a fallback answer cites nothing verified.
 #'
 #' @param id The ID of the chat element; must match between `commons_ui()`
 #'   and `commons_server()`.
@@ -40,6 +40,7 @@
 #' @export
 commons_ui <- function(id, ...) {
   check_chat_packages()
+  register_commons_icon_resources()
   ui <- shinychat::chat_ui(id, icon_assistant = htmltools::HTML(""), ...)
   htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
 }
@@ -63,87 +64,7 @@ commons_server <- function(id, client, ...) {
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
 
-  chat <- shinychat::chat_server(id, client = client, ...)
-
-  session <- shiny::getDefaultReactiveDomain()
-
-  shiny::observeEvent(chat$last_turn(), ignoreNULL = TRUE, {
-    provenance <- commons_last_provenance(client)
-    if (is.na(provenance$tag)) {
-      return()
-    }
-
-    send_commons_pill(session, id, provenance)
-  })
-
-  session$onFlushed(
-    function() {
-      seed_commons_pills(session, id, client)
-    },
-    once = TRUE
-  )
-
-  chat
-}
-
-send_commons_pill <- function(session, id, provenance) {
-  html <- htmltools::renderTags(commons_answer_pill(provenance$tag))$html
-  session$sendCustomMessage(
-    "commonsProvenancePill",
-    list(
-      id = session$ns(id),
-      html = html,
-      citations = citations_payload(provenance$citations)
-    )
-  )
-}
-
-# Restored history renders as streams, so all seeded pills go in one
-# message and the client places them only once the transcript settles.
-seed_commons_pills <- function(session, id, client) {
-  provenances <- commons_exchange_provenance(
-    client$get_turns(include_system_prompt = FALSE),
-    client$citation_corpus()
-  )
-  n <- length(provenances)
-  pills <- list()
-  for (i in seq_len(n)) {
-    if (is.na(provenances[[i]]$tag)) {
-      next
-    }
-    pills[[length(pills) + 1]] <- list(
-      html = htmltools::renderTags(
-        commons_answer_pill(provenances[[i]]$tag)
-      )$html,
-      citations = citations_payload(provenances[[i]]$citations),
-      indexFromEnd = n - i
-    )
-  }
-  if (length(pills) == 0) {
-    return(invisible())
-  }
-
-  session$sendCustomMessage(
-    "commonsProvenancePillSeed",
-    list(id = session$ns(id), count = n, pills = pills)
-  )
-}
-
-# The client assembles the footnote tooltip from these fields (see
-# footnote() in commons-chat.js); unverified entries carry nothing but
-# their position.
-citations_payload <- function(citations) {
-  lapply(citations, function(citation) {
-    if (!citation$verified) {
-      return(list(verified = FALSE))
-    }
-    list(
-      verified = TRUE,
-      reason = if (!is.na(citation$reason)) citation$reason,
-      quote = normalize_citation(citation$quote),
-      label = citation$label
-    )
-  })
+  shinychat::chat_server(id, client = client, ...)
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
@@ -171,58 +92,10 @@ check_commons_client <- function(client, call = rlang::caller_env()) {
   }
 }
 
-commons_answer_pill <- function(tag) {
-  switch(
-    tag,
-    A = htmltools::tags$span(
-      class = "commons-answer-pill commons-answer-pill-trusted",
-      title = "This answer comes from a governed calculation defined by your data team.",
-      `aria-label` = "Verified answer. This answer comes from a governed calculation defined by your data team.",
-      tabindex = "0",
-      commons_pill_icon("trusted-icon.svg", "Verified answer"),
-      htmltools::tags$span("Verified answer"),
-      commons_pill_tooltip(
-        "This answer comes from a governed calculation defined by your data team."
-      )
-    ),
-    # Cited fallback answers ("B") get no pill: their citation footnotes are
-    # the provenance UI.
-    C = htmltools::tags$span(
-      class = "commons-answer-pill commons-answer-pill-caution",
-      title = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
-      `aria-label` = "Untrusted. This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
-      tabindex = "0",
-      commons_pill_icon("warning-icon.svg", "Untrusted"),
-      htmltools::tags$span("Untrusted."),
-      commons_pill_tooltip(
-        "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong."
-      )
-    ),
-    NULL
-  )
-}
-
-commons_pill_tooltip <- function(text) {
-  htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
-}
-
-commons_pill_icon <- function(file, alt) {
-  path <- system.file("figs", file, package = "commons")
-  if (!nzchar(path)) {
-    return(NULL)
-  }
-
-  svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
-  svg <- sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg)
-  src <- paste0(
-    "data:image/svg+xml,",
-    utils::URLencode(svg, reserved = TRUE)
-  )
-
-  htmltools::tags$img(
-    src = src,
-    alt = alt,
-    class = "commons-answer-pill-icon"
+register_commons_icon_resources <- function() {
+  shiny::addResourcePath(
+    COMMONS_ICON_RESOURCE_PREFIX,
+    system.file("figs", package = "commons")
   )
 }
 

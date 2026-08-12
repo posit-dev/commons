@@ -15,3 +15,4 @@ AGENTS.override.md
 inst/hex/output
 .shinychat/
 commons-review.jsonl
+/sandbox/commons-openai-citation-smoke/

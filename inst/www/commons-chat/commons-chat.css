@@ -185,6 +185,11 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 /* ---- Answer provenance ----------------------------------------------- */
 
+/* The live commons chat renders provenance as the <shiny-aside> asides
+ * styled above, not this pill -- but R/trajectory-review.R's reviewer still
+ * renders trust badges this way in its sidebar (commons_answer_pill(),
+ * relocated from R/chat.R), so this block and "Provenance tooltips" below
+ * stay. */
 .commons-answer-pill {
   align-items: center;
   border-radius: 999px;
@@ -210,65 +215,24 @@ shiny-tool-request .shiny-tool-card .tool-title,
   color: #286144;
 }
 
+.commons-answer-pill-cited {
+  background: #eef7fa;
+  border: 1px solid #c9e2e9;
+  color: #285867;
+}
+
 .commons-answer-pill-caution {
   background: #fff8ec;
   border: 1px solid #f2ddbb;
   color: #6b4b1b;
 }
 
-/* ---- Answer citations ------------------------------------------------- */
-
-/* Raw <citation> markup stays invisible while a reply streams; once the turn
- * settles, verified citations become footnotes at the end of the reply and
- * the rest are removed (see commons-chat.js). */
-.shiny-chat-message-content citation {
-  display: none;
-}
-
-.commons-citation {
-  color: color-mix(in srgb, var(--bs-primary, #007bc2) 70%, var(--bs-body-bg, #fff));
-  cursor: default;
-  font-size: 0.72em;
-  font-weight: 600;
-  padding: 0 0.12em;
-  position: relative;
-}
-
-.commons-citation:hover,
-.commons-citation:focus {
-  color: var(--bs-primary, #007bc2);
-}
-
-.commons-citation-reason {
-  display: block;
-  font-weight: 500;
-  margin-bottom: 0.15rem;
-}
-
-.commons-citation-quote {
-  border-left: 2px solid var(--bs-border-color, #dee2e6);
-  color: var(--bs-secondary-color, #6c757d);
-  display: block;
-  margin: 0 0 0.5rem;
-  padding: 0.05rem 0 0.05rem 0.5rem;
-}
-
-.commons-citation-quote:last-child {
-  margin-bottom: 0;
-}
-
-.commons-citation-source {
-  display: block;
-  margin-top: 0.1rem;
-}
-
 /* ---- Provenance tooltips ---------------------------------------------- */
 
-/* Shared by pills and footnote markers. The box is a real element rather
- * than an attr() pseudo-element so a merged footnote can interleave each
- * citation's reason with its quoted excerpt, and so commons-chat.js can
- * measure it; the arrow stays a pseudo-element on the marker so it keeps
- * pointing at it while the box is nudged back inside the pane. */
+/* The box is a real element rather than an attr() pseudo-element so
+ * commons-chat.js can measure it; the arrow stays a pseudo-element on the
+ * marker so it keeps pointing at it while the box is nudged back inside the
+ * pane. */
 .commons-tooltip {
   background: var(--bs-body-bg, #fff);
   border: 1px solid var(--bs-border-color, #dee2e6);
@@ -294,17 +258,13 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 .commons-answer-pill:hover > .commons-tooltip,
 .commons-answer-pill:focus > .commons-tooltip,
-.commons-answer-pill:focus-within > .commons-tooltip,
-.commons-citation:hover > .commons-tooltip,
-.commons-citation:focus > .commons-tooltip {
+.commons-answer-pill:focus-within > .commons-tooltip {
   display: block;
 }
 
 .commons-answer-pill:hover::before,
 .commons-answer-pill:focus::before,
-.commons-answer-pill:focus-within::before,
-.commons-citation:hover::before,
-.commons-citation:focus::before {
+.commons-answer-pill:focus-within::before {
   background: var(--bs-body-bg, #fff);
   border-bottom: 1px solid var(--bs-border-color, #dee2e6);
   border-right: 1px solid var(--bs-border-color, #dee2e6);
@@ -325,11 +285,85 @@ shiny-tool-request .shiny-tool-card .tool-title,
   top: calc(100% + 0.45rem);
 }
 
-.commons-answer-pill.commons-tooltip-below::before,
-.commons-citation.commons-tooltip-below::before {
+.commons-answer-pill.commons-tooltip-below::before {
   bottom: auto;
   top: calc(100% + 0.28rem);
   transform: translateX(-50%) rotate(225deg);
+}
+
+/* ---- Citation asides -------------------------------------------------- */
+
+/* A cited fallback answer is provenance tier "B" -- below the governed-measure
+ * tier "A" -- so its pill must not read like the trusted badge above. Both
+ * provenance badges are filled, saturated shapes; this is an outline with a
+ * stroked glyph, and it borrows neither badge's hue. */
+shiny-chat-container .shiny-aside-pill {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--bs-border-color, #dfe3e7);
+  color: var(--bs-secondary-color, #5c636a);
+  font-size: 0.74rem;
+  padding: 0.12rem 0.45rem;
+}
+
+shiny-chat-container .shiny-aside-pill:hover,
+shiny-chat-container .shiny-aside-pill:focus-visible,
+shiny-chat-container .shiny-aside-pill[aria-expanded="true"] {
+  background: rgba(var(--bs-emphasis-color-rgb, 33, 37, 41), 0.035);
+  color: var(--bs-body-color, #212529);
+}
+
+shiny-chat-container .shiny-aside-pill img {
+  opacity: 0.75;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
+  background: #f2fbf5;
+  box-shadow: inset 0 0 0 1px #cfeedd;
+  color: #286144;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"])[aria-expanded="true"] {
+  background: #e4f6ea;
+  color: #204f38;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
+  background: #fff8ec;
+  box-shadow: inset 0 0 0 1px #f2ddbb;
+  color: #6b4b1b;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"])[aria-expanded="true"] {
+  background: #fcefd8;
+  color: #583b14;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )
+  img {
+  opacity: 1;
+}
+
+/* The "matched exactly" line closes the popover as a caption, not a claim. */
+shiny-chat-container .shiny-aside-popover__body em {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.92em;
+  font-style: normal;
 }
 
 /* ---- Measure display ------------------------------------------------- */

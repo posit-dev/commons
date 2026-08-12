@@ -1,76 +1,3 @@
-test_that("derive_provenance reports how the answer was produced", {
-  corpus <- list(
-    list(label = "context layer", text = "Revenue excludes tax.")
-  )
-
-  expect_equal(derive_provenance("A")$tag, "A")
-  expect_true(is.na(derive_provenance(character())$tag))
-
-  uncited <- derive_provenance(c("A", "B"))
-  expect_equal(uncited$tag, "C")
-  expect_equal(uncited$citations, list())
-
-  cited <- derive_provenance(
-    "B",
-    "Answer.\n\n<citation>Revenue excludes tax.</citation>",
-    corpus
-  )
-  expect_equal(cited$tag, "B")
-  expect_true(cited$citations[[1]]$verified)
-  expect_equal(cited$citations[[1]]$label, "context layer")
-
-  unmatched <- derive_provenance(
-    "B",
-    "<citation>Revenue includes shipping.</citation>",
-    corpus
-  )
-  expect_equal(unmatched$tag, "C")
-  expect_false(unmatched$citations[[1]]$verified)
-
-  # A measure-backed answer discards stray citation markup: the client
-  # receives no entries and removes the elements.
-  measure_backed <- derive_provenance(
-    "A",
-    "6 orders. <citation>Revenue excludes tax.</citation>",
-    corpus
-  )
-  expect_equal(measure_backed$tag, "A")
-  expect_equal(measure_backed$citations, list())
-})
-
-test_that("commons_exchange_provenance reads tags and text from turns", {
-  corpus <- list(
-    list(label = "context layer", text = "Revenue excludes tax.")
-  )
-  turns <- list(
-    ellmer::UserTurn("How many orders are there?"),
-    ellmer::UserTurn(list(
-      ellmer::ContentToolResult(
-        value = "6",
-        extra = list(commons_tag = "A")
-      )
-    )),
-    ellmer::AssistantTurn("There are 6 orders."),
-    ellmer::UserTurn("And total revenue?"),
-    ellmer::UserTurn(list(
-      ellmer::ContentToolResult(
-        value = "5650",
-        extra = list(commons_tag = "B")
-      )
-    )),
-    ellmer::AssistantTurn(
-      "5650.\n\n<citation>Revenue excludes tax.</citation>"
-    )
-  )
-
-  out <- commons_exchange_provenance(turns, corpus)
-
-  expect_length(out, 2)
-  expect_equal(out[[1]]$tag, "A")
-  expect_equal(out[[2]]$tag, "B")
-  expect_true(out[[2]]$citations[[1]]$verified)
-})
-
 test_that("commons() registers only the tools the agent's composition earns", {
   agent <- test_agent()
 
@@ -316,8 +243,8 @@ test_that("run_sql delivers the citation request once per conversation", {
   first <- run_sql("SELECT count(*) AS n FROM sales")
   second <- run_sql("SELECT count(*) AS n FROM sales")
 
-  expect_match(first@value, "<citation ", fixed = TRUE)
-  expect_no_match(second@value, "<citation ", fixed = TRUE)
+  expect_match(first@value, "<commons-citation>", fixed = TRUE)
+  expect_no_match(second@value, "<commons-citation>", fixed = TRUE)
 })
 
 test_that("the system prompt groups tables when there are several sources", {
@@ -604,4 +531,213 @@ test_that("commons() records an agent-creation span", {
   span <- recorded$traces[[which(names == "commons_agent_create")]]
   expect_equal(span$attributes[["commons.agent.n_data_sources"]], 1L)
   expect_equal(span$attributes[["commons.agent.has_context_layer"]], FALSE)
+})
+
+test_that("collect_appended_tags reads commons_tag across tool-calling turns", {
+  turns <- list(
+    ellmer::AssistantTurn(
+      contents = list(
+        ellmer::ContentToolRequest(
+          id = "1",
+          name = "run_sql",
+          arguments = list()
+        )
+      )
+    ),
+    ellmer::UserTurn(
+      contents = list(
+        ellmer::ContentToolResult(
+          value = "42",
+          request = NULL,
+          extra = list(commons_tag = "B")
+        )
+      )
+    ),
+    ellmer::AssistantTurn(
+      contents = list(ellmer::ContentText(text = "Answer."))
+    )
+  )
+  expect_identical(collect_appended_tags(turns, from_index = 1L), "B")
+})
+
+test_that("collect_appended_tags ignores turns before from_index", {
+  turns <- list(
+    ellmer::UserTurn(
+      contents = list(
+        ellmer::ContentToolResult(
+          value = "1",
+          request = NULL,
+          extra = list(commons_tag = "A")
+        )
+      )
+    ),
+    ellmer::UserTurn(
+      contents = list(
+        ellmer::ContentToolResult(
+          value = "2",
+          request = NULL,
+          extra = list(commons_tag = "B")
+        )
+      )
+    )
+  )
+  expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
+})
+
+# Drives Commons$stream_async() with a fake ellmer provider that streams a
+# fixed answer in two chunks split mid-element, so the scanner's
+# chunk-invariant behavior is actually exercised (not just fed the whole
+# string at once). Mirrors ellmer's own stub-provider pattern for testing
+# Chat$stream_async() (see tidyverse/ellmer test-chat.R): mocking the
+# provider-facing generics (chat_perform(), stream_merge_chunks(),
+# stream_content(), value_finish_reason(), value_turn()) lets ellmer's real
+# turn-accumulation machinery run end to end, so assertions about
+# `client$get_turns()` reflect ellmer's actual behavior, not a stand-in.
+stream_citations_fixture <- function(agent, raw, split_at) {
+  final_turn <- ellmer::AssistantTurn(
+    list(ellmer::ContentText(raw)),
+    tokens = c(0, 0, 0),
+    cost = 0
+  )
+  chunks <- list(
+    substr(raw, 1, split_at),
+    substr(raw, split_at + 1, nchar(raw))
+  )
+  make_response <- function() {
+    coro::async_generator(function() {
+      yield(list(text = chunks[[1]]))
+      yield(list(text = chunks[[2]]))
+      coro::exhausted()
+    })()
+  }
+  testthat::local_mocked_bindings(
+    chat_perform = function(...) make_response(),
+    stream_merge_chunks = function(provider, result, chunk) chunk,
+    stream_content = function(provider, event) ellmer::ContentText(event$text),
+    value_finish_reason = function(provider, result) "stop",
+    value_turn = function(provider, model, result, has_type = FALSE) final_turn,
+    .package = "ellmer"
+  )
+  sync_promise(coro::async_collect(agent$stream_async(
+    "What does canopy cover mean?"
+  )))
+}
+
+test_that("stream_async projects citations without touching stored turns", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Canopy cover is always acre-weighted for reporting.", path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  raw <- paste0(
+    "Answer sentence.\n\n",
+    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "> Canopy cover is always acre-weighted for reporting.\n\n",
+    "</commons-citation>\n\nMore text.\n\n",
+    '<SHINY-ASIDE label="spoofed">not from the server</shiny-aside>\n\n',
+    "<commons-citation>\n\nr\n\n> a fabricated quote goes here\n\n</commons-citation>\n\nEnd."
+  )
+
+  chunks <- stream_citations_fixture(agent, raw, split_at = 30)
+  concatenated <- paste(unlist(chunks), collapse = "")
+
+  # ellmer appends a trailing "\n" chunk of its own when the raw answer
+  # doesn't already end in one; that structural newline passes through the
+  # scanner unchanged, so it's expected on top of the whole-string projection.
+  expect_identical(
+    concatenated,
+    paste0(project_citation_text(raw, agent$citation_corpus())$text, "\n")
+  )
+  expect_false(any(grepl("commons-citation", unlist(chunks), fixed = TRUE)))
+  expect_false(any(grepl("spoofed", unlist(chunks), fixed = TRUE)))
+
+  turns <- agent$get_turns()
+  stored_text <- turns[[length(turns)]]@contents[[1]]@text
+  expect_identical(stored_text, raw)
+})
+
+test_that("stream_async preserves structured provider content", {
+  structured <- ellmer::ContentThinking("provider citation metadata")
+  final_turn <- ellmer::AssistantTurn(
+    list(
+      ellmer::ContentText("Before "),
+      structured,
+      ellmer::ContentText("after.")
+    ),
+    tokens = c(0, 0, 0),
+    cost = 0
+  )
+  make_response <- function() {
+    coro::async_generator(function() {
+      for (content in final_turn@contents) {
+        yield(list(content = content))
+      }
+      coro::exhausted()
+    })()
+  }
+  testthat::local_mocked_bindings(
+    chat_perform = function(...) make_response(),
+    stream_merge_chunks = function(provider, result, chunk) chunk,
+    stream_content = function(provider, event) event$content,
+    value_finish_reason = function(provider, result) "stop",
+    value_turn = function(provider, model, result, has_type = FALSE) final_turn,
+    .package = "ellmer"
+  )
+  agent <- test_agent()
+
+  chunks <- sync_promise(coro::async_collect(
+    agent$stream_async("Use provider evidence.", stream = "content")
+  ))
+
+  expect_s7_class(chunks[[1]], ellmer::ContentText)
+  expect_identical(chunks[[1]]@text, "Before ")
+  expect_identical(chunks[[2]], structured)
+  expect_s7_class(chunks[[3]], ellmer::ContentText)
+  expect_identical(chunks[[3]]@text, "after.")
+})
+
+test_that("stream_async records citation candidates on the conversation span", {
+  skip_if_not_installed("otelsdk")
+  # log = TRUE only skips new_trajectory_tracing()'s real
+  # enable_local_tracing() side effects (which mutate process-wide env vars)
+  # when otel already looks like it's tracing -- true here because
+  # with_otel_record() activates its in-memory recording provider before
+  # `expr` runs, so the agent must be built inside this block, not before it.
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Canopy cover is always acre-weighted for reporting.", path)
+
+  raw <- paste0(
+    "Answer sentence.\n\n",
+    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "> Canopy cover is always acre-weighted for reporting.\n\n",
+    "</commons-citation>\n\nMore text.\n\n",
+    "<commons-citation>\n\nr\n\n> a fabricated quote goes here\n\n</commons-citation>\n\nEnd."
+  )
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(context_layer = context_layer(files = path), log = TRUE)
+    stream_citations_fixture(agent, raw, split_at = 30)
+  })
+
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  span <- recorded$traces[[which(names == "commons_conversation_turn")]]
+  candidates <- jsonlite::fromJSON(
+    span$attributes[["commons.citation.candidates"]],
+    simplifyVector = FALSE
+  )
+
+  expect_equal(
+    candidates,
+    list(
+      list(
+        quote = "Canopy cover is always acre-weighted for reporting.",
+        status = "accepted",
+        label = "documentation",
+        kind = "prose"
+      ),
+      list(
+        quote = "a fabricated quote goes here",
+        status = "rejected"
+      )
+    )
+  )
 })

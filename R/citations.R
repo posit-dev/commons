@@ -2,36 +2,57 @@
 # its reply with <citation reason="...">exact text</citation> elements, and
 # commons verifies each quote against the corpus of text the agent could have
 # drawn on. Only the quote is verified; the reason is unverified model
-# commentary shown alongside it. See derive_provenance() for how verification
-# affects an answer's provenance tag.
+# commentary shown alongside it. See derive_provenance_tag() for how
+# verification affects an answer's provenance tag.
 
-# Everything citable: context layer docs, measure schemas (as
-# search_pool presents them), and dictionary entries (as first touch
-# delivers them). Labels are user-facing; they name the source in a footnote
-# tooltip.
+# Everything citable: measure schemas (as search_pool presents them),
+# dictionary entries (as first touch delivers them), and the context layer's
+# docs. Each entry carries a `kind` -- "prose", "definition", or "schema" --
+# which selects the aside's icon, and a `label` naming the specific source.
+# Labels are noun phrases because the aside pill's accessible name is the
+# label and nothing else: its icon is decorative, so "sales" alone would tell
+# a screen reader nothing.
+#
+# Order here is precedence, not presentation. match_citation() reports the
+# first entry whose text contains the quote, and augment_context_layer()
+# copies dictionary prose into the context store to make it searchable -- so
+# a table's own description is reachable under both its table label and the
+# catch-all documentation label. Specific sources are added first so the
+# reader is always pointed at the narrowest source that can account for the
+# quote.
 build_citation_corpus <- function(context_layer, registry, sources) {
   corpus <- list()
-  add <- function(label, text) {
+  add <- function(label, kind, text) {
     for (t in text[nzchar(text)]) {
-      corpus[[length(corpus) + 1]] <<- list(label = label, text = t)
+      corpus[[length(corpus) + 1]] <<- list(
+        label = label,
+        kind = kind,
+        text = t
+      )
     }
     invisible()
   }
 
-  add("context layer", context_layer$docs %||% character())
   # Mirror search_pool's measure blocks: source lines only appear in schemas when
   # the agent has several sources, and quotes must match what was presented.
   source_names <- if (length(sources) > 1) names(sources) else character()
   for (td in registry) {
     add(
-      sprintf("measure '%s'", tool_name(td)),
+      sprintf("%s definition", tool_name(td)),
+      "definition",
       measure_schema_text(td, source_names = source_names)
     )
   }
+  names_out <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     dictionary <- sources[[i]]$dictionary
     add(
-      "data dictionary",
+      if (nzchar(names_out[[i]])) {
+        sprintf("%s dictionary", names_out[[i]])
+      } else {
+        "data dictionary"
+      },
+      "schema",
       c(
         dictionary$description %||% character(),
         dictionary$details %||% character()
@@ -39,81 +60,108 @@ build_citation_corpus <- function(context_layer, registry, sources) {
     )
     for (table in names(dictionary$tables)) {
       add(
-        sprintf("data dictionary, table '%s'", table),
+        sprintf("%s table", table),
+        "schema",
         dictionary_entry_text(dictionary, table) %||% character()
       )
     }
   }
+  add("documentation", "prose", context_layer$docs %||% character())
   corpus
 }
 
-# Extraction mirrors how the browser will parse the markup, since the client
-# replaces the rendered elements positionally: markup inside code (which never
-# becomes an element) is skipped, and tag-name case, attributes, and
-# whitespace are tolerated the way an HTML parser tolerates them.
-extract_citations <- function(text) {
-  if (length(text) == 0) {
-    return(list())
-  }
-  text <- paste(text, collapse = "\n")
-  text <- gsub("(?s)```.*?```", "", text, perl = TRUE)
-  text <- gsub("`[^`\n]*`", "", text)
-  matches <- regmatches(
-    text,
-    gregexpr("(?si)<citation\\b[^>]*>.*?</citation\\s*>", text, perl = TRUE)
-  )[[1]]
-  lapply(matches, function(match) {
-    opening <- regmatches(
-      match,
-      regexpr("(?i)^<citation\\b[^>]*>", match, perl = TRUE)
-    )
-    quote <- sub("(?i)^<citation\\b[^>]*>", "", match, perl = TRUE)
-    list(
-      quote = sub("(?i)</citation\\s*>$", "", quote, perl = TRUE),
-      reason = citation_reason(opening)
-    )
-  })
-}
-
-citation_reason <- function(opening) {
-  match <- regmatches(
-    opening,
-    regexec("(?i)\\breason\\s*=\\s*(\"[^\"]*\"|'[^']*')", opening, perl = TRUE)
-  )[[1]]
-  if (length(match) == 0) {
-    return(NA_character_)
-  }
-  value <- match[[2]]
-  trimws(substr(value, 2, nchar(value) - 1))
-}
-
-# All extracted citations, each verified against the corpus. Unverified
-# entries and their order are kept for the client's positional replacement of
-# the rendered <citation> elements (see applyCitations in commons-chat.js).
-answer_citations <- function(text, corpus) {
-  lapply(extract_citations(text), function(citation) {
-    label <- match_citation(citation$quote, corpus)
-    list(
-      quote = citation$quote,
-      reason = citation$reason,
-      label = label,
-      verified = !is.na(label)
-    )
-  })
-}
-
+# The label/kind of the first corpus entry containing `quote`, or NULL when
+# nothing does.
 match_citation <- function(quote, corpus) {
   needle <- normalize_citation(quote)
   # A trivial quote shouldn't be able to promote an answer.
   if (nchar(needle) < 10) {
-    return(NA_character_)
+    return(NULL)
   }
   for (entry in corpus) {
     if (grepl(needle, normalize_citation(entry$text), fixed = TRUE)) {
-      return(entry$label)
+      return(list(label = entry$label, kind = entry$kind))
     }
   }
-  NA_character_
+  NULL
+}
+
+# One verified citation as <shiny-aside> markup. The icon says what sort of
+# source this is and the label says which one, which is what lets the label
+# stay short. The "matched exactly" line stays in the popover body, off the
+# pill face where it would read as a trust badge. An unverified quote
+# contributes nothing: a pill for an unconfirmed quote would misrepresent it.
+render_citation_aside <- function(quote, explanation, corpus) {
+  source <- match_citation(quote, corpus)
+  decision <- list(
+    quote = quote,
+    status = if (is.null(source)) "rejected" else "accepted"
+  )
+  if (is.null(source)) {
+    return(list(html = "", decision = decision))
+  }
+  decision$label <- source$label
+  decision$kind <- source$kind
+  list(
+    html = citation_aside_html(
+      quote,
+      explanation,
+      source$label,
+      source$kind
+    ),
+    decision = decision
+  )
+}
+
+citation_aside_html <- function(quote, explanation, label, kind) {
+  icon <- citation_icon_url(kind)
+  reason <- if (nzchar(explanation)) paste0("**", explanation, "**\n\n") else ""
+  sprintf(
+    '<shiny-aside label="%s"%s>%s> %s\n\n*Quoted verbatim; matched exactly.*</shiny-aside>',
+    escape_attr(label),
+    if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
+    reason,
+    trimws(quote)
+  )
+}
+
+render_recorded_citation_aside <- function(parsed, decision) {
+  fallback <- list(
+    quote = if (is.null(parsed)) NA_character_ else parsed$quote,
+    status = "missing"
+  )
+  if (is.null(parsed) || is.null(decision) || !is.list(decision)) {
+    return(list(html = "", decision = fallback))
+  }
+  valid <- is.character(parsed$quote) &&
+    length(parsed$quote) == 1 &&
+    is.character(parsed$explanation) &&
+    length(parsed$explanation) == 1 &&
+    identical(decision$status %||% "", "accepted") &&
+    is.character(decision$quote) &&
+    length(decision$quote) == 1 &&
+    identical(
+      normalize_citation(parsed$quote),
+      normalize_citation(decision$quote)
+    ) &&
+    is.character(decision$label) &&
+    length(decision$label) == 1 &&
+    nzchar(decision$label) &&
+    is.character(decision$kind) &&
+    length(decision$kind) == 1 &&
+    decision$kind %in% c("prose", "definition", "schema")
+  if (!valid) {
+    return(list(html = "", decision = decision))
+  }
+  list(
+    html = citation_aside_html(
+      parsed$quote,
+      parsed$explanation,
+      decision$label,
+      decision$kind
+    ),
+    decision = decision
+  )
 }
 
 # Forgiving of the ways a faithful quote can still drift from its source:
@@ -154,8 +202,8 @@ citation_reminder_text <- function() {
     "With this most recent tool call, this turn is now based on outputs",
     "beyond trusted calculations.",
     "If trusted text you have seen supports your final answer,",
-    "end your reply with `<citation reason=\"Short reason\">exact supporting",
-    "text</citation>` elements, following the citation rules given earlier.",
+    "add a `<commons-citation>` block with one blockquote of the exact",
+    "supporting text, following the citation rules given earlier.",
     "Otherwise, provide no citations."
   )
 }
@@ -187,4 +235,52 @@ citation_request_text <- function(measures = list(), definitions = NULL) {
     trust_note = trust_note,
     citable_sources = cli::format_inline("{.or {citable}}")
   ))
+}
+
+# Glyph per citation kind. The SVGs carry a literal stroke colour because the
+# icon renders as <img>, which cannot inherit currentColor.
+COMMONS_ICON_RESOURCE_PREFIX <- "commons-icons"
+
+citation_icon_url <- function(kind) {
+  file <- switch(
+    kind,
+    prose = "citation-prose.svg",
+    definition = "citation-definition.svg",
+    schema = "citation-schema.svg",
+    NULL
+  )
+  if (is.null(file)) {
+    return(NULL)
+  }
+  commons_icon_url(file)
+}
+
+commons_icon_url <- function(file) {
+  path <- system.file("figs", file, package = "commons")
+  if (!nzchar(path)) {
+    return(NULL)
+  }
+  paste0(
+    COMMONS_ICON_RESOURCE_PREFIX,
+    "/",
+    utils::URLencode(file, reserved = TRUE)
+  )
+}
+
+# Minimal escaping for a value interpolated into an HTML attribute. Order
+# matters: escaping "&" first keeps "&quot;" itself from being re-escaped.
+escape_attr <- function(x) {
+  x <- gsub("&", "&amp;", x, fixed = TRUE)
+  gsub("\"", "&quot;", x, fixed = TRUE)
+}
+
+svg_data_uri <- function(file) {
+  path <- system.file("figs", file, package = "commons")
+  if (!nzchar(path)) {
+    return(NULL)
+  }
+
+  svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
+  svg <- sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg)
+  paste0("data:image/svg+xml,", utils::URLencode(svg, reserved = TRUE))
 }

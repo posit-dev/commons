@@ -241,22 +241,87 @@ Commons <- R6::R6Class(
       stream = c("text", "content"),
       controller = NULL
     ) {
-      stream <- super$stream_async(
+      # Turns appended by this call start here; collect_appended_tags() below
+      # needs this captured before super$stream_async() adds any.
+      from_index <- length(self$get_turns()) + 1L
+      stream <- rlang::arg_match(stream)
+      raw_stream <- super$stream_async(
         ...,
         tool_mode = tool_mode,
         stream = stream,
         controller = controller
       )
-      if (!private$tracing) {
-        return(stream)
-      }
+
+      tracing <- private$tracing
       conversation_id <- private$conversation_id
-      # The generator frame persists across yields and exits on completion,
-      # so the conversation span covers the whole streamed turn.
+      corpus <- private$corpus
+      as_content <- identical(stream, "content")
+
+      # The scanner has to run on every streamed turn -- fail-closed means
+      # the model's <commons-citation> dialect must never reach the browser
+      # unprojected, tracing or not. The conversation span, and the
+      # attributes recorded on it, are the only part that's conditional; the
+      # generator frame otherwise persists across yields and exits on
+      # completion, so the span (when there is one) covers the whole turn.
       coro::async_generator(function() {
-        local_conversation_turn_span(conversation_id)
-        for (chunk in coro::await_each(stream)) {
-          yield(chunk)
+        span <- NULL
+        if (tracing) {
+          span <- local_conversation_turn_span(conversation_id)
+        }
+        scanner <- citation_scanner(corpus)
+
+        for (chunk in coro::await_each(raw_stream)) {
+          if (is.character(chunk)) {
+            out <- scanner$feed(chunk)
+            if (nzchar(out)) yield(out)
+          } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
+            out <- scanner$feed(chunk@text)
+            if (nzchar(out)) yield(ellmer::ContentText(out))
+          } else {
+            yield(chunk)
+          }
+        }
+
+        tail <- scanner$finish()
+        if (nzchar(tail)) {
+          yield(if (as_content) ellmer::ContentText(tail) else tail)
+        }
+
+        decisions <- scanner$decisions()
+        verified <- any(vapply(
+          decisions,
+          function(d) identical(d$status, "accepted"),
+          logical(1)
+        ))
+        tag <- derive_provenance_tag(
+          collect_appended_tags(self$get_turns(), from_index),
+          verified
+        )
+
+        if (tracing) {
+          # Two independent tryCatch()es, not one around both: NA (no A/B
+          # tag to report) is a routine outcome that otel's attribute setter
+          # rejects, and it must not take the candidates attribute down
+          # with it.
+          if (!is.na(tag)) {
+            tryCatch(
+              commons_span_set_attribute(span, "commons.provenance.tag", tag),
+              error = function(err) NULL
+            )
+          }
+          tryCatch(
+            commons_span_set_attribute(
+              span,
+              "commons.citation.candidates",
+              jsonlite::toJSON(decisions, auto_unbox = TRUE)
+            ),
+            error = function(err) NULL
+          )
+        }
+
+        aside <- provenance_aside(tag)
+        if (nzchar(aside)) {
+          yield(if (as_content) ellmer::ContentText(aside) else aside)
         }
         coro::exhausted()
       })()
