@@ -1,8 +1,9 @@
-# read_review_records ignores malformed records
+# review state ignores unrelated Markdown and warns on bad reviews
 
     Code
-      records <- read_review_records(review_file)
+      state <- read_review_state(review_dir)
     Condition
       Warning:
-      Ignoring invalid review record on line 1 of '<review-file>'.
+      Ignoring malformed trajectory review document.
+      i '<review-dir>/conversation-bad.md'
 
