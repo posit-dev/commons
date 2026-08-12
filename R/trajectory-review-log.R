@@ -152,7 +152,10 @@ review_document <- function(
     conversation = id,
     source = source,
     updated_at = updated_at,
-    flags = flags,
+    flags = list(
+      conversation = flags$conversation,
+      exchanges = as.list(flags$exchanges)
+    ),
     notes = lapply(notes, review_note_metadata)
   )
   frontmatter <- yaml::as.yaml(metadata, indent.mapping.sequence = TRUE)
@@ -264,24 +267,12 @@ review_tools_markdown <- function(exchange) {
           "",
           sprintf("### Tool result: `%s`", name),
           "",
-          truncate_review_tool_result(review_tool_result_markdown(content))
+          truncate_review_tool_result(format_review_tool_result(content@value))
         )
       }
     }
   }
   sections
-}
-
-review_tool_result_markdown <- function(content) {
-  display <- content@extra$display
-  if (is.null(display)) {
-    display <- viewer_tool_display(content@request, content@value)
-  }
-  markdown <- display$markdown %||% NULL
-  if (rlang::is_string(markdown) && nzchar(markdown)) {
-    return(markdown)
-  }
-  format_review_tool_result(content@value)
 }
 
 format_review_tool_result <- function(value) {
