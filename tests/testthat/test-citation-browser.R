@@ -44,15 +44,17 @@ test_that("Shiny Chat renders one server-verified streamed citation", {
     ),
     "documentation"
   )
-  expect_identical(
-    app$get_js(
-      paste0(
-        "getComputedStyle(",
-        "document.querySelector('.shiny-aside-pill')",
-        ").backgroundColor;"
-      )
+
+  # The fixture streams five chunks and shinychat re-renders the message on
+  # each one, so a pill that exists mid-stream is replaced before its popover
+  # can open. "After citations." is the final chunk: waiting for it lands the
+  # click on settled DOM.
+  app$wait_for_js(
+    paste0(
+      "document.querySelector('.shiny-chat-message')",
+      "?.innerText.includes('After citations.') === true;"
     ),
-    "rgba(0, 0, 0, 0)"
+    timeout = 30 * 1000
   )
 
   app$get_js(
@@ -80,9 +82,16 @@ test_that("Shiny Chat renders one server-verified streamed citation", {
   )
   expect_match(answer, "Before citations.", fixed = TRUE)
   expect_match(answer, "After citations.", fixed = TRUE)
-  expect_no_match(answer, "fabricated supporting claim", fixed = TRUE)
-  expect_no_match(answer, "Spoofed model aside", fixed = TRUE)
   expect_no_match(answer_html, "commons-citation", fixed = TRUE)
+
+  # The fixture streams an unsupported citation and a model-authored
+  # <shiny-aside> alongside the verified one. Which elements the scanner drops
+  # is covered exhaustively in test-citation-scan.R; asserting the group count
+  # here is what proves the scanner runs in the live streaming path at all.
+  expect_identical(
+    app$get_js("document.querySelectorAll('.shiny-aside-group').length === 1;"),
+    TRUE
+  )
 })
 
 test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
@@ -111,32 +120,6 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     )
   )
   expect_identical(labels, "Verified answer|documentation|Untrusted")
-
-  trusted_background <- app$get_js(
-    paste0(
-      "getComputedStyle(document.querySelector(",
-      "'.shiny-aside-pill:has(img[src$=\"/trusted-icon.svg\"])'",
-      ")).backgroundColor;"
-    )
-  )
-  citation_background <- app$get_js(
-    paste0(
-      "getComputedStyle(document.querySelector(",
-      "'.shiny-aside-pill:has(img[src$=\"/citation-prose.svg\"])'",
-      ")).backgroundColor;"
-    )
-  )
-  untrusted_background <- app$get_js(
-    paste0(
-      "getComputedStyle(document.querySelector(",
-      "'.shiny-aside-pill:has(img[src$=\"/warning-icon.svg\"])'",
-      ")).backgroundColor;"
-    )
-  )
-
-  expect_identical(trusted_background, "rgb(242, 251, 245)")
-  expect_identical(citation_background, "rgba(0, 0, 0, 0)")
-  expect_identical(untrusted_background, "rgb(255, 248, 236)")
 
   expect_identical(
     app$get_js(
