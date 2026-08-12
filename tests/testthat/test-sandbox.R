@@ -1,10 +1,11 @@
 test_that("sandbox_capabilities reports all mechanisms", {
   caps <- sandbox_capabilities()
-  expect_named(caps, c("landlock_abi", "seccomp", "seatbelt", "userns"))
+  expect_named(caps, c("landlock_abi", "seccomp", "seatbelt", "userns", "nsjail"))
   expect_type(caps$landlock_abi, "integer")
   expect_type(caps$seccomp, "logical")
   expect_type(caps$seatbelt, "logical")
   expect_type(caps$userns, "logical")
+  expect_type(caps$nsjail, "logical")
 })
 
 test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
@@ -12,7 +13,8 @@ test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
     landlock_abi = 0L,
     seccomp = TRUE,
     seatbelt = FALSE,
-    userns = FALSE
+    userns = FALSE,
+    nsjail = FALSE
   )
 
   expect_error(
@@ -31,13 +33,77 @@ test_that("check_run_r_sandbox accepts either Linux filesystem sandbox", {
     landlock_abi = 1L,
     seccomp = TRUE,
     seatbelt = FALSE,
-    userns = FALSE
+    userns = FALSE,
+    nsjail = FALSE
   )
   expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
 
   capabilities$landlock_abi <- 0L
   capabilities$userns <- TRUE
   expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+})
+
+test_that("check_run_r_sandbox validates the nsjail backend", {
+  capabilities <- list(
+    landlock_abi = 0L,
+    seccomp = TRUE,
+    seatbelt = FALSE,
+    userns = TRUE,
+    nsjail = FALSE
+  )
+  expect_error(
+    check_run_r_sandbox(capabilities, "Linux", sandbox_mode = "nsjail"),
+    "nsjail"
+  )
+
+  capabilities$nsjail <- TRUE
+  expect_output(
+    expect_invisible(
+      check_run_r_sandbox(capabilities, "Linux", sandbox_mode = "nsjail")
+    ),
+    "\\[commons\\]\\[nsjail\\] requested:"
+  )
+})
+
+test_that("nsjail is rejected outside Linux", {
+  capabilities <- list(
+    landlock_abi = 0L,
+    seccomp = FALSE,
+    seatbelt = TRUE,
+    userns = FALSE,
+    nsjail = TRUE
+  )
+  expect_error(
+    check_run_r_sandbox(capabilities, "Darwin", sandbox_mode = "nsjail"),
+    "only supported on Linux"
+  )
+})
+
+test_that("the nsjail policy retains callr descriptors and network controls", {
+  skip_if_not(identical(Sys.info()[["sysname"]], "Linux"))
+  work_dir <- tempfile("commons-worker-")
+  dir.create(work_dir)
+  withr::defer(unlink(work_dir, recursive = TRUE))
+  nsjail <- tempfile("nsjail-")
+  file.create(nsjail)
+  Sys.chmod(nsjail, mode = "0755")
+  withr::defer(unlink(nsjail))
+  withr::local_options(commons.nsjail_path = nsjail)
+
+  config <- nsjail_worker_spec(
+    work_dir = work_dir,
+    parent_tmp = tempdir(),
+    network = "none",
+    env = worker_scrubbed_env(work_dir)
+  )
+  text <- readLines(config$config, warn = FALSE)
+  policy <- nsjail_seccomp("none")
+
+  expect_true(all(paste0("pass_fd: ", c(3, 5, 6)) %in% text))
+  expect_true(any(grepl("^clone_newnet: true$", text)))
+  expect_match(paste(policy, collapse = "\n"), "socket")
+  expect_match(paste(policy, collapse = "\n"), "clone_flags")
+  expect_no_match(paste(nsjail_seccomp("full"), collapse = "\n"), "socket")
 })
 
 test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
@@ -90,30 +156,37 @@ sandboxed_worker_probes <- function(
   dir.create(work_dir)
   withr::defer(unlink(work_dir, recursive = TRUE), envir = env)
 
+  parent_tmp <- tempdir()
   rs <- callr::r_session$new(
-    callr::r_session_options(
-      env = worker_scrubbed_env(work_dir, worker_single_thread(sandbox_mode))
+    worker_session_options(
+      work_dir,
+      parent_tmp,
+      network,
+      sandbox_mode
     )
   )
   withr::defer(rs$close(), envir = env)
-  rs$run(
-    function(outside) {
-      assign(
-        ".commons_inherited_file",
-        file(file.path(outside, "secret.txt"), open = "r"),
-        envir = globalenv()
-      )
-    },
-    args = list(outside = outside)
-  )
+  if (!identical(sandbox_mode, "nsjail")) {
+    rs$run(
+      function(outside) {
+        assign(
+          ".commons_inherited_file",
+          file(file.path(outside, "secret.txt"), open = "r"),
+          envir = globalenv()
+        )
+      },
+      args = list(outside = outside)
+    )
+  }
   rs$run(
     worker_init,
     args = list(
-      parent_tmp = tempdir(),
+      parent_tmp = parent_tmp,
       work_dir = work_dir,
       dll_path = commons_dll_path(),
       network = network,
-      sandbox_mode = sandbox_mode
+      sandbox_mode = sandbox_mode,
+      sandboxed_by_nsjail = identical(sandbox_mode, "nsjail")
     )
   )
 
@@ -206,6 +279,21 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
   probes <- sandboxed_worker_probes("userns")
   expect_equal(probes$read, "denied")
   expect_equal(probes$inherited, "denied")
+  expect_equal(probes$write, "denied")
+  expect_equal(probes$socket, "denied")
+  expect_equal(probes$subprocess, "denied")
+  expect_equal(probes$exec, "allowed")
+  expect_equal(probes$compute, 55)
+})
+
+test_that("the nsjail tier is denied reads, writes, and sockets", {
+  skip_if_not(identical(Sys.info()[["sysname"]], "Linux"))
+  caps <- sandbox_capabilities()
+  skip_if_not(caps$nsjail, "nsjail is not installed")
+  skip_if_not(caps$userns, "no unprivileged user namespaces")
+
+  probes <- sandboxed_worker_probes("nsjail")
+  expect_equal(probes$read, "denied")
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")

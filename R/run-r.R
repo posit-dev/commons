@@ -218,9 +218,17 @@ run_r_html <- function(code, segments) {
 
 # --- worker lifecycle --------------------------------------------------------
 
-new_r_worker <- function(network = "none") {
+new_r_worker <- function(
+  network = "none",
+  sandbox_mode = run_r_sandbox_mode()
+) {
+  sandbox_mode <- rlang::arg_match(
+    sandbox_mode,
+    c("auto", "landlock", "userns", "nsjail")
+  )
   worker <- new.env(parent = emptyenv())
   worker$network <- network
+  worker$sandbox_mode <- sandbox_mode
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
@@ -242,10 +250,22 @@ worker_ensure <- function(worker, fn_sources = character()) {
   }
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir, recursive = TRUE)
+  parent_tmp <- tempdir()
+  options <- worker_session_options(
+    work_dir,
+    parent_tmp,
+    worker$network,
+    worker$sandbox_mode
+  )
+  if (identical(worker$sandbox_mode, "nsjail")) {
+    nsjail_log(
+      "starting callr worker: network=%s work_dir=%s",
+      worker$network,
+      work_dir
+    )
+  }
   rs <- callr::r_session$new(
-    callr::r_session_options(
-      env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
-    ),
+    options,
     wait = TRUE
   )
   # callr rebinds a transferred function's environment to the worker's global
@@ -256,16 +276,21 @@ worker_ensure <- function(worker, fn_sources = character()) {
   rs$run(
     worker_init,
     args = list(
-      parent_tmp = tempdir(),
+      parent_tmp = parent_tmp,
       work_dir = work_dir,
       dll_path = commons_dll_path(),
-      network = worker$network
+      network = worker$network,
+      sandbox_mode = worker$sandbox_mode,
+      sandboxed_by_nsjail = identical(worker$sandbox_mode, "nsjail")
     )
   )
   # Defining sources at spawn (rather than syncing per call like handles)
   # means a respawned worker gets them again for free.
   if (length(fn_sources)) {
     rs$run(worker_define_functions, args = list(fn_sources = fn_sources))
+  }
+  if (identical(worker$sandbox_mode, "nsjail")) {
+    nsjail_log("callr worker initialized")
   }
   worker$rs <- rs
   worker$synced <- 0L
@@ -283,6 +308,33 @@ worker_single_thread <- function(sandbox_mode) {
     auto = sandbox_capabilities()$landlock_abi < 1,
     FALSE
   )
+}
+
+nsjail_path <- function() {
+  path <- getOption("commons.nsjail_path", Sys.which("nsjail"))
+  if (!is.character(path) || length(path) != 1 || is.na(path)) {
+    return("")
+  }
+  path
+}
+
+worker_session_options <- function(
+  work_dir,
+  parent_tmp,
+  network,
+  sandbox_mode
+) {
+  env <- worker_scrubbed_env(
+    work_dir,
+    worker_single_thread(sandbox_mode)
+  )
+  options <- callr::r_session_options(env = env)
+  if (!identical(sandbox_mode, "nsjail")) {
+    return(options)
+  }
+
+  spec <- nsjail_worker_spec(work_dir, parent_tmp, network, env)
+  callr::r_session_options(env = env, arch = spec$wrapper)
 }
 
 commons_dll_path <- function() {
@@ -330,6 +382,200 @@ worker_scrubbed_env <- function(work_dir, single_thread = FALSE) {
     env[["OMP_NUM_THREADS"]] <- "1"
   }
   env
+}
+
+nsjail_quote <- function(x) {
+  if (!is.character(x) || length(x) != 1 || is.na(x) ||
+      grepl("[[:cntrl:]]", x)) {
+    cli::cli_abort("nsjail configuration values must be one-line strings.")
+  }
+  x <- gsub("\\", "\\\\", x, fixed = TRUE)
+  x <- gsub("\"", "\\\"", x, fixed = TRUE)
+  paste0("\"", x, "\"")
+}
+
+worker_sandbox_roots <- function(parent_tmp, work_dir, sysname) {
+  resolve <- function(paths) {
+    vapply(
+      paths,
+      function(p) tryCatch(normalizePath(p), error = function(e) p),
+      character(1),
+      USE.NAMES = FALSE
+    )
+  }
+  pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
+  os_roots <- switch(
+    sysname,
+    Linux = c("/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/opt/R"),
+    Darwin = c(
+      "/usr", "/bin", "/sbin", "/System", "/Library",
+      "/private/etc", "/private/var/db", "/opt", "/dev"
+    )
+  )
+  read_roots <- unique(c(
+    R.home(),
+    .libPaths(),
+    resolve(pkg_dirs),
+    os_roots
+  ))
+  read_roots <- read_roots[dir.exists(read_roots)]
+  read_roots <- unique(c(read_roots, resolve(read_roots)))
+  write_roots <- c(parent_tmp, work_dir)
+  write_roots <- unique(c(write_roots, resolve(write_roots)))
+  list(read = read_roots, write = write_roots)
+}
+
+nsjail_seccomp <- function(network) {
+  namespace_flags <- paste(
+    c(
+      "0x10000000", "0x00020000", "0x40000000", "0x20000000",
+      "0x08000000", "0x04000000", "0x02000000"
+    ),
+    collapse = " | "
+  )
+  denied <- c(
+    "ptrace",
+    "process_vm_readv",
+    "process_vm_writev",
+    "mount",
+    "pivot_root",
+    "chroot",
+    "unshare",
+    "setns",
+    "open_tree",
+    "move_mount",
+    "fsopen",
+    "fsconfig",
+    "fsmount",
+    "fspick",
+    "mount_setattr"
+  )
+  if (identical(network, "none")) {
+    denied <- c(denied, "socket", "io_uring_setup")
+  }
+  unmount <- c(
+    "SYSCALL[166] ON x86_64",
+    "SYSCALL[39] ON aarch64",
+    "SYSCALL[52] ON { x86, arm }"
+  )
+  c(
+    "POLICY commons {",
+    paste0(
+      "  ERRNO(1) { ",
+      paste(c(denied, unmount), collapse = ", "),
+      ","
+    ),
+    paste0("    clone { (clone_flags & (", namespace_flags, ")) != 0 }"),
+    "  },",
+    "  ERRNO(38) { clone3 }",
+    "}",
+    "USE commons DEFAULT ALLOW"
+  )
+}
+
+nsjail_worker_spec <- function(work_dir, parent_tmp, network, env) {
+  network <- rlang::arg_match(network, c("none", "full"))
+  if (!identical(Sys.info()[["sysname"]], "Linux")) {
+    cli::cli_abort("{.code nsjail} is only supported on Linux.")
+  }
+  nsjail <- nsjail_path()
+  if (!nzchar(nsjail) || file.access(nsjail, mode = 1) != 0) {
+    cli::cli_abort(
+      "commons cannot sandbox the {.code run_r} session because {.code nsjail}
+       is not installed or is not executable."
+    )
+  }
+
+  roots <- worker_sandbox_roots(parent_tmp, work_dir, "Linux")
+  nsjail_log(
+    "building policy: binary=%s network=%s read_roots=%d write_roots=%d",
+    nsjail,
+    network,
+    length(roots$read),
+    length(roots$write)
+  )
+  mount <- function(path, rw) {
+    c(
+      "mount {",
+      paste0("  src: ", nsjail_quote(path)),
+      paste0("  dst: ", nsjail_quote(path)),
+      "  is_bind: true",
+      paste0("  rw: ", tolower(as.character(rw))),
+      "  mandatory: true",
+      "}"
+    )
+  }
+  env_values <- env[!is.na(env)]
+  inherited <- Sys.getenv(
+    c(
+      "PATH", "LANG", "LD_LIBRARY_PATH", "R_HOME", "R_LIBS", "R_LIBS_USER",
+      "R_LIBS_SITE", "R_ENVIRON", "R_ENVIRON_USER", "R_PROFILE",
+      "R_PROFILE_USER", names(Sys.getenv())[startsWith(names(Sys.getenv()), "LC_")]
+    ),
+    unset = NA_character_
+  )
+  inherited <- inherited[!is.na(inherited)]
+  child_env <- c(inherited, env_values)
+  child_env <- child_env[!duplicated(names(child_env), fromLast = TRUE)]
+  config <- c(
+    "name: \"commons-run-r\"",
+    "mode: EXECVE",
+    paste0("cwd: ", nsjail_quote(work_dir)),
+    "time_limit: 0",
+    "disable_rl: true",
+    "keep_env: false",
+    "clone_newuser: true",
+    "clone_newns: true",
+    paste0("clone_newnet: ", tolower(as.character(identical(network, "none")))),
+    "clone_newpid: false",
+    "clone_newipc: false",
+    "clone_newuts: false",
+    "clone_newcgroup: false",
+    "uidmap { inside_id: \"0\" outside_id: \"\" count: 1 }",
+    "gidmap { inside_id: \"0\" outside_id: \"\" count: 1 }",
+    # callr uses fd 3 for its control protocol and redirects output to fds 5
+    # and 6 while a request is running. nsjail otherwise retains only stdio.
+    "pass_fd: 3",
+    "pass_fd: 5",
+    "pass_fd: 6",
+    unlist(lapply(roots$read, mount, rw = FALSE), use.names = FALSE),
+    unlist(lapply(roots$write, mount, rw = TRUE), use.names = FALSE),
+    paste0(
+      "envar: ",
+      vapply(
+        paste0(names(child_env), "=", unname(child_env)),
+        nsjail_quote,
+        character(1)
+      )
+    ),
+    paste0("seccomp_string: ", vapply(nsjail_seccomp(network), nsjail_quote, character(1)))
+  )
+  config_path <- file.path(work_dir, ".commons-nsjail.cfg")
+  wrapper_path <- file.path(work_dir, ".commons-nsjail")
+  writeLines(config, config_path, useBytes = TRUE)
+  writeLines(
+    c(
+      "#!/bin/sh",
+      paste(
+        "exec",
+        shQuote(nsjail),
+        "--config",
+        shQuote(config_path),
+        "--",
+        shQuote(normalizePath(file.path(R.home("bin"), "R"))),
+        "\"$@\""
+      )
+    ),
+    wrapper_path,
+    useBytes = TRUE
+  )
+  Sys.chmod(wrapper_path, mode = "0755")
+  nsjail_log(
+    "launch configuration written: config=%s wrapper=%s",
+    config_path,
+    wrapper_path
+  )
+  list(config = config_path, wrapper = wrapper_path)
 }
 
 # Close the worker after a quiet stretch; it respawns lazily on the next
@@ -461,7 +707,8 @@ worker_init <- function(
   work_dir,
   dll_path,
   network = "none",
-  sandbox_mode = "auto"
+  sandbox_mode = "auto",
+  sandboxed_by_nsjail = FALSE
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
@@ -474,67 +721,69 @@ worker_init <- function(
       "; only Linux and macOS are supported."
     )
   }
-  if (is.na(dll_path)) {
+  if (is.na(dll_path) && !sandboxed_by_nsjail) {
     stop(
       "commons cannot sandbox the run_r session: its compiled library was ",
       "not found. Install commons as a package, or bundle its src/ directory ",
       "so load_all() can compile it."
     )
   }
-  if (!("commons" %in% names(getLoadedDLLs()))) {
+  if (!sandboxed_by_nsjail && !("commons" %in% names(getLoadedDLLs()))) {
     dyn.load(dll_path)
   }
-  resolve <- function(paths) {
-    vapply(
-      paths,
-      function(p) tryCatch(normalizePath(p), error = function(e) p),
-      character(1),
-      USE.NAMES = FALSE
+  if (!sandboxed_by_nsjail) {
+    resolve <- function(paths) {
+      vapply(
+        paths,
+        function(p) tryCatch(normalizePath(p), error = function(e) p),
+        character(1),
+        USE.NAMES = FALSE
+      )
+    }
+    # The sandboxes match symlink-free paths: Connect's packrat library is a
+    # farm of symlinks into a shared cache, and macOS's /tmp and /var live
+    # under /private, so grant resolved paths alongside the originals.
+    pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
+    os_roots <- switch(
+      sysname,
+      Linux = c(
+        "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/opt/R"
+      ),
+      Darwin = c(
+        "/usr", "/bin", "/sbin", "/System", "/Library",
+        "/private/etc", "/private/var/db", "/opt", "/dev"
+      )
+    )
+    read_roots <- unique(c(
+      R.home(),
+      .libPaths(),
+      resolve(pkg_dirs),
+      os_roots
+    ))
+    read_roots <- read_roots[dir.exists(read_roots)]
+    read_roots <- unique(c(read_roots, resolve(read_roots)))
+    # callr writes its per-call result files into the parent's tempdir, so the
+    # worker must be able to write there for results to make it back.
+    write_roots <- c(parent_tmp, work_dir)
+    write_roots <- unique(c(write_roots, resolve(write_roots)))
+    # callr reports status on fd 3 and saves stdout/stderr while a call runs.
+    callr_data <- as.environment("tools:callr")[["__callr_data__"]]
+    preserve_fds <- c(
+      3L,
+      callr_data[[".__stdout__"]],
+      callr_data[[".__stderr__"]]
+    )
+    sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
+    .Call(
+      sym,
+      read_roots,
+      write_roots,
+      NULL,
+      sandbox_mode,
+      preserve_fds,
+      network
     )
   }
-  # The sandboxes match symlink-free paths: Connect's packrat library is a
-  # farm of symlinks into a shared cache, and macOS's /tmp and /var live
-  # under /private, so grant resolved paths alongside the originals.
-  pkg_dirs <- list.dirs(.libPaths(), recursive = FALSE)
-  os_roots <- switch(
-    sysname,
-    Linux = c(
-      "/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/opt/R"
-    ),
-    Darwin = c(
-      "/usr", "/bin", "/sbin", "/System", "/Library",
-      "/private/etc", "/private/var/db", "/opt", "/dev"
-    )
-  )
-  read_roots <- unique(c(
-    R.home(),
-    .libPaths(),
-    resolve(pkg_dirs),
-    os_roots
-  ))
-  read_roots <- read_roots[dir.exists(read_roots)]
-  read_roots <- unique(c(read_roots, resolve(read_roots)))
-  # callr writes its per-call result files into the parent's tempdir, so the
-  # worker must be able to write there for results to make it back.
-  write_roots <- c(parent_tmp, work_dir)
-  write_roots <- unique(c(write_roots, resolve(write_roots)))
-  # callr reports status on fd 3 and saves stdout/stderr while a call runs.
-  callr_data <- as.environment("tools:callr")[["__callr_data__"]]
-  preserve_fds <- c(
-    3L,
-    callr_data[[".__stdout__"]],
-    callr_data[[".__stderr__"]]
-  )
-  sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
-  .Call(
-    sym,
-    read_roots,
-    write_roots,
-    NULL,
-    sandbox_mode,
-    preserve_fds,
-    network
-  )
   # Register methods for integer64 columns transferred from ODBC results.
   requireNamespace("bit64", quietly = TRUE)
   invisible(TRUE)

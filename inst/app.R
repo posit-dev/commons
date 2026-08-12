@@ -3,6 +3,23 @@ library(commons)
 library(shiny)
 library(shinychat)
 
+options(commons.run_r_sandbox = "nsjail")
+
+nsjail <- Sys.which("nsjail")
+cat(
+  sprintf(
+    paste0(
+      "[commons][nsjail] app startup: mode=%s commons_path=%s ",
+      "binary=%s executable=%s\n"
+    ),
+    getOption("commons.run_r_sandbox"),
+    getNamespaceInfo(asNamespace("commons"), "path"),
+    if (nzchar(nsjail)) nsjail else "<not found>",
+    nzchar(nsjail) && file.access(nsjail, mode = 1) == 0
+  ),
+  file = stdout()
+)
+
 observations <- data.frame(
   site = c(
     "Cedar Fen", "Cedar Fen", "Cedar Fen", "Cedar Fen", "Cedar Fen", "Cedar Fen",
