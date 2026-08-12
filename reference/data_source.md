@@ -130,7 +130,7 @@ src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))
 )
 #> duckdb keeps downloaded extensions and secrets in a temporary directory:
-#> ℹ /tmp/RtmpcFttuP/duckdb
+#> ℹ /tmp/RtmpAVzxRd/duckdb
 #> This is removed when the R session ends.
 #> • Extensions are re-downloaded each session.
 #> • Secrets are lost.
