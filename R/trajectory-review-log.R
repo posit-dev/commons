@@ -1,37 +1,125 @@
-new_review_event <- function(
-  trajectories,
-  key,
-  action,
-  user,
-  source = trajectory_source(trajectories),
-  note = NULL
-) {
-  exchange <- key$exchange
-  record <- list(
-    schema_version = 1L,
-    event_id = new_review_event_id(),
-    time = review_timestamp(),
-    user = user,
-    source = source,
-    conversation = names(trajectories)[[key$conversation]],
-    exchange = exchange,
-    action = action,
-    note = note
-  )
-
-  if (!is.null(exchange)) {
-    turns <- split_exchanges(trajectories[[key$conversation]])[[exchange]]
-    provenance <- exchange_provenance(turns)
-    record$question <- turns[[1]]@text
-    record$tag <- if (is.na(provenance$tag)) "none" else provenance$tag
+read_review_state <- function(review_dir) {
+  if (!dir.exists(review_dir)) {
+    return(list(flags = character(), notes = list()))
   }
 
-  record
+  files <- list.files(
+    review_dir,
+    pattern = "^conversation-.*[.]md$",
+    full.names = TRUE
+  )
+  documents <- list()
+  invalid <- character()
+
+  for (file in files) {
+    document <- read_review_document(file)
+    if (is.null(document)) {
+      invalid <- c(invalid, file)
+    } else {
+      documents[[length(documents) + 1]] <- document
+    }
+  }
+
+  if (length(invalid) > 0) {
+    cli::cli_warn(c(
+      "Ignoring {cli::qty(invalid)}malformed trajectory review
+       document{?s}.",
+      i = "{.file {invalid}}"
+    ))
+  }
+
+  flags <- unlist(lapply(documents, review_document_flags), use.names = FALSE)
+  notes <- unlist(lapply(documents, review_document_notes), recursive = FALSE)
+  list(
+    flags = flags %||% character(),
+    notes = notes %||% list()
+  )
 }
 
-new_review_event_id <- function() {
-  suffix <- paste(sample(c(letters, 0:9), 12, replace = TRUE), collapse = "")
-  paste0(format(Sys.time(), "%Y%m%dt%H%M%OS6", tz = "UTC"), "-", suffix)
+write_conversation_review <- function(
+  review_dir,
+  trajectories,
+  conversation,
+  flags,
+  notes,
+  source = trajectory_source(trajectories),
+  call = rlang::caller_env()
+) {
+  id <- names(trajectories)[[conversation]]
+  notes <- Filter(\(note) identical(note$conversation, id), notes)
+  conversation_flags <- review_conversation_flags(
+    id,
+    trajectories[[conversation]],
+    flags
+  )
+  file <- review_document_path(review_dir, id)
+
+  if (
+    !conversation_flags$conversation &&
+      length(conversation_flags$exchanges) == 0 &&
+      length(notes) == 0
+  ) {
+    if (file.exists(file) && !file.remove(file)) {
+      cli::cli_abort(
+        "Could not remove empty trajectory review {.file {file}}.",
+        call = call
+      )
+    }
+    return(invisible(file))
+  }
+
+  if (!dir.exists(review_dir)) {
+    created <- dir.create(review_dir, recursive = TRUE, showWarnings = FALSE)
+    if (!created && !dir.exists(review_dir)) {
+      cli::cli_abort(
+        "Could not create trajectory review directory {.path {review_dir}}.",
+        call = call
+      )
+    }
+  }
+
+  markdown <- review_document(
+    id,
+    trajectories[[conversation]],
+    conversation_flags,
+    notes,
+    source
+  )
+  temporary <- tempfile(
+    pattern = ".commons-review-",
+    tmpdir = review_dir,
+    fileext = ".md"
+  )
+  on.exit(unlink(temporary), add = TRUE)
+
+  tryCatch(
+    writeLines(markdown, temporary, useBytes = TRUE),
+    error = function(error) {
+      cli::cli_abort(
+        "Could not write trajectory review {.file {file}}.",
+        parent = error,
+        call = call
+      )
+    }
+  )
+  if (!file.rename(temporary, file)) {
+    cli::cli_abort(
+      "Could not replace trajectory review {.file {file}}.",
+      call = call
+    )
+  }
+
+  invisible(file)
+}
+
+new_review_note <- function(trajectories, key, user, note) {
+  list(
+    time = review_timestamp(),
+    user = user,
+    conversation = names(trajectories)[[key$conversation]],
+    exchange = key$exchange,
+    note = note
+  )
 }
 
 review_timestamp <- function() {
@@ -50,103 +138,354 @@ trajectory_source <- function(trajectories) {
   attr(trajectories, "source") %||% list(kind = "unknown")
 }
 
-append_review_record <- function(file, record) {
-  line <- jsonlite::toJSON(drop_nulls(record), auto_unbox = TRUE)
-  cat(line, "\n", file = file, sep = "", append = TRUE)
+review_document <- function(
+  id,
+  turns,
+  flags,
+  notes,
+  source,
+  updated_at = review_timestamp()
+) {
+  metadata <- list(
+    generated_by = "commons::trajectory_review",
+    schema_version = 1L,
+    conversation = id,
+    source = source,
+    updated_at = updated_at,
+    flags = flags,
+    notes = lapply(notes, review_note_metadata)
+  )
+  frontmatter <- yaml::as.yaml(metadata, indent.mapping.sequence = TRUE)
+  body <- review_document_body(id, turns, flags, notes, source, updated_at)
+
+  paste0("---\n", frontmatter, "---\n\n", body, "\n")
 }
 
-read_review_records <- function(file) {
-  if (!file.exists(file)) {
-    return(list())
+review_document_body <- function(id, turns, flags, notes, source, updated_at) {
+  exchanges <- split_exchanges(turns)
+  conversation_notes <- Filter(\(note) is.null(note$exchange), notes)
+  last_active <- attr(turns, "last_active") %||% as.POSIXct(NA)
+  source_kind <- source$kind %||% "unknown"
+  metadata <- c(
+    sprintf("- Conversation: `%s`", id),
+    sprintf("- Source: `%s`", source_kind),
+    if (!is.na(last_active)) {
+      sprintf("- Last active: %s", format(last_active, "%Y-%m-%dT%H:%M:%S%z"))
+    },
+    sprintf("- Review updated: %s", updated_at)
+  )
+
+  sections <- c(
+    "# Trajectory review",
+    "",
+    "> Generated by `commons::trajectory_review()`. Manual edits are not supported.",
+    "",
+    metadata,
+    "",
+    "## Conversation review",
+    "",
+    sprintf("**Flagged:** %s", review_yes_no(flags$conversation)),
+    review_notes_markdown(conversation_notes, level = 3L)
+  )
+
+  for (i in seq_along(exchanges)) {
+    exchange_notes <- Filter(\(note) identical(note$exchange, i), notes)
+    sections <- c(
+      sections,
+      review_exchange_markdown(
+        exchanges[[i]],
+        i,
+        i %in% flags$exchanges,
+        exchange_notes
+      )
+    )
   }
 
-  records <- list()
-  invalid <- integer()
-  lines <- readLines(file, warn = FALSE)
-  for (i in seq_along(lines)) {
-    record <- tryCatch(
-      jsonlite::fromJSON(lines[[i]], simplifyVector = FALSE),
-      error = function(err) NULL
-    )
-    if (!is_review_record(record)) {
-      invalid <- c(invalid, i)
-      next
+  paste(sections, collapse = "\n")
+}
+
+review_exchange_markdown <- function(exchange, number, flagged, notes) {
+  provenance <- exchange_provenance(exchange)
+  assistant_text <- unlist(lapply(exchange, turn_text), use.names = FALSE)
+  tool_sections <- review_tools_markdown(exchange)
+  citation_section <- review_citations_markdown(provenance$citations)
+
+  c(
+    "",
+    sprintf("## Exchange %d", number),
+    "",
+    sprintf("**Trust:** %s", review_trust_label(provenance$tag)),
+    "",
+    sprintf("**Flagged:** %s", review_yes_no(flagged)),
+    "",
+    "### User",
+    "",
+    exchange[[1]]@text,
+    tool_sections,
+    if (length(assistant_text) > 0) {
+      c(
+        "",
+        "### Assistant",
+        "",
+        assistant_text
+      )
+    },
+    citation_section,
+    review_notes_markdown(notes, level = 3L)
+  )
+}
+
+review_tools_markdown <- function(exchange) {
+  sections <- character()
+  for (turn in exchange) {
+    for (content in turn@contents) {
+      if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
+        sections <- c(
+          sections,
+          "",
+          sprintf("### Tool call: `%s`", content@name),
+          "",
+          "#### Arguments",
+          "",
+          "```json",
+          as.character(jsonlite::toJSON(
+            content@arguments,
+            auto_unbox = TRUE,
+            pretty = TRUE,
+            null = "null"
+          )),
+          "```"
+        )
+      } else if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
+        request <- content@request
+        name <- if (is.null(request)) "unknown" else request@name
+        sections <- c(
+          sections,
+          "",
+          sprintf("### Tool result: `%s`", name),
+          "",
+          truncate_review_tool_result(review_tool_result_markdown(content))
+        )
+      }
     }
-    records[[length(records) + 1]] <- record
   }
-
-  if (length(invalid) > 0) {
-    cli::cli_warn(
-      "Ignoring {cli::qty(invalid)}invalid review record{?s} on line{?s}
-       {invalid} of {.file {file}}."
-    )
-  }
-  records
+  sections
 }
 
-is_review_record <- function(record) {
+review_tool_result_markdown <- function(content) {
+  display <- content@extra$display
+  if (is.null(display)) {
+    display <- viewer_tool_display(content@request, content@value)
+  }
+  markdown <- display$markdown %||% NULL
+  if (rlang::is_string(markdown) && nzchar(markdown)) {
+    return(markdown)
+  }
+  format_review_tool_result(content@value)
+}
+
+format_review_tool_result <- function(value) {
+  if (is.null(value)) {
+    return("(empty result)")
+  }
+  if (is.data.frame(value)) {
+    return(df_to_markdown(value))
+  }
+  if (is.character(value)) {
+    return(paste(value, collapse = "\n"))
+  }
+  if (is.atomic(value)) {
+    return(paste(format(value, trim = TRUE), collapse = ", "))
+  }
+  paste(utils::capture.output(print(value)), collapse = "\n")
+}
+
+truncate_review_tool_result <- function(
+  result,
+  max_lines = 100L,
+  max_chars = 20000L
+) {
+  lines <- strsplit(result, "\n", fixed = TRUE)[[1]]
+  truncated <- length(lines) > max_lines
+  lines <- utils::head(lines, max_lines)
+  result <- paste(lines, collapse = "\n")
+
+  if (nchar(result, type = "chars") > max_chars) {
+    result <- substr(result, 1L, max_chars)
+    truncated <- TRUE
+  }
+  if (truncated) {
+    result <- paste(result, "... (tool result truncated)", sep = "\n\n")
+  }
+  result
+}
+
+review_citations_markdown <- function(citations) {
+  if (length(citations) == 0) {
+    return(character())
+  }
+
+  items <- unlist(lapply(citations, function(citation) {
+    reason <- citation$reason
+    c(
+      sprintf("- %s", normalize_citation(citation$quote)),
+      if (!is.na(reason)) sprintf("  - Reason: %s", flatten_inline(reason))
+    )
+  }))
+  c("", "### Citations", "", items)
+}
+
+review_notes_markdown <- function(notes, level) {
+  if (length(notes) == 0) {
+    return(character())
+  }
+
+  heading <- paste0(strrep("#", level), " Review notes")
+  rendered <- unlist(lapply(notes, function(note) {
+    text <- paste0("> ", gsub("\n", "\n> ", note$note, fixed = TRUE))
+    c(
+      "",
+      text,
+      ">",
+      sprintf("> _%s, %s_", note$user, note$time)
+    )
+  }))
+  c("", heading, rendered)
+}
+
+review_note_metadata <- function(note) {
+  metadata <- list(
+    user = note$user,
+    time = note$time,
+    text = note$note
+  )
+  if (!is.null(note$exchange)) {
+    metadata$exchange <- note$exchange
+  }
+  metadata
+}
+
+review_conversation_flags <- function(id, turns, flags) {
+  exchanges <- seq_along(split_exchanges(turns))
+  list(
+    conversation = review_key(id) %in% flags,
+    exchanges = exchanges[vapply(
+      exchanges,
+      \(exchange) review_key(id, exchange) %in% flags,
+      logical(1)
+    )]
+  )
+}
+
+read_review_document <- function(file) {
+  lines <- tryCatch(
+    readLines(file, warn = FALSE, encoding = "UTF-8"),
+    error = function(error) character()
+  )
+  if (length(lines) < 3 || !identical(lines[[1]], "---")) {
+    return(NULL)
+  }
+
+  end <- which(lines[-1] == "---")
+  if (length(end) == 0) {
+    return(NULL)
+  }
+  end <- end[[1]] + 1L
+  metadata <- tryCatch(
+    yaml::yaml.load(paste(lines[seq.int(2L, end - 1L)], collapse = "\n")),
+    error = function(error) NULL
+  )
+  if (!is_review_document(metadata)) {
+    return(NULL)
+  }
+  metadata
+}
+
+is_review_document <- function(document) {
+  is.list(document) &&
+    identical(document$generated_by, "commons::trajectory_review") &&
+    identical(document$schema_version, 1L) &&
+    rlang::is_string(document$conversation) &&
+    is.list(document$source) &&
+    rlang::is_string(document$updated_at) &&
+    is_review_flags(document$flags) &&
+    is.list(document$notes) &&
+    all(vapply(document$notes, is_review_note, logical(1)))
+}
+
+is_review_flags <- function(flags) {
   if (
-    !is.list(record) ||
-      !rlang::is_string(record$conversation) ||
-      !rlang::is_string(record$action) ||
-      !record$action %in% c("flag", "unflag", "note")
+    !is.list(flags) ||
+      !is.logical(flags$conversation) ||
+      length(flags$conversation) != 1 ||
+      is.na(flags$conversation)
   ) {
     return(FALSE)
   }
-  exchange <- record$exchange
-  if (
-    !is.null(exchange) &&
-      (!is.numeric(exchange) ||
-        length(exchange) != 1 ||
-        !is.finite(exchange) ||
-        exchange < 1 ||
-        exchange != trunc(exchange))
-  ) {
-    return(FALSE)
+  exchanges <- unlist(flags$exchanges, use.names = FALSE)
+  length(exchanges) == 0 ||
+    all(vapply(exchanges, is_review_exchange, logical(1)))
+}
+
+is_review_note <- function(note) {
+  is.list(note) &&
+    rlang::is_string(note$user) &&
+    rlang::is_string(note$time) &&
+    rlang::is_string(note$text) &&
+    (is.null(note$exchange) || is_review_exchange(note$exchange))
+}
+
+is_review_exchange <- function(exchange) {
+  is.numeric(exchange) &&
+    length(exchange) == 1 &&
+    is.finite(exchange) &&
+    exchange >= 1 &&
+    exchange == trunc(exchange)
+}
+
+review_document_flags <- function(document) {
+  flags <- if (document$flags$conversation) {
+    review_key(document$conversation)
+  } else {
+    character()
   }
-  !identical(record$action, "note") || rlang::is_string(record$note)
+  exchanges <- unlist(document$flags$exchanges, use.names = FALSE)
+  c(
+    flags,
+    vapply(
+      exchanges,
+      \(exchange) review_key(document$conversation, exchange),
+      character(1)
+    )
+  )
 }
 
-actionable_review_records <- function(records) {
-  note_indices <- integer()
-  latest_flag_indices <- integer()
+review_document_notes <- function(document) {
+  lapply(document$notes, function(note) {
+    list(
+      time = note$time,
+      user = note$user,
+      conversation = document$conversation,
+      exchange = note$exchange,
+      note = note$text
+    )
+  })
+}
 
-  for (i in seq_along(records)) {
-    record <- records[[i]]
-    if (identical(record$action, "note")) {
-      note_indices <- c(note_indices, i)
-    } else {
-      key <- review_key(record$conversation, record$exchange)
-      latest_flag_indices[[key]] <- i
-    }
+review_document_path <- function(review_dir, id) {
+  encoded <- utils::URLencode(id, reserved = TRUE)
+  file.path(review_dir, sprintf("conversation-%s.md", encoded))
+}
+
+review_trust_label <- function(tag) {
+  if (is.na(tag)) {
+    return("No data tool")
   }
-
-  active_flag_indices <- unname(latest_flag_indices)
-  active_flag_indices <- active_flag_indices[vapply(
-    records[active_flag_indices],
-    function(record) identical(record$action, "flag"),
-    logical(1)
-  )]
-  records[sort(c(note_indices, active_flag_indices))]
+  switch(tag, A = "Verified (A)", B = "Cited (B)", C = "Untrusted (C)")
 }
 
-review_flags <- function(records) {
-  active <- Filter(
-    function(record) identical(record$action, "flag"),
-    actionable_review_records(records)
-  )
-  vapply(
-    active,
-    function(record) review_key(record$conversation, record$exchange),
-    character(1)
-  )
-}
-
-review_notes <- function(records) {
-  Filter(
-    function(record) identical(record$action, "note"),
-    records
-  )
+review_yes_no <- function(value) {
+  if (value) "Yes" else "No"
 }
 
 review_key <- function(id, exchange = NULL) {

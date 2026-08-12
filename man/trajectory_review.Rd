@@ -6,18 +6,17 @@
 \usage{
 trajectory_review(
   trajectories = trajectory_read(),
-  review_file = Sys.getenv("COMMONS_REVIEW_FILE", unset = "commons-review.jsonl")
+  review_dir = Sys.getenv("COMMONS_REVIEW_DIR", unset = "commons-reviews")
 )
 }
 \arguments{
 \item{trajectories}{A named list of conversations, as returned by
 \code{\link[=trajectory_read]{trajectory_read()}}.}
 
-\item{review_file}{Path of the JSONL file that review actions append to:
-flags, unflags, and feedback notes, each with a timestamp, the
-conversation id, and (for questions) the exchange number. Created on
-first use; flags and notes recorded here are restored when the viewer
-reopens. Defaults to \code{COMMONS_REVIEW_FILE} when set.}
+\item{review_dir}{Directory where review actions write one generated
+Markdown document per conversation. Created on first use; active flags
+and note history recorded here are restored when the viewer reopens.
+Defaults to \code{COMMONS_REVIEW_DIR} when set.}
 }
 \value{
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. Calling \code{trajectory_review()} at the
@@ -36,13 +35,14 @@ chat UI would show.
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
 whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes land in \code{review_file}, one JSON record
-per line, and are restored when the viewer reopens.
+in the transcript. Flags and notes land in \code{review_dir}, one generated
+Markdown document per reviewed conversation, and are restored when the
+viewer reopens.
 
-New review records use schema version 1 and include a unique event id, UTC
-timestamp, reviewer username, trajectory source, conversation id, optional
-exchange number, action, and optional note. Exchange-level records also
-snapshot the question and trust tag.
+Each Markdown document contains the complete reviewer-visible conversation
+and its tool activity. YAML frontmatter stores active flags and note history
+so the reviewer can restore its state. Tool results are limited to 100 lines
+or 20,000 characters in the rendered document.
 
 Trajectories carry no record of how each answer was tagged when it was
 produced, so the viewer derives trust levels from the tool calls in the
@@ -58,9 +58,9 @@ shinychat's conversation-title generation, and completions with no user
 turn—are excluded from the viewer.
 }
 \details{
-A single reviewer app writes all of its review events to \code{review_file}. For a
-deployed app, point \code{COMMONS_REVIEW_FILE} at persistent storage: files in a
-Posit Connect app's working directory are replaced on redeployment.
+A single reviewer app writes all of its review documents to \code{review_dir}.
+For a deployed app, point \code{COMMONS_REVIEW_DIR} at persistent storage: files
+in a Posit Connect app's working directory are replaced on redeployment.
 File-backed review apps should use one Connect process because separate
 processes do not coordinate file writes or in-memory review state.
 }

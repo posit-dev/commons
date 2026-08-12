@@ -12,13 +12,14 @@
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review and annotated with notes. Notes apply to the
 #' whole conversation, or to a single question-and-answer exchange selected
-#' in the transcript. Flags and notes land in `review_file`, one JSON record
-#' per line, and are restored when the viewer reopens.
+#' in the transcript. Flags and notes land in `review_dir`, one generated
+#' Markdown document per reviewed conversation, and are restored when the
+#' viewer reopens.
 #'
-#' New review records use schema version 1 and include a unique event id, UTC
-#' timestamp, reviewer username, trajectory source, conversation id, optional
-#' exchange number, action, and optional note. Exchange-level records also
-#' snapshot the question and trust tag.
+#' Each Markdown document contains the complete reviewer-visible conversation
+#' and its tool activity. YAML frontmatter stores active flags and note history
+#' so the reviewer can restore its state. Tool results are limited to 100 lines
+#' or 20,000 characters in the rendered document.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
@@ -35,16 +36,15 @@
 #'
 #' @param trajectories A named list of conversations, as returned by
 #'   [trajectory_read()].
-#' @param review_file Path of the JSONL file that review actions append to:
-#'   flags, unflags, and feedback notes, each with a timestamp, the
-#'   conversation id, and (for questions) the exchange number. Created on
-#'   first use; flags and notes recorded here are restored when the viewer
-#'   reopens. Defaults to `COMMONS_REVIEW_FILE` when set.
+#' @param review_dir Directory where review actions write one generated
+#'   Markdown document per conversation. Created on first use; active flags
+#'   and note history recorded here are restored when the viewer reopens.
+#'   Defaults to `COMMONS_REVIEW_DIR` when set.
 #'
 #' @details
-#' A single reviewer app writes all of its review events to `review_file`. For a
-#' deployed app, point `COMMONS_REVIEW_FILE` at persistent storage: files in a
-#' Posit Connect app's working directory are replaced on redeployment.
+#' A single reviewer app writes all of its review documents to `review_dir`.
+#' For a deployed app, point `COMMONS_REVIEW_DIR` at persistent storage: files
+#' in a Posit Connect app's working directory are replaced on redeployment.
 #' File-backed review apps should use one Connect process because separate
 #' processes do not coordinate file writes or in-memory review state.
 #'
@@ -61,21 +61,21 @@
 #' @export
 trajectory_review <- function(
   trajectories = trajectory_read(),
-  review_file = Sys.getenv(
-    "COMMONS_REVIEW_FILE",
-    unset = "commons-review.jsonl"
+  review_dir = Sys.getenv(
+    "COMMONS_REVIEW_DIR",
+    unset = "commons-reviews"
   )
 ) {
   check_viewer_packages()
   check_trajectories(trajectories)
-  rlang::check_string(review_file)
+  rlang::check_string(review_dir)
   source <- trajectory_source(trajectories)
   trajectories <- drop_side_conversations(trajectories)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
     viewer_ui(summary),
-    viewer_server(trajectories, summary, questions, review_file, source)
+    viewer_server(trajectories, summary, questions, review_dir, source)
   )
 }
 
@@ -85,7 +85,8 @@ check_viewer_packages <- function(call = rlang::caller_env()) {
     "htmltools",
     "plotly",
     "shiny",
-    "shinychat"
+    "shinychat",
+    "yaml"
   )
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
@@ -475,13 +476,13 @@ viewer_server <- function(
   trajectories,
   summary,
   questions,
-  review_file,
+  review_dir,
   source = trajectory_source(trajectories)
 ) {
   # Share review state across sessions in the documented single process.
-  review_records <- read_review_records(review_file)
-  app_flags <- shiny::reactiveVal(review_flags(review_records))
-  app_notes <- shiny::reactiveVal(review_notes(review_records))
+  review_state <- read_review_state(review_dir)
+  app_flags <- shiny::reactiveVal(review_state$flags)
+  app_notes <- shiny::reactiveVal(review_state$notes)
 
   function(input, output, session) {
     flags <- app_flags
@@ -622,15 +623,20 @@ viewer_server <- function(
       }
       review <- selection_review_key(key, summary)
       flagged <- review %in% flags()
-      record <- new_review_event(
+      next_flags <- if (flagged) {
+        setdiff(flags(), review)
+      } else {
+        union(flags(), review)
+      }
+      write_conversation_review(
+        review_dir,
         trajectories,
-        key,
-        action = if (flagged) "unflag" else "flag",
-        user = user,
-        source = source
+        key$conversation,
+        next_flags,
+        notes(),
+        source
       )
-      append_review_record(review_file, record)
-      flags(if (flagged) setdiff(flags(), review) else union(flags(), review))
+      flags(next_flags)
     })
 
     shiny::observeEvent(input$exchange_select, {
@@ -681,16 +687,19 @@ viewer_server <- function(
       if (is.null(key) || !nzchar(note)) {
         return()
       }
-      record <- new_review_event(
-        trajectories,
-        key,
-        action = "note",
-        user = user,
-        source = source,
-        note = note
+      next_notes <- c(
+        notes(),
+        list(new_review_note(trajectories, key, user, note))
       )
-      append_review_record(review_file, record)
-      notes(c(notes(), list(record)))
+      write_conversation_review(
+        review_dir,
+        trajectories,
+        key$conversation,
+        flags(),
+        next_notes,
+        source
+      )
+      notes(next_notes)
       bslib::update_submit_textarea(
         "review_note",
         value = "",
