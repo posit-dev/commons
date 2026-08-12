@@ -224,34 +224,6 @@ project_citation_text <- function(text, corpus) {
   list(text = out, decisions = s$decisions())
 }
 
-# Every `commons_tag` carried by a ContentToolResult in the turns appended
-# since `from_index` (i.e. `turns[from_index:length(turns)]`) -- a read-only
-# walk, never a mutation, so it's safe to call on `self$get_turns()` mid- or
-# post-stream without disturbing ellmer's turn store.
-collect_appended_tags <- function(turns, from_index) {
-  if (from_index > length(turns)) {
-    return(character())
-  }
-  appended <- turns[from_index:length(turns)]
-  tags <- unlist(
-    lapply(appended, function(turn) {
-      lapply(turn@contents, function(content) {
-        if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
-          content@extra$commons_tag
-        }
-      })
-    }),
-    use.names = FALSE
-  )
-  tags %||% character()
-}
-
-# Shared by commons.R's turn_has_user_message() and trajectory-review.R's
-# turn_has_tool_result().
-is_tool_result_content <- function(content) {
-  S7::S7_inherits(content, ellmer::ContentToolResult)
-}
-
 # Earliest complete reserved literal in `buf`, or NULL. <commons-citation> is
 # only a candidate at line start (true position 1 when `at_line_start`, or
 # anywhere immediately after a "\n"); <shiny-aside> and stray reserved closes
