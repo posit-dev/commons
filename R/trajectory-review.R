@@ -267,43 +267,26 @@ review_audit_aside <- function(decisions) {
 }
 
 # The reviewer's compact provenance badge for question-list entries. Transcript
-# messages use the fuller audit asides assembled by exchange_chip().
+# messages use the fuller audit asides assembled by exchange_chip(). Copy,
+# icon, and styling come from provenance_display (R/provenance.R), the same
+# table provenance_aside() reads -- so this pill can't drift from the aside
+# the way it once did.
 commons_answer_pill <- function(tag) {
-  switch(
-    tag,
-    A = htmltools::tags$span(
-      class = "commons-answer-pill commons-answer-pill-trusted",
-      title = "This answer comes from a governed calculation defined by your data team.",
-      `aria-label` = "Verified answer. This answer comes from a governed calculation defined by your data team.",
-      tabindex = "0",
-      commons_pill_icon("trusted-icon.svg", "Verified answer"),
-      htmltools::tags$span("Verified answer"),
-      commons_pill_tooltip(
-        "This answer comes from a governed calculation defined by your data team."
-      )
+  entry <- provenance_display[[tag]]
+  if (is.null(entry)) {
+    return(NULL)
+  }
+  htmltools::tags$span(
+    class = paste0(
+      "commons-answer-pill commons-answer-pill-",
+      entry$pill_class
     ),
-    B = htmltools::tags$span(
-      class = "commons-answer-pill commons-answer-pill-cited",
-      title = "This answer includes supporting text verified against a trusted source.",
-      `aria-label` = "Cited. This answer includes supporting text verified against a trusted source.",
-      tabindex = "0",
-      htmltools::tags$span("Cited"),
-      commons_pill_tooltip(
-        "This answer includes supporting text verified against a trusted source."
-      )
-    ),
-    C = htmltools::tags$span(
-      class = "commons-answer-pill commons-answer-pill-caution",
-      title = "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
-      `aria-label` = "Untrusted. This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong.",
-      tabindex = "0",
-      commons_pill_icon("warning-icon.svg", "Untrusted"),
-      htmltools::tags$span("Untrusted."),
-      commons_pill_tooltip(
-        "This answer was generated from available context and data, but was not produced by a governed calculation and cites none of your organization's definitions. AI can be wrong."
-      )
-    ),
-    NULL
+    title = entry$body,
+    `aria-label` = paste0(entry$label, ". ", entry$body),
+    tabindex = "0",
+    commons_pill_icon(entry$icon, entry$label),
+    htmltools::tags$span(entry$label),
+    commons_pill_tooltip(entry$body)
   )
 }
 
@@ -312,6 +295,9 @@ commons_pill_tooltip <- function(text) {
 }
 
 commons_pill_icon <- function(file, alt) {
+  if (is.null(file)) {
+    return(NULL)
+  }
   src <- svg_data_uri(file)
   if (is.null(src)) {
     return(NULL)
