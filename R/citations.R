@@ -256,8 +256,7 @@ citation_icon_url <- function(kind) {
 }
 
 commons_icon_url <- function(file) {
-  path <- system.file("figs", file, package = "commons")
-  if (!nzchar(path)) {
+  if (is.null(commons_icon_path(file))) {
     return(NULL)
   }
   paste0(
@@ -274,13 +273,21 @@ escape_attr <- function(x) {
   gsub("\"", "&quot;", x, fixed = TRUE)
 }
 
+# svg_data_uri() self-embeds the SVG rather than pointing at
+# commons_icon_url()'s resource path because its caller (the trajectory
+# review app) never calls register_commons_icon_resources() -- that
+# happens in commons_ui(), a different Shiny app.
 svg_data_uri <- function(file) {
-  path <- system.file("figs", file, package = "commons")
-  if (!nzchar(path)) {
+  path <- commons_icon_path(file)
+  if (is.null(path)) {
     return(NULL)
   }
-
   svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
   svg <- sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg)
   paste0("data:image/svg+xml,", utils::URLencode(svg, reserved = TRUE))
+}
+
+commons_icon_path <- function(file) {
+  path <- system.file("figs", file, package = "commons")
+  if (!nzchar(path)) NULL else path
 }
