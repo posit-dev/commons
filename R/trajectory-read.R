@@ -571,6 +571,19 @@ turn_has_tool_result <- function(turn) {
   any(vapply(turn@contents, is_tool_result_content, logical(1)))
 }
 
+# Why structural matching instead of a recorded ordinal: stream_async()
+# knows its own exchange's position (from_index) at production time, but a
+# conversation's turn history isn't append-only. A user can edit an earlier
+# turn, forking the conversation so two recorded calls share a prefix and
+# diverge after it (see "edited paths retain shared-prefix records and drop
+# abandoned records" in test-trajectories.R), or the reconstructed history
+# can be shorter than an older call's because a later one was recorded
+# against a restored/truncated context (see "restored context stays
+# unannotated..." and "switched conversations do not donate audit records").
+# A same-position ordinal from one call can silently name the wrong exchange
+# in another call's reality, so each recorded call's provenance is matched
+# by comparing its own reconstructed exchange content against the final
+# turns' exchanges, not by index.
 exchange_signature <- function(exchange) {
   lapply(exchange, turn_signature)
 }
