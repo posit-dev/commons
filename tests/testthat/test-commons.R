@@ -613,9 +613,17 @@ stream_citations_fixture <- function(agent, raw, split_at) {
   testthat::local_mocked_bindings(
     chat_perform = function(...) make_response(),
     stream_merge_chunks = function(provider, result, chunk) chunk,
-    stream_content = function(provider, event) ellmer::ContentText(event$text),
+    stream_content_with_turns = function(provider, event, completion, turns) {
+      list(ellmer::ContentText(event$text))
+    },
     value_finish_reason = function(provider, result) "stop",
-    value_turn = function(provider, model, result, has_type = FALSE) final_turn,
+    value_turn_with_turns = function(
+      provider,
+      model,
+      result,
+      has_type = FALSE,
+      turns = list()
+    ) final_turn,
     .package = "ellmer"
   )
   sync_promise(coro::async_collect(agent$stream_async(
@@ -677,9 +685,17 @@ test_that("stream_async preserves structured provider content", {
   testthat::local_mocked_bindings(
     chat_perform = function(...) make_response(),
     stream_merge_chunks = function(provider, result, chunk) chunk,
-    stream_content = function(provider, event) event$content,
+    stream_content_with_turns = function(provider, event, completion, turns) {
+      list(event$content)
+    },
     value_finish_reason = function(provider, result) "stop",
-    value_turn = function(provider, model, result, has_type = FALSE) final_turn,
+    value_turn_with_turns = function(
+      provider,
+      model,
+      result,
+      has_type = FALSE,
+      turns = list()
+    ) final_turn,
     .package = "ellmer"
   )
   agent <- test_agent()
