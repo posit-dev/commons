@@ -58,7 +58,53 @@ test_that("review_document renders a self-contained trajectory review", {
   file <- withr::local_tempfile(fileext = ".md")
   writeLines(markdown, file, useBytes = TRUE)
   expect_snapshot_file(file, "review-document.md")
-  expect_match(markdown, "exchanges:\n    - 1", fixed = TRUE)
+})
+
+test_that("review documents preserve assistant and tool content order", {
+  first <- ellmer::ContentToolRequest(
+    id = "call-1",
+    name = "first_tool",
+    arguments = list()
+  )
+  second <- ellmer::ContentToolRequest(
+    id = "call-2",
+    name = "second_tool",
+    arguments = list()
+  )
+  exchange <- list(
+    ellmer::UserTurn("Check both sources."),
+    ellmer::AssistantTurn(list(
+      ellmer::ContentText("I'll check both sources."),
+      first,
+      ellmer::ContentText("The first call is queued."),
+      second
+    )),
+    ellmer::UserTurn(list(
+      ellmer::ContentToolResult("first result", request = first),
+      ellmer::ContentToolResult("second result", request = second)
+    )),
+    ellmer::AssistantTurn("Both checks are complete.")
+  )
+
+  markdown <- review_exchange_markdown(
+    exchange,
+    number = 1L,
+    flagged = FALSE,
+    notes = list()
+  )
+
+  expected <- c(
+    "I'll check both sources.",
+    "### Tool call: `first_tool`",
+    "The first call is queued.",
+    "### Tool call: `second_tool`",
+    "### Tool result: `first_tool`",
+    "first result",
+    "### Tool result: `second_tool`",
+    "second result",
+    "Both checks are complete."
+  )
+  expect_equal(markdown[markdown %in% expected], expected)
 })
 
 test_that("review state round trips through YAML frontmatter", {

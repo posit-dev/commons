@@ -209,8 +209,7 @@ review_document_body <- function(id, turns, flags, notes, source, updated_at) {
 
 review_exchange_markdown <- function(exchange, number, flagged, notes) {
   provenance <- exchange_provenance(exchange)
-  assistant_text <- unlist(lapply(exchange, turn_text), use.names = FALSE)
-  tool_sections <- review_tools_markdown(exchange)
+  contents <- review_exchange_contents_markdown(exchange)
   citation_section <- review_citations_markdown(provenance$citations)
 
   c(
@@ -224,55 +223,72 @@ review_exchange_markdown <- function(exchange, number, flagged, notes) {
     "### User",
     "",
     exchange[[1]]@text,
-    tool_sections,
-    if (length(assistant_text) > 0) {
-      c(
-        "",
-        "### Assistant",
-        "",
-        assistant_text
-      )
-    },
+    contents,
     citation_section,
     review_notes_markdown(notes, level = 3L)
   )
 }
 
-review_tools_markdown <- function(exchange) {
+review_exchange_contents_markdown <- function(exchange) {
   sections <- character()
+  assistant_open <- FALSE
+
   for (turn in exchange) {
     for (content in turn@contents) {
-      if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
+      if (
+        identical(turn@role, "assistant") &&
+          S7::S7_inherits(content, ellmer::ContentText)
+      ) {
+        if (!assistant_open) {
+          sections <- c(sections, "", "### Assistant", "")
+        }
+        sections <- c(sections, content@text)
+        assistant_open <- TRUE
+      } else if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
         sections <- c(
           sections,
-          "",
-          sprintf("### Tool call: `%s`", content@name),
-          "",
-          "#### Arguments",
-          "",
-          "```json",
-          as.character(jsonlite::toJSON(
-            content@arguments,
-            auto_unbox = TRUE,
-            pretty = TRUE,
-            null = "null"
-          )),
-          "```"
+          review_tool_request_markdown(content)
         )
+        assistant_open <- FALSE
       } else if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
-        request <- content@request
-        name <- if (is.null(request)) "unknown" else request@name
         sections <- c(
           sections,
-          "",
-          sprintf("### Tool result: `%s`", name),
-          "",
-          truncate_review_tool_result(format_review_tool_result(content@value))
+          review_tool_result_markdown(content)
         )
+        assistant_open <- FALSE
       }
     }
   }
   sections
+}
+
+review_tool_request_markdown <- function(request) {
+  c(
+    "",
+    sprintf("### Tool call: `%s`", request@name),
+    "",
+    "#### Arguments",
+    "",
+    "```json",
+    as.character(jsonlite::toJSON(
+      request@arguments,
+      auto_unbox = TRUE,
+      pretty = TRUE,
+      null = "null"
+    )),
+    "```"
+  )
+}
+
+review_tool_result_markdown <- function(result) {
+  request <- result@request
+  name <- if (is.null(request)) "unknown" else request@name
+  c(
+    "",
+    sprintf("### Tool result: `%s`", name),
+    "",
+    truncate_review_tool_result(format_review_tool_result(result@value))
+  )
 }
 
 format_review_tool_result <- function(value) {
