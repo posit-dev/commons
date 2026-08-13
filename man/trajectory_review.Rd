@@ -44,7 +44,7 @@ and its tool activity. YAML frontmatter stores active flags and note history
 so the reviewer can restore its state and agents can identify flagged
 conversations, exchanges, and reviewer notes. The Markdown body is the
 human-readable transcript for joint human-agent review. Tool results are
-limited to 100 lines or 20,000 characters in the rendered document.
+limited to 50 lines or 20,000 characters in the rendered document.
 
 Trajectories carry no record of how each answer was tagged when it was
 produced, so the viewer derives trust levels from the tool calls in the
@@ -61,15 +61,29 @@ turn—are excluded from the viewer.
 }
 \details{
 A single reviewer app writes all of its review documents to \code{review_dir}.
-For a deployed app, point \code{COMMONS_REVIEW_DIR} at persistent storage: files
-in a Posit Connect app's working directory are replaced on redeployment.
-File-backed review apps should use one Connect process because separate
-processes do not coordinate file writes or in-memory review state.
+Pass \code{review_dir} directly, set \code{COMMONS_REVIEW_DIR} for the current R
+process with \code{Sys.setenv()}, or add it to \code{.Renviron} to keep the setting
+across local R sessions. Without either, reviews land in \code{commons-reviews}
+relative to the app's working directory.
+
+On Posit Connect, configure \code{COMMONS_REVIEW_DIR} to name writable persistent
+storage available to the reviewer app. The default working-directory path
+is replaced when the content is redeployed. File-backed review apps should
+use one Connect process because separate processes do not coordinate file
+writes or in-memory review state.
+
+All sessions of one reviewer app share the same \code{review_dir}, flags, and
+notes; review state is not separated by user. Notes record \code{session$user},
+the login information supplied by the Shiny host, or \code{"unknown"} when it is
+unavailable. Flags do not record who changed them.
 }
 \examples{
 \dontrun{
 trajectory_review()
 
 trajectory_review(trajectory_read(from = "2026-07-01"))
+
+Sys.setenv(COMMONS_REVIEW_DIR = "/path/to/persistent/reviews")
+trajectory_review()
 }
 }
