@@ -112,26 +112,27 @@ replace_review_file <- function(
   file,
   call = rlang::caller_env()
 ) {
-  backup <- tempfile(
-    pattern = ".commons-review-backup-",
-    tmpdir = dirname(file),
-    fileext = ".md"
-  )
-  on.exit(unlink(backup), add = TRUE)
-
-  had_file <- file.exists(file)
-  if (had_file && !file.rename(file, backup)) {
-    cli::cli_abort(
-      "Could not prepare to replace trajectory review {.file {file}}.",
-      call = call
+  backup <- NULL
+  if (file.exists(file)) {
+    backup <- tempfile(
+      pattern = ".commons-review-backup-",
+      tmpdir = dirname(file),
+      fileext = ".md"
     )
+    on.exit(unlink(backup), add = TRUE)
+    if (!file.rename(file, backup)) {
+      cli::cli_abort(
+        "Could not replace trajectory review {.file {file}}.",
+        call = call
+      )
+    }
   }
 
   if (file.rename(temporary, file)) {
-    return(invisible(file))
+    return(invisible())
   }
 
-  if (had_file) {
+  if (!is.null(backup)) {
     file.rename(backup, file)
   }
   cli::cli_abort(

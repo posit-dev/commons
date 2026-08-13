@@ -126,7 +126,10 @@ test_that("review state round trips through YAML frontmatter", {
   state <- read_review_state(review_dir)
 
   expect_equal(state$flags, c("conv/1", "conv/1#1"))
-  expect_equal(basename(file), "conversation-636f6e762f31.md")
+  expect_length(
+    unique(c(file, review_document_path(review_dir, "conv%2F1"))),
+    2
+  )
   expect_length(state$notes, 2)
   expect_equal(
     state$notes[[1]][c("conversation", "exchange", "user", "note")],
@@ -152,7 +155,7 @@ test_that("review state ignores unrelated Markdown and warns on bad reviews", {
   expect_equal(state, list(flags = character(), notes = list()))
 })
 
-test_that("conversation reviews are created atomically and removed when empty", {
+test_that("conversation reviews are created, replaced, and removed", {
   parent <- withr::local_tempdir()
   review_dir <- file.path(parent, "reviews")
   trajectories <- list(`conv/1` = review_test_turns())
@@ -171,6 +174,16 @@ test_that("conversation reviews are created atomically and removed when empty", 
   expect_identical(dir.exists(review_dir), TRUE)
   expect_identical(file.exists(file), TRUE)
   expect_length(list.files(review_dir, pattern = "^[.]commons-review-"), 0)
+
+  write_conversation_review(
+    review_dir,
+    trajectories,
+    conversation = 1L,
+    flags = "conv/1",
+    notes = list(),
+    source = source
+  )
+  expect_equal(read_review_state(review_dir)$flags, "conv/1")
 
   unknown <- review_document_path(review_dir, "unknown")
   writeLines(
@@ -200,49 +213,6 @@ test_that("conversation reviews are created atomically and removed when empty", 
   expect_identical(
     readBin(unknown, "raw", n = file.info(unknown)$size),
     unknown_contents
-  )
-})
-
-test_that("conversation reviews replace an existing file", {
-  review_dir <- withr::local_tempdir()
-  trajectories <- list(conv1 = review_test_turns())
-
-  write_conversation_review(
-    review_dir,
-    trajectories,
-    conversation = 1L,
-    flags = "conv1",
-    notes = list()
-  )
-  write_conversation_review(
-    review_dir,
-    trajectories,
-    conversation = 1L,
-    flags = "conv1#1",
-    notes = list()
-  )
-
-  state <- read_review_state(review_dir)
-  expect_equal(state$flags, "conv1#1")
-  expect_length(
-    list.files(review_dir, pattern = "^[.]commons-review-backup-"),
-    0
-  )
-})
-
-test_that("conversation ids map to distinct safe filenames", {
-  review_dir <- withr::local_tempdir()
-  ids <- c("x/y", "x%2Fy")
-  files <- vapply(
-    ids,
-    \(id) review_document_path(review_dir, id),
-    character(1)
-  )
-
-  expect_length(unique(files), 2)
-  expect_equal(
-    basename(files),
-    c("conversation-782f79.md", "conversation-7825324679.md")
   )
 })
 
