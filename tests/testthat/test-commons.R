@@ -695,6 +695,129 @@ test_that("stream_async preserves structured provider content", {
   expect_identical(chunks[[3]]@text, "after.")
 })
 
+conversation_turn_ids <- function(recorded) {
+  spans <- Filter(
+    function(span) identical(span$name, "commons_conversation_turn"),
+    recorded$traces
+  )
+  vapply(
+    spans,
+    function(span) span$attributes[["gen_ai.conversation.id"]],
+    character(1)
+  )
+}
+
+test_that("stream_async keeps one conversation id across continued exchanges", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(log = TRUE)
+    stream_citations_fixture(agent, "First answer.", split_at = 5)
+    stream_citations_fixture(agent, "Second answer.", split_at = 5)
+  })
+
+  ids <- conversation_turn_ids(recorded)
+  expect_length(ids, 2)
+  expect_length(unique(ids), 1)
+})
+
+test_that("stream_async rotates the conversation id when history is replaced", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(log = TRUE)
+    stream_citations_fixture(agent, "First conversation.", split_at = 5)
+    # shinychat's "New chat" and conversation switching swap this client's
+    # turns in place (HistoryController$new_chat / $switch_to).
+    agent$set_turns(list())
+    stream_citations_fixture(agent, "Second conversation.", split_at = 5)
+  })
+
+  ids <- conversation_turn_ids(recorded)
+  expect_length(ids, 2)
+  expect_length(unique(ids), 2)
+})
+
+test_that("stream_async rotates the conversation id when history is truncated", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(log = TRUE)
+    stream_citations_fixture(agent, "First answer.", split_at = 5)
+    stream_citations_fixture(agent, "Second answer.", split_at = 5)
+    # shinychat's message edit truncates to the fork parent and resubmits
+    # (HistoryController$handle_edit), abandoning the later exchanges.
+    agent$set_turns(agent$get_turns()[1:2])
+    stream_citations_fixture(agent, "Edited answer.", split_at = 5)
+  })
+
+  ids <- conversation_turn_ids(recorded)
+  expect_length(ids, 3)
+  expect_length(unique(ids), 2)
+  expect_identical(ids[[1]], ids[[2]])
+})
+
+test_that("a stream that fails after rotation retries under the rotated id", {
+  skip_if_not_installed("otelsdk")
+
+  stream_failure_fixture <- function(agent) {
+    testthat::local_mocked_bindings(
+      chat_perform = function(...) stop("provider unavailable"),
+      .package = "ellmer"
+    )
+    expect_error(
+      sync_promise(coro::async_collect(agent$stream_async("New question."))),
+      "provider unavailable"
+    )
+  }
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(log = TRUE)
+    stream_citations_fixture(agent, "First conversation.", split_at = 5)
+    agent$set_turns(list())
+    stream_failure_fixture(agent)
+    stream_citations_fixture(agent, "Retried question.", split_at = 5)
+  })
+
+  ids <- conversation_turn_ids(recorded)
+  expect_length(ids, 3)
+  expect_false(ids[[2]] == ids[[1]])
+  expect_identical(ids[[2]], ids[[3]])
+})
+
+test_that("set_conversation_id reinstates an id across a history swap", {
+  skip_if_not_installed("otelsdk")
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(log = TRUE)
+    stream_citations_fixture(agent, "First conversation.", split_at = 5)
+    restored <- agent$get_turns()
+    agent$set_turns(list())
+    stream_citations_fixture(agent, "Second conversation.", split_at = 5)
+    # Switching back: shinychat restores the stored turns, then the
+    # commons_server() on_restore hook reinstates the stored id.
+    agent$set_turns(restored)
+    agent$set_conversation_id("restored-conversation")
+    stream_citations_fixture(agent, "Continued.", split_at = 3)
+  })
+
+  ids <- conversation_turn_ids(recorded)
+  expect_length(ids, 3)
+  expect_in("restored-conversation", ids)
+})
+
+test_that("conversation id accessors get and set the active id", {
+  agent <- test_agent()
+
+  expect_true(rlang::is_string(agent$get_conversation_id()))
+
+  agent$set_conversation_id("c_1")
+  expect_identical(agent$get_conversation_id(), "c_1")
+
+  expect_snapshot(agent$set_conversation_id(""), error = TRUE)
+  expect_snapshot(agent$set_conversation_id(c("a", "b")), error = TRUE)
+})
+
 test_that("stream_async records citation candidates on the conversation span", {
   skip_if_not_installed("otelsdk")
   # log = TRUE only skips new_trajectory_tracing()'s real

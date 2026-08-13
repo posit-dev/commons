@@ -22,6 +22,59 @@ test_that("commons_server runs under shiny::testServer without error", {
   succeed()
 })
 
+test_that("persist_conversation_id round-trips the id through history hooks", {
+  agent <- test_agent()
+  hooks <- new.env(parent = emptyenv())
+  fake_chat <- list(
+    history = list(
+      on_save = function(fn) hooks$on_save <- fn,
+      on_restore = function(fn) hooks$on_restore <- fn
+    )
+  )
+
+  persist_conversation_id(fake_chat, agent)
+
+  # on_save must return the augmented values list (shinychat's call_on_save
+  # contract) without clobbering other app state.
+  values <- hooks$on_save(list(app_state = 1))
+  expect_identical(
+    values$commons_conversation_id,
+    agent$get_conversation_id()
+  )
+  expect_identical(values$app_state, 1)
+
+  hooks$on_restore(list(commons_conversation_id = "restored-id"))
+  expect_identical(agent$get_conversation_id(), "restored-id")
+
+  # Conversations saved before this integration existed carry no id.
+  hooks$on_restore(list())
+  expect_identical(agent$get_conversation_id(), "restored-id")
+})
+
+test_that("commons_server wires conversation-id persistence into shinychat", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  shiny::testServer(
+    function(input, output, session) {
+      agent <- test_agent()
+      commons_server("chat", client = agent)
+    },
+    {
+      # Reach shinychat's live history controller and fire a restore the way
+      # switch_to()/restore_app_state() would.
+      controller <- shinychat:::get_session_chat_bookmark_info(
+        session,
+        "chat.history-controller"
+      )
+      controller$restore_app_state(
+        list(commons_conversation_id = "restored-id")
+      )
+      expect_identical(agent$get_conversation_id(), "restored-id")
+    }
+  )
+})
+
 test_that("chat UI preserves shinychat's top-level fill container", {
   ui <- commons_ui("chat", height = "100%")
   classes <- unlist(ui$attribs[names(ui$attribs) == "class"], use.names = FALSE)

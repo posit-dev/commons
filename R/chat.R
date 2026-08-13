@@ -10,8 +10,8 @@
 #'
 #' @param id The ID of the chat element; must match between `commons_ui()`
 #'   and `commons_server()`.
-#' @param ... In `commons_ui()`, extra arguments passed to 
-#'  [shinychat::chat_ui()]. In `commons_server()`, arguments passed to 
+#' @param ... In `commons_ui()`, extra arguments passed to
+#'  [shinychat::chat_ui()]. In `commons_server()`, arguments passed to
 #'  [shinychat::chat_server()].
 #' @param client A [commons()] agent. Create a new agent for each Shiny session.
 #'
@@ -64,12 +64,46 @@ commons_server <- function(id, client, ...) {
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
 
-  shinychat::chat_server(id, client = client, ...)
+  chat <- shinychat::chat_server(id, client = client, ...)
+  persist_conversation_id(chat, client)
+  chat
+}
+
+# Keeps one saved shinychat conversation under one commons conversation id
+# across switches, new chats, and session restores: on_save() stashes the
+# client's current id in the conversation's app-state values, and
+# on_restore() reinstates it when that conversation is reopened. Without
+# this, Commons$stream_async()'s divergence rotation (R/commons.R) still
+# keeps distinct conversations from collapsing into one id
+# (posit-dev/commons#106), but every switch back to a conversation would
+# mint a fresh id and duplicate its history prefix in trajectory_read().
+#
+# Deletable: once shinychat records a stable conversation id on a span
+# around each managed response, trajectory_read() should prefer that span's
+# id, and this save/restore round trip (plus Commons$set_conversation_id)
+# becomes redundant.
+persist_conversation_id <- function(chat, client) {
+  chat$history$on_save(function(values) {
+    values$commons_conversation_id <- client$get_conversation_id()
+    values
+  })
+  chat$history$on_restore(function(values) {
+    id <- values$commons_conversation_id
+    if (rlang::is_string(id) && nzchar(id)) {
+      client$set_conversation_id(id)
+    }
+  })
+  invisible(chat)
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
   missing <- c("htmltools", "shiny", "shinychat")[
-    !vapply(c("htmltools", "shiny", "shinychat"), requireNamespace, logical(1), quietly = TRUE)
+    !vapply(
+      c("htmltools", "shiny", "shinychat"),
+      requireNamespace,
+      logical(1),
+      quietly = TRUE
+    )
   ]
 
   if (length(missing)) {
