@@ -18,8 +18,10 @@
 #'
 #' Each Markdown document contains the complete reviewer-visible conversation
 #' and its tool activity. YAML frontmatter stores active flags and note history
-#' so the reviewer can restore its state. Tool results are limited to 100 lines
-#' or 20,000 characters in the rendered document.
+#' so the reviewer can restore its state and agents can identify flagged
+#' conversations, exchanges, and reviewer notes. The Markdown body is the
+#' human-readable transcript for joint human-agent review. Tool results are
+#' limited to 100 lines or 20,000 characters in the rendered document.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
