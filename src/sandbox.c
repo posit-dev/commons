@@ -237,6 +237,12 @@ static int userns_map_ids(void) {
   return 0;
 }
 
+static void exit_probe_child(int status) {
+  /* Match _exit() without linking the libc symbol R CMD check flags. */
+  syscall(SYS_exit_group, status);
+  __builtin_unreachable();
+}
+
 static void mkdir_p(char *path) {
   for (char *p = path + 1; *p != '\0'; p++) {
     if (*p == '/') {
@@ -638,7 +644,7 @@ SEXP c_sandbox_capabilities(void) {
   int userns_ok = 0;
   pid_t pid = fork();
   if (pid == 0) {
-    _exit(userns_map_ids() == 0 ? 0 : 1);
+    exit_probe_child(userns_map_ids() == 0 ? 0 : 1);
   } else if (pid > 0) {
     int status;
     if (waitpid(pid, &status, 0) == pid) {
