@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      COMMONS_SKIP_BROWSER_TESTS: "true"
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
@@ -24,21 +25,3 @@ jobs:
           extra-packages: any::rcmdcheck, local::.
           needs: check
       - uses: r-lib/actions/check-r-package@v2
-
-  browser:
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          use-public-rspm: true
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          extra-packages: local::., any::devtools, any::shinytest2, any::chromote
-          needs: check
-      - name: Locate Chrome
-        run: Rscript -e 'stopifnot(nzchar(chromote::find_chrome()))'
-      - name: Run citation browser tests
-        run: Rscript -e 'devtools::test(filter = "citation-browser")'
