@@ -340,7 +340,7 @@ format_review_tool_result <- function(value) {
 
 truncate_review_tool_result <- function(
   result,
-  max_lines = 100L,
+  max_lines = 50L,
   max_chars = 20000L
 ) {
   lines <- strsplit(result, "\n", fixed = TRUE)[[1]]
