@@ -43,6 +43,21 @@ test_that("recorded accepted citations reuse live aside presentation", {
   )
 })
 
+test_that("citation asides blockquote every line of multiline evidence", {
+  html <- citation_aside_html(
+    "Canopy cover is always acre-weighted.\nReport acreage after filtering.",
+    "This supports the weighting rule.",
+    "forest documentation",
+    "prose"
+  )
+
+  expect_match(
+    html,
+    "> Canopy cover is always acre-weighted.\n> Report acreage after filtering.",
+    fixed = TRUE
+  )
+})
+
 test_that("recorded citations fail closed when evidence or metadata conflicts", {
   quote <- "Canopy cover is always acre-weighted for reporting."
   parsed <- list(explanation = "Reason", quote = quote)
