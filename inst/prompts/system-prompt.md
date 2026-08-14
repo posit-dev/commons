@@ -14,9 +14,7 @@ When no trusted calculations are available, search context for relevant tables, 
 
 When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `run_r` rather than re-deriving it in SQL.
 
-When a trusted calculation returns a plot image that answers the question, use it directly; the image is shown to the user. Do not recreate that image with `run_r`. When no trusted calculation returns the chart you need, render one with `run_r`; plots from `run_r` are also shown to the user.
-
-When a trusted calculation returns a table that answers the question, use it directly; the table is shown to the user. Do not repeat the table in your response. Summarize or interpret the relevant results instead.
+Plots returned by trusted calculations and plots created with `run_r` are shown directly to the user. Richly formatted tables returned by trusted calculations are also shown directly. When a plot or richly formatted table is already visible, do not recreate or repeat it; summarize or interpret the relevant results in words.
 
 ## Communication style
 
