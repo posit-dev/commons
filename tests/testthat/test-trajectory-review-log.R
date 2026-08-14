@@ -142,6 +142,44 @@ test_that("review state round trips through YAML frontmatter", {
   )
 })
 
+test_that("review archives contain generated documents", {
+  review_dir <- withr::local_tempdir()
+  writeLines("review one", file.path(review_dir, "conversation-one.md"))
+  writeLines("not a review", file.path(review_dir, "notes.md"))
+  archive <- tempfile(fileext = ".tar.gz")
+
+  write_review_archive(review_dir, archive)
+
+  expect_equal(
+    utils::untar(archive, list = TRUE),
+    "commons-reviews/conversation-one.md"
+  )
+})
+
+test_that("pin-backed review stores sync and restore documents", {
+  skip_if_not_installed("pins")
+  board <- pins::board_folder(withr::local_tempdir(), versioned = TRUE)
+  source_dir <- withr::local_tempdir()
+  restored_dir <- withr::local_tempdir()
+  store <- review_store(source_dir, board, "agent-reviews")
+  writeLines("review one", file.path(source_dir, "conversation-one.md"))
+
+  sync_review_store(store)
+  hydrate_review_store(review_store(restored_dir, board, "agent-reviews"))
+
+  expect_equal(
+    readLines(file.path(restored_dir, "conversation-one.md")),
+    "review one"
+  )
+
+  unlink(file.path(source_dir, "conversation-one.md"))
+  sync_review_store(store)
+  hydrate_review_store(review_store(restored_dir, board, "agent-reviews"))
+
+  expect_length(review_document_files(restored_dir), 0)
+  expect_length(pins::pin_versions(board, "agent-reviews")$version, 2)
+})
+
 test_that("review state ignores unrelated Markdown and warns on bad reviews", {
   review_dir <- withr::local_tempdir()
   writeLines("# Personal notes", file.path(review_dir, "notes.md"))

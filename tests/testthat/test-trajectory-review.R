@@ -358,7 +358,12 @@ test_that("the viewer filters conversations and follows selection", {
   review_dir <- withr::local_tempdir()
 
   shiny::testServer(
-    viewer_server(trajectories, summary, questions, review_dir),
+    viewer_server(
+      trajectories,
+      summary,
+      questions,
+      review_store(review_dir)
+    ),
     {
       session$setInputs(
         group_by = "conversation",
@@ -412,7 +417,12 @@ test_that("flags and notes write to and restore from review documents", {
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   review_dir <- withr::local_tempdir()
-  server <- viewer_server(trajectories, summary, questions, review_dir)
+  server <- viewer_server(
+    trajectories,
+    summary,
+    questions,
+    review_store(review_dir)
+  )
 
   shiny::testServer(
     server,
@@ -621,6 +631,8 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   html <- as.character(viewer_ui(list()))
 
   expect_match(html, "shiny-date-range-input")
+  expect_match(html, "download_reviews")
+  expect_match(html, "Download reviews")
   expect_match(html, "bslib-sidebar-layout")
   expect_match(html, "sidebar-right")
   expect_match(html, "data-resizable")

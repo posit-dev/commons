@@ -6,7 +6,9 @@
 \usage{
 trajectory_review(
   trajectories = trajectory_read(),
-  review_dir = Sys.getenv("COMMONS_REVIEW_DIR", unset = "commons-reviews")
+  review_dir = Sys.getenv("COMMONS_REVIEW_DIR", unset = "commons-reviews"),
+  review_board = NULL,
+  review_pin = NULL
 )
 }
 \arguments{
@@ -16,7 +18,14 @@ trajectory_review(
 \item{review_dir}{Directory where review actions write one generated
 Markdown document per conversation. Created on first use; active flags
 and note history recorded here are restored when the viewer reopens.
-Defaults to \code{COMMONS_REVIEW_DIR} when set.}
+Defaults to \code{COMMONS_REVIEW_DIR} when set. When \code{review_board} and
+\code{review_pin} are supplied, this directory is a local cache of the pin.}
+
+\item{review_board}{Optional pins board used for durable review storage,
+such as \code{pins::board_connect()}. Must be supplied with \code{review_pin}.}
+
+\item{review_pin}{Name of a pin containing the review documents. Must be
+supplied with \code{review_board}.}
 }
 \value{
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. Calling \code{trajectory_review()} at the
@@ -66,11 +75,20 @@ process with \code{Sys.setenv()}, or add it to \code{.Renviron} to keep the sett
 across local R sessions. Without either, reviews land in \code{commons-reviews}
 relative to the app's working directory.
 
-On Posit Connect, configure \code{COMMONS_REVIEW_DIR} to name writable persistent
-storage available to the reviewer app. The default working-directory path
-is replaced when the content is redeployed. File-backed review apps should
-use one Connect process because separate processes do not coordinate file
-writes or in-memory review state.
+On Posit Connect, use a Connect pin for durable storage across deployments:
+
+\if{html}{\out{<div class="sourceCode">}}\preformatted{trajectory_review(
+  trajectories,
+  review_board = pins::board_connect(),
+  review_pin = "agent-reviews"
+)
+}\if{html}{\out{</div>}}
+
+The reviewer downloads the pin at startup and uploads a new pin version
+after each review action. Without a pin, the default working-directory path
+is replaced when the content is redeployed. Review apps should use one
+Connect process because separate processes do not coordinate writes or
+in-memory review state.
 
 All sessions of one reviewer app share the same \code{review_dir}, flags, and
 notes; review state is not separated by user. Notes record \code{session$user},
