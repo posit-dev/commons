@@ -91,7 +91,7 @@ hydrate_review_store <- function(store, call = rlang::caller_env()) {
       pins::pin_download(
         store$board,
         store$pin,
-        version = versions$version[[1]]
+        version = latest_review_pin_version(store, versions)
       )
     },
     error = function(error) {
@@ -109,6 +109,32 @@ hydrate_review_store <- function(store, call = rlang::caller_env()) {
     file.copy(reviews, store$review_dir, overwrite = TRUE)
   }
   invisible(store)
+}
+
+latest_review_pin_version <- function(store, versions) {
+  if ("active" %in% names(versions)) {
+    active <- which(versions$active %in% TRUE)
+    if (length(active) > 0) {
+      return(versions$version[[active[[1]]]])
+    }
+  }
+
+  if (
+    inherits(store$board, "pins_board_folder") &&
+      !is.null(store$board$path)
+  ) {
+    paths <- file.path(store$board$path, store$pin, versions$version)
+    modified <- file.info(paths)$mtime
+    if (any(!is.na(modified))) {
+      return(versions$version[[which.max(modified)]])
+    }
+  }
+
+  if ("created" %in% names(versions) && any(!is.na(versions$created))) {
+    return(versions$version[[which.max(versions$created)]])
+  }
+
+  versions$version[[nrow(versions)]]
 }
 
 sync_review_store <- function(store, call = rlang::caller_env()) {
@@ -144,6 +170,28 @@ sync_review_store <- function(store, call = rlang::caller_env()) {
       )
     }
   )
+  invisible(store)
+}
+
+request_review_store_sync <- function(store, state, revision) {
+  if (is.null(store$board)) {
+    return(invisible(store))
+  }
+  state$dirty <- TRUE
+  revision(revision() + 1L)
+  invisible(store)
+}
+
+flush_review_store_sync <- function(
+  store,
+  state,
+  call = rlang::caller_env()
+) {
+  if (!state$dirty) {
+    return(invisible(store))
+  }
+  sync_review_store(store, call = call)
+  state$dirty <- FALSE
   invisible(store)
 }
 
@@ -673,7 +721,13 @@ review_trust_label <- function(tag) {
   if (is.na(tag)) {
     return("No data tool")
   }
-  switch(tag, A = "Verified (A)", B = "Cited (B)", C = "Untrusted (C)")
+  switch(
+    tag,
+    A = "Verified (A)",
+    B = "Cited (B)",
+    C = "Untrusted (C)",
+    sprintf("Unknown (%s)", tag)
+  )
 }
 
 review_yes_no <- function(value) {

@@ -124,6 +124,10 @@ test_that("search_pool results are omitted from review documents", {
   )
 })
 
+test_that("unexpected trust tags remain visible", {
+  expect_equal(review_trust_label("D"), "Unknown (D)")
+})
+
 test_that("review state round trips through YAML frontmatter", {
   review_dir <- withr::local_tempdir()
   id <- "conv/1"

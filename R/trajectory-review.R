@@ -71,10 +71,11 @@
 #' ```
 #'
 #' The reviewer uses an automatically managed temporary local cache, downloads
-#' the pin at startup, and uploads a new pin version after each review action.
-#' Connect supplies `CONNECT_SERVER` and `CONNECT_API_KEY` to running content
-#' when its default API-key integration is enabled, so `auth = "envvar"` does
-#' not require embedding credentials. Without a pin, the default
+#' the pin at startup, and uploads a new pin version after a brief pause in
+#' review activity. Pending changes are also uploaded when a reviewer session
+#' ends. Connect supplies `CONNECT_SERVER` and `CONNECT_API_KEY` to running
+#' content when its default API-key integration is enabled, so `auth = "envvar"`
+#' does not require embedding credentials. Without a pin, the default
 #' working-directory path is replaced when the content is redeployed. Review
 #' apps should use one Connect process because separate processes do not
 #' coordinate writes or in-memory review state.
@@ -520,6 +521,8 @@ trust_choices <- function(group_by) {
   }
 }
 
+review_sync_delay_ms <- 1000L
+
 viewer_server <- function(
   trajectories,
   summary,
@@ -530,10 +533,22 @@ viewer_server <- function(
   review_state <- read_review_state(store$review_dir)
   app_flags <- shiny::reactiveVal(review_state$flags)
   app_notes <- shiny::reactiveVal(review_state$notes)
+  sync_state <- rlang::env(dirty = FALSE)
 
   function(input, output, session) {
     flags <- app_flags
     notes <- app_notes
+    sync_revision <- shiny::reactiveVal(0L)
+    debounced_sync_revision <- shiny::debounce(
+      shiny::reactive(sync_revision()),
+      millis = review_sync_delay_ms
+    )
+    shiny::observeEvent(
+      debounced_sync_revision(),
+      flush_review_store_sync(store, sync_state),
+      ignoreInit = TRUE
+    )
+    session$onSessionEnded(\() flush_review_store_sync(store, sync_state))
     selected <- shiny::reactiveVal(NULL)
     selected_transcript <- shiny::reactive({
       key <- selected()
@@ -691,8 +706,8 @@ viewer_server <- function(
         next_flags,
         notes()
       )
-      sync_review_store(store)
       flags(next_flags)
+      request_review_store_sync(store, sync_state, sync_revision)
     })
 
     shiny::observeEvent(input$exchange_select, {
@@ -754,8 +769,8 @@ viewer_server <- function(
         flags(),
         next_notes
       )
-      sync_review_store(store)
       notes(next_notes)
+      request_review_store_sync(store, sync_state, sync_revision)
       bslib::update_submit_textarea(
         "review_note",
         value = "",

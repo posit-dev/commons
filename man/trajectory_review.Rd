@@ -90,10 +90,11 @@ deployments:
 }\if{html}{\out{</div>}}
 
 The reviewer uses an automatically managed temporary local cache, downloads
-the pin at startup, and uploads a new pin version after each review action.
-Connect supplies \code{CONNECT_SERVER} and \code{CONNECT_API_KEY} to running content
-when its default API-key integration is enabled, so \code{auth = "envvar"} does
-not require embedding credentials. Without a pin, the default
+the pin at startup, and uploads a new pin version after a brief pause in
+review activity. Pending changes are also uploaded when a reviewer session
+ends. Connect supplies \code{CONNECT_SERVER} and \code{CONNECT_API_KEY} to running
+content when its default API-key integration is enabled, so \code{auth = "envvar"}
+does not require embedding credentials. Without a pin, the default
 working-directory path is replaced when the content is redeployed. Review
 apps should use one Connect process because separate processes do not
 coordinate writes or in-memory review state.
