@@ -162,7 +162,8 @@ tool_call_measure <- function(private) {
       "Run trusted calculations returned by",
       "search_pool. `arguments` is a JSON object using exactly the argument",
       "names from search_pool. Prefer a measure's own arguments when they can",
-      "answer the question directly."
+      "answer the question directly. When call_measure returns a plot image,",
+      "it is shown directly to the user; do not recreate it with run_r."
     ),
     arguments = list(
       name = ellmer::type_string(
@@ -247,7 +248,9 @@ tool_run_sql <- function(private) {
     },
     run_sql_description(private$definitions, private$registry),
     arguments = list(
-      sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect."),
+      sql = ellmer::type_string(
+        "A read-only SELECT query, in the data source's SQL dialect."
+      ),
       source = sql_source_type(private$sources)
     ),
     name = "run_sql",
@@ -314,12 +317,118 @@ call_measure_tool <- function(
   value <- do.call(td, c(args, injections[[name]]))
   value <- collect_lazy_table(value)
   advert <- register_handle(handles, value)
+  if (is_ggplot(value)) {
+    return(measure_plot_tool_result(td, args, value, advert))
+  }
+  if (is_gt_tbl(value)) {
+    return(measure_gt_tool_result(td, args, value, advert))
+  }
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = sprintf("Measure: %s", html_escape(tool_title(td))),
     icon = maybe_icon("shield-check"),
     html = measure_display_html(args, value),
     tag = "A",
+    show_tag = FALSE
+  )
+}
+
+measure_plot_tool_result <- function(td, args, value, advert) {
+  title <- tool_title(td)
+  rendered <- tryCatch(
+    render_plot_image(value, sprintf("Plot returned by %s", title)),
+    error = function(error) error
+  )
+  if (inherits(rendered, "error")) {
+    return(measure_plot_failure_result(
+      args,
+      advert,
+      title,
+      conditionMessage(rendered)
+    ))
+  }
+
+  model_value <- list(rendered$model)
+  if (!is.null(advert)) {
+    model_value[[length(model_value) + 1L]] <- ellmer::ContentText(advert)
+  }
+  tool_result(
+    model_value,
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = measure_display_with_result_html(
+      args,
+      measure_plot_result_html(rendered$html)
+    ),
+    tag = "A",
+    open = TRUE,
+    show_tag = FALSE
+  )
+}
+
+measure_plot_failure_result <- function(args, advert, title, message) {
+  note <- sprintf(
+    "The measure returned a plot, but it could not be displayed: %s",
+    message
+  )
+  tool_result(
+    paste(c(note, advert), collapse = "\n\n"),
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = measure_display_with_result_html(
+      args,
+      measure_plot_failure_html(note)
+    ),
+    tag = "A",
+    open = TRUE,
+    show_tag = FALSE
+  )
+}
+
+measure_gt_tool_result <- function(td, args, value, advert) {
+  title <- tool_title(td)
+  rendered <- tryCatch(
+    render_gt_table_html(value),
+    error = function(error) error
+  )
+  if (inherits(rendered, "error")) {
+    return(measure_gt_failure_result(
+      args,
+      advert,
+      title,
+      conditionMessage(rendered)
+    ))
+  }
+
+  tool_result(
+    paste(c(format_gt_table_value(value), advert), collapse = "\n\n"),
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = measure_display_with_result_html(
+      args,
+      measure_gt_result_html(rendered)
+    ),
+    tag = "A",
+    open = TRUE,
+    show_tag = FALSE
+  )
+}
+
+measure_gt_failure_result <- function(args, advert, title, message) {
+  note <- sprintf(
+    "The measure returned a gt table, but it could not be displayed: %s",
+    message
+  )
+  tool_result(
+    paste(c(note, advert), collapse = "\n\n"),
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = measure_display_with_result_html(
+      args,
+      measure_gt_failure_html(note)
+    ),
+    tag = "A",
+    open = TRUE,
     show_tag = FALSE
   )
 }
@@ -342,7 +451,12 @@ search_context_tool <- function(context, query) {
   )
 }
 
-describe_table_tool <- function(source, table, source_name = NULL, tracker = NULL) {
+describe_table_tool <- function(
+  source,
+  table,
+  source_name = NULL,
+  tracker = NULL
+) {
   d <- source_describe(source, table)
   entry <- source$dictionary$tables[[table]]
   relation <- c(
@@ -422,11 +536,13 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
     dictionary = dictionary,
     text = sql
   )]
-  hits <- hits[!vapply(
-    hits,
-    function(table) table_touched(tracker, source_name, table),
-    logical(1)
-  )]
+  hits <- hits[
+    !vapply(
+      hits,
+      function(table) table_touched(tracker, source_name, table),
+      logical(1)
+    )
+  ]
   if (length(hits) == 0) {
     return(NULL)
   }
@@ -521,6 +637,9 @@ collect_lazy_table <- function(value) {
 
 format_measure_value <- function(value) {
   value <- collect_lazy_table(value)
+  if (is_gt_tbl(value)) {
+    return(format_gt_table_value(value))
+  }
   if (is.data.frame(value)) {
     return(df_to_markdown(value))
   }
@@ -554,10 +673,14 @@ measure_args_html <- function(args) {
 }
 
 measure_display_html <- function(args, value) {
+  measure_display_with_result_html(args, measure_result_html(value))
+}
+
+measure_display_with_result_html <- function(args, result_html) {
   sprintf(
     "<div class=\"commons-measure-display\">%s%s</div>",
     measure_args_html(args),
-    measure_result_html(value)
+    result_html
   )
 }
 
@@ -565,6 +688,48 @@ measure_result_html <- function(value) {
   sprintf(
     "<div class=\"commons-measure-result\"><strong>Tool result</strong><div class=\"commons-measure-result-value\">%s</div></div>",
     format_measure_html(value)
+  )
+}
+
+measure_plot_result_html <- function(image_html) {
+  sprintf(
+    paste0(
+      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
+      "<div class=\"commons-measure-result-value\">%s</div></div>"
+    ),
+    image_html
+  )
+}
+
+measure_plot_failure_html <- function(note) {
+  sprintf(
+    paste0(
+      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
+      "<div class=\"commons-measure-result-value ",
+      "commons-measure-plot-error\">%s</div></div>"
+    ),
+    html_escape(note)
+  )
+}
+
+measure_gt_result_html <- function(table_html) {
+  sprintf(
+    paste0(
+      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
+      "<div class=\"commons-measure-result-value\">%s</div></div>"
+    ),
+    table_html
+  )
+}
+
+measure_gt_failure_html <- function(note) {
+  sprintf(
+    paste0(
+      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
+      "<div class=\"commons-measure-result-value ",
+      "commons-measure-gt-error\">%s</div></div>"
+    ),
+    html_escape(note)
   )
 }
 

@@ -69,10 +69,7 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
           rlang::set_names(new_ids),
           function(id) get_handle(handles, id)
         )
-        dims <- plot_dimensions(
-          getOption("commons.run_r_plot_aspect_ratio", "3:2"),
-          getOption("commons.run_r_plot_size", 768L)
-        )
+        dims <- configured_plot_dimensions()
         # callr rebinds a transferred function's environment to the worker's
         # global env, so the entry point must be namespace-qualified.
         worker$rs$call(
@@ -433,22 +430,6 @@ worker_await <- function(
     }
     poll()
   })
-}
-
-plot_dimensions <- function(ratio, longest_side) {
-  parts <- suppressWarnings(
-    as.numeric(strsplit(ratio, ":", fixed = TRUE)[[1]])
-  )
-  r <- if (length(parts) == 2 && all(!is.na(parts) & parts > 0)) {
-    parts[[1]] / parts[[2]]
-  } else {
-    3 / 2
-  }
-  if (r >= 1) {
-    list(width = as.integer(round(longest_side)), height = as.integer(round(longest_side / r)))
-  } else {
-    list(width = as.integer(round(longest_side * r)), height = as.integer(round(longest_side)))
-  }
 }
 
 # --- worker side -------------------------------------------------------------
