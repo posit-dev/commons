@@ -8,7 +8,7 @@ description: Building, maintaining, and iterating on a self-service data agent w
 Read the relevant reference below before starting the corresponding task.
 
 - [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, dictionary edits, and free-text context, each carrying provenance back to its source.
-- [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent by reading logged trajectories, finding recurring low-trust or slow answers, and proposing semantic-layer or context-layer changes.
+- [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent from reviewed conversations when available, or from raw logged trajectories otherwise, then propose semantic-layer or context-layer changes.
 
 ## Agent project layout
 
