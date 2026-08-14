@@ -20,25 +20,79 @@ The answer uses SQL with little documentation and the agent had to inspect table
 1. Find the agent definition.
    Search for `commons(`, `data_source(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure arguments without `@param` documentation are never seen by the model: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. A new measure that queries a database should take the connection this way rather than referencing a global; other objects it needs (a pins board, an API client) should come from a default written as a call, e.g. `board = pins::board_connect()`.
 
-2. Load trajectories.
-   Use `commons::trajectory_read()`. With no arguments it resolves automatically: on Posit Connect it reads this content's own traces, in a deployed project it reads the deployment's traces from Connect (requires the `CONNECT_API_KEY` environment variable and editor access to the content), and otherwise it reads local trace files. You can also pass a Connect content GUID, a content URL, or a directory of OTLP trace files. If resolution is unclear, inspect the project for `log =`, `COMMONS_TRACES_DIR`, `OTEL_*` environment variables, or deployment setup.
+2. Choose the evidence path.
+   Do not always begin by loading raw trajectories. First look for a `commons-reviews/` directory, a downloaded review archive, or reviewer configuration that names a review pin.
 
-   When the store is large, subset: `n` keeps the `n` most recent conversations, and `from`/`to` keep conversations with chat activity in a time window, e.g. `trajectory_read(n = 25, from = Sys.Date() - 7)`.
+### Path 1: Reviewed trajectories
 
-3. Read the conversations.
-   Each trajectory is a list of ellmer turns, named by conversation id.
+Use review documents whenever they are available. They contain the conversations and exchanges a reviewer flagged or annotated, so treat them as the primary qualitative evidence rather than starting over from the raw log.
+
+- Read each `conversation-*.md` file. Parse its YAML frontmatter for the conversation id, active conversation and exchange flags, and reviewer notes. Read the Markdown body for the transcript, trust labels, tool calls, tool results, and notes in context.
+- Treat flags as requests for attention, not conclusions. Use review notes to understand what the reviewer wants investigated.
+- Treat tool results as excerpts because the Markdown renderer truncates long results.
+- Use the latest pin version unless the user asks to compare review state over time.
+- Supplement the reviews with raw trajectories only when needed to quantify how common a theme is, inspect a truncated result, or analyze conversations that were not reviewed.
+
+When a review pin is configured but not present locally, ask for its name or a downloaded archive. With access to the same Connect account, retrieve it read-only:
 
 ```r
-trajectories <- commons::trajectory_read()
-turns <- trajectories[[1]]
+board <- pins::board_connect()
+pins::pin_download(board, "<review-pin>")
+```
 
+### Path 2: Raw trajectories
+
+When no review documents exist, analyze raw logs now; do not make reviewer setup a prerequisite.
+
+Use `commons::trajectory_read()`. With no arguments it resolves automatically: on Posit Connect it reads this content's own traces, in a deployed project it reads the deployment's traces from Connect, and otherwise it reads local trace files. You can also pass a Connect content GUID, a content URL, or a directory of OTLP trace files. Connect reads require `CONNECT_API_KEY` and editor access to the content.
+
+If resolution is unclear, inspect the project for `log =`, `COMMONS_TRACES_DIR`, `OTEL_*` environment variables, or deployment setup. When the store is large, use `n`, `from`, or `to`, for example:
+
+```r
+trajectories <- commons::trajectory_read(
+  n = 25,
+  from = Sys.Date() - 7
+)
+
+turns <- trajectories[[1]]
 print(turns)
 ```
 
-4. Analyze themes.
+If traces are absent, confirm that the agent runs with `log = TRUE` while OpenTelemetry tracing is active.
+
+### Set up trajectory review
+
+When the project has no review workflow, recommend setting one up for future iterations after completing the current raw-log analysis.
+
+For local review:
+
+```r
+commons::trajectory_review(
+  commons::trajectory_read() # set n to limit the number of trajectories
+)
+```
+
+For a deployed reviewer, back review state with a versioned Connect pin so it
+survives restarts and redeployments. `trajectory_review()` manages its temporary
+working cache automatically:
+
+```r
+commons::trajectory_review(
+  commons::trajectory_read("<agent-content-guid-or-url>"),
+  review_board = pins::board_connect(
+    auth = "envvar",
+    use_cache_on_failure = FALSE
+  ),
+  review_pin = "agent-reviews"
+)
+```
+
+Use one Connect process because separate processes do not coordinate review writes. The reviewer can export a `commons-reviews` archive with **Download reviews**. Prepare local reviewer code when the user asks, but obtain explicit confirmation before deploying content or creating external resources.
+
+3. Analyze themes.
    Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
 
-5. Propose changes.
+4. Propose changes.
    Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change.
 
    Prefer semantic-layer edits when the question is a stable governed metric. Prefer context-layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
@@ -49,7 +103,7 @@ print(turns)
    * **extension** — same concept, superset behavior: edit the existing measure, adding the `@param` and the provenance tag. Never create `revenue2`.
    * **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides; do not resolve silently.
 
-6. Wait before editing.
+5. Wait before editing.
    Do not make semantic-layer or context-layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.
 
    When a proposal is accepted, new measures and context land in the agent project layout defined in `SKILL.md`: measures in `measures/`, free-text in `context/`. Because these changes are born from trajectory analysis rather than an artifact, they carry the self-referencing provenance `trajectory analysis (<yyyy-mm-dd>)` — a `#' @provenance` tag on measures, YAML frontmatter on context files.
