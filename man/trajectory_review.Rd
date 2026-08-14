@@ -52,8 +52,9 @@ Each Markdown document contains the complete reviewer-visible conversation
 and its tool activity. YAML frontmatter stores active flags and note history
 so the reviewer can restore its state and agents can identify flagged
 conversations, exchanges, and reviewer notes. The Markdown body is the
-human-readable transcript for joint human-agent review. Tool results are
-limited to 50 lines or 20,000 characters in the rendered document.
+human-readable transcript for joint human-agent review. Tool calls and
+results are collapsed for easier scanning, and tool results are limited to
+50 lines or 20,000 characters in the rendered document.
 
 Trajectories carry no record of how each answer was tagged when it was
 produced, so the viewer derives trust levels from the tool calls in the
@@ -75,20 +76,32 @@ process with \code{Sys.setenv()}, or add it to \code{.Renviron} to keep the sett
 across local R sessions. Without either, reviews land in \code{commons-reviews}
 relative to the app's working directory.
 
-On Posit Connect, use a Connect pin for durable storage across deployments:
+On Posit Connect, use a versioned Connect pin for durable storage across
+deployments:
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{trajectory_review(
   trajectories,
-  review_board = pins::board_connect(),
+  review_dir = file.path(tempdir(), "commons-reviews"),
+  review_board = pins::board_connect(
+    auth = "envvar",
+    use_cache_on_failure = FALSE
+  ),
   review_pin = "agent-reviews"
 )
 }\if{html}{\out{</div>}}
 
 The reviewer downloads the pin at startup and uploads a new pin version
-after each review action. Without a pin, the default working-directory path
-is replaced when the content is redeployed. Review apps should use one
-Connect process because separate processes do not coordinate writes or
-in-memory review state.
+after each review action. Connect supplies \code{CONNECT_SERVER} and
+\code{CONNECT_API_KEY} to running content when its default API-key integration is
+enabled, so \code{auth = "envvar"} does not require embedding credentials.
+Without a pin, the default working-directory path is replaced when the
+content is redeployed. Review apps should use one Connect process because
+separate processes do not coordinate writes or in-memory review state.
+
+The Connect API key's user must have editor access to the content whose
+trajectories are read. The pin is owned by the reviewer app's publisher.
+Download the generated documents with the app's \strong{Download reviews} button
+or \code{\link[pins:pin_download]{pins::pin_download()}} when they need to be reviewed outside the app.
 
 All sessions of one reviewer app share the same \code{review_dir}, flags, and
 notes; review state is not separated by user. Notes record \code{session$user},

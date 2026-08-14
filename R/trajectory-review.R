@@ -20,8 +20,9 @@
 #' and its tool activity. YAML frontmatter stores active flags and note history
 #' so the reviewer can restore its state and agents can identify flagged
 #' conversations, exchanges, and reviewer notes. The Markdown body is the
-#' human-readable transcript for joint human-agent review. Tool results are
-#' limited to 50 lines or 20,000 characters in the rendered document.
+#' human-readable transcript for joint human-agent review. Tool calls and
+#' results are collapsed for easier scanning, and tool results are limited to
+#' 50 lines or 20,000 characters in the rendered document.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
@@ -55,21 +56,33 @@
 #' across local R sessions. Without either, reviews land in `commons-reviews`
 #' relative to the app's working directory.
 #'
-#' On Posit Connect, use a Connect pin for durable storage across deployments:
+#' On Posit Connect, use a versioned Connect pin for durable storage across
+#' deployments:
 #'
 #' ```
 #' trajectory_review(
 #'   trajectories,
-#'   review_board = pins::board_connect(),
+#'   review_dir = file.path(tempdir(), "commons-reviews"),
+#'   review_board = pins::board_connect(
+#'     auth = "envvar",
+#'     use_cache_on_failure = FALSE
+#'   ),
 #'   review_pin = "agent-reviews"
 #' )
 #' ```
 #'
 #' The reviewer downloads the pin at startup and uploads a new pin version
-#' after each review action. Without a pin, the default working-directory path
-#' is replaced when the content is redeployed. Review apps should use one
-#' Connect process because separate processes do not coordinate writes or
-#' in-memory review state.
+#' after each review action. Connect supplies `CONNECT_SERVER` and
+#' `CONNECT_API_KEY` to running content when its default API-key integration is
+#' enabled, so `auth = "envvar"` does not require embedding credentials.
+#' Without a pin, the default working-directory path is replaced when the
+#' content is redeployed. Review apps should use one Connect process because
+#' separate processes do not coordinate writes or in-memory review state.
+#'
+#' The Connect API key's user must have editor access to the content whose
+#' trajectories are read. The pin is owned by the reviewer app's publisher.
+#' Download the generated documents with the app's **Download reviews** button
+#' or [pins::pin_download()] when they need to be reviewed outside the app.
 #'
 #' All sessions of one reviewer app share the same `review_dir`, flags, and
 #' notes; review state is not separated by user. Notes record `session$user`,
@@ -104,13 +117,12 @@ trajectory_review <- function(
   rlang::check_string(review_dir)
   store <- review_store(review_dir, review_board, review_pin)
   hydrate_review_store(store)
-  source <- trajectory_source(trajectories)
   trajectories <- drop_side_conversations(trajectories)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
     viewer_ui(summary),
-    viewer_server(trajectories, summary, questions, store, source)
+    viewer_server(trajectories, summary, questions, store)
   )
 }
 
@@ -516,8 +528,7 @@ viewer_server <- function(
   trajectories,
   summary,
   questions,
-  store,
-  source = trajectory_source(trajectories)
+  store
 ) {
   # Share review state across sessions in the documented single process.
   review_state <- read_review_state(store$review_dir)
@@ -682,8 +693,7 @@ viewer_server <- function(
         trajectories,
         key$conversation,
         next_flags,
-        notes(),
-        source
+        notes()
       )
       sync_review_store(store)
       flags(next_flags)
@@ -746,8 +756,7 @@ viewer_server <- function(
         trajectories,
         key$conversation,
         flags(),
-        next_notes,
-        source
+        next_notes
       )
       sync_review_store(store)
       notes(next_notes)
