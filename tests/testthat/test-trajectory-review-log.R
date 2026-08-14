@@ -47,11 +47,6 @@ test_that("review_document renders a self-contained trajectory review", {
     review_test_turns(),
     list(conversation = TRUE, exchanges = 1L),
     review_test_notes(),
-    source = list(
-      kind = "connect",
-      server = "https://connect.example.com",
-      content_guid = "00000000-0000-0000-0000-000000000001"
-    ),
     updated_at = "2026-08-12T16:10:00Z"
   )
 
@@ -94,17 +89,39 @@ test_that("review documents preserve assistant and tool content order", {
   )
 
   expected <- c(
-    "I'll check both sources.",
+    "> I'll check both sources.",
     "### Tool call: `first_tool`",
-    "The first call is queued.",
+    "> The first call is queued.",
     "### Tool call: `second_tool`",
     "### Tool result: `first_tool`",
     "first result",
     "### Tool result: `second_tool`",
     "second result",
-    "Both checks are complete."
+    "> Both checks are complete."
   )
   expect_equal(markdown[markdown %in% expected], expected)
+})
+
+test_that("search_pool results are omitted from review documents", {
+  request <- ellmer::ContentToolRequest(
+    id = "call-1",
+    name = "search_pool",
+    arguments = list(query = "revenue")
+  )
+  result <- ellmer::ContentToolResult(
+    "A long catalog of matching measures",
+    request = request
+  )
+
+  expect_equal(
+    review_tool_result_markdown(result),
+    c(
+      "",
+      "### Tool result: `search_pool`",
+      "",
+      "_Discovery result omitted from the review log._"
+    )
+  )
 })
 
 test_that("review state round trips through YAML frontmatter", {
@@ -117,7 +134,6 @@ test_that("review state round trips through YAML frontmatter", {
       review_test_turns(),
       list(conversation = TRUE, exchanges = 1L),
       review_test_notes(id),
-      source = list(kind = "unknown"),
       updated_at = "2026-08-12T16:10:00Z"
     ),
     file
@@ -153,6 +169,32 @@ test_that("review archives contain generated documents", {
   expect_equal(
     utils::untar(archive, list = TRUE),
     "commons-reviews/conversation-one.md"
+  )
+})
+
+test_that("review directories resolve by storage mode", {
+  expect_equal(
+    withr::with_envvar(
+      c(COMMONS_REVIEW_DIR = "/custom/reviews"),
+      resolve_review_dir(NULL, pin_backed = FALSE)
+    ),
+    "/custom/reviews"
+  )
+  expect_equal(
+    withr::with_envvar(
+      c(COMMONS_REVIEW_DIR = NA),
+      resolve_review_dir(NULL, pin_backed = FALSE)
+    ),
+    "commons-reviews"
+  )
+
+  cache <- resolve_review_dir(NULL, pin_backed = TRUE)
+  expect_equal(dirname(cache), tempdir())
+  expect_match(basename(cache), "^commons-reviews-")
+  expect_identical(dir.exists(cache), FALSE)
+  expect_equal(
+    resolve_review_dir("/explicit/reviews", pin_backed = TRUE),
+    "/explicit/reviews"
   )
 })
 
@@ -197,15 +239,13 @@ test_that("conversation reviews are created, replaced, and removed", {
   parent <- withr::local_tempdir()
   review_dir <- file.path(parent, "reviews")
   trajectories <- list(`conv/1` = review_test_turns())
-  source <- list(kind = "unknown")
 
   write_conversation_review(
     review_dir,
     trajectories,
     conversation = 1L,
     flags = "conv/1#1",
-    notes = list(),
-    source = source
+    notes = list()
   )
   file <- review_document_path(review_dir, "conv/1")
 
@@ -218,8 +258,7 @@ test_that("conversation reviews are created, replaced, and removed", {
     trajectories,
     conversation = 1L,
     flags = "conv/1",
-    notes = list(),
-    source = source
+    notes = list()
   )
   expect_equal(read_review_state(review_dir)$flags, "conv/1")
 
@@ -230,7 +269,6 @@ test_that("conversation reviews are created, replaced, and removed", {
       review_test_turns(),
       list(conversation = TRUE, exchanges = integer()),
       list(),
-      source,
       updated_at = "2026-08-12T16:10:00Z"
     ),
     unknown
@@ -242,8 +280,7 @@ test_that("conversation reviews are created, replaced, and removed", {
     trajectories,
     conversation = 1L,
     flags = character(),
-    notes = list(),
-    source = source
+    notes = list()
   )
 
   expect_identical(file.exists(file), FALSE)
