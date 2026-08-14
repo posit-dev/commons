@@ -392,13 +392,13 @@ shiny-tool-request .shiny-tool-card .tool-title,
   background: var(--bs-tertiary-bg, #f3f4f6);
 }
 
-.commons-measure-gt {
+.commons-measure-rich-table {
   max-width: 100%;
   overflow-x: auto;
   white-space: normal;
 }
 
-.commons-measure-gt-error {
+.commons-measure-rich-table-error {
   color: var(--bs-secondary-color, #6c757d);
   white-space: normal;
 }
