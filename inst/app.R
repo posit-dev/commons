@@ -5,6 +5,18 @@ library(shinychat)
 
 options(commons.run_r_sandbox = "nsjail")
 
+package_revision <- function(pkg) {
+  desc <- packageDescription(pkg)
+  sha <- desc[["RemoteSha"]]
+  if (is.null(sha)) {
+    sha <- desc[["GithubSHA1"]]
+  }
+  if (is.null(sha) || is.na(sha) || !nzchar(sha)) {
+    return("<unknown>")
+  }
+  sha
+}
+
 nsjail <- Sys.which("nsjail")
 cat(
   sprintf(
@@ -16,6 +28,22 @@ cat(
     getNamespaceInfo(asNamespace("commons"), "path"),
     if (nzchar(nsjail)) nsjail else "<not found>",
     nzchar(nsjail) && file.access(nsjail, mode = 1) == 0
+  ),
+  file = stdout()
+)
+
+cat(
+  sprintf(
+    paste0(
+      "[commons][history] ellmer=%s sha=%s path=%s ",
+      "shinychat=%s sha=%s path=%s\n"
+    ),
+    as.character(packageVersion("ellmer")),
+    package_revision("ellmer"),
+    system.file(package = "ellmer"),
+    as.character(packageVersion("shinychat")),
+    package_revision("shinychat"),
+    system.file(package = "shinychat")
   ),
   file = stdout()
 )
