@@ -128,3 +128,11 @@ sync_promise <- function(promise) {
 
   success
 }
+
+png_dimensions_from_base64 <- function(base64) {
+  bytes <- as.integer(jsonlite::base64_dec(base64))
+  c(
+    width = sum(bytes[17:20] * 256^(3:0)),
+    height = sum(bytes[21:24] * 256^(3:0))
+  )
+}

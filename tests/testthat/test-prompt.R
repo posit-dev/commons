@@ -108,3 +108,18 @@ test_that("the packaged prompt omits run_r result handles", {
 
   expect_no_match(prompt, "r1", fixed = TRUE)
 })
+
+test_that("the packaged prompt uses visible trusted rich results", {
+  prompt <- test_agent()$get_system_prompt()
+
+  expect_match(
+    prompt,
+    "Plots returned by trusted calculations and plots created with `run_r` are shown directly to the user",
+    fixed = TRUE
+  )
+  expect_match(
+    prompt,
+    "When a plot or richly formatted table is already visible, do not recreate or repeat it",
+    fixed = TRUE
+  )
+})

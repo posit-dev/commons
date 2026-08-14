@@ -68,6 +68,104 @@ test_that("call_measure_tool registers scalar output as a handle", {
   expect_equal(get_handle(store, "r1"), 6L)
 })
 
+test_that("call_measure_tool shows ggplot results to the model and user", {
+  skip_if_not_installed("ggplot2")
+  withr::local_options(
+    commons.plot_aspect_ratio = "2:1",
+    commons.plot_size = 320L
+  )
+  registry <- list(
+    plot = measure(
+      "plot",
+      "Plot values.",
+      function() {
+        ggplot2::ggplot(
+          data.frame(x = 1:2, y = 2:1),
+          ggplot2::aes(x, y)
+        ) +
+          ggplot2::geom_point()
+      },
+      title = 'A & "B"'
+    )
+  )
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "plot", "{}", handles = store)
+
+  images <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentImageInline),
+    res@value
+  )
+
+  expect_length(images, 1)
+  expect_equal(
+    png_dimensions_from_base64(images[[1]]@data),
+    c(width = 320, height = 160)
+  )
+  expect_match(
+    res@extra$display$html,
+    'alt="Plot returned by A &amp; &quot;B&quot;"',
+    fixed = TRUE
+  )
+  expect_s3_class(get_handle(store, "r1"), "ggplot")
+})
+
+test_that("call_measure_tool shows rich tables to the model and user", {
+  skip_if_not_installed("htmltools")
+  table <- structure(list(name = "adverse events"), class = "custom_table")
+  table_data <- data.frame(term = "Headache", count = 7)
+  table_html <- htmltools::tags$table(
+    htmltools::tags$tr(
+      htmltools::tags$td("Headache"),
+      htmltools::tags$td("7")
+    )
+  )
+  registry <- list(
+    table = measure(
+      "table",
+      "Summarize adverse events.",
+      function() rich_table(table, data = table_data, html = table_html)
+    )
+  )
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "table", "{}", handles = store)
+
+  expect_match(
+    res@value,
+    "A richly formatted version of this table is already visible to the user",
+    fixed = TRUE
+  )
+  expect_match(res@value, "Headache", fixed = TRUE)
+  expect_match(
+    res@extra$display$html,
+    "<td>Headache</td>",
+    fixed = TRUE
+  )
+  expect_identical(get_handle(store, "r1"), table)
+})
+
+test_that("call_measure_tool keeps ggplot results when display rendering fails", {
+  local_mocked_bindings(
+    render_plot_image = function(...) stop("graphics device broke")
+  )
+  plot <- structure(list(), class = "ggplot")
+  registry <- list(
+    plot = measure(
+      "plot",
+      "Plot values.",
+      function() plot
+    )
+  )
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "plot", "{}", handles = store)
+
+  expect_match(res@value, "could not be displayed")
+  expect_match(res@extra$display$html, "commons-measure-plot-error")
+  expect_s3_class(get_handle(store, "r1"), "ggplot")
+})
+
 test_that("register_handle numbers handles in call order and caps rows", {
   store <- new_handle_store()
 
