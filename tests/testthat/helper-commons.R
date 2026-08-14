@@ -17,7 +17,7 @@ test_sales <- function() {
 }
 
 test_source <- function() {
-  data_source(sales = test_sales())
+  suppressMessages(data_source(sales = test_sales()))
 }
 
 test_client <- function() {
