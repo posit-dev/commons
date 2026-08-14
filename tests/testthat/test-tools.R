@@ -69,22 +69,16 @@ test_that("call_measure_tool registers scalar output as a handle", {
 })
 
 test_that("call_measure_tool shows ggplot results to the model and user", {
-  skip_if_not_installed("ggplot2")
   withr::local_options(
     commons.plot_aspect_ratio = "2:1",
     commons.plot_size = 320L
   )
+  plot <- test_ggplot()
   registry <- list(
     plot = measure(
       "plot",
       "Plot values.",
-      function() {
-        ggplot2::ggplot(
-          data.frame(x = 1:2, y = 2:1),
-          ggplot2::aes(x, y)
-        ) +
-          ggplot2::geom_point()
-      },
+      function() plot,
       title = 'A & "B"'
     )
   )
@@ -149,7 +143,7 @@ test_that("call_measure_tool keeps ggplot results when display rendering fails",
   local_mocked_bindings(
     render_plot_image = function(...) stop("graphics device broke")
   )
-  plot <- structure(list(), class = "ggplot")
+  plot <- test_ggplot()
   registry <- list(
     plot = measure(
       "plot",
