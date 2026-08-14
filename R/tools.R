@@ -316,12 +316,29 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   value <- collect_lazy_table(value)
-  advert <- register_handle(handles, value)
+  rich <- tryCatch(
+    as_measure_rich_table(value),
+    error = function(error) error
+  )
+  handle_value <- if (inherits(value, "commons_rich_table")) {
+    value$value
+  } else {
+    value
+  }
+  advert <- register_handle(handles, handle_value)
   if (is_ggplot(value)) {
     return(measure_plot_tool_result(td, args, value, advert))
   }
-  if (is_gt_tbl(value)) {
-    return(measure_gt_tool_result(td, args, value, advert))
+  if (inherits(rich, "error")) {
+    return(measure_rich_table_failure_result(
+      args,
+      advert,
+      tool_title(td),
+      conditionMessage(rich)
+    ))
+  }
+  if (!is.null(rich)) {
+    return(measure_rich_table_tool_result(td, args, rich, advert))
   }
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
@@ -385,21 +402,8 @@ measure_plot_failure_result <- function(args, advert, title, message) {
   )
 }
 
-measure_gt_tool_result <- function(td, args, value, advert) {
+measure_rich_table_tool_result <- function(td, args, value, advert) {
   title <- tool_title(td)
-  rendered <- tryCatch(
-    render_gt_table_html(value),
-    error = function(error) error
-  )
-  if (inherits(rendered, "error")) {
-    return(measure_gt_failure_result(
-      args,
-      advert,
-      title,
-      conditionMessage(rendered)
-    ))
-  }
-
   model_note <- paste(
     "A richly formatted version of this table is already visible to the user.",
     "Do not reproduce or reformat its rows or columns in your response; summarize or",
@@ -407,14 +411,14 @@ measure_gt_tool_result <- function(td, args, value, advert) {
   )
   tool_result(
     paste(
-      c(model_note, format_gt_table_value(value), advert),
+      c(model_note, df_to_markdown(value$data), advert),
       collapse = "\n\n"
     ),
     title = sprintf("Measure: %s", html_escape(title)),
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_gt_result_html(rendered)
+      measure_rich_table_result_html(value$html)
     ),
     tag = "A",
     open = TRUE,
@@ -422,9 +426,9 @@ measure_gt_tool_result <- function(td, args, value, advert) {
   )
 }
 
-measure_gt_failure_result <- function(args, advert, title, message) {
+measure_rich_table_failure_result <- function(args, advert, title, message) {
   note <- sprintf(
-    "The measure returned a gt table, but it could not be displayed: %s",
+    "The measure returned a richly formatted table, but it could not be displayed: %s",
     message
   )
   tool_result(
@@ -433,7 +437,7 @@ measure_gt_failure_result <- function(args, advert, title, message) {
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_gt_failure_html(note)
+      measure_rich_table_failure_html(note)
     ),
     tag = "A",
     open = TRUE,
@@ -645,9 +649,6 @@ collect_lazy_table <- function(value) {
 
 format_measure_value <- function(value) {
   value <- collect_lazy_table(value)
-  if (is_gt_tbl(value)) {
-    return(format_gt_table_value(value))
-  }
   if (is.data.frame(value)) {
     return(df_to_markdown(value))
   }
@@ -720,22 +721,23 @@ measure_plot_failure_html <- function(note) {
   )
 }
 
-measure_gt_result_html <- function(table_html) {
+measure_rich_table_result_html <- function(table_html) {
   sprintf(
     paste0(
       "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
-      "<div class=\"commons-measure-result-value\">%s</div></div>"
+      "<div class=\"commons-measure-result-value ",
+      "commons-measure-rich-table\">%s</div></div>"
     ),
     table_html
   )
 }
 
-measure_gt_failure_html <- function(note) {
+measure_rich_table_failure_html <- function(note) {
   sprintf(
     paste0(
       "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
       "<div class=\"commons-measure-result-value ",
-      "commons-measure-gt-error\">%s</div></div>"
+      "commons-measure-rich-table-error\">%s</div></div>"
     ),
     html_escape(note)
   )

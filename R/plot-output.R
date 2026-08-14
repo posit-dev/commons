@@ -31,10 +31,6 @@ is_ggplot <- function(x) {
   inherits(x, "ggplot")
 }
 
-is_gt_tbl <- function(x) {
-  inherits(x, "gt_tbl")
-}
-
 render_plot_image <- function(plot, alt) {
   dims <- configured_plot_dimensions()
   base64 <- render_plot_png_base64(plot, dims$width, dims$height)
@@ -49,17 +45,6 @@ render_plot_image <- function(plot, alt) {
       html_escape(alt)
     )
   )
-}
-
-render_gt_table_html <- function(table) {
-  sprintf(
-    "<div class=\"commons-measure-gt\">%s</div>",
-    gt::as_raw_html(table)
-  )
-}
-
-format_gt_table_value <- function(table) {
-  df_to_markdown(gt::extract_body(table))
 }
 
 render_plot_png_base64 <- function(
