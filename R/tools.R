@@ -162,8 +162,8 @@ tool_call_measure <- function(private) {
       "Run trusted calculations returned by",
       "search_pool. `arguments` is a JSON object using exactly the argument",
       "names from search_pool. Prefer a measure's own arguments when they can",
-      "answer the question directly. When call_measure returns a plot image,",
-      "it is shown directly to the user; do not recreate it with run_r."
+      "answer the question directly. Returned plot images and richly formatted",
+      "tables are shown directly to the user."
     ),
     arguments = list(
       name = ellmer::type_string(
@@ -400,8 +400,16 @@ measure_gt_tool_result <- function(td, args, value, advert) {
     ))
   }
 
+  model_note <- paste(
+    "A richly formatted version of this table is already visible to the user.",
+    "Do not reproduce or reformat its rows or columns in your response; summarize or",
+    "interpret the relevant results in words instead."
+  )
   tool_result(
-    paste(c(format_gt_table_value(value), advert), collapse = "\n\n"),
+    paste(
+      c(model_note, format_gt_table_value(value), advert),
+      collapse = "\n\n"
+    ),
     title = sprintf("Measure: %s", html_escape(title)),
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
