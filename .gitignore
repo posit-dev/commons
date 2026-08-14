@@ -4,7 +4,7 @@ inst/resources/
 inst/tiles/
 inst/tiles-agent/
 inst/pkgs
-.Rprofile
+inst/manifest.json
 docs
 src/*.o
 src/*.so

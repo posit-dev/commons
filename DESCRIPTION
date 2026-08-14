@@ -60,8 +60,8 @@ Suggests:
     yaml
 VignetteBuilder: knitr
 Remotes:
-    tidyverse/ellmer,
-    posit-dev/shinychat/pkg-r
+    tidyverse/ellmer@dd1c8965c8e35d94a0fcaa6b452234e7e95e432d,
+    posit-dev/shinychat/pkg-r@be8b827c2238055650e63748ccd36860a2b99361
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
