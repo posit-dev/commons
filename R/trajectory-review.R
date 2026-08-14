@@ -12,17 +12,17 @@
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review and annotated with notes. Notes apply to the
 #' whole conversation, or to a single question-and-answer exchange selected
-#' in the transcript. Flags and notes land in `review_dir`, one generated
-#' Markdown document per reviewed conversation, and are restored when the
-#' viewer reopens.
+#' in the transcript. Flags and notes are stored as one generated Markdown
+#' document per reviewed conversation and are restored when the viewer
+#' reopens.
 #'
 #' Each Markdown document contains the complete reviewer-visible conversation
 #' and its tool activity. YAML frontmatter stores active flags and note history
 #' so the reviewer can restore its state and agents can identify flagged
 #' conversations, exchanges, and reviewer notes. The Markdown body is the
-#' human-readable transcript for joint human-agent review. Tool calls and
-#' results are collapsed for easier scanning, and tool results are limited to
-#' 50 lines or 20,000 characters in the rendered document.
+#' human-readable transcript for joint human-agent review. Search-pool results
+#' are omitted because later tool calls record any selected measure; other tool
+#' results are limited to 50 lines or 20,000 characters.
 #'
 #' Trajectories carry no record of how each answer was tagged when it was
 #' produced, so the viewer derives trust levels from the tool calls in the
@@ -39,19 +39,19 @@
 #'
 #' @param trajectories A named list of conversations, as returned by
 #'   [trajectory_read()].
-#' @param review_dir Directory where review actions write one generated
-#'   Markdown document per conversation. Created on first use; active flags
-#'   and note history recorded here are restored when the viewer reopens.
-#'   Defaults to `COMMONS_REVIEW_DIR` when set. When `review_board` and
-#'   `review_pin` are supplied, this directory is a local cache of the pin.
+#' @param review_dir Optional directory where review actions write generated
+#'   Markdown documents. For local review, defaults to `COMMONS_REVIEW_DIR`
+#'   when set and otherwise to `commons-reviews` in the working directory.
+#'   Pin-backed review uses an automatically managed temporary cache unless
+#'   this argument is supplied.
 #' @param review_board Optional pins board used for durable review storage,
 #'   such as `pins::board_connect()`. Must be supplied with `review_pin`.
 #' @param review_pin Name of a pin containing the review documents. Must be
 #'   supplied with `review_board`.
 #'
 #' @details
-#' A single reviewer app writes all of its review documents to `review_dir`.
-#' Pass `review_dir` directly, set `COMMONS_REVIEW_DIR` for the current R
+#' Without a pin, a single reviewer app writes all review documents to
+#' `review_dir`. Pass it directly, set `COMMONS_REVIEW_DIR` for the current R
 #' process with `Sys.setenv()`, or add it to `.Renviron` to keep the setting
 #' across local R sessions. Without either, reviews land in `commons-reviews`
 #' relative to the app's working directory.
@@ -62,7 +62,6 @@
 #' ```
 #' trajectory_review(
 #'   trajectories,
-#'   review_dir = file.path(tempdir(), "commons-reviews"),
 #'   review_board = pins::board_connect(
 #'     auth = "envvar",
 #'     use_cache_on_failure = FALSE
@@ -71,22 +70,23 @@
 #' )
 #' ```
 #'
-#' The reviewer downloads the pin at startup and uploads a new pin version
-#' after each review action. Connect supplies `CONNECT_SERVER` and
-#' `CONNECT_API_KEY` to running content when its default API-key integration is
-#' enabled, so `auth = "envvar"` does not require embedding credentials.
-#' Without a pin, the default working-directory path is replaced when the
-#' content is redeployed. Review apps should use one Connect process because
-#' separate processes do not coordinate writes or in-memory review state.
+#' The reviewer uses an automatically managed temporary local cache, downloads
+#' the pin at startup, and uploads a new pin version after each review action.
+#' Connect supplies `CONNECT_SERVER` and `CONNECT_API_KEY` to running content
+#' when its default API-key integration is enabled, so `auth = "envvar"` does
+#' not require embedding credentials. Without a pin, the default
+#' working-directory path is replaced when the content is redeployed. Review
+#' apps should use one Connect process because separate processes do not
+#' coordinate writes or in-memory review state.
 #'
 #' The Connect API key's user must have editor access to the content whose
 #' trajectories are read. The pin is owned by the reviewer app's publisher.
 #' Download the generated documents with the app's **Download reviews** button
 #' or [pins::pin_download()] when they need to be reviewed outside the app.
 #'
-#' All sessions of one reviewer app share the same `review_dir`, flags, and
-#' notes; review state is not separated by user. Notes record `session$user`,
-#' the login information supplied by the Shiny host, or `"unknown"` when it is
+#' All sessions of one reviewer app share the same flags and notes; review
+#' state is not separated by user. Notes record `session$user`, the login
+#' information supplied by the Shiny host, or `"unknown"` when it is
 #' unavailable. Flags do not record who changed them.
 #'
 #' @return A [shiny::shinyApp()] object. Calling `trajectory_review()` at the
@@ -105,16 +105,12 @@
 #' @export
 trajectory_review <- function(
   trajectories = trajectory_read(),
-  review_dir = Sys.getenv(
-    "COMMONS_REVIEW_DIR",
-    unset = "commons-reviews"
-  ),
+  review_dir = NULL,
   review_board = NULL,
   review_pin = NULL
 ) {
   check_viewer_packages()
   check_trajectories(trajectories)
-  rlang::check_string(review_dir)
   store <- review_store(review_dir, review_board, review_pin)
   hydrate_review_store(store)
   trajectories <- drop_side_conversations(trajectories)

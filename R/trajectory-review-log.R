@@ -33,7 +33,7 @@ read_review_state <- function(review_dir) {
 }
 
 review_store <- function(
-  review_dir,
+  review_dir = NULL,
   review_board = NULL,
   review_pin = NULL,
   call = rlang::caller_env()
@@ -44,6 +44,11 @@ review_store <- function(
       call = call
     )
   }
+  review_dir <- resolve_review_dir(
+    review_dir,
+    pin_backed = !is.null(review_pin),
+    call = call
+  )
   if (!is.null(review_pin)) {
     rlang::check_string(review_pin, call = call)
     if (!requireNamespace("pins", quietly = TRUE)) {
@@ -58,6 +63,21 @@ review_store <- function(
     board = review_board,
     pin = review_pin
   )
+}
+
+resolve_review_dir <- function(
+  review_dir,
+  pin_backed,
+  call = rlang::caller_env()
+) {
+  if (!is.null(review_dir)) {
+    rlang::check_string(review_dir, call = call)
+    return(review_dir)
+  }
+  if (pin_backed) {
+    return(tempfile("commons-reviews-"))
+  }
+  Sys.getenv("COMMONS_REVIEW_DIR", unset = "commons-reviews")
 }
 
 hydrate_review_store <- function(store, call = rlang::caller_env()) {
@@ -418,11 +438,9 @@ review_exchange_contents_markdown <- function(exchange) {
 review_tool_request_markdown <- function(request) {
   c(
     "",
-    "<details>",
-    sprintf(
-      "<summary><strong>Tool call: <code>%s</code></strong></summary>",
-      request@name
-    ),
+    sprintf("### Tool call: `%s`", request@name),
+    "",
+    "#### Arguments",
     "",
     "```json",
     as.character(jsonlite::toJSON(
@@ -431,26 +449,26 @@ review_tool_request_markdown <- function(request) {
       pretty = TRUE,
       null = "null"
     )),
-    "```",
-    "",
-    "</details>"
+    "```"
   )
 }
 
 review_tool_result_markdown <- function(result) {
   request <- result@request
   name <- if (is.null(request)) "unknown" else request@name
+  if (identical(name, "search_pool")) {
+    return(c(
+      "",
+      sprintf("### Tool result: `%s`", name),
+      "",
+      "_Discovery result omitted from the review log._"
+    ))
+  }
   c(
     "",
-    "<details>",
-    sprintf(
-      "<summary><strong>Tool result: <code>%s</code></strong></summary>",
-      name
-    ),
+    sprintf("### Tool result: `%s`", name),
     "",
-    truncate_review_tool_result(format_review_tool_result(result@value)),
-    "",
-    "</details>"
+    truncate_review_tool_result(format_review_tool_result(result@value))
   )
 }
 
