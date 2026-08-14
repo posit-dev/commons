@@ -316,6 +316,10 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   value <- collect_lazy_table(value)
+  if (is_ggplot(value)) {
+    advert <- register_handle(handles, value)
+    return(measure_plot_tool_result(td, args, value, advert))
+  }
   rich <- tryCatch(
     as_measure_rich_table(value),
     error = function(error) error
@@ -326,15 +330,14 @@ call_measure_tool <- function(
     value
   }
   advert <- register_handle(handles, handle_value)
-  if (is_ggplot(value)) {
-    return(measure_plot_tool_result(td, args, value, advert))
-  }
   if (inherits(rich, "error")) {
-    return(measure_rich_table_failure_result(
+    return(measure_failure_result(
       args,
       advert,
       tool_title(td),
-      conditionMessage(rich)
+      conditionMessage(rich),
+      "a richly formatted table",
+      "commons-measure-rich-table-error"
     ))
   }
   if (!is.null(rich)) {
@@ -357,11 +360,13 @@ measure_plot_tool_result <- function(td, args, value, advert) {
     error = function(error) error
   )
   if (inherits(rendered, "error")) {
-    return(measure_plot_failure_result(
+    return(measure_failure_result(
       args,
       advert,
       title,
-      conditionMessage(rendered)
+      conditionMessage(rendered),
+      "a plot",
+      "commons-measure-plot-error"
     ))
   }
 
@@ -375,7 +380,7 @@ measure_plot_tool_result <- function(td, args, value, advert) {
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_plot_result_html(rendered$html)
+      measure_result_html(rendered$html)
     ),
     tag = "A",
     open = TRUE,
@@ -383,9 +388,17 @@ measure_plot_tool_result <- function(td, args, value, advert) {
   )
 }
 
-measure_plot_failure_result <- function(args, advert, title, message) {
+measure_failure_result <- function(
+  args,
+  advert,
+  title,
+  message,
+  result_type,
+  class
+) {
   note <- sprintf(
-    "The measure returned a plot, but it could not be displayed: %s",
+    "The measure returned %s, but it could not be displayed: %s",
+    result_type,
     message
   )
   tool_result(
@@ -394,7 +407,7 @@ measure_plot_failure_result <- function(args, advert, title, message) {
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_plot_failure_html(note)
+      measure_result_html(html_escape(note), class)
     ),
     tag = "A",
     open = TRUE,
@@ -418,26 +431,7 @@ measure_rich_table_tool_result <- function(td, args, value, advert) {
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_rich_table_result_html(value$html)
-    ),
-    tag = "A",
-    open = TRUE,
-    show_tag = FALSE
-  )
-}
-
-measure_rich_table_failure_result <- function(args, advert, title, message) {
-  note <- sprintf(
-    "The measure returned a richly formatted table, but it could not be displayed: %s",
-    message
-  )
-  tool_result(
-    paste(c(note, advert), collapse = "\n\n"),
-    title = sprintf("Measure: %s", html_escape(title)),
-    icon = maybe_icon("shield-check"),
-    html = measure_display_with_result_html(
-      args,
-      measure_rich_table_failure_html(note)
+      measure_result_html(value$html, "commons-measure-rich-table")
     ),
     tag = "A",
     open = TRUE,
@@ -682,7 +676,10 @@ measure_args_html <- function(args) {
 }
 
 measure_display_html <- function(args, value) {
-  measure_display_with_result_html(args, measure_result_html(value))
+  measure_display_with_result_html(
+    args,
+    measure_result_html(format_measure_html(value))
+  )
 }
 
 measure_display_with_result_html <- function(args, result_html) {
@@ -693,53 +690,15 @@ measure_display_with_result_html <- function(args, result_html) {
   )
 }
 
-measure_result_html <- function(value) {
-  sprintf(
-    "<div class=\"commons-measure-result\"><strong>Tool result</strong><div class=\"commons-measure-result-value\">%s</div></div>",
-    format_measure_html(value)
-  )
-}
-
-measure_plot_result_html <- function(image_html) {
+measure_result_html <- function(content, class = NULL) {
+  class <- if (is.null(class)) "" else paste0(" ", class)
   sprintf(
     paste0(
       "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
-      "<div class=\"commons-measure-result-value\">%s</div></div>"
+      "<div class=\"commons-measure-result-value%s\">%s</div></div>"
     ),
-    image_html
-  )
-}
-
-measure_plot_failure_html <- function(note) {
-  sprintf(
-    paste0(
-      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
-      "<div class=\"commons-measure-result-value ",
-      "commons-measure-plot-error\">%s</div></div>"
-    ),
-    html_escape(note)
-  )
-}
-
-measure_rich_table_result_html <- function(table_html) {
-  sprintf(
-    paste0(
-      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
-      "<div class=\"commons-measure-result-value ",
-      "commons-measure-rich-table\">%s</div></div>"
-    ),
-    table_html
-  )
-}
-
-measure_rich_table_failure_html <- function(note) {
-  sprintf(
-    paste0(
-      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
-      "<div class=\"commons-measure-result-value ",
-      "commons-measure-rich-table-error\">%s</div></div>"
-    ),
-    html_escape(note)
+    class,
+    content
   )
 }
 
