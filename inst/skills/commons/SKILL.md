@@ -7,16 +7,21 @@ description: Building, maintaining, and iterating on a self-service data agent w
 
 Read the relevant reference below before starting the corresponding task.
 
+- [Onboarding](references/onboarding.md) - onboard and create a commons agent from existing materials.
 - [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, dictionary edits, and free-text context, each carrying provenance back to its source.
+- [Evaluating a commons agent](references/evaluation.md) - create an evaluation for a commons agent to determine whether it is working correctly.
 - [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent from reviewed conversations when available, or from raw logged trajectories otherwise, then propose semantic-layer or context-layer changes.
 
 ## Agent project layout
 
-A commons agent project follows this on-disk convention. Both references above build on it.
+A commons agent project follows this on-disk convention. The onboarding,
+extraction, and trajectory references build on it.
 
 ```
 my-agent/
 ├── agent.R                  # commons() definition
+├── DESCRIPTION
+├── onboarding.md            # scope, decisions, and unresolved questions
 ├── dictionaries/
 │   └── warehouse.yaml       # one data-dict.yaml per data_source(), named
 │                            # to match the source name in the commons() call
