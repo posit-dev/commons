@@ -129,6 +129,11 @@ test_that("call_measure_tool shows rich tables to the model and user", {
     "A richly formatted version of this table is already visible to the user",
     fixed = TRUE
   )
+  expect_match(
+    res@value,
+    "For calculations, use `run_r` with the table handle below",
+    fixed = TRUE
+  )
   expect_match(res@value, "Headache", fixed = TRUE)
   expect_match(res@value, "<table>", fixed = TRUE)
   expect_match(
@@ -137,6 +142,21 @@ test_that("call_measure_tool shows rich tables to the model and user", {
     fixed = TRUE
   )
   expect_identical(get_handle(store, "r1"), table)
+})
+
+test_that("rich tables do not advertise an unavailable run_r handle", {
+  table <- structure(list(name = "adverse events"), class = "custom_table")
+  registry <- list(
+    table = measure(
+      "table",
+      "Summarize adverse events.",
+      function() rich_table(table, html = "<table></table>")
+    )
+  )
+
+  res <- call_measure_tool(registry, "table", "{}")
+
+  expect_no_match(res@value, "For calculations", fixed = TRUE)
 })
 
 test_that("call_measure_tool keeps recoverable table data when HTML conversion fails", {

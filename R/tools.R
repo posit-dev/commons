@@ -431,11 +431,18 @@ recover_rich_table_model_content <- function(value) {
 
 measure_rich_table_tool_result <- function(td, args, value, advert) {
   title <- tool_title(td)
-  model_note <- paste(
+  model_note <- c(
     "A richly formatted version of this table is already visible to the user.",
     "Do not reproduce or reformat its rows or columns in your response; summarize or",
-    "interpret the relevant results in words instead."
+    "interpret the relevant results in words instead.",
+    if (!is.null(advert)) {
+      paste(
+        "For calculations, use `run_r` with the table handle below instead of",
+        "parsing values from the HTML."
+      )
+    }
   )
+  model_note <- paste(model_note, collapse = " ")
   tool_result(
     paste(
       c(model_note, value$model_content, advert),
