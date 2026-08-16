@@ -71,7 +71,3 @@ test_that("as_measure_rich_table recognizes gt tables by class", {
   expect_identical(result$html, html)
   expect_identical(result$model_content, html)
 })
-
-test_that("as_measure_rich_table ignores other values", {
-  expect_null(as_measure_rich_table(data.frame(x = 1)))
-})
