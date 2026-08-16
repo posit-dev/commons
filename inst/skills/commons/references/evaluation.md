@@ -3,6 +3,7 @@
 ## Contents
 
 - [Purpose](#purpose)
+- [Work with the user](#work-with-the-user)
 - [Build the question set](#build-the-question-set)
 - [Define targets and grading](#define-targets-and-grading)
 - [Implement the evaluation](#implement-the-evaluation)
@@ -27,6 +28,41 @@ as the current worked example of a full commons evaluation. Adapt its
 question, target, scorer, runner, baseline, and transcript-review patterns to
 the agent being evaluated; do not copy its domain-specific rubric.
 
+## Work with the user
+
+Evaluation requires the user's judgment about realistic questions, business
+meaning, acceptable interpretations, and useful answers. Do routine
+implementation and evaluation runs without interrupting them, but pause for
+their review before treating the question set, grading guidance, pilot, or
+full-run results as authoritative.
+
+Make each review concrete. Give the user direct links to the question and
+target files, summarize the choices that need attention, and tell them where
+the `vitals` logs are stored. Open a completed task in the Inspect log viewer
+with:
+
+```r
+task$view()
+```
+
+To browse a directory of saved logs in a later R session, use:
+
+```r
+vitals::vitals_view(dir = "evals/logs")
+```
+
+In the viewer, ask the user to select a sample and inspect the question,
+grading target, complete solver messages and tool calls, final answer, score,
+and grader messages and explanation. When custom scorer details are not
+visible enough in the viewer, reconstruct the sample with
+`vitals::vitals_log_read(log_path)` or render the relevant JSON fields into a
+readable Markdown transcript.
+
+Ask the user to flag unrealistic questions, missing valid interpretations,
+incorrect business meaning, unavailable evidence, solver behavior they would
+not accept, and grades they disagree with. Resolve those issues and rerun the
+affected samples before proceeding.
+
 ## Build the question set
 
 Start with the representative questions collected during onboarding and any
@@ -35,10 +71,7 @@ review it with the user before implementing the evaluation. Ask whether the
 questions are realistic, useful, and representative of the agent's intended
 production traffic.
 
-Expand the set iteratively, aiming for enough coverage to expose repeated
-patterns rather than many paraphrases of the same question. Roughly 30
-questions is a useful initial target for a scoped agent, but coverage matters
-more than the exact count. Include:
+Expand the set iteratively. Aim for around 30 questions. Include:
 
 * Easy questions with direct, verifiable answers.
 * Questions that require custom analysis from available data.
@@ -124,9 +157,9 @@ itself. Treat the grading facts as verified anchors, not a complete inventory
 of the database: a value absent from those facts but supported by the
 trajectory is not automatically fabricated.
 
-Ask the user to review consequential business definitions, accepted
-interpretations, and the expected behavior for partly answerable or
-unanswerable questions before treating the targets as authoritative.
+Ask the user to review the complete question set and grading guidance,
+especially consequential business definitions, accepted interpretations, and
+the expected behavior for partly answerable or unanswerable questions.
 
 ## Implement the evaluation
 
@@ -172,12 +205,14 @@ never write credentials into evaluation data or logs.
 
 Before a full run:
 
-1. Run each draft question through the commons agent at least twice.
-2. Where useful, run the same question through a general coding agent with
+1. Agree with the user on a small representative pilot set that includes the
+   major question categories and known ambiguities or data gotchas.
+2. Run each pilot question through the commons agent at least twice.
+3. Where useful, run the same question through a general coding agent with
    access to the relevant project and data.
-3. Compare the answers and trajectories, enumerate plausible
+4. Compare the answers and trajectories, enumerate plausible
    misinterpretations, and refine the target and grading guidance.
-4. Check that the scorer receives enough evidence and grades representative
+5. Check that the scorer receives enough evidence and grades representative
    correct, partially correct, and incorrect answers as intended.
 
 For a direct comparison, constrain the general coding agent to the same data
@@ -187,11 +222,11 @@ have materially different access, treat the coding agent only as a diagnostic
 baseline and label those differences rather than treating every advantage as a
 commons failure.
 
-Run a complete pilot against a strong model with Thinking enabled and save the
-JSON log. Use `vitals::vitals_log_read()` to reconstruct the samples and their
-solver and scorer chats. Inspect complete trajectories for every sample, not
-only the final answers. Preserve and inspect item-level scorer output and
-reasons as well. In particular, look for:
+Run the pilot against a strong model with Thinking enabled. `vitals` writes the
+JSON log automatically. Use `vitals::vitals_log_read()` to reconstruct the
+samples and their solver and scorer chats. Inspect complete trajectories for
+every sample, not only the final answers. Preserve and inspect item-level
+scorer output and reasons as well. In particular, look for:
 
 * Missing information in the scorer prompt.
 * A scorer that is too strict or too permissive.
@@ -201,14 +236,13 @@ reasons as well. In particular, look for:
 * Failure to prefer a trusted calculation when one applies.
 * Fabricated answers where the data is insufficient.
 
-Write down the findings, correct the evaluation, and rerun affected samples
-before relying on the full score.
+Give the user access to the pilot log and ask them to inspect every pilot
+sample in the viewer. Write down both the coding agent's and user's findings,
+correct the evaluation, and rerun affected samples. Run the full question set
+only after the user agrees that the pilot questions, targets, and grades are
+working as intended.
 
 ## Run and interpret
-
-Save timestamped JSON logs and record the agent version, model and thinking
-configuration, data snapshot or as-of date, target-code version, scorer model,
-and evaluation version for each run.
 
 Report accuracy by question category. Also record latency, input and output
 tokens, cached input tokens where available, and cost so improvements can be
@@ -219,8 +253,7 @@ Interpret results with three distinct sources of variation in mind:
 * **Solver variation:** the same model may answer the same question
   differently across runs. Use multiple epochs.
 * **Question variation:** performance on one finite question set may not
-  generalize to other production questions. Preserve held-out questions and
-  add real traffic over time.
+  generalize to other production questions. Preserve held-out questions.
 * **Grader variation:** a model grader may score the same trajectory
   differently. Regrade or manually review borderline and high-impact samples.
 
@@ -231,3 +264,9 @@ Report per-question failures and recurring themes alongside aggregate metrics.
 Use failures to identify general improvements to the agent or evaluation, then
 confirm those changes against held-out questions rather than tuning only to
 the visible set.
+
+Give the user access to the full-run logs. Ask them to review the results and
+trajectories, including every failure and borderline grade and a representative
+set of successful samples. Record disagreements with the grader and unresolved
+questions alongside the evaluation findings; do not present the aggregate
+score as trustworthy until this review is complete.
