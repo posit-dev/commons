@@ -3,10 +3,12 @@
 #' `rich_table()` marks a measure result as a table whose authored HTML should
 #' be shown directly to the user. By default, the model receives the same HTML,
 #' so both representations contain the same table structure and values. The
-#' original table object remains available through the result's `run_r` handle.
+#' original table object remains available through the result's `run_r` handle
+#' when using `rich_table()`.
 #'
 #' Tables with class `gt_tbl` are recognized automatically and do not need to
-#' be wrapped in `rich_table()`.
+#' be wrapped in `rich_table()`. Their underlying data frame is made available
+#' through the `run_r` handle.
 #'
 #' @param value The original table object.
 #' @param html A static HTML string or an object supported by
@@ -91,7 +93,7 @@ rich_table_html <- function(value, call = rlang::caller_env()) {
 normalize_rich_table_html <- function(html, call = rlang::caller_env()) {
   if (is.character(html)) {
     rlang::check_string(html, call = call)
-    return(as.character(html))
+    return(html)
   }
   if (!requireNamespace("htmltools", quietly = TRUE)) {
     cli::cli_abort(
@@ -112,7 +114,11 @@ normalize_rich_table_html <- function(html, call = rlang::caller_env()) {
       )
     }
   )
-  as.character(tags)
+  rendered <- htmltools::renderTags(tags)
+  attach_html_dependencies(
+    as.character(rendered$html),
+    rendered$dependencies
+  )
 }
 
 normalize_rich_table_model_content <- function(
@@ -139,4 +145,22 @@ as_measure_rich_table <- function(value, call = rlang::caller_env()) {
     ))
   }
   NULL
+}
+
+attach_html_dependencies <- function(html, dependencies) {
+  if (length(dependencies) == 0) {
+    return(html)
+  }
+  htmltools::attachDependencies(
+    htmltools::HTML(html),
+    dependencies,
+    append = TRUE
+  )
+}
+
+find_html_dependencies <- function(html) {
+  if (!requireNamespace("htmltools", quietly = TRUE)) {
+    return(list())
+  }
+  htmltools::findDependencies(html)
 }

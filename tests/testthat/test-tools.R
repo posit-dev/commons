@@ -144,6 +144,53 @@ test_that("call_measure_tool shows rich tables to the model and user", {
   expect_identical(get_handle(store, "r1"), table)
 })
 
+test_that("call_measure_tool preserves rich table HTML dependencies", {
+  skip_if_not_installed("htmltools")
+  dependency <- htmltools::htmlDependency(
+    "table-widget",
+    "1.0.0",
+    src = c(href = "table-widget"),
+    script = "table-widget.js"
+  )
+  table_html <- htmltools::attachDependencies(
+    htmltools::tags$div(class = "table-widget"),
+    dependency
+  )
+  registry <- list(
+    table = measure(
+      "table",
+      "Summarize adverse events.",
+      function() rich_table("table", html = table_html)
+    )
+  )
+
+  res <- call_measure_tool(registry, "table", "{}")
+
+  dependencies <- htmltools::findDependencies(res@extra$display$html)
+  expect_identical(vapply(dependencies, `[[`, "", "name"), "table-widget")
+})
+
+test_that("call_measure_tool registers recovered data for automatic gt tables", {
+  table <- structure(list(name = "adverse events"), class = "gt_tbl")
+  table_data <- data.frame(term = "Headache", value = 7)
+  local_mocked_bindings(
+    recover_rich_table_data = function(...) table_data,
+    rich_table_html = function(...) "<table></table>"
+  )
+  registry <- list(
+    table = measure(
+      "table",
+      "Summarize adverse events.",
+      function() table
+    )
+  )
+  store <- new_handle_store()
+
+  call_measure_tool(registry, "table", "{}", handles = store)
+
+  expect_identical(get_handle(store, "r1"), table_data)
+})
+
 test_that("rich tables do not advertise an unavailable run_r handle", {
   table <- structure(list(name = "adverse events"), class = "custom_table")
   registry <- list(

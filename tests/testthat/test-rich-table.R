@@ -26,6 +26,26 @@ test_that("rich_table accepts explicit model content", {
   expect_identical(result$model_content, model_content)
 })
 
+test_that("rich_table preserves HTML dependencies", {
+  skip_if_not_installed("htmltools")
+  dependency <- htmltools::htmlDependency(
+    "table-widget",
+    "1.0.0",
+    src = c(href = "table-widget"),
+    script = "table-widget.js"
+  )
+  html <- htmltools::attachDependencies(
+    htmltools::tags$table(htmltools::tags$tr(htmltools::tags$td("Headache"))),
+    dependency
+  )
+
+  result <- rich_table("table", html = html)
+
+  dependencies <- htmltools::findDependencies(result$html)
+  expect_identical(vapply(dependencies, `[[`, "", "name"), "table-widget")
+  expect_identical(result$model_content, as.character(result$html))
+})
+
 test_that("rich_table requires model content to be a single string", {
   expect_snapshot(
     rich_table(

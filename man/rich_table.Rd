@@ -23,11 +23,13 @@ A \code{commons_rich_table} object for returning from a \code{\link[=measure]{me
 \code{rich_table()} marks a measure result as a table whose authored HTML should
 be shown directly to the user. By default, the model receives the same HTML,
 so both representations contain the same table structure and values. The
-original table object remains available through the result's \code{run_r} handle.
+original table object remains available through the result's \code{run_r} handle
+when using \code{rich_table()}.
 }
 \details{
 Tables with class \code{gt_tbl} are recognized automatically and do not need to
-be wrapped in \code{rich_table()}.
+be wrapped in \code{rich_table()}. Their underlying data frame is made available
+through the \code{run_r} handle.
 }
 \examples{
 table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))

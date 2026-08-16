@@ -326,6 +326,11 @@ call_measure_tool <- function(
   )
   handle_value <- if (inherits(value, "commons_rich_table")) {
     value$value
+  } else if (inherits(value, "gt_tbl")) {
+    tryCatch(
+      recover_rich_table_data(value),
+      error = function(error) NULL
+    )
   } else {
     value
   }
@@ -704,22 +709,30 @@ measure_display_html <- function(args, value) {
 }
 
 measure_display_with_result_html <- function(args, result_html) {
-  sprintf(
+  html <- sprintf(
     "<div class=\"commons-measure-display\">%s%s</div>",
     measure_args_html(args),
     result_html
+  )
+  attach_html_dependencies(
+    html,
+    find_html_dependencies(result_html)
   )
 }
 
 measure_result_html <- function(content, class = NULL) {
   class <- if (is.null(class)) "" else paste0(" ", class)
-  sprintf(
+  html <- sprintf(
     paste0(
       "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
       "<div class=\"commons-measure-result-value%s\">%s</div></div>"
     ),
     class,
     content
+  )
+  attach_html_dependencies(
+    html,
+    find_html_dependencies(content)
   )
 }
 
