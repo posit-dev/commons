@@ -215,6 +215,12 @@ Before a full run:
 5. Check that the scorer receives enough evidence and grades representative
    correct, partially correct, and incorrect answers as intended.
 
+Use the pilot set, not the complete evaluation, when iterating on the agent and
+scorer. Keep the remaining questions as held-out questions for the full run,
+and do not use their expected answers or grading facts as reasons to change the
+agent. When a pilot failure motivates an agent change, make that change only
+when approved sources support it and it would be useful beyond the evaluation.
+
 For a direct comparison, constrain the general coding agent to the same data
 snapshot and approved source boundary, and disable outside knowledge, web
 access, or other tools that the commons agent cannot use. If the two solvers
@@ -255,7 +261,8 @@ Interpret results with three distinct sources of variation in mind:
 * **Question variation:** performance on one finite question set may not
   generalize to other production questions. Preserve held-out questions.
 * **Grader variation:** a model grader may score the same trajectory
-  differently. Regrade or manually review borderline and high-impact samples.
+  differently. Regrade the same stored trajectory when estimating this
+  variation, and manually review borderline and high-impact samples.
 
 With only a few epochs, describe run-to-run summaries as empirical sensitivity
 estimates, not calibrated confidence intervals.
