@@ -4,7 +4,16 @@ Use this reference when asked to turn a trusted, existing data artifact into con
 
 The task is to lift the calculations, table knowledge, and prose an artifact already encodes into the agent's semantic layer, dictionaries, and context layer — measures first and foremost. Every contribution carries provenance back to the artifact version it came from, so a maintainer can always trace a definition to its origin.
 
-Extraction assumes an agent project already exists. Scaffolding a brand-new project is a separate "create a commons agent" flow.
+Extraction assumes an agent project already exists. When creating a new agent,
+follow the [onboarding reference](onboarding.md) first; it establishes the
+project, scope, and data-source mapping before invoking this workflow.
+
+The user decides which artifacts and calculations are trusted. Do not treat
+code as trusted merely because it exists. Do not invent calculations, cleaning,
+or transformation logic during extraction. Carry existing trusted logic into
+the agent, making only the mechanical changes needed to expose it through
+commons. If a required calculation does not already have trusted code, surface
+the gap instead of implementing it here.
 
 ## Workflow
 
@@ -22,7 +31,7 @@ Extraction assumes an agent project already exists. Scaffolding a brand-new proj
 3. Draft measures.
    For each trusted calculation:
    * Inputs the user would vary become documented `@param`s (use the type code spans, e.g. `` `string` ``, `` `enum[EMEA, APAC]` ``).
-   * The computation becomes the measure body.
+   * Preserve the computation as the measure body; do not introduce new business, cleaning, or transformation logic.
    * The output's label and surrounding phrasing become the title and description.
    * The data source connection becomes an undocumented argument named after the source (never seen by the model; `commons()` injects the connection). Other objects it needs — a pins board, an API client — come from a default written as a call, e.g. `board = pins::board_connect()`.
    * Record one or more `@provenance` tags (see grammar in `SKILL.md`).
