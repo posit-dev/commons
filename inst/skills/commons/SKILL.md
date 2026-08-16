@@ -1,6 +1,10 @@
 ---
 name: commons
-description: Building, maintaining, and iterating on a self-service data agent with commons.
+description: >-
+  Build, maintain, and iterate on self-service data agents with commons. Use
+  when onboarding a new agent, creating or reviewing data dictionaries,
+  extracting trusted calculations and context from existing artifacts,
+  evaluating an agent, or improving one from logged trajectories.
 ---
 
 # commons
@@ -8,9 +12,23 @@ description: Building, maintaining, and iterating on a self-service data agent w
 Read the relevant reference below before starting the corresponding task.
 
 - [Onboarding](references/onboarding.md) - onboard and create a commons agent from existing materials.
-- [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, dictionary edits, and free-text context, each carrying provenance back to its source.
+- [Use data dictionaries with commons](references/data-dictionaries.md) - read alongside onboarding or extraction when creating, reviewing, or editing a data dictionary.
+- [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, governed definitions, dictionary edits, and free-text context, each carrying provenance back to its source.
 - [Evaluating a commons agent](references/evaluation.md) - create an evaluation for a commons agent to determine whether it is working correctly.
 - [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent from reviewed conversations when available, or from raw logged trajectories otherwise, then propose semantic-layer or context-layer changes.
+
+## Working principles
+
+* Aim for a solid data foundation, but not perfection. The data should be
+  trustworthy and have a reasonably solid creation process, but it can continue to improve after the agent is built.
+* Give the agent data that is fine-grained enough for custom manipulation, but trusted and cleaned enough that it will not make unforced errors or need context that reasonably belongs in the data preparation process.
+* Keep context DRY. Information in a data dictionary, for example, should not also appear in free text in the context layer.
+* Verify anything that can be verified.
+* Preserve provenance. Everything that can be cited should be cited.
+* Never fabricate information or pull from general knowledge without the
+  user's permission. Include only scope-relevant information from approved
+  sources.
+* Surface uncertainties and contradictions instead of resolving them silently.
 
 ## Agent project layout
 
@@ -21,6 +39,7 @@ extraction, and trajectory references build on it.
 my-agent/
 ├── agent.R                  # commons() definition
 ├── DESCRIPTION
+├── instructions.md          # optional concise, always-needed guidance
 ├── onboarding.md            # scope, decisions, and unresolved questions
 ├── dictionaries/
 │   └── warehouse.yaml       # one data-dict.yaml per data_source(), named
