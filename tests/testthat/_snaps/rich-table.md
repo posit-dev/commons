@@ -1,8 +1,8 @@
-# rich_table requires model-facing data to be a data frame
+# rich_table requires model content to be a single string
 
     Code
-      rich_table("table", data = 1, html = "<table></table>")
+      rich_table("table", html = "<table></table>", model_content = c("one", "two"))
     Condition
       Error in `rich_table()`:
-      ! `data` must be a data frame.
+      ! `model_content` must be a single string, not a character vector.
 

@@ -107,7 +107,6 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
 test_that("call_measure_tool shows rich tables to the model and user", {
   skip_if_not_installed("htmltools")
   table <- structure(list(name = "adverse events"), class = "custom_table")
-  table_data <- data.frame(term = "Headache", count = 7)
   table_html <- htmltools::tags$table(
     htmltools::tags$tr(
       htmltools::tags$td("Headache"),
@@ -118,7 +117,7 @@ test_that("call_measure_tool shows rich tables to the model and user", {
     table = measure(
       "table",
       "Summarize adverse events.",
-      function() rich_table(table, data = table_data, html = table_html)
+      function() rich_table(table, html = table_html)
     )
   )
   store <- new_handle_store()
@@ -131,6 +130,7 @@ test_that("call_measure_tool shows rich tables to the model and user", {
     fixed = TRUE
   )
   expect_match(res@value, "Headache", fixed = TRUE)
+  expect_match(res@value, "<table>", fixed = TRUE)
   expect_match(
     res@extra$display$html,
     "<td>Headache</td>",
@@ -139,11 +139,11 @@ test_that("call_measure_tool shows rich tables to the model and user", {
   expect_identical(get_handle(store, "r1"), table)
 })
 
-test_that("call_measure_tool keeps rich table data when HTML conversion fails", {
+test_that("call_measure_tool keeps recoverable table data when HTML conversion fails", {
   table <- structure(list(name = "adverse events"), class = "gt_tbl")
   table_data <- data.frame(term = "Headache", count = 7)
   local_mocked_bindings(
-    rich_table_data = function(...) table_data,
+    recover_rich_table_data = function(...) table_data,
     rich_table_html = function(...) stop("HTML conversion broke")
   )
   registry <- list(

@@ -1,21 +1,19 @@
 #' Display a richly formatted table from a measure
 #'
 #' `rich_table()` marks a measure result as a table whose authored HTML should
-#' be shown directly to the user. The model receives the underlying data, and
-#' the original table object remains available through the result's `run_r`
-#' handle.
+#' be shown directly to the user. By default, the model receives the same HTML,
+#' so both representations contain the same table structure and values. The
+#' original table object remains available through the result's `run_r` handle.
 #'
 #' Tables with class `gt_tbl` are recognized automatically and do not need to
-#' be wrapped in `rich_table()`. Automatic conversion sends the table's
-#' underlying data to the model, which can include columns hidden from the
-#' rendered table. Wrap the table in `rich_table()` and supply `data` explicitly
-#' when the model should receive only selected columns.
+#' be wrapped in `rich_table()`.
 #'
 #' @param value The original table object.
-#' @param data A data frame containing the values to send to the model. By
-#'   default, `as.data.frame(value)` is used.
 #' @param html A static HTML string or an object supported by
 #'   [htmltools::as.tags()]. By default, `htmltools::as.tags(value)` is used.
+#' @param model_content A single string to send to the model. By default, the
+#'   normalized value of `html` is used. Supply this only when deriving a more
+#'   compact semantic representation from the same rendered table.
 #'
 #' @return A `commons_rich_table` object for returning from a [measure()].
 #'
@@ -31,50 +29,38 @@
 #' )
 #'
 #' @export
-rich_table <- function(value, data = NULL, html = NULL) {
+rich_table <- function(value, html = NULL, model_content = NULL) {
+  html <- normalize_rich_table_html(
+    html %||% rich_table_html(value)
+  )
   new_rich_table(
     value,
-    data %||% rich_table_data(value),
-    html %||% rich_table_html(value)
+    html,
+    model_content %||% html
   )
 }
 
 new_rich_table <- function(
   value,
-  data,
   html,
+  model_content = html,
   call = rlang::caller_env()
 ) {
-  if (!is.data.frame(data)) {
-    cli::cli_abort(
-      "{.arg data} must be a data frame.",
-      call = call
-    )
-  }
   structure(
     list(
       value = value,
-      data = data,
-      html = normalize_rich_table_html(html, call = call)
+      html = normalize_rich_table_html(html, call = call),
+      model_content = normalize_rich_table_model_content(
+        model_content,
+        call = call
+      )
     ),
     class = "commons_rich_table"
   )
 }
 
-rich_table_data <- function(value, call = rlang::caller_env()) {
-  tryCatch(
-    as.data.frame(value),
-    error = function(error) {
-      cli::cli_abort(
-        c(
-          "Can't derive model-facing data from {.arg value}.",
-          i = "Supply {.arg data} explicitly."
-        ),
-        parent = error,
-        call = call
-      )
-    }
-  )
+recover_rich_table_data <- function(value) {
+  as.data.frame(value)
 }
 
 rich_table_html <- function(value, call = rlang::caller_env()) {
@@ -129,15 +115,26 @@ normalize_rich_table_html <- function(html, call = rlang::caller_env()) {
   as.character(tags)
 }
 
+normalize_rich_table_model_content <- function(
+  model_content,
+  call = rlang::caller_env()
+) {
+  rlang::check_string(model_content, call = call)
+  as.character(model_content)
+}
+
 as_measure_rich_table <- function(value, call = rlang::caller_env()) {
   if (inherits(value, "commons_rich_table")) {
     return(value)
   }
   if (inherits(value, "gt_tbl")) {
+    html <- normalize_rich_table_html(
+      rich_table_html(value, call = call),
+      call = call
+    )
     return(new_rich_table(
       value,
-      rich_table_data(value, call = call),
-      rich_table_html(value, call = call),
+      html,
       call = call
     ))
   }

@@ -1,7 +1,6 @@
-test_that("rich_table preserves its value, data, and HTML", {
+test_that("rich_table sends its HTML to the model and user", {
   skip_if_not_installed("htmltools")
   value <- structure(list(name = "custom"), class = "custom_table")
-  data <- data.frame(term = "Headache", count = 7)
   html <- htmltools::tags$table(
     htmltools::tags$tr(
       htmltools::tags$td("Headache"),
@@ -9,20 +8,30 @@ test_that("rich_table preserves its value, data, and HTML", {
     )
   )
 
-  result <- rich_table(value, data = data, html = html)
+  result <- rich_table(value, html = html)
 
   expect_s3_class(result, "commons_rich_table")
   expect_identical(result$value, value)
-  expect_identical(result$data, data)
   expect_match(result$html, "<td>Headache</td>", fixed = TRUE)
+  expect_identical(result$model_content, result$html)
 })
 
-test_that("rich_table requires model-facing data to be a data frame", {
+test_that("rich_table accepts explicit model content", {
+  html <- "<table><tr><td style=\"color: red\">Headache</td></tr></table>"
+  model_content <- "<table><tr><td>Headache</td></tr></table>"
+
+  result <- rich_table("table", html = html, model_content = model_content)
+
+  expect_identical(result$html, html)
+  expect_identical(result$model_content, model_content)
+})
+
+test_that("rich_table requires model content to be a single string", {
   expect_snapshot(
     rich_table(
       "table",
-      data = 1,
-      html = "<table></table>"
+      html = "<table></table>",
+      model_content = c("one", "two")
     ),
     error = TRUE
   )
@@ -30,10 +39,8 @@ test_that("rich_table requires model-facing data to be a data frame", {
 
 test_that("as_measure_rich_table recognizes gt tables by class", {
   value <- structure(list(name = "custom"), class = "gt_tbl")
-  data <- data.frame(term = "Headache", count = 7)
   html <- "<table><tr><td>Headache</td><td>7</td></tr></table>"
   local_mocked_bindings(
-    rich_table_data = function(...) data,
     rich_table_html = function(...) html
   )
 
@@ -41,8 +48,8 @@ test_that("as_measure_rich_table recognizes gt tables by class", {
 
   expect_s3_class(result, "commons_rich_table")
   expect_identical(result$value, value)
-  expect_identical(result$data, data)
   expect_identical(result$html, html)
+  expect_identical(result$model_content, html)
 })
 
 test_that("as_measure_rich_table ignores other values", {

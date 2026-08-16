@@ -420,7 +420,7 @@ measure_failure_result <- function(
 
 recover_rich_table_model_content <- function(value) {
   data <- tryCatch(
-    rich_table_data(value),
+    recover_rich_table_data(value),
     error = function(error) NULL
   )
   if (!is.data.frame(data)) {
@@ -438,7 +438,7 @@ measure_rich_table_tool_result <- function(td, args, value, advert) {
   )
   tool_result(
     paste(
-      c(model_note, df_to_markdown(value$data), advert),
+      c(model_note, value$model_content, advert),
       collapse = "\n\n"
     ),
     title = sprintf("Measure: %s", html_escape(title)),

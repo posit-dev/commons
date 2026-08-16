@@ -4,32 +4,30 @@
 \alias{rich_table}
 \title{Display a richly formatted table from a measure}
 \usage{
-rich_table(value, data = NULL, html = NULL)
+rich_table(value, html = NULL, model_content = NULL)
 }
 \arguments{
 \item{value}{The original table object.}
 
-\item{data}{A data frame containing the values to send to the model. By
-default, \code{as.data.frame(value)} is used.}
-
 \item{html}{A static HTML string or an object supported by
 \code{\link[htmltools:as.tags]{htmltools::as.tags()}}. By default, \code{htmltools::as.tags(value)} is used.}
+
+\item{model_content}{A single string to send to the model. By default, the
+normalized value of \code{html} is used. Supply this only when deriving a more
+compact semantic representation from the same rendered table.}
 }
 \value{
 A \code{commons_rich_table} object for returning from a \code{\link[=measure]{measure()}}.
 }
 \description{
 \code{rich_table()} marks a measure result as a table whose authored HTML should
-be shown directly to the user. The model receives the underlying data, and
-the original table object remains available through the result's \code{run_r}
-handle.
+be shown directly to the user. By default, the model receives the same HTML,
+so both representations contain the same table structure and values. The
+original table object remains available through the result's \code{run_r} handle.
 }
 \details{
 Tables with class \code{gt_tbl} are recognized automatically and do not need to
-be wrapped in \code{rich_table()}. Automatic conversion sends the table's
-underlying data to the model, which can include columns hidden from the
-rendered table. Wrap the table in \code{rich_table()} and supply \code{data} explicitly
-when the model should receive only selected columns.
+be wrapped in \code{rich_table()}.
 }
 \examples{
 table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))
