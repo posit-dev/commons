@@ -92,8 +92,8 @@ discovered; do not defer them to the final review or silently resolve them.
    > this agent to support? If there isn't one, share 2-3 representative
    > questions it should answer.
 
-   After the user provides the scope anchor, and before asking for source
-   material, give this compact overview:
+   After the user provides the scope anchor, and before asking for additional
+   source material, give this compact overview:
 
    | Part | Contains | Usually comes from |
    |---|---|---|

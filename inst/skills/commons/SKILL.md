@@ -75,7 +75,13 @@ For artifacts not under version control, prefer a stable URL that identifies the
 Where each kind of contribution carries it:
 
 * Measures: one or more `#' @provenance` roxygen tags per measure. The tag never reaches the model — `read_measures()` forwards only the title, description, `@return`, and documented `@param`s.
-* Context files: the same string in YAML frontmatter. `context_layer()` strips frontmatter before indexing, so it never reaches the model.
+* Context files: the same string under a `provenance` key in YAML frontmatter:
+  ```yaml
+  ---
+  provenance: https://github.com/org/sales-dashboard/blob/abc1234/R/server.R#L120-L145
+  ---
+  ```
+  `context_layer()` strips frontmatter before indexing, so it never reaches the model.
 * Dictionary edits: git commit messages; optionally a column's `details` when a caveat comes straight from artifact code.
 
 Example extracted measure:
