@@ -207,9 +207,10 @@ Before a full run:
 
 1. Agree with the user on a small representative pilot set that includes the
    major question categories and known ambiguities or data gotchas.
-2. Run each pilot question through the commons agent at least twice.
-3. Where useful, run the same question through a general coding agent with
-   access to the relevant project and data.
+2. Use the `vitals` task to run each pilot question through the commons agent
+   at least twice.
+3. Where useful, run the same questions through a controlled general
+   coding-agent solver in the evaluation harness.
 4. Compare the answers and trajectories, enumerate plausible
    misinterpretations, and refine the target and grading guidance.
 5. Check that the scorer receives enough evidence and grades representative
@@ -242,8 +243,19 @@ scorer output and reasons as well. In particular, look for:
 * Failure to prefer a trusted calculation when one applies.
 * Fabricated answers where the data is insufficient.
 
+When independent coding agents are available, have multiple agents review the
+pilot solver and grader transcripts. Give them the raw question, grading
+target, complete transcripts, and only the context needed to understand those
+artifacts. Do not give them suspected defects or prior conclusions. Ask them to
+identify missing scorer evidence, inappropriate grading, omitted valid
+interpretations, premature solver stopping, and other evaluation problems.
+
+Consolidate the findings in `evals/review.md`, identifying the affected sample,
+evidence, proposed correction, and whether it was addressed. This report
+supplements rather than replaces direct log review.
+
 Give the user access to the pilot log and ask them to inspect every pilot
-sample in the viewer. Write down both the coding agent's and user's findings,
+sample in the viewer and review `evals/review.md`. Add the user's findings,
 correct the evaluation, and rerun affected samples. Run the full question set
 only after the user agrees that the pilot questions, targets, and grades are
 working as intended.
