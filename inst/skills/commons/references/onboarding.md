@@ -38,6 +38,11 @@ Do routine investigation and implementation without interrupting the user.
 Pause when a decision affects scope, trust, business meaning, data-source
 selection, or the user's understanding of the data.
 
+Explain a principle in plain language when it materially affects a user
+decision, especially the solid-but-not-perfect foundation and the
+fine-grained-versus-prepared data tradeoff. Do not present the full principles
+list as required reading.
+
 At each decision point:
 
 1. Summarize the evidence, uncertainties, and conflicting information.
@@ -88,7 +93,7 @@ discovered; do not defer them to the final review or silently resolve them.
    working agent. Treat the scope as a decision point; do not exclude materials
    without the user's confirmation.
 
-4. **Investigate the data environment.**
+4. **Investigate the data and artifacts.**
    Inspect the supplied data, documentation, schemas, source code, and data
    pipelines. Run scratch code to understand table grain, joins,
    transformations, update processes, and surprising behavior that may need to
@@ -99,7 +104,7 @@ discovered; do not defer them to the final review or silently resolve them.
    agent would operate. Ask the user to correct or confirm the resulting
    understanding.
 
-5. **Confirm the initial scope and data boundary.**
+5. **Confirm trust, scope, and the data boundary.**
    Identify which layer or layers the agent could access, such as warehouse
    tables, views, pins, or pipeline outputs. Present the tradeoffs and recommend
    the cleanest ready-to-analyze source that fits the user's environment.
@@ -112,10 +117,23 @@ discovered; do not defer them to the final review or silently resolve them.
    ownership or control requirements point elsewhere.
 
    Map each selected artifact's data inputs to the proposed data sources.
-   Summarize the intended users and questions, selected sources and artifacts,
-   data flow, and source mapping. Recommend a coherent initial scope, then
-   pause for the user to confirm it. Record the confirmed scope, example
-   questions, selections, and mapping in `onboarding.md`.
+   Before building, make sure it is clear which data sources will form the
+   agent's data layer, which selected artifacts and files contain computations
+   the user considers trusted, and how those artifacts map to the selected
+   sources.
+
+   Do not ask the user to design the detailed division among the dictionary,
+   semantic layer, and remaining context. Steps 6 through 8 determine that
+   placement from the available evidence.
+
+   If discovery supports one coherent approach, summarize the intended users
+   and questions, selected sources and trusted artifacts, data flow, and source
+   mapping; recommend the initial scope; and ask the user to confirm it. If a
+   foundational choice remains unclear or has consequential alternatives, work
+   through one choice at a time: summarize the evidence, uncertainties,
+   options, and recommendation, then ask one `**Your decision:**` question and
+   wait. Record the confirmed scope, example questions, selections, mappings,
+   and decisions in `onboarding.md`.
 
 6. **Build the data dictionaries.**
    Create one `data-dict.yaml` for each selected data source. Follow the
@@ -123,6 +141,10 @@ discovered; do not defer them to the final review or silently resolve them.
    behavior and the upstream data-dict documentation for the general format.
    Use existing dictionaries, schemas, notes, verified exploration, and trusted
    code. Use joins demonstrated by trusted code to document relationships.
+   Before extraction, review each draft dictionary against the evidence again.
+   Look specifically for surprising facts that are not yet represented and
+   claims that are not supported by verified sources; correct them or surface
+   the uncertainty.
    Preserve existing governed definitions, but defer adding or redesigning them
    until step 7, when trusted artifacts can establish their meaning and
    computation.
@@ -160,10 +182,24 @@ discovered; do not defer them to the final review or silently resolve them.
    the extracted artifacts are visible. Treat consequential changes as
    decision points and record their resolution in `onboarding.md`.
 
-10. **Complete the minimal agent.**
+10. **Complete the agent.**
    Fill in `DESCRIPTION` and `agent.R`. Ask the user which model provider the
-   agent should use, and recommend a model with Thinking enabled. Connect the
-   selected data sources, dictionaries, semantic layer, and remaining context.
+   agent should use, and recommend a model with Thinking enabled.
+
+   Commons owns the base system prompt; a system prompt set on the client is
+   ignored. Decide whether the agent needs additional `instructions`. Use them
+   only for concise, durable guidance that every conversation must have before
+   using tools, such as the meaning of an agent-specific name or acronym or an
+   organization-wide convention. Do not restate the commons agent's role or
+   add generic domain framing such as "You answer pharmaceutical questions."
+   Keep data knowledge, calculations, and longer reference material in their
+   appropriate layers. Because instructions consume tokens in every session,
+   omit them when nothing genuinely needs to be ambient. If instructions are
+   needed, place them in a short `instructions.md` file and ask the user to
+   confirm them.
+
+   Connect the selected data sources, dictionaries, semantic layer, remaining
+   context, and any additional instructions.
 
    Verify that the agent starts, that representative context searches retrieve
    the intended guidance, and that it can answer a few representative
@@ -173,5 +209,5 @@ discovered; do not defer them to the final review or silently resolve them.
    representative answers, business meanings, source choices, and stated
    limitations match their expectations. Treat their acceptance and any issues
    they identify as a decision point, and record the outcome in `onboarding.md`.
-   Expand sources and trusted calculations only after this small agent works
-   and the user confirms that they understand and accept its current behavior.
+   Expand sources and trusted calculations only after the agent works and the
+   user confirms that they understand and accept its current behavior.
