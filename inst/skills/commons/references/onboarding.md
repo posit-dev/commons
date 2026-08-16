@@ -64,8 +64,14 @@ discovered; do not defer them to the final review or silently resolve them.
 ## Workflow
 
 1. **Orient to commons.**
-   Read the relevant commons documentation and skill references before working
-   on the agent.
+   Before scaffolding, identify the installed commons version and locate the
+   corresponding package source when available. Read the relevant commons
+   documentation and skill references, then inspect the implementation,
+   examples, and tests for the APIs the agent will use. At minimum, examine:
+   * `commons()`, `data_source()`, `semantic_layer()`, and `context_layer()`;
+   * `commons_ui()` and `commons_server()`, including per-session construction;
+   * measure loading and data-dictionary behavior; and
+   * dependency and deployment expectations for a commons app.
 
 2. **Scaffold the project.**
    Create the project layout in `SKILL.md`, including `DESCRIPTION`,
@@ -85,6 +91,18 @@ discovered; do not defer them to the final review or silently resolve them.
    > What existing app, report, or question set best represents what you want
    > this agent to support? If there isn't one, share 2-3 representative
    > questions it should answer.
+
+   After the user provides the scope anchor, and before asking for source
+   material, give this compact overview:
+
+   | Layer | Contains | Usually comes from |
+   |---|---|---|
+   | Data | Queryable tables and their dictionaries | Warehouses, databases, pins, and prepared files |
+   | Semantic | Trusted calculations and governed definitions | Existing apps, reports, R, and SQL |
+   | Context | Relevant knowledge not represented elsewhere | Documentation, methodology, and glossaries |
+
+   Tell the user that you will identify material for these layers
+   incrementally and that they do not need to organize it themselves.
 
    Retain representative questions for scoping and later testing. After
    inspecting the scope-defining artifact or questions, collect only the
