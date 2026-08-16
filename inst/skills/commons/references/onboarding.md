@@ -95,13 +95,14 @@ discovered; do not defer them to the final review or silently resolve them.
    After the user provides the scope anchor, and before asking for source
    material, give this compact overview:
 
-   | Layer | Contains | Usually comes from |
+   | Part | Contains | Usually comes from |
    |---|---|---|
-   | Data | Queryable tables and their dictionaries | Warehouses, databases, pins, and prepared files |
-   | Semantic | Trusted calculations and governed definitions | Existing apps, reports, R, and SQL |
-   | Context | Relevant knowledge not represented elsewhere | Documentation, methodology, and glossaries |
+   | Data sources | Queryable tables | Warehouses, databases, pins, and prepared files |
+   | Data dictionaries | Table grain, columns, relationships, meanings, and governed definitions | Schemas, existing dictionaries, trusted code, and verified exploration |
+   | Semantic layer | Trusted callable calculations | Existing apps, reports, R, and SQL |
+   | Context layer | Relevant knowledge not represented elsewhere | Documentation, methodology, and glossaries |
 
-   Tell the user that you will identify material for these layers
+   Tell the user that you will identify material for these parts
    incrementally and that they do not need to organize it themselves.
 
    Retain representative questions for scoping and later testing. After
