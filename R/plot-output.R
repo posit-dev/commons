@@ -18,22 +18,20 @@ render_plot_image <- function(plot, alt) {
   )
 }
 
-configured_plot_dimensions <- function() {
+configured_plot_dimensions <- function(call = rlang::caller_env()) {
   plot_dimensions(
     getOption("commons.plot_aspect_ratio", "3:2"),
-    getOption("commons.plot_size", 768L)
+    getOption("commons.plot_size", 768L),
+    call = call
   )
 }
 
-plot_dimensions <- function(ratio, longest_side) {
-  parts <- suppressWarnings(
-    as.numeric(strsplit(ratio, ":", fixed = TRUE)[[1]])
-  )
-  r <- if (length(parts) == 2 && all(!is.na(parts) & parts > 0)) {
-    parts[[1]] / parts[[2]]
-  } else {
-    3 / 2
-  }
+plot_dimensions <- function(
+  ratio,
+  longest_side,
+  call = rlang::caller_env()
+) {
+  r <- parse_plot_aspect_ratio(ratio, call = call)
   if (r >= 1) {
     list(
       width = as.integer(round(longest_side)),
@@ -45,6 +43,31 @@ plot_dimensions <- function(ratio, longest_side) {
       height = as.integer(round(longest_side))
     )
   }
+}
+
+parse_plot_aspect_ratio <- function(ratio, call = rlang::caller_env()) {
+  valid_string <- is.character(ratio) &&
+    length(ratio) == 1 &&
+    !is.na(ratio)
+  parts <- if (valid_string) {
+    suppressWarnings(as.numeric(strsplit(ratio, ":", fixed = TRUE)[[1]]))
+  } else {
+    numeric()
+  }
+  if (length(parts) == 2 && all(is.finite(parts) & parts > 0)) {
+    return(parts[[1]] / parts[[2]])
+  }
+
+  value <- paste(deparse(ratio), collapse = "")
+  cli::cli_warn(
+    c(
+      "Invalid {.option commons.plot_aspect_ratio} option.",
+      "!" = "Expected a single {.code width:height} string; got {.code {value}}.",
+      "i" = "Using {.val 3:2}."
+    ),
+    call = call
+  )
+  3 / 2
 }
 
 render_plot_png_base64 <- function(

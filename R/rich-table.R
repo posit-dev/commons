@@ -6,7 +6,10 @@
 #' handle.
 #'
 #' Tables with class `gt_tbl` are recognized automatically and do not need to
-#' be wrapped in `rich_table()`.
+#' be wrapped in `rich_table()`. Automatic conversion sends the table's
+#' underlying data to the model, which can include columns hidden from the
+#' rendered table. Wrap the table in `rich_table()` and supply `data` explicitly
+#' when the model should receive only selected columns.
 #'
 #' @param value The original table object.
 #' @param data A data frame containing the values to send to the model. By

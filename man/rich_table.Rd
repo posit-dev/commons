@@ -26,7 +26,10 @@ handle.
 }
 \details{
 Tables with class \code{gt_tbl} are recognized automatically and do not need to
-be wrapped in \code{rich_table()}.
+be wrapped in \code{rich_table()}. Automatic conversion sends the table's
+underlying data to the model, which can include columns hidden from the
+rendered table. Wrap the table in \code{rich_table()} and supply \code{data} explicitly
+when the model should receive only selected columns.
 }
 \examples{
 table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))

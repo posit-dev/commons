@@ -331,13 +331,15 @@ call_measure_tool <- function(
   }
   advert <- register_handle(handles, handle_value)
   if (inherits(rich, "error")) {
+    model_content <- recover_rich_table_model_content(handle_value)
     return(measure_failure_result(
       args,
       advert,
       tool_title(td),
       conditionMessage(rich),
       "a richly formatted table",
-      "commons-measure-rich-table-error"
+      "commons-measure-rich-table-error",
+      model_content = model_content
     ))
   }
   if (!is.null(rich)) {
@@ -394,7 +396,8 @@ measure_failure_result <- function(
   title,
   message,
   result_type,
-  class
+  class,
+  model_content = NULL
 ) {
   note <- sprintf(
     "The measure returned %s, but it could not be displayed: %s",
@@ -402,7 +405,7 @@ measure_failure_result <- function(
     message
   )
   tool_result(
-    paste(c(note, advert), collapse = "\n\n"),
+    paste(c(model_content, note, advert), collapse = "\n\n"),
     title = sprintf("Measure: %s", html_escape(title)),
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
@@ -413,6 +416,17 @@ measure_failure_result <- function(
     open = TRUE,
     show_tag = FALSE
   )
+}
+
+recover_rich_table_model_content <- function(value) {
+  data <- tryCatch(
+    rich_table_data(value),
+    error = function(error) NULL
+  )
+  if (!is.data.frame(data)) {
+    return(NULL)
+  }
+  df_to_markdown(data)
 }
 
 measure_rich_table_tool_result <- function(td, args, value, advert) {

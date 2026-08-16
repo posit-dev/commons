@@ -139,6 +139,31 @@ test_that("call_measure_tool shows rich tables to the model and user", {
   expect_identical(get_handle(store, "r1"), table)
 })
 
+test_that("call_measure_tool keeps rich table data when HTML conversion fails", {
+  table <- structure(list(name = "adverse events"), class = "gt_tbl")
+  table_data <- data.frame(term = "Headache", count = 7)
+  local_mocked_bindings(
+    rich_table_data = function(...) table_data,
+    rich_table_html = function(...) stop("HTML conversion broke")
+  )
+  registry <- list(
+    table = measure(
+      "table",
+      "Summarize adverse events.",
+      function() table
+    )
+  )
+
+  res <- call_measure_tool(registry, "table", "{}")
+
+  expect_match(res@value, "Headache", fixed = TRUE)
+  expect_match(
+    res@extra$display$html,
+    "commons-measure-rich-table-error",
+    fixed = TRUE
+  )
+})
+
 test_that("call_measure_tool keeps ggplot results when display rendering fails", {
   local_mocked_bindings(
     render_plot_image = function(...) stop("graphics device broke")
