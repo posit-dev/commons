@@ -32,25 +32,63 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 
 ```text
 .
-|-- R/
-|   |-- data_sources.R
-|   |-- semantic_layer.R
-|   `-- context_layer.R
 |-- app.R
+|-- agent.R
+|-- DESCRIPTION
 |-- instructions.md
+|-- onboarding.md
+|-- dictionaries/
+|   `-- warehouse.yaml
+|-- measures/
+|   `-- sales-dashboard.R
 `-- context/
-    `-- metrics.md
+    `-- sales-dashboard.md
 ```
 
-The bundled `commons` agent skill can also be copied into your project. The skill helps coding agents follow best practices when building and iterating on commons agents.
+## Installing the agent skill
+
+The package includes a `commons` [agent skill](https://agentskills.io/) that
+helps coding agents build, evaluate, and improve commons agents. Installing the
+R package makes the skill files available, but does not automatically add them
+to an assistant's skill discovery directory.
+
+Locate the bundled skill with:
+
+```r
+skill <- system.file("skills", "commons", package = "commons")
+skill
+```
+
+### Codex and Posit Assistant
+
+Both [Codex](https://learn.chatgpt.com/docs/build-skills) and
+[Posit Assistant](https://assistant.posit.co/docs/reference/config-file#skills)
+discover project skills in `.agents/skills`:
 
 ```r
 dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
-file.copy(
-  system.file("skills", "commons", package = "commons"),
-  ".agents/skills",
-  recursive = TRUE
-)
+file.copy(skill, ".agents/skills", recursive = TRUE)
 ```
 
-For Claude Code, copy the same directory into `.claude/skills` instead.
+This creates `.agents/skills/commons/SKILL.md`. Commit that directory when the
+skill should be available to everyone working in the project.
+
+For a user-wide installation, copy the directory to `~/.agents/skills`.
+Posit Assistant also searches `~/.posit/assistant/skills` and
+`.posit/assistant/skills` by default. Its `skills.paths` configuration controls
+the complete search path; a project-level value replaces, rather than extends,
+the global value.
+
+### Claude Code
+
+[Claude Code](https://code.claude.com/docs/en/skills) uses
+`.claude/skills` for project skills:
+
+```r
+dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".claude/skills", recursive = TRUE)
+```
+
+This creates `.claude/skills/commons/SKILL.md`. Use
+`~/.claude/skills/commons` instead for a personal installation available
+across local projects.

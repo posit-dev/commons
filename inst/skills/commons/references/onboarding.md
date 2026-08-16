@@ -67,9 +67,9 @@ discovered; do not defer them to the final review or silently resolve them.
 
 2. **Scaffold the project.**
    Create the project layout in `SKILL.md`, including `DESCRIPTION`,
-   `agent.R`, and `onboarding.md`. Add only boilerplate at this stage: create
-   the directories and required fields, but do not invent domain content or
-   calculations.
+   `app.R`, `agent.R`, and `onboarding.md`. Add only boilerplate at this stage:
+   create the directories and required fields, but do not invent domain
+   content or calculations.
 
 3. **Discovery: Collect the source material.**
    Ask the user:
@@ -183,8 +183,12 @@ discovered; do not defer them to the final review or silently resolve them.
    decision points and record their resolution in `onboarding.md`.
 
 10. **Complete the agent.**
-   Fill in `DESCRIPTION` and `agent.R`. Ask the user which model provider the
-   agent should use, and recommend a model with Thinking enabled.
+   Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session
+   receives a fresh agent, as required by `commons_server()`. Construct it
+   directly inside the server function or call reusable construction code from
+   `agent.R`; do not pass one global agent object to every session. Ask the
+   user which model provider the agent should use, and recommend a model with
+   Thinking enabled.
 
    Commons owns the base system prompt; a system prompt set on the client is
    ignored. Decide whether the agent needs additional `instructions`. Use them

@@ -1,10 +1,13 @@
 ---
 name: commons
 description: >-
-  Build, maintain, and iterate on self-service data agents with commons. Use
-  when onboarding a new agent, creating or reviewing data dictionaries,
-  extracting trusted calculations and context from existing artifacts,
-  evaluating an agent, or improving one from logged trajectories.
+  Build and maintain self-service data agents created with Posit's commons R
+  package. Use when the user mentions a commons data agent or a project uses
+  commons package APIs such as commons(), data_source(), semantic_layer(),
+  context_layer(), or trajectory_read(), including onboarding, commons data
+  dictionaries, trusted-artifact extraction, evaluation, and trajectory-based
+  improvement. Do not use for unrelated data dictionaries, generic AI agents,
+  or common or shared resources.
 ---
 
 # commons
@@ -37,7 +40,8 @@ extraction, and trajectory references build on it.
 
 ```
 my-agent/
-├── agent.R                  # commons() definition
+├── app.R                    # Shiny entry point
+├── agent.R                  # reusable commons() construction
 ├── DESCRIPTION
 ├── instructions.md          # optional concise, always-needed guidance
 ├── onboarding.md            # scope, decisions, and unresolved questions
