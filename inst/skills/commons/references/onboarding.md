@@ -41,7 +41,9 @@ selection, or the user's understanding of the data.
 Explain a principle in plain language when it materially affects a user
 decision, especially the solid-but-not-perfect foundation and the
 fine-grained-versus-prepared data tradeoff. Do not present the full principles
-list as required reading.
+list as required reading. Do not begin onboarding with a general explanation
+of commons or its principles; introduce only the context needed for the
+current question.
 
 At each decision point:
 
@@ -72,21 +74,31 @@ discovered; do not defer them to the final review or silently resolve them.
    content or calculations.
 
 3. **Discovery: Collect the source material.**
-   Ask the user:
-   * Who should use the agent, and what should they be able to ask?
-   * What representative questions should the completed agent answer?
-   * Where does the data live?
-   * Where does its documentation live?
-   * Where does trusted code that works with the data live?
+   Collect source material incrementally. Do not present the full discovery
+   checklist in one message. Ask one focused question, inspect what the user
+   provides, and use the resulting evidence to determine the next question.
+   Do not ask the user for information that can be discovered from supplied
+   files, repositories, or connections.
 
-   Collect example questions early and retain them for scoping and later
-   testing. If an existing Shiny app, report, or question set defines all or
-   most of the intended scope, ask the user to identify it explicitly.
+   Begin with the strongest available scope anchor. Ask:
 
-   Ask for links or file paths to relevant data, documentation, trusted code,
-   and scope-defining artifacts. Tell the user to be selective: exclude
-   material they are unsure about trusting and material unrelated to the
-   intended agent.
+   > What existing app, report, or question set best represents what you want
+   > this agent to support? If there isn't one, share 2-3 representative
+   > questions it should answer.
+
+   Retain representative questions for scoping and later testing. After
+   inspecting the scope-defining artifact or questions, collect only the
+   missing information, one topic at a time:
+
+   1. Clarify who should use the agent and what they should be able to ask.
+   2. Locate the underlying data and establish how it can be accessed.
+   3. Locate documentation for the selected data.
+   4. Locate trusted code that works with the selected data.
+
+   Ask for a link or file path when the relevant material is not already
+   available. When requesting each source, tell the user to include only
+   material they trust and that is relevant to the intended agent. Do not
+   front-load this guidance before it affects a source-selection decision.
 
    If the supplied materials are extensive, span several domains, or lack clear
    organization, recommend a narrower initial scope that can produce a useful
