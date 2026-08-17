@@ -99,8 +99,6 @@ test_that("trivial quotes cannot promote an answer", {
 
 test_that("corpus entries carry a kind and a reader-facing label", {
   skip_if_not_installed("yaml")
-  # The pill's accessible name is the label alone -- the icon is decorative
-  # (<img alt="">) -- so each label has to stand on its own as a noun phrase.
   doc <- withr::local_tempfile(fileext = ".md")
   writeLines("Fiscal year starts in February.", doc)
   path <- withr::local_tempfile(fileext = ".yaml")
@@ -194,11 +192,6 @@ test_that("the citation corpus spans context, measures, and dictionaries", {
 
 test_that("dictionary prose keeps its specific label once it is also context", {
   skip_if_not_installed("yaml")
-  # augment_context_layer() copies table prose, dataset details, and glossary
-  # terms into the context store so they are searchable. That makes the same
-  # text reachable under two labels, and a citation must report the specific
-  # one -- naming "context layer" for a table's own description would send a
-  # reader to the wrong place.
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
     c(
@@ -237,7 +230,6 @@ test_that("dictionary prose keeps its specific label once it is also context", {
     )$label,
     "data dictionary"
   )
-  # The agent's own documentation is only ever in the context layer.
   expect_equal(
     match_citation("Fiscal year starts in February.", corpus)$label,
     "documentation"

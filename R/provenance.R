@@ -1,11 +1,3 @@
-# Copy, icon, and pill styling for each provenance tag, keyed the same way
-# as the tag itself. Shared by provenance_aside() (the shiny-aside markdown
-# shown inline for A/C) and commons_answer_pill() (R/trajectory-review.R;
-# the compact question-list badge for A/B/C). "B" gets no *aside* here -- a
-# cited answer's provenance UI there is the citation asides
-# render_citation_aside() builds, not a pill -- but it still needs pill
-# copy, so its entry stays in this table and provenance_aside() excludes it
-# explicitly.
 provenance_display <- list(
   A = list(
     label = "Verified answer",
@@ -33,10 +25,8 @@ provenance_display <- list(
   )
 )
 
-# "B" beats "A": a governed calculation that also cites trusted text still
-# reads as untrusted unless the citation checks out, because the citation is
-# the thing the user is meant to trust. Neither tag present means nothing to
-# show.
+# A fallback claim remains fallback even when its answer also uses a governed
+# calculation, so its citation verdict takes precedence.
 derive_provenance_tag <- function(tags, verified) {
   if ("B" %in% tags) {
     if (verified) "B" else "C"
@@ -47,8 +37,6 @@ derive_provenance_tag <- function(tags, verified) {
   }
 }
 
-# A provenance pill for "A"/"C" as <shiny-aside> markup; "" for "B" (whose UI
-# is the citation asides) and NA (nothing to show).
 provenance_aside <- function(tag) {
   entry <- provenance_display[[tag]]
   if (is.null(entry) || identical(tag, "B")) {

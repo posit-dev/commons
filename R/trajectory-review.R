@@ -179,10 +179,6 @@ summarize_questions <- function(trajectories) {
   records
 }
 
-# Task 9's trajectory_read() attaches attr(turns, "provenance"): one record
-# per split_exchanges(turns) group, recorded verbatim (never re-derived) from
-# the tags/citation decisions the stream actually produced. `record` is one
-# such entry (or the fail-closed default when none was recorded).
 exchange_provenance <- function(record) {
   list(tag = record$provenance_tag)
 }
@@ -266,11 +262,6 @@ review_audit_aside <- function(decisions) {
   )
 }
 
-# The reviewer's compact provenance badge for question-list entries. Transcript
-# messages use the fuller audit asides assembled by exchange_chip(). Copy,
-# icon, and styling come from provenance_display (R/provenance.R), the same
-# table provenance_aside() reads -- so this pill can't drift from the aside
-# the way it once did.
 commons_answer_pill <- function(tag) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {

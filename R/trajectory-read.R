@@ -571,19 +571,8 @@ turn_has_tool_result <- function(turn) {
   any(vapply(turn@contents, is_tool_result_content, logical(1)))
 }
 
-# Why structural matching instead of a recorded ordinal: stream_async()
-# knows its own exchange's position (from_index) at production time, but a
-# conversation's turn history isn't append-only. A user can edit an earlier
-# turn, forking the conversation so two recorded calls share a prefix and
-# diverge after it (see "edited paths retain shared-prefix records and drop
-# abandoned records" in test-trajectories.R), or the reconstructed history
-# can be shorter than an older call's because a later one was recorded
-# against a restored/truncated context (see "restored context stays
-# unannotated..." and "switched conversations do not donate audit records").
-# A same-position ordinal from one call can silently name the wrong exchange
-# in another call's reality, so each recorded call's provenance is matched
-# by comparing its own reconstructed exchange content against the final
-# turns' exchanges, not by index.
+# Editable histories make exchange positions unstable, so match recorded
+# provenance by content instead of ordinal.
 exchange_signature <- function(exchange) {
   lapply(exchange, turn_signature)
 }
@@ -828,14 +817,6 @@ exchange_key <- function(span) {
   paste(span$trace_id, span$span_id)
 }
 
-# The provenance recorded (by stream_async(), see commons.R) on a chat
-# span's nearest commons_conversation_turn ancestor. No such ancestor
-# (`turn_span` is NULL), or no attribute on it -- tracing was off for that
-# call, or it wasn't a commons streamed exchange at all -- reports the same
-# absent defaults; provenance is read back verbatim, never reconstructed
-# from turn content. (Not named exchange_provenance(): trajectory-review.R
-# already uses that name for its own, unrelated, turn-text-based
-# heuristic.)
 turn_span_provenance <- function(turn_span) {
   tag <- turn_span$attributes[["commons.provenance.tag"]]
   candidates <- turn_span$attributes[["commons.citation.candidates"]]
@@ -852,8 +833,6 @@ turn_span_provenance <- function(turn_span) {
   )
 }
 
-# Mirrors conversation_id_walk()'s ancestor walk, bounded the same way, but
-# stopping at a span's name rather than one of its attributes.
 conversation_turn_ancestor <- function(span, index) {
   current <- span
   for (i in seq_len(length(index))) {

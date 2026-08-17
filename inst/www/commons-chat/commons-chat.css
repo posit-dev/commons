@@ -185,11 +185,6 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 /* ---- Answer provenance ----------------------------------------------- */
 
-/* The live commons chat renders provenance as the <shiny-aside> asides
- * styled above, not this pill -- but R/trajectory-review.R's reviewer still
- * renders trust badges this way in its sidebar (commons_answer_pill(),
- * relocated from R/chat.R), so this block and "Provenance tooltips" below
- * stay. */
 .commons-answer-pill {
   align-items: center;
   border-radius: 999px;
@@ -229,10 +224,7 @@ shiny-tool-request .shiny-tool-card .tool-title,
 
 /* ---- Provenance tooltips ---------------------------------------------- */
 
-/* The box is a real element rather than an attr() pseudo-element so
- * commons-chat.js can measure it; the arrow stays a pseudo-element on the
- * marker so it keeps pointing at it while the box is nudged back inside the
- * pane. */
+/* Use a real element so JavaScript can keep tooltips inside the pane. */
 .commons-tooltip {
   background: var(--bs-body-bg, #fff);
   border: 1px solid var(--bs-border-color, #dee2e6);
@@ -291,12 +283,6 @@ shiny-tool-request .shiny-tool-card .tool-title,
   transform: translateX(-50%) rotate(225deg);
 }
 
-/* ---- Citation asides -------------------------------------------------- */
-
-/* A cited fallback answer is provenance tier "B" -- below the governed-measure
- * tier "A" -- so its pill must not read like the trusted badge above. Both
- * provenance badges are filled, saturated shapes; this is an outline with a
- * stroked glyph, and it borrows neither badge's hue. */
 shiny-chat-container .shiny-aside-pill {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--bs-border-color, #dfe3e7);
@@ -359,7 +345,6 @@ shiny-chat-container
   opacity: 1;
 }
 
-/* The "matched exactly" line closes the popover as a caption, not a claim. */
 shiny-chat-container .shiny-aside-popover__body em {
   color: var(--bs-secondary-color, #6c757d);
   font-size: 0.92em;

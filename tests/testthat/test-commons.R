@@ -584,15 +584,6 @@ test_that("collect_appended_tags ignores turns before from_index", {
   expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
 })
 
-# Drives Commons$stream_async() with a fake ellmer provider that streams a
-# fixed answer in two chunks split mid-element, so the scanner's
-# chunk-invariant behavior is actually exercised (not just fed the whole
-# string at once). Mirrors ellmer's own stub-provider pattern for testing
-# Chat$stream_async() (see tidyverse/ellmer test-chat.R): mocking the
-# provider-facing generics (chat_perform(), stream_merge_chunks(),
-# stream_content(), value_finish_reason(), value_turn()) lets ellmer's real
-# turn-accumulation machinery run end to end, so assertions about
-# `client$get_turns()` reflect ellmer's actual behavior, not a stand-in.
 stream_citations_fixture <- function(agent, raw, split_at) {
   final_turn <- ellmer::AssistantTurn(
     list(ellmer::ContentText(raw)),
@@ -648,9 +639,6 @@ test_that("stream_async projects citations without touching stored turns", {
   chunks <- stream_citations_fixture(agent, raw, split_at = 30)
   concatenated <- paste(unlist(chunks), collapse = "")
 
-  # ellmer appends a trailing "\n" chunk of its own when the raw answer
-  # doesn't already end in one; that structural newline passes through the
-  # scanner unchanged, so it's expected on top of the whole-string projection.
   expect_identical(
     concatenated,
     paste0(project_citation_text(raw, agent$citation_corpus())$text, "\n")
@@ -743,8 +731,6 @@ test_that("stream_async rotates the conversation id when history is replaced", {
   recorded <- otelsdk::with_otel_record({
     agent <- test_agent(log = TRUE)
     stream_citations_fixture(agent, "First conversation.", split_at = 5)
-    # shinychat's "New chat" and conversation switching swap this client's
-    # turns in place (HistoryController$new_chat / $switch_to).
     agent$set_turns(list())
     stream_citations_fixture(agent, "Second conversation.", split_at = 5)
   })
@@ -761,8 +747,6 @@ test_that("stream_async rotates the conversation id when history is truncated", 
     agent <- test_agent(log = TRUE)
     stream_citations_fixture(agent, "First answer.", split_at = 5)
     stream_citations_fixture(agent, "Second answer.", split_at = 5)
-    # shinychat's message edit truncates to the fork parent and resubmits
-    # (HistoryController$handle_edit), abandoning the later exchanges.
     agent$set_turns(agent$get_turns()[1:2])
     stream_citations_fixture(agent, "Edited answer.", split_at = 5)
   })
@@ -810,8 +794,6 @@ test_that("set_conversation_id reinstates an id across a history swap", {
     restored <- agent$get_turns()
     agent$set_turns(list())
     stream_citations_fixture(agent, "Second conversation.", split_at = 5)
-    # Switching back: shinychat restores the stored turns, then the
-    # commons_server() on_restore hook reinstates the stored id.
     agent$set_turns(restored)
     agent$set_conversation_id("restored-conversation")
     stream_citations_fixture(agent, "Continued.", split_at = 3)
@@ -836,11 +818,6 @@ test_that("conversation id accessors get and set the active id", {
 
 test_that("stream_async records citation candidates on the conversation span", {
   skip_if_not_installed("otelsdk")
-  # log = TRUE only skips new_trajectory_tracing()'s real
-  # enable_local_tracing() side effects (which mutate process-wide env vars)
-  # when otel already looks like it's tracing -- true here because
-  # with_otel_record() activates its in-memory recording provider before
-  # `expr` runs, so the agent must be built inside this block, not before it.
   path <- withr::local_tempfile(fileext = ".md")
   writeLines("Canopy cover is always acre-weighted for reporting.", path)
 

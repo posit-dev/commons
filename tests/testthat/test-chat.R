@@ -1,8 +1,4 @@
 test_that("commons_server registers no custom-message observers", {
-  # The live chat's provenance and citations now arrive as server-authored
-  # <shiny-aside> elements already inline in the stream (see R/provenance.R,
-  # R/citation-scan.R) -- commons_server() has nothing left to push to the
-  # client, unlike the retired pill protocol this guards against reviving.
   body_text <- paste(deparse(body(commons_server)), collapse = "\n")
   expect_false(grepl("sendCustomMessage", body_text, fixed = TRUE))
 })
@@ -34,8 +30,6 @@ test_that("persist_conversation_id round-trips the id through history hooks", {
 
   persist_conversation_id(fake_chat, agent)
 
-  # on_save must return the augmented values list (shinychat's call_on_save
-  # contract) without clobbering other app state.
   values <- hooks$on_save(list(app_state = 1))
   expect_identical(
     values$commons_conversation_id,
@@ -46,7 +40,6 @@ test_that("persist_conversation_id round-trips the id through history hooks", {
   hooks$on_restore(list(commons_conversation_id = "restored-id"))
   expect_identical(agent$get_conversation_id(), "restored-id")
 
-  # Conversations saved before this integration existed carry no id.
   hooks$on_restore(list())
   expect_identical(agent$get_conversation_id(), "restored-id")
 })
@@ -61,8 +54,6 @@ test_that("commons_server wires conversation-id persistence into shinychat", {
       commons_server("chat", client = agent)
     },
     {
-      # Reach shinychat's live history controller and fire a restore the way
-      # switch_to()/restore_app_state() would.
       controller <- shinychat:::get_session_chat_bookmark_info(
         session,
         "chat.history-controller"

@@ -13,8 +13,6 @@ test_tool_turns <- function(name, id = "c1") {
   )
 }
 
-# The shape Task 9's trajectory_read() attaches as attr(turns, "provenance"):
-# one such record per split_exchanges(turns) group.
 provenance_record <- function(tag, citation_decisions = list()) {
   list(provenance_tag = tag, citation_decisions = citation_decisions)
 }
@@ -161,7 +159,6 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
     c(1L, 1L, 2L, 2L)
   )
 
-  # Exchange 1 is tagged "A": its chip is the recorded provenance_aside().
   answer1 <- transcript$messages[[2]]$content
   expect_length(answer1, 3)
   expect_s3_class(answer1[[1]], "shinychat_tool_card")

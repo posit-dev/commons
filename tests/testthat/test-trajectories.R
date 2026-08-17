@@ -410,14 +410,6 @@ test_that("edited paths retain shared-prefix records and drop abandoned records"
 })
 
 test_that("the latest descendant tool-loop span contributes one call record", {
-  # A realistic two-exchange conversation: exchange 1 is a single round;
-  # exchange 2 is a tool-calling round wrapped in the same
-  # commons_conversation_turn span as the round that follows it. Only the
-  # LATEST chat span in the whole conversation (chat2b) is ever used to
-  # reconstruct turns (build_trajectories()'s existing, unchanged
-  # behavior), so its input_messages must be genuinely cumulative -- the
-  # same shape ellmer itself produces -- for this to exercise the real
-  # invariant rather than an artificial one.
   root1 <- otlp_test_span(
     "t1",
     "root1",
@@ -488,11 +480,6 @@ test_that("the latest descendant tool-loop span contributes one call record", {
         parent_span_id = "root2",
         name = "invoke_agent"
       ),
-      # Round 1 of exchange 2's tool call: input is exchange 1's full
-      # history plus exchange 2's new question; output is the tool
-      # request. Not the latest chat span, so never used for turn
-      # reconstruction -- included only for realism, matching what
-      # ellmer's own tool-calling loop actually emits.
       chat_test_span(
         "t2",
         "chat2a",
@@ -510,9 +497,6 @@ test_that("the latest descendant tool-loop span contributes one call record", {
         output_messages = paste0("[", exchange2_tool_call, "]"),
         end_time = "20"
       ),
-      # Round 2 (the latest chat span overall): cumulative input carries
-      # exchange 1's turns AND exchange 2's own new turns up to the tool
-      # result; output is the final answer.
       chat_test_span(
         "t2",
         "chat2b",

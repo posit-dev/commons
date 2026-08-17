@@ -45,10 +45,6 @@ test_that("Shiny Chat renders one server-verified streamed citation", {
     "documentation"
   )
 
-  # The fixture streams five chunks and shinychat re-renders the message on
-  # each one, so a pill that exists mid-stream is replaced before its popover
-  # can open. "After citations." is the final chunk: waiting for it lands the
-  # click on settled DOM.
   app$wait_for_js(
     paste0(
       "document.querySelector('.shiny-chat-message')",
@@ -84,10 +80,6 @@ test_that("Shiny Chat renders one server-verified streamed citation", {
   expect_match(answer, "After citations.", fixed = TRUE)
   expect_no_match(answer_html, "commons-citation", fixed = TRUE)
 
-  # The fixture streams an unsupported citation and a model-authored
-  # <shiny-aside> alongside the verified one. Which elements the scanner drops
-  # is covered exhaustively in test-citation-scan.R; asserting the group count
-  # here is what proves the scanner runs in the live streaming path at all.
   expect_identical(
     app$get_js("document.querySelectorAll('.shiny-aside-group').length === 1;"),
     TRUE

@@ -300,13 +300,6 @@ test_that("a malformed body (no blockquote) records status malformed and emits n
 })
 
 test_that("a close literal split across a feed() boundary near the cap still verifies", {
-  # Regression: the cap-overflow check must hold back a trailing partial
-  # match of the close literal, the same way text mode holds back a
-  # trailing partial match of an open literal -- otherwise a close literal
-  # split across a feed() boundary can transiently push nchar(buf) past
-  # the cap even though the confirmed body is comfortably under it, and
-  # the element gets wrongly abandoned in the chunked case but not in the
-  # whole-string case.
   quote_text <- "Canopy cover is always acre-weighted for reporting."
   corpus <- list(list(
     label = "documentation",
@@ -324,9 +317,6 @@ test_that("a close literal split across a feed() boundary near the cap still ver
   close <- "</commons-citation>"
   text <- paste0("A.\n", open, body, close, "\nB.")
 
-  # Split so chunk 1 ends 6 characters into the 19-character close
-  # literal (i.e. right after "</comm"): at that instant, raw
-  # nchar(buf) == target_body_len + 6 == cap + 1, one past the cap.
   split_at <- nchar(paste0("A.\n", open, body)) + 6L
   chunk1 <- substr(text, 1, split_at)
   chunk2 <- substr(text, split_at + 1, nchar(text))

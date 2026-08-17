@@ -69,19 +69,8 @@ commons_server <- function(id, client, ...) {
   chat
 }
 
-# Keeps one saved shinychat conversation under one commons conversation id
-# across switches, new chats, and session restores: on_save() stashes the
-# client's current id in the conversation's app-state values, and
-# on_restore() reinstates it when that conversation is reopened. Without
-# this, Commons$stream_async()'s divergence rotation (R/commons.R) still
-# keeps distinct conversations from collapsing into one id
-# (posit-dev/commons#106), but every switch back to a conversation would
-# mint a fresh id and duplicate its history prefix in trajectory_read().
-#
-# Deletable: once shinychat records a stable conversation id on a span
-# around each managed response, trajectory_read() should prefer that span's
-# id, and this save/restore round trip (plus Commons$set_conversation_id)
-# becomes redundant.
+# shinychat reuses one client across saved conversations, so persist each
+# conversation's trace identity with its history.
 persist_conversation_id <- function(chat, client) {
   chat$history$on_save(function(values) {
     values$commons_conversation_id <- client$get_conversation_id()

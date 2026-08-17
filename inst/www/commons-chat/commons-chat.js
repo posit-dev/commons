@@ -94,9 +94,6 @@
       return bounds;
     };
 
-    // The trajectory reviewer's sidebar still renders commons_answer_pill()
-    // trust badges (R/trajectory-review.R's question_entry()), so their
-    // hover/focus tooltip needs to stay positioned within the viewport.
     var onMarker = function(event) {
       if (!event.target || !event.target.closest) return;
       var marker = event.target.closest(".commons-answer-pill");

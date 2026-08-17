@@ -1,25 +1,7 @@
-# Fallback answers can cite the trusted text that backs them: the model ends
-# its reply with <citation reason="...">exact text</citation> elements, and
-# commons verifies each quote against the corpus of text the agent could have
-# drawn on. Only the quote is verified; the reason is unverified model
-# commentary shown alongside it. See derive_provenance_tag() for how
-# verification affects an answer's provenance tag.
+# Explanations remain model-authored, so only citation quotes affect provenance.
 
-# Everything citable: measure schemas (as search_pool presents them),
-# dictionary entries (as first touch delivers them), and the context layer's
-# docs. Each entry carries a `kind` -- "prose", "definition", or "schema" --
-# which selects the aside's icon, and a `label` naming the specific source.
-# Labels are noun phrases because the aside pill's accessible name is the
-# label and nothing else: its icon is decorative, so "sales" alone would tell
-# a screen reader nothing.
-#
-# Order here is precedence, not presentation. match_citation() reports the
-# first entry whose text contains the quote, and augment_context_layer()
-# copies dictionary prose into the context store to make it searchable -- so
-# a table's own description is reachable under both its table label and the
-# catch-all documentation label. Specific sources are added first so the
-# reader is always pointed at the narrowest source that can account for the
-# quote.
+# Matching returns the first source containing a quote, so add specific
+# sources before the general documentation corpus.
 build_citation_corpus <- function(context_layer, registry, sources) {
   corpus <- list()
   add <- function(label, kind, text) {
@@ -70,11 +52,9 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   corpus
 }
 
-# The label/kind of the first corpus entry containing `quote`, or NULL when
-# nothing does.
 match_citation <- function(quote, corpus) {
   needle <- normalize_citation(quote)
-  # A trivial quote shouldn't be able to promote an answer.
+  # Reject trivial matches that could promote an unsupported answer.
   if (nchar(needle) < 10) {
     return(NULL)
   }
@@ -86,11 +66,7 @@ match_citation <- function(quote, corpus) {
   NULL
 }
 
-# One verified citation as <shiny-aside> markup. The icon says what sort of
-# source this is and the label says which one, which is what lets the label
-# stay short. The "matched exactly" line stays in the popover body, off the
-# pill face where it would read as a trust badge. An unverified quote
-# contributes nothing: a pill for an unconfirmed quote would misrepresent it.
+# Rejected citations render nothing so unverified markup cannot appear trusted.
 render_citation_aside <- function(quote, explanation, corpus) {
   source <- match_citation(quote, corpus)
   decision <- list(
@@ -238,8 +214,7 @@ citation_request_text <- function(measures = list(), definitions = NULL) {
   ))
 }
 
-# Glyph per citation kind. The SVGs carry a literal stroke colour because the
-# icon renders as <img>, which cannot inherit currentColor.
+# These SVGs need a fixed stroke because images cannot inherit currentColor.
 COMMONS_ICON_RESOURCE_PREFIX <- "commons-icons"
 
 citation_icon_url <- function(kind) {
@@ -267,17 +242,13 @@ commons_icon_url <- function(file) {
   )
 }
 
-# Minimal escaping for a value interpolated into an HTML attribute. Order
-# matters: escaping "&" first keeps "&quot;" itself from being re-escaped.
+# Escape ampersands first to avoid re-escaping generated entities.
 escape_attr <- function(x) {
   x <- gsub("&", "&amp;", x, fixed = TRUE)
   gsub("\"", "&quot;", x, fixed = TRUE)
 }
 
-# svg_data_uri() self-embeds the SVG rather than pointing at
-# commons_icon_url()'s resource path because its caller (the trajectory
-# review app) never calls register_commons_icon_resources() -- that
-# happens in commons_ui(), a different Shiny app.
+# The trajectory reviewer does not register the live chat's resource path.
 svg_data_uri <- function(file) {
   path <- commons_icon_path(file)
   if (is.null(path)) {

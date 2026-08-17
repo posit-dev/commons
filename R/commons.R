@@ -242,8 +242,6 @@ Commons <- R6::R6Class(
       controller = NULL
     ) {
       private$refresh_conversation_id()
-      # Turns appended by this call start here; collect_appended_tags() below
-      # needs this captured before super$stream_async() adds any.
       from_index <- length(self$get_turns()) + 1L
       stream <- rlang::arg_match(stream)
       raw_stream <- super$stream_async(
@@ -258,12 +256,7 @@ Commons <- R6::R6Class(
       corpus <- private$corpus
       as_content <- identical(stream, "content")
 
-      # The scanner has to run on every streamed turn -- fail-closed means
-      # the model's <commons-citation> dialect must never reach the browser
-      # unprojected, tracing or not. The conversation span, and the
-      # attributes recorded on it, are the only part that's conditional; the
-      # generator frame otherwise persists across yields and exits on
-      # completion, so the span (when there is one) covers the whole turn.
+      # Scan without tracing too so model-authored citation markup fails closed.
       coro::async_generator(function() {
         span <- NULL
         if (tracing) {
@@ -302,10 +295,7 @@ Commons <- R6::R6Class(
         )
 
         if (tracing) {
-          # Two independent tryCatch()es, not one around both: NA (no A/B
-          # tag to report) is a routine outcome that otel's attribute setter
-          # rejects, and it must not take the candidates attribute down
-          # with it.
+          # Record independently so one invalid attribute cannot suppress another.
           if (!is.na(tag)) {
             tryCatch(
               commons_span_set_attribute(span, "commons.provenance.tag", tag),
@@ -338,9 +328,6 @@ Commons <- R6::R6Class(
       private$conversation_id
     },
 
-    # Reinstates a saved conversation's id (see persist_conversation_id() in
-    # R/chat.R). The current turns become the id's lineage baseline so the
-    # next stream doesn't immediately rotate the reinstated id away.
     set_conversation_id = function(id) {
       if (!rlang::is_string(id) || !nzchar(id)) {
         cli::cli_abort("{.arg id} must be a single non-empty string.")
@@ -384,14 +371,8 @@ Commons <- R6::R6Class(
     corpus = NULL,
     citation_request = NULL,
 
-    # One conversation id per history lineage: shinychat's history controller
-    # reuses this client across new chats, conversation switches, edits, and
-    # branch navigation (all via set_turns()), so when the current turns no
-    # longer extend the last streamed state this is a different conversation
-    # and it gets a fresh id -- otherwise trajectory_read() collapses every
-    # conversation the session touched into one, keeping only the last
-    # (posit-dev/commons#106). Rotation re-baselines immediately so a failed
-    # first stream retries under the same id.
+    # shinychat reuses one client across editable histories, so divergent
+    # histories need distinct trace identities.
     refresh_conversation_id = function() {
       baseline <- private$last_streamed_turns
       if (is.null(baseline)) {
