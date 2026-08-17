@@ -1,0 +1,109 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: survey
+    columns:
+      - name: q1
+        type: boolean
+      - name: q2
+        type: boolean
+      - name: created
+        type: date
+        range: [2020-01-01, 2030-01-01]
+      - name: observed
+        type: datetime
+        range: [2020-01-01T00:00:00Z, 2030-01-01T00:00:00Z]
+      - name: amount
+        type: number(quantity)
+        range: [0, 1000]
+      - name: ratio
+        type: number(quantity)
+        range: [-10, 10]
+      - name: pattern
+        type: string
+        examples: ["%a", "a%"]
+      - name: category
+        type: enum
+        values: [A, B]
+      - name: profile
+        type: struct
+        fields:
+          - name: zip
+            type: string
+            examples: ["02139", "60601"]
+          - name: geo
+            type: struct
+            fields:
+              - name: latitude
+                type: number(quantity)
+                range: [-90, 90]
+          - name: nick names
+            type: string
+            examples: [Al, Bee]
+      - name: tags
+        type: list(string)
+        examples: [A, B, C]
+      - name: untyped
+    definitions:
+      - name: complete
+        expr: COLUMNS([q1, q2]) IS NOT NULL
+      - name: recent
+        expr: created >= '2024-01-01'
+      - name: fresh
+        expr: observed >= NOW() - interval(2, weeks)
+      - name: postal length
+        expr: LENGTH(profile.zip)
+      - name: long postal
+        expr: '`postal length` > 5'
+      - name: amount band
+        expr: amount <= 2 * MIN(amount)
+      - name: constant
+        expr: "1"
+      - name: anything missing
+        expr: COLUMNS(*) IS NOT NULL
+      - name: untyped count
+        expr: COUNT(untyped)
+      - name: negative quotient
+        expr: -(amount - 2) / (ratio + 1.0)
+      - name: range predicate
+        expr: amount BETWEEN -10 AND 10 AND amount NOT IN (0, 1)
+      - name: null logic
+        expr: NOT q1 OR NULL IS NULL
+      - name: exact match
+        expr: pattern LIKE 'a'
+      - name: prefix match
+        expr: pattern LIKE 'a%'
+      - name: suffix mismatch
+        expr: pattern NOT LIKE '%z'
+      - name: dynamic match
+        expr: pattern LIKE profile.zip
+      - name: case without else
+        expr: CASE WHEN q1 THEN amount END
+      - name: mixed temporal case
+        expr: CASE WHEN q1 THEN created ELSE observed END
+      - name: offset time
+        expr: observed >= '2024-01-01T01:30:00-06:00'
+      - name: fractional time
+        expr: observed <= '2024-01-01T01:30:00.123Z'
+      - name: computed interval
+        expr: observed + interval(amount + 1, days)
+      - name: fractional interval
+        expr: observed - interval(1.5, hours)
+      - name: category A
+        expr: category = 'A'
+      - name: deep score
+        expr: profile.geo.latitude + LENGTH(profile.`nick names`)
+      - name: missing tags
+        expr: tags IS NULL
+      - name: missing unknown
+        expr: untyped IS NULL
+      - name: selected dates
+        expr: COLUMNS('^created$') >= '2020-01-01'
+      - name: negative infinity
+        expr: amount > -INF
+      - name: precise threshold
+        expr: amount > 0.12345678901234567
+      - name: right associative arithmetic
+        expr: amount - (ratio - 1)
+      - name: nullable date shift
+        expr: created + NULL
