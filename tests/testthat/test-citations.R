@@ -32,7 +32,7 @@ test_that("recorded accepted citations reuse live aside presentation", {
   expect_match(result$html, 'label="forest documentation"', fixed = TRUE)
   expect_match(
     result$html,
-    "**This supports the weighting rule.**",
+    "This supports the weighting rule.",
     fixed = TRUE
   )
   expect_match(
@@ -396,7 +396,8 @@ test_that("render_citation_aside emits a labeled, iconed aside for a verified qu
   expect_no_match(out$html, "data:image", fixed = TRUE)
   expect_match(
     out$html,
-    "\\*\\*The computation follows the documented recognition rule\\.\\*\\*"
+    "The computation follows the documented recognition rule.",
+    fixed = TRUE
   )
   expect_match(out$html, "> Revenue is recognized at shipment", fixed = TRUE)
   expect_identical(out$decision$status, "accepted")

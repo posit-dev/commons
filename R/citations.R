@@ -91,7 +91,7 @@ render_citation_aside <- function(quote, explanation, corpus) {
 
 citation_aside_html <- function(quote, explanation, label, kind) {
   icon <- citation_icon_url(kind)
-  reason <- if (nzchar(explanation)) paste0("**", explanation, "**\n\n") else ""
+  reason <- if (nzchar(explanation)) paste0(explanation, "\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   sprintf(
     '<shiny-aside label="%s"%s>%s%s</shiny-aside>',
