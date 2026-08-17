@@ -1,3 +1,6 @@
+# A port of data-dict's definition expression parser. See the comments at the
+# top of definition-export.R for more information.
+
 definition_expr_parse <- function(text, call = rlang::caller_env()) {
   if (!rlang::is_string(text) || !nzchar(trimws(text))) {
     cli::cli_abort(

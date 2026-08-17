@@ -1,3 +1,6 @@
+# A port of data-dict's DuckDB definition emitter. See the comments at the top
+# of definition-export.R for more information.
+
 definition_emit_duckdb <- function(ir, selection = NULL) {
   state <- new.env(parent = emptyenv())
   state$notes <- character()
