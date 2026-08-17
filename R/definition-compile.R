@@ -1,4 +1,4 @@
-# Export records stay authored and target-independent until a source supplies
+# Export records stay source-independent until a source supplies
 # the destination target and its authored-to-physical catalog bindings.
 
 definition_compile_source <- function(
@@ -34,12 +34,14 @@ definition_bind_export <- function(
   )
   tables <- lapply(tables, function(table) {
     binding <- definition_source_binding(source, table$name, call = call)
+    markers <- definition_reference_markers(table$definitions, binding)
     definitions <- lapply(table$definitions, function(definition) {
       definition_bind_one(
         definition,
         table$name,
         binding,
         target,
+        markers,
         call = call
       )
     })
@@ -70,6 +72,7 @@ definition_bind_one <- function(
   table,
   binding,
   target,
+  markers,
   call
 ) {
   ir <- attr(definition, "ir", exact = TRUE)
@@ -79,7 +82,14 @@ definition_bind_one <- function(
       call = call
     )
   }
-  ir <- definition_bind_ir(
+  selection <- attr(definition, "selection", exact = TRUE)
+  translations <- lapply(
+    definition_sql_targets,
+    definition_emit_translation,
+    ir = ir,
+    selection = selection
+  )
+  bound_ir <- definition_bind_ir(
     ir,
     binding$columns,
     binding$strict,
@@ -87,21 +97,20 @@ definition_bind_one <- function(
     table,
     call
   )
-  selection <- definition_bind_selection(
-    attr(definition, "selection", exact = TRUE),
+  bound_selection <- definition_bind_selection(
+    selection,
     binding$columns,
     binding$strict,
     definition$name,
     table,
     call
   )
-  translations <- lapply(
-    definition_sql_targets,
-    definition_emit_translation,
-    ir = ir,
-    selection = selection
+  execution_ir <- definition_mark_references(bound_ir, markers)
+  selected <- definition_emit_translation(
+    target,
+    execution_ir,
+    bound_selection
   )
-  selected <- translations[[match(target, definition_sql_targets)]]
   if (!is.null(selected$error)) {
     cli::cli_abort(
       c(
@@ -115,9 +124,62 @@ definition_bind_one <- function(
   definition$target <- target
   definition$sql <- selected$code
   definition$notes <- selected$notes
-  attr(definition, "ir") <- ir
-  attr(definition, "selection") <- selection
+  attr(definition, "ir") <- bound_ir
+  attr(definition, "selection") <- bound_selection
+  attr(definition, "composition_markers") <- unname(
+    markers[definition$definitions]
+  )
   definition
+}
+
+definition_reference_markers <- function(definitions, binding) {
+  used <- c(
+    vapply(definitions, `[[`, character(1), "name"),
+    names(binding$columns),
+    unname(binding$columns),
+    unlist(lapply(definitions, function(definition) {
+      definition_ir_identifiers(attr(definition, "ir", exact = TRUE))
+    }))
+  )
+  used <- used[!is.na(used)]
+  markers <- character(length(definitions))
+  names(markers) <- vapply(definitions, `[[`, character(1), "name")
+  for (i in seq_along(markers)) {
+    marker <- sprintf("__commons_definition_reference_%03d__", i)
+    while (marker %in% c(used, markers)) {
+      marker <- paste0(marker, "_")
+    }
+    markers[[i]] <- marker
+  }
+  markers
+}
+
+definition_ir_identifiers <- function(node) {
+  if (!is.list(node)) {
+    return(character())
+  }
+  current <- if (identical(node$kind, "column")) node$path else character()
+  unique(c(
+    current,
+    unlist(lapply(node, definition_ir_identifiers), use.names = FALSE)
+  ))
+}
+
+definition_mark_references <- function(node, markers) {
+  if (!is.list(node)) {
+    return(node)
+  }
+  if (
+    identical(node$kind, "column") &&
+      identical(node$reference, "definition")
+  ) {
+    node$path[[1]] <- markers[[node$path[[1]]]]
+  }
+  lapply(
+    node,
+    definition_mark_references,
+    markers = markers
+  )
 }
 
 definition_emit_translation <- function(target, ir, selection) {
@@ -300,6 +362,11 @@ definition_compose_table <- function(
         references,
         function(reference) composed[[reference]]$sql,
         character(1)
+      )
+      names(replacements) <- attr(
+        definition,
+        "composition_markers",
+        exact = TRUE
       )
       definition$sql <- definition_compose_identifiers(
         definition$sql,

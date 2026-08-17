@@ -114,7 +114,7 @@ test_that("one checked expression emits all supported SQL targets", {
     definition_translation(definitions$remainder, "SQL(databricks)")$code,
     paste0(
       "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE ",
-      "pmod(`number`, 3) END"
+      "MOD(MOD(`number`, 3) + 3, 3) END"
     )
   )
   expect_match(
@@ -197,6 +197,47 @@ test_that("temporal, struct, and COLUMNS expressions lower by target", {
     definition_translation(definitions$complete, "SQL(databricks)")$code,
     "`q1` IS NOT NULL AND `q2` IS NOT NULL"
   )
+  expect_match(
+    definition_translation(
+      definitions[["dynamic match"]],
+      "SQL(snowflake)"
+    )$notes,
+    "newline characters",
+    fixed = TRUE
+  )
+  expect_match(
+    definition_translation(
+      definitions[["negative quotient"]],
+      "SQL(snowflake)"
+    )$code,
+    "CASE WHEN",
+    fixed = TRUE
+  )
+  expect_match(
+    definition_translation(
+      definitions[["negative quotient"]],
+      "SQL(databricks)"
+    )$notes,
+    "negative zero divisor",
+    fixed = TRUE
+  )
+  expect_equal(
+    definition_translation(definitions[["offset time"]], "SQL(snowflake)")$code,
+    paste0(
+      '"observed" >= TO_TIMESTAMP_TZ(',
+      "'2024-01-01 07:30:00 +00:00')"
+    )
+  )
+  expect_equal(
+    definition_translation(
+      definitions[["fractional time"]],
+      "SQL(databricks)"
+    )$code,
+    paste0(
+      "`observed` <= make_timestamp(",
+      "2024, 1, 1, 1, 30, 0.123, 'UTC')"
+    )
+  )
 })
 
 test_that("source selection binds authored warehouse identifiers", {
@@ -225,6 +266,10 @@ test_that("source selection binds authored warehouse identifiers", {
   expect_equal(
     definitions$list_price$sql,
     '"ORDER_TOTAL" * 1.2'
+  )
+  expect_equal(
+    definition_translation(definitions$list_price, "SQL(snowflake)")$code,
+    '"order_total" * 1.2'
   )
   expect_match(
     definitions$enterprise_revenue$sql,
@@ -355,6 +400,57 @@ test_that("target restrictions stay on their translation records", {
     )$error,
     "dynamic ROUND"
   )
+
+  constant <- list(
+    tables = list(list(
+      name = "values",
+      columns = list(list(name = "number", type = "number(quantity)")),
+      definitions = list(list(
+        name = "fractional_scale",
+        expr = "ROUND(number, 1.5)"
+      ))
+    ))
+  )
+  definitions <- definition_compiled_table(definition_compile_source(
+    constant,
+    data_source(values = data.frame(number = 1))
+  ))
+  expect_equal(
+    definition_translation(
+      definitions$fractional_scale,
+      "SQL(snowflake)"
+    )$code,
+    'round("number", TRUNC(1.5))'
+  )
+  expect_equal(
+    definition_translation(
+      definitions$fractional_scale,
+      "SQL(databricks)"
+    )$code,
+    "round(`number`, CAST(1.5 AS INT))"
+  )
+
+  nanosecond <- list(
+    tables = list(list(
+      name = "values",
+      columns = list(list(name = "observed", type = "datetime")),
+      definitions = list(list(
+        name = "after_threshold",
+        expr = "observed > '2024-01-01T00:00:00.123456789Z'"
+      ))
+    ))
+  )
+  definitions <- definition_compiled_table(definition_compile_source(
+    nanosecond,
+    data_source(values = data.frame(observed = Sys.time()))
+  ))
+  expect_match(
+    definition_translation(
+      definitions$after_threshold,
+      "SQL(databricks)"
+    )$error,
+    "microsecond precision"
+  )
 })
 
 test_that("composition carries dependency fidelity notes", {
@@ -400,7 +496,38 @@ test_that("composition replaces identifiers but leaves literals intact", {
   expect_equal(databricks, "(TRUE) OR `other` = 'a`b'")
 })
 
+test_that("physical columns cannot be confused with sibling definitions", {
+  local_mocked_bindings(
+    is_snowflake_connection = function(con) TRUE,
+    is_databricks_connection = function(con) FALSE
+  )
+  raw <- list(
+    tables = list(list(
+      name = "values",
+      columns = list(list(name = "amount", type = "number(quantity)")),
+      definitions = list(
+        list(name = "AMOUNT", expr = "1"),
+        list(name = "combined", expr = "amount + AMOUNT")
+      )
+    ))
+  )
+  bindings <- list(
+    tables = c(values = "ANALYTICS.PUBLIC.VALUES"),
+    columns = list(values = c(amount = "AMOUNT")),
+    strict = TRUE
+  )
+  compiled <- definition_compile_source(
+    raw,
+    definition_mock_source("ANALYTICS.PUBLIC.VALUES", bindings)
+  )
+
+  expect_equal(
+    definition_compiled_table(compiled)$combined$sql,
+    '"AMOUNT" + (1)'
+  )
+})
+
 test_that("target string literals preserve backslashes", {
-  expect_equal(definition_sql_string("a\\b", "snowflake"), "'a\\b'")
+  expect_equal(definition_sql_string("a\\b", "snowflake"), "'a\\\\b'")
   expect_equal(definition_sql_string("a\\b", "databricks"), "'a\\\\b'")
 })

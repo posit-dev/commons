@@ -63,7 +63,9 @@ warehouse_definition_spec <- function(table) {
   expressions <- c(
     round_half = "ROUND(2.5) = 3",
     floored_modulus = "MOD(-5, 3) = 1",
+    negative_modulus = "MOD(7, -3) = -2",
     modulus_by_zero = "IS_NAN(MOD(1, 0))",
+    division_by_zero = "IS_INFINITE(1 / 0)",
     like_pattern = "'Alpha' LIKE 'A_%'",
     similar_pattern = "'Alpha' SIMILAR TO 'A.*'",
     temporal_shift = "NOW() + interval(1, days) > NOW()",
@@ -93,14 +95,27 @@ expect_warehouse_definitions_execute <- function(source) {
     )[[1]][[1]]
   })
   names(values) <- vapply(definitions, `[[`, character(1), "name")
+  boolean_fold <- definitions[[match(
+    "boolean_fold",
+    names(values)
+  )]]$sql
+  empty_boolean_fold <- DBI::dbGetQuery(
+    source$con,
+    paste(
+      "SELECT",
+      boolean_fold,
+      "AS value FROM (SELECT 1 AS one) AS empty_rows WHERE FALSE"
+    )
+  )[[1]][[1]]
 
   expect_true(all(vapply(
     values[setdiff(
       names(values),
       "null_boolean_fold"
     )],
-    isTRUE,
+    function(value) isTRUE(as.logical(value)),
     logical(1)
   )))
   expect_true(is.na(values$null_boolean_fold))
+  expect_true(is.na(empty_boolean_fold))
 }

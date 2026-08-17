@@ -63,7 +63,7 @@ definition_sql_write <- function(
     return(sprintf("DATE '%s'", node$value))
   }
   if (identical(kind, "datetime")) {
-    return(sprintf("TIMESTAMP '%s'", node$value))
+    return(definition_sql_datetime(node$value, dialect))
   }
   if (identical(kind, "now")) {
     return("CURRENT_TIMESTAMP()")
@@ -118,10 +118,7 @@ definition_sql_write <- function(
       return(shifted)
     }
     if (identical(node$op, "/")) {
-      definition_sql_note(
-        state,
-        definition_sql_division_note[[dialect]]
-      )
+      return(definition_sql_divide(node, state, dialect, selected))
     }
     level <- if (node$op %in% c("+", "-")) 5L else 6L
     return(definition_sql_infix(
@@ -316,17 +313,22 @@ definition_sql_function <- function(node, state, dialect, selected) {
     return(sprintf("%s(%s)", fn, paste(args, collapse = ", ")))
   }
   if (identical(node$name, "round")) {
-    if (
-      identical(dialect, "databricks") &&
-        length(node$args) == 2L &&
-        !(identical(node$args[[2]]$kind, "number") &&
-          identical(node$args[[2]]$number_kind, "integer"))
-    ) {
-      definition_sql_abort_unsupported(
-        dialect,
-        "a dynamic ROUND() scale",
-        "Databricks requires the scale to be an integer constant"
-      )
+    if (length(node$args) == 2L) {
+      if (
+        identical(dialect, "databricks") &&
+          !identical(node$args[[2]]$shape, "const")
+      ) {
+        definition_sql_abort_unsupported(
+          dialect,
+          "a dynamic ROUND() scale",
+          "Databricks requires the scale to be an integer constant expression"
+        )
+      }
+      args[[2]] <- if (identical(dialect, "snowflake")) {
+        sprintf("TRUNC(%s)", args[[2]])
+      } else {
+        sprintf("CAST(%s AS INT)", args[[2]])
+      }
     }
     return(sprintf("round(%s)", paste(args, collapse = ", ")))
   }
@@ -367,18 +369,57 @@ definition_sql_mod <- function(node, args, state, dialect, selected) {
     selected
   )
   nan <- definition_sql_non_finite_literal("nan", dialect)
-  value <- if (identical(dialect, "databricks")) {
-    sprintf("pmod(%s, %s)", args[[1]], args[[2]])
-  } else {
-    sprintf(
-      "MOD(MOD(%s, %s) + %s, %s)",
-      args[[1]],
-      args[[2]],
-      divisor,
-      args[[2]]
-    )
-  }
+  value <- sprintf(
+    "MOD(MOD(%s, %s) + %s, %s)",
+    args[[1]],
+    args[[2]],
+    divisor,
+    args[[2]]
+  )
   sprintf("CASE WHEN %s = 0 THEN %s ELSE %s END", divisor, nan, value)
+}
+
+definition_sql_divide <- function(node, state, dialect, selected) {
+  numerator <- definition_sql_child(
+    node$lhs,
+    0L,
+    "free",
+    state,
+    dialect,
+    selected
+  )
+  divisor <- definition_sql_child(
+    node$rhs,
+    0L,
+    "free",
+    state,
+    dialect,
+    selected
+  )
+  nan <- definition_sql_non_finite_literal("nan", dialect)
+  inf <- definition_sql_non_finite_literal("inf", dialect)
+  neg_inf <- definition_sql_non_finite_literal("-inf", dialect)
+  is_nan <- definition_sql_non_finite("is_nan", numerator, dialect)
+  definition_sql_note(state, definition_sql_division_note[[dialect]])
+  sprintf(
+    paste0(
+      "CASE WHEN %s = 0 THEN CASE ",
+      "WHEN %s IS NULL THEN NULL ",
+      "WHEN %s OR %s = 0 THEN %s ",
+      "WHEN %s < 0 THEN %s ELSE %s END ",
+      "ELSE %s / %s END"
+    ),
+    divisor,
+    numerator,
+    is_nan,
+    numerator,
+    nan,
+    numerator,
+    neg_inf,
+    inf,
+    numerator,
+    divisor
+  )
 }
 
 definition_sql_non_finite <- function(name, arg, dialect) {
@@ -649,9 +690,7 @@ definition_sql_quote_identifier <- function(name, dialect) {
 
 definition_sql_string <- function(value, dialect) {
   value <- gsub("'", "''", value, fixed = TRUE)
-  if (identical(dialect, "databricks")) {
-    value <- gsub("\\", "\\\\", value, fixed = TRUE)
-  }
+  value <- gsub("\\", "\\\\", value, fixed = TRUE)
   sprintf("'%s'", value)
 }
 
@@ -668,6 +707,39 @@ definition_sql_number <- function(node, dialect) {
   }
   text <- definition_duckdb_float(node$value)
   if (!grepl("[.eE]", text)) paste0(text, ".0") else text
+}
+
+definition_sql_datetime <- function(value, dialect) {
+  if (identical(dialect, "snowflake")) {
+    return(sprintf("TO_TIMESTAMP_TZ('%s +00:00')", value))
+  }
+  match <- regexec(
+    "^([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2}):([0-9]{2})(\\.[0-9]+)?$",
+    value,
+    perl = TRUE
+  )
+  pieces <- regmatches(value, match)[[1]]
+  fraction <- substring(pieces[[8]], 2L)
+  if (
+    nchar(fraction) > 6L &&
+      as.integer(substr(fraction, 7L, nchar(fraction))) != 0L
+  ) {
+    definition_sql_abort_unsupported(
+      dialect,
+      "a nanosecond datetime literal",
+      "Databricks timestamps have microsecond precision"
+    )
+  }
+  second <- paste0(as.integer(pieces[[7]]), pieces[[8]])
+  sprintf(
+    "make_timestamp(%d, %d, %d, %d, %d, %s, 'UTC')",
+    as.integer(pieces[[2]]),
+    as.integer(pieces[[3]]),
+    as.integer(pieces[[4]]),
+    as.integer(pieces[[5]]),
+    as.integer(pieces[[6]]),
+    second
+  )
 }
 
 definition_sql_non_finite_literal <- function(value, dialect) {
@@ -706,12 +778,12 @@ definition_sql_nan_note <- list(
 
 definition_sql_division_note <- list(
   snowflake = paste(
-    "Snowflake raises an error for division by zero, where data-dict returns",
-    "an infinity or NaN."
+    "Guarded division cannot distinguish a negative zero divisor in",
+    "Snowflake; its result has positive-zero semantics."
   ),
   databricks = paste(
-    "Databricks may raise an error or return null for division by zero, where",
-    "data-dict returns an infinity or NaN."
+    "Guarded division cannot distinguish a negative zero divisor in",
+    "Databricks; its result has positive-zero semantics."
   )
 )
 
@@ -728,8 +800,8 @@ definition_sql_trim_note <- list(
 
 definition_sql_like_note <- list(
   snowflake = paste(
-    "A dynamic Snowflake LIKE pattern follows Snowflake escaping rules, which",
-    "can differ from data-dict for backslashes."
+    "Snowflake LIKE wildcards match newline characters, where data-dict's",
+    "wildcards do not."
   ),
   databricks = paste(
     "A dynamic Databricks LIKE pattern treats backslash as an escape, where",
