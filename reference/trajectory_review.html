@@ -11,12 +11,16 @@ appear in a separate &quot;Review audit&quot; aside.
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
 whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes land in review_file, one JSON record
-per line, and are restored when the viewer reopens.
-New review records use schema version 1 and include a unique event id, UTC
-timestamp, reviewer username, trajectory source, conversation id, optional
-exchange number, action, and optional note. Exchange-level records also
-snapshot the question and trust tag.
+in the transcript. Flags and notes are stored as one generated Markdown
+document per reviewed conversation and are restored when the viewer
+reopens.
+Each Markdown document contains the complete reviewer-visible conversation
+and its tool activity. YAML frontmatter stores active flags and note history
+so the reviewer can restore its state and agents can identify flagged
+conversations, exchanges, and reviewer notes. The Markdown body is the
+human-readable transcript for joint human-agent review. Search-pool results
+are omitted because later tool calls record any selected measure; other tool
+results are limited to 50 lines or 20,000 characters.
 Each answer's trust tag and citation outcomes are read back exactly as
 trajectory_read() recorded them. The viewer uses those decisions to
 reconstruct Commons citation asides from the raw ellmer answer; it never
@@ -36,12 +40,16 @@ appear in a separate &quot;Review audit&quot; aside.
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
 whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes land in review_file, one JSON record
-per line, and are restored when the viewer reopens.
-New review records use schema version 1 and include a unique event id, UTC
-timestamp, reviewer username, trajectory source, conversation id, optional
-exchange number, action, and optional note. Exchange-level records also
-snapshot the question and trust tag.
+in the transcript. Flags and notes are stored as one generated Markdown
+document per reviewed conversation and are restored when the viewer
+reopens.
+Each Markdown document contains the complete reviewer-visible conversation
+and its tool activity. YAML frontmatter stores active flags and note history
+so the reviewer can restore its state and agents can identify flagged
+conversations, exchanges, and reviewer notes. The Markdown body is the
+human-readable transcript for joint human-agent review. Search-pool results
+are omitted because later tool calls record any selected measure; other tool
+results are limited to 50 lines or 20,000 characters.
 Each answer's trust tag and citation outcomes are read back exactly as
 trajectory_read() recorded them. The viewer uses those decisions to
 reconstruct Commons citation asides from the raw ellmer answer; it never
@@ -95,12 +103,16 @@ appear in a separate "Review audit" aside.</p>
 <p>Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
 whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes land in <code>review_file</code>, one JSON record
-per line, and are restored when the viewer reopens.</p>
-<p>New review records use schema version 1 and include a unique event id, UTC
-timestamp, reviewer username, trajectory source, conversation id, optional
-exchange number, action, and optional note. Exchange-level records also
-snapshot the question and trust tag.</p>
+in the transcript. Flags and notes are stored as one generated Markdown
+document per reviewed conversation and are restored when the viewer
+reopens.</p>
+<p>Each Markdown document contains the complete reviewer-visible conversation
+and its tool activity. YAML frontmatter stores active flags and note history
+so the reviewer can restore its state and agents can identify flagged
+conversations, exchanges, and reviewer notes. The Markdown body is the
+human-readable transcript for joint human-agent review. Search-pool results
+are omitted because later tool calls record any selected measure; other tool
+results are limited to 50 lines or 20,000 characters.</p>
 <p>Each answer's trust tag and citation outcomes are read back exactly as
 <code><a href="trajectory_read.html">trajectory_read()</a></code> recorded them. The viewer uses those decisions to
 reconstruct Commons citation asides from the raw ellmer answer; it never
@@ -113,10 +125,7 @@ turn—are excluded from the viewer.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">trajectory_review</span><span class="op">(</span></span>
-<span>  trajectories <span class="op">=</span> <span class="fu"><a href="trajectory_read.html">trajectory_read</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  review_file <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getenv.html" class="external-link">Sys.getenv</a></span><span class="op">(</span><span class="st">"COMMONS_REVIEW_FILE"</span>, unset <span class="op">=</span> <span class="st">"commons-review.jsonl"</span><span class="op">)</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">trajectory_review</span><span class="op">(</span>trajectories <span class="op">=</span> <span class="fu"><a href="trajectory_read.html">trajectory_read</a></span><span class="op">(</span><span class="op">)</span>, review_dir <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -128,12 +137,10 @@ turn—are excluded from the viewer.</p>
 <code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
 
 
-<dt id="arg-review-file">review_file<a class="anchor" aria-label="anchor" href="#arg-review-file"></a></dt>
-<dd><p>Path of the JSONL file that review actions append to:
-flags, unflags, and feedback notes, each with a timestamp, the
-conversation id, and (for questions) the exchange number. Created on
-first use; flags and notes recorded here are restored when the viewer
-reopens. Defaults to <code>COMMONS_REVIEW_FILE</code> when set.</p></dd>
+<dt id="arg-review-dir">review_dir<a class="anchor" aria-label="anchor" href="#arg-review-dir"></a></dt>
+<dd><p>Optional directory where review actions write generated
+Markdown documents. Defaults to <code>COMMONS_REVIEW_DIR</code> when set and
+otherwise to <code>commons-reviews</code> in the working directory.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -144,11 +151,18 @@ expression of an <code>app.R</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>A single reviewer app writes all of its review events to <code>review_file</code>. For a
-deployed app, point <code>COMMONS_REVIEW_FILE</code> at persistent storage: files in a
-Posit Connect app's working directory are replaced on redeployment.
-File-backed review apps should use one Connect process because separate
+    <p>A single reviewer app writes all review documents to <code>review_dir</code>. Pass it
+directly, set <code>COMMONS_REVIEW_DIR</code> for the current R process with
+<code><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv()</a></code>, or add it to <code>.Renviron</code> to keep the setting across local R
+sessions. Without either, reviews land in <code>commons-reviews</code> relative to the
+app's working directory.</p>
+<p>Files in a Posit Connect app's working directory are replaced on
+redeployment. Review apps should use one Connect process because separate
 processes do not coordinate file writes or in-memory review state.</p>
+<p>All sessions of one reviewer app share the same flags and notes; review
+state is not separated by user. Notes record <code>session$user</code>, the login
+information supplied by the Shiny host, or <code>"unknown"</code> when it is
+unavailable. Flags do not record who changed them.</p>
     </div>
 
     <div class="section level2">
@@ -157,6 +171,9 @@ processes do not coordinate file writes or in-memory review state.</p>
 <span class="r-in"><span><span class="fu">trajectory_review</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu">trajectory_review</span><span class="op">(</span><span class="fu"><a href="trajectory_read.html">trajectory_read</a></span><span class="op">(</span>from <span class="op">=</span> <span class="st">"2026-07-01"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Sys.setenv.html" class="external-link">Sys.setenv</a></span><span class="op">(</span>COMMONS_REVIEW_DIR <span class="op">=</span> <span class="st">"/path/to/persistent/reviews"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">trajectory_review</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>
 </code></pre></div>
     </div>

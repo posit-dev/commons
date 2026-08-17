@@ -15,13 +15,18 @@ aside.
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
 whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes land in `review_file`, one JSON
-record per line, and are restored when the viewer reopens.
+in the transcript. Flags and notes are stored as one generated Markdown
+document per reviewed conversation and are restored when the viewer
+reopens.
 
-New review records use schema version 1 and include a unique event id,
-UTC timestamp, reviewer username, trajectory source, conversation id,
-optional exchange number, action, and optional note. Exchange-level
-records also snapshot the question and trust tag.
+Each Markdown document contains the complete reviewer-visible
+conversation and its tool activity. YAML frontmatter stores active flags
+and note history so the reviewer can restore its state and agents can
+identify flagged conversations, exchanges, and reviewer notes. The
+Markdown body is the human-readable transcript for joint human-agent
+review. Search-pool results are omitted because later tool calls record
+any selected measure; other tool results are limited to 50 lines or
+20,000 characters.
 
 Each answer's trust tag and citation outcomes are read back exactly as
 [`trajectory_read()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_read.md)
@@ -37,10 +42,7 @@ turn—are excluded from the viewer.
 ## Usage
 
 ``` r
-trajectory_review(
-  trajectories = trajectory_read(),
-  review_file = Sys.getenv("COMMONS_REVIEW_FILE", unset = "commons-review.jsonl")
-)
+trajectory_review(trajectories = trajectory_read(), review_dir = NULL)
 ```
 
 ## Arguments
@@ -50,13 +52,11 @@ trajectory_review(
   A named list of conversations, as returned by
   [`trajectory_read()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_read.md).
 
-- review_file:
+- review_dir:
 
-  Path of the JSONL file that review actions append to: flags, unflags,
-  and feedback notes, each with a timestamp, the conversation id, and
-  (for questions) the exchange number. Created on first use; flags and
-  notes recorded here are restored when the viewer reopens. Defaults to
-  `COMMONS_REVIEW_FILE` when set.
+  Optional directory where review actions write generated Markdown
+  documents. Defaults to `COMMONS_REVIEW_DIR` when set and otherwise to
+  `commons-reviews` in the working directory.
 
 ## Value
 
@@ -67,12 +67,22 @@ reviewer; the result can also be served as the last expression of an
 
 ## Details
 
-A single reviewer app writes all of its review events to `review_file`.
-For a deployed app, point `COMMONS_REVIEW_FILE` at persistent storage:
-files in a Posit Connect app's working directory are replaced on
-redeployment. File-backed review apps should use one Connect process
-because separate processes do not coordinate file writes or in-memory
-review state.
+A single reviewer app writes all review documents to `review_dir`. Pass
+it directly, set `COMMONS_REVIEW_DIR` for the current R process with
+[`Sys.setenv()`](https://rdrr.io/r/base/Sys.setenv.html), or add it to
+`.Renviron` to keep the setting across local R sessions. Without either,
+reviews land in `commons-reviews` relative to the app's working
+directory.
+
+Files in a Posit Connect app's working directory are replaced on
+redeployment. Review apps should use one Connect process because
+separate processes do not coordinate file writes or in-memory review
+state.
+
+All sessions of one reviewer app share the same flags and notes; review
+state is not separated by user. Notes record `session$user`, the login
+information supplied by the Shiny host, or `"unknown"` when it is
+unavailable. Flags do not record who changed them.
 
 ## Examples
 
@@ -81,5 +91,8 @@ if (FALSE) { # \dontrun{
 trajectory_review()
 
 trajectory_review(trajectory_read(from = "2026-07-01"))
+
+Sys.setenv(COMMONS_REVIEW_DIR = "/path/to/persistent/reviews")
+trajectory_review()
 } # }
 ```
