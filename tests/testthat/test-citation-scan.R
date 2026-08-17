@@ -209,6 +209,11 @@ test_that("a verified citation is rewritten in place", {
     "</commons-citation>\n\nMore text."
   )
   out <- scan_all(text, list(text), corpus)
+  expect_match(
+    out$text,
+    'Answer sentence.<shiny-aside label="documentation"',
+    fixed = TRUE
+  )
   expect_match(out$text, '<shiny-aside label="documentation"')
   expect_false(grepl("commons-citation", out$text))
   expect_identical(
@@ -287,6 +292,32 @@ test_that("chunk-invariance: any character split yields identical output", {
     expect_identical(got$text, whole$text)
     expect_identical(got$decisions, whole$decisions)
   }
+})
+
+test_that("adjacent verified citations attach to the preceding text", {
+  text <- paste(
+    "Answer sentence.",
+    scanner_test_citation("First reason."),
+    scanner_test_citation("Second reason."),
+    sep = "\n\n"
+  )
+
+  out <- scan_all(
+    text,
+    as.list(strsplit(text, "", fixed = TRUE)[[1]]),
+    corpus = scanner_test_corpus()
+  )
+
+  expect_match(
+    out$text,
+    'Answer sentence.<shiny-aside label="documentation"',
+    fixed = TRUE
+  )
+  expect_match(
+    out$text,
+    "</shiny-aside><shiny-aside",
+    fixed = TRUE
+  )
 })
 
 test_that("a malformed body (no blockquote) records status malformed and emits nothing", {

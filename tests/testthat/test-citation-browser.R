@@ -84,6 +84,15 @@ test_that("Shiny Chat renders one server-verified streamed citation", {
     app$get_js("document.querySelectorAll('.shiny-aside-group').length === 1;"),
     TRUE
   )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "document.querySelector('.shiny-aside-group')",
+        "?.closest('p')?.innerText.includes('Before citations.');"
+      )
+    ),
+    TRUE
+  )
 })
 
 test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
