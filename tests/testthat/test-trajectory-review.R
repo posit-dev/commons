@@ -731,8 +731,6 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   html <- as.character(viewer_ui(list()))
 
   expect_match(html, "shiny-date-range-input")
-  expect_match(html, "download_reviews")
-  expect_match(html, "Download reviews")
   expect_match(html, "bslib-sidebar-layout")
   expect_match(html, "sidebar-right")
   expect_match(html, "data-resizable")

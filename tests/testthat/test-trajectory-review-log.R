@@ -178,20 +178,6 @@ test_that("review state round trips through YAML frontmatter", {
   )
 })
 
-test_that("review archives contain generated documents", {
-  review_dir <- withr::local_tempdir()
-  writeLines("review one", file.path(review_dir, "conversation-one.md"))
-  writeLines("not a review", file.path(review_dir, "notes.md"))
-  archive <- tempfile(fileext = ".tar.gz")
-
-  write_review_archive(review_dir, archive)
-
-  expect_equal(
-    utils::untar(archive, list = TRUE),
-    "commons-reviews/conversation-one.md"
-  )
-})
-
 test_that("review directories resolve from arguments and the environment", {
   expect_equal(
     withr::with_envvar(

@@ -47,8 +47,7 @@
 #' directly, set `COMMONS_REVIEW_DIR` for the current R process with
 #' `Sys.setenv()`, or add it to `.Renviron` to keep the setting across local R
 #' sessions. Without either, reviews land in `commons-reviews` relative to the
-#' app's working directory. Download the generated documents with the app's
-#' **Download reviews** button when they need to be reviewed elsewhere.
+#' app's working directory.
 #'
 #' Files in a Posit Connect app's working directory are replaced on
 #' redeployment. Review apps should use one Connect process because separate
@@ -443,11 +442,6 @@ viewer_ui <- function(summary) {
           "Trust Level",
           trust_choices("conversation")
         ),
-        shiny::downloadButton(
-          "download_reviews",
-          "Download reviews",
-          icon = shiny::icon("download")
-        ),
         shiny::uiOutput("entries")
       ),
       trust_timeline_card(),
@@ -545,15 +539,6 @@ viewer_server <- function(
       review_target() %||% selected()["conversation"]
     })
     user <- review_user(session)
-
-    output$download_reviews <- shiny::downloadHandler(
-      filename = function() {
-        sprintf("commons-reviews-%s.tar.gz", Sys.Date())
-      },
-      content = function(file) {
-        write_review_archive(review_dir, file)
-      }
-    )
 
     output$review_ready <- shiny::renderText({
       if (is.null(review_selection())) "" else "ready"

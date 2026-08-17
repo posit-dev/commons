@@ -25,39 +25,6 @@ resolve_review_dir <- function(
   Sys.getenv("COMMONS_REVIEW_DIR", unset = "commons-reviews")
 }
 
-write_review_archive <- function(
-  review_dir,
-  file,
-  call = rlang::caller_env()
-) {
-  staging <- tempfile("commons-reviews-")
-  dir.create(file.path(staging, "commons-reviews"), recursive = TRUE)
-  on.exit(unlink(staging, recursive = TRUE), add = TRUE)
-
-  files <- review_document_files(review_dir)
-  if (length(files) > 0) {
-    file.copy(files, file.path(staging, "commons-reviews"))
-  }
-
-  old <- setwd(staging)
-  on.exit(setwd(old), add = TRUE)
-  tryCatch(
-    utils::tar(
-      file,
-      files = "commons-reviews",
-      compression = "gzip",
-      tar = "internal"
-    ),
-    error = function(error) {
-      cli::cli_abort(
-        "Could not create the trajectory review archive.",
-        parent = error,
-        call = call
-      )
-    }
-  )
-}
-
 review_document_files <- function(review_dir) {
   if (!dir.exists(review_dir)) {
     return(character())

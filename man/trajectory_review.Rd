@@ -60,8 +60,7 @@ A single reviewer app writes all review documents to \code{review_dir}. Pass it
 directly, set \code{COMMONS_REVIEW_DIR} for the current R process with
 \code{Sys.setenv()}, or add it to \code{.Renviron} to keep the setting across local R
 sessions. Without either, reviews land in \code{commons-reviews} relative to the
-app's working directory. Download the generated documents with the app's
-\strong{Download reviews} button when they need to be reviewed elsewhere.
+app's working directory.
 
 Files in a Posit Connect app's working directory are replaced on
 redeployment. Review apps should use one Connect process because separate

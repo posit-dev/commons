@@ -21,7 +21,7 @@ The answer uses SQL with little documentation and the agent had to inspect table
    Search for `commons(`, `data_source(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure arguments without `@param` documentation are never seen by the model: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. A new measure that queries a database should take the connection this way rather than referencing a global; other objects it needs (a pins board, an API client) should come from a default written as a call, e.g. `board = pins::board_connect()`.
 
 2. Choose the evidence path.
-   Do not always begin by loading raw trajectories. First look for a `commons-reviews/` directory or a downloaded review archive.
+   Do not always begin by loading raw trajectories. First look for a `commons-reviews/` directory.
 
 ### Path 1: Reviewed trajectories
 
@@ -74,7 +74,7 @@ commons::trajectory_review(
 )
 ```
 
-Files in a Posit Connect app's working directory are replaced on redeployment. The reviewer can export a `commons-reviews` archive with **Download reviews**. Use one Connect process because separate processes do not coordinate review writes. Prepare local reviewer code when the user asks, but obtain explicit confirmation before deploying content or creating external resources.
+Files in a Posit Connect app's working directory are replaced on redeployment. Use one Connect process because separate processes do not coordinate review writes. Prepare local reviewer code when the user asks, but obtain explicit confirmation before deploying content or creating external resources.
 
 3. Analyze themes.
    Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
