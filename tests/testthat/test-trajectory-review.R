@@ -455,10 +455,15 @@ test_that("the viewer filters conversations and follows selection", {
   trajectories <- list(conv1 = early, conv2 = late)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
-  review_file <- withr::local_tempfile(fileext = ".jsonl")
+  review_dir <- withr::local_tempdir()
 
   shiny::testServer(
-    viewer_server(trajectories, summary, questions, review_file),
+    viewer_server(
+      trajectories,
+      summary,
+      questions,
+      review_dir
+    ),
     {
       session$setInputs(
         group_by = "conversation",
@@ -501,7 +506,7 @@ test_that("the viewer filters conversations and follows selection", {
   )
 })
 
-test_that("flags and notes append to and restore from the review file", {
+test_that("flags and notes write to and restore from review documents", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   skip_if_not_installed("shinychat")
@@ -511,8 +516,13 @@ test_that("flags and notes append to and restore from the review file", {
   trajectories <- list(conv1 = turns)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
-  review_file <- withr::local_tempfile(fileext = ".jsonl")
-  server <- viewer_server(trajectories, summary, questions, review_file)
+  review_dir <- withr::local_tempdir()
+  server <- viewer_server(
+    trajectories,
+    summary,
+    questions,
+    review_dir
+  )
 
   shiny::testServer(
     server,
@@ -552,30 +562,10 @@ test_that("flags and notes append to and restore from the review file", {
     expect_length(notes(), 2)
   })
 
-  records <- lapply(readLines(review_file), jsonlite::fromJSON)
+  restored <- read_review_state(review_dir)
+  expect_equal(restored$flags, c("conv1", "conv1#1"))
   expect_equal(
-    vapply(records, function(r) r$action, character(1)),
-    c("flag", "flag", "note", "note")
-  )
-  expect_equal(records[[2]]$conversation, "conv1")
-  expect_equal(records[[2]]$exchange, 1)
-  expect_equal(records[[3]]$note, "Wrong join, should use orders.")
-  expect_null(records[[4]]$exchange)
-  expect_equal(
-    records[[2]][c("schema_version", "user", "source", "question", "tag")],
-    list(
-      schema_version = 1L,
-      user = "unknown",
-      source = list(kind = "unknown"),
-      question = "One?",
-      tag = "none"
-    )
-  )
-
-  restored <- read_review_records(review_file)
-  expect_equal(review_flags(restored), c("conv1", "conv1#1"))
-  expect_equal(
-    vapply(review_notes(restored), `[[`, character(1), "note"),
+    vapply(restored$notes, `[[`, character(1), "note"),
     c("Wrong join, should use orders.", "Reviewed end to end; looks fine.")
   )
 })

@@ -4,20 +4,15 @@
 \alias{trajectory_review}
 \title{Review commons trajectories}
 \usage{
-trajectory_review(
-  trajectories = trajectory_read(),
-  review_file = Sys.getenv("COMMONS_REVIEW_FILE", unset = "commons-review.jsonl")
-)
+trajectory_review(trajectories = trajectory_read(), review_dir = NULL)
 }
 \arguments{
 \item{trajectories}{A named list of conversations, as returned by
 \code{\link[=trajectory_read]{trajectory_read()}}.}
 
-\item{review_file}{Path of the JSONL file that review actions append to:
-flags, unflags, and feedback notes, each with a timestamp, the
-conversation id, and (for questions) the exchange number. Created on
-first use; flags and notes recorded here are restored when the viewer
-reopens. Defaults to \code{COMMONS_REVIEW_FILE} when set.}
+\item{review_dir}{Optional directory where review actions write generated
+Markdown documents. Defaults to \code{COMMONS_REVIEW_DIR} when set and
+otherwise to \code{commons-reviews} in the working directory.}
 }
 \value{
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. Calling \code{trajectory_review()} at the
@@ -38,13 +33,17 @@ appear in a separate "Review audit" aside.
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
 whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes land in \code{review_file}, one JSON record
-per line, and are restored when the viewer reopens.
+in the transcript. Flags and notes are stored as one generated Markdown
+document per reviewed conversation and are restored when the viewer
+reopens.
 
-New review records use schema version 1 and include a unique event id, UTC
-timestamp, reviewer username, trajectory source, conversation id, optional
-exchange number, action, and optional note. Exchange-level records also
-snapshot the question and trust tag.
+Each Markdown document contains the complete reviewer-visible conversation
+and its tool activity. YAML frontmatter stores active flags and note history
+so the reviewer can restore its state and agents can identify flagged
+conversations, exchanges, and reviewer notes. The Markdown body is the
+human-readable transcript for joint human-agent review. Search-pool results
+are omitted because later tool calls record any selected measure; other tool
+results are limited to 50 lines or 20,000 characters.
 
 Each answer's trust tag and citation outcomes are read back exactly as
 \code{\link[=trajectory_read]{trajectory_read()}} recorded them. The viewer uses those decisions to
@@ -57,16 +56,28 @@ shinychat's conversation-title generation, and completions with no user
 turn—are excluded from the viewer.
 }
 \details{
-A single reviewer app writes all of its review events to \code{review_file}. For a
-deployed app, point \code{COMMONS_REVIEW_FILE} at persistent storage: files in a
-Posit Connect app's working directory are replaced on redeployment.
-File-backed review apps should use one Connect process because separate
+A single reviewer app writes all review documents to \code{review_dir}. Pass it
+directly, set \code{COMMONS_REVIEW_DIR} for the current R process with
+\code{Sys.setenv()}, or add it to \code{.Renviron} to keep the setting across local R
+sessions. Without either, reviews land in \code{commons-reviews} relative to the
+app's working directory.
+
+Files in a Posit Connect app's working directory are replaced on
+redeployment. Review apps should use one Connect process because separate
 processes do not coordinate file writes or in-memory review state.
+
+All sessions of one reviewer app share the same flags and notes; review
+state is not separated by user. Notes record \code{session$user}, the login
+information supplied by the Shiny host, or \code{"unknown"} when it is
+unavailable. Flags do not record who changed them.
 }
 \examples{
 \dontrun{
 trajectory_review()
 
 trajectory_review(trajectory_read(from = "2026-07-01"))
+
+Sys.setenv(COMMONS_REVIEW_DIR = "/path/to/persistent/reviews")
+trajectory_review()
 }
 }
