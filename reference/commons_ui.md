@@ -4,12 +4,12 @@ These functions wrap
 [`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html)
 and
 [`shinychat::chat_server()`](https://posit-dev.github.io/shinychat/r/reference/chat_app.html)
-with commons-specific answer provenance UI. Answers produced from
-registered measures get a compact verified-answer pill. Answers produced
-from fallback SQL or R can cite text from the agent's context, measure
-definitions, or data documentation; verified citations render as
-footnotes whose tooltips name their source. Fallback answers with no
-verified citation get an untrusted caution pill.
+for commons agents. The server verifies each `<commons-citation>` the
+model writes against its own context, measure definitions, and data
+documentation as the answer streams, and rewrites verified citations
+inline as server-authored `<shiny-aside>` elements naming their source.
+A compact provenance aside follows the answer when it was produced by a
+governed calculation, or when a fallback answer cites nothing verified.
 
 ## Usage
 
