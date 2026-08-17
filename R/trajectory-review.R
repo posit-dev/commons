@@ -39,50 +39,20 @@
 #' @param trajectories A named list of conversations, as returned by
 #'   [trajectory_read()].
 #' @param review_dir Optional directory where review actions write generated
-#'   Markdown documents. For local review, defaults to `COMMONS_REVIEW_DIR`
-#'   when set and otherwise to `commons-reviews` in the working directory.
-#'   Pin-backed review uses an automatically managed temporary cache unless
-#'   this argument is supplied.
-#' @param review_board Optional pins board used for durable review storage,
-#'   such as `pins::board_connect()`. Must be supplied with `review_pin`.
-#' @param review_pin Name of a pin containing the review documents. Must be
-#'   supplied with `review_board`.
+#'   Markdown documents. Defaults to `COMMONS_REVIEW_DIR` when set and
+#'   otherwise to `commons-reviews` in the working directory.
 #'
 #' @details
-#' Without a pin, a single reviewer app writes all review documents to
-#' `review_dir`. Pass it directly, set `COMMONS_REVIEW_DIR` for the current R
-#' process with `Sys.setenv()`, or add it to `.Renviron` to keep the setting
-#' across local R sessions. Without either, reviews land in `commons-reviews`
-#' relative to the app's working directory.
+#' A single reviewer app writes all review documents to `review_dir`. Pass it
+#' directly, set `COMMONS_REVIEW_DIR` for the current R process with
+#' `Sys.setenv()`, or add it to `.Renviron` to keep the setting across local R
+#' sessions. Without either, reviews land in `commons-reviews` relative to the
+#' app's working directory. Download the generated documents with the app's
+#' **Download reviews** button when they need to be reviewed elsewhere.
 #'
-#' On Posit Connect, use a versioned Connect pin for durable storage across
-#' deployments:
-#'
-#' ```
-#' trajectory_review(
-#'   trajectories,
-#'   review_board = pins::board_connect(
-#'     auth = "envvar",
-#'     use_cache_on_failure = FALSE
-#'   ),
-#'   review_pin = "agent-reviews"
-#' )
-#' ```
-#'
-#' The reviewer uses an automatically managed temporary local cache, downloads
-#' the pin at startup, and uploads a new pin version after a brief pause in
-#' review activity. Pending changes are also uploaded when a reviewer session
-#' ends. Connect supplies `CONNECT_SERVER` and `CONNECT_API_KEY` to running
-#' content when its default API-key integration is enabled, so `auth = "envvar"`
-#' does not require embedding credentials. Without a pin, the default
-#' working-directory path is replaced when the content is redeployed. Review
-#' apps should use one Connect process because separate processes do not
-#' coordinate writes or in-memory review state.
-#'
-#' The Connect API key's user must have editor access to the content whose
-#' trajectories are read. The pin is owned by the reviewer app's publisher.
-#' Download the generated documents with the app's **Download reviews** button
-#' or [pins::pin_download()] when they need to be reviewed outside the app.
+#' Files in a Posit Connect app's working directory are replaced on
+#' redeployment. Review apps should use one Connect process because separate
+#' processes do not coordinate file writes or in-memory review state.
 #'
 #' All sessions of one reviewer app share the same flags and notes; review
 #' state is not separated by user. Notes record `session$user`, the login
@@ -105,20 +75,17 @@
 #' @export
 trajectory_review <- function(
   trajectories = trajectory_read(),
-  review_dir = NULL,
-  review_board = NULL,
-  review_pin = NULL
+  review_dir = NULL
 ) {
   check_viewer_packages()
   check_trajectories(trajectories)
-  store <- review_store(review_dir, review_board, review_pin)
-  hydrate_review_store(store)
+  review_dir <- resolve_review_dir(review_dir)
   trajectories <- drop_side_conversations(trajectories)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
     viewer_ui(summary),
-    viewer_server(trajectories, summary, questions, store)
+    viewer_server(trajectories, summary, questions, review_dir)
   )
 }
 
@@ -551,34 +518,20 @@ trust_choices <- function(group_by) {
   }
 }
 
-review_sync_delay_ms <- 1000L
-
 viewer_server <- function(
   trajectories,
   summary,
   questions,
-  store
+  review_dir
 ) {
   # Share review state across sessions in the documented single process.
-  review_state <- read_review_state(store$review_dir)
+  review_state <- read_review_state(review_dir)
   app_flags <- shiny::reactiveVal(review_state$flags)
   app_notes <- shiny::reactiveVal(review_state$notes)
-  sync_state <- rlang::env(dirty = FALSE)
 
   function(input, output, session) {
     flags <- app_flags
     notes <- app_notes
-    sync_revision <- shiny::reactiveVal(0L)
-    debounced_sync_revision <- shiny::debounce(
-      shiny::reactive(sync_revision()),
-      millis = review_sync_delay_ms
-    )
-    shiny::observeEvent(
-      debounced_sync_revision(),
-      flush_review_store_sync(store, sync_state),
-      ignoreInit = TRUE
-    )
-    session$onSessionEnded(\() flush_review_store_sync(store, sync_state))
     selected <- shiny::reactiveVal(NULL)
     selected_transcript <- shiny::reactive({
       key <- selected()
@@ -598,7 +551,7 @@ viewer_server <- function(
         sprintf("commons-reviews-%s.tar.gz", Sys.Date())
       },
       content = function(file) {
-        write_review_archive(store$review_dir, file)
+        write_review_archive(review_dir, file)
       }
     )
 
@@ -730,14 +683,13 @@ viewer_server <- function(
         union(flags(), review)
       }
       write_conversation_review(
-        store$review_dir,
+        review_dir,
         trajectories,
         key$conversation,
         next_flags,
         notes()
       )
       flags(next_flags)
-      request_review_store_sync(store, sync_state, sync_revision)
     })
 
     shiny::observeEvent(input$exchange_select, {
@@ -793,14 +745,13 @@ viewer_server <- function(
         list(new_review_note(trajectories, key, user, note))
       )
       write_conversation_review(
-        store$review_dir,
+        review_dir,
         trajectories,
         key$conversation,
         flags(),
         next_notes
       )
       notes(next_notes)
-      request_review_store_sync(store, sync_state, sync_revision)
       bslib::update_submit_textarea(
         "review_note",
         value = "",

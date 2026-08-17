@@ -462,7 +462,7 @@ test_that("the viewer filters conversations and follows selection", {
       trajectories,
       summary,
       questions,
-      review_store(review_dir)
+      review_dir
     ),
     {
       session$setInputs(
@@ -521,7 +521,7 @@ test_that("flags and notes write to and restore from review documents", {
     trajectories,
     summary,
     questions,
-    review_store(review_dir)
+    review_dir
   )
 
   shiny::testServer(
@@ -567,47 +567,6 @@ test_that("flags and notes write to and restore from review documents", {
   expect_equal(
     vapply(restored$notes, `[[`, character(1), "note"),
     c("Wrong join, should use orders.", "Reviewed end to end; looks fine.")
-  )
-})
-
-test_that("pin-backed review sync batches actions and flushes on session end", {
-  skip_if_not_installed("shiny")
-  skip_if_not_installed("bslib")
-  skip_if_not_installed("shinychat")
-  skip_if_not_installed("htmltools")
-
-  syncs <- 0L
-  local_mocked_bindings(
-    sync_review_store = function(...) syncs <<- syncs + 1L
-  )
-  turns <- list(ellmer::UserTurn("One?"), ellmer::AssistantTurn("1."))
-  trajectories <- list(conv1 = turns)
-  summary <- summarize_trajectories(trajectories)
-  questions <- summarize_questions(trajectories)
-  store <- list(
-    review_dir = withr::local_tempdir(),
-    board = TRUE,
-    pin = "agent-reviews"
-  )
-
-  shiny::testServer(
-    viewer_server(trajectories, summary, questions, store),
-    {
-      session$setInputs(group_by = "conversation", trust = "all", entry_1 = 1)
-      session$setInputs(flag_toggle = 1)
-      session$setInputs(flag_toggle = 2)
-
-      expect_identical(syncs, 0L)
-      session$elapse(review_sync_delay_ms - 1L)
-      expect_identical(syncs, 0L)
-      session$elapse(1L)
-      expect_identical(syncs, 1L)
-
-      session$setInputs(flag_toggle = 3)
-      expect_identical(syncs, 1L)
-      session$close()
-      expect_identical(syncs, 2L)
-    }
   )
 })
 

@@ -4,28 +4,15 @@
 \alias{trajectory_review}
 \title{Review commons trajectories}
 \usage{
-trajectory_review(
-  trajectories = trajectory_read(),
-  review_dir = NULL,
-  review_board = NULL,
-  review_pin = NULL
-)
+trajectory_review(trajectories = trajectory_read(), review_dir = NULL)
 }
 \arguments{
 \item{trajectories}{A named list of conversations, as returned by
 \code{\link[=trajectory_read]{trajectory_read()}}.}
 
 \item{review_dir}{Optional directory where review actions write generated
-Markdown documents. For local review, defaults to \code{COMMONS_REVIEW_DIR}
-when set and otherwise to \code{commons-reviews} in the working directory.
-Pin-backed review uses an automatically managed temporary cache unless
-this argument is supplied.}
-
-\item{review_board}{Optional pins board used for durable review storage,
-such as \code{pins::board_connect()}. Must be supplied with \code{review_pin}.}
-
-\item{review_pin}{Name of a pin containing the review documents. Must be
-supplied with \code{review_board}.}
+Markdown documents. Defaults to \code{COMMONS_REVIEW_DIR} when set and
+otherwise to \code{commons-reviews} in the working directory.}
 }
 \value{
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. Calling \code{trajectory_review()} at the
@@ -69,39 +56,16 @@ shinychat's conversation-title generation, and completions with no user
 turn—are excluded from the viewer.
 }
 \details{
-Without a pin, a single reviewer app writes all review documents to
-\code{review_dir}. Pass it directly, set \code{COMMONS_REVIEW_DIR} for the current R
-process with \code{Sys.setenv()}, or add it to \code{.Renviron} to keep the setting
-across local R sessions. Without either, reviews land in \code{commons-reviews}
-relative to the app's working directory.
+A single reviewer app writes all review documents to \code{review_dir}. Pass it
+directly, set \code{COMMONS_REVIEW_DIR} for the current R process with
+\code{Sys.setenv()}, or add it to \code{.Renviron} to keep the setting across local R
+sessions. Without either, reviews land in \code{commons-reviews} relative to the
+app's working directory. Download the generated documents with the app's
+\strong{Download reviews} button when they need to be reviewed elsewhere.
 
-On Posit Connect, use a versioned Connect pin for durable storage across
-deployments:
-
-\if{html}{\out{<div class="sourceCode">}}\preformatted{trajectory_review(
-  trajectories,
-  review_board = pins::board_connect(
-    auth = "envvar",
-    use_cache_on_failure = FALSE
-  ),
-  review_pin = "agent-reviews"
-)
-}\if{html}{\out{</div>}}
-
-The reviewer uses an automatically managed temporary local cache, downloads
-the pin at startup, and uploads a new pin version after a brief pause in
-review activity. Pending changes are also uploaded when a reviewer session
-ends. Connect supplies \code{CONNECT_SERVER} and \code{CONNECT_API_KEY} to running
-content when its default API-key integration is enabled, so \code{auth = "envvar"}
-does not require embedding credentials. Without a pin, the default
-working-directory path is replaced when the content is redeployed. Review
-apps should use one Connect process because separate processes do not
-coordinate writes or in-memory review state.
-
-The Connect API key's user must have editor access to the content whose
-trajectories are read. The pin is owned by the reviewer app's publisher.
-Download the generated documents with the app's \strong{Download reviews} button
-or \code{\link[pins:pin_download]{pins::pin_download()}} when they need to be reviewed outside the app.
+Files in a Posit Connect app's working directory are replaced on
+redeployment. Review apps should use one Connect process because separate
+processes do not coordinate file writes or in-memory review state.
 
 All sessions of one reviewer app share the same flags and notes; review
 state is not separated by user. Notes record \code{session$user}, the login

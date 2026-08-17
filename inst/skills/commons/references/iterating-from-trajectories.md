@@ -21,7 +21,7 @@ The answer uses SQL with little documentation and the agent had to inspect table
    Search for `commons(`, `data_source(`, `semantic_layer(`, `measure(`, and `context_layer(`. Identify where the semantic layer and context layer are constructed. If they are wrapped in project helpers, follow those helpers. Note that measure arguments without `@param` documentation are never seen by the model: an argument named after a data source receives that source's connection, and any other undocumented argument keeps its default. A new measure that queries a database should take the connection this way rather than referencing a global; other objects it needs (a pins board, an API client) should come from a default written as a call, e.g. `board = pins::board_connect()`.
 
 2. Choose the evidence path.
-   Do not always begin by loading raw trajectories. First look for a `commons-reviews/` directory, a downloaded review archive, or reviewer configuration that names a review pin.
+   Do not always begin by loading raw trajectories. First look for a `commons-reviews/` directory or a downloaded review archive.
 
 ### Path 1: Reviewed trajectories
 
@@ -30,15 +30,7 @@ Use review documents whenever they are available. They contain the conversations
 - Read each `conversation-*.md` file. Parse its YAML frontmatter for the conversation id, active conversation and exchange flags, and reviewer notes. Read the Markdown body for the transcript, trust labels, tool calls, tool results, and notes in context.
 - Treat flags as requests for attention, not conclusions. Use review notes to understand what the reviewer wants investigated.
 - Treat tool results as excerpts because the Markdown renderer truncates long results.
-- Use the latest pin version unless the user asks to compare review state over time.
 - Supplement the reviews with raw trajectories only when needed to quantify how common a theme is, inspect a truncated result, or analyze conversations that were not reviewed.
-
-When a review pin is configured but not present locally, ask for its name or a downloaded archive. With access to the same Connect account, retrieve it read-only:
-
-```r
-board <- pins::board_connect()
-pins::pin_download(board, "<review-pin>")
-```
 
 ### Path 2: Raw trajectories
 
@@ -72,22 +64,17 @@ commons::trajectory_review(
 )
 ```
 
-For a deployed reviewer, back review state with a versioned Connect pin so it
-survives restarts and redeployments. `trajectory_review()` manages its temporary
-working cache automatically:
+For a deployed reviewer, pass an explicit review directory when durable writable
+storage is available:
 
 ```r
 commons::trajectory_review(
   commons::trajectory_read("<agent-content-guid-or-url>"),
-  review_board = pins::board_connect(
-    auth = "envvar",
-    use_cache_on_failure = FALSE
-  ),
-  review_pin = "agent-reviews"
+  review_dir = "<path-to-review-directory>"
 )
 ```
 
-Use one Connect process because separate processes do not coordinate review writes. The reviewer can export a `commons-reviews` archive with **Download reviews**. Prepare local reviewer code when the user asks, but obtain explicit confirmation before deploying content or creating external resources.
+Files in a Posit Connect app's working directory are replaced on redeployment. The reviewer can export a `commons-reviews` archive with **Download reviews**. Use one Connect process because separate processes do not coordinate review writes. Prepare local reviewer code when the user asks, but obtain explicit confirmation before deploying content or creating external resources.
 
 3. Analyze themes.
    Group conversations by the business concept being asked about, not by exact wording. Note which themes already hit Path A, which are documented Path B, and which are exploratory Path B.
