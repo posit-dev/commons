@@ -190,6 +190,7 @@ shiny-tool-request .shiny-tool-card .tool-title,
   border-radius: 999px;
   display: inline-flex;
   font-size: 0.74rem;
+  font-weight: 400;
   gap: 0.3rem;
   line-height: 1.2;
   max-width: 100%;
@@ -288,6 +289,7 @@ shiny-chat-container .shiny-aside-pill {
   box-shadow: inset 0 0 0 1px var(--bs-border-color, #dfe3e7);
   color: var(--bs-secondary-color, #5c636a);
   font-size: 0.74rem;
+  font-weight: 400;
   padding: 0.12rem 0.45rem;
 }
 

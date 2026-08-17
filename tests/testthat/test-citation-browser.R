@@ -112,6 +112,12 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     )
   )
   expect_identical(labels, "Verified answer|documentation|Untrusted")
+  expect_identical(
+    app$get_js(
+      "getComputedStyle(document.querySelector('.shiny-aside-pill')).fontWeight;"
+    ),
+    "400"
+  )
 
   expect_identical(
     app$get_js(
