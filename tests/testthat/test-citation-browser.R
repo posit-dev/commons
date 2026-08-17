@@ -40,7 +40,7 @@ test_that("Shiny Chat renders one server-verified streamed citation", {
 
   expect_identical(
     app$get_js(
-      "document.querySelector('.shiny-aside-pill__label')?.innerText;"
+      "document.querySelector('.shiny-aside-pill__label')?.textContent;"
     ),
     "documentation"
   )
@@ -108,7 +108,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   labels <- app$get_js(
     paste0(
       "Array.from(document.querySelectorAll('.shiny-aside-pill__label'))",
-      ".map((node) => node.innerText).join('|');"
+      ".map((node) => node.textContent).join('|');"
     )
   )
   expect_identical(labels, "Verified answer|documentation|Untrusted")
@@ -117,6 +117,27 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
       "getComputedStyle(document.querySelector('.shiny-aside-pill')).fontWeight;"
     ),
     "400"
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "getComputedStyle(document.querySelector(",
+        "'.shiny-aside-pill:has(img[src*=\"/citation-\"])'",
+        "), '::before').content;"
+      )
+    ),
+    "counter(commons-citation)"
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "getComputedStyle(document.querySelector(",
+        "'.shiny-aside-pill:has(img[src*=\"/citation-\"]) '",
+        "+ '.shiny-aside-pill__label'",
+        ")).display;"
+      )
+    ),
+    "none"
   )
 
   expect_identical(

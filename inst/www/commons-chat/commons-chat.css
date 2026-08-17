@@ -304,6 +304,56 @@ shiny-chat-container .shiny-aside-pill img {
   opacity: 0.75;
 }
 
+shiny-chat-container .shiny-chat-message-content {
+  counter-reset: commons-citation;
+}
+
+shiny-chat-container
+  .shiny-aside-group:has(.shiny-aside-pill img[src*="/citation-"]) {
+  margin-inline-start: 0.1em;
+  vertical-align: super;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"]) {
+  background: transparent;
+  box-shadow: none;
+  color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 70%,
+    var(--bs-body-bg, #fff)
+  );
+  counter-increment: commons-citation;
+  font-size: 0.72em;
+  font-weight: 600;
+  min-height: 0;
+  padding: 0 0.12em;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"]):hover,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"]):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"])[aria-expanded="true"] {
+  background: transparent;
+  color: var(--bs-primary, #007bc2);
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"])::before {
+  content: counter(commons-citation);
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"])
+  img,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"])
+  .shiny-aside-pill__label {
+  display: none;
+}
+
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
   background: #f2fbf5;
