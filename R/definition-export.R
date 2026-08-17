@@ -1,22 +1,30 @@
 # This is a temporary, definition-only implementation of the contract produced
-# by `data-dict export-spec`. A definition's `expr` is written in data-dict's
-# typed expression language, not in the SQL dialect of the attached source.
-# Commons therefore cannot execute the source text directly: it must parse and
-# type-check the expression against the authored dictionary, infer its kind and
-# value type, resolve its direct column and sibling-definition references, and
-# translate the checked expression through a target-specific emitter.
+# by `data-dict export-spec`, ported against tidyverse/data-dict at
+# d950c5ac90d0ab939d330600f3a5ee1bfde0f604. A definition's `expr` is written in
+# data-dict's typed expression language, not in the SQL dialect of the attached
+# source. Commons therefore cannot execute the source text directly: it must
+# parse and type-check the expression against the authored dictionary, infer
+# its kind and value type, resolve its direct column and sibling-definition
+# references, and translate the checked expression through a target-specific
+# emitter.
 #
 # Keep that work behind definition_export_spec(). The records returned here
-# intentionally follow the definition portion of data-dict's JSON export:
-# expression, kind, type, direct references, and translations. Runtime code
-# should consume those records rather than reach into the parser or typed IR.
-# The implementation does not attempt to validate or export the rest of a data
+# follow the definition portion of data-dict's JSON export: expression, kind,
+# type, direct references, and translations. Only data-dict's DuckDB target is
+# ported because commons does not consume its R targets. Runtime code should
+# consume the export records rather than reach into the parser or typed IR. The
+# implementation does not attempt to validate or export the rest of a data
 # dictionary, and package checks compare it with an installed data-dict binary.
+# R does not expose data-dict's Rust regex engine, so regex handling guards
+# known PCRE-only constructs before compiling the remaining pattern with PCRE;
+# cross-implementation conformance remains the authority.
 #
-# Once a data-dict R package exposes the CLI's validation/export interface,
-# replace this local parser, checker, and official emitters with that package.
-# Commons will still own source binding, sibling-translation composition,
-# invocation tokens, and SQL targets that data-dict itself does not provide.
+# A data-dict R package wrapping the CLI's JSON interface can replace this
+# adapter for the targets that interface returns. Such a wrapper may not expose
+# typed IR, so commons-only SQL targets still need local lowering until
+# data-dict either exposes that IR or emits those targets itself. Commons will
+# continue to own source binding, sibling-translation composition, and
+# invocation tokens.
 
 definition_export_spec <- function(raw, call = rlang::caller_env()) {
   raw <- raw %||% list()
@@ -242,10 +250,11 @@ definition_check_node <- function(
     }
     state$selection <- selection
     return(definition_ir(
-      c(node, list(selection = selection)),
+      node,
       "any",
       "row",
-      kind = "selected"
+      .kind = "selected",
+      selection = selection
     ))
   }
   if (kind %in% c("negate", "not")) {
@@ -253,16 +262,18 @@ definition_check_node <- function(
     if (identical(kind, "negate")) {
       definition_require(operand, "number", "negation", call)
       return(definition_ir(
-        c(node, list(operand = operand)),
+        node,
         "number",
-        operand$shape
+        operand$shape,
+        operand = operand
       ))
     }
     definition_require(operand, "boolean", "`NOT`", call)
     return(definition_ir(
-      c(node, list(operand = operand)),
+      node,
       "boolean",
-      operand$shape
+      operand$shape,
+      operand = operand
     ))
   }
   if (kind %in% c("and", "or")) {
@@ -271,9 +282,11 @@ definition_check_node <- function(
     definition_require(lhs, "boolean", "a logical operator", call)
     definition_require(rhs, "boolean", "a logical operator", call)
     return(definition_ir(
-      c(node, list(lhs = lhs, rhs = rhs)),
+      node,
       "boolean",
-      definition_shape_max(lhs$shape, rhs$shape)
+      definition_shape_max(lhs$shape, rhs$shape),
+      lhs = lhs,
+      rhs = rhs
     ))
   }
   if (identical(kind, "arithmetic")) {
@@ -295,9 +308,11 @@ definition_check_node <- function(
       type <- "number"
     }
     return(definition_ir(
-      c(node, list(lhs = lhs, rhs = rhs)),
+      node,
       type,
-      definition_shape_max(lhs$shape, rhs$shape)
+      definition_shape_max(lhs$shape, rhs$shape),
+      lhs = lhs,
+      rhs = rhs
     ))
   }
   if (identical(kind, "compare")) {
@@ -309,43 +324,41 @@ definition_check_node <- function(
       call
     )
     return(definition_ir(
-      c(node, operands),
+      node,
       "boolean",
-      definition_shape_max(operands$lhs$shape, operands$rhs$shape)
+      definition_shape_max(operands$lhs$shape, operands$rhs$shape),
+      lhs = operands$lhs,
+      rhs = operands$rhs
     ))
   }
   if (identical(kind, "is_null")) {
     operand <- definition_check_node(node$operand, env, state, call)
     return(definition_ir(
-      c(node, list(operand = operand)),
+      node,
       "boolean",
-      operand$shape
+      operand$shape,
+      operand = operand
     ))
   }
   if (identical(kind, "between")) {
-    lower <- definition_check_comparable(
-      node$operand,
-      node$lo,
-      env,
-      state,
-      call
-    )
-    upper <- definition_check_comparable_ir(
-      lower$lhs,
-      node$hi,
-      env,
-      state,
-      call
-    )
+    operand <- definition_check_node(node$operand, env, state, call)
+    lo <- definition_check_node(node$lo, env, state, call)
+    hi <- definition_check_node(node$hi, env, state, call)
+    lower <- definition_comparable_ir(operand, lo, call)
+    definition_comparable_ir(operand, hi, call)
+    upper <- definition_coerce_temporal_pair(lower$lhs, hi)
     shape <- definition_shape_max(
       lower$lhs$shape,
       lower$rhs$shape,
       upper$rhs$shape
     )
     return(definition_ir(
-      c(node, list(operand = upper$lhs, lo = lower$rhs, hi = upper$rhs)),
+      node,
       "boolean",
-      shape
+      shape,
+      operand = upper$lhs,
+      lo = lower$rhs,
+      hi = upper$rhs
     ))
   }
   if (identical(kind, "in")) {
@@ -365,12 +378,14 @@ definition_check_node <- function(
       operand <- definition_coerce_temporal(operand, items[[1]]$type)
     }
     return(definition_ir(
-      c(node, list(operand = operand, items = items)),
+      node,
       "boolean",
       do.call(
         definition_shape_max,
         c(list(operand$shape), lapply(items, `[[`, "shape"))
-      )
+      ),
+      operand = operand,
+      items = items
     ))
   }
   if (kind %in% c("like", "similar")) {
@@ -387,9 +402,11 @@ definition_check_node <- function(
       definition_validate_regex(pattern$value, call)
     }
     return(definition_ir(
-      c(node, list(operand = operand, pattern = pattern)),
+      node,
       "boolean",
-      definition_shape_max(operand$shape, pattern$shape)
+      definition_shape_max(operand$shape, pattern$shape),
+      operand = operand,
+      pattern = pattern
     ))
   }
   if (identical(kind, "interval")) {
@@ -401,7 +418,7 @@ definition_check_node <- function(
         call = call
       )
     }
-    return(definition_ir(c(node, list(n = n)), "interval", n$shape))
+    return(definition_ir(node, "interval", n$shape, n = n))
   }
   if (identical(kind, "function")) {
     return(definition_check_function(node, env, state, call))
@@ -428,9 +445,11 @@ definition_check_node <- function(
       if (!is.null(otherwise)) otherwise$shape
     )
     return(definition_ir(
-      c(node, list(whens = whens, otherwise = otherwise)),
+      node,
       type,
-      do.call(definition_shape_max, as.list(shapes))
+      do.call(definition_shape_max, as.list(shapes)),
+      whens = whens,
+      otherwise = otherwise
     ))
   }
   cli::cli_abort("Unknown expression node {.val {kind}}.", call = call)
@@ -446,9 +465,10 @@ definition_check_reference <- function(node, env, state, call) {
     state$definition_selection_count <- state$definition_selection_count +
       (attr(definition, "selection_count") %||% 0L)
     return(definition_ir(
-      c(node, list(reference = "definition")),
+      node,
       definition$type %||% "any",
-      attr(definition, "shape") %||% "row"
+      attr(definition, "shape") %||% "row",
+      reference = "definition"
     ))
   }
   column <- env$columns[[path[[1]]]]
@@ -478,9 +498,10 @@ definition_check_reference <- function(node, env, state, call) {
     }
   }
   definition_ir(
-    c(node, list(reference = "column")),
+    node,
     current$type,
-    "row"
+    "row",
+    reference = "column"
   )
 }
 
@@ -525,24 +546,18 @@ definition_check_function <- function(node, env, state, call) {
   type <- if (identical(signature$return, "same")) {
     args[[1]]$type %||% "any"
   } else {
-    signature$
-    return
+    signature[["return"]]
   }
   shape <- if (isTRUE(signature$aggregate)) {
     "agg"
   } else {
     do.call(definition_shape_max, lapply(args, `[[`, "shape"))
   }
-  definition_ir(c(node, list(args = args)), type, shape)
+  definition_ir(node, type, shape, args = args)
 }
 
 definition_check_comparable <- function(lhs, rhs, env, state, call) {
   lhs <- definition_check_node(lhs, env, state, call)
-  rhs <- definition_check_node(rhs, env, state, call)
-  definition_comparable_ir(lhs, rhs, call)
-}
-
-definition_check_comparable_ir <- function(lhs, rhs, env, state, call) {
   rhs <- definition_check_node(rhs, env, state, call)
   definition_comparable_ir(lhs, rhs, call)
 }
@@ -554,16 +569,21 @@ definition_comparable_ir <- function(lhs, rhs, call) {
   if (identical(rhs$kind, "selected")) {
     definition_require_selection_comparable(rhs$selection, lhs, call)
   }
+  operands <- definition_coerce_temporal_pair(lhs, rhs)
+  if (!definition_types_comparable(operands$lhs$type, operands$rhs$type)) {
+    cli::cli_abort(
+      "Cannot compare {.val {operands$lhs$type}} with {.val {operands$rhs$type}}.",
+      call = call
+    )
+  }
+  operands
+}
+
+definition_coerce_temporal_pair <- function(lhs, rhs) {
   lhs_type <- lhs$type
   rhs_type <- rhs$type
   lhs <- definition_coerce_temporal(lhs, rhs_type)
   rhs <- definition_coerce_temporal(rhs, lhs_type)
-  if (!definition_types_comparable(lhs$type, rhs$type)) {
-    cli::cli_abort(
-      "Cannot compare {.val {lhs$type}} with {.val {rhs$type}}.",
-      call = call
-    )
-  }
   list(lhs = lhs, rhs = rhs)
 }
 
@@ -683,8 +703,9 @@ definition_resolve_selection <- function(selector, columns, call) {
 }
 
 definition_validate_regex <- function(pattern, call) {
+  # Guard PCRE extensions that data-dict's Rust regex engine would reject.
   unsupported <- grepl(
-    "\\(\\?(?:[=!]|<[=!])|\\\\[1-9]",
+    "\\(\\?(?:[=!>]|<[=!])|\\\\[1-9]",
     pattern,
     perl = TRUE
   )
@@ -698,7 +719,7 @@ definition_validate_regex <- function(pattern, call) {
   )
   if (unsupported || !valid) {
     cli::cli_abort(
-      "Invalid RE2 regular expression {.val {pattern}}.",
+      "Invalid data-dict regular expression {.val {pattern}}.",
       call = call
     )
   }
@@ -853,27 +874,20 @@ definition_column_descriptor <- function(column, call = rlang::caller_env()) {
   }
   fields <- if (identical(kind, "struct")) {
     nested <- definition_named_entries(column$fields, "field", call = call)
-    nested <- lapply(nested, definition_column_descriptor, call = call)
-    names(nested) <- names(definition_named_entries(
-      column$fields,
-      "field",
-      call = call
-    ))
-    nested
+    lapply(nested, definition_column_descriptor, call = call)
   } else {
     list()
   }
   list(type = kind, fields = fields)
 }
 
-definition_ir <- function(node, type, shape, kind = node$kind) {
-  if (anyDuplicated(names(node))) {
-    node <- node[!duplicated(names(node), fromLast = TRUE)]
-  }
-  node$kind <- kind
-  node$type <- type
-  node$shape <- shape
-  node
+definition_ir <- function(.node, .type, .shape, ..., .kind = .node$kind) {
+  fields <- list(...)
+  .node[names(fields)] <- fields
+  .node$kind <- .kind
+  .node$type <- .type
+  .node$shape <- .shape
+  .node
 }
 
 definition_common_type <- function(types) {
