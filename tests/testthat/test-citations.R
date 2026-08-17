@@ -35,7 +35,11 @@ test_that("recorded accepted citations reuse live aside presentation", {
     "**This supports the weighting rule.**",
     fixed = TRUE
   )
-  expect_match(result$html, paste0("> ", quote), fixed = TRUE)
+  expect_match(
+    result$html,
+    paste0("\n\n> ", quote, "</shiny-aside>"),
+    fixed = TRUE
+  )
   expect_match(
     result$html,
     'icon="commons-icons/citation-prose.svg',
@@ -395,7 +399,6 @@ test_that("render_citation_aside emits a labeled, iconed aside for a verified qu
     "\\*\\*The computation follows the documented recognition rule\\.\\*\\*"
   )
   expect_match(out$html, "> Revenue is recognized at shipment", fixed = TRUE)
-  expect_match(out$html, "Quoted verbatim; matched exactly", fixed = TRUE)
   expect_identical(out$decision$status, "accepted")
 })
 

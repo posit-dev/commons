@@ -94,7 +94,7 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   reason <- if (nzchar(explanation)) paste0("**", explanation, "**\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   sprintf(
-    '<shiny-aside label="%s"%s>%s> %s\n\n*Quoted verbatim; matched exactly.*</shiny-aside>',
+    '<shiny-aside label="%s"%s>%s%s</shiny-aside>',
     escape_attr(label),
     if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
     reason,
