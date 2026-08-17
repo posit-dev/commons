@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-      COMMONS_SKIP_BROWSER_TESTS: "true"
     steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
