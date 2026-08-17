@@ -30,8 +30,10 @@ trajectories read with \code{\link[=trajectory_read]{trajectory_read()}}. The ap
 level's share of answers over time—binned by day, week, or month, using
 the finest unit the volume of answers supports—alongside a list of
 conversations or of individual questions, filterable by date and trust
-level, and a transcript of each with the provenance pills the commons
-chat UI would show.
+level. The transcript reconstructs each answer's recorded Commons
+presentation: accepted citations appear inline at their original locations,
+A/C provenance appears after the answer, and rejected citation attempts
+appear in a separate "Review audit" aside.
 
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
@@ -44,14 +46,11 @@ timestamp, reviewer username, trajectory source, conversation id, optional
 exchange number, action, and optional note. Exchange-level records also
 snapshot the question and trust tag.
 
-Trajectories carry no record of how each answer was tagged when it was
-produced, so the viewer derives trust levels from the tool calls in the
-trajectory: answers backed only by governed tools (\code{call_measure},
-\code{call_metrics}) are verified, and answers that used fallback tools
-(\code{run_sql}, \code{run_r}) count as cited when they contain citation markup and
-untrusted when they don't. A cited answer's quotes render as footnotes so
-they can be reviewed, but they are not re-verified against the agent's
-context: footnotes name no source and are attributed "unverified".
+Each answer's trust tag and citation outcomes are read back exactly as
+\code{\link[=trajectory_read]{trajectory_read()}} recorded them. The viewer uses those decisions to
+reconstruct Commons citation asides from the raw ellmer answer; it never
+re-verifies citations against a corpus. Missing or conflicting records are
+omitted rather than inferred.
 
 Logged calls that aren't part of the agent's question-and-answer record—
 shinychat's conversation-title generation, and completions with no user

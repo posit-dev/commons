@@ -62,6 +62,106 @@ test_that("trajectories rebuild ellmer turns from semconv messages", {
   expect_equal(turns[[5]]@text, "You rolled a 4.")
 })
 
+test_that("exchange signatures compare semantic turn content", {
+  request <- ellmer::ContentToolRequest(
+    id = "call-1",
+    name = "run_sql",
+    arguments = list(limit = 10L, filters = list(region = "EMEA"))
+  )
+  exchange <- list(
+    ellmer::UserTurn("Question"),
+    ellmer::AssistantTurn(list(request)),
+    ellmer::UserTurn(list(ellmer::ContentToolResult(
+      value = list(rows = 3L),
+      request = request
+    ))),
+    ellmer::AssistantTurn("Answer")
+  )
+
+  expect_identical(
+    exchange_signature(exchange),
+    list(
+      list(
+        role = "user",
+        contents = list(list(type = "text", text = "Question"))
+      ),
+      list(
+        role = "assistant",
+        contents = list(list(
+          type = "tool_request",
+          id = "call-1",
+          name = "run_sql",
+          arguments = list(filters = list(region = "EMEA"), limit = 10L)
+        ))
+      ),
+      list(
+        role = "user",
+        contents = list(list(
+          type = "tool_result",
+          id = "call-1",
+          value = list(rows = 3L)
+        ))
+      ),
+      list(
+        role = "assistant",
+        contents = list(list(type = "text", text = "Answer"))
+      )
+    )
+  )
+})
+
+test_that("exchange prefix matching is exact and structured", {
+  first <- list(
+    ellmer::UserTurn("Q1"),
+    ellmer::AssistantTurn("A1")
+  )
+  second <- list(
+    ellmer::UserTurn("Q2"),
+    ellmer::AssistantTurn("A2")
+  )
+  edited <- list(
+    ellmer::UserTurn("Q2 edited"),
+    ellmer::AssistantTurn("A2")
+  )
+
+  canonical <- lapply(list(first, second), exchange_signature)
+
+  expect_true(exchange_prefix_matches(
+    lapply(list(first), exchange_signature),
+    canonical
+  ))
+  expect_true(exchange_prefix_matches(
+    lapply(list(first, second), exchange_signature),
+    canonical
+  ))
+  expect_false(exchange_prefix_matches(
+    lapply(list(first, edited), exchange_signature),
+    canonical
+  ))
+  expect_false(exchange_prefix_matches(
+    lapply(list(first, second, edited), exchange_signature),
+    canonical
+  ))
+})
+
+test_that("only a completed final assistant response is attachable", {
+  request <- ellmer::ContentToolRequest(
+    id = "call-1",
+    name = "run_sql",
+    arguments = list(sql = "select 1")
+  )
+
+  expect_true(exchange_is_complete(list(
+    ellmer::UserTurn("Q"),
+    ellmer::AssistantTurn("A")
+  )))
+  expect_false(exchange_is_complete(list(ellmer::UserTurn("Q"))))
+  expect_false(exchange_is_complete(list(
+    ellmer::UserTurn("Q"),
+    ellmer::AssistantTurn(list(request))
+  )))
+})
+
 test_that("conversations carry their last chat activity time", {
   trajectories <- build_trajectories(parse_otlp_lines(staggered_test_line()))
 
@@ -86,7 +186,12 @@ test_that("chat spans group by the nearest ancestor conversation id", {
   lines <- c(
     otlp_test_line(list(
       conversation_test_span("t1", "root1", "conv-a"),
-      otlp_test_span("t1", "agent1", parent_span_id = "root1", name = "invoke_agent"),
+      otlp_test_span(
+        "t1",
+        "agent1",
+        parent_span_id = "root1",
+        name = "invoke_agent"
+      ),
       chat_test_span(
         "t1",
         "chat1",
@@ -97,7 +202,12 @@ test_that("chat spans group by the nearest ancestor conversation id", {
     )),
     otlp_test_line(list(
       conversation_test_span("t2", "root2", "conv-a"),
-      otlp_test_span("t2", "agent2", parent_span_id = "root2", name = "invoke_agent"),
+      otlp_test_span(
+        "t2",
+        "agent2",
+        parent_span_id = "root2",
+        name = "invoke_agent"
+      ),
       chat_test_span(
         "t2",
         "chat2",
@@ -113,6 +223,502 @@ test_that("chat spans group by the nearest ancestor conversation id", {
   expect_named(trajectories, "conv-a")
   expect_length(trajectories[[1]], 3)
   expect_equal(trajectories[[1]][[1]]@text, "Roll a die.")
+})
+
+text_semconv_message <- function(role, text) {
+  list(role = role, parts = list(list(type = "text", content = text)))
+}
+
+semconv_messages_json <- function(messages) {
+  jsonlite::toJSON(messages, auto_unbox = TRUE)
+}
+
+recorded_call_test_spans <- function(
+  trace_id,
+  conversation_id,
+  messages,
+  tag,
+  end_time,
+  citation_decisions = list()
+) {
+  root_id <- paste0(trace_id, "-root")
+  agent_id <- paste0(trace_id, "-agent")
+  attributes <- list(
+    otlp_test_attr("gen_ai.conversation.id", conversation_id),
+    otlp_test_attr("commons.provenance.tag", tag),
+    otlp_test_attr(
+      "commons.citation.candidates",
+      jsonlite::toJSON(citation_decisions, auto_unbox = TRUE)
+    )
+  )
+  list(
+    otlp_test_span(
+      trace_id,
+      root_id,
+      name = "commons_conversation_turn",
+      attributes = attributes,
+      end_time = end_time
+    ),
+    otlp_test_span(
+      trace_id,
+      agent_id,
+      parent_span_id = root_id,
+      name = "invoke_agent",
+      end_time = end_time
+    ),
+    chat_test_span(
+      trace_id,
+      paste0(trace_id, "-chat"),
+      parent_span_id = agent_id,
+      input_messages = semconv_messages_json(head(messages, -1L)),
+      output_messages = semconv_messages_json(tail(messages, 1L)),
+      end_time = end_time
+    )
+  )
+}
+
+test_that("linear calls attach records to their own final exchanges", {
+  q1 <- text_semconv_message("user", "Q1")
+  a1 <- text_semconv_message("assistant", "A1")
+  q2 <- text_semconv_message("user", "Q2")
+  a2 <- text_semconv_message("assistant", "A2")
+  spans <- parse_otlp_lines(otlp_test_line(c(
+    recorded_call_test_spans("t1", "conv-a", list(q1, a1), "A", "10"),
+    recorded_call_test_spans(
+      "t2",
+      "conv-a",
+      list(q1, a1, q2, a2),
+      "B",
+      "20"
+    )
+  )))
+
+  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+
+  expect_identical(
+    vapply(provenance, `[[`, character(1), "provenance_tag"),
+    c("A", "B")
+  )
+})
+
+test_that("restored context stays unannotated when only the new call was recorded", {
+  messages <- list(
+    text_semconv_message("user", "Q1"),
+    text_semconv_message("assistant", "A1"),
+    text_semconv_message("user", "Q2"),
+    text_semconv_message("assistant", "A2"),
+    text_semconv_message("user", "Q3"),
+    text_semconv_message("assistant", "A3")
+  )
+  spans <- parse_otlp_lines(otlp_test_line(
+    recorded_call_test_spans("t3", "conv-a", messages, "C", "30")
+  ))
+
+  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+
+  expect_length(provenance, 3)
+  expect_true(all(is.na(vapply(
+    provenance[1:2],
+    `[[`,
+    character(1),
+    "provenance_tag"
+  ))))
+  expect_identical(provenance[[3]]$provenance_tag, "C")
+})
+
+test_that("calls after restore attach to their respective new exchanges", {
+  restored <- list(
+    text_semconv_message("user", "Q1"),
+    text_semconv_message("assistant", "A1"),
+    text_semconv_message("user", "Q2"),
+    text_semconv_message("assistant", "A2")
+  )
+  q3a3 <- c(
+    restored,
+    list(
+      text_semconv_message("user", "Q3"),
+      text_semconv_message("assistant", "A3")
+    )
+  )
+  q4a4 <- c(
+    q3a3,
+    list(
+      text_semconv_message("user", "Q4"),
+      text_semconv_message("assistant", "A4")
+    )
+  )
+  spans <- parse_otlp_lines(otlp_test_line(c(
+    recorded_call_test_spans("t3", "conv-a", q3a3, "A", "30"),
+    recorded_call_test_spans("t4", "conv-a", q4a4, "C", "40")
+  )))
+
+  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+
+  expect_true(is.na(provenance[[1]]$provenance_tag))
+  expect_true(is.na(provenance[[2]]$provenance_tag))
+  expect_identical(provenance[[3]]$provenance_tag, "A")
+  expect_identical(provenance[[4]]$provenance_tag, "C")
+})
+
+test_that("switched conversations do not donate audit records", {
+  old_path <- list(
+    text_semconv_message("user", "Old question"),
+    text_semconv_message("assistant", "Old answer")
+  )
+  latest_path <- list(
+    text_semconv_message("user", "New question"),
+    text_semconv_message("assistant", "New answer")
+  )
+  spans <- parse_otlp_lines(otlp_test_line(c(
+    recorded_call_test_spans("old", "conv-a", old_path, "A", "10"),
+    recorded_call_test_spans("new", "conv-a", latest_path, "C", "20")
+  )))
+
+  turns <- build_trajectories(spans)[["conv-a"]]
+  provenance <- attr(turns, "provenance")
+
+  expect_identical(split_exchanges(turns)[[1]][[1]]@text, "New question")
+  expect_length(provenance, 1)
+  expect_identical(provenance[[1]]$provenance_tag, "C")
+})
+
+test_that("edited paths retain shared-prefix records and drop abandoned records", {
+  q1 <- text_semconv_message("user", "Q1")
+  a1 <- text_semconv_message("assistant", "A1")
+  old <- list(
+    q1,
+    a1,
+    text_semconv_message("user", "Q2"),
+    text_semconv_message("assistant", "A2")
+  )
+  edited <- list(
+    q1,
+    a1,
+    text_semconv_message("user", "Q2 edited"),
+    text_semconv_message("assistant", "A2 edited")
+  )
+  spans <- parse_otlp_lines(otlp_test_line(c(
+    recorded_call_test_spans("t1", "conv-a", list(q1, a1), "A", "10"),
+    recorded_call_test_spans("t2", "conv-a", old, "B", "20"),
+    recorded_call_test_spans("t3", "conv-a", edited, "C", "30")
+  )))
+
+  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+
+  expect_identical(provenance[[1]]$provenance_tag, "A")
+  expect_identical(provenance[[2]]$provenance_tag, "C")
+})
+
+test_that("the latest descendant tool-loop span contributes one call record", {
+  root1 <- otlp_test_span(
+    "t1",
+    "root1",
+    name = "commons_conversation_turn",
+    attributes = list(
+      otlp_test_attr("gen_ai.conversation.id", "conv-a"),
+      otlp_test_attr("commons.provenance.tag", "A")
+    )
+  )
+  root2 <- otlp_test_span(
+    "t2",
+    "root2",
+    name = "commons_conversation_turn",
+    attributes = list(
+      otlp_test_attr("gen_ai.conversation.id", "conv-a"),
+      otlp_test_attr("commons.provenance.tag", "B"),
+      otlp_test_attr(
+        "commons.citation.candidates",
+        '[{"quote":"Canopy cover.","status":"accepted"}]'
+      )
+    )
+  )
+
+  exchange1_turn <- paste0(
+    '{"role":"user","parts":[{"type":"text","content":"What is the weather?"}]}'
+  )
+  exchange1_answer <- paste0(
+    '{"role":"assistant","parts":[{"type":"text","content":"It\'s sunny."}]}'
+  )
+  exchange2_question <- paste0(
+    '{"role":"user","parts":[{"type":"text","content":"Roll a die."}]}'
+  )
+  exchange2_tool_call <- paste0(
+    '{"role":"assistant","parts":[{"type":"tool_call","id":"c1",',
+    '"name":"roll_die","arguments":{"sides":6}}]}'
+  )
+  exchange2_tool_result <- paste0(
+    '{"role":"tool","parts":[{"type":"tool_call_response","id":"c1",',
+    '"response":4}]}'
+  )
+  exchange2_final <- paste0(
+    '{"role":"assistant","parts":[{"type":"text","content":"You rolled a 4."}]}'
+  )
+
+  lines <- c(
+    otlp_test_line(list(
+      root1,
+      otlp_test_span(
+        "t1",
+        "agent1",
+        parent_span_id = "root1",
+        name = "invoke_agent"
+      ),
+      chat_test_span(
+        "t1",
+        "chat1",
+        parent_span_id = "agent1",
+        input_messages = paste0("[", exchange1_turn, "]"),
+        output_messages = paste0("[", exchange1_answer, "]"),
+        end_time = "10"
+      )
+    )),
+    otlp_test_line(list(
+      root2,
+      otlp_test_span(
+        "t2",
+        "agent2",
+        parent_span_id = "root2",
+        name = "invoke_agent"
+      ),
+      chat_test_span(
+        "t2",
+        "chat2a",
+        parent_span_id = "agent2",
+        input_messages = paste0(
+          "[",
+          paste(
+            exchange1_turn,
+            exchange1_answer,
+            exchange2_question,
+            sep = ","
+          ),
+          "]"
+        ),
+        output_messages = paste0("[", exchange2_tool_call, "]"),
+        end_time = "20"
+      ),
+      chat_test_span(
+        "t2",
+        "chat2b",
+        parent_span_id = "agent2",
+        input_messages = paste0(
+          "[",
+          paste(
+            exchange1_turn,
+            exchange1_answer,
+            exchange2_question,
+            exchange2_tool_call,
+            exchange2_tool_result,
+            sep = ","
+          ),
+          "]"
+        ),
+        output_messages = paste0("[", exchange2_final, "]"),
+        end_time = "30"
+      )
+    ))
+  )
+
+  trajectories <- build_trajectories(parse_otlp_lines(lines))
+  turns <- trajectories[["conv-a"]]
+
+  exchanges <- split_exchanges(turns)
+  provenance <- attr(turns, "provenance")
+  expect_length(exchanges, 2)
+  expect_length(provenance, 2)
+
+  expect_equal(exchanges[[1]][[1]]@text, "What is the weather?")
+  expect_equal(provenance[[1]]$provenance_tag, "A")
+  expect_equal(provenance[[1]]$citation_decisions, list())
+
+  expect_equal(exchanges[[2]][[1]]@text, "Roll a die.")
+  expect_equal(provenance[[2]]$provenance_tag, "B")
+  expect_equal(
+    provenance[[2]]$citation_decisions,
+    list(list(quote = "Canopy cover.", status = "accepted"))
+  )
+})
+
+test_that("conflicting records fail closed with one conversation warning", {
+  messages <- list(
+    text_semconv_message("user", "Q1"),
+    text_semconv_message("assistant", "A1")
+  )
+  spans <- parse_otlp_lines(otlp_test_line(c(
+    recorded_call_test_spans("t1", "conv-a", messages, "A", "10"),
+    recorded_call_test_spans("t2", "conv-a", messages, "C", "20")
+  )))
+
+  expect_warning(
+    turns <- build_trajectories(spans)[["conv-a"]],
+    "conflicting audit records"
+  )
+  expect_true(is.na(attr(turns, "provenance")[[1]]$provenance_tag))
+})
+
+test_that("identical duplicate records collapse to one claim", {
+  messages <- list(
+    text_semconv_message("user", "Q1"),
+    text_semconv_message("assistant", "A1")
+  )
+  spans <- parse_otlp_lines(otlp_test_line(c(
+    recorded_call_test_spans("t1", "conv-a", messages, "A", "10"),
+    recorded_call_test_spans("t2", "conv-a", messages, "A", "20")
+  )))
+
+  expect_no_warning(turns <- build_trajectories(spans)[["conv-a"]])
+  expect_identical(attr(turns, "provenance")[[1]]$provenance_tag, "A")
+})
+
+test_that("an incomplete tool call does not receive provenance", {
+  request <- list(
+    role = "assistant",
+    parts = list(list(
+      type = "tool_call",
+      id = "call-1",
+      name = "run_sql",
+      arguments = list(sql = "select 1")
+    ))
+  )
+  messages <- list(text_semconv_message("user", "Q1"), request)
+  spans <- parse_otlp_lines(otlp_test_line(
+    recorded_call_test_spans("t1", "conv-a", messages, "A", "10")
+  ))
+
+  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+
+  expect_length(provenance, 1)
+  expect_true(is.na(provenance[[1]]$provenance_tag))
+})
+
+trajectory_scaling_spans <- function(n) {
+  json <- test_turn_json()
+  spans <- unlist(
+    lapply(seq_len(n), function(i) {
+      trace_id <- sprintf("scale-trace-%03d", i)
+      root_id <- sprintf("scale-root-%03d", i)
+      agent_id <- sprintf("scale-agent-%03d", i)
+      conversation_id <- sprintf("scale-conversation-%03d", i)
+      root <- otlp_test_span(
+        trace_id,
+        root_id,
+        name = "commons_conversation_turn",
+        attributes = list(
+          otlp_test_attr("gen_ai.conversation.id", conversation_id),
+          otlp_test_attr("commons.provenance.tag", "B"),
+          otlp_test_attr(
+            "commons.citation.candidates",
+            paste0(
+              '[{"quote":"Scale quote ',
+              i,
+              '","status":"accepted",',
+              '"label":"documentation","kind":"prose"}]'
+            )
+          )
+        )
+      )
+      agent <- otlp_test_span(
+        trace_id,
+        agent_id,
+        parent_span_id = root_id,
+        name = "invoke_agent"
+      )
+      round_one <- chat_test_span(
+        trace_id,
+        sprintf("scale-chat-%03d-a", i),
+        parent_span_id = agent_id,
+        input_messages = json$input,
+        end_time = as.character(i * 10L)
+      )
+      round_two <- chat_test_span(
+        trace_id,
+        sprintf("scale-chat-%03d-b", i),
+        parent_span_id = agent_id,
+        input_messages = json$input,
+        output_messages = json$output,
+        end_time = as.character(i * 10L + 1L)
+      )
+      list(root, agent, round_one, round_two)
+    }),
+    recursive = FALSE
+  )
+  parse_otlp_lines(otlp_test_line(spans))
+}
+
+test_that("trajectory reconstruction classifies spans a linear number of times", {
+  spans <- trajectory_scaling_spans(40)
+  chat_checks <- 0L
+  original_is_chat_span <- is_chat_span
+
+  local_mocked_bindings(
+    is_chat_span = function(span) {
+      chat_checks <<- chat_checks + 1L
+      original_is_chat_span(span)
+    }
+  )
+
+  trajectories <- build_trajectories(spans)
+  provenance <- lapply(trajectories, attr, "provenance")
+
+  expect_length(trajectories, 40)
+  expect_lte(chat_checks, length(spans) * 3L)
+  expect_identical(unname(lengths(provenance)), rep(1L, 40))
+  expect_identical(
+    unname(vapply(
+      provenance,
+      function(records) records[[1]]$provenance_tag,
+      character(1)
+    )),
+    rep("B", 40)
+  )
+})
+
+test_that("trajectory reconstruction parses each selected chat span once", {
+  spans <- trajectory_scaling_spans(40)
+  parsed <- character()
+  original_trajectory_turns <- trajectory_turns
+
+  local_mocked_bindings(
+    trajectory_turns = function(span) {
+      parsed <<- c(parsed, exchange_key(span))
+      original_trajectory_turns(span)
+    }
+  )
+
+  trajectories <- build_trajectories(spans)
+  expected <- vapply(
+    seq_len(40),
+    function(i) {
+      paste(
+        sprintf("scale-trace-%03d", i),
+        sprintf("scale-chat-%03d-b", i)
+      )
+    },
+    character(1)
+  )
+
+  expect_length(trajectories, 40)
+  expect_identical(anyDuplicated(parsed), 0L)
+  expect_setequal(parsed, expected)
+})
+
+test_that("provenance defaults to NA/empty with no commons_conversation_turn ancestor", {
+  spans <- parse_otlp_lines(otlp_test_line(list(
+    chat_test_span(
+      "lonetrace",
+      "chat1",
+      input_messages = '[{"role":"user","parts":[{"type":"text","content":"Hi."}]}]'
+    )
+  )))
+
+  trajectories <- build_trajectories(spans)
+
+  provenance <- attr(trajectories[["lonetrace"]], "provenance")
+  expect_length(provenance, 1)
+  expect_identical(
+    provenance[[1]],
+    list(provenance_tag = NA_character_, citation_decisions = list())
+  )
 })
 
 test_that("chat spans without a wrapper fall back to their trace id", {
