@@ -14,9 +14,8 @@ A brief explanation of how the quote supports the answer.
 
 Rules:
 
-- Put the first `<commons-citation>` on the line immediately after the answer,
-  with no blank line before it. Start the tag at the beginning of the line,
-  exactly as written, with no attributes.
+- Place the `<commons-citation>` immediately after the relevant claim,
+  with no blank line before it.
 - Include exactly one blockquote, containing only the verbatim excerpt, with
   every line prefixed by `> `. Citations are verified by exact text match
   against {{citable_sources}} and are dropped if no match is found.
