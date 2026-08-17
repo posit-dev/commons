@@ -58,3 +58,19 @@
       ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source.
       i `data_sources` has no named sources.
 
+# conversation id accessors get and set the active id
+
+    Code
+      agent$set_conversation_id("")
+    Condition
+      Error in `agent$set_conversation_id()`:
+      ! `id` must be a single non-empty string.
+
+---
+
+    Code
+      agent$set_conversation_id(c("a", "b"))
+    Condition
+      Error in `agent$set_conversation_id()`:
+      ! `id` must be a single non-empty string.
+

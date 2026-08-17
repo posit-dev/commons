@@ -6,8 +6,10 @@
 #' level's share of answers over time—binned by day, week, or month, using
 #' the finest unit the volume of answers supports—alongside a list of
 #' conversations or of individual questions, filterable by date and trust
-#' level, and a transcript of each with the provenance pills the commons
-#' chat UI would show.
+#' level. The transcript reconstructs each answer's recorded Commons
+#' presentation: accepted citations appear inline at their original locations,
+#' A/C provenance appears after the answer, and rejected citation attempts
+#' appear in a separate "Review audit" aside.
 #'
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review and annotated with notes. Notes apply to the
@@ -24,14 +26,11 @@
 #' are omitted because later tool calls record any selected measure; other tool
 #' results are limited to 50 lines or 20,000 characters.
 #'
-#' Trajectories carry no record of how each answer was tagged when it was
-#' produced, so the viewer derives trust levels from the tool calls in the
-#' trajectory: answers backed only by governed tools (`call_measure`,
-#' `call_metrics`) are verified, and answers that used fallback tools
-#' (`run_sql`, `run_r`) count as cited when they contain citation markup and
-#' untrusted when they don't. A cited answer's quotes render as footnotes so
-#' they can be reviewed, but they are not re-verified against the agent's
-#' context: footnotes name no source and are attributed "unverified".
+#' Each answer's trust tag and citation outcomes are read back exactly as
+#' [trajectory_read()] recorded them. The viewer uses those decisions to
+#' reconstruct Commons citation asides from the raw ellmer answer; it never
+#' re-verifies citations against a corpus. Missing or conflicting records are
+#' omitted rather than inferred.
 #'
 #' Logged calls that aren't part of the agent's question-and-answer record—
 #' shinychat's conversation-title generation, and completions with no user
@@ -189,7 +188,10 @@ summarize_trajectories <- function(trajectories) {
 
 conversation_record <- function(id, turns) {
   exchanges <- split_exchanges(turns)
-  provenance <- lapply(exchanges, exchange_provenance)
+  provenance <- lapply(
+    attr(turns, "provenance") %||% list(),
+    exchange_provenance
+  )
   list(
     id = id,
     snippet = first_user_snippet(exchanges),
@@ -204,14 +206,17 @@ summarize_questions <- function(trajectories) {
   for (i in rlang::seq2(1, length(trajectories))) {
     turns <- trajectories[[i]]
     exchanges <- split_exchanges(turns)
-    provenance <- lapply(exchanges, exchange_provenance)
+    provenance <- lapply(
+      attr(turns, "provenance") %||% list(),
+      exchange_provenance
+    )
     for (j in rlang::seq2(1, length(exchanges))) {
       records[[length(records) + 1]] <- list(
         conversation = i,
         conversation_id = names(trajectories)[[i]],
         exchange = j,
         snippet = question_snippet(exchanges[[j]]),
-        tag = provenance[[j]]$tag,
+        tag = (provenance[j][[1]] %||% list(tag = NA_character_))$tag,
         last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
       )
     }
@@ -219,39 +224,8 @@ summarize_questions <- function(trajectories) {
   records
 }
 
-# The OTLP round trip drops commons_tag but preserves tool names and
-# citations.
-exchange_provenance <- function(exchange) {
-  tags <- exchange_tool_tags(exchange)
-  text <- unlist(lapply(exchange, turn_text)) %||% character()
-  citations <- extract_citations(text)
-  tag <- if ("B" %in% tags) {
-    if (length(citations) > 0) "B" else "C"
-  } else if ("A" %in% tags) {
-    "A"
-  } else {
-    NA_character_
-  }
-  list(tag = tag, citations = citations)
-}
-
-viewer_tool_tags <- c(
-  call_measure = "A",
-  call_metrics = "A",
-  run_sql = "B",
-  run_r = "B"
-)
-
-exchange_tool_tags <- function(turns) {
-  calls <- unlist(lapply(turns, function(turn) {
-    lapply(turn@contents, function(content) {
-      if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
-        content@name
-      }
-    })
-  }))
-  tags <- viewer_tool_tags[calls]
-  unname(tags[!is.na(tags)])
+exchange_provenance <- function(record) {
+  list(tag = record$provenance_tag)
 }
 
 first_user_snippet <- function(exchanges, max_chars = 80) {
@@ -271,9 +245,8 @@ question_snippet <- function(exchange, max_chars = 80) {
 
 trajectory_transcript <- function(turns) {
   exchanges <- split_exchanges(turns)
+  records <- attr(turns, "provenance") %||% list()
   messages <- list()
-  pills <- list()
-  n_assistant <- 0L
 
   for (i in seq_along(exchanges)) {
     exchange <- exchanges[[i]]
@@ -282,59 +255,121 @@ trajectory_transcript <- function(turns) {
       content = exchange[[1]]@text,
       exchange = i
     )
-    chunks <- exchange_answer_chunks(exchange[-1])
+    record <- records[i][[1]] %||% empty_turn_provenance()
+    chunks <- exchange_answer_chunks(
+      exchange[-1],
+      record$citation_decisions
+    )
     if (length(chunks) == 0) {
       next
     }
-    n_assistant <- n_assistant + 1L
+    chip <- exchange_chip(record)
+    if (!is.null(chip)) {
+      chunks[[length(chunks) + 1]] <- chip
+    }
     messages[[length(messages) + 1]] <- list(
       role = "assistant",
       content = chunks,
       exchange = i
     )
-    pill <- viewer_pill(exchange_provenance(exchange), n_assistant)
-    if (!is.null(pill)) {
-      pills[[length(pills) + 1]] <- pill
-    }
   }
 
-  for (i in seq_along(pills)) {
-    pills[[i]]$indexFromEnd <- n_assistant - pills[[i]]$indexFromEnd
-  }
-  list(messages = messages, count = n_assistant, pills = pills)
+  list(messages = messages)
 }
 
-# Cited answers keep their quotes visible, but the viewer cannot re-verify
-# them.
-viewer_pill <- function(provenance, assistant_index) {
-  if (is.na(provenance$tag) && length(provenance$citations) == 0) {
+exchange_chip <- function(record) {
+  pieces <- c(
+    provenance_aside(record$provenance_tag %||% NA_character_),
+    review_audit_aside(record$citation_decisions)
+  )
+  pieces <- pieces[nzchar(pieces)]
+  if (length(pieces) == 0) {
     return(NULL)
   }
-  citations <- if (identical(provenance$tag, "B")) {
-    lapply(provenance$citations, viewer_citation)
-  } else {
-    lapply(provenance$citations, function(x) list(verified = FALSE))
+  paste(pieces, collapse = "\n\n")
+}
+
+review_audit_aside <- function(decisions) {
+  rejected <- sum(vapply(
+    decisions,
+    function(decision) {
+      is.list(decision) && identical(decision$status, "rejected")
+    },
+    logical(1)
+  ))
+  if (rejected == 0) {
+    return("")
   }
-  list(
-    html = htmltools::renderTags(commons_answer_pill(provenance$tag))$html,
-    citations = citations,
-    indexFromEnd = assistant_index
+  sprintf(
+    '<shiny-aside label="Review audit">%d citation%s rejected.</shiny-aside>',
+    rejected,
+    if (rejected == 1) "" else "s"
   )
 }
 
-viewer_citation <- function(citation) {
-  list(
-    verified = TRUE,
-    reason = if (!is.na(citation$reason)) citation$reason,
-    quote = normalize_citation(citation$quote),
-    label = "unverified"
+commons_answer_pill <- function(tag) {
+  entry <- provenance_display[[tag]]
+  if (is.null(entry)) {
+    return(NULL)
+  }
+  htmltools::tags$span(
+    class = paste0(
+      "commons-answer-pill commons-answer-pill-",
+      entry$pill_class
+    ),
+    title = entry$body,
+    `aria-label` = paste0(entry$label, ". ", entry$body),
+    tabindex = "0",
+    commons_pill_icon(entry$icon, entry$label),
+    htmltools::tags$span(entry$label),
+    commons_pill_tooltip(entry$body)
   )
 }
 
-exchange_answer_chunks <- function(turns) {
+commons_pill_tooltip <- function(text) {
+  htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
+}
+
+commons_pill_icon <- function(file, alt) {
+  if (is.null(file)) {
+    return(NULL)
+  }
+  src <- svg_data_uri(file)
+  if (is.null(src)) {
+    return(NULL)
+  }
+
+  htmltools::tags$img(
+    src = src,
+    alt = alt,
+    class = "commons-answer-pill-icon"
+  )
+}
+
+exchange_answer_chunks <- function(turns, decisions) {
   chunks <- list()
+  resolver <- recorded_citation_resolver(decisions)
+  scanner <- citation_scanner(resolve = resolver$resolve)
+
+  append_text <- function(text) {
+    if (nzchar(text)) {
+      chunks[[length(chunks) + 1]] <<-
+        shinychat::contents_shinychat(ellmer::ContentText(text))
+    }
+  }
+  reset_text_scanner <- function() {
+    append_text(scanner$finish())
+    scanner <<- citation_scanner(resolve = resolver$resolve)
+  }
+
   for (turn in turns) {
     for (content in turn@contents) {
+      if (S7::S7_inherits(content, ellmer::ContentText)) {
+        append_text(scanner$feed(content@text))
+        next
+      }
+
+      reset_text_scanner()
       if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
         next
       }
@@ -345,6 +380,7 @@ exchange_answer_chunks <- function(turns) {
       chunks[[length(chunks) + 1]] <- shinychat::contents_shinychat(content)
     }
   }
+  append_text(scanner$finish())
   drop_nulls(chunks)
 }
 
@@ -397,12 +433,6 @@ seed_transcript_decorations <- function(
   transcript,
   selected_exchange = NULL
 ) {
-  if (length(transcript$pills) > 0) {
-    session$sendCustomMessage(
-      "commonsProvenancePillSeed",
-      list(id = id, count = transcript$count, pills = transcript$pills)
-    )
-  }
   if (length(transcript$messages) > 0) {
     session$sendCustomMessage(
       "commonsViewerExchangeSeed",

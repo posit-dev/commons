@@ -183,7 +183,13 @@ tool_call_measure <- function(private) {
 
 tool_search_context <- function(private) {
   ellmer::tool(
-    function(query) search_context_tool(private$context_layer, query),
+    function(query) {
+      result <- search_context_tool(private$context_layer, query)
+      if (!S7::S7_inherits(result, ellmer::ContentToolResult)) {
+        return(result)
+      }
+      add_citation_request(result, private$citation_request)
+    },
     "Search context for metric definitions, data notes, and table relationships.",
     arguments = list(
       query = ellmer::type_string(
@@ -247,7 +253,9 @@ tool_run_sql <- function(private) {
     },
     run_sql_description(private$definitions, private$registry),
     arguments = list(
-      sql = ellmer::type_string("A read-only SELECT query, in the data source's SQL dialect."),
+      sql = ellmer::type_string(
+        "A read-only SELECT query, in the data source's SQL dialect."
+      ),
       source = sql_source_type(private$sources)
     ),
     name = "run_sql",
@@ -342,7 +350,12 @@ search_context_tool <- function(context, query) {
   )
 }
 
-describe_table_tool <- function(source, table, source_name = NULL, tracker = NULL) {
+describe_table_tool <- function(
+  source,
+  table,
+  source_name = NULL,
+  tracker = NULL
+) {
   d <- source_describe(source, table)
   entry <- source$dictionary$tables[[table]]
   relation <- c(
@@ -422,11 +435,13 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
     dictionary = dictionary,
     text = sql
   )]
-  hits <- hits[!vapply(
-    hits,
-    function(table) table_touched(tracker, source_name, table),
-    logical(1)
-  )]
+  hits <- hits[
+    !vapply(
+      hits,
+      function(table) table_touched(tracker, source_name, table),
+      logical(1)
+    )
+  ]
   if (length(hits) == 0) {
     return(NULL)
   }

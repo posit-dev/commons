@@ -69,10 +69,17 @@ notes:
 
 > There are 6 orders.
 >
-> <citation reason="definition">Orders are rows.</citation>
+> <commons-citation>
+>
+> The governed definition supports this answer.
+>
+> > Orders are rows.
+>
+> </commons-citation>
 
 ### Citations
 
 - Orders are rows.
-  - Reason: definition
+  - Status: accepted
+  - Source: orders definition
 

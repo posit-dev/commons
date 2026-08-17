@@ -641,7 +641,10 @@ duckdb_connect <- function() {
   dir <- file.path(tempdir(), "duckdb")
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
   con <- DBI::dbConnect(
-    duckdb::duckdb(config = list(extension_directory = dir))
+    duckdb::duckdb(
+      shared_home = FALSE,
+      config = list(extension_directory = dir)
+    )
   )
   DBI::dbExecute(
     con,

@@ -1,90 +1,159 @@
-test_that("extract_citations pulls quotes in order", {
-  text <- paste0(
-    "The answer is 42.\n\n",
-    "<citation>Revenue excludes tax.</citation>\n",
-    "<citation>Orders are counted\nper line item.</citation>"
-  )
-
-  expect_equal(
-    extract_citations(text),
-    list(
-      list(quote = "Revenue excludes tax.", reason = NA_character_),
-      list(quote = "Orders are counted\nper line item.", reason = NA_character_)
-    )
-  )
-  expect_equal(extract_citations("No citations here."), list())
-  expect_equal(extract_citations(character()), list())
-})
-
-test_that("extract_citations reads the reason attribute", {
-  text <- paste0(
-    '<citation reason="Definition followed">Revenue excludes tax.</citation>\n',
-    "<citation reason='documented caveat'>Refunds are negative rows.</citation>\n",
-    "<citation>No reason given.</citation>"
-  )
-
-  citations <- extract_citations(text)
-
-  expect_equal(citations[[1]]$reason, "Definition followed")
-  expect_equal(citations[[2]]$reason, "documented caveat")
-  expect_true(is.na(citations[[3]]$reason))
-})
-
-test_that("extraction skips markup inside code and tolerates tag variants", {
-  text <- paste0(
-    "Wrap quotes in `<citation>` markup, for example:\n\n",
-    "```\n<citation>not a real citation</citation>\n```\n\n",
-    "<CITATION >Revenue excludes tax.</citation >"
-  )
-
-  expect_equal(
-    extract_citations(text),
-    list(list(quote = "Revenue excludes tax.", reason = NA_character_))
-  )
-})
-
-test_that("answer_citations verifies quotes against the corpus", {
-  corpus <- list(
-    list(label = "context layer", text = "Revenue excludes tax.\nRefunds are negative rows."),
-    list(label = "measure 'order_count'", text = "order_count\nCount of orders, per line item.")
-  )
-  text <- paste0(
-    '<citation reason="Refund handling">Refunds are negative rows.</citation>',
-    "<citation>Count of orders, per line item.</citation>",
-    "<citation>Entirely fabricated support.</citation>"
-  )
-
-  citations <- answer_citations(text, corpus)
-
-  expect_length(citations, 3)
-  expect_equal(citations[[1]]$label, "context layer")
-  expect_equal(citations[[1]]$reason, "Refund handling")
-  expect_equal(citations[[2]]$label, "measure 'order_count'")
-  expect_true(is.na(citations[[2]]$reason))
-  expect_false(citations[[3]]$verified)
-})
-
 test_that("citation matching forgives reflowed whitespace and typography", {
   corpus <- list(
-    list(label = "context layer", text = "Revenue *excludes* tax — always.")
+    list(
+      label = "documentation",
+      kind = "prose",
+      text = "Revenue *excludes* tax — always."
+    )
   )
 
   expect_equal(
-    match_citation("Revenue excludes\n  tax - always.", corpus),
-    "context layer"
+    match_citation("Revenue excludes\n  tax - always.", corpus)$label,
+    "documentation"
+  )
+})
+
+test_that("recorded accepted citations reuse live aside presentation", {
+  quote <- "Canopy cover is always acre-weighted for reporting."
+  parsed <- list(
+    explanation = "This supports the weighting rule.",
+    quote = quote
+  )
+  decision <- list(
+    quote = quote,
+    status = "accepted",
+    label = "forest documentation",
+    kind = "prose"
+  )
+
+  result <- render_recorded_citation_aside(parsed, decision)
+
+  expect_identical(result$decision, decision)
+  expect_match(result$html, 'label="forest documentation"', fixed = TRUE)
+  expect_match(
+    result$html,
+    "This supports the weighting rule.",
+    fixed = TRUE
+  )
+  expect_match(
+    result$html,
+    paste0("\n\n> ", quote, "</shiny-aside>"),
+    fixed = TRUE
+  )
+  expect_match(
+    result$html,
+    'icon="commons-icons/citation-prose.svg',
+    fixed = TRUE
+  )
+})
+
+test_that("citation asides blockquote every line of multiline evidence", {
+  html <- citation_aside_html(
+    "Canopy cover is always acre-weighted.\nReport acreage after filtering.",
+    "This supports the weighting rule.",
+    "forest documentation",
+    "prose"
+  )
+
+  expect_match(
+    html,
+    "> Canopy cover is always acre-weighted.\n> Report acreage after filtering.",
+    fixed = TRUE
+  )
+})
+
+test_that("recorded citations fail closed when evidence or metadata conflicts", {
+  quote <- "Canopy cover is always acre-weighted for reporting."
+  parsed <- list(explanation = "Reason", quote = quote)
+  accepted <- list(
+    quote = "Different quote",
+    status = "accepted",
+    label = "documentation",
+    kind = "prose"
+  )
+
+  expect_identical(
+    render_recorded_citation_aside(parsed, accepted)$html,
+    ""
+  )
+  expect_identical(
+    render_recorded_citation_aside(
+      parsed,
+      within(accepted, kind <- "unknown")
+    )$html,
+    ""
+  )
+  expect_identical(
+    render_recorded_citation_aside(
+      parsed,
+      list(quote = quote, status = "rejected")
+    )$html,
+    ""
   )
 })
 
 test_that("trivial quotes cannot promote an answer", {
-  corpus <- list(list(label = "context layer", text = "Revenue excludes tax."))
-  expect_true(is.na(match_citation("tax", corpus)))
+  corpus <- list(list(
+    label = "documentation",
+    kind = "prose",
+    text = "Revenue excludes tax."
+  ))
+  expect_null(match_citation("tax", corpus))
+})
+
+test_that("corpus entries carry a kind and a reader-facing label", {
+  skip_if_not_installed("yaml")
+  doc <- withr::local_tempfile(fileext = ".md")
+  writeLines("Fiscal year starts in February.", doc)
+  path <- withr::local_tempfile(fileext = ".yaml")
+  writeLines(
+    c(
+      '$version: "0.1.0"',
+      "name: retail sales",
+      "description: Order and revenue data for a small retailer.",
+      "tables:",
+      "  - name: sales",
+      "    columns:",
+      "      - name: revenue",
+      "        description: Booked revenue, net of discounts."
+    ),
+    path
+  )
+  source <- data_source(sales = test_sales(), dictionary = path)
+
+  corpus <- build_citation_corpus(
+    augment_context_layer(context_layer(files = doc), list(source)),
+    list(order_count = count_measure_tool()),
+    list(sales_db = source)
+  )
+
+  expect_equal(
+    match_citation("Fiscal year starts in February.", corpus),
+    list(label = "documentation", kind = "prose")
+  )
+  expect_equal(
+    match_citation(
+      "Count orders, optionally filtered by region and a revenue ceiling.",
+      corpus
+    ),
+    list(label = "order_count definition", kind = "definition")
+  )
+  expect_equal(
+    match_citation("Booked revenue, net of discounts.", corpus),
+    list(label = "sales table", kind = "schema")
+  )
+  expect_equal(
+    match_citation("Order and revenue data for a small retailer.", corpus),
+    list(label = "sales_db dictionary", kind = "schema")
+  )
+  expect_null(match_citation("tax", corpus))
 })
 
 test_that("the citation corpus spans context, measures, and dictionaries", {
   skip_if_not_installed("yaml")
-  fact <- withr::local_tempfile(fileext = ".md")
-  writeLines("Fiscal year starts in February.", fact)
-  layer <- context_layer(files = fact)
+  doc <- withr::local_tempfile(fileext = ".md")
+  writeLines("Fiscal year starts in February.", doc)
+  layer <- context_layer(files = doc)
   registry <- list(order_count = count_measure_tool())
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
@@ -108,17 +177,66 @@ test_that("the citation corpus spans context, measures, and dictionaries", {
     list(source)
   )
 
-  expect_false(is.na(match_citation("Fiscal year starts in February.", corpus)))
+  expect_false(is.null(match_citation(
+    "Fiscal year starts in February.",
+    corpus
+  )))
   expect_equal(
     match_citation(
       "Count orders, optionally filtered by region and a revenue ceiling.",
       corpus
-    ),
-    "measure 'order_count'"
+    )$label,
+    "order_count definition"
   )
   expect_equal(
-    match_citation("Booked revenue, net of discounts.", corpus),
-    "data dictionary, table 'sales'"
+    match_citation("Booked revenue, net of discounts.", corpus)$label,
+    "sales table"
+  )
+})
+
+test_that("dictionary prose keeps its specific label once it is also context", {
+  skip_if_not_installed("yaml")
+  path <- withr::local_tempfile(fileext = ".yaml")
+  writeLines(
+    c(
+      '$version: "0.1.0"',
+      "name: retail sales",
+      "details: Revenue figures exclude tax collected at checkout.",
+      "tables:",
+      "  - name: sales",
+      "    description: One row per order line.",
+      "    details: Refunds appear as negative-revenue rows."
+    ),
+    path
+  )
+  source <- data_source(sales = test_sales(), dictionary = path)
+  own_doc <- withr::local_tempfile(fileext = ".md")
+  writeLines("Fiscal year starts in February.", own_doc)
+
+  corpus <- build_citation_corpus(
+    augment_context_layer(context_layer(files = own_doc), list(source)),
+    list(),
+    list(source)
+  )
+
+  expect_equal(
+    match_citation("One row per order line.", corpus)$label,
+    "sales table"
+  )
+  expect_equal(
+    match_citation("Refunds appear as negative-revenue rows.", corpus)$label,
+    "sales table"
+  )
+  expect_equal(
+    match_citation(
+      "Revenue figures exclude tax collected at checkout.",
+      corpus
+    )$label,
+    "data dictionary"
+  )
+  expect_equal(
+    match_citation("Fiscal year starts in February.", corpus)$label,
+    "documentation"
   )
 })
 
@@ -141,8 +259,8 @@ test_that("corpus measure text matches multi-source presentation", {
     match_citation(
       "Total revenue for a region.\n\nsources: sales_db",
       corpus
-    ),
-    "measure 'region_revenue'"
+    )$label,
+    "region_revenue definition"
   )
 })
 
@@ -163,11 +281,17 @@ test_that("dataset-level dictionary prose is citable", {
   corpus <- build_citation_corpus(NULL, list(), list(source))
 
   expect_equal(
-    match_citation("Order and revenue data for a small retailer.", corpus),
+    match_citation(
+      "Order and revenue data for a small retailer.",
+      corpus
+    )$label,
     "data dictionary"
   )
   expect_equal(
-    match_citation("Revenue figures exclude tax collected at checkout.", corpus),
+    match_citation(
+      "Revenue figures exclude tax collected at checkout.",
+      corpus
+    )$label,
     "data dictionary"
   )
 })
@@ -204,7 +328,30 @@ test_that("add_citation_request appends ContentText to content lists", {
   result <- add_citation_request(result, tracker)
 
   expect_length(result@value, 2)
-  expect_match(result@value[[2]]@text, "<citation ", fixed = TRUE)
+  expect_match(result@value[[2]]@text, "<commons-citation>", fixed = TRUE)
+})
+
+test_that("search_context requests a citation for fallback answers", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(
+    "Regeneration units are tracked separately until they close canopy.",
+    path
+  )
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  result <- agent_tool(agent, "search_context")(
+    query = "regeneration baseline"
+  )
+
+  expect_s7_class(result, ellmer::ContentToolResult)
+  expect_match(result@value, "<commons-citation>", fixed = TRUE)
+})
+
+test_that("citation_reminder_text names the commons-citation dialect", {
+  reminder <- citation_reminder_text()
+
+  expect_match(reminder, "<commons-citation>", fixed = TRUE)
+  expect_no_match(reminder, "<citation reason", fixed = TRUE)
 })
 
 test_that("user messages reset citation requests but tool results do not", {
@@ -226,4 +373,43 @@ test_that("user messages reset citation requests but tool results do not", {
     log_tokens = FALSE
   )
   expect_true(tracker$requested)
+})
+
+test_that("render_citation_aside emits a labeled, iconed aside for a verified quote", {
+  corpus <- list(list(
+    label = "sales table",
+    kind = "schema",
+    text = "Revenue is recognized at shipment, not at order placement."
+  ))
+  out <- render_citation_aside(
+    "Revenue is recognized at shipment, not at order placement.",
+    "The computation follows the documented recognition rule.",
+    corpus
+  )
+  expect_match(
+    out$html,
+    paste0(
+      '^<shiny-aside label="sales table" ',
+      'icon="commons-icons/citation-schema.svg'
+    )
+  )
+  expect_no_match(out$html, "data:image", fixed = TRUE)
+  expect_match(
+    out$html,
+    "The computation follows the documented recognition rule.",
+    fixed = TRUE
+  )
+  expect_match(out$html, "> Revenue is recognized at shipment", fixed = TRUE)
+  expect_identical(out$decision$status, "accepted")
+})
+
+test_that("render_citation_aside emits nothing for an unverified quote", {
+  out <- render_citation_aside("Nobody ever wrote this.", "reason", list())
+  expect_identical(out$html, "")
+  expect_identical(out$decision$status, "rejected")
+})
+
+test_that("unknown citation kinds have no icon", {
+  expect_null(citation_icon_url("unknown"))
+  expect_null(commons_icon_url("missing.svg"))
 })

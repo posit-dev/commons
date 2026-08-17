@@ -399,6 +399,7 @@ review_document <- function(
 
 review_document_body <- function(id, turns, flags, notes) {
   exchanges <- split_exchanges(turns)
+  provenance <- attr(turns, "provenance") %||% list()
   conversation_notes <- Filter(\(note) is.null(note$exchange), notes)
 
   sections <- c(
@@ -420,7 +421,8 @@ review_document_body <- function(id, turns, flags, notes) {
         exchanges[[i]],
         i,
         i %in% flags$exchanges,
-        exchange_notes
+        exchange_notes,
+        provenance[i][[1]] %||% empty_turn_provenance()
       )
     )
   }
@@ -428,16 +430,22 @@ review_document_body <- function(id, turns, flags, notes) {
   paste(sections, collapse = "\n")
 }
 
-review_exchange_markdown <- function(exchange, number, flagged, notes) {
-  provenance <- exchange_provenance(exchange)
+review_exchange_markdown <- function(
+  exchange,
+  number,
+  flagged,
+  notes,
+  provenance = empty_turn_provenance()
+) {
+  tag <- exchange_provenance(provenance)$tag
   contents <- review_exchange_contents_markdown(exchange)
-  citation_section <- review_citations_markdown(provenance$citations)
+  citation_section <- review_citations_markdown(provenance$citation_decisions)
 
   c(
     "",
     sprintf("## Exchange %d", number),
     "",
-    sprintf("**Trust:** %s", review_trust_label(provenance$tag)),
+    sprintf("**Trust:** %s", review_trust_label(tag)),
     "",
     sprintf("**Flagged:** %s", review_yes_no(flagged)),
     review_notes_markdown(notes),
@@ -562,10 +570,14 @@ review_citations_markdown <- function(citations) {
   }
 
   items <- unlist(lapply(citations, function(citation) {
-    reason <- citation$reason
     c(
       sprintf("- %s", normalize_citation(citation$quote)),
-      if (!is.na(reason)) sprintf("  - Reason: %s", flatten_inline(reason))
+      if (rlang::is_string(citation$status)) {
+        sprintf("  - Status: %s", flatten_inline(citation$status))
+      },
+      if (rlang::is_string(citation$label)) {
+        sprintf("  - Source: %s", flatten_inline(citation$label))
+      }
     )
   }))
   c("", "### Citations", "", items)

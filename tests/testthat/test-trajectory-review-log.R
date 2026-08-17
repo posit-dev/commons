@@ -12,13 +12,29 @@ review_test_turns <- function() {
       request = request
     ))),
     ellmer::AssistantTurn(
-      "There are 6 orders.\n\n<citation reason=\"definition\">Orders are rows.</citation>"
+      paste(
+        "There are 6 orders.",
+        "<commons-citation>",
+        "The governed definition supports this answer.",
+        "> Orders are rows.",
+        "</commons-citation>",
+        sep = "\n\n"
+      )
     )
   )
   attr(turns, "last_active") <- as.POSIXct(
     "2026-08-11 09:30:00",
     tz = "UTC"
   )
+  attr(turns, "provenance") <- list(list(
+    provenance_tag = "B",
+    citation_decisions = list(list(
+      quote = "Orders are rows.",
+      status = "accepted",
+      label = "orders definition",
+      kind = "definition"
+    ))
+  ))
   turns
 }
 
