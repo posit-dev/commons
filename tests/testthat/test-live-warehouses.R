@@ -132,6 +132,14 @@ test_that("live Snowflake rejects an ambiguous relative dictionary table", {
   )
 })
 
+test_that("live Snowflake executes compiled definition mappings", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  source <- data_source(con, tables = table)
+
+  expect_warehouse_definitions_execute(source)
+})
+
 test_that("live Databricks discovers and describes catalog relations", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
@@ -240,4 +248,12 @@ test_that("live Databricks handles quoted relation and column names", {
   expect_identical(source$table_ids[["commons quoted.table"]], table)
   expect_equal(described$schema$column, "quoted column")
   expect_equal(described$sample[["quoted column"]], 1L)
+})
+
+test_that("live Databricks executes compiled definition mappings", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  source <- data_source(con, tables = table)
+
+  expect_warehouse_definitions_execute(source)
 })

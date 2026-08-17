@@ -58,3 +58,49 @@ warehouse_test_dictionary <- function(table, column) {
     table
   )))
 }
+
+warehouse_definition_spec <- function(table) {
+  expressions <- c(
+    round_half = "ROUND(2.5) = 3",
+    floored_modulus = "MOD(-5, 3) = 1",
+    modulus_by_zero = "IS_NAN(MOD(1, 0))",
+    like_pattern = "'Alpha' LIKE 'A_%'",
+    similar_pattern = "'Alpha' SIMILAR TO 'A.*'",
+    temporal_shift = "NOW() + interval(1, days) > NOW()",
+    boolean_fold = "ANY(TRUE) AND ALL(TRUE)",
+    null_boolean_fold = "ANY(CASE WHEN TRUE THEN NULL ELSE TRUE END)"
+  )
+  list(
+    tables = list(list(
+      name = table,
+      definitions = lapply(names(expressions), function(name) {
+        list(name = name, expr = expressions[[name]])
+      })
+    ))
+  )
+}
+
+expect_warehouse_definitions_execute <- function(source) {
+  compiled <- definition_compile_source(
+    warehouse_definition_spec(source$tables[[1]]),
+    source
+  )
+  definitions <- compiled$tables[[1]]$definitions
+  values <- lapply(definitions, function(definition) {
+    DBI::dbGetQuery(
+      source$con,
+      paste("SELECT", definition$sql, "AS value")
+    )[[1]][[1]]
+  })
+  names(values) <- vapply(definitions, `[[`, character(1), "name")
+
+  expect_true(all(vapply(
+    values[setdiff(
+      names(values),
+      "null_boolean_fold"
+    )],
+    isTRUE,
+    logical(1)
+  )))
+  expect_true(is.na(values$null_boolean_fold))
+}
