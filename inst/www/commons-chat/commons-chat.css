@@ -154,50 +154,20 @@ shiny-chat-container .shiny-aside-pill img {
   opacity: 0.75;
 }
 
-shiny-chat-container
-  .shiny-aside-group:has(.shiny-aside-pill--count) {
-  margin-inline-start: 0;
-  vertical-align: super;
-}
-
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count {
-  background: transparent;
+shiny-chat-container .shiny-aside-pill--number {
   box-shadow: none;
   color: color-mix(
     in srgb,
     var(--bs-primary, #007bc2) 70%,
     var(--bs-body-bg, #fff)
   );
-  font-size: 0.72em;
   font-weight: 600;
-  min-height: 0;
-  padding: 0 0.12em;
 }
 
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count:hover,
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count:focus-visible,
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count[aria-expanded="true"] {
-  background: transparent;
+shiny-chat-container .shiny-aside-pill--number:hover,
+shiny-chat-container .shiny-aside-pill--number:focus-visible,
+shiny-chat-container .shiny-aside-pill--number[aria-expanded="true"] {
   color: var(--bs-primary, #007bc2);
-}
-
-.shiny-aside-popover .commons-source-heading {
-  align-items: center;
-  display: flex;
-  font-weight: 600;
-  gap: 0.4em;
-  margin-bottom: 0.4em;
-}
-
-.shiny-aside-popover .commons-source-heading img {
-  border-radius: 50%;
-  height: 1.1em;
-  opacity: 0.75;
-  width: 1.1em;
 }
 
 shiny-chat-container
