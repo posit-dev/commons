@@ -280,6 +280,33 @@ test_that("search_pool spans measures and definitions", {
 
   out <- search_pool_text(measures, registry, "how many orders")
   expect_match(out, "### order_count", fixed = TRUE)
+
+  general_name <- definitions_source(
+    definitions = c(
+      "      - name: gross margin",
+      "        expr: SUM(revenue)"
+    )
+  )
+  out <- search_pool_text(
+    list(),
+    sales_registry(general_name),
+    "gross margin"
+  )
+  expect_match(out, "SELECT {{gross margin}} AS value", fixed = TRUE)
+
+  labelled <- definitions_source(
+    definitions = c(
+      "      - name: metric_1",
+      "        label: Commercial contribution",
+      "        expr: SUM(revenue)"
+    )
+  )
+  out <- search_pool_text(
+    list(),
+    sales_registry(labelled),
+    "commercial contribution"
+  )
+  expect_match(out, "{{metric_1}} --- metric", fixed = TRUE)
 })
 
 test_that("call_metrics rejects mixed-grain definitions", {

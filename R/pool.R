@@ -278,8 +278,10 @@ search_pool_text <- function(
       defs$name,
       defs$table,
       defs$kind,
+      blank_na(defs$label),
       blank_na(defs$description),
-      blank_na(defs$details)
+      blank_na(defs$details),
+      blank_na(defs$expression)
     )
   )
 
@@ -313,8 +315,7 @@ definition_pool_text <- function(def, defs) {
       def$name
     ),
     metric = sprintf(
-      "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS %s`.",
-      def$name,
+      "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS value`.",
       def$name,
       def$name
     ),
