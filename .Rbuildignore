@@ -14,5 +14,8 @@ CLAUDE.md
 ^pkgdown$
 ^\.github$
 inst/hex/
-^commons-review\.jsonl$
+^commons-reviews$
 inst/manifest.json
+^sandbox$
+inst/pkgs/
+.shinychat/

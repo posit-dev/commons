@@ -70,11 +70,12 @@
 #' * When the agent also has a [context_layer()], the dictionary's prose is
 #'   indexed for the `search_context` tool.
 #'
-#' A table's entry can also declare `definitions`: named, governed SQL
-#' expressions with declared types that the model applies as `{{name}}`
-#' tokens in `run_sql` queries, expanded to their trusted SQL before the
-#' query runs. Definitions are validated against the live source and
-#' delivered through all three channels above.
+#' A table's entry can also declare `definitions`: named expressions in the
+#' [data-dict expression language](https://data-dict.tidyverse.org/expressions.html).
+#' Commons validates their inferred types and references, compiles them for
+#' the source's SQL backend, and lets the model apply them as `{{name}}`
+#' tokens in `run_sql` or through `call_metrics()`. Definitions are delivered
+#' through all three channels above.
 #'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
@@ -177,7 +178,8 @@ data_source_connection <- function(
       owned = FALSE,
       table_ids = table_registry$ids,
       dictionary = dictionary,
-      relations = table_registry$relations
+      relations = table_registry$relations,
+      definition_bindings = merged$definition_bindings
     ))
   }
 
@@ -207,7 +209,8 @@ data_source_connection <- function(
       owned = FALSE,
       table_ids = table_registry$ids,
       dictionary = dictionary,
-      relations = table_registry$relations
+      relations = table_registry$relations,
+      definition_bindings = merged$definition_bindings
     ))
   }
 
@@ -310,7 +313,8 @@ new_data_source <- function(
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
   pending = NULL,
-  relations = NULL
+  relations = NULL,
+  definition_bindings = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -325,7 +329,7 @@ new_data_source <- function(
     )
   }
 
-  structure(
+  source <- structure(
     list(
       con = con,
       tables = tables,
@@ -333,10 +337,12 @@ new_data_source <- function(
       handle = handle,
       dictionary = dictionary,
       pending = pending,
-      relations = relations
+      relations = relations,
+      definition_bindings = definition_bindings
     ),
     class = "commons_data_source"
   )
+  definition_compile_data_source(source)
 }
 
 # Pick the data source a SQL tool call runs against. With one source no
@@ -641,7 +647,10 @@ duckdb_connect <- function() {
   dir <- file.path(tempdir(), "duckdb")
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
   con <- DBI::dbConnect(
-    duckdb::duckdb(config = list(extension_directory = dir))
+    duckdb::duckdb(
+      shared_home = FALSE,
+      config = list(extension_directory = dir)
+    )
   )
   DBI::dbExecute(
     con,

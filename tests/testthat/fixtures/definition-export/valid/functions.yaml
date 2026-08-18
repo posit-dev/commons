@@ -1,0 +1,28 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: values
+    columns:
+      - name: number
+        type: number(quantity)
+        range: [-100, 100]
+      - name: text
+        type: string
+        examples: [Alpha, omega]
+      - name: flag
+        type: boolean
+    definitions:
+      - name: strings
+        expr: STARTS_WITH(LOWER(TRIM(text)), 'a') OR ENDS_WITH(UPPER(text), 'Z')
+      - name: patterns
+        expr: text LIKE 'A_%' AND text SIMILAR TO 'A.*'
+      - name: numeric
+        expr: ABS(number) + FLOOR(number) + CEIL(number) + ROUND(number, 2)
+      - name: remainder
+        expr: MOD(number, 3)
+      - name: finite
+        expr: IS_FINITE(number) AND NOT IS_INFINITE(number) AND NOT IS_NAN(number)
+      - name: folds
+        expr: MIN(number) + MAX(number) + SUM(number) + AVG(number) + COUNT(number) + COUNT_DISTINCT(number) + ROW_COUNT()
+      - name: boolean folds
+        expr: ANY(flag) OR ALL(flag)

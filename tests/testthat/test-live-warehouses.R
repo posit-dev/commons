@@ -132,6 +132,89 @@ test_that("live Snowflake rejects an ambiguous relative dictionary table", {
   )
 })
 
+test_that("live Snowflake executes compiled definition mappings", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  label <- table_id_label(table)
+  dictionary <- new_data_dictionary(warehouse_definition_spec(label))
+  source <- data_source(con, tables = table, dictionary = dictionary)
+  definitions <- source$dictionary$tables[[label]]$definitions
+  expect_equal(
+    vapply(definitions, `[[`, character(1), "target"),
+    rep("SQL(snowflake)", length(definitions))
+  )
+
+  round_half <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$round_half$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(round_half)))
+
+  floored_modulus <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$floored_modulus$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(floored_modulus)))
+
+  negative_modulus <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$negative_modulus$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(negative_modulus)))
+
+  modulus_by_zero <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$modulus_by_zero$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(modulus_by_zero)))
+
+  division_by_zero <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$division_by_zero$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(division_by_zero)))
+
+  like_pattern <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$like_pattern$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(like_pattern)))
+
+  similar_pattern <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$similar_pattern$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(similar_pattern)))
+
+  temporal_shift <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$temporal_shift$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(temporal_shift)))
+
+  boolean_fold <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$boolean_fold$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(boolean_fold)))
+
+  null_boolean_fold <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$null_boolean_fold$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(is.na(null_boolean_fold))
+
+  empty_boolean_fold <- DBI::dbGetQuery(
+    con,
+    paste(
+      "SELECT",
+      definitions$boolean_fold$sql,
+      "AS value FROM (SELECT 1 AS one) AS empty_rows WHERE FALSE"
+    )
+  )[[1]][[1]]
+  expect_true(is.na(empty_boolean_fold))
+})
+
 test_that("live Databricks discovers and describes catalog relations", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
@@ -240,4 +323,87 @@ test_that("live Databricks handles quoted relation and column names", {
   expect_identical(source$table_ids[["commons quoted.table"]], table)
   expect_equal(described$schema$column, "quoted column")
   expect_equal(described$sample[["quoted column"]], 1L)
+})
+
+test_that("live Databricks executes compiled definition mappings", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  label <- table_id_label(table)
+  dictionary <- new_data_dictionary(warehouse_definition_spec(label))
+  source <- data_source(con, tables = table, dictionary = dictionary)
+  definitions <- source$dictionary$tables[[label]]$definitions
+  expect_equal(
+    vapply(definitions, `[[`, character(1), "target"),
+    rep("SQL(databricks)", length(definitions))
+  )
+
+  round_half <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$round_half$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(round_half)))
+
+  floored_modulus <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$floored_modulus$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(floored_modulus)))
+
+  negative_modulus <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$negative_modulus$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(negative_modulus)))
+
+  modulus_by_zero <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$modulus_by_zero$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(modulus_by_zero)))
+
+  division_by_zero <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$division_by_zero$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(division_by_zero)))
+
+  like_pattern <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$like_pattern$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(like_pattern)))
+
+  similar_pattern <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$similar_pattern$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(similar_pattern)))
+
+  temporal_shift <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$temporal_shift$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(temporal_shift)))
+
+  boolean_fold <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$boolean_fold$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(isTRUE(as.logical(boolean_fold)))
+
+  null_boolean_fold <- DBI::dbGetQuery(
+    con,
+    paste("SELECT", definitions$null_boolean_fold$sql, "AS value")
+  )[[1]][[1]]
+  expect_true(is.na(null_boolean_fold))
+
+  empty_boolean_fold <- DBI::dbGetQuery(
+    con,
+    paste(
+      "SELECT",
+      definitions$boolean_fold$sql,
+      "AS value FROM (SELECT 1 AS one) AS empty_rows WHERE FALSE"
+    )
+  )[[1]][[1]]
+  expect_true(is.na(empty_boolean_fold))
 })

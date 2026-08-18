@@ -104,7 +104,11 @@ catalog_merge_dictionary <- function(
   call = rlang::caller_env()
 ) {
   if (is.null(dictionary) || length(dictionary$tables) == 0L) {
-    return(list(dictionary = dictionary, relations = relations))
+    return(list(
+      dictionary = dictionary,
+      relations = relations,
+      definition_bindings = NULL
+    ))
   }
 
   matches <- catalog_dictionary_matches(
@@ -118,6 +122,7 @@ catalog_merge_dictionary <- function(
     matches
   )
   tables <- list()
+  column_matches <- list()
   for (authored_name in names(matches)) {
     label <- matches[[authored_name]]
     if (is.na(label)) {
@@ -127,7 +132,7 @@ catalog_merge_dictionary <- function(
     columns <- describe_relation(con, relation$id, call = call)
     relation$columns <- columns
     relations[[label]] <- relation
-    tables[[label]] <- catalog_merge_dictionary_table(
+    merged <- catalog_merge_dictionary_table(
       dictionary$tables[[authored_name]],
       authored_name,
       label,
@@ -136,10 +141,20 @@ catalog_merge_dictionary <- function(
       identifier_case,
       call = call
     )
+    tables[[label]] <- merged$table
+    column_matches[[authored_name]] <- merged$column_matches
   }
   dictionary$tables <- tables
 
-  list(dictionary = dictionary, relations = relations)
+  list(
+    dictionary = dictionary,
+    relations = relations,
+    definition_bindings = list(
+      tables = matches,
+      columns = column_matches,
+      strict = TRUE
+    )
+  )
 }
 
 catalog_scope_dictionary_relationships <- function(dictionary, matches) {
@@ -302,30 +317,19 @@ catalog_merge_dictionary_table <- function(
     relation$description
   )
   authored$kind <- relation$kind %||% authored$kind
-  authored$columns <- catalog_merge_dictionary_columns(
+  merged <- catalog_merge_dictionary_columns(
     authored$columns,
     columns,
     identifier_case,
     call = call
   )
+  authored$columns <- merged$columns
   if (!identical(authored_name, selected_name)) {
     # Preserve the authored alias for first-touch and relationship matching after re-keying.
     authored$.authored_name <- authored_name
   }
 
-  definition_names <- names(authored$definitions)
-  shadowed <- definition_names[
-    catalog_normalize_identifier(definition_names, identifier_case) %in%
-      catalog_normalize_identifier(names(authored$columns), identifier_case)
-  ]
-  if (length(shadowed)) {
-    cli::cli_abort(
-      "Definitions on table {.val {selected_name}} must not share a name with
-       its discovered columns: {.val {shadowed}}.",
-      call = call
-    )
-  }
-  authored
+  list(table = authored, column_matches = merged$matches)
 }
 
 catalog_merge_dictionary_columns <- function(
@@ -338,6 +342,10 @@ catalog_merge_dictionary_columns <- function(
     catalog_dictionary_column(discovered, i)
   })
   names(out) <- discovered$column
+  matches <- stats::setNames(
+    rep(NA_character_, length(authored)),
+    names(authored)
+  )
 
   normalized <- catalog_normalize_identifier(names(out), identifier_case)
   for (authored_name in names(authored)) {
@@ -363,6 +371,7 @@ catalog_merge_dictionary_columns <- function(
     }
 
     discovered_name <- names(out)[[candidates]]
+    matches[[authored_name]] <- discovered_name
     column <- utils::modifyList(
       out[[discovered_name]],
       authored[[authored_name]],
@@ -376,7 +385,7 @@ catalog_merge_dictionary_columns <- function(
     )
     out[[discovered_name]] <- column
   }
-  out
+  list(columns = out, matches = matches)
 }
 
 catalog_dictionary_column <- function(discovered, i) {

@@ -1,71 +1,69 @@
-test_that("answer pills describe trusted and uncited fallback answers", {
-  trusted <- htmltools::renderTags(commons_answer_pill("A"))$html
-  uncited <- htmltools::renderTags(commons_answer_pill("C"))$html
-
-  expect_match(trusted, "Verified answer")
-  expect_match(trusted, "governed calculation")
-  expect_match(trusted, "commons-tooltip")
-  expect_match(trusted, "commons-answer-pill-icon")
-  expect_match(trusted, "commons-answer-pill-trusted")
-
-  expect_match(uncited, "Untrusted")
-  expect_match(uncited, "AI can be wrong")
-  expect_match(uncited, "not produced by a governed calculation")
-  expect_match(uncited, "commons-tooltip")
-  expect_match(uncited, "commons-answer-pill-icon")
-  expect_match(uncited, "commons-answer-pill-caution")
+test_that("commons_server registers no custom-message observers", {
+  body_text <- paste(deparse(body(commons_server)), collapse = "\n")
+  expect_false(grepl("sendCustomMessage", body_text, fixed = TRUE))
 })
 
-test_that("cited fallback answers get footnotes rather than a pill", {
-  expect_null(commons_answer_pill("B"))
-  expect_equal(
-    as.character(htmltools::renderTags(commons_answer_pill("B"))$html),
-    ""
-  )
-})
+test_that("commons_server runs under shiny::testServer without error", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
 
-test_that("citations_payload aligns entries with the answer's citations", {
-  payload <- citations_payload(list(
-    list(
-      quote = "Revenue  excludes tax.",
-      reason = "Definition followed",
-      label = "context layer",
-      verified = TRUE
-    ),
-    list(
-      quote = "Made up.",
-      reason = NA_character_,
-      label = NA_character_,
-      verified = FALSE
-    )
-  ))
-
-  expect_length(payload, 2)
-  expect_true(payload[[1]]$verified)
-  expect_equal(payload[[1]]$quote, "Revenue excludes tax.")
-  expect_equal(payload[[1]]$reason, "Definition followed")
-  expect_equal(payload[[1]]$label, "context layer")
-  expect_false(payload[[2]]$verified)
-  expect_null(payload[[2]]$quote)
-})
-
-test_that("send_commons_pill targets the chat's own id, not a hardcoded one", {
-  sent <- NULL
-  fake_session <- list(
-    ns = function(x) paste0("ns-", x),
-    sendCustomMessage = function(type, message) {
-      sent <<- list(type = type, message = message)
+  shiny::testServer(
+    function(input, output, session) {
+      commons_server("chat", client = test_agent())
+    },
+    {
+      session$flushReact()
     }
   )
+  succeed()
+})
 
-  send_commons_pill(
-    fake_session,
-    "my_chat",
-    list(tag = "A", citations = list())
+test_that("persist_conversation_id round-trips the id through history hooks", {
+  agent <- test_agent()
+  hooks <- new.env(parent = emptyenv())
+  fake_chat <- list(
+    history = list(
+      on_save = function(fn) hooks$on_save <- fn,
+      on_restore = function(fn) hooks$on_restore <- fn
+    )
   )
 
-  expect_equal(sent$type, "commonsProvenancePill")
-  expect_equal(sent$message$id, "ns-my_chat")
+  persist_conversation_id(fake_chat, agent)
+
+  values <- hooks$on_save(list(app_state = 1))
+  expect_identical(
+    values$commons_conversation_id,
+    agent$get_conversation_id()
+  )
+  expect_identical(values$app_state, 1)
+
+  hooks$on_restore(list(commons_conversation_id = "restored-id"))
+  expect_identical(agent$get_conversation_id(), "restored-id")
+
+  hooks$on_restore(list())
+  expect_identical(agent$get_conversation_id(), "restored-id")
+})
+
+test_that("commons_server wires conversation-id persistence into shinychat", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  shiny::testServer(
+    function(input, output, session) {
+      agent <- test_agent()
+      commons_server("chat", client = agent)
+    },
+    {
+      controller <- shinychat:::get_session_chat_bookmark_info(
+        session,
+        "chat.history-controller"
+      )
+      controller$restore_app_state(
+        list(commons_conversation_id = "restored-id")
+      )
+      expect_identical(agent$get_conversation_id(), "restored-id")
+    }
+  )
 })
 
 test_that("chat UI preserves shinychat's top-level fill container", {
@@ -83,6 +81,32 @@ test_that("chat UI preserves shinychat's top-level fill container", {
   expect_true("html-fill-item" %in% classes)
   expect_true("html-fill-container" %in% classes)
   expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
+})
+
+test_that("chat UI registers the packaged icon resource path", {
+  prefix <- "commons-icons"
+  paths <- shiny::resourcePaths()
+  previous <- if (prefix %in% names(paths)) unname(paths[[prefix]])
+  if (!is.null(previous)) {
+    shiny::removeResourcePath(prefix)
+  }
+  withr::defer({
+    if (prefix %in% names(shiny::resourcePaths())) {
+      shiny::removeResourcePath(prefix)
+    }
+    if (!is.null(previous)) {
+      shiny::addResourcePath(prefix, previous)
+    }
+  })
+
+  commons_ui("chat")
+
+  paths <- shiny::resourcePaths()
+  expect_in(prefix, names(paths))
+  expect_identical(
+    unname(paths[prefix]),
+    normalizePath(system.file("figs", package = "commons"))
+  )
 })
 
 test_that("commons_server requires a commons agent", {

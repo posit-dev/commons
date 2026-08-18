@@ -14,4 +14,6 @@ CLAUDE.local.md
 AGENTS.override.md
 inst/hex/output
 .shinychat/
-commons-review.jsonl
+commons-reviews/
+.worktrees/
+/sandbox/commons-openai-citation-smoke/

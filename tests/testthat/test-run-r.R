@@ -118,7 +118,7 @@ test_that("run_r delivers the citation request when no fallback tool has", {
   res <- sync_promise(run_r("1 + 1"))
 
   expect_match(res@value, "[1] 2", fixed = TRUE)
-  expect_match(res@value, "<citation ", fixed = TRUE)
+  expect_match(res@value, "<commons-citation>", fixed = TRUE)
 })
 
 test_that("run_r surfaces errors from model code without failing the tool", {

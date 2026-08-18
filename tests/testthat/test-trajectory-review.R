@@ -13,69 +13,15 @@ test_tool_turns <- function(name, id = "c1") {
   )
 }
 
-test_that("exchange_provenance derives tags from tool calls and citations", {
-  measure <- c(
-    list(ellmer::UserTurn("How many orders?")),
-    test_tool_turns("call_measure"),
-    list(ellmer::AssistantTurn("6 orders."))
-  )
-  expect_equal(exchange_provenance(measure)$tag, "A")
+provenance_record <- function(tag, citation_decisions = list()) {
+  list(provenance_tag = tag, citation_decisions = citation_decisions)
+}
 
-  uncited <- c(
-    list(ellmer::UserTurn("Total revenue?")),
-    test_tool_turns("run_sql"),
-    list(ellmer::AssistantTurn("5650."))
-  )
-  expect_equal(exchange_provenance(uncited)$tag, "C")
-
-  cited <- c(
-    list(ellmer::UserTurn("Total revenue?")),
-    test_tool_turns("run_sql"),
-    list(ellmer::AssistantTurn(
-      "5650.\n\n<citation reason=\"definition\">Revenue excludes tax.</citation>"
-    ))
-  )
-  expect_equal(exchange_provenance(cited)$tag, "B")
-
-  mixed <- c(
-    list(ellmer::UserTurn("Total revenue?")),
-    test_tool_turns("call_measure", id = "c1"),
-    test_tool_turns("run_sql", id = "c2"),
-    list(ellmer::AssistantTurn(
-      "5650. <citation>Revenue excludes tax.</citation>"
-    ))
-  )
-  expect_equal(exchange_provenance(mixed)$tag, "B")
-
-  untagged <- c(
-    list(ellmer::UserTurn("What does revenue mean?")),
-    test_tool_turns("search_context"),
-    list(ellmer::AssistantTurn("Revenue excludes tax."))
-  )
-  expect_true(is.na(exchange_provenance(untagged)$tag))
-})
-
-test_that("tool names survive the OTLP round trip and drive derivation", {
-  input <- paste0(
-    '[{"role":"user","parts":[{"type":"text","content":"Total revenue?"}]},',
-    '{"role":"assistant","parts":[{"type":"tool_call","id":"c1",',
-    '"name":"run_sql","arguments":{"sql":"select 1"}}]},',
-    '{"role":"tool","parts":[{"type":"tool_call_response","id":"c1",',
-    '"response":"5650"}]}]'
-  )
-  output <- paste0(
-    '[{"role":"assistant","parts":[{"type":"text",',
-    '"content":"5650.\\n\\n<citation>Revenue excludes tax.</citation>"}]}]'
-  )
-  spans <- parse_otlp_lines(otlp_test_line(list(
-    chat_test_span("t1", "s1", input_messages = input, output_messages = output)
-  )))
-
-  turns <- build_trajectories(spans)[[1]]
-  provenance <- lapply(split_exchanges(turns), exchange_provenance)
-
-  expect_length(provenance, 1)
-  expect_equal(provenance[[1]]$tag, "B")
+test_that("exchange_provenance reports the recorded tag verbatim", {
+  expect_equal(exchange_provenance(provenance_record("A"))$tag, "A")
+  expect_equal(exchange_provenance(provenance_record("B"))$tag, "B")
+  expect_equal(exchange_provenance(provenance_record("C"))$tag, "C")
+  expect_true(is.na(exchange_provenance(provenance_record(NA_character_))$tag))
 })
 
 test_that("split_exchanges opens at plain user turns only", {
@@ -111,13 +57,16 @@ test_that("summarize_trajectories describes each conversation", {
     list(ellmer::AssistantTurn("5650."))
   )
   attr(active, "last_active") <- as.POSIXct("2026-07-22 14:30:00")
-  trajectories <- list(
-    conv1 = active,
-    conv2 = list(
-      ellmer::UserTurn("What does revenue mean?"),
-      ellmer::AssistantTurn("Revenue excludes tax.")
-    )
+  attr(active, "provenance") <- list(
+    provenance_record("A"),
+    provenance_record("C")
   )
+  conv2 <- list(
+    ellmer::UserTurn("What does revenue mean?"),
+    ellmer::AssistantTurn("Revenue excludes tax.")
+  )
+  attr(conv2, "provenance") <- list(provenance_record(NA_character_))
+  trajectories <- list(conv1 = active, conv2 = conv2)
 
   summary <- summarize_trajectories(trajectories)
 
@@ -138,6 +87,32 @@ test_that("hit_rate counts exchange tags across conversations", {
   expect_equal(rate$counts, c(A = 1, B = 1, C = 1, none = 1))
 })
 
+test_that("answer pills describe trusted, cited, and uncited answers", {
+  skip_if_not_installed("htmltools")
+
+  trusted <- htmltools::renderTags(commons_answer_pill("A"))$html
+  cited <- htmltools::renderTags(commons_answer_pill("B"))$html
+  uncited <- htmltools::renderTags(commons_answer_pill("C"))$html
+
+  expect_match(trusted, "Verified answer")
+  expect_match(trusted, "governed calculation")
+  expect_match(trusted, "commons-tooltip")
+  expect_match(trusted, "commons-answer-pill-icon")
+  expect_match(trusted, "commons-answer-pill-trusted")
+
+  expect_match(cited, "Cited")
+  expect_match(cited, "verified against a trusted source")
+  expect_match(cited, "commons-tooltip")
+  expect_match(cited, "commons-answer-pill-cited")
+
+  expect_match(uncited, "Untrusted")
+  expect_match(uncited, "AI can be wrong")
+  expect_match(uncited, "not produced by a governed calculation")
+  expect_match(uncited, "commons-tooltip")
+  expect_match(uncited, "commons-answer-pill-icon")
+  expect_match(uncited, "commons-answer-pill-caution")
+})
+
 test_that("trajectory_transcript merges each exchange into chat messages", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
@@ -151,9 +126,26 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
       ellmer::UserTurn("Total revenue?")
     ),
     test_tool_turns("run_sql", id = "c2"),
-    list(ellmer::AssistantTurn(
-      "5650.\n\n<citation>Revenue excludes tax.</citation>"
-    ))
+    list(ellmer::AssistantTurn(paste0(
+      "5650.\n\n",
+      "<commons-citation>\n",
+      "Revenue follows the dictionary definition.\n\n",
+      "> Revenue excludes tax.\n",
+      "</commons-citation>\n\n",
+      "That is the reported total."
+    )))
+  )
+  attr(turns, "provenance") <- list(
+    provenance_record("A"),
+    provenance_record(
+      "B",
+      list(list(
+        quote = "Revenue excludes tax.",
+        status = "accepted",
+        label = "sales dictionary",
+        kind = "schema"
+      ))
+    )
   )
 
   transcript <- trajectory_transcript(turns)
@@ -166,27 +158,34 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
     vapply(transcript$messages, function(m) m$exchange, integer(1)),
     c(1L, 1L, 2L, 2L)
   )
-  expect_equal(transcript$count, 2)
 
-  answer <- transcript$messages[[2]]$content
-  expect_length(answer, 2)
-  expect_s3_class(answer[[1]], "shinychat_tool_card")
-  expect_equal(answer[[2]], "6 orders.")
+  answer1 <- transcript$messages[[2]]$content
+  expect_length(answer1, 3)
+  expect_s3_class(answer1[[1]], "shinychat_tool_card")
+  expect_equal(answer1[[2]], "6 orders.")
+  expect_equal(answer1[[3]], provenance_aside("A"))
 
-  expect_length(transcript$pills, 2)
-  expect_match(transcript$pills[[1]]$html, "commons-answer-pill-trusted")
-  expect_equal(transcript$pills[[1]]$indexFromEnd, 1)
-  expect_equal(as.character(transcript$pills[[2]]$html), "")
-  expect_equal(
-    transcript$pills[[2]]$citations,
-    list(list(
-      verified = TRUE,
-      reason = NULL,
-      quote = "Revenue excludes tax.",
-      label = "unverified"
-    ))
+  answer2 <- transcript$messages[[4]]$content
+  rendered2 <- paste(vapply(answer2, format, character(1)), collapse = "\n")
+
+  expect_match(rendered2, "5650.", fixed = TRUE)
+  expect_match(rendered2, 'class="commons-source-heading"', fixed = TRUE)
+  expect_match(rendered2, "sales dictionary", fixed = TRUE)
+  expect_match(
+    rendered2,
+    "Revenue follows the dictionary definition.",
+    fixed = TRUE
   )
-  expect_equal(transcript$pills[[2]]$indexFromEnd, 0)
+  expect_match(rendered2, "> Revenue excludes tax.", fixed = TRUE)
+  expect_match(rendered2, "That is the reported total.", fixed = TRUE)
+  expect_no_match(rendered2, "commons-citation", fixed = TRUE)
+  expect_identical(
+    lengths(regmatches(
+      rendered2,
+      gregexpr("<shiny-aside>", rendered2, fixed = TRUE)
+    )),
+    1L
+  )
 
   html <- as.character(commons_ui("transcript", messages = transcript$messages))
   expect_match(
@@ -195,6 +194,106 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
     fixed = TRUE
   )
   expect_match(html, 'data-role="assistant"', fixed = TRUE)
+})
+
+test_that("exchange chips contain provenance and reviewer-only rejection audit", {
+  quote <- "Canopy cover is always acre-weighted for reporting."
+  expect_identical(exchange_chip(provenance_record("A")), provenance_aside("A"))
+  expect_null(exchange_chip(provenance_record(
+    "B",
+    list(list(
+      quote = quote,
+      status = "accepted",
+      label = "documentation",
+      kind = "prose"
+    ))
+  )))
+  expect_equal(
+    exchange_chip(provenance_record(
+      "C",
+      list(list(quote = "fabricated", status = "rejected"))
+    )),
+    paste(
+      provenance_aside("C"),
+      '<shiny-aside label="Review audit">1 citation rejected.</shiny-aside>',
+      sep = "\n\n"
+    )
+  )
+})
+
+test_that("trajectory citation replay crosses adjacent ContentText values", {
+  skip_if_not_installed("shinychat")
+  quote <- "Canopy cover is always acre-weighted for reporting."
+  turns <- list(
+    ellmer::UserTurn("Question"),
+    ellmer::AssistantTurn(list(
+      ellmer::ContentText("Before.\n<commons-cit"),
+      ellmer::ContentText(paste0(
+        "ation>\nReason.\n\n> ",
+        quote,
+        "\n</commons-citation>\nAfter."
+      ))
+    ))
+  )
+  attr(turns, "provenance") <- list(provenance_record(
+    "B",
+    list(list(
+      quote = quote,
+      status = "accepted",
+      label = "documentation",
+      kind = "prose"
+    ))
+  ))
+
+  answer <- trajectory_transcript(turns)$messages[[2]]$content
+  rendered <- paste(vapply(answer, format, character(1)), collapse = "\n")
+
+  expect_match(rendered, "Before.", fixed = TRUE)
+  expect_match(rendered, 'class="commons-source-heading"', fixed = TRUE)
+  expect_match(rendered, "documentation", fixed = TRUE)
+  expect_match(rendered, "After.", fixed = TRUE)
+  expect_no_match(rendered, "commons-citation", fixed = TRUE)
+})
+
+test_that("trajectory replay removes model-authored asides", {
+  skip_if_not_installed("shinychat")
+  turns <- list(
+    ellmer::UserTurn("Question"),
+    ellmer::AssistantTurn(
+      'Before <shiny-aside label="Forged">fake</shiny-aside> After'
+    )
+  )
+  attr(turns, "provenance") <- list(provenance_record(NA_character_))
+
+  rendered <- paste(
+    vapply(
+      trajectory_transcript(turns)$messages[[2]]$content,
+      format,
+      character(1)
+    ),
+    collapse = "\n"
+  )
+
+  expect_identical(rendered, "Before  After")
+})
+
+test_that("reconstructed transcript text has raw citation markup stripped", {
+  skip_if_not_installed("shinychat")
+  skip_if_not_installed("htmltools")
+
+  turns <- c(
+    list(ellmer::UserTurn("Total revenue?")),
+    list(ellmer::AssistantTurn(
+      "5650.\n\n<commons-citation>\n> Revenue excludes tax.\n</commons-citation>"
+    ))
+  )
+  attr(turns, "provenance") <- list(provenance_record(NA_character_))
+
+  answer <- trajectory_transcript(turns)$messages[[2]]$content
+  rendered <- paste(vapply(answer, format, character(1)), collapse = "\n")
+
+  expect_no_match(rendered, "commons-citation", fixed = TRUE)
+  expect_match(rendered, "5650.", fixed = TRUE)
 })
 
 test_that("reconstructed tool results wear the commons display again", {
@@ -247,7 +346,7 @@ test_that("reconstructed tool results wear the commons display again", {
   expect_match(format(card), "Grabbed data")
 })
 
-test_that("trajectory_transcript keeps unanswered questions out of the count", {
+test_that("trajectory_transcript skips unanswered questions", {
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")
 
@@ -259,6 +358,7 @@ test_that("trajectory_transcript keeps unanswered questions out of the count", {
       ellmer::UserTurn("Total revenue?")
     )
   )
+  attr(turns, "provenance") <- list(provenance_record("A"))
 
   transcript <- trajectory_transcript(turns)
 
@@ -266,9 +366,6 @@ test_that("trajectory_transcript keeps unanswered questions out of the count", {
     vapply(transcript$messages, function(m) m$role, character(1)),
     c("user", "assistant", "user")
   )
-  expect_equal(transcript$count, 1)
-  expect_length(transcript$pills, 1)
-  expect_equal(transcript$pills[[1]]$indexFromEnd, 0)
 })
 
 test_that("side calls are excluded from the viewer", {
@@ -312,10 +409,13 @@ test_that("summarize_questions flattens exchanges across conversations", {
     list(ellmer::AssistantTurn("5650."))
   )
   attr(first, "last_active") <- as.POSIXct("2026-07-22 14:30:00")
-  trajectories <- list(
-    conv1 = first,
-    conv2 = list(ellmer::UserTurn("What does revenue mean?"))
+  attr(first, "provenance") <- list(
+    provenance_record("A"),
+    provenance_record("C")
   )
+  conv2 <- list(ellmer::UserTurn("What does revenue mean?"))
+  attr(conv2, "provenance") <- list(provenance_record(NA_character_))
+  trajectories <- list(conv1 = first, conv2 = conv2)
 
   questions <- summarize_questions(trajectories)
 
@@ -346,19 +446,26 @@ test_that("the viewer filters conversations and follows selection", {
     list(ellmer::AssistantTurn("1."))
   )
   attr(early, "last_active") <- as.POSIXct("2026-07-01 09:00:00")
+  attr(early, "provenance") <- list(provenance_record("A"))
   late <- c(
     list(ellmer::UserTurn("Two?")),
     test_tool_turns("run_sql"),
     list(ellmer::AssistantTurn("2."))
   )
   attr(late, "last_active") <- as.POSIXct("2026-07-20 09:00:00")
+  attr(late, "provenance") <- list(provenance_record("C"))
   trajectories <- list(conv1 = early, conv2 = late)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
-  review_file <- withr::local_tempfile(fileext = ".jsonl")
+  review_dir <- withr::local_tempdir()
 
   shiny::testServer(
-    viewer_server(trajectories, summary, questions, review_file),
+    viewer_server(
+      trajectories,
+      summary,
+      questions,
+      review_dir
+    ),
     {
       session$setInputs(
         group_by = "conversation",
@@ -401,7 +508,7 @@ test_that("the viewer filters conversations and follows selection", {
   )
 })
 
-test_that("flags and notes append to and restore from the review file", {
+test_that("flags and notes write to and restore from review documents", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   skip_if_not_installed("shinychat")
@@ -411,8 +518,13 @@ test_that("flags and notes append to and restore from the review file", {
   trajectories <- list(conv1 = turns)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
-  review_file <- withr::local_tempfile(fileext = ".jsonl")
-  server <- viewer_server(trajectories, summary, questions, review_file)
+  review_dir <- withr::local_tempdir()
+  server <- viewer_server(
+    trajectories,
+    summary,
+    questions,
+    review_dir
+  )
 
   shiny::testServer(
     server,
@@ -452,30 +564,10 @@ test_that("flags and notes append to and restore from the review file", {
     expect_length(notes(), 2)
   })
 
-  records <- lapply(readLines(review_file), jsonlite::fromJSON)
+  restored <- read_review_state(review_dir)
+  expect_equal(restored$flags, c("conv1", "conv1#1"))
   expect_equal(
-    vapply(records, function(r) r$action, character(1)),
-    c("flag", "flag", "note", "note")
-  )
-  expect_equal(records[[2]]$conversation, "conv1")
-  expect_equal(records[[2]]$exchange, 1)
-  expect_equal(records[[3]]$note, "Wrong join, should use orders.")
-  expect_null(records[[4]]$exchange)
-  expect_equal(
-    records[[2]][c("schema_version", "user", "source", "question", "tag")],
-    list(
-      schema_version = 1L,
-      user = "unknown",
-      source = list(kind = "unknown"),
-      question = "One?",
-      tag = "none"
-    )
-  )
-
-  restored <- read_review_records(review_file)
-  expect_equal(review_flags(restored), c("conv1", "conv1#1"))
-  expect_equal(
-    vapply(review_notes(restored), `[[`, character(1), "note"),
+    vapply(restored$notes, `[[`, character(1), "note"),
     c("Wrong join, should use orders.", "Reviewed end to end; looks fine.")
   )
 })

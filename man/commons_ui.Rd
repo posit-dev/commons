@@ -25,12 +25,13 @@ and \code{commons_server()}.}
 }
 \description{
 These functions wrap \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} and \code{\link[shinychat:chat_server]{shinychat::chat_server()}}
-with commons-specific answer provenance UI. Answers produced from
-registered measures get a compact verified-answer pill. Answers produced
-from fallback SQL or R can cite text from the agent's context, measure
-definitions, or data documentation; verified citations render as footnotes
-whose tooltips name their source. Fallback answers with no verified
-citation get an untrusted caution pill.
+for commons agents. The server verifies each \verb{<commons-citation>} the
+model writes against its own context, measure definitions, and data
+documentation as the answer streams, and rewrites verified citations
+inline as numbered, server-authored \verb{<shiny-aside>} elements. Citation
+details name the trusted source.
+A compact provenance aside follows the answer when it was produced by a
+governed calculation, or when a fallback answer cites nothing verified.
 }
 \examples{
 \dontrun{

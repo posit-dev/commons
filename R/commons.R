@@ -241,22 +241,80 @@ Commons <- R6::R6Class(
       stream = c("text", "content"),
       controller = NULL
     ) {
-      stream <- super$stream_async(
+      private$refresh_conversation_id()
+      from_index <- length(self$get_turns()) + 1L
+      stream <- rlang::arg_match(stream)
+      raw_stream <- super$stream_async(
         ...,
         tool_mode = tool_mode,
         stream = stream,
         controller = controller
       )
-      if (!private$tracing) {
-        return(stream)
-      }
+
+      tracing <- private$tracing
       conversation_id <- private$conversation_id
-      # The generator frame persists across yields and exits on completion,
-      # so the conversation span covers the whole streamed turn.
+      corpus <- private$corpus
+      as_content <- identical(stream, "content")
+
+      # Scan without tracing too so model-authored citation markup fails closed.
       coro::async_generator(function() {
-        local_conversation_turn_span(conversation_id)
-        for (chunk in coro::await_each(stream)) {
-          yield(chunk)
+        span <- NULL
+        if (tracing) {
+          span <- local_conversation_turn_span(conversation_id)
+        }
+        scanner <- citation_scanner(corpus)
+
+        for (chunk in coro::await_each(raw_stream)) {
+          if (is.character(chunk)) {
+            out <- scanner$feed(chunk)
+            if (nzchar(out)) yield(out)
+          } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
+            out <- scanner$feed(chunk@text)
+            if (nzchar(out)) yield(ellmer::ContentText(out))
+          } else {
+            yield(chunk)
+          }
+        }
+
+        tail <- scanner$finish()
+        if (nzchar(tail)) {
+          yield(if (as_content) ellmer::ContentText(tail) else tail)
+        }
+
+        decisions <- scanner$decisions()
+        verified <- any(vapply(
+          decisions,
+          function(d) identical(d$status, "accepted"),
+          logical(1)
+        ))
+        turns <- self$get_turns()
+        private$last_streamed_turns <- turns
+        tag <- derive_provenance_tag(
+          collect_appended_tags(turns, from_index),
+          verified
+        )
+
+        if (tracing) {
+          # Record independently so one invalid attribute cannot suppress another.
+          if (!is.na(tag)) {
+            tryCatch(
+              commons_span_set_attribute(span, "commons.provenance.tag", tag),
+              error = function(err) NULL
+            )
+          }
+          tryCatch(
+            commons_span_set_attribute(
+              span,
+              "commons.citation.candidates",
+              jsonlite::toJSON(decisions, auto_unbox = TRUE)
+            ),
+            error = function(err) NULL
+          )
+        }
+
+        aside <- provenance_aside(tag)
+        if (nzchar(aside)) {
+          yield(if (as_content) ellmer::ContentText(aside) else aside)
         }
         coro::exhausted()
       })()
@@ -264,6 +322,19 @@ Commons <- R6::R6Class(
 
     citation_corpus = function() {
       private$corpus
+    },
+
+    get_conversation_id = function() {
+      private$conversation_id
+    },
+
+    set_conversation_id = function(id) {
+      if (!rlang::is_string(id) || !nzchar(id)) {
+        cli::cli_abort("{.arg id} must be a single non-empty string.")
+      }
+      private$conversation_id <- id
+      private$last_streamed_turns <- self$get_turns()
+      invisible(self)
     },
 
     prewarm = function() {
@@ -292,12 +363,30 @@ Commons <- R6::R6Class(
     fn_sources = NULL,
     injections = NULL,
     conversation_id = NULL,
+    last_streamed_turns = NULL,
     tracing = FALSE,
     first_touch = NULL,
     handles = NULL,
     worker = NULL,
     corpus = NULL,
-    citation_request = NULL
+    citation_request = NULL,
+
+    # shinychat reuses one client across editable histories, so divergent
+    # histories need distinct trace identities.
+    refresh_conversation_id = function() {
+      baseline <- private$last_streamed_turns
+      if (is.null(baseline)) {
+        return(invisible(NULL))
+      }
+      current <- self$get_turns()
+      extends <- length(current) >= length(baseline) &&
+        identical(current[seq_along(baseline)], baseline)
+      if (!extends) {
+        private$conversation_id <- new_conversation_id()
+        private$last_streamed_turns <- current
+      }
+      invisible(NULL)
+    }
   )
 )
 

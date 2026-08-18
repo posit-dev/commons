@@ -58,3 +58,26 @@ warehouse_test_dictionary <- function(table, column) {
     table
   )))
 }
+
+warehouse_definition_spec <- function(table) {
+  expressions <- c(
+    round_half = "ROUND(2.5) = 3",
+    floored_modulus = "MOD(-5, 3) = 1",
+    negative_modulus = "MOD(7, -3) = -2",
+    modulus_by_zero = "IS_NAN(MOD(1, 0))",
+    division_by_zero = "IS_INFINITE(1 / 0)",
+    like_pattern = "'Alpha' LIKE 'A_%'",
+    similar_pattern = "'Alpha' SIMILAR TO 'A.*'",
+    temporal_shift = "NOW() + interval(1, days) > NOW()",
+    boolean_fold = "ANY(TRUE) AND ALL(TRUE)",
+    null_boolean_fold = "ANY(CASE WHEN TRUE THEN NULL ELSE TRUE END)"
+  )
+  list(
+    tables = list(list(
+      name = table,
+      definitions = lapply(names(expressions), function(name) {
+        list(name = name, expr = expressions[[name]])
+      })
+    ))
+  )
+}

@@ -77,3 +77,25 @@ defer <- function(expr, envir = parent.frame()) {
 drop_nulls <- function(x) {
   x[!vapply(x, is.null, logical(1))]
 }
+
+collect_appended_tags <- function(turns, from_index) {
+  if (from_index > length(turns)) {
+    return(character())
+  }
+  appended <- turns[from_index:length(turns)]
+  tags <- unlist(
+    lapply(appended, function(turn) {
+      lapply(turn@contents, function(content) {
+        if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
+          content@extra$commons_tag
+        }
+      })
+    }),
+    use.names = FALSE
+  )
+  tags %||% character()
+}
+
+is_tool_result_content <- function(content) {
+  S7::S7_inherits(content, ellmer::ContentToolResult)
+}

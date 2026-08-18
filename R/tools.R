@@ -34,7 +34,7 @@ tool_search_pool <- function(private) {
   kinds <- c(
     if (length(private$registry) > 0) "measures (run with call_measure)",
     if (nrow(registry_defs(private$definitions)) > 0) {
-      "governed definitions (apply as {{name}} tokens in run_sql, or through call_metrics)"
+      "governed definitions (apply as {{name}} tokens in run_sql)"
     }
   )
   ellmer::tool(
@@ -97,7 +97,7 @@ tool_call_metrics <- function(private) {
     sprintf(
       paste(
         "Compute trusted calculations from governed metrics, optionally",
-        "grouped and filtered. Metric, dimension, and filter names come from",
+        "grouped and filtered. Metric, grouping, and filter names come from",
         "%s; commons compiles and runs the query."
       ),
       if (pool_searchable(private$registry, private$definitions)) {
@@ -113,7 +113,7 @@ tool_call_metrics <- function(private) {
       ),
       dimensions = ellmer::type_array(
         ellmer::type_string(),
-        "Dimension or documented column names to group by.",
+        "Derived or filter definition names, or documented column names, to group by.",
         required = FALSE
       ),
       filters = ellmer::type_array(
@@ -184,7 +184,13 @@ tool_call_measure <- function(private) {
 
 tool_search_context <- function(private) {
   ellmer::tool(
-    function(query) search_context_tool(private$context_layer, query),
+    function(query) {
+      result <- search_context_tool(private$context_layer, query)
+      if (!S7::S7_inherits(result, ellmer::ContentToolResult)) {
+        return(result)
+      }
+      add_citation_request(result, private$citation_request)
+    },
     "Search context for metric definitions, data notes, and table relationships.",
     arguments = list(
       query = ellmer::type_string(
@@ -271,8 +277,8 @@ run_sql_description <- function(definitions, measures = list()) {
     if (!is.null(definitions) && nrow(registry_defs(definitions)) > 0) {
       paste0(
         "Governed definitions can be written as {{name}} tokens anywhere ",
-        "in the SQL; each expands to its trusted expression before the ",
-        "query runs."
+        "in the SQL (or {{table::name}} when qualification is needed); ",
+        "each expands to its compiled SQL before the query runs."
       )
     }
   )
