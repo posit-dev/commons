@@ -4,7 +4,8 @@
 #' for commons agents. The server verifies each `<commons-citation>` the
 #' model writes against its own context, measure definitions, and data
 #' documentation as the answer streams, and rewrites verified citations
-#' inline as server-authored `<shiny-aside>` elements naming their source.
+#' inline as numbered, server-authored `<shiny-aside>` elements. Citation
+#' details name the trusted source.
 #' A compact provenance aside follows the answer when it was produced by a
 #' governed calculation, or when a fallback answer cites nothing verified.
 #'

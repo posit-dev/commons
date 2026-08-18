@@ -169,7 +169,8 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
   rendered2 <- paste(vapply(answer2, format, character(1)), collapse = "\n")
 
   expect_match(rendered2, "5650.", fixed = TRUE)
-  expect_match(rendered2, 'label="sales dictionary"', fixed = TRUE)
+  expect_match(rendered2, 'class="commons-source-heading"', fixed = TRUE)
+  expect_match(rendered2, "sales dictionary", fixed = TRUE)
   expect_match(
     rendered2,
     "Revenue follows the dictionary definition.",
@@ -181,7 +182,7 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
   expect_identical(
     lengths(regmatches(
       rendered2,
-      gregexpr('<shiny-aside label="sales dictionary"', rendered2, fixed = TRUE)
+      gregexpr("<shiny-aside>", rendered2, fixed = TRUE)
     )),
     1L
   )
@@ -248,7 +249,8 @@ test_that("trajectory citation replay crosses adjacent ContentText values", {
   rendered <- paste(vapply(answer, format, character(1)), collapse = "\n")
 
   expect_match(rendered, "Before.", fixed = TRUE)
-  expect_match(rendered, 'label="documentation"', fixed = TRUE)
+  expect_match(rendered, 'class="commons-source-heading"', fixed = TRUE)
+  expect_match(rendered, "documentation", fixed = TRUE)
   expect_match(rendered, "After.", fixed = TRUE)
   expect_no_match(rendered, "commons-citation", fixed = TRUE)
 })

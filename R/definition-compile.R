@@ -13,6 +13,26 @@ definition_compile_source <- function(
   )
 }
 
+definition_compile_data_source <- function(
+  source,
+  call = rlang::caller_env()
+) {
+  # The export retains authored names after a warehouse catalog relabels tables.
+  export <- attr(source$dictionary, "definition_export", exact = TRUE)
+  if (is.null(export)) {
+    return(source)
+  }
+  compiled <- definition_bind_export(export, source, call = call)
+  dictionary <- source$dictionary
+  for (table in compiled$tables) {
+    definitions <- table$definitions
+    names(definitions) <- vapply(definitions, `[[`, character(1), "name")
+    dictionary$tables[[table$name]]$definitions <- definitions
+  }
+  source$dictionary <- dictionary
+  source
+}
+
 definition_bind_export <- function(
   export,
   source,
@@ -24,6 +44,7 @@ definition_bind_export <- function(
     function(table) length(table$definitions) > 0L,
     logical(1)
   )]
+  definition_check_metric_grain(tables, call = call)
   definition_names <- unlist(lapply(tables, function(table) {
     vapply(table$definitions, `[[`, character(1), "name")
   }))
@@ -65,6 +86,25 @@ definition_bind_export <- function(
   })
   names(tables) <- vapply(tables, `[[`, character(1), "name")
   list(target = target, tables = tables)
+}
+
+definition_check_metric_grain <- function(tables, call) {
+  for (table in tables) {
+    definitions <- table$definitions
+    names(definitions) <- vapply(definitions, `[[`, character(1), "name")
+    mixed <- definition_mixed_grain(definitions)
+    metrics <- vapply(definitions, `[[`, character(1), "kind") == "metric"
+    invalid <- mixed & metrics
+    if (any(invalid)) {
+      cli::cli_abort(
+        c(
+          "Metric definition {.val {names(definitions)[invalid]}} on table {.val {table$name}} cannot be compiled into one SQL expression.",
+          i = "The dependency chain mixes row and aggregate grain and requires a subquery rewrite."
+        ),
+        call = call
+      )
+    }
+  }
 }
 
 definition_bind_one <- function(

@@ -76,6 +76,22 @@ test_that("definitions compile and compose for a DuckDB source", {
   expect_equal(enterprise_revenue$value, 100)
 })
 
+test_that("source compilation rejects metrics over mixed-grain definitions", {
+  expect_error(
+    definitions_source(
+      definitions = c(
+        "      - name: above_minimum",
+        "        expr: revenue > MIN(revenue)",
+        "      - name: inherited_mixed",
+        "        expr: NOT above_minimum",
+        "      - name: mixed_metric",
+        "        expr: ANY(inherited_mixed)"
+      )
+    ),
+    "requires a subquery rewrite"
+  )
+})
+
 test_that("one checked expression emits all supported SQL targets", {
   skip_if_not_installed("yaml")
   source <- data_source(

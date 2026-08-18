@@ -1,172 +1,39 @@
-# Governed definitions: named SQL expressions authored in a data dictionary's
-# per-table `definitions` field, anticipating the envelope sketched in
-# tidyverse/data-dict#134. The model writes them as {{name}} tokens in run_sql
-# SQL; commons expands each token to its trusted expression before the query
-# runs. Boolean definitions act as filters, aggregates as metrics, and
-# everything else as dimensions.
-
-normalize_dictionary_definitions <- function(
-  definitions,
-  table,
-  columns,
-  call = rlang::caller_env()
-) {
-  if (length(definitions) == 0) {
-    return(list())
-  }
-  definitions <- key_by_name(definitions, "definition", call = call)
-
-  for (name in names(definitions)) {
-    if (!grepl("^[A-Za-z_][A-Za-z0-9_]*$", name)) {
-      cli::cli_abort(
-        c(
-          "Definition names must be identifiers (letters, digits, and
-           underscores); {.val {name}} on table {.val {table}} is not.",
-          i = "Names become tokens like {.code {{{{{name}}}}}} in SQL and
-           bare references in sibling expressions."
-        ),
-        call = call
-      )
-    }
-    def <- as.list(definitions[[name]])
-    for (field in c("expr", "type")) {
-      value <- def[[field]]
-      if (!rlang::is_string(value) || !nzchar(trimws(value))) {
-        cli::cli_abort(
-          "Definition {.val {name}} on table {.val {table}} is missing
-           {.field {field}}.",
-          call = call
-        )
-      }
-    }
-    def$expr <- trimws(def$expr)
-    def$label <- prose_field(def$label)
-    def$description <- prose_field(def$description)
-    def$details <- prose_field(def$details)
-    definitions[[name]] <- def
-  }
-
-  # A definition shadowing a column would silently change what sibling
-  # references to that name mean.
-  shadowed <- intersect(names(definitions), columns)
-  if (length(shadowed)) {
-    cli::cli_abort(
-      "Definitions on table {.val {table}} must not share a name with its
-       documented columns: {.val {shadowed}}.",
-      call = call
-    )
-  }
-
-  definitions <- resolve_definition_references(definitions, table, call = call)
-  for (name in names(definitions)) {
-    definitions[[name]]$role <- definition_role(
-      definitions[[name]],
-      name,
-      table,
-      call = call
-    )
-  }
-  definitions
-}
-
-definition_role <- function(def, name, table, call = rlang::caller_env()) {
-  aggregate <- grepl(
-    "\\b(sum|count|avg|min|max)\\s*\\(",
-    strip_sql_literals(def$expanded),
-    ignore.case = TRUE
-  )
-  if (definition_base_type(def$type) != "boolean") {
-    return(if (aggregate) "metric" else "dimension")
-  }
-  if (aggregate) {
-    cli::cli_abort(
-      c(
-        "Boolean definition {.val {name}} on table {.val {table}} can't
-         filter rows.",
-        i = "Its expression aggregates over rows, so it has no per-row
-         value. Restate it per row, or declare a non-boolean type."
-      ),
-      call = call
-    )
-  }
-  "filter"
-}
-
-# A bare name in an expr that matches a sibling definition on the same table
-# refers to it (per the #134 spec, e.g. `SUM(total) FILTER (WHERE realized)`).
-# Store the fully-resolved SQL as `expanded` so every consumer splices it in
-# one step.
-resolve_definition_references <- function(
-  definitions,
-  table,
-  call = rlang::caller_env()
-) {
-  references <- lapply(
-    definitions,
-    sibling_references,
-    siblings = names(definitions)
-  )
-
-  expanded <- list()
-  pending <- names(definitions)
-  while (length(pending)) {
-    ready <- pending[vapply(
-      pending,
-      function(name) !any(references[[name]] %in% pending),
-      logical(1)
-    )]
-    if (length(ready) == 0) {
-      cli::cli_abort(
-        "Definitions on table {.val {table}} reference each other in a
-         cycle: {.val {pending}}.",
-        call = call
-      )
-    }
-    for (name in ready) {
-      expr <- definitions[[name]]$expr
-      for (ref in references[[name]]) {
-        expr <- gsub_outside_literals(
-          expr,
-          word_pattern(ref),
-          sprintf("(%s)", expanded[[ref]])
-        )
-      }
-      expanded[[name]] <- expr
-      definitions[[name]]$expanded <- expr
-    }
-    pending <- setdiff(pending, ready)
-  }
-  definitions
-}
-
-sibling_references <- function(def, siblings) {
-  code <- strip_sql_literals(def$expr)
-  hits <- vapply(
-    siblings,
-    function(sibling) grepl(word_pattern(sibling), code),
+definition_export_dictionary <- function(tables, call = rlang::caller_env()) {
+  tables <- tables[vapply(
+    tables,
+    function(table) length(table$definitions) > 0L,
     logical(1)
-  )
-  siblings[hits]
+  )]
+  input <- lapply(names(tables), function(name) {
+    table <- tables[[name]]
+    table$name <- name
+    table$columns <- definition_named_sequence(table$columns)
+    table$definitions <- definition_named_sequence(table$definitions)
+    table
+  })
+  definition_export_spec(list(tables = unname(input)), call = call)
 }
 
-# Substitute outside single-quoted SQL string literals, so a definition
-# named like a word inside a literal ('deduplicated') is left alone.
-gsub_outside_literals <- function(x, pattern, replacement) {
-  # gsub replacements treat backslashes and backreferences specially; the
-  # substituted text is literal SQL.
-  replacement <- gsub("\\", "\\\\", replacement, fixed = TRUE)
-  literals <- gregexpr(sql_literal_pattern, x, perl = TRUE)
-  code <- regmatches(x, literals, invert = TRUE)[[1]]
-  regmatches(x, literals, invert = TRUE) <-
-    list(gsub(pattern, replacement, code))
-  x
+definition_named_sequence <- function(entries) {
+  unname(Map(
+    function(entry, name) {
+      entry <- as.list(entry)
+      entry$name <- name
+      entry[c("name", setdiff(names(entry), "name"))]
+    },
+    entries,
+    names(entries)
+  ))
 }
 
-strip_sql_literals <- function(x) {
-  gsub(sql_literal_pattern, "''", x, perl = TRUE)
+dictionary_attach_definition_export <- function(tables, export) {
+  for (table in export$tables) {
+    definitions <- table$definitions
+    names(definitions) <- vapply(definitions, `[[`, character(1), "name")
+    tables[[table$name]]$definitions <- definitions
+  }
+  tables
 }
-
-sql_literal_pattern <- "'(?:[^']|'')*'"
 
 # Every source's definitions in one data frame.
 definitions_registry <- function(sources, call = rlang::caller_env()) {
@@ -196,22 +63,35 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
   list(defs = do.call(rbind, rows))
 }
 
-definition_fields <- c(
+definition_scalar_fields <- c(
   "type",
-  "role",
+  "kind",
   "label",
   "description",
   "details",
-  "expr",
-  "expanded"
+  "todo",
+  "expression",
+  "target",
+  "sql"
+)
+
+definition_list_fields <- c(
+  "columns",
+  "definitions",
+  "translations",
+  "notes"
 )
 
 no_definitions <- data.frame(
   c(
     list(name = character(), table = character(), source = character()),
-    rlang::rep_named(definition_fields, list(character()))
+    rlang::rep_named(definition_scalar_fields, list(character())),
+    list(mixed_grain = logical())
   )
 )
+for (field in definition_list_fields) {
+  no_definitions[[field]] <- I(list())
+}
 
 definition_rows <- function(definitions, table, source) {
   out <- data.frame(
@@ -219,14 +99,51 @@ definition_rows <- function(definitions, table, source) {
     table = table,
     source = source
   )
-  for (field in definition_fields) {
+  for (field in definition_scalar_fields) {
     out[[field]] <- vapply(
       definitions,
       function(def) def[[field]] %||% NA_character_,
       character(1)
     )
   }
+  out$mixed_grain <- definition_mixed_grain(definitions)
+  for (field in definition_list_fields) {
+    out[[field]] <- I(lapply(definitions, function(def) def[[field]]))
+  }
   out
+}
+
+definition_mixed_grain <- function(definitions) {
+  mixed <- vapply(definitions, definition_is_mixed_grain, logical(1))
+
+  repeat {
+    inherited <- vapply(
+      definitions,
+      function(definition) any(mixed[definition$definitions]),
+      logical(1)
+    )
+    updated <- mixed | inherited
+    if (identical(updated, mixed)) {
+      return(unname(updated))
+    }
+    mixed <- updated
+  }
+}
+
+definition_is_mixed_grain <- function(definition) {
+  # Exported kind alone does not expose a row expression's aggregate child.
+  ir <- attr(definition, "ir", exact = TRUE)
+  identical(ir$shape, "row") && definition_ir_has_aggregate(ir)
+}
+
+definition_ir_has_aggregate <- function(node) {
+  if (!is.list(node)) {
+    return(FALSE)
+  }
+  if (identical(node$shape, "agg")) {
+    return(TRUE)
+  }
+  any(vapply(node, definition_ir_has_aggregate, logical(1)))
 }
 
 registry_defs <- function(registry, source = NULL) {
@@ -237,12 +154,8 @@ registry_defs <- function(registry, source = NULL) {
   defs[defs$source == source, ]
 }
 
-definition_base_type <- function(type) {
-  tolower(sub("\\(.*$", "", trimws(type)))
-}
-
 definition_token_pattern <-
-  "\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*)\\s*\\}\\}"
+  "\\{\\{\\s*([^{}]+?)\\s*\\}\\}"
 
 # The expansion step of run_sql, before check_query() so the denylist sees
 # the SQL that will actually execute.
@@ -269,7 +182,7 @@ expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
     replacement <- gsub(
       "\\",
       "\\\\",
-      sprintf("(%s)", def$expanded),
+      sprintf("(%s)", def$sql),
       fixed = TRUE
     )
     sql <- gsub(
@@ -292,26 +205,32 @@ resolve_definition_token <- function(
   defs,
   call = rlang::caller_env()
 ) {
-  if (grepl(".", token, fixed = TRUE)) {
-    parts <- strsplit(token, ".", fixed = TRUE)[[1]]
-    name <- utils::tail(parts, 1L)
-    table <- paste(utils::head(parts, -1L), collapse = ".")
-    hits <- defs[defs$table == table & defs$name == name, ]
-    if (nrow(hits) == 0) {
-      abort_unknown_token(token, defs, call = call)
-    }
-    return(hits[1, ])
+  separator <- regexpr("::", token, fixed = TRUE)[[1]]
+  if (separator > 0L) {
+    table <- substr(token, 1L, separator - 1L)
+    name <- substr(token, separator + 2L, nchar(token))
+    return(resolve_qualified_definition(table, name, token, sql, defs, call))
   }
 
   named <- defs[defs$name == token, ]
   if (nrow(named) == 0) {
-    abort_unknown_token(token, defs, call = call)
+    legacy <- grepl(
+      "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)+$",
+      token
+    )
+    if (!legacy) {
+      abort_unknown_token(token, defs, call = call)
+    }
+    parts <- strsplit(token, ".", fixed = TRUE)[[1]]
+    name <- utils::tail(parts, 1L)
+    table <- paste(utils::head(parts, -1L), collapse = ".")
+    return(resolve_qualified_definition(table, name, token, sql, defs, call))
   }
 
   in_scope <- named[
     vapply(
       named$table,
-      function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
+      function(table) definition_table_in_query(table, sql),
       logical(1)
     ),
   ]
@@ -325,7 +244,7 @@ resolve_definition_token <- function(
       call = call
     )
   }
-  qualified <- sprintf("{{%s.%s}}", in_scope$table, token)
+  qualified <- sprintf("{{%s::%s}}", in_scope$table, token)
   cli::cli_abort(
     c(
       "{.code {{{{{token}}}}}} is ambiguous here: it is defined on several
@@ -334,6 +253,26 @@ resolve_definition_token <- function(
     ),
     call = call
   )
+}
+
+resolve_qualified_definition <- function(table, name, token, sql, defs, call) {
+  hits <- defs[defs$table == table & defs$name == name, ]
+  if (nrow(hits) == 0L) {
+    abort_unknown_token(token, defs, call = call)
+  }
+  if (!definition_table_in_query(table, sql)) {
+    cli::cli_abort(
+      "{.code {{{{{token}}}}}} is defined on table {.val {table}}, which does
+       not appear in this query.",
+      call = call
+    )
+  }
+  hits[1, ]
+}
+
+definition_table_in_query <- function(table, sql) {
+  sql <- gsub(definition_token_pattern, "", sql, perl = TRUE)
+  grepl(word_pattern(table), sql, ignore.case = TRUE)
 }
 
 abort_unknown_token <- function(token, defs, call) {
@@ -372,7 +311,7 @@ definition_index_lines <- function(registry) {
   if (length(unique(defs$source)) > 1) {
     scope <- paste(defs$source, defs$table, sep = ".")
   }
-  role <- defs$role
+  kind <- defs$kind
   label <- flatten_inline(ifelse(is.na(defs$label), "", defs$label))
   item <- ifelse(
     nzchar(label),
@@ -382,19 +321,19 @@ definition_index_lines <- function(registry) {
 
   groups <- c(
     filter = "filters",
-    dimension = "dimensions",
+    derived = "derived",
     metric = "metrics"
   )
   vapply(
     unique(scope),
     function(one) {
       parts <- vapply(
-        intersect(names(groups), role[scope == one]),
-        function(r) {
+        intersect(names(groups), kind[scope == one]),
+        function(group) {
           sprintf(
             "%s %s",
-            groups[[r]],
-            paste(item[scope == one & role == r], collapse = ", ")
+            groups[[group]],
+            paste(item[scope == one & kind == group], collapse = ", ")
           )
         },
         character(1)
@@ -405,14 +344,15 @@ definition_index_lines <- function(registry) {
   )
 }
 
-# A table's first-touch entry carries full expansions, so the model sees
-# exactly what each token stands for without a search.
 definitions_entry_text <- function(definitions) {
   if (length(definitions) == 0) {
     return(NULL)
   }
   paste0(
-    "Governed definitions (write as `{{name}}` tokens in SQL):\n\n",
+    paste0(
+      "Governed definitions (write as `{{name}}` tokens in SQL; use ",
+      "`{{table::name}}` to qualify):\n\n"
+    ),
     paste(
       sprintf(
         "- `{{%s}}` %s",
@@ -424,8 +364,6 @@ definitions_entry_text <- function(definitions) {
   )
 }
 
-# Indexed with the rest of the dictionary prose, so definitions are
-# retrievable by search and citable.
 definition_context_chunks <- function(dictionary) {
   unlist(lapply(names(dictionary$tables), function(table) {
     definitions <- dictionary$tables[[table]]$definitions
@@ -443,27 +381,54 @@ definition_gist <- function(definitions) {
     definitions,
     function(def) {
       detail <- prose_detail(def$description, def$details)
-      paste0(
-        sprintf("(%s)", def$type),
-        if (nzchar(detail)) paste0(": ", detail),
-        sprintf(" Expands to `(%s)`.", flatten_inline(def$expanded))
+      notes <- def$notes %||% character()
+      paste(
+        c(
+          sprintf("(%s, %s)", def$kind, def$type),
+          if (nzchar(detail)) detail,
+          if (!is.null(def$sql)) {
+            sprintf(
+              "Selected %s: `(%s)`.",
+              def$target,
+              flatten_inline(def$sql)
+            )
+          },
+          if (length(notes)) {
+            sprintf("Translation notes: %s", paste(notes, collapse = " "))
+          }
+        ),
+        collapse = " "
       )
     },
     character(1)
   )
 }
 
-# Appended to the run_sql result so definition usage is auditable from the
-# transcript.
 applied_definitions_text <- function(applied) {
   if (NROW(applied) == 0) {
     return(NULL)
   }
-  lines <- sprintf(
-    "- {{%s}} (%s) expanded to `(%s)`",
-    applied$name,
-    applied$table,
-    flatten_inline(applied$expanded)
+  lines <- vapply(
+    seq_len(nrow(applied)),
+    function(i) {
+      notes <- applied$notes[[i]]
+      paste(
+        c(
+          sprintf(
+            "- {{%s}} (%s): %s `(%s)`",
+            applied$name[[i]],
+            applied$table[[i]],
+            applied$target[[i]],
+            flatten_inline(applied$sql[[i]])
+          ),
+          if (length(notes)) {
+            sprintf("  Translation notes: %s", paste(notes, collapse = " "))
+          }
+        ),
+        collapse = "\n"
+      )
+    },
+    character(1)
   )
   paste0("Applied governed definitions:\n\n", paste(lines, collapse = "\n"))
 }

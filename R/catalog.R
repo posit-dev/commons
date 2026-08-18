@@ -329,18 +329,6 @@ catalog_merge_dictionary_table <- function(
     authored$.authored_name <- authored_name
   }
 
-  definition_names <- names(authored$definitions)
-  shadowed <- definition_names[
-    catalog_normalize_identifier(definition_names, identifier_case) %in%
-      catalog_normalize_identifier(names(authored$columns), identifier_case)
-  ]
-  if (length(shadowed)) {
-    cli::cli_abort(
-      "Definitions on table {.val {selected_name}} must not share a name with
-       its discovered columns: {.val {shadowed}}.",
-      call = call
-    )
-  }
   list(table = authored, column_matches = merged$matches)
 }
 

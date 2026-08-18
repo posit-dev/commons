@@ -1,15 +1,12 @@
 local_definitions_dict <- function(
   definitions = c(
     "      - name: emea",
-    "        type: boolean",
     "        description: EMEA rows only.",
     "        expr: region = 'EMEA'",
     "      - name: big_revenue",
-    "        type: number(quantity)",
     "        description: Revenue over big EMEA orders.",
-    "        expr: SUM(revenue) FILTER (WHERE emea AND revenue > 600)",
+    "        expr: SUM(CASE WHEN emea AND revenue > 600 THEN revenue ELSE 0 END)",
     "      - name: region_band",
-    "        type: string",
     "        description: Coarse region grouping.",
     "        expr: CASE WHEN emea THEN 'east' ELSE 'west' END"
   ),
@@ -54,7 +51,6 @@ many_definitions <- function(n = 400) {
   unlist(lapply(seq_len(n), function(i) {
     c(
       sprintf("      - name: filter_%03d", i),
-      "        type: boolean",
       sprintf("        expr: revenue > %d", i),
       sprintf("        description: Filter number %d of many.", i)
     )
