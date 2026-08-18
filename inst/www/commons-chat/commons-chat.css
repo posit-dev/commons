@@ -146,6 +146,12 @@ shiny-chat-container [data-shinychat-aside-display="compact"] {
   --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
 }
 
+/*
+ * Temporary private Shinychat dependency: Shinychat has no public per-aside
+ * tone API, so Commons identifies provenance asides by its own icon URLs.
+ * Remove these selectors when <shiny-aside> gains a public tone contract.
+ * Browser integration tests cover the trusted and warning presentations.
+ */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
   background: #f2fbf5;

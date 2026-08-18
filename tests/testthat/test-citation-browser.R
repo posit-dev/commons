@@ -255,6 +255,21 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     ),
     TRUE
   )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "(() => {",
+        "const trusted = document.querySelector(",
+        "'button[aria-label=\"Verified answer\"]');",
+        "const warning = document.querySelector(",
+        "'button[aria-label=\"Untrusted\"]');",
+        "return trusted && warning && ",
+        "getComputedStyle(trusted).color !== getComputedStyle(warning).color;",
+        "})()"
+      )
+    ),
+    TRUE
+  )
 
   app$get_js(
     'document.querySelector(\'button[aria-label="Verified answer"]\').click();'
