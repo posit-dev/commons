@@ -290,11 +290,13 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     paste0("document.querySelector('", verified_dialog, "') !== null;"),
     timeout = 30 * 1000
   )
+  verified <- app$get_js(
+    paste0("document.querySelector('", verified_dialog, "').innerText;")
+  )
+  expect_no_match(verified, "Verified answer", fixed = TRUE)
   expect_match(
-    app$get_js(
-      paste0("document.querySelector('", verified_dialog, "').innerText;")
-    ),
-    "Verified answer",
+    verified,
+    "This answer comes from a governed calculation defined by your data team.",
     fixed = TRUE
   )
 })
