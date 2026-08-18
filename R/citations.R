@@ -68,7 +68,7 @@ match_citation <- function(quote, corpus) {
 
 # Only the quoted evidence is verified. The explanation remains model-authored.
 # Source identity stays in label/icon for shinychat's popover and accessible
-# name; marker="number" changes only the marker presentation.
+# name; display="compact" changes only the marker presentation.
 render_citation_aside <- function(quote, explanation, corpus) {
   source <- match_citation(quote, corpus)
   decision <- list(
@@ -101,7 +101,7 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   )
   sprintf(
     paste0(
-      '<shiny-aside marker="number" label="%s"%s>',
+      '<shiny-aside display="compact" label="%s"%s>',
       "%s%s\n\n*%s*</shiny-aside>"
     ),
     escape_attr(label),

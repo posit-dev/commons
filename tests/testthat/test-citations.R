@@ -31,7 +31,7 @@ test_that("recorded accepted citations reuse live aside presentation", {
   expect_identical(result$decision, decision)
   expect_match(
     result$html,
-    '<shiny-aside marker="number" label="forest documentation"',
+    '<shiny-aside display="compact" label="forest documentation"',
     fixed = TRUE
   )
   expect_match(
@@ -433,7 +433,7 @@ test_that("render_citation_aside emits a numbered aside with source details", {
   expect_match(
     out$html,
     paste0(
-      '^<shiny-aside marker="number" label="sales table" ',
+      '^<shiny-aside display="compact" label="sales table" ',
       'icon="commons-icons/citation-schema.svg'
     )
   )

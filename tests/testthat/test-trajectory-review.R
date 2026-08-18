@@ -171,7 +171,7 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
   expect_match(rendered2, "5650.", fixed = TRUE)
   expect_match(
     rendered2,
-    '<shiny-aside marker="number" label="sales dictionary"',
+    '<shiny-aside display="compact" label="sales dictionary"',
     fixed = TRUE
   )
   expect_match(
@@ -191,7 +191,7 @@ test_that("trajectory_transcript merges each exchange into chat messages", {
     lengths(regmatches(
       rendered2,
       gregexpr(
-        '<shiny-aside marker="number" label="sales dictionary"',
+        '<shiny-aside display="compact" label="sales dictionary"',
         rendered2,
         fixed = TRUE
       )

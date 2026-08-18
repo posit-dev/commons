@@ -134,7 +134,8 @@ shiny-chat-container {
   transform: translateX(-50%) rotate(225deg);
 }
 
-shiny-chat-container .shiny-aside-pill {
+shiny-chat-container
+  .shiny-aside-pill:not(.shiny-aside-pill--number) {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--bs-border-color, #dfe3e7);
   color: var(--bs-secondary-color, #5c636a);
@@ -143,31 +144,45 @@ shiny-chat-container .shiny-aside-pill {
   padding: 0.12rem 0.45rem;
 }
 
-shiny-chat-container .shiny-aside-pill:hover,
-shiny-chat-container .shiny-aside-pill:focus-visible,
-shiny-chat-container .shiny-aside-pill[aria-expanded="true"] {
+shiny-chat-container
+  .shiny-aside-pill:not(.shiny-aside-pill--number):hover,
+shiny-chat-container
+  .shiny-aside-pill:not(.shiny-aside-pill--number):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:not(.shiny-aside-pill--number)[aria-expanded="true"] {
   background: rgba(var(--bs-emphasis-color-rgb, 33, 37, 41), 0.035);
   color: var(--bs-body-color, #212529);
 }
 
-shiny-chat-container .shiny-aside-pill img {
+shiny-chat-container
+  .shiny-aside-pill:not(.shiny-aside-pill--number)
+  img {
   opacity: 0.75;
 }
 
 shiny-chat-container .shiny-aside-pill--number {
-  box-shadow: none;
-  color: color-mix(
-    in srgb,
-    var(--bs-primary, #007bc2) 70%,
-    var(--bs-body-bg, #fff)
-  );
-  font-weight: 600;
+  color: var(--bs-link-color, #007bc2);
+  font-weight: inherit;
+  text-decoration-line: underline;
 }
 
 shiny-chat-container .shiny-aside-pill--number:hover,
 shiny-chat-container .shiny-aside-pill--number:focus-visible,
 shiny-chat-container .shiny-aside-pill--number[aria-expanded="true"] {
-  color: var(--bs-primary, #007bc2);
+  color: var(--bs-link-hover-color, #0056b3);
+}
+
+shiny-chat-container
+  .shiny-aside-pill.shiny-aside-pill--number
+  .shiny-aside-pill__count,
+shiny-chat-container
+  .shiny-aside-pill.shiny-aside-pill--number:is(
+    :hover,
+    :focus-visible,
+    [aria-expanded="true"]
+  )
+  .shiny-aside-pill__count {
+  background: transparent;
 }
 
 shiny-chat-container

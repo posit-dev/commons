@@ -37,7 +37,7 @@ test_that("Shiny Chat renders native numbered streamed citations", {
         ".map((node) => node.textContent).join('|');"
       )
     ),
-    "1|2"
+    "[1]|[2]"
   )
   expect_identical(
     app$get_js(
@@ -58,8 +58,25 @@ test_that("Shiny Chat renders native numbered streamed citations", {
       paste0(
         "Array.from(document.querySelectorAll('.shiny-aside-pill--number'))",
         ".every((node) => {",
-        "const box = node.getBoundingClientRect();",
-        "return box.width >= 24 && box.height >= 24;",
+        "const target = getComputedStyle(node, '::before');",
+        "return target.width === '24px' && target.height === '24px';",
+        "});"
+      )
+    ),
+    TRUE
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "Array.from(document.querySelectorAll('.shiny-aside-pill--number'))",
+        ".every((node) => {",
+        "const style = getComputedStyle(node);",
+        "const count = getComputedStyle(",
+        "node.querySelector('.shiny-aside-pill__count')",
+        ");",
+        "return style.textDecorationLine === 'underline' && ",
+        "style.fontWeight === '400' && ",
+        "count.backgroundColor === 'rgba(0, 0, 0, 0)';",
         "});"
       )
     ),
@@ -74,8 +91,8 @@ test_that("Shiny Chat renders native numbered streamed citations", {
       )
     ),
     paste(
-      "Canopy weighting follows the documentation.\n1",
-      "Revenue timing follows the table definition.\n2",
+      "Canopy weighting follows the documentation.\n[1]",
+      "Revenue timing follows the table definition.\n[2]",
       sep = "|"
     )
   )

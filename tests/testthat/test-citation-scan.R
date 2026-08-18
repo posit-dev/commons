@@ -395,7 +395,7 @@ test_that("a citation body exactly at the cap can verify", {
   expect_identical(out$decisions[[1]]$status, "accepted")
   expect_match(
     out$text,
-    '<shiny-aside marker="number" label="documentation"',
+    '<shiny-aside display="compact" label="documentation"',
     fixed = TRUE
   )
 })
