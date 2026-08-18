@@ -163,7 +163,6 @@ shiny-chat-container
 shiny-chat-container .shiny-aside-pill--number {
   color: var(--bs-link-color, #007bc2);
   font-family: var(--bs-font-monospace);
-  text-decoration-line: underline;
 }
 
 shiny-chat-container .shiny-aside-pill--number:hover,
