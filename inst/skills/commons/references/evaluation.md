@@ -20,7 +20,9 @@ Use the [devrel-agent evaluation](https://github.com/posit-dev/devrel-agent/tree
 
 ## Work with the user
 
-Evaluation requires the user's judgment about realistic questions, business meaning, acceptable interpretations, and useful answers. Do routine implementation and evaluation runs without interrupting them, but pause for their review before treating the question set, grading guidance, pilot, or full-run results as authoritative.
+Evaluation requires the user's judgment about realistic questions, business meaning, acceptable interpretations, and useful answers. Do routine implementation without interrupting them, but pause for their review before treating the question set, grading guidance, pilot, or full-run results as authoritative.
+
+Before launching any model-backed pilot, full run, or rerun, estimate its cost from the number of samples (questions × epochs), expected model calls and token usage per sample, and the models used by the solver and model-based scorer. Account for agent solvers that may make multiple model calls for one sample. When pilot or prior-run results exist, use `task$get_cost()` to scale the observed solver and scorer costs; otherwise state the provider pricing and usage assumptions. Present the estimate and its assumptions, ask whether the user wants to proceed, and do not launch the run until they explicitly approve it.
 
 Make each review concrete. Give the user direct links to the question and target files, summarize the choices that need attention, and tell them where the `vitals` logs are stored. Open a completed task in the Inspect log viewer with:
 
@@ -28,10 +30,10 @@ Make each review concrete. Give the user direct links to the question and target
 task$view()
 ```
 
-To browse a directory of saved logs in a later R session, use:
+To browse saved logs in a later R session, use:
 
 ```r
-vitals::vitals_view(dir = "evals/logs")
+vitals::vitals_view()
 ```
 
 In the viewer, ask the user to select a sample and inspect the question, grading target, complete solver messages and tool calls, final answer, score, and grader messages and explanation. When custom scorer details are not visible enough in the viewer, reconstruct the sample with `vitals::vitals_log_read(log_path)` or render the relevant JSON fields into a readable Markdown transcript.
@@ -40,9 +42,9 @@ Ask the user to flag unrealistic questions, missing valid interpretations, incor
 
 ## Build the question set
 
-Start with the representative questions collected during onboarding and any real questions supplied by intended users. Draft a small set in Markdown and review it with the user before implementing the evaluation. Ask whether the questions are realistic, useful, and representative of the agent's intended production traffic.
+Start with a handful of representative questions collected during onboarding or supplied by intended users. Choose questions that cover as many important categories, ambiguities, and data gotchas as practical, then review them with the user before implementing the evaluation. Ask whether they are realistic, useful, and representative of the agent's intended production traffic.
 
-Expand the set iteratively. Aim for around 30 questions. Include:
+Expand the set of questions iteratively. Take the initial questions through target definition, implementation, pilot runs, trajectory and grader inspection, user review, and correction before adding more. Once that full cycle works, add questions in small batches and repeat the cycle for the new coverage. Aim for around 30 questions eventually, not in the initial draft. Across the growing set, include:
 
 - Easy questions with direct, verifiable answers.
 - Questions that require custom analysis from available data.
@@ -124,10 +126,11 @@ Keep question data, target-generating code and stored facts, task construction, 
 Before a full run:
 
 1. Agree with the user on a small representative pilot set that includes the major question categories and known ambiguities or data gotchas.
-2. Use the `vitals` task to run each pilot question through the commons agent at least twice.
-3. Where useful, run the same questions through a controlled general coding-agent solver in the evaluation harness.
-4. Compare the answers and trajectories, enumerate plausible misinterpretations, and refine the target and grading guidance.
-5. Check that the scorer receives enough evidence and grades representative correct, partially correct, and incorrect answers as intended.
+2. Estimate the pilot's cost using the method above and obtain the user's explicit approval to launch it.
+3. Use the `vitals` task to run each pilot question through the commons agent at least twice.
+4. Where useful, run the same questions through a controlled general coding-agent solver in the evaluation harness.
+5. Compare the answers and trajectories, enumerate plausible misinterpretations, and refine the target and grading guidance.
+6. Check that the scorer receives enough evidence and grades representative correct, partially correct, and incorrect answers as intended.
 
 Use the pilot set, not the complete evaluation, when iterating on the agent and scorer. Keep the remaining questions as held-out questions for the full run, and do not use their expected answers or grading facts as reasons to change the agent. When a pilot failure motivates an agent change, make that change only when approved sources support it and it would be useful beyond the evaluation.
 
@@ -151,6 +154,8 @@ Give the user access to the pilot log and ask them to inspect every pilot sample
 
 ## Run and interpret
 
+Before the full run, estimate its cost using the method above and the final question count and epochs. Present the resulting estimate and obtain the user's explicit approval to launch it.
+
 Report accuracy by question category. Also record latency, input and output tokens, cached input tokens where available, and cost so improvements can be evaluated against the agent's accuracy, speed, and expense goals.
 
 Interpret results with three distinct sources of variation in mind:
@@ -163,4 +168,16 @@ With only a few epochs, describe run-to-run summaries as empirical sensitivity e
 
 Report per-question failures and recurring themes alongside aggregate metrics. Use failures to identify general improvements to the agent or evaluation, then confirm those changes against held-out questions rather than tuning only to the visible set.
 
-Give the user access to the full-run logs. Ask them to review the results and trajectories, including every failure and borderline grade and a representative set of successful samples. Record disagreements with the grader and unresolved questions alongside the evaluation findings; do not present the aggregate score as trustworthy until this review is complete.
+Launch the Inspect log viewer for the full run from the task's R session with:
+
+```r
+task$view()
+```
+
+To reopen saved full-run logs in a later R session, use:
+
+```r
+vitals::vitals_view()
+```
+
+Give the user access to the viewer and ask them to review the results and trajectories, including every failure and borderline grade and a representative set of successful samples. Record disagreements with the grader and unresolved questions alongside the evaluation findings; do not present the aggregate score as trustworthy until this review is complete.
