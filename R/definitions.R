@@ -106,15 +106,28 @@ definition_rows <- function(definitions, table, source) {
       character(1)
     )
   }
-  out$mixed_grain <- vapply(
-    definitions,
-    definition_is_mixed_grain,
-    logical(1)
-  )
+  out$mixed_grain <- definition_mixed_grain(definitions)
   for (field in definition_list_fields) {
     out[[field]] <- I(lapply(definitions, function(def) def[[field]]))
   }
   out
+}
+
+definition_mixed_grain <- function(definitions) {
+  mixed <- vapply(definitions, definition_is_mixed_grain, logical(1))
+
+  repeat {
+    inherited <- vapply(
+      definitions,
+      function(definition) any(mixed[definition$definitions]),
+      logical(1)
+    )
+    updated <- mixed | inherited
+    if (identical(updated, mixed)) {
+      return(unname(updated))
+    }
+    mixed <- updated
+  }
 }
 
 definition_is_mixed_grain <- function(definition) {
@@ -196,7 +209,7 @@ resolve_definition_token <- function(
   if (separator > 0L) {
     table <- substr(token, 1L, separator - 1L)
     name <- substr(token, separator + 2L, nchar(token))
-    return(resolve_qualified_definition(table, name, token, defs, call))
+    return(resolve_qualified_definition(table, name, token, sql, defs, call))
   }
 
   named <- defs[defs$name == token, ]
@@ -211,13 +224,13 @@ resolve_definition_token <- function(
     parts <- strsplit(token, ".", fixed = TRUE)[[1]]
     name <- utils::tail(parts, 1L)
     table <- paste(utils::head(parts, -1L), collapse = ".")
-    return(resolve_qualified_definition(table, name, token, defs, call))
+    return(resolve_qualified_definition(table, name, token, sql, defs, call))
   }
 
   in_scope <- named[
     vapply(
       named$table,
-      function(table) grepl(word_pattern(table), sql, ignore.case = TRUE),
+      function(table) definition_table_in_query(table, sql),
       logical(1)
     ),
   ]
@@ -242,12 +255,24 @@ resolve_definition_token <- function(
   )
 }
 
-resolve_qualified_definition <- function(table, name, token, defs, call) {
+resolve_qualified_definition <- function(table, name, token, sql, defs, call) {
   hits <- defs[defs$table == table & defs$name == name, ]
   if (nrow(hits) == 0L) {
     abort_unknown_token(token, defs, call = call)
   }
+  if (!definition_table_in_query(table, sql)) {
+    cli::cli_abort(
+      "{.code {{{{{token}}}}}} is defined on table {.val {table}}, which does
+       not appear in this query.",
+      call = call
+    )
+  }
   hits[1, ]
+}
+
+definition_table_in_query <- function(table, sql) {
+  sql <- gsub(definition_token_pattern, "", sql, perl = TRUE)
+  grepl(word_pattern(table), sql, ignore.case = TRUE)
 }
 
 abort_unknown_token <- function(token, defs, call) {

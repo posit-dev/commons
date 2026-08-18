@@ -17,6 +17,11 @@ call_metrics_impl <- function(
   defs <- registry_defs(registry, label)
 
   metric_defs <- resolve_pool_names(metrics, defs, kind = "metric")
+  if (any(metric_defs$mixed_grain)) {
+    cli::cli_abort(
+      "Mixed-grain metric{?s} {.val {metric_defs$name[metric_defs$mixed_grain]}} cannot be queried by {.fn call_metrics}; use the definition in {.fn run_sql}."
+    )
+  }
   tables <- unique(metric_defs$table)
   if (length(tables) > 1) {
     cli::cli_abort(
@@ -60,9 +65,8 @@ call_metrics_impl <- function(
       DBI::dbQuoteIdentifier(con, metric_defs$name)
     )
   )
-  # Data-dict constants are metrics; DISTINCT keeps an ungrouped constant scalar.
   sql <- sprintf(
-    "SELECT DISTINCT %s FROM %s",
+    "SELECT %s FROM %s",
     paste(select, collapse = ", "),
     id
   )
@@ -71,6 +75,9 @@ call_metrics_impl <- function(
   }
   if (length(dims)) {
     sql <- sprintf("%s GROUP BY %s", sql, paste(dims, collapse = ", "))
+  } else {
+    # Force a global group so constants remain scalar when no rows remain.
+    sql <- sprintf("%s HAVING COUNT(*) >= 0", sql)
   }
 
   result <- source_query(source, sql)

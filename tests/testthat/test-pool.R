@@ -50,6 +50,46 @@ test_that("call_metrics without dimensions returns a grand total", {
   expect_equal(get_handle(store, "r1")$big_revenue, 1950)
 })
 
+test_that("constant metrics return one row when no input rows remain", {
+  src <- definitions_source(
+    definitions = c(
+      "      - name: answer",
+      "        expr: \"42\"",
+      "      - name: total_revenue",
+      "        expr: SUM(revenue)"
+    )
+  )
+  store <- new_handle_store()
+  query <- metrics_caller(src, store)
+
+  query(
+    metrics = c("answer", "total_revenue"),
+    where = list(list(column = "revenue", op = ">", value = "9999"))
+  )
+
+  value <- get_handle(store, "r1")
+  expect_equal(nrow(value), 1L)
+  expect_equal(value$answer, 42)
+  expect_true(is.na(value$total_revenue))
+
+  empty <- data_source(
+    sales = test_sales()[0, ],
+    dictionary = local_definitions_dict(
+      definitions = c(
+        "      - name: answer",
+        "        expr: \"42\""
+      )
+    )
+  )
+  store <- new_handle_store()
+
+  metrics_caller(empty, store)(metrics = "answer")
+
+  value <- get_handle(store, "r1")
+  expect_equal(nrow(value), 1L)
+  expect_equal(value$answer, 42)
+})
+
 test_that("names arriving in token braces are accepted", {
   store <- new_handle_store()
   metrics_caller(store = store)(
@@ -242,19 +282,34 @@ test_that("search_pool spans measures and definitions", {
   expect_match(out, "### order_count", fixed = TRUE)
 })
 
-test_that("call_metrics rejects mixed-grain dimensions and filters", {
+test_that("call_metrics rejects mixed-grain definitions", {
   src <- definitions_source(
     definitions = c(
       "      - name: total_revenue",
       "        expr: SUM(revenue)",
       "      - name: above_minimum",
-      "        expr: revenue > MIN(revenue)"
+      "        expr: revenue > MIN(revenue)",
+      "      - name: inherited_mixed",
+      "        expr: NOT above_minimum",
+      "      - name: mixed_metric",
+      "        expr: ANY(inherited_mixed)"
     )
   )
   registry <- sales_registry(src)
   records <- registry_defs(registry)
 
   expect_true(records$mixed_grain[records$name == "above_minimum"])
+  expect_true(records$mixed_grain[records$name == "inherited_mixed"])
+  expect_true(records$mixed_grain[records$name == "mixed_metric"])
+  expect_error(
+    call_metrics_impl(
+      registry,
+      list(sales_db = src),
+      NULL,
+      metrics = "mixed_metric"
+    ),
+    "Mixed-grain metric"
+  )
   expect_error(
     call_metrics_impl(
       registry,
@@ -274,6 +329,16 @@ test_that("call_metrics rejects mixed-grain dimensions and filters", {
       filters = "above_minimum"
     ),
     "Mixed-grain filter"
+  )
+  expect_error(
+    call_metrics_impl(
+      registry,
+      list(sales_db = src),
+      NULL,
+      metrics = "total_revenue",
+      dimensions = "inherited_mixed"
+    ),
+    "Mixed-grain definition"
   )
 
   expansion <- expand_for_run_sql(

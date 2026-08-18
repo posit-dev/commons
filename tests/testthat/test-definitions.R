@@ -202,6 +202,29 @@ test_that("token resolution errors are actionable", {
     expand_definitions("SELECT {{emea}} FROM elsewhere", records),
     "does not appear"
   )
+  expect_error(
+    expand_definitions("SELECT {{sales::emea}} FROM elsewhere", records),
+    "does not appear"
+  )
+  expect_error(
+    expand_definitions("SELECT {{sales.emea}} FROM elsewhere", records),
+    "does not appear"
+  )
+
+  constant <- definitions_source(
+    definitions = c(
+      "      - name: answer",
+      "        expr: \"42\""
+    )
+  )
+  constant_records <- registry_defs(sales_registry(constant))
+  expect_error(
+    expand_definitions(
+      "SELECT {{sales::answer}} FROM elsewhere",
+      constant_records
+    ),
+    "does not appear"
+  )
 })
 
 test_that("same-named definitions disambiguate by table scope", {
