@@ -33,8 +33,8 @@ my-agent/
 ├── app.R                    # Shiny entry point
 ├── agent.R                  # reusable commons() construction
 ├── DESCRIPTION
+├── AGENTS.md                # or the active coding agent's equivalent
 ├── instructions.md          # optional concise, always-needed guidance
-├── onboarding.md            # scope, decisions, and unresolved questions
 ├── dictionaries/
 │   └── warehouse.yaml       # one data-dict.yaml per data_source(), named
 │                            # to match the source name in the commons() call

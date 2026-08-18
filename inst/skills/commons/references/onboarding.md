@@ -36,9 +36,8 @@ At each decision point:
 2. Explain the available options and make a recommendation.
 3. End with one clearly scoped prompt labeled `**Your decision:**`.
 4. End the response and wait for the user.
-5. Record the answer in the project's `onboarding.md`.
 
-Maintain `onboarding.md` as a concise record of the agent's intended scope, selected sources and artifacts, data flow, design decisions, confirmed assumptions, and unresolved questions.
+Maintain concise project guidance in the project instruction file recognized by the coding agent doing the work. For example, use `AGENTS.md` for Codex or Posit Assistant and `CLAUDE.md` for Claude Code; use the corresponding convention for other coding agents. Reuse and preserve an applicable existing file, and do not create or maintain multiple agent-specific files solely for onboarding. If the coding agent has no project instruction file convention, do not create one just for this workflow. Record only durable information a future coding agent needs to work on the project safely: the agent's intended scope, data boundaries and source mapping, trusted artifacts, consequential business constraints, and unresolved issues that affect implementation. Do not use the file as a transcript, decision log, status report, or record of routine and completed choices.
 
 Reconcile new evidence with earlier assumptions and decisions as it appears. Surface contradictions, unsupported claims, and unresolved uncertainty when discovered; do not defer them to the final review or silently resolve them.
 
@@ -50,7 +49,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
    - measure loading and data-dictionary behavior; and
    - dependency and deployment expectations for a commons app.
 
-2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, and `onboarding.md`. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations.
+2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
 
 3. **Discovery: Collect the source material.** Collect source material incrementally. Do not present the full discovery checklist in one message. Ask one focused question, inspect what the user provides, and use the resulting evidence to determine the next question. Do not ask the user for information that can be discovered from supplied files, repositories, or connections.
 
@@ -91,11 +90,11 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Do not ask the user to design the detailed division among the dictionary, semantic layer, and remaining context. Steps 6 through 8 determine that placement from the available evidence.
 
-   If discovery supports one coherent approach, summarize the intended users and questions, selected sources and trusted artifacts, data flow, and source mapping; recommend the initial scope; and ask the user to confirm it. If a foundational choice remains unclear or has consequential alternatives, work through one choice at a time: summarize the evidence, uncertainties, options, and recommendation, then ask one `**Your decision:**` question and wait. Record the confirmed scope, example questions, selections, mappings, and decisions in `onboarding.md`.
+   If discovery supports one coherent approach, summarize the intended users and questions, selected sources and trusted artifacts, data flow, and source mapping; recommend the initial scope; and ask the user to confirm it. If a foundational choice remains unclear or has consequential alternatives, work through one choice at a time: summarize the evidence, uncertainties, options, and recommendation, then ask one `**Your decision:**` question and wait. Add the confirmed high-level scope, data boundary, source mapping, and trusted artifacts to the agent instruction file; omit example questions and the history of how the decisions were reached.
 
 6. **Build the data dictionaries.** Create one `data-dict.yaml` for each selected data source. Follow the [data dictionary reference](data-dictionaries.md) for commons-specific behavior and the upstream data-dict documentation for the general format. Use existing dictionaries, schemas, notes, verified exploration, and trusted code. Use joins demonstrated by trusted code to document relationships. Before extraction, review each draft dictionary against the evidence again. Look specifically for surprising facts that are not yet represented and claims that are not supported by verified sources; correct them or surface the uncertainty. Preserve existing governed definitions, but defer adding or redesigning them until step 7, when trusted artifacts can establish their meaning and computation.
 
-7. **Extract from selected trusted artifacts.** For each artifact selected during discovery and mapped to a confirmed data source, follow the [extraction reference](extracting-from-artifacts.md). Use it to draft and reconcile measures, governed definitions, dictionary edits, and free-text context. Apply only the proposals the user confirms, then record the resulting semantic-layer decisions and unresolved gaps in `onboarding.md`.
+7. **Extract from selected trusted artifacts.** For each artifact selected during discovery and mapped to a confirmed data source, follow the [extraction reference](extracting-from-artifacts.md). Use it to draft and reconcile measures, governed definitions, dictionary edits, and free-text context. Apply only the proposals the user confirms. Add an unresolved gap to the agent instruction file only when it constrains future implementation.
 
    If the selected artifacts do not contain trusted computation for a needed calculation, leave that part of the semantic layer incomplete. Record the gap rather than authoring new calculation or data-processing logic.
 
@@ -103,7 +102,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Construct the `context_layer()` to confirm that every configured context file exists and can be read. Identify representative searches that should retrieve its most important guidance, and verify them after connecting the context layer to the agent in step 10.
 
-9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic-layer, and context-layer design now that the extracted artifacts are visible. Treat consequential changes as decision points and record their resolution in `onboarding.md`.
+9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic-layer, and context-layer design now that the extracted artifacts are visible. Treat consequential changes as decision points, and update the agent instruction file only when they change its durable guidance.
 
 10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
 
@@ -113,4 +112,4 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions.
 
-   Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point, and record the outcome in `onboarding.md`. Expand sources and trusted calculations only after the agent works and the user confirms that they understand and accept its current behavior.
+   Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Expand sources and trusted calculations only after the agent works and the user confirms that they understand and accept its current behavior.

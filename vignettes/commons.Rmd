@@ -35,8 +35,8 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 |-- app.R
 |-- agent.R
 |-- DESCRIPTION
+|-- AGENTS.md                 # or the active coding agent's equivalent (e.g., CLAUDE.md)
 |-- instructions.md
-|-- onboarding.md
 |-- dictionaries/
 |   `-- warehouse.yaml
 |-- measures/
