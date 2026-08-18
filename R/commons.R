@@ -132,7 +132,8 @@ commons <- function(
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
   network <- rlang::arg_match(network)
-  check_run_r_sandbox()
+  sandbox_mode <- run_r_sandbox_mode()
+  check_run_r_sandbox(sandbox_mode = sandbox_mode)
   check_instructions(instructions)
   rlang::check_bool(log)
   check_share_with(share_with)
@@ -143,6 +144,7 @@ commons <- function(
     context_layer = context_layer,
     semantic_layer = semantic_layer,
     network = network,
+    sandbox_mode = sandbox_mode,
     instructions = instructions,
     log = log,
     share_with = share_with
@@ -161,6 +163,7 @@ Commons <- R6::R6Class(
       ...,
       instructions = NULL,
       network = c("none", "full"),
+      sandbox_mode = run_r_sandbox_mode(),
       log = FALSE,
       share_with = NULL
     ) {
@@ -168,6 +171,10 @@ Commons <- R6::R6Class(
       do.call(super$initialize, ellmer_chat_initialize_args(client))
       semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
+      sandbox_mode <- rlang::arg_match(
+        sandbox_mode,
+        c("auto", "landlock", "userns", "nsjail")
+      )
 
       sources <- as_data_sources(data_sources)
 
@@ -198,7 +205,7 @@ Commons <- R6::R6Class(
       )
 
       private$handles <- new_handle_store()
-      private$worker <- new_r_worker(network)
+      private$worker <- new_r_worker(network, sandbox_mode)
       private$corpus <- build_citation_corpus(
         private$context_layer,
         private$registry,
