@@ -393,7 +393,11 @@ test_that("a citation body exactly at the cap can verify", {
   out <- scan_all(text, list(text), scanner_test_corpus())
 
   expect_identical(out$decisions[[1]]$status, "accepted")
-  expect_match(out$text, "<shiny-aside>", fixed = TRUE)
+  expect_match(
+    out$text,
+    '<shiny-aside marker="number" label="documentation"',
+    fixed = TRUE
+  )
 })
 
 test_that("a citation body one character over the cap is removed", {
