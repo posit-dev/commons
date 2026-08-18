@@ -221,6 +221,11 @@ test_that("the pool tools follow the agent's composition", {
     definitions_agent$get_system_prompt(),
     "the complete set of governed definitions"
   )
+  expect_no_match(
+    definitions_agent$get_system_prompt(),
+    "call_metrics",
+    fixed = TRUE
+  )
 
   # Filters only: no call_metrics either.
   filters_only <- test_agent(
@@ -236,6 +241,11 @@ test_that("the pool tools follow the agent's composition", {
   expect_false(any(
     c("search_pool", "call_metrics") %in% tool_names(filters_only)
   ))
+  expect_no_match(
+    filters_only$get_system_prompt(),
+    "call_metrics",
+    fixed = TRUE
+  )
 
   # A roster past the ambient cap makes the pool searchable.
   overflow_agent <- test_agent(
@@ -267,7 +277,8 @@ test_that("search_pool spans measures and definitions", {
   out <- search_pool_text(measures, registry, "revenue in EMEA")
   expect_match(out, "{{big_revenue}} --- metric on table `sales`", fixed = TRUE)
   expect_match(out, "call_metrics", fixed = TRUE)
-  expect_match(out, "Expression: `SUM(CASE", fixed = TRUE)
+  expect_no_match(out, "Expression:", fixed = TRUE)
+  expect_no_match(out, "SUM(CASE WHEN emea", fixed = TRUE)
   expect_match(out, "Selected SQL(duckdb)", fixed = TRUE)
   expect_match(out, "Translation notes", fixed = TRUE)
   # A metric hit advertises what it can be sliced by.
@@ -307,6 +318,19 @@ test_that("search_pool spans measures and definitions", {
     "commercial contribution"
   )
   expect_match(out, "{{metric_1}} --- metric", fixed = TRUE)
+})
+
+test_that("definition discovery only mentions available tools", {
+  src <- definitions_source(
+    definitions = c(
+      "      - name: emea",
+      "        expr: region = 'EMEA'"
+    )
+  )
+  registry <- sales_registry(src)
+  out <- definition_pool_text(registry_defs(registry), registry_defs(registry))
+
+  expect_no_match(out, "call_metrics", fixed = TRUE)
 })
 
 test_that("call_metrics rejects mixed-grain definitions", {

@@ -281,7 +281,7 @@ search_pool_text <- function(
       blank_na(defs$label),
       blank_na(defs$description),
       blank_na(defs$details),
-      blank_na(defs$expression)
+      blank_na(defs$sql)
     )
   )
 
@@ -308,6 +308,11 @@ search_pool_text <- function(
 
 definition_pool_text <- function(def, defs) {
   kind <- def$kind
+  table_has_metrics <- any(
+    defs$source == def$source &
+      defs$table == def$table &
+      defs$kind == "metric"
+  )
   invoke <- if (def$mixed_grain) {
     sprintf(
       "Use `{{%s}}` only in run_sql with manually grain-correct query structure.",
@@ -316,19 +321,30 @@ definition_pool_text <- function(def, defs) {
   } else {
     switch(
       kind,
-      filter = sprintf(
-        "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
-        def$name
-      ),
+      filter = if (table_has_metrics) {
+        sprintf(
+          "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
+          def$name
+        )
+      } else {
+        sprintf("Apply in run_sql (e.g. `WHERE {{%s}}`).", def$name)
+      },
       metric = sprintf(
         "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS value`.",
         def$name,
         def$name
       ),
-      sprintf(
-        "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
-        def$name
-      )
+      if (table_has_metrics) {
+        sprintf(
+          "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
+          def$name
+        )
+      } else {
+        sprintf(
+          "Use in run_sql SELECT or GROUP BY as `{{%s}}`.",
+          def$name
+        )
+      }
     )
   }
 
@@ -362,7 +378,6 @@ definition_pool_text <- function(def, defs) {
         def$table,
         prose_detail(def$description, def$details)
       ),
-      sprintf("Expression: `%s`.", flatten_inline(def$expression)),
       sprintf(
         "Selected %s: `(%s)`.",
         def$target,

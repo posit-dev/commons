@@ -34,7 +34,7 @@ tool_search_pool <- function(private) {
   kinds <- c(
     if (length(private$registry) > 0) "measures (run with call_measure)",
     if (nrow(registry_defs(private$definitions)) > 0) {
-      "governed definitions (apply as {{name}} tokens in run_sql, or through call_metrics)"
+      "governed definitions (apply as {{name}} tokens in run_sql)"
     }
   )
   ellmer::tool(
@@ -277,8 +277,7 @@ run_sql_description <- function(definitions, measures = list()) {
       paste0(
         "Governed definitions can be written as {{name}} tokens anywhere ",
         "in the SQL (or {{table::name}} when qualification is needed); ",
-        "each expands to SQL compiled from its trusted expression before ",
-        "the query runs."
+        "each expands to its compiled SQL before the query runs."
       )
     }
   )

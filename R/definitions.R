@@ -386,7 +386,6 @@ definition_gist <- function(definitions) {
         c(
           sprintf("(%s, %s)", def$kind, def$type),
           if (nzchar(detail)) detail,
-          sprintf("Expression: `%s`.", flatten_inline(def$expression)),
           if (!is.null(def$sql)) {
             sprintf(
               "Selected %s: `(%s)`.",
@@ -416,10 +415,9 @@ applied_definitions_text <- function(applied) {
       paste(
         c(
           sprintf(
-            "- {{%s}} (%s): expression `%s`; %s `(%s)`",
+            "- {{%s}} (%s): %s `(%s)`",
             applied$name[[i]],
             applied$table[[i]],
-            flatten_inline(applied$expression[[i]]),
             applied$target[[i]],
             flatten_inline(applied$sql[[i]])
           ),

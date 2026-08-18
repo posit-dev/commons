@@ -330,7 +330,9 @@ test_that("run_sql results report source, selected SQL, and notes", {
   result <- run_sql_tool(src, expansion$sql, applied = expansion$applied)
 
   expect_match(result@value, "Applied governed definitions", fixed = TRUE)
-  expect_match(result@value, "expression `SUM(CASE", fixed = TRUE)
+  expect_no_match(result@value, "Expression:", fixed = TRUE)
+  expect_no_match(result@value, ": expression `", fixed = TRUE)
+  expect_no_match(result@value, "SUM(CASE WHEN emea", fixed = TRUE)
   expect_match(result@value, "SQL(duckdb)", fixed = TRUE)
   expect_match(result@value, "Translation notes", fixed = TRUE)
 })
@@ -344,6 +346,7 @@ test_that("the system prompt indexes landed definition kinds", {
 
   expect_match(prompt, "# Governed definitions", fixed = TRUE)
   expect_match(prompt, "`{{table::name}}`", fixed = TRUE)
+  expect_no_match(prompt, "expression-language", fixed = TRUE)
   expect_match(
     prompt,
     "- sales: filters `{{emea}}`; derived `{{region_band}}`; metrics `{{big_revenue}}`",
@@ -382,12 +385,13 @@ test_that("the prompt definition index is capped", {
   expect_false(definitions_overflow(sales_registry(definitions_source())))
 })
 
-test_that("first touch shows expressions and compiled SQL separately", {
+test_that("first touch shows compiled SQL without expression source", {
   src <- definitions_source()
   entry <- dictionary_entry_text(src$dictionary, "sales")
 
   expect_match(entry, "Governed definitions", fixed = TRUE)
-  expect_match(entry, "Expression: `region = 'EMEA'`", fixed = TRUE)
+  expect_no_match(entry, "Expression:", fixed = TRUE)
+  expect_no_match(entry, "region = 'EMEA'", fixed = TRUE)
   expect_match(entry, "Selected SQL(duckdb)", fixed = TRUE)
   expect_match(entry, '"region" = \'EMEA\'', fixed = TRUE)
   expect_match(entry, "Translation notes", fixed = TRUE)
@@ -399,7 +403,8 @@ test_that("definitions are indexed as context chunks", {
   hit <- grepl("Governed definition `{{big_revenue}}`", chunks, fixed = TRUE)
 
   expect_true(any(hit))
-  expect_match(chunks[hit], "Expression: `SUM(CASE", fixed = TRUE)
+  expect_no_match(chunks[hit], "Expression:", fixed = TRUE)
+  expect_no_match(chunks[hit], "SUM(CASE WHEN emea", fixed = TRUE)
   expect_match(chunks[hit], "Selected SQL(duckdb)", fixed = TRUE)
 })
 

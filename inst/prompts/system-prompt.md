@@ -46,12 +46,12 @@ Do not announce tool calls; before your final response to the user, you should o
 
 {if (has_glossary_context) glossary_context else ""}
 
-<!-- Definitions stay discoverable by name while their full expressions arrive on first touch. -->
+<!-- Definitions stay discoverable by name while their compiled SQL arrives on first touch. -->
 {if (nzchar(definition_index) || !definitions_complete) r"(
 
 ## Governed definitions
 
-Trusted calculations from the data dictionary are indexed here by table; each table's dictionary entry delivers its expression-language source, selected SQL, and any translation notes. Write definitions as `{{name}}` tokens anywhere in `run_sql` SQL (`{{table::name}}` when qualification is needed); each expands to its compiled SQL before the query runs. Expansion can't add an alias, so write `SELECT {{name}} AS name`. Metric expressions are complete calculations—never wrap one in `SUM()` or another aggregate. Filters and derived definitions can also be grouping dimensions in `call_metrics`.
+Trusted calculations from the data dictionary are indexed here by table; each table's dictionary entry delivers its compiled SQL and any translation notes. Write definitions as `{{name}}` tokens anywhere in `run_sql` SQL (`{{table::name}}` when qualification is needed); each expands to its compiled SQL before the query runs. Expansion can't add an alias, so write `SELECT {{name}} AS name`. Metric definitions are complete calculations—never wrap one in `SUM()` or another aggregate.
 )" else ""}
 
 {definition_index}
