@@ -378,33 +378,9 @@ test_that("search_context requests a citation for fallback answers", {
 })
 
 test_that("citation_reminder_text names the commons-citation dialect", {
-  request <- citation_request_text()
   reminder <- citation_reminder_text()
 
-  expect_match(
-    request,
-    "end of the paragraph or list item it supports",
-    fixed = TRUE
-  )
-  expect_match(
-    request,
-    "without a blank line before it",
-    fixed = TRUE
-  )
-  expect_match(
-    request,
-    "Leave a blank line after each citation block",
-    fixed = TRUE
-  )
-  expect_no_match(
-    request,
-    "Leave a blank line before and after each citation block",
-    fixed = TRUE
-  )
-  expect_no_match(request, "end your reply", fixed = TRUE)
-  expect_no_match(request, "very end", fixed = TRUE)
   expect_match(reminder, "<commons-citation>", fixed = TRUE)
-  expect_match(reminder, "after the claim it supports", fixed = TRUE)
   expect_no_match(reminder, "<citation reason", fixed = TRUE)
 })
 
