@@ -1,11 +1,11 @@
 # Run from the repository root with:
-# shiny::runApp("dev/plot-app")
+# shiny::runApp("inst/examples/plot-app")
 
 library(bslib)
 library(ggplot2)
 library(shiny)
 
-devtools::load_all("../..")
+devtools::load_all("../../..")
 
 values <- data.frame(
   group = c("A", "B", "C"),
