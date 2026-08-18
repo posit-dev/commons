@@ -255,6 +255,22 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     ),
     TRUE
   )
+
+  app$get_js(
+    'document.querySelector(\'button[aria-label="Verified answer"]\').click();'
+  )
+  verified_dialog <- '[role="dialog"][aria-label="Verified answer"]'
+  app$wait_for_js(
+    paste0("document.querySelector('", verified_dialog, "') !== null;"),
+    timeout = 30 * 1000
+  )
+  expect_match(
+    app$get_js(
+      paste0("document.querySelector('", verified_dialog, "').innerText;")
+    ),
+    "Verified answer",
+    fixed = TRUE
+  )
 })
 
 test_that("Shiny Chat preserves Markdown blocks around citations", {

@@ -134,32 +134,6 @@ shiny-chat-container {
   transform: translateX(-50%) rotate(225deg);
 }
 
-shiny-chat-container
-  .shiny-aside-pill:not(.shiny-aside-pill--number) {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--bs-border-color, #dfe3e7);
-  color: var(--bs-secondary-color, #5c636a);
-  font-size: 0.74rem;
-  font-weight: 400;
-  padding: 0.12rem 0.45rem;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:not(.shiny-aside-pill--number):hover,
-shiny-chat-container
-  .shiny-aside-pill:not(.shiny-aside-pill--number):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:not(.shiny-aside-pill--number)[aria-expanded="true"] {
-  background: rgba(var(--bs-emphasis-color-rgb, 33, 37, 41), 0.035);
-  color: var(--bs-body-color, #212529);
-}
-
-shiny-chat-container
-  .shiny-aside-pill:not(.shiny-aside-pill--number)
-  img {
-  opacity: 0.75;
-}
-
 /*
  * Public Shinychat marker API scoped with its compact display hook.
  * Shinychat owns marker structure, placement, and target geometry.
@@ -213,19 +187,6 @@ shiny-chat-container
   )
   img {
   opacity: 1;
-}
-
-.shiny-aside-popover__label:has(
-  img[src$="/trusted-icon.svg"],
-  img[src$="/warning-icon.svg"]
-) {
-  display: none;
-}
-
-shiny-chat-container .shiny-aside-popover__body em {
-  color: var(--bs-secondary-color, #6c757d);
-  font-size: 0.92em;
-  font-style: normal;
 }
 
 /* ---- Measure display ------------------------------------------------- */
