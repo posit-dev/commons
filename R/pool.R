@@ -10,11 +10,32 @@ call_metrics_impl <- function(
   dimensions = NULL,
   filters = NULL,
   where = NULL,
-  source_name = NULL
+  source_name = NULL,
+  semantic_models = NULL
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
   defs <- registry_defs(registry, label)
+  semantic_models <- semantic_models %||% semantic_models_registry(sources)
+  semantic_members <- registry_semantic_members(semantic_models, label)
+  origins <- resolve_metric_origins(metrics, defs, semantic_members)
+  if (length(unique(origins)) > 1L) {
+    cli::cli_abort(
+      "Metrics in one call must come from either data-dict definitions or one native semantic model."
+    )
+  }
+  if (identical(origins[[1]], "semantic_model")) {
+    return(call_semantic_metrics(
+      source,
+      handles,
+      semantic_members,
+      metrics,
+      dimensions,
+      filters,
+      where,
+      source_name
+    ))
+  }
 
   metric_defs <- resolve_pool_names(metrics, defs, kind = "metric")
   if (any(metric_defs$mixed_grain)) {
@@ -93,6 +114,150 @@ call_metrics_impl <- function(
     dimensions = dimensions,
     filters = filters
   ))
+  metric_tool_result(
+    result,
+    sql,
+    handles,
+    metrics,
+    dimensions,
+    filters,
+    source_name,
+    note = note,
+    advert = advert,
+    args = args
+  )
+}
+
+resolve_metric_origins <- function(metrics, definitions, semantic_members) {
+  metrics <- strip_token_braces(metrics %||% character())
+  if (length(metrics) == 0L) {
+    cli::cli_abort("{.arg metrics} must contain at least one metric name.")
+  }
+  vapply(
+    metrics,
+    metric_origin,
+    character(1),
+    definitions = definitions,
+    semantic_members = semantic_members
+  )
+}
+
+metric_origin <- function(name, definitions, semantic_members) {
+  definition_named <- pool_name_candidates(name, definitions)
+  definition_metrics <- definition_named[
+    definition_named$kind == "metric",
+    ,
+    drop = FALSE
+  ]
+  semantic_named <- semantic_member_candidates(name, semantic_members)
+  semantic_metrics <- semantic_named[
+    semantic_named$kind == "metric",
+    ,
+    drop = FALSE
+  ]
+  n_matches <- nrow(definition_metrics) + nrow(semantic_metrics)
+  if (n_matches == 1L) {
+    if (nrow(definition_metrics)) "definition" else "semantic_model"
+  } else if (n_matches > 1L) {
+    definition_choices <- sprintf(
+      "%s::%s",
+      definition_metrics$table,
+      definition_metrics$name
+    )
+    semantic_choices <- vapply(seq_len(nrow(semantic_metrics)), function(i) {
+      semantic_member_key(semantic_metrics[i, , drop = FALSE])
+    }, character(1))
+    cli::cli_abort(c(
+      "Metric name {.val {name}} is ambiguous.",
+      "i" = "Use a qualified name: {.val {c(definition_choices, semantic_choices)}}."
+    ))
+  } else if (nrow(definition_named) || nrow(semantic_named)) {
+    kinds <- unique(c(definition_named$kind, semantic_named$kind))
+    kind_text <- paste(kinds, collapse = " or a ")
+    cli::cli_abort(
+      "{.val {name}} is a {kind_text}, not a metric."
+    )
+  } else {
+    available <- c(
+      definitions$name[definitions$kind == "metric"],
+      semantic_members$name[semantic_members$kind == "metric"]
+    )
+    cli::cli_abort(c(
+      "No governed metric is named {.val {name}}.",
+      "i" = "Available metrics: {.val {available}}."
+    ))
+  }
+}
+
+call_semantic_metrics <- function(
+  source,
+  handles,
+  members,
+  metrics,
+  dimensions,
+  filters,
+  where,
+  source_name
+) {
+  metric_members <- resolve_semantic_members(metrics, members, "metric")
+  models <- unique(metric_members$model)
+  if (length(models) != 1L) {
+    cli::cli_abort("Metrics in one call must belong to one native semantic model.")
+  }
+  if (length(filters %||% character())) {
+    cli::cli_abort(
+      "Named filters from native semantic models are not supported yet."
+    )
+  }
+  model <- source$semantic_models[[models[[1]]]]
+  model_members <- members[members$model == models[[1]], , drop = FALSE]
+  dimension_members <- resolve_semantic_members(
+    dimensions,
+    model_members,
+    "dimension"
+  )
+  sql <- switch(
+    model$backend,
+    snowflake_semantic_view = snowflake_semantic_metric_sql(
+      model,
+      metric_members,
+      dimension_members,
+      where,
+      model_members,
+      source$con
+    ),
+    cli::cli_abort(
+      "Unsupported native semantic-model backend {.val {model$backend}}."
+    )
+  )
+  result <- source_query(source, sql)
+  metric_tool_result(
+    result,
+    sql,
+    handles,
+    metrics,
+    dimensions,
+    filters,
+    source_name
+  )
+}
+
+metric_tool_result <- function(
+  result,
+  sql,
+  handles,
+  metrics,
+  dimensions,
+  filters,
+  source_name,
+  note = NULL,
+  advert = register_handle(handles, result),
+  args = drop_nulls(list(
+    metrics = metrics,
+    dimensions = dimensions,
+    filters = filters
+  ))
+) {
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = sprintf(
@@ -260,10 +425,13 @@ search_pool_text <- function(
   measures,
   registry,
   query,
-  source_names = character()
+  source_names = character(),
+  semantic_models = NULL
 ) {
   defs <- registry_defs(registry)
-  if (length(measures) == 0 && nrow(defs) == 0) {
+  semantic_models <- semantic_models %||% list(members = no_semantic_members)
+  semantic_members <- registry_semantic_members(semantic_models)
+  if (length(measures) == 0 && nrow(defs) == 0 && nrow(semantic_members) == 0) {
     return("The semantic layer is empty.")
   }
 
@@ -282,6 +450,14 @@ search_pool_text <- function(
       blank_na(defs$description),
       blank_na(defs$details),
       blank_na(defs$sql)
+    ),
+    paste(
+      semantic_members$name,
+      semantic_members$model,
+      semantic_members$kind,
+      blank_na(semantic_members$label),
+      blank_na(semantic_members$description),
+      semantic_members$synonyms
     )
   )
 
@@ -297,8 +473,13 @@ search_pool_text <- function(
     function(hit) {
       if (hit <= length(measures)) {
         measure_schema_text(measures[[hit]], source_names = source_names)
-      } else {
+      } else if (hit <= length(measures) + nrow(defs)) {
         definition_pool_text(defs[hit - length(measures), ], defs)
+      } else {
+        semantic_member_pool_text(
+          semantic_members[hit - length(measures) - nrow(defs), , drop = FALSE],
+          semantic_members
+        )
       }
     },
     character(1)

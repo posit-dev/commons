@@ -1,6 +1,12 @@
-local_warehouse_connection <- function(backend, env = parent.frame()) {
+local_warehouse_connection <- function(
+  backend,
+  require_table = TRUE,
+  env = parent.frame()
+) {
   backend <- match.arg(backend, c("snowflake", "databricks"))
-  warehouse_test_table(backend)
+  if (require_table) {
+    warehouse_test_table(backend)
+  }
   skip_if_not_installed("odbc")
 
   con <- switch(
@@ -32,6 +38,22 @@ warehouse_test_table <- function(backend, call = rlang::caller_env()) {
     )
   }
   table
+}
+
+warehouse_test_semantic_view <- function(call = rlang::caller_env()) {
+  option <- "commons.test.snowflake.semantic_view"
+  view <- getOption(option)
+  skip_if(
+    is.null(view),
+    paste0("Set options(", option, " = DBI::Id(...)) to run this test")
+  )
+  if (!inherits(view, "Id")) {
+    cli::cli_abort(
+      "The {.option {option}} option must be a {.cls DBI::Id} object.",
+      call = call
+    )
+  }
+  view
 }
 
 warehouse_read_one <- function(con, id) {

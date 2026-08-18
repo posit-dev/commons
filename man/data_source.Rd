@@ -22,7 +22,9 @@ literal table names containing dots. For Snowflake and Databricks
 connections, a \code{DBI::Id} ending in \code{catalog} or \code{schema} selects every
 table and view in that namespace. Leaving \code{tables} unset selects the
 current schema. A Databricks \code{hive_metastore} selection must include a
-schema.
+schema. Snowflake selections also import semantic views as native trusted
+metrics and dimensions. Semantic views are available through
+\code{search_pool} and \code{call_metrics}, but are not returned by \code{\link[=list_tables]{list_tables()}}.
 
 For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}

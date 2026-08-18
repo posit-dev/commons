@@ -53,6 +53,17 @@ catalog_table_registry <- function(
   )
 }
 
+catalog_exclude_relations <- function(registry, labels) {
+  registry$labels <- setdiff(registry$labels, labels)
+  registry$ids <- registry$ids[registry$labels]
+  registry$relations <- registry$relations[registry$labels]
+
+  validate_labels <- setdiff(registry$validate$labels, labels)
+  registry$validate$labels <- validate_labels
+  registry$validate$ids <- registry$validate$ids[validate_labels]
+  registry
+}
+
 catalog_id_type <- function(id, backend, call = rlang::caller_env()) {
   components <- id@name
   roles <- names(components)

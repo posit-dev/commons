@@ -198,15 +198,25 @@ citation_reminder_text <- function() {
   )
 }
 
-citation_request_text <- function(measures = list(), definitions = NULL) {
+citation_request_text <- function(
+  measures = list(),
+  definitions = NULL,
+  semantic_models = NULL
+) {
   has_measures <- length(measures) > 0
   has_definitions <- !is.null(definitions) &&
     nrow(registry_defs(definitions)) > 0
+  has_semantic_metrics <- !is.null(semantic_models) &&
+    semantic_registry_has_metrics(semantic_models)
 
   # Without a tool that answers on its own (call_measure, call_metrics),
   # every answer is a fallback answer: there is no governed path to contrast
   # with, so don't imply one.
-  exception <- if (has_measures || registry_has_metrics(definitions)) {
+  exception <- if (
+    has_measures ||
+      registry_has_metrics(definitions) ||
+      has_semantic_metrics
+  ) {
     " that does not come from a trusted calculation alone"
   }
   trust_note <- cli::format_inline(

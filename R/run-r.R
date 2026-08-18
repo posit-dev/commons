@@ -1,7 +1,12 @@
 tool_run_r <- function(private) {
   handle_tools <- c(
     if (length(private$registry) > 0) "call_measure",
-    if (registry_has_metrics(private$definitions)) "call_metrics",
+    if (
+      registry_has_metrics(private$definitions) ||
+        semantic_registry_has_metrics(private$semantic_models)
+    ) {
+      "call_metrics"
+    },
     "run_sql"
   )
   ellmer::tool(
