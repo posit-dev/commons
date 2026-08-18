@@ -17,3 +17,5 @@ inst/hex/
 ^commons-reviews$
 inst/manifest.json
 ^sandbox$
+inst/pkgs/
+.shinychat/
