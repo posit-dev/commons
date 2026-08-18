@@ -478,7 +478,8 @@ search_pool_text <- function(
       } else {
         semantic_member_pool_text(
           semantic_members[hit - length(measures) - nrow(defs), , drop = FALSE],
-          semantic_members
+          semantic_members,
+          source_names
         )
       }
     },

@@ -208,29 +208,15 @@ resolve_semantic_member <- function(
   )
 }
 
-semantic_member_pool_text <- function(member, members) {
+semantic_member_pool_text <- function(
+  member,
+  members,
+  source_names = character()
+) {
   reference <- if (nrow(semantic_member_candidates(member$name[[1]], members)) == 1L) {
     member$name[[1]]
   } else {
     semantic_member_key(member)
-  }
-  model_members <- members[
-    members$source == member$source[[1]] &
-      members$model == member$model[[1]],
-    ,
-    drop = FALSE
-  ]
-  dimensions <- model_members[model_members$kind == "dimension", , drop = FALSE]
-  related <- if (identical(member$kind[[1]], "metric") && nrow(dimensions)) {
-    references <- vapply(seq_len(nrow(dimensions)), function(i) {
-      dimension <- dimensions[i, , drop = FALSE]
-      if (nrow(semantic_member_candidates(dimension$name[[1]], members)) == 1L) {
-        dimension$name[[1]]
-      } else {
-        semantic_member_key(dimension)
-      }
-    }, character(1))
-    sprintf("Available dimensions: %s.", paste(references, collapse = ", "))
   }
   detail <- prose_detail(member$description[[1]], NA_character_)
   paste(
@@ -242,13 +228,21 @@ semantic_member_pool_text <- function(member, members) {
         member$model[[1]],
         detail
       ),
+      semantic_member_sources_line(member, source_names),
       if (identical(member$kind[[1]], "metric")) {
         sprintf("Query with call_metrics (metrics = [\"%s\"]).", reference)
       } else {
         sprintf("Use as a call_metrics dimension: %s.", reference)
-      },
-      related
+      }
     ),
     collapse = "\n"
   )
+}
+
+semantic_member_sources_line <- function(member, source_names) {
+  source <- member$source[[1]]
+  if (!source %in% source_names) {
+    return(NULL)
+  }
+  sprintf("sources: %s", source)
 }

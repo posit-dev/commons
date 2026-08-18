@@ -152,6 +152,7 @@ snowflake_list_semantic_views <- function(
     if (!is.null(name)) paste("LIKE", DBI::dbQuoteString(con, name)),
     target
   )
+  # Missing semantic metadata should not block ordinary relation discovery.
   rows <- tryCatch(
     DBI::dbGetQuery(con, sql),
     error = function(err) NULL

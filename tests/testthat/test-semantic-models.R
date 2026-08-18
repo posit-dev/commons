@@ -54,7 +54,24 @@ test_that("native semantic members appear in pool search", {
 
   expect_match(out, "native metric", fixed = TRUE)
   expect_match(out, "total_revenue", fixed = TRUE)
-  expect_match(out, "Available dimensions: region", fixed = TRUE)
+  expect_match(out, "call_metrics dimension: region", fixed = TRUE)
+})
+
+test_that("pool search identifies native members' data sources", {
+  registry <- semantic_models_registry(list(
+    warehouse = test_semantic_source(),
+    finance = test_semantic_source()
+  ))
+  out <- search_pool_text(
+    list(),
+    empty_definitions(),
+    "total revenue",
+    source_names = c("warehouse", "finance"),
+    semantic_models = registry
+  )
+
+  expect_match(out, "sources: warehouse", fixed = TRUE)
+  expect_match(out, "sources: finance", fixed = TRUE)
 })
 
 test_that("call_metrics dispatches native metrics through their model", {
