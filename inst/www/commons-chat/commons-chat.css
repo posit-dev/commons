@@ -190,6 +190,14 @@ shiny-chat-container
   .shiny-aside-pill:has(
     img[src$="/trusted-icon.svg"],
     img[src$="/warning-icon.svg"]
+  ) {
+  font-weight: 400;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
   )
   img {
   opacity: 1;
