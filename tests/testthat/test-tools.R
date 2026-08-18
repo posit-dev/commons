@@ -93,6 +93,15 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
   )
 
   expect_length(images, 1)
+  notes <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentText),
+    res@value
+  )
+  expect_true(any(vapply(
+    notes,
+    \(x) grepl("This plot is already visible to the user", x@text, fixed = TRUE),
+    logical(1)
+  )))
   expect_equal(
     png_dimensions_from_base64(images[[1]]@data),
     c(width = 320, height = 160)

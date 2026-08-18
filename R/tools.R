@@ -362,7 +362,10 @@ measure_plot_tool_result <- function(td, args, value, advert) {
     ))
   }
 
-  model_value <- list(rendered$model)
+  model_value <- list(
+    ellmer::ContentText(visible_result_note("plot")),
+    rendered$model
+  )
   if (!is.null(advert)) {
     model_value[[length(model_value) + 1L]] <- ellmer::ContentText(advert)
   }
@@ -429,9 +432,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     ))
   }
   model_note <- c(
-    "This gt table is already visible to the user.",
-    "Do not reproduce or reformat its rows or columns in your response; summarize or",
-    "interpret the relevant results in words instead.",
+    visible_result_note("gt table"),
     if (!is.null(advert)) {
       paste(
         "For calculations, use `run_r` with the table handle below instead of",
@@ -634,6 +635,14 @@ tool_result <- function(
   ellmer::ContentToolResult(
     value = value,
     extra = list(display = display, commons_tag = tag)
+  )
+}
+
+visible_result_note <- function(type) {
+  paste(
+    sprintf("This %s is already visible to the user.", type),
+    "Do not recreate or repeat it; summarize or interpret the relevant results",
+    "in words instead."
   )
 }
 

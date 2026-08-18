@@ -65,6 +65,15 @@ test_that("run_r returns plots as images and opens the display", {
     png_dimensions_from_base64(images[[1]]@data),
     c(width = 600, height = 300)
   )
+  notes <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentText),
+    res@value
+  )
+  expect_true(any(vapply(
+    notes,
+    \(x) grepl("This plot is already visible to the user", x@text, fixed = TRUE),
+    logical(1)
+  )))
   expect_identical(res@extra$display$open, TRUE)
   expect_match(res@extra$display$html, "data:image/png;base64,")
   expect_match(res@extra$display$html, "commons-run-r-details")

@@ -165,6 +165,12 @@ run_r_value <- function(segments) {
   }
   flush()
 
+  if (any(vapply(segments, function(seg) seg$type == "plot", logical(1)))) {
+    out[[length(out) + 1L]] <- ellmer::ContentText(
+      visible_result_note("plot")
+    )
+  }
+
   if (length(out) == 0) {
     return("(The code ran but produced no output.)")
   }
