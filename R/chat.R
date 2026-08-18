@@ -70,10 +70,8 @@ commons_server <- function(id, client, ...) {
   chat
 }
 
-# shinychat reuses one client across saved conversations. Persisting the
-# Commons conversation id prevents a restored history prefix from being
-# recorded again under a new trace identity. Remove this round trip once
-# shinychat records a stable conversation id on each managed response span.
+# shinychat reuses one client across saved conversations, so persist each
+# conversation's trace identity with its history.
 persist_conversation_id <- function(chat, client) {
   chat$history$on_save(function(values) {
     values$commons_conversation_id <- client$get_conversation_id()

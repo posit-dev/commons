@@ -20,13 +20,6 @@ ASIDE_OPEN <- "<shiny-aside"
 ASIDE_CLOSE <- "</shiny-aside>"
 ELEMENT_BODY_CAP <- 16384L
 
-# Chunk-invariant incremental scanner: translate model-authored
-# <commons-citation> elements into server-authored <shiny-aside> markup (or
-# drop them, unverified) while copying everything else through unchanged.
-# State spans the unflushed raw-input tail, the text/citation/discard mode, and
-# whether the next raw character is at line start. Text mode retains only a
-# trailing prefix of a reserved literal; citation mode buffers one bounded
-# element body; discard mode drops invalid reserved markup through its close.
 citation_scanner <- function(corpus = list(), resolve = NULL) {
   if (is.null(resolve)) {
     resolve <- function(parsed) {

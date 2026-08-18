@@ -66,9 +66,7 @@ match_citation <- function(quote, corpus) {
   NULL
 }
 
-# Only the quoted evidence is verified. The explanation remains model-authored.
-# Source identity stays in label/icon for shinychat's popover and accessible
-# name; display="compact" changes only the marker presentation.
+# Only the quote is verified; the explanation remains model-authored.
 render_citation_aside <- function(quote, explanation, corpus) {
   source <- match_citation(quote, corpus)
   decision <- list(

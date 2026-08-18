@@ -134,10 +134,7 @@ shiny-chat-container {
   transform: translateX(-50%) rotate(225deg);
 }
 
-/*
- * Public Shinychat marker API scoped with its compact display hook.
- * Shinychat owns marker structure, placement, and target geometry.
- */
+/* Shinychat owns compact marker structure and placement through this public API. */
 shiny-chat-container [data-shinychat-aside-display="compact"] {
   --shiny-chat-aside-marker-color: var(--bs-link-color);
   --shiny-chat-aside-marker-hover-color: var(--bs-link-hover-color);
@@ -146,12 +143,7 @@ shiny-chat-container [data-shinychat-aside-display="compact"] {
   --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
 }
 
-/*
- * Temporary private Shinychat dependency: Shinychat has no public per-aside
- * tone API, so Commons identifies provenance asides by its own icon URLs.
- * Remove these selectors when <shiny-aside> gains a public tone contract.
- * Browser integration tests cover the trusted and warning presentations.
- */
+/* Temporary bridge until Shinychat provides a public per-aside tone API. */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
   background: #f2fbf5;
