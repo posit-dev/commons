@@ -77,8 +77,8 @@ test_that("recorded decisions replay accepted citations in original order", {
 
   expect_identical(out$remaining, 0L)
   expect_lt(
-    regexpr('label="first source"', out$text, fixed = TRUE)[[1]],
-    regexpr('label="second source"', out$text, fixed = TRUE)[[1]]
+    regexpr("first source", out$text, fixed = TRUE)[[1]],
+    regexpr("second source", out$text, fixed = TRUE)[[1]]
   )
   expect_match(out$text, "First explanation.", fixed = TRUE)
   expect_match(out$text, "Second explanation.", fixed = TRUE)
@@ -136,7 +136,7 @@ test_that("accepted decisions stay aligned after a rejected citation", {
     )),
     1L
   )
-  expect_match(out$text, 'label="second source"', fixed = TRUE)
+  expect_match(out$text, "second source", fixed = TRUE)
   expect_match(out$text, "Accepted second.", fixed = TRUE)
   expect_no_match(out$text, "Rejected first.", fixed = TRUE)
 })
@@ -211,10 +211,10 @@ test_that("a verified citation is rewritten in place", {
   out <- scan_all(text, list(text), corpus)
   expect_match(
     out$text,
-    'Answer sentence.<shiny-aside label="documentation"',
+    "Answer sentence.<shiny-aside>",
     fixed = TRUE
   )
-  expect_match(out$text, '<shiny-aside label="documentation"')
+  expect_match(out$text, 'class="commons-source-heading"', fixed = TRUE)
   expect_false(grepl("commons-citation", out$text))
   expect_identical(
     out$decisions[[1]],
@@ -310,7 +310,7 @@ test_that("adjacent verified citations attach to the preceding text", {
 
   expect_match(
     out$text,
-    'Answer sentence.<shiny-aside label="documentation"',
+    "Answer sentence.<shiny-aside>",
     fixed = TRUE
   )
   expect_match(
@@ -368,7 +368,7 @@ test_that("a citation body exactly at the cap can verify", {
   out <- scan_all(text, list(text), scanner_test_corpus())
 
   expect_identical(out$decisions[[1]]$status, "accepted")
-  expect_match(out$text, '<shiny-aside label="documentation"', fixed = TRUE)
+  expect_match(out$text, "<shiny-aside>", fixed = TRUE)
 })
 
 test_that("a citation body one character over the cap is removed", {

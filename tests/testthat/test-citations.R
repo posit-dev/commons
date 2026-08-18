@@ -29,7 +29,9 @@ test_that("recorded accepted citations reuse live aside presentation", {
   result <- render_recorded_citation_aside(parsed, decision)
 
   expect_identical(result$decision, decision)
-  expect_match(result$html, 'label="forest documentation"', fixed = TRUE)
+  expect_match(result$html, 'class="commons-source-heading"', fixed = TRUE)
+  expect_match(result$html, "forest documentation", fixed = TRUE)
+  expect_no_match(result$html, "label=", fixed = TRUE)
   expect_match(
     result$html,
     "This supports the weighting rule.",
@@ -42,7 +44,7 @@ test_that("recorded accepted citations reuse live aside presentation", {
   )
   expect_match(
     result$html,
-    'icon="commons-icons/citation-prose.svg',
+    'src="commons-icons/citation-prose.svg',
     fixed = TRUE
   )
 })
@@ -60,6 +62,17 @@ test_that("citation asides blockquote every line of multiline evidence", {
     "> Canopy cover is always acre-weighted.\n> Report acreage after filtering.",
     fixed = TRUE
   )
+})
+
+test_that("citation source labels are escaped as HTML text", {
+  html <- citation_aside_html(
+    "Quoted evidence.",
+    "",
+    "docs <sales> & more",
+    "prose"
+  )
+
+  expect_match(html, "docs &lt;sales&gt; &amp; more", fixed = TRUE)
 })
 
 test_that("recorded citations fail closed when evidence or metadata conflicts", {
@@ -375,7 +388,7 @@ test_that("user messages reset citation requests but tool results do not", {
   expect_true(tracker$requested)
 })
 
-test_that("render_citation_aside emits a labeled, iconed aside for a verified quote", {
+test_that("render_citation_aside emits a numbered aside with source details", {
   corpus <- list(list(
     label = "sales table",
     kind = "schema",
@@ -389,10 +402,12 @@ test_that("render_citation_aside emits a labeled, iconed aside for a verified qu
   expect_match(
     out$html,
     paste0(
-      '^<shiny-aside label="sales table" ',
-      'icon="commons-icons/citation-schema.svg'
+      '^<shiny-aside><div class="commons-source-heading">',
+      '<img src="commons-icons/citation-schema.svg" alt="">',
+      '<span>sales table</span>'
     )
   )
+  expect_no_match(out$html, "label=", fixed = TRUE)
   expect_no_match(out$html, "data:image", fixed = TRUE)
   expect_match(
     out$html,
