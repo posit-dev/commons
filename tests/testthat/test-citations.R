@@ -378,6 +378,16 @@ test_that("citation_reminder_text names the commons-citation dialect", {
   )
   expect_match(
     request,
+    "without a blank line before it",
+    fixed = TRUE
+  )
+  expect_match(
+    request,
+    "Leave a blank line after each citation block",
+    fixed = TRUE
+  )
+  expect_no_match(
+    request,
     "Leave a blank line before and after each citation block",
     fixed = TRUE
   )

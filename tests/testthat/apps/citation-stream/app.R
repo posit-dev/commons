@@ -3,12 +3,12 @@ library(commons)
 quote_one <- "Canopy cover is always acre-weighted for reporting."
 quote_two <- "Revenue is recognized at shipment, not at order placement."
 raw_response <- paste0(
-  "Canopy weighting follows the documentation.\n\n",
+  "Canopy weighting follows the documentation.\n",
   "<commons-citation>\n\nSupports the reported weighting.\n\n",
   "> ",
   quote_one,
   "\n\n</commons-citation>\n\n",
-  "Revenue timing follows the table definition.\n\n",
+  "Revenue timing follows the table definition.\n",
   "<commons-citation>\n\nSupports the recognition timing.\n\n",
   "> ",
   quote_two,
@@ -19,12 +19,12 @@ raw_response <- paste0(
   "\n\nAfter citations."
 )
 response_chunks <- c(
-  "Canopy weighting follows the documentation.\n\n<commons-cit",
+  "Canopy weighting follows the documentation.\n<commons-cit",
   paste0(
     "ation>\n\nSupports the reported weighting.\n\n> ",
     quote_one,
     "\n\n</commons-citation>\n\nRevenue timing follows the table definition.",
-    "\n\n<commons-cita"
+    "\n<commons-cita"
   ),
   paste0(
     "tion>\n\nSupports the recognition timing.\n\n> ",

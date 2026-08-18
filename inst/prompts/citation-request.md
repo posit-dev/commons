@@ -24,7 +24,10 @@ Rules:
 - Cite only text that genuinely supports your approach. If nothing you have
   seen supports it, provide no citations.
 - Put each citation immediately after the paragraph or list item whose claim
-  it supports.
-- Leave a blank line before and after each citation block so it remains a
-  separate Markdown block. Citations are rendered as footnotes; do not mention
-  or explain the footnote mechanism in the body of your reply.
+  it supports. Start the opening tag on the next line
+  without a blank line before it.
+- Leave a blank line after each citation block. Citations are rendered as
+  footnotes; do not mention or explain the footnote mechanism in the body of
+  your reply.
+- Do not put a citation inside a fenced code block or Markdown table. Cite the
+  explanatory paragraph or list item that states the supported claim.

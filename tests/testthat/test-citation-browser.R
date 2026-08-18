@@ -65,6 +65,20 @@ test_that("Shiny Chat renders native numbered streamed citations", {
     ),
     TRUE
   )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "Array.from(document.querySelectorAll('.shiny-aside-pill--number'))",
+        ".map((node) => node.closest('p')?.innerText)",
+        ".join('|');"
+      )
+    ),
+    paste(
+      "Canopy weighting follows the documentation.\n1",
+      "Revenue timing follows the table definition.\n2",
+      sep = "|"
+    )
+  )
   app$get_js(
     "document.querySelectorAll('.shiny-aside-pill--number')[0].click();"
   )
