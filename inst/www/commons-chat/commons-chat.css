@@ -162,7 +162,7 @@ shiny-chat-container
 
 shiny-chat-container .shiny-aside-pill--number {
   color: var(--bs-link-color, #007bc2);
-  font-weight: inherit;
+  font-family: var(--bs-font-monospace);
   text-decoration-line: underline;
 }
 

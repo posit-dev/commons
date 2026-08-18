@@ -68,16 +68,24 @@ test_that("Shiny Chat renders native numbered streamed citations", {
   expect_identical(
     app$get_js(
       paste0(
-        "Array.from(document.querySelectorAll('.shiny-aside-pill--number'))",
-        ".every((node) => {",
+        "(() => {",
+        "const code = document.createElement('code');",
+        "document.body.append(code);",
+        "const monospace = getComputedStyle(code).fontFamily;",
+        "code.remove();",
+        "return Array.from(",
+        "document.querySelectorAll('.shiny-aside-pill--number')",
+        ").every((node) => {",
         "const style = getComputedStyle(node);",
         "const count = getComputedStyle(",
         "node.querySelector('.shiny-aside-pill__count')",
         ");",
         "return style.textDecorationLine === 'underline' && ",
-        "style.fontWeight === '400' && ",
+        "style.fontFamily === monospace && ",
+        "style.fontWeight === '600' && ",
         "count.backgroundColor === 'rgba(0, 0, 0, 0)';",
-        "});"
+        "});",
+        "})()"
       )
     ),
     TRUE
