@@ -22,4 +22,4 @@ Rules:
   the quote supports your answer. Put it outside the blockquote.
 - Cite only text that genuinely supports your approach. If nothing you have
   seen supports it, provide no citations.
-- Place each citation immediately after the paragraph it supports.
+- Place each citation immediately after the text it supports.

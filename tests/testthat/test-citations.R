@@ -384,6 +384,12 @@ test_that("citation_reminder_text names the commons-citation dialect", {
   expect_no_match(reminder, "<citation reason", fixed = TRUE)
 })
 
+test_that("citation requests do not prescribe answer length", {
+  request <- citation_request_text()
+
+  expect_no_match(request, "paragraph", fixed = TRUE)
+})
+
 test_that("user messages reset citation requests but tool results do not", {
   agent <- test_agent()
   tracker <- agent$.__enclos_env__$private$citation_request
