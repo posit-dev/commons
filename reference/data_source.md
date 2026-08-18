@@ -107,11 +107,13 @@ reaches the agent three ways:
   [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md),
   the dictionary's prose is indexed for the `search_context` tool.
 
-A table's entry can also declare `definitions`: named, governed SQL
-expressions with declared types that the model applies as `{{name}}`
-tokens in `run_sql` queries, expanded to their trusted SQL before the
-query runs. Definitions are validated against the live source and
-delivered through all three channels above.
+A table's entry can also declare `definitions`: named expressions in the
+[data-dict expression
+language](https://data-dict.tidyverse.org/expressions.html). Commons
+validates their inferred types and references, compiles them for the
+source's SQL backend, and lets the model apply them as `{{name}}` tokens
+in `run_sql` or through `call_metrics()`. Definitions are delivered
+through all three channels above.
 
 ## Trust
 
