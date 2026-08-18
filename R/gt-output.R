@@ -34,26 +34,5 @@ render_gt_table_html <- function(value, call = rlang::caller_env()) {
     }
   )
   rendered <- htmltools::renderTags(tags)
-  attach_html_dependencies(
-    as.character(rendered$html),
-    rendered$dependencies
-  )
-}
-
-attach_html_dependencies <- function(html, dependencies) {
-  if (length(dependencies) == 0) {
-    return(html)
-  }
-  htmltools::attachDependencies(
-    htmltools::HTML(html),
-    dependencies,
-    append = TRUE
-  )
-}
-
-find_html_dependencies <- function(html) {
-  if (!requireNamespace("htmltools", quietly = TRUE)) {
-    return(list())
-  }
-  htmltools::findDependencies(html)
+  as.character(rendered$html)
 }

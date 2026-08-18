@@ -327,10 +327,7 @@ call_measure_tool <- function(
     return(measure_plot_tool_result(td, args, value, advert))
   }
   if (is_gt_table(value)) {
-    data <- tryCatch(
-      recover_gt_table_data(value),
-      error = function(error) NULL
-    )
+    data <- recover_gt_table_data(value)
     advert <- register_handle(handles, data)
     return(measure_gt_table_tool_result(td, args, value, data, advert))
   }
@@ -417,9 +414,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     render_gt_table_html(value),
     error = function(error) error
   )
-  model_content <- if (is.data.frame(data)) {
-    df_to_markdown(data)
-  }
+  model_content <- df_to_markdown(data)
   if (inherits(html, "error")) {
     return(measure_failure_result(
       args,
@@ -443,7 +438,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
   model_note <- paste(model_note, collapse = " ")
   tool_result(
     paste(
-      c(model_note, model_content %||% html, advert),
+      c(model_note, model_content, advert),
       collapse = "\n\n"
     ),
     title = sprintf("Measure: %s", html_escape(title)),
@@ -710,30 +705,22 @@ measure_display_html <- function(args, value) {
 }
 
 measure_display_with_result_html <- function(args, result_html) {
-  html <- sprintf(
+  sprintf(
     "<div class=\"commons-measure-display\">%s%s</div>",
     measure_args_html(args),
     result_html
-  )
-  attach_html_dependencies(
-    html,
-    find_html_dependencies(result_html)
   )
 }
 
 measure_result_html <- function(content, class = NULL) {
   class <- if (is.null(class)) "" else paste0(" ", class)
-  html <- sprintf(
+  sprintf(
     paste0(
       "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
       "<div class=\"commons-measure-result-value%s\">%s</div></div>"
     ),
     class,
     content
-  )
-  attach_html_dependencies(
-    html,
-    find_html_dependencies(content)
   )
 }
 
