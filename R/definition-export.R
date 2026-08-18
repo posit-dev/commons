@@ -25,6 +25,8 @@
 # data-dict either exposes that IR or emits those targets itself. Commons will
 # continue to own source binding, sibling-translation composition, and
 # invocation tokens.
+# A replacement must also expose equivalent grain metadata for call_metrics'
+# mixed row/aggregate guard.
 
 definition_export_spec <- function(raw, call = rlang::caller_env()) {
   raw <- raw %||% list()

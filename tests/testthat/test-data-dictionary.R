@@ -334,7 +334,7 @@ test_that("relative authored table names must be unambiguous", {
   )
 })
 
-test_that("discovered columns cannot shadow governed definitions", {
+test_that("physical column names do not redefine the authored namespace", {
   relations <- list(
     "ANALYTICS.PUBLIC.ORDERS" = list(
       id = DBI::Id(
@@ -347,20 +347,27 @@ test_that("discovered columns cannot shadow governed definitions", {
     )
   )
   dictionary <- new_data_dictionary(list(
-    tables = list(orders = list(definitions = list(
-      order_id = list(expr = "ORDER_ID", type = "number")
-    )))
+    tables = list(orders = list(
+      columns = list(order_id = list(type = "number")),
+      definitions = list(ORDER_ID = list(expr = "order_id + 1"))
+    ))
   ))
 
-  expect_snapshot(
-    catalog_merge_dictionary(
-      dictionary,
-      relations,
-      NULL,
-      function(...) catalog_test_columns(),
-      "upper"
-    ),
-    error = TRUE
+  merged <- catalog_merge_dictionary(
+    dictionary,
+    relations,
+    NULL,
+    function(...) catalog_test_columns(),
+    "upper"
+  )
+
+  expect_named(
+    merged$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions,
+    "ORDER_ID"
+  )
+  expect_equal(
+    merged$definition_bindings$columns$orders,
+    c(order_id = "ORDER_ID")
   )
 })
 

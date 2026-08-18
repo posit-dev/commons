@@ -16,6 +16,8 @@ test_that("call_metrics compiles metrics x dimensions x filters x where", {
   expect_equal(value$region_band, "east")
   expect_equal(value$big_revenue, 1950)
   expect_match(res@extra$display$markdown, "GROUP BY", fixed = TRUE)
+  expect_match(res@value, "Applied governed definitions", fixed = TRUE)
+  expect_match(res@value, "Translation notes", fixed = TRUE)
 })
 
 test_that("call_metrics groups by documented columns too", {
@@ -28,6 +30,18 @@ test_that("call_metrics groups by documented columns too", {
   value <- get_handle(store, "r1")
   expect_setequal(value$region, c("Americas", "APAC", "EMEA"))
   expect_equal(value$big_revenue[value$region == "EMEA"], 1950)
+})
+
+test_that("call_metrics groups by filter definitions", {
+  store <- new_handle_store()
+  metrics_caller(store = store)(
+    metrics = "big_revenue",
+    dimensions = "emea"
+  )
+
+  value <- get_handle(store, "r1")
+  expect_setequal(value$emea, c(FALSE, TRUE))
+  expect_equal(value$big_revenue[value$emea], 1950)
 })
 
 test_that("call_metrics without dimensions returns a grand total", {
@@ -52,14 +66,14 @@ test_that("call_metrics validates names with actionable errors", {
   query <- metrics_caller()
 
   expect_error(query(metrics = "nope"), "No governed metric is named")
-  expect_error(query(metrics = "region_band"), "is a dimension, not a metric")
+  expect_error(query(metrics = "region_band"), "is a derived, not a metric")
   expect_error(
     query(metrics = "big_revenue", dimensions = "nope"),
     "No dimension or documented column"
   )
   expect_error(
     query(metrics = "big_revenue", filters = "region_band"),
-    "is a dimension, not a filter"
+    "is a derived, not a filter"
   )
   expect_error(
     query(
@@ -83,15 +97,16 @@ test_that("metrics in one call must share a table", {
     c(
       "tables:",
       "  - name: sales",
+      "    columns:",
+      "      - name: revenue",
+      "        type: number",
       "    definitions:",
       "      - name: total_revenue",
-      "        type: number(quantity)",
       "        expr: SUM(revenue)",
       "  - name: reps",
       "    definitions:",
       "      - name: n_reps",
-      "        type: number(quantity)",
-      "        expr: COUNT(*)"
+      "        expr: ROW_COUNT()"
     ),
     path
   )
@@ -135,7 +150,7 @@ test_that("board-source metrics query without pre-binding the board", {
     dictionary = local_definitions_dict()
   )
   registry <- definitions_registry(list(sales_db = src))
-  expect_equal(registry_defs(registry)$role[[2]], "metric")
+  expect_equal(registry_defs(registry)$kind[[2]], "metric")
 
   store <- new_handle_store()
   call_metrics_impl(
@@ -173,7 +188,6 @@ test_that("the pool tools follow the agent's composition", {
       sales_db = definitions_source(
         definitions = c(
           "      - name: emea",
-          "        type: boolean",
           "        expr: region = 'EMEA'"
         )
       )
@@ -213,10 +227,60 @@ test_that("search_pool spans measures and definitions", {
   out <- search_pool_text(measures, registry, "revenue in EMEA")
   expect_match(out, "{{big_revenue}} --- metric on table `sales`", fixed = TRUE)
   expect_match(out, "call_metrics", fixed = TRUE)
+  expect_match(out, "Expression: `SUM(CASE", fixed = TRUE)
+  expect_match(out, "Selected SQL(duckdb)", fixed = TRUE)
+  expect_match(out, "Translation notes", fixed = TRUE)
   # A metric hit advertises what it can be sliced by.
-  expect_match(out, "Filters and dimensions on this table", fixed = TRUE)
+  expect_match(
+    out,
+    "Filters and derived definitions on this table",
+    fixed = TRUE
+  )
   expect_match(out, "{{emea}} (filter)", fixed = TRUE)
 
   out <- search_pool_text(measures, registry, "how many orders")
   expect_match(out, "### order_count", fixed = TRUE)
+})
+
+test_that("call_metrics rejects mixed-grain dimensions and filters", {
+  src <- definitions_source(
+    definitions = c(
+      "      - name: total_revenue",
+      "        expr: SUM(revenue)",
+      "      - name: above_minimum",
+      "        expr: revenue > MIN(revenue)"
+    )
+  )
+  registry <- sales_registry(src)
+  records <- registry_defs(registry)
+
+  expect_true(records$mixed_grain[records$name == "above_minimum"])
+  expect_error(
+    call_metrics_impl(
+      registry,
+      list(sales_db = src),
+      NULL,
+      metrics = "total_revenue",
+      dimensions = "above_minimum"
+    ),
+    "Mixed-grain definition"
+  )
+  expect_error(
+    call_metrics_impl(
+      registry,
+      list(sales_db = src),
+      NULL,
+      metrics = "total_revenue",
+      filters = "above_minimum"
+    ),
+    "Mixed-grain filter"
+  )
+
+  expansion <- expand_for_run_sql(
+    registry,
+    list(sales_db = src),
+    NULL,
+    "SELECT {{above_minimum}} FROM sales"
+  )
+  expect_match(expansion$sql, '"revenue" > min("revenue")', fixed = TRUE)
 })

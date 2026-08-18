@@ -97,7 +97,7 @@ tool_call_metrics <- function(private) {
     sprintf(
       paste(
         "Compute trusted calculations from governed metrics, optionally",
-        "grouped and filtered. Metric, dimension, and filter names come from",
+        "grouped and filtered. Metric, grouping, and filter names come from",
         "%s; commons compiles and runs the query."
       ),
       if (pool_searchable(private$registry, private$definitions)) {
@@ -113,7 +113,7 @@ tool_call_metrics <- function(private) {
       ),
       dimensions = ellmer::type_array(
         ellmer::type_string(),
-        "Dimension or documented column names to group by.",
+        "Derived or filter definition names, or documented column names, to group by.",
         required = FALSE
       ),
       filters = ellmer::type_array(
@@ -276,8 +276,9 @@ run_sql_description <- function(definitions, measures = list()) {
     if (!is.null(definitions) && nrow(registry_defs(definitions)) > 0) {
       paste0(
         "Governed definitions can be written as {{name}} tokens anywhere ",
-        "in the SQL; each expands to its trusted expression before the ",
-        "query runs."
+        "in the SQL (or {{table::name}} when qualification is needed); ",
+        "each expands to SQL compiled from its trusted expression before ",
+        "the query runs."
       )
     }
   )

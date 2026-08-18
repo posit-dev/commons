@@ -70,11 +70,12 @@
 #' * When the agent also has a [context_layer()], the dictionary's prose is
 #'   indexed for the `search_context` tool.
 #'
-#' A table's entry can also declare `definitions`: named, governed SQL
-#' expressions with declared types that the model applies as `{{name}}`
-#' tokens in `run_sql` queries, expanded to their trusted SQL before the
-#' query runs. Definitions are validated against the live source and
-#' delivered through all three channels above.
+#' A table's entry can also declare `definitions`: named expressions in the
+#' [data-dict expression language](https://data-dict.tidyverse.org/expressions.html).
+#' Commons validates their inferred types and references, compiles them for
+#' the source's SQL backend, and lets the model apply them as `{{name}}`
+#' tokens in `run_sql` or through `call_metrics()`. Definitions are delivered
+#' through all three channels above.
 #'
 #' @section Trust:
 #' The `run_sql` tool runs only read-only `SELECT` queries; statements that
@@ -328,7 +329,7 @@ new_data_source <- function(
     )
   }
 
-  structure(
+  source <- structure(
     list(
       con = con,
       tables = tables,
@@ -341,6 +342,7 @@ new_data_source <- function(
     ),
     class = "commons_data_source"
   )
+  definition_compile_data_source(source)
 }
 
 # Pick the data source a SQL tool call runs against. With one source no

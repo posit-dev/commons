@@ -13,6 +13,26 @@ definition_compile_source <- function(
   )
 }
 
+definition_compile_data_source <- function(
+  source,
+  call = rlang::caller_env()
+) {
+  # The export retains authored names after a warehouse catalog relabels tables.
+  export <- attr(source$dictionary, "definition_export", exact = TRUE)
+  if (is.null(export)) {
+    return(source)
+  }
+  compiled <- definition_bind_export(export, source, call = call)
+  dictionary <- source$dictionary
+  for (table in compiled$tables) {
+    definitions <- table$definitions
+    names(definitions) <- vapply(definitions, `[[`, character(1), "name")
+    dictionary$tables[[table$name]]$definitions <- definitions
+  }
+  source$dictionary <- dictionary
+  source
+}
+
 definition_bind_export <- function(
   export,
   source,

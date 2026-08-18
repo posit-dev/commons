@@ -16,7 +16,7 @@ call_metrics_impl <- function(
   label <- source_name %||% rlang::names2(sources)[[1]]
   defs <- registry_defs(registry, label)
 
-  metric_defs <- resolve_pool_names(metrics, defs, role = "metric")
+  metric_defs <- resolve_pool_names(metrics, defs, kind = "metric")
   tables <- unique(metric_defs$table)
   if (length(tables) > 1) {
     cli::cli_abort(
@@ -37,9 +37,14 @@ call_metrics_impl <- function(
     function(name) dimension_sql(name, on_table, columns, con),
     character(1)
   )
-  filter_defs <- resolve_pool_names(filters, on_table, role = "filter")
+  filter_defs <- resolve_pool_names(filters, on_table, kind = "filter")
+  if (any(filter_defs$mixed_grain)) {
+    cli::cli_abort(
+      "Mixed-grain filter{?s} {.val {filter_defs$name[filter_defs$mixed_grain]}} cannot be applied by {.fn call_metrics}; use the definition in {.fn run_sql}."
+    )
+  }
   conditions <- c(
-    sprintf("(%s)", filter_defs$expanded),
+    sprintf("(%s)", filter_defs$sql),
     vapply(
       normalize_where(where),
       function(triple) compile_where_triple(triple, columns, con),
@@ -51,11 +56,16 @@ call_metrics_impl <- function(
     sprintf("%s AS %s", dims, DBI::dbQuoteIdentifier(con, names(dims))),
     sprintf(
       "(%s) AS %s",
-      metric_defs$expanded,
+      metric_defs$sql,
       DBI::dbQuoteIdentifier(con, metric_defs$name)
     )
   )
-  sql <- sprintf("SELECT %s FROM %s", paste(select, collapse = ", "), id)
+  # Data-dict constants are metrics; DISTINCT keeps an ungrouped constant scalar.
+  sql <- sprintf(
+    "SELECT DISTINCT %s FROM %s",
+    paste(select, collapse = ", "),
+    id
+  )
   if (length(conditions)) {
     sql <- sprintf("%s WHERE %s", sql, paste(conditions, collapse = " AND "))
   }
@@ -65,13 +75,19 @@ call_metrics_impl <- function(
 
   result <- source_query(source, sql)
   advert <- register_handle(handles, result)
+  dimension_defs <- on_table[
+    match(dim_names, on_table$name, nomatch = 0L),
+  ]
+  applied <- rbind(metric_defs, dimension_defs, filter_defs)
+  applied <- applied[!duplicated(applied[c("name", "table", "source")]), ]
+  note <- applied_definitions_text(applied)
   args <- drop_nulls(list(
     metrics = metrics,
     dimensions = dimensions,
     filters = filters
   ))
   tool_result(
-    paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
+    paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = sprintf(
       "Metrics: %s%s",
       html_escape(paste(metrics, collapse = ", ")),
@@ -86,7 +102,7 @@ call_metrics_impl <- function(
 }
 
 registry_has_metrics <- function(registry) {
-  any(registry$defs$role == "metric")
+  any(registry$defs$kind == "metric")
 }
 
 # The prompt teaches `{{name}}` for SQL, so models sometimes pass the
@@ -95,54 +111,82 @@ strip_token_braces <- function(name) {
   gsub("^\\{\\{\\s*|\\s*\\}\\}$", "", trimws(name))
 }
 
-resolve_pool_names <- function(names, defs, role) {
+resolve_pool_names <- function(names, defs, kind) {
   out <- defs[0, ]
   for (name in strip_token_braces(names %||% character())) {
-    out <- rbind(out, resolve_pool_name(name, defs, role))
+    out <- rbind(out, resolve_pool_name(name, defs, kind))
   }
   out
 }
 
-resolve_pool_name <- function(name, defs, role) {
-  named <- defs[defs$name == name, ]
-  matched <- named[which(named$role == role), ]
-  if (nrow(matched)) {
+resolve_pool_name <- function(name, defs, kind) {
+  named <- pool_name_candidates(name, defs)
+  matched <- named[which(named$kind == kind), ]
+  if (nrow(matched) == 1L) {
     return(matched[1, ])
+  }
+  if (nrow(matched) > 1L) {
+    qualified <- sprintf("{{%s::%s}}", matched$table, matched$name)
+    cli::cli_abort(
+      c(
+        "Governed {kind} name {.val {name}} is ambiguous.",
+        i = "Qualify it as {.or {.code {qualified}}}."
+      )
+    )
   }
   if (nrow(named)) {
     cli::cli_abort(
-      "{.val {name}} is a {named$role[[1]]}, not a {role}; apply it as
+      "{.val {name}} is a {named$kind[[1]]}, not a {kind}; apply it as
        {.code {{{{{name}}}}}} in SQL instead."
     )
   }
-  available <- defs$name[which(defs$role == role)]
+  available <- defs$name[which(defs$kind == kind)]
   cli::cli_abort(
     c(
-      "No governed {role} is named {.val {name}}.",
-      i = "Available {role}s: {.val {available}}."
+      "No governed {kind} is named {.val {name}}.",
+      i = "Available {kind}s: {.val {available}}."
     )
   )
+}
+
+pool_name_candidates <- function(name, defs) {
+  separator <- regexpr("::", name, fixed = TRUE)[[1]]
+  if (separator > 0L) {
+    table <- substr(name, 1L, separator - 1L)
+    definition <- substr(name, separator + 2L, nchar(name))
+    return(defs[defs$table == table & defs$name == definition, ])
+  }
+  defs[defs$name == name, ]
 }
 
 dimension_sql <- function(name, defs, columns, con) {
   named <- defs[defs$name == name, ]
   if (nrow(named)) {
-    if (!identical(named$role[[1]], "dimension")) {
+    if (!named$kind[[1]] %in% c("derived", "filter")) {
       cli::cli_abort(
-        "{.val {name}} is a {named$role[[1]]} and can't be grouped by."
+        "{.val {name}} is a {named$kind[[1]]} and can't be grouped by."
       )
     }
-    return(sprintf("(%s)", named$expanded[[1]]))
+    if (named$mixed_grain[[1]]) {
+      cli::cli_abort(
+        "Mixed-grain definition {.val {name}} cannot be grouped by with {.fn call_metrics}; use it in {.fn run_sql}."
+      )
+    }
+    return(sprintf("(%s)", named$sql[[1]]))
   }
   if (name %in% columns) {
     return(as.character(DBI::dbQuoteIdentifier(con, name)))
   }
-  dimensions <- defs$name[which(defs$role == "dimension")]
+  dimensions <- defs$name[
+    which(defs$kind %in% c("derived", "filter") & !defs$mixed_grain)
+  ]
   cli::cli_abort(
     c(
       "No dimension or documented column is named {.val {name}}.",
       i = "Documented columns: {.val {columns}}.",
-      i = if (length(dimensions)) "Governed dimensions: {.val {dimensions}}."
+      i = if (length(dimensions)) {
+        "Governed row definitions: {.val {dimensions}}."
+      }
     )
   )
 }
@@ -226,7 +270,7 @@ search_pool_text <- function(
     paste(
       defs$name,
       defs$table,
-      defs$role,
+      defs$kind,
       blank_na(defs$description),
       blank_na(defs$details)
     )
@@ -254,11 +298,11 @@ search_pool_text <- function(
 }
 
 definition_pool_text <- function(def, defs) {
-  role <- def$role
+  kind <- def$kind
   invoke <- switch(
-    role,
+    kind,
     filter = sprintf(
-      "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter.",
+      "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
       def$name
     ),
     metric = sprintf(
@@ -274,16 +318,21 @@ definition_pool_text <- function(def, defs) {
   )
 
   siblings <- NULL
-  if (identical(role, "metric")) {
-    same_table <- defs[defs$table == def$table & defs$name != def$name, ]
+  if (identical(kind, "metric")) {
+    same_table <- defs[
+      defs$table == def$table &
+        defs$name != def$name &
+        defs$kind %in% c("filter", "derived") &
+        !defs$mixed_grain,
+    ]
     if (nrow(same_table)) {
       items <- sprintf(
         "{{%s}} (%s)",
         same_table$name,
-        same_table$role
+        same_table$kind
       )
       siblings <- sprintf(
-        "Filters and dimensions on this table: %s.",
+        "Filters and derived definitions on this table: %s.",
         paste(items, collapse = ", ")
       )
     }
@@ -294,10 +343,22 @@ definition_pool_text <- function(def, defs) {
       sprintf(
         "### {{%s}} --- %s on table `%s`\n%s",
         def$name,
-        role,
+        kind,
         def$table,
         prose_detail(def$description, def$details)
       ),
+      sprintf("Expression: `%s`.", flatten_inline(def$expression)),
+      sprintf(
+        "Selected %s: `(%s)`.",
+        def$target,
+        flatten_inline(def$sql)
+      ),
+      if (length(def$notes[[1]])) {
+        sprintf(
+          "Translation notes: %s",
+          paste(def$notes[[1]], collapse = " ")
+        )
+      },
       invoke,
       siblings
     ),

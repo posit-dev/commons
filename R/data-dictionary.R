@@ -23,17 +23,22 @@ as_data_dictionary <- function(x, call = rlang::caller_env()) {
 
 new_data_dictionary <- function(raw, call = rlang::caller_env()) {
   raw <- raw %||% list()
-  structure(
+  tables <- normalize_dictionary_tables(raw$tables, call = call)
+  definition_export <- definition_export_dictionary(tables, call = call)
+  tables <- dictionary_attach_definition_export(tables, definition_export)
+  dictionary <- structure(
     list(
       name = prose_field(raw$name),
       description = prose_field(raw$description),
       details = prose_field(raw$details),
-      tables = normalize_dictionary_tables(raw$tables, call = call),
+      tables = tables,
       relationships = normalize_dictionary_relationships(raw$relationships),
       glossary = normalize_dictionary_glossary(raw$glossary)
     ),
     class = "commons_data_dictionary"
   )
+  attr(dictionary, "definition_export") <- definition_export
+  dictionary
 }
 
 normalize_dictionary_tables <- function(tables, call = rlang::caller_env()) {
@@ -41,10 +46,9 @@ normalize_dictionary_tables <- function(tables, call = rlang::caller_env()) {
   out <- lapply(names(tables), function(name) {
     table <- as.list(tables[[name]])
     table$columns <- key_by_name(table$columns, "column", call = call)
-    table$definitions <- normalize_dictionary_definitions(
+    table$definitions <- key_by_name(
       table$definitions,
-      table = name,
-      columns = names(table$columns),
+      "definition",
       call = call
     )
     table
@@ -238,14 +242,21 @@ dictionary_range_fact <- function(range) {
   if (length(range) < 2) {
     return(NULL)
   }
-  sprintf("Range: %s to %s.", as.character(range[[1]]), as.character(range[[2]]))
+  sprintf(
+    "Range: %s to %s.",
+    as.character(range[[1]]),
+    as.character(range[[2]])
+  )
 }
 
 dictionary_examples_fact <- function(examples) {
   if (is.null(examples)) {
     return(NULL)
   }
-  sprintf("Examples: %s.", paste(as.character(unlist(examples)), collapse = ", "))
+  sprintf(
+    "Examples: %s.",
+    paste(as.character(unlist(examples)), collapse = ", ")
+  )
 }
 
 dictionary_relationships_text <- function(dictionary, table) {
@@ -266,7 +277,10 @@ dictionary_relationships_text <- function(dictionary, table) {
     relationships[mentions],
     function(rel) {
       head <- paste(
-        c(rel$join, if (!is.null(rel$cardinality)) sprintf("(%s)", rel$cardinality)),
+        c(
+          rel$join,
+          if (!is.null(rel$cardinality)) sprintf("(%s)", rel$cardinality)
+        ),
         collapse = " "
       )
       desc <- flatten_inline(rel$description %||% "")
