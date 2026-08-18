@@ -1,11 +1,7 @@
-test_that("invalid plot aspect ratios warn and use the default", {
-  expect_snapshot(plot_dimensions("wide", 300L))
-})
-
-test_that("plot dimensions keep the longest side for portrait ratios", {
+test_that("plot dimensions use btw's defaults", {
   expect_equal(
-    plot_dimensions("2:3", 300L),
-    list(width = 200L, height = 300L)
+    plot_dimensions(),
+    list(width = 768L, height = 512L)
   )
 })
 

@@ -46,10 +46,6 @@ test_that("run_r loads integer64 methods for stored handles", {
 })
 
 test_that("run_r returns plots as images and opens the display", {
-  withr::local_options(
-    commons.plot_aspect_ratio = "2:1",
-    commons.plot_size = 600L
-  )
   worker <- local_worker()
   store <- new_handle_store()
   register_handle(store, test_sales())
@@ -63,7 +59,7 @@ test_that("run_r returns plots as images and opens the display", {
   expect_length(images, 1)
   expect_equal(
     png_dimensions_from_base64(images[[1]]@data),
-    c(width = 600, height = 300)
+    c(width = 768, height = 512)
   )
   notes <- Filter(
     \(x) S7::S7_inherits(x, ellmer::ContentText),

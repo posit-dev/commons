@@ -70,10 +70,6 @@ test_that("call_measure_tool registers scalar output as a handle", {
 })
 
 test_that("call_measure_tool shows ggplot results to the model and user", {
-  withr::local_options(
-    commons.plot_aspect_ratio = "2:1",
-    commons.plot_size = 320L
-  )
   plot <- test_ggplot()
   registry <- list(
     plot = measure(
@@ -104,7 +100,7 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
   )))
   expect_equal(
     png_dimensions_from_base64(images[[1]]@data),
-    c(width = 320, height = 160)
+    c(width = 768, height = 512)
   )
   expect_match(
     res@extra$display$html,

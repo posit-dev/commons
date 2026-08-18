@@ -69,7 +69,7 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
           rlang::set_names(new_ids),
           function(id) get_handle(handles, id)
         )
-        dims <- configured_plot_dimensions()
+        dims <- plot_dimensions()
         # callr rebinds a transferred function's environment to the worker's
         # global env, so the entry point must be namespace-qualified.
         worker$rs$call(
