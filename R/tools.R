@@ -410,17 +410,17 @@ measure_failure_result <- function(
 
 measure_gt_table_tool_result <- function(td, args, value, data, advert) {
   title <- tool_title(td)
-  html <- tryCatch(
-    render_gt_table_html(value),
+  rendered <- tryCatch(
+    render_gt_table(value),
     error = function(error) error
   )
   model_content <- df_to_markdown(data)
-  if (inherits(html, "error")) {
+  if (inherits(rendered, "error")) {
     return(measure_failure_result(
       args,
       advert,
       title,
-      conditionMessage(html),
+      conditionMessage(rendered),
       "a gt table",
       "commons-measure-gt-table-error",
       model_content = model_content
@@ -436,6 +436,17 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     }
   )
   model_note <- paste(model_note, collapse = " ")
+  display_html <- measure_display_with_result_html(
+    args,
+    measure_result_html(rendered$html, "commons-measure-gt-table")
+  )
+  if (length(rendered$dependencies) > 0) {
+    display_html <- htmltools::attachDependencies(
+      htmltools::HTML(display_html),
+      rendered$dependencies,
+      append = TRUE
+    )
+  }
   tool_result(
     paste(
       c(model_note, model_content, advert),
@@ -443,10 +454,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     ),
     title = sprintf("Measure: %s", html_escape(title)),
     icon = maybe_icon("shield-check"),
-    html = measure_display_with_result_html(
-      args,
-      measure_result_html(html, "commons-measure-gt-table")
-    ),
+    html = display_html,
     tag = "A",
     open = TRUE,
     show_tag = FALSE

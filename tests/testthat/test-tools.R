@@ -111,7 +111,7 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
 test_that("call_measure_tool shows gt tables to the model and user", {
   skip_if_not_installed("gt")
   table_data <- data.frame(term = "Headache", count = 7)
-  table <- gt::gt(table_data)
+  table <- gt::opt_interactive(gt::gt(table_data))
   registry <- list(
     table = measure(
       "table",
@@ -136,7 +136,7 @@ test_that("call_measure_tool shows gt tables to the model and user", {
   expect_match(res@value, "Headache", fixed = TRUE)
   expect_no_match(res@value, "<table>", fixed = TRUE)
   expect_match(res@extra$display$html, "Headache", fixed = TRUE)
-  expect_match(res@extra$display$html, "<table", fixed = TRUE)
+  expect_gt(length(htmltools::findDependencies(res@extra$display$html)), 0)
   expect_identical(get_handle(store, "r1"), table_data)
   expect_identical(res@extra$display$open, TRUE)
 })
@@ -146,7 +146,7 @@ test_that("call_measure_tool keeps recoverable table data when HTML conversion f
   table_data <- data.frame(term = "Headache", count = 7)
   table <- gt::gt(table_data)
   local_mocked_bindings(
-    render_gt_table_html = function(...) stop("HTML conversion broke")
+    render_gt_table = function(...) stop("HTML conversion broke")
   )
   registry <- list(
     table = measure(

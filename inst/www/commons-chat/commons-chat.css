@@ -322,7 +322,8 @@ shiny-chat-container .shiny-aside-popover__body em {
   white-space: normal;
 }
 
-.commons-measure-gt-table-error {
+.commons-measure-gt-table-error,
+.commons-measure-plot-error {
   color: var(--bs-secondary-color, #6c757d);
   white-space: normal;
 }
@@ -333,11 +334,6 @@ shiny-chat-container .shiny-aside-popover__body em {
   display: block;
   height: auto;
   max-width: min(100%, 34rem);
-  white-space: normal;
-}
-
-.commons-measure-plot-error {
-  color: var(--bs-secondary-color, #6c757d);
   white-space: normal;
 }
 

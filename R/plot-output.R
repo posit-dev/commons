@@ -4,15 +4,18 @@ is_ggplot <- function(x) {
 
 render_plot_image <- function(plot, alt) {
   dims <- plot_dimensions()
-  base64 <- render_plot_png_base64(plot, dims$width, dims$height)
+  path <- tempfile("commons-plot-", fileext = ".png")
+  on.exit(unlink(path), add = TRUE)
+  render_plot_png(plot, path, dims$width, dims$height)
+  model <- ellmer::content_image_file(path, resize = "none")
   list(
-    model = ellmer::ContentImageInline(type = "image/png", data = base64),
+    model = model,
     html = sprintf(
       paste0(
         "<img class=\"commons-measure-plot\" ",
         "src=\"data:image/png;base64,%s\" alt=\"%s\"/>"
       ),
-      base64,
+      model@data,
       html_escape(alt)
     )
   )
@@ -22,15 +25,13 @@ plot_dimensions <- function() {
   list(width = 768L, height = 512L)
 }
 
-render_plot_png_base64 <- function(
+render_plot_png <- function(
   plot,
+  path,
   width,
   height,
   call = rlang::caller_env()
 ) {
-  path <- tempfile("commons-plot-", fileext = ".png")
-  on.exit(unlink(path), add = TRUE)
-
   if (requireNamespace("ragg", quietly = TRUE)) {
     ragg::agg_png(path, width = width, height = height, scaling = 1.5)
   } else {
@@ -48,7 +49,4 @@ render_plot_png_base64 <- function(
       call = call
     )
   }
-
-  raw <- readBin(path, "raw", size)
-  gsub("[[:space:]]+", "", jsonlite::base64_enc(raw))
 }
