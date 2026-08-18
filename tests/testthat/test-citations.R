@@ -51,7 +51,7 @@ test_that("recorded accepted citations reuse live aside presentation", {
   )
   expect_match(
     result$html,
-    'src="commons-icons/citation-prose.svg',
+    'icon="commons-icons/citation-prose.svg',
     fixed = TRUE
   )
 })

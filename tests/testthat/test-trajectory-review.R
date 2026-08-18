@@ -261,8 +261,11 @@ test_that("trajectory citation replay crosses adjacent ContentText values", {
   rendered <- paste(vapply(answer, format, character(1)), collapse = "\n")
 
   expect_match(rendered, "Before.", fixed = TRUE)
-  expect_match(rendered, 'class="commons-source-heading"', fixed = TRUE)
-  expect_match(rendered, "documentation", fixed = TRUE)
+  expect_match(
+    rendered,
+    '<shiny-aside display="compact" label="documentation"',
+    fixed = TRUE
+  )
   expect_match(rendered, "After.", fixed = TRUE)
   expect_no_match(rendered, "commons-citation", fixed = TRUE)
 })
