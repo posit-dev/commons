@@ -18,6 +18,23 @@ test_that("dictionary definitions use landed export records", {
   )
 })
 
+test_that("dictionary normalization attaches export metadata before binding", {
+  dictionary <- data_dictionary(local_definitions_dict())
+  definition <- dictionary$tables$sales$definitions$big_revenue
+
+  expect_equal(definition$kind, "metric")
+  expect_equal(definition$type, "number")
+  expect_equal(
+    definition$expression,
+    "SUM(CASE WHEN emea AND revenue > 600 THEN revenue ELSE 0 END)"
+  )
+  expect_equal(definition$definitions, "emea")
+  expect_equal(definition$translations[[1]]$target, "SQL(duckdb)")
+  expect_null(definition$target)
+  expect_null(definition$sql)
+  expect_length(attr(dictionary, "definition_export")$tables, 1L)
+})
+
 test_that("definition envelopes infer types and accept general names", {
   src <- definitions_source(
     definitions = c(

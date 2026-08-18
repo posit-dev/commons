@@ -349,7 +349,10 @@ test_that("physical column names do not redefine the authored namespace", {
   dictionary <- new_data_dictionary(list(
     tables = list(orders = list(
       columns = list(order_id = list(type = "number")),
-      definitions = list(ORDER_ID = list(expr = "order_id + 1"))
+      definitions = list(
+        ORDER_ID = list(expr = "1"),
+        combined = list(expr = "order_id + ORDER_ID")
+      )
     ))
   ))
 
@@ -363,11 +366,28 @@ test_that("physical column names do not redefine the authored namespace", {
 
   expect_named(
     merged$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions,
-    "ORDER_ID"
+    c("ORDER_ID", "combined")
   )
   expect_equal(
     merged$definition_bindings$columns$orders,
     c(order_id = "ORDER_ID")
+  )
+
+  local_mocked_bindings(
+    is_snowflake_connection = function(con) TRUE,
+    is_databricks_connection = function(con) FALSE
+  )
+  con <- structure(list(), class = c("mock_connection", "DBIConnection"))
+  source <- new_data_source(
+    con,
+    tables = "ANALYTICS.PUBLIC.ORDERS",
+    owned = FALSE,
+    dictionary = merged$dictionary,
+    definition_bindings = merged$definition_bindings
+  )
+  expect_equal(
+    source$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions$combined$sql,
+    '"ORDER_ID" + (1)'
   )
 })
 
