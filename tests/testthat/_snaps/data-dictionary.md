@@ -33,12 +33,3 @@
       ! Authored table "orders" matches more than one selected relation: "ANALYTICS.PUBLIC.ORDERS" and "ANALYTICS.STAGING.ORDERS".
       i Use its fully qualified name in the data dictionary.
 
-# discovered columns cannot shadow governed definitions
-
-    Code
-      catalog_merge_dictionary(dictionary, relations, NULL, function(...)
-        catalog_test_columns(), "upper")
-    Condition
-      Error:
-      ! Definitions on table "ANALYTICS.PUBLIC.ORDERS" must not share a name with its discovered columns: "order_id".
-

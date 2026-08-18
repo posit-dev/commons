@@ -87,11 +87,12 @@ while warehouse column types remain authoritative.
 indexed for the \code{search_context} tool.
 }
 
-A table's entry can also declare \code{definitions}: named, governed SQL
-expressions with declared types that the model applies as \code{{{name}}}
-tokens in \code{run_sql} queries, expanded to their trusted SQL before the
-query runs. Definitions are validated against the live source and
-delivered through all three channels above.
+A table's entry can also declare \code{definitions}: named expressions in the
+\href{https://data-dict.tidyverse.org/expressions.html}{data-dict expression language}.
+Commons validates their inferred types and references, compiles them for
+the source's SQL backend, and lets the model apply them as \code{{{name}}}
+tokens in \code{run_sql} or through \code{call_metrics()}. Definitions are delivered
+through all three channels above.
 }
 
 \section{Trust}{

@@ -334,7 +334,7 @@ test_that("relative authored table names must be unambiguous", {
   )
 })
 
-test_that("discovered columns cannot shadow governed definitions", {
+test_that("physical column names do not redefine the authored namespace", {
   relations <- list(
     "ANALYTICS.PUBLIC.ORDERS" = list(
       id = DBI::Id(
@@ -347,20 +347,47 @@ test_that("discovered columns cannot shadow governed definitions", {
     )
   )
   dictionary <- new_data_dictionary(list(
-    tables = list(orders = list(definitions = list(
-      order_id = list(expr = "ORDER_ID", type = "number")
-    )))
+    tables = list(orders = list(
+      columns = list(order_id = list(type = "number")),
+      definitions = list(
+        ORDER_ID = list(expr = "1"),
+        combined = list(expr = "order_id + ORDER_ID")
+      )
+    ))
   ))
 
-  expect_snapshot(
-    catalog_merge_dictionary(
-      dictionary,
-      relations,
-      NULL,
-      function(...) catalog_test_columns(),
-      "upper"
-    ),
-    error = TRUE
+  merged <- catalog_merge_dictionary(
+    dictionary,
+    relations,
+    NULL,
+    function(...) catalog_test_columns(),
+    "upper"
+  )
+
+  expect_named(
+    merged$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions,
+    c("ORDER_ID", "combined")
+  )
+  expect_equal(
+    merged$definition_bindings$columns$orders,
+    c(order_id = "ORDER_ID")
+  )
+
+  local_mocked_bindings(
+    is_snowflake_connection = function(con) TRUE,
+    is_databricks_connection = function(con) FALSE
+  )
+  con <- structure(list(), class = c("mock_connection", "DBIConnection"))
+  source <- new_data_source(
+    con,
+    tables = "ANALYTICS.PUBLIC.ORDERS",
+    owned = FALSE,
+    dictionary = merged$dictionary,
+    definition_bindings = merged$definition_bindings
+  )
+  expect_equal(
+    source$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions$combined$sql,
+    '"ORDER_ID" + (1)'
   )
 })
 

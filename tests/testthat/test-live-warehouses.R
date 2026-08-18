@@ -135,13 +135,14 @@ test_that("live Snowflake rejects an ambiguous relative dictionary table", {
 test_that("live Snowflake executes compiled definition mappings", {
   table <- warehouse_test_table("snowflake")
   con <- local_warehouse_connection("snowflake")
-  source <- data_source(con, tables = table)
-  compiled <- definition_compile_source(
-    warehouse_definition_spec(source$tables[[1]]),
-    source
+  label <- table_id_label(table)
+  dictionary <- new_data_dictionary(warehouse_definition_spec(label))
+  source <- data_source(con, tables = table, dictionary = dictionary)
+  definitions <- source$dictionary$tables[[label]]$definitions
+  expect_equal(
+    vapply(definitions, `[[`, character(1), "target"),
+    rep("SQL(snowflake)", length(definitions))
   )
-  definitions <- compiled$tables[[1]]$definitions
-  names(definitions) <- vapply(definitions, `[[`, character(1), "name")
 
   round_half <- DBI::dbGetQuery(
     con,
@@ -327,13 +328,14 @@ test_that("live Databricks handles quoted relation and column names", {
 test_that("live Databricks executes compiled definition mappings", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
-  source <- data_source(con, tables = table)
-  compiled <- definition_compile_source(
-    warehouse_definition_spec(source$tables[[1]]),
-    source
+  label <- table_id_label(table)
+  dictionary <- new_data_dictionary(warehouse_definition_spec(label))
+  source <- data_source(con, tables = table, dictionary = dictionary)
+  definitions <- source$dictionary$tables[[label]]$definitions
+  expect_equal(
+    vapply(definitions, `[[`, character(1), "target"),
+    rep("SQL(databricks)", length(definitions))
   )
-  definitions <- compiled$tables[[1]]$definitions
-  names(definitions) <- vapply(definitions, `[[`, character(1), "name")
 
   round_half <- DBI::dbGetQuery(
     con,
