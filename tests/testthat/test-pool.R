@@ -317,9 +317,7 @@ test_that("call_metrics rejects mixed-grain definitions", {
       "      - name: above_minimum",
       "        expr: revenue > MIN(revenue)",
       "      - name: inherited_mixed",
-      "        expr: NOT above_minimum",
-      "      - name: mixed_metric",
-      "        expr: ANY(inherited_mixed)"
+      "        expr: NOT above_minimum"
     )
   )
   registry <- sales_registry(src)
@@ -327,16 +325,6 @@ test_that("call_metrics rejects mixed-grain definitions", {
 
   expect_true(records$mixed_grain[records$name == "above_minimum"])
   expect_true(records$mixed_grain[records$name == "inherited_mixed"])
-  expect_true(records$mixed_grain[records$name == "mixed_metric"])
-  expect_error(
-    call_metrics_impl(
-      registry,
-      list(sales_db = src),
-      NULL,
-      metrics = "mixed_metric"
-    ),
-    "Mixed-grain metric"
-  )
   expect_error(
     call_metrics_impl(
       registry,

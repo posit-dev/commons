@@ -19,7 +19,7 @@ call_metrics_impl <- function(
   metric_defs <- resolve_pool_names(metrics, defs, kind = "metric")
   if (any(metric_defs$mixed_grain)) {
     cli::cli_abort(
-      "Mixed-grain metric{?s} {.val {metric_defs$name[metric_defs$mixed_grain]}} cannot be queried by {.fn call_metrics}; use the definition in {.fn run_sql}."
+      "Mixed-grain metric{?s} {.val {metric_defs$name[metric_defs$mixed_grain]}} cannot be queried because the dependency chain requires a subquery rewrite."
     )
   }
   tables <- unique(metric_defs$table)
