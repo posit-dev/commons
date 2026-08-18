@@ -44,6 +44,7 @@ Suggests:
     chromote,
     dbplyr,
     dplyr,
+    gt,
     htmltools,
     odbc,
     otel (>= 0.2.0),

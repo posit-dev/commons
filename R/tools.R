@@ -162,8 +162,8 @@ tool_call_measure <- function(private) {
       "Run trusted calculations returned by",
       "search_pool. `arguments` is a JSON object using exactly the argument",
       "names from search_pool. Prefer a measure's own arguments when they can",
-      "answer the question directly. Returned plot images and richly formatted",
-      "tables are shown directly to the user."
+      "answer the question directly. Returned ggplots and gt tables are shown",
+      "directly to the user."
     ),
     arguments = list(
       name = ellmer::type_string(
@@ -326,36 +326,15 @@ call_measure_tool <- function(
     advert <- register_handle(handles, value)
     return(measure_plot_tool_result(td, args, value, advert))
   }
-  rich <- tryCatch(
-    as_measure_rich_table(value),
-    error = function(error) error
-  )
-  handle_value <- if (inherits(value, "commons_rich_table")) {
-    value$value
-  } else if (inherits(value, "gt_tbl")) {
-    tryCatch(
-      recover_rich_table_data(value),
+  if (is_gt_table(value)) {
+    data <- tryCatch(
+      recover_gt_table_data(value),
       error = function(error) NULL
     )
-  } else {
-    value
+    advert <- register_handle(handles, data)
+    return(measure_gt_table_tool_result(td, args, value, data, advert))
   }
-  advert <- register_handle(handles, handle_value)
-  if (inherits(rich, "error")) {
-    model_content <- recover_rich_table_model_content(handle_value)
-    return(measure_failure_result(
-      args,
-      advert,
-      tool_title(td),
-      conditionMessage(rich),
-      "a richly formatted table",
-      "commons-measure-rich-table-error",
-      model_content = model_content
-    ))
-  }
-  if (!is.null(rich)) {
-    return(measure_rich_table_tool_result(td, args, rich, advert))
-  }
+  advert <- register_handle(handles, value)
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = sprintf("Measure: %s", html_escape(tool_title(td))),
@@ -429,41 +408,48 @@ measure_failure_result <- function(
   )
 }
 
-recover_rich_table_model_content <- function(value) {
-  data <- tryCatch(
-    recover_rich_table_data(value),
-    error = function(error) NULL
-  )
-  if (!is.data.frame(data)) {
-    return(NULL)
-  }
-  df_to_markdown(data)
-}
-
-measure_rich_table_tool_result <- function(td, args, value, advert) {
+measure_gt_table_tool_result <- function(td, args, value, data, advert) {
   title <- tool_title(td)
+  html <- tryCatch(
+    render_gt_table_html(value),
+    error = function(error) error
+  )
+  model_content <- if (is.data.frame(data)) {
+    df_to_markdown(data)
+  }
+  if (inherits(html, "error")) {
+    return(measure_failure_result(
+      args,
+      advert,
+      title,
+      conditionMessage(html),
+      "a gt table",
+      "commons-measure-gt-table-error",
+      model_content = model_content
+    ))
+  }
   model_note <- c(
-    "A richly formatted version of this table is already visible to the user.",
+    "This gt table is already visible to the user.",
     "Do not reproduce or reformat its rows or columns in your response; summarize or",
     "interpret the relevant results in words instead.",
     if (!is.null(advert)) {
       paste(
         "For calculations, use `run_r` with the table handle below instead of",
-        "parsing values from the HTML."
+        "parsing values from the rendered table."
       )
     }
   )
   model_note <- paste(model_note, collapse = " ")
   tool_result(
     paste(
-      c(model_note, value$model_content, advert),
+      c(model_note, model_content %||% html, advert),
       collapse = "\n\n"
     ),
     title = sprintf("Measure: %s", html_escape(title)),
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_result_html(value$html, "commons-measure-rich-table")
+      measure_result_html(html, "commons-measure-gt-table")
     ),
     tag = "A",
     open = TRUE,

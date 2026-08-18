@@ -316,13 +316,13 @@ shiny-chat-container .shiny-aside-popover__body em {
   background: var(--bs-tertiary-bg, #f3f4f6);
 }
 
-.commons-measure-rich-table {
+.commons-measure-gt-table {
   max-width: 100%;
   overflow-x: auto;
   white-space: normal;
 }
 
-.commons-measure-rich-table-error {
+.commons-measure-gt-table-error {
   color: var(--bs-secondary-color, #6c757d);
   white-space: normal;
 }

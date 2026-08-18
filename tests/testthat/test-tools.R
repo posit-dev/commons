@@ -66,6 +66,7 @@ test_that("call_measure_tool registers scalar output as a handle", {
 
   expect_match(res@value, "Available to `run_r` as `r1`", fixed = TRUE)
   expect_equal(get_handle(store, "r1"), 6L)
+  expect_identical(res@extra$display$open, FALSE)
 })
 
 test_that("call_measure_tool shows ggplot results to the model and user", {
@@ -102,22 +103,22 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
     fixed = TRUE
   )
   expect_s3_class(get_handle(store, "r1"), "ggplot")
+  expect_identical(res@extra$display$open, TRUE)
 })
 
-test_that("call_measure_tool shows rich tables to the model and user", {
-  skip_if_not_installed("htmltools")
-  table <- structure(list(name = "adverse events"), class = "custom_table")
-  table_html <- htmltools::tags$table(
-    htmltools::tags$tr(
-      htmltools::tags$td("Headache"),
-      htmltools::tags$td("7")
-    )
+test_that("call_measure_tool shows gt tables to the model and user", {
+  table <- structure(list(name = "adverse events"), class = "gt_tbl")
+  table_data <- data.frame(term = "Headache", count = 7)
+  table_html <- "<table><tr><td>Headache</td><td>7</td></tr></table>"
+  local_mocked_bindings(
+    recover_gt_table_data = function(...) table_data,
+    render_gt_table_html = function(...) table_html
   )
   registry <- list(
     table = measure(
       "table",
       "Summarize adverse events.",
-      function() rich_table(table, html = table_html)
+      function() table
     )
   )
   store <- new_handle_store()
@@ -126,7 +127,7 @@ test_that("call_measure_tool shows rich tables to the model and user", {
 
   expect_match(
     res@value,
-    "A richly formatted version of this table is already visible to the user",
+    "This gt table is already visible to the user",
     fixed = TRUE
   )
   expect_match(
@@ -135,16 +136,17 @@ test_that("call_measure_tool shows rich tables to the model and user", {
     fixed = TRUE
   )
   expect_match(res@value, "Headache", fixed = TRUE)
-  expect_match(res@value, "<table>", fixed = TRUE)
+  expect_no_match(res@value, "<table>", fixed = TRUE)
   expect_match(
     res@extra$display$html,
     "<td>Headache</td>",
     fixed = TRUE
   )
-  expect_identical(get_handle(store, "r1"), table)
+  expect_identical(get_handle(store, "r1"), table_data)
+  expect_identical(res@extra$display$open, TRUE)
 })
 
-test_that("call_measure_tool preserves rich table HTML dependencies", {
+test_that("call_measure_tool preserves gt table HTML dependencies", {
   skip_if_not_installed("htmltools")
   dependency <- htmltools::htmlDependency(
     "table-widget",
@@ -153,14 +155,19 @@ test_that("call_measure_tool preserves rich table HTML dependencies", {
     script = "table-widget.js"
   )
   table_html <- htmltools::attachDependencies(
-    htmltools::tags$div(class = "table-widget"),
+    htmltools::HTML("<div class=\"table-widget\"></div>"),
     dependency
+  )
+  table <- structure(list(name = "adverse events"), class = "gt_tbl")
+  local_mocked_bindings(
+    recover_gt_table_data = function(...) data.frame(),
+    render_gt_table_html = function(...) table_html
   )
   registry <- list(
     table = measure(
       "table",
       "Summarize adverse events.",
-      function() rich_table("table", html = table_html)
+      function() table
     )
   )
 
@@ -174,8 +181,8 @@ test_that("call_measure_tool registers recovered data for automatic gt tables", 
   table <- structure(list(name = "adverse events"), class = "gt_tbl")
   table_data <- data.frame(term = "Headache", value = 7)
   local_mocked_bindings(
-    recover_rich_table_data = function(...) table_data,
-    rich_table_html = function(...) "<table></table>"
+    recover_gt_table_data = function(...) table_data,
+    render_gt_table_html = function(...) "<table></table>"
   )
   registry <- list(
     table = measure(
@@ -191,27 +198,32 @@ test_that("call_measure_tool registers recovered data for automatic gt tables", 
   expect_identical(get_handle(store, "r1"), table_data)
 })
 
-test_that("rich tables do not advertise an unavailable run_r handle", {
-  table <- structure(list(name = "adverse events"), class = "custom_table")
+test_that("gt tables do not advertise an unavailable run_r handle", {
+  table <- structure(list(name = "adverse events"), class = "gt_tbl")
+  local_mocked_bindings(
+    recover_gt_table_data = function(...) stop("data recovery broke"),
+    render_gt_table_html = function(...) "<table></table>"
+  )
   registry <- list(
     table = measure(
       "table",
       "Summarize adverse events.",
-      function() rich_table(table, html = "<table></table>")
+      function() table
     )
   )
 
   res <- call_measure_tool(registry, "table", "{}")
 
   expect_no_match(res@value, "For calculations", fixed = TRUE)
+  expect_identical(res@extra$display$open, TRUE)
 })
 
 test_that("call_measure_tool keeps recoverable table data when HTML conversion fails", {
   table <- structure(list(name = "adverse events"), class = "gt_tbl")
   table_data <- data.frame(term = "Headache", count = 7)
   local_mocked_bindings(
-    recover_rich_table_data = function(...) table_data,
-    rich_table_html = function(...) stop("HTML conversion broke")
+    recover_gt_table_data = function(...) table_data,
+    render_gt_table_html = function(...) stop("HTML conversion broke")
   )
   registry <- list(
     table = measure(
@@ -226,9 +238,10 @@ test_that("call_measure_tool keeps recoverable table data when HTML conversion f
   expect_match(res@value, "Headache", fixed = TRUE)
   expect_match(
     res@extra$display$html,
-    "commons-measure-rich-table-error",
+    "commons-measure-gt-table-error",
     fixed = TRUE
   )
+  expect_identical(res@extra$display$open, TRUE)
 })
 
 test_that("call_measure_tool keeps ggplot results when display rendering fails", {
