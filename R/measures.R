@@ -118,6 +118,11 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' body is ordinary R; its `arguments` schema tells the model what inputs it can
 #' supply.
 #'
+#' Two return types receive special display handling: ggplots and [gt::gt()]
+#' tables are shown directly to the user in the opened measure result. The model
+#' is told that the plot or table has already been shown, so it can interpret the
+#' result without repeating it.
+#'
 #' @param name Measure name.
 #' @param description What the measure computes.
 #' @param fn Function that computes the measure.
