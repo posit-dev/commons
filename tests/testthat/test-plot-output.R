@@ -6,10 +6,12 @@ test_that("plot dimensions use btw's defaults", {
 })
 
 test_that("plot rendering rejects an empty PNG", {
+  skip_if_not_installed("ggplot2")
   local_mocked_bindings(file.size = function(...) 0, .package = "base")
+  plot <- ggplot2::ggplot()
 
   expect_snapshot(
-    render_plot_png_base64(test_ggplot(), 300L, 200L),
+    render_plot_png_base64(plot, 300L, 200L),
     error = TRUE
   )
 })

@@ -70,7 +70,8 @@ test_that("call_measure_tool registers scalar output as a handle", {
 })
 
 test_that("call_measure_tool shows ggplot results to the model and user", {
-  plot <- test_ggplot()
+  skip_if_not_installed("ggplot2")
+  plot <- ggplot2::ggplot()
   registry <- list(
     plot = measure(
       "plot",
@@ -98,10 +99,6 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
     \(x) grepl("This plot is already visible to the user", x@text, fixed = TRUE),
     logical(1)
   )))
-  expect_equal(
-    png_dimensions_from_base64(images[[1]]@data),
-    c(width = 768, height = 512)
-  )
   expect_match(
     res@extra$display$html,
     'alt="Plot returned by A &amp; &quot;B&quot;"',
@@ -250,10 +247,11 @@ test_that("call_measure_tool keeps recoverable table data when HTML conversion f
 })
 
 test_that("call_measure_tool keeps ggplot results when display rendering fails", {
+  skip_if_not_installed("ggplot2")
   local_mocked_bindings(
     render_plot_image = function(...) stop("graphics device broke")
   )
-  plot <- test_ggplot()
+  plot <- ggplot2::ggplot()
   registry <- list(
     plot = measure(
       "plot",

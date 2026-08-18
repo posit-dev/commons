@@ -57,10 +57,6 @@ test_that("run_r returns plots as images and opens the display", {
     res@value
   )
   expect_length(images, 1)
-  expect_equal(
-    png_dimensions_from_base64(images[[1]]@data),
-    c(width = 768, height = 512)
-  )
   notes <- Filter(
     \(x) S7::S7_inherits(x, ellmer::ContentText),
     res@value

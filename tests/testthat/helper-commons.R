@@ -128,29 +128,3 @@ sync_promise <- function(promise) {
 
   success
 }
-
-png_dimensions_from_base64 <- function(base64) {
-  bytes <- as.integer(jsonlite::base64_dec(base64))
-  c(
-    width = sum(bytes[17:20] * 256^(3:0)),
-    height = sum(bytes[21:24] * 256^(3:0))
-  )
-}
-
-test_ggplot <- function() {
-  structure(list(), class = c("commons_test_ggplot", "ggplot"))
-}
-
-print.commons_test_ggplot <- function(x, ...) {
-  old <- graphics::par(mar = rep(0, 4))
-  on.exit(graphics::par(old))
-  graphics::plot.new()
-  invisible(x)
-}
-
-registerS3method(
-  "print",
-  "commons_test_ggplot",
-  print.commons_test_ggplot,
-  envir = asNamespace("base")
-)
