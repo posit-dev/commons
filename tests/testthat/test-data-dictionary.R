@@ -240,6 +240,15 @@ test_that("warehouse metadata supplements an authored dictionary", {
     merged$relations[["ANALYTICS.PUBLIC.ORDERS"]]$columns,
     catalog_test_columns()
   )
+  expect_equal(
+    merged$definition_bindings$tables,
+    c(orders = "ANALYTICS.PUBLIC.ORDERS", unselected = NA_character_)
+  )
+  expect_equal(
+    merged$definition_bindings$columns$orders,
+    c(amount = "AMOUNT", missing = NA_character_)
+  )
+  expect_true(merged$definition_bindings$strict)
   expect_length(merged$dictionary$relationships, 1L)
   entry <- dictionary_entry_text(
     merged$dictionary,

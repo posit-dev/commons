@@ -177,7 +177,8 @@ data_source_connection <- function(
       owned = FALSE,
       table_ids = table_registry$ids,
       dictionary = dictionary,
-      relations = table_registry$relations
+      relations = table_registry$relations,
+      definition_bindings = merged$definition_bindings
     ))
   }
 
@@ -207,7 +208,8 @@ data_source_connection <- function(
       owned = FALSE,
       table_ids = table_registry$ids,
       dictionary = dictionary,
-      relations = table_registry$relations
+      relations = table_registry$relations,
+      definition_bindings = merged$definition_bindings
     ))
   }
 
@@ -310,7 +312,8 @@ new_data_source <- function(
   table_ids = table_ids_from_labels(tables),
   dictionary = NULL,
   pending = NULL,
-  relations = NULL
+  relations = NULL,
+  definition_bindings = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -333,7 +336,8 @@ new_data_source <- function(
       handle = handle,
       dictionary = dictionary,
       pending = pending,
-      relations = relations
+      relations = relations,
+      definition_bindings = definition_bindings
     ),
     class = "commons_data_source"
   )
