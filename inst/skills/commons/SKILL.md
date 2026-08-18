@@ -1,13 +1,7 @@
 ---
 name: commons
 description: >-
-  Build and maintain self-service data agents created with Posit's commons R
-  package. Use when the user mentions a commons data agent or a project uses
-  commons package APIs such as commons(), data_source(), semantic_layer(),
-  context_layer(), or trajectory_read(), including onboarding, commons data
-  dictionaries, trusted-artifact extraction, evaluation, and trajectory-based
-  improvement. Do not use for unrelated data dictionaries, generic AI agents,
-  or common or shared resources.
+  Build and maintain self-service data agents created with Posit's commons R package. Use when the user mentions a commons data agent or a project uses commons package APIs such as commons(), data_source(), semantic_layer(), context_layer(), or trajectory_read(), including onboarding, commons data dictionaries, trusted-artifact extraction, evaluation, and trajectory-based improvement. Do not use for unrelated data dictionaries, generic AI agents, or common or shared resources.
 ---
 
 # commons
@@ -22,21 +16,17 @@ Read the relevant reference below before starting the corresponding task.
 
 ## Working principles
 
-* Aim for a solid data foundation, but not perfection. The data should be
-  trustworthy and have a reasonably solid creation process, but it can continue to improve after the agent is built.
-* Give the agent data that is fine-grained enough for custom manipulation, but trusted and cleaned enough that it will not make unforced errors or need context that reasonably belongs in the data preparation process.
-* Keep context DRY. Information in a data dictionary, for example, should not also appear in free text in the context layer.
-* Verify anything that can be verified.
-* Preserve provenance. Everything that can be cited should be cited.
-* Never fabricate information or pull from general knowledge without the
-  user's permission. Include only scope-relevant information from approved
-  sources.
-* Surface uncertainties and contradictions instead of resolving them silently.
+- Aim for a solid data foundation, but not perfection. The data should be trustworthy and have a reasonably solid creation process, but it can continue to improve after the agent is built.
+- Give the agent data that is fine-grained enough for custom manipulation, but trusted and cleaned enough that it will not make unforced errors or need context that reasonably belongs in the data preparation process.
+- Keep context DRY. Information in a data dictionary, for example, should not also appear in free text in the context layer.
+- Verify anything that can be verified.
+- Preserve provenance. Everything that can be cited should be cited.
+- Never fabricate information or pull from general knowledge without the user's permission. Include only scope-relevant information from approved sources.
+- Surface uncertainties and contradictions instead of resolving them silently.
 
 ## Agent project layout
 
-A commons agent project follows this on-disk convention. The onboarding,
-extraction, and trajectory references build on it.
+A commons agent project follows this on-disk convention. The onboarding, extraction, and trajectory references build on it.
 
 ```
 my-agent/
@@ -74,15 +64,15 @@ For artifacts not under version control, prefer a stable URL that identifies the
 
 Where each kind of contribution carries it:
 
-* Measures: one or more `#' @provenance` roxygen tags per measure. The tag never reaches the model — `read_measures()` forwards only the title, description, `@return`, and documented `@param`s.
-* Context files: the same string under a `provenance` key in YAML frontmatter:
+- Measures: one or more `#' @provenance` roxygen tags per measure. The tag never reaches the model — `read_measures()` forwards only the title, description, `@return`, and documented `@param`s.
+- Context files: the same string under a `provenance` key in YAML frontmatter:
   ```yaml
   ---
   provenance: https://github.com/org/sales-dashboard/blob/abc1234/R/server.R#L120-L145
   ---
   ```
   `context_layer()` strips frontmatter before indexing, so it never reaches the model.
-* Dictionary edits: git commit messages; optionally a column's `details` when a caveat comes straight from artifact code.
+- Dictionary edits: git commit messages; optionally a column's `details` when a caveat comes straight from artifact code.
 
 Example extracted measure:
 
