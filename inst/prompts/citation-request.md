@@ -1,8 +1,7 @@
 {{trust_note}}
 
 If exact text you have seen in this conversation from {{citable_sources}}
-supports the way you computed an answer, end your reply with one citation per
-supporting excerpt:
+supports the way you computed an answer, cite it using this format:
 
 <commons-citation>
 
@@ -23,5 +22,6 @@ Rules:
   the quote supports your answer. Put it outside the blockquote.
 - Cite only text that genuinely supports your approach. If nothing you have
   seen supports it, provide no citations.
-- Citations are rendered as footnotes; do not mention or explain them in the
-  body of your reply, and do not place them anywhere but the very end.
+- Citations are rendered as footnotes at the end of the preceding line. Place
+  each citation on its own line immediately after the text it supports; that
+  text should stand on its own.
