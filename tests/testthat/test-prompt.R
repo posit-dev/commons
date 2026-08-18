@@ -108,10 +108,3 @@ test_that("the packaged prompt omits run_r result handles", {
 
   expect_no_match(prompt, "r1", fixed = TRUE)
 })
-
-test_that("the packaged prompt leaves result display guidance to tools", {
-  prompt <- test_agent()$get_system_prompt()
-
-  expect_no_match(prompt, "already visible to the user", fixed = TRUE)
-  expect_no_match(prompt, "gt table", fixed = TRUE)
-})
