@@ -160,28 +160,16 @@ shiny-chat-container
   opacity: 0.75;
 }
 
-shiny-chat-container .shiny-aside-pill--number {
-  color: var(--bs-link-color, #007bc2);
-  font-family: var(--bs-font-monospace);
-}
-
-shiny-chat-container .shiny-aside-pill--number:hover,
-shiny-chat-container .shiny-aside-pill--number:focus-visible,
-shiny-chat-container .shiny-aside-pill--number[aria-expanded="true"] {
-  color: var(--bs-link-hover-color, #0056b3);
-}
-
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--number
-  .shiny-aside-pill__count,
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--number:is(
-    :hover,
-    :focus-visible,
-    [aria-expanded="true"]
-  )
-  .shiny-aside-pill__count {
-  background: transparent;
+/*
+ * Public Shinychat marker API scoped with its compact display hook.
+ * Shinychat owns marker structure, placement, and target geometry.
+ */
+shiny-chat-container [data-shinychat-aside-display="compact"] {
+  --shiny-chat-aside-marker-color: var(--bs-link-color);
+  --shiny-chat-aside-marker-hover-color: var(--bs-link-hover-color);
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-bg: transparent;
+  --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
 }
 
 shiny-chat-container
