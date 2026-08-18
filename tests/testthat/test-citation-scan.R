@@ -196,25 +196,30 @@ test_that("plain text streams through unchanged", {
   expect_length(out$decisions, 0)
 })
 
-test_that("a verified citation is rewritten in place", {
+test_that("a verified citation replaces only its reserved element", {
   corpus <- list(list(
     label = "documentation",
     kind = "prose",
     text = "Canopy cover is always acre-weighted for reporting."
   ))
-  text <- paste0(
-    "Answer sentence.\n\n",
+  citation <- paste0(
     "<commons-citation>\n\nFollows the weighting rule.\n\n",
     "> Canopy cover is always acre-weighted for reporting.\n\n",
-    "</commons-citation>\n\nMore text."
+    "</commons-citation>"
   )
+  text <- paste0("Answer sentence.\n\n", citation, "\n\nMore text.")
+
   out <- scan_all(text, list(text), corpus)
-  expect_match(
+  expected_aside <- render_citation_aside(
+    "Canopy cover is always acre-weighted for reporting.",
+    "Follows the weighting rule.",
+    corpus
+  )$html
+
+  expect_identical(
     out$text,
-    "Answer sentence.<shiny-aside>",
-    fixed = TRUE
+    paste0("Answer sentence.\n\n", expected_aside, "\n\nMore text.")
   )
-  expect_match(out$text, 'class="commons-source-heading"', fixed = TRUE)
   expect_false(grepl("commons-citation", out$text))
   expect_identical(
     out$decisions[[1]],
@@ -225,6 +230,26 @@ test_that("a verified citation is rewritten in place", {
       kind = "prose"
     )
   )
+})
+
+test_that("citation projection preserves a preceding fenced code block", {
+  citation <- scanner_test_citation()
+  text <- paste0("```r\n1 + 1\n```\n\n", citation)
+
+  out <- scan_all(text, list(text), scanner_test_corpus())
+
+  expect_match(out$text, "```r\n1 + 1\n```\n\n<shiny-aside", fixed = TRUE)
+  expect_no_match(out$text, "```<shiny-aside", fixed = TRUE)
+})
+
+test_that("citation projection preserves a preceding Markdown table", {
+  citation <- scanner_test_citation()
+  text <- paste0("| value |\n| ---: |\n| 2 |\n\n", citation)
+
+  out <- scan_all(text, list(text), scanner_test_corpus())
+
+  expect_match(out$text, "| 2 |\n\n<shiny-aside", fixed = TRUE)
+  expect_no_match(out$text, "| 2 |<shiny-aside", fixed = TRUE)
 })
 
 test_that("an unverified citation vanishes", {
@@ -294,7 +319,7 @@ test_that("chunk-invariance: any character split yields identical output", {
   }
 })
 
-test_that("adjacent verified citations attach to the preceding text", {
+test_that("adjacent verified citations retain their original separators", {
   text <- paste(
     "Answer sentence.",
     scanner_test_citation("First reason."),
@@ -310,12 +335,12 @@ test_that("adjacent verified citations attach to the preceding text", {
 
   expect_match(
     out$text,
-    "Answer sentence.<shiny-aside>",
+    "Answer sentence.\n\n<shiny-aside",
     fixed = TRUE
   )
   expect_match(
     out$text,
-    "</shiny-aside><shiny-aside",
+    "</shiny-aside>\n\n<shiny-aside",
     fixed = TRUE
   )
 })
