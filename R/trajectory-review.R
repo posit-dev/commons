@@ -190,6 +190,9 @@ summarize_questions <- function(trajectories) {
   records
 }
 
+# trajectory_read() attaches one recorded provenance entry per reconstructed
+# exchange. Review rendering consumes that audit record rather than re-deriving
+# trust from message text.
 exchange_provenance <- function(record) {
   list(tag = record$provenance_tag)
 }
@@ -273,6 +276,8 @@ review_audit_aside <- function(decisions) {
   )
 }
 
+# Reviewer badges and transcript asides share provenance_display so their copy,
+# icon, and meaning cannot drift.
 commons_answer_pill <- function(tag) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {

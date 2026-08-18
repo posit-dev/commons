@@ -242,6 +242,7 @@ Commons <- R6::R6Class(
       controller = NULL
     ) {
       private$refresh_conversation_id()
+      # Capture the append boundary before the superclass adds this exchange.
       from_index <- length(self$get_turns()) + 1L
       stream <- rlang::arg_match(stream)
       raw_stream <- super$stream_async(
@@ -256,7 +257,9 @@ Commons <- R6::R6Class(
       corpus <- private$corpus
       as_content <- identical(stream, "content")
 
-      # Scan without tracing too so model-authored citation markup fails closed.
+      # Citation projection is unconditional so model-authored reserved markup
+      # never reaches the browser. Tracing only controls the surrounding span
+      # and its recorded attributes.
       coro::async_generator(function() {
         span <- NULL
         if (tracing) {
@@ -295,7 +298,8 @@ Commons <- R6::R6Class(
         )
 
         if (tracing) {
-          # Record independently so one invalid attribute cannot suppress another.
+          # Record independently: an absent provenance tag is routine and must
+          # not suppress the citation-decision audit record.
           if (!is.na(tag)) {
             tryCatch(
               commons_span_set_attribute(span, "commons.provenance.tag", tag),
@@ -328,6 +332,9 @@ Commons <- R6::R6Class(
       private$conversation_id
     },
 
+    # Restoring a saved conversation also resets the lineage baseline,
+    # preventing the next stream from rotating the restored identity as if it
+    # were a new fork.
     set_conversation_id = function(id) {
       if (!rlang::is_string(id) || !nzchar(id)) {
         cli::cli_abort("{.arg id} must be a single non-empty string.")
@@ -371,8 +378,9 @@ Commons <- R6::R6Class(
     corpus = NULL,
     citation_request = NULL,
 
-    # shinychat reuses one client across editable histories, so divergent
-    # histories need distinct trace identities.
+    # shinychat reuses one client across new chats, switches, edits, and branch
+    # navigation. A history that no longer extends the last streamed turns is a
+    # distinct lineage and needs a distinct trace identity.
     refresh_conversation_id = function() {
       baseline <- private$last_streamed_turns
       if (is.null(baseline)) {

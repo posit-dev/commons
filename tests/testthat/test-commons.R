@@ -584,6 +584,9 @@ test_that("collect_appended_tags ignores turns before from_index", {
   expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
 })
 
+# Drive ellmer's real streaming and turn-accumulation path with a fake provider.
+# The fixed response is split inside reserved markup so this exercises scanner
+# chunk invariance without replacing ellmer's stored-turn behavior.
 stream_citations_fixture <- function(agent, raw, split_at) {
   final_turn <- ellmer::AssistantTurn(
     list(ellmer::ContentText(raw)),
