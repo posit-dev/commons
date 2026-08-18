@@ -189,8 +189,9 @@ citation_reminder_text <- function() {
     "With this most recent tool call, this turn is now based on outputs",
     "beyond trusted calculations.",
     "If trusted text you have seen supports your final answer,",
-    "add a `<commons-citation>` block with one blockquote of the exact",
-    "supporting text, following the citation rules given earlier.",
+    "place it after the claim it supports, using a blank-line-separated",
+    "`<commons-citation>` block with one blockquote of the exact supporting",
+    "text, following the citation rules given earlier.",
     "Otherwise, provide no citations."
   )
 }

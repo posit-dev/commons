@@ -1,7 +1,8 @@
 {{trust_note}}
 
 If exact text you have seen in this conversation from {{citable_sources}}
-supports the way you computed an answer, cite it using this format:
+supports the way you computed an answer, place a citation at the
+end of the paragraph or list item it supports, starting on its own line:
 
 <commons-citation>
 
@@ -22,6 +23,8 @@ Rules:
   the quote supports your answer. Put it outside the blockquote.
 - Cite only text that genuinely supports your approach. If nothing you have
   seen supports it, provide no citations.
-- Citations are rendered as footnotes at the end of the preceding line. Place
-  each citation on its own line immediately after the text it supports; that
-  text should stand on its own.
+- Put each citation immediately after the paragraph or list item whose claim
+  it supports.
+- Leave a blank line before and after each citation block so it remains a
+  separate Markdown block. Citations are rendered as footnotes; do not mention
+  or explain the footnote mechanism in the body of your reply.
