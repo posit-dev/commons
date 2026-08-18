@@ -308,22 +308,29 @@ search_pool_text <- function(
 
 definition_pool_text <- function(def, defs) {
   kind <- def$kind
-  invoke <- switch(
-    kind,
-    filter = sprintf(
-      "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
-      def$name
-    ),
-    metric = sprintf(
-      "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS value`.",
-      def$name,
-      def$name
-    ),
+  invoke <- if (def$mixed_grain) {
     sprintf(
-      "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
+      "Use `{{%s}}` only in run_sql with manually grain-correct query structure.",
       def$name
     )
-  )
+  } else {
+    switch(
+      kind,
+      filter = sprintf(
+        "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
+        def$name
+      ),
+      metric = sprintf(
+        "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS value`.",
+        def$name,
+        def$name
+      ),
+      sprintf(
+        "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
+        def$name
+      )
+    )
+  }
 
   siblings <- NULL
   if (identical(kind, "metric")) {

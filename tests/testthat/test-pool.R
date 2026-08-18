@@ -325,6 +325,15 @@ test_that("call_metrics rejects mixed-grain definitions", {
 
   expect_true(records$mixed_grain[records$name == "above_minimum"])
   expect_true(records$mixed_grain[records$name == "inherited_mixed"])
+
+  guidance <- definition_pool_text(
+    records[records$name == "above_minimum", ],
+    records
+  )
+  expect_match(guidance, "manually grain-correct", fixed = TRUE)
+  expect_no_match(guidance, "call_metrics", fixed = TRUE)
+  expect_no_match(guidance, "WHERE", fixed = TRUE)
+
   expect_error(
     call_metrics_impl(
       registry,
