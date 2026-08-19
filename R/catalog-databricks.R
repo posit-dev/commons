@@ -54,7 +54,12 @@ databricks_table_registry <- function(
   registry$semantic_models <- models[!unsupported]
   registry$semantic_models <- c(
     registry$semantic_models,
-    databricks_associated_semantic_models(con, registry, call = call)
+    databricks_associated_semantic_models(
+      con,
+      registry,
+      exclude = exclude,
+      call = call
+    )
   )
   registry$semantic_models <- catalog_exclude_semantic_models(
     registry$semantic_models,
@@ -70,6 +75,7 @@ databricks_table_registry <- function(
 databricks_associated_semantic_models <- function(
   con,
   registry,
+  exclude = NULL,
   call = rlang::caller_env()
 ) {
   seeds <- Filter(
@@ -100,6 +106,10 @@ databricks_associated_semantic_models <- function(
     function(relation) identical(relation$kind, "metric_view"),
     candidates
   )
+  candidates <- candidates[!catalog_excluded(
+    vapply(candidates, catalog_relation_name, character(1)),
+    exclude
+  )]
   candidate_keys <- vapply(
     candidates,
     function(relation) {
@@ -115,6 +125,12 @@ databricks_associated_semantic_models <- function(
   candidates <- candidates[
     !duplicated(candidate_keys) & !candidate_keys %in% selected_keys
   ]
+  catalog_check_object_limit(
+    length(registry$relations) +
+      length(registry$semantic_models) +
+      length(candidates),
+    call = call
+  )
   models <- lapply(candidates, function(view) {
     tryCatch(
       databricks_read_semantic_model(view, con, call = call),

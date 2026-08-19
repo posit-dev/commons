@@ -26,8 +26,8 @@ test_that("catalog manifests switch broad prompts to search", {
 test_that("catalog search finds relation names and descriptions", {
   source <- test_source()
   source$manifest <- new_catalog_manifest(list(
-    orders = list(
-      id = DBI::Id(table = "orders"),
+    "main.finance.orders" = list(
+      id = DBI::Id(catalog = "main", schema = "finance", table = "orders"),
       kind = "table",
       description = "Booked commercial activity."
     ),
@@ -39,7 +39,11 @@ test_that("catalog search finds relation names and descriptions", {
   ), TRUE)
   source$manifest$searchable <- TRUE
 
-  expect_named(catalog_search(source, "commercial bookings"), "orders")
+  expect_named(
+    catalog_search(source, "commercial bookings"),
+    "main.finance.orders"
+  )
+  expect_named(catalog_search(source, "finance"), "main.finance.orders")
   expect_named(catalog_search(source, "refund"), "refunds")
   expect_length(catalog_search(source, "refund", kinds = "table"), 0L)
   expect_length(catalog_search(source, ""), 0L)
@@ -120,6 +124,15 @@ test_that("catalog selection supports exclusions and an object cap", {
   expect_true(registry$namespace_selected)
 
   local_mocked_bindings(catalog_object_limit = 1L)
+  expect_no_error(catalog_table_registry(
+    DBI::ANSI(),
+    DBI::Id(catalog = "main", schema = "sales"),
+    current_namespace = function(...) NULL,
+    id_type = function(...) "namespace",
+    exact_relation = function(...) NULL,
+    list_relations = function(...) relations,
+    exclude = "TMP_*"
+  ))
   expect_error(
     catalog_table_registry(
       DBI::ANSI(),
@@ -130,6 +143,54 @@ test_that("catalog selection supports exclusions and an object cap", {
       list_relations = function(...) relations
     ),
     "above the supported limit"
+  )
+})
+
+test_that("associated model candidates are bounded before hydration", {
+  dependency <- DBI::Id(
+    catalog = "main",
+    schema = "sales",
+    table = "orders"
+  )
+  candidates <- lapply(c("MODEL_A", "MODEL_B"), function(name) {
+    list(
+      id = DBI::Id(catalog = "main", schema = "sales", table = name),
+      kind = "metric_view"
+    )
+  })
+  registry <- list(
+    relations = list(orders = list(
+      id = dependency,
+      identity = dependency,
+      kind = "table"
+    )),
+    validate = list(labels = "orders"),
+    semantic_models = list()
+  )
+  local_mocked_bindings(
+    catalog_object_limit = 2L,
+    databricks_list_relations = function(...) candidates,
+    databricks_read_semantic_model = function(view, ...) {
+      new_semantic_model(
+        view$id,
+        view$id@name[["table"]],
+        backend = "databricks_metric_view",
+        dependencies = list(dependency)
+      )
+    }
+  )
+
+  expect_error(
+    databricks_associated_semantic_models(DBI::ANSI(), registry),
+    "above the supported limit"
+  )
+  expect_named(
+    databricks_associated_semantic_models(
+      DBI::ANSI(),
+      registry,
+      exclude = "MODEL_B"
+    ),
+    "main.sales.MODEL_A"
   )
 })
 

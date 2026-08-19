@@ -38,7 +38,12 @@ snowflake_table_registry <- function(
   )
   registry$semantic_models <- c(
     registry$semantic_models,
-    snowflake_associated_semantic_models(con, registry, call = call)
+    snowflake_associated_semantic_models(
+      con,
+      registry,
+      exclude = exclude,
+      call = call
+    )
   )
   registry$semantic_models <- catalog_exclude_semantic_models(
     registry$semantic_models,
@@ -54,6 +59,7 @@ snowflake_table_registry <- function(
 snowflake_associated_semantic_models <- function(
   con,
   registry,
+  exclude = NULL,
   call = rlang::caller_env()
 ) {
   seeds <- Filter(
@@ -80,6 +86,10 @@ snowflake_associated_semantic_models <- function(
     con = con,
     call = call
   ), recursive = FALSE)
+  views <- views[!catalog_excluded(
+    vapply(views, catalog_relation_name, character(1)),
+    exclude
+  )]
   view_keys <- vapply(
     views,
     function(view) {
@@ -96,6 +106,12 @@ snowflake_associated_semantic_models <- function(
     character(1)
   )
   views <- views[!duplicated(view_keys) & !view_keys %in% selected_keys]
+  catalog_check_object_limit(
+    length(registry$relations) +
+      length(registry$semantic_models) +
+      length(views),
+    call = call
+  )
   models <- lapply(views, function(view) {
     tryCatch(
       snowflake_read_semantic_model(view, con, call = call),
