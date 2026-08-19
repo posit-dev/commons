@@ -226,6 +226,14 @@ call_semantic_metrics <- function(
       model_members,
       source$con
     ),
+    databricks_metric_view = databricks_semantic_metric_sql(
+      model,
+      metric_members,
+      dimension_members,
+      where,
+      model_members,
+      source$con
+    ),
     cli::cli_abort(
       "Unsupported native semantic-model backend {.val {model$backend}}."
     )

@@ -10,7 +10,7 @@ databricks_table_registry <- function(
   tables = NULL,
   call = rlang::caller_env()
 ) {
-  catalog_table_registry(
+  registry <- catalog_table_registry(
     con,
     tables,
     current_namespace = databricks_current_namespace,
@@ -19,6 +19,18 @@ databricks_table_registry <- function(
     list_relations = databricks_list_relations,
     call = call
   )
+  semantic_views <- Filter(
+    function(relation) identical(relation$kind, "metric_view"),
+    registry$relations
+  )
+  registry <- catalog_exclude_relations(registry, names(semantic_views))
+  registry$semantic_models <- lapply(
+    semantic_views,
+    databricks_read_semantic_model,
+    con = con,
+    call = call
+  )
+  registry
 }
 
 databricks_current_namespace <- function(con, call = rlang::caller_env()) {
@@ -121,7 +133,18 @@ databricks_list_unity_relations <- function(
       )
     }
   )
-  databricks_relations_from_information_schema(rows)
+  semantic_candidates <- grepl(
+    "view|metric",
+    rows$table_type,
+    ignore.case = TRUE
+  )
+  candidate_schemas <- unique(rows$table_schema[semantic_candidates])
+  object_types <- databricks_odbc_object_types(
+    con,
+    components[["catalog"]],
+    candidate_schemas
+  )
+  databricks_relations_from_information_schema(rows, object_types)
 }
 
 databricks_exact_relation <- function(con, id, call = rlang::caller_env()) {
@@ -141,14 +164,27 @@ databricks_exact_relation <- function(con, id, call = rlang::caller_env()) {
   catalog_match_exact_relation(relations, id)
 }
 
-databricks_relations_from_information_schema <- function(rows) {
+databricks_relations_from_information_schema <- function(
+  rows,
+  object_types = character()
+) {
   names(rows) <- tolower(names(rows))
   lapply(seq_len(nrow(rows)), function(i) {
     description <- rows$comment[[i]]
     if (is.na(description) || !nzchar(description)) {
       description <- NULL
     }
-    kind <- if (grepl("view", rows$table_type[[i]], ignore.case = TRUE)) {
+    key <- databricks_object_key(
+      rows$table_schema[[i]],
+      rows$table_name[[i]]
+    )
+    object_type <- unname(object_types[key])
+    if (length(object_type) == 0L || is.na(object_type)) {
+      object_type <- rows$table_type[[i]]
+    }
+    kind <- if (grepl("metric", object_type, ignore.case = TRUE)) {
+      "metric_view"
+    } else if (grepl("view", object_type, ignore.case = TRUE)) {
       "view"
     } else {
       "table"
@@ -163,6 +199,38 @@ databricks_relations_from_information_schema <- function(rows) {
       description = description
     )
   })
+}
+
+databricks_odbc_object_types <- function(con, catalog, schemas) {
+  if (
+    !requireNamespace("odbc", quietly = TRUE) ||
+      !inherits(con, "OdbcConnection") ||
+      length(schemas) == 0L
+  ) {
+    return(character())
+  }
+  types <- lapply(unique(schemas), function(schema) {
+    rows <- tryCatch(
+      odbc::odbcListObjects(con, catalog = catalog, schema = schema),
+      error = function(err) NULL
+    )
+    if (
+      is.null(rows) ||
+        nrow(rows) == 0L ||
+        !all(c("name", "type") %in% names(rows))
+    ) {
+      return(character())
+    }
+    stats::setNames(
+      as.character(rows$type),
+      databricks_object_key(schema, rows$name)
+    )
+  })
+  unlist(types, use.names = TRUE)
+}
+
+databricks_object_key <- function(schema, table) {
+  paste(schema, table, sep = "\034")
 }
 
 databricks_list_hive_relations <- function(
@@ -202,6 +270,225 @@ databricks_list_hive_relations <- function(
       description = NULL
     )
   })
+}
+
+databricks_read_semantic_model <- function(
+  view,
+  con,
+  call = rlang::caller_env()
+) {
+  rlang::check_installed("yaml", call = call)
+  id <- databricks_complete_relation(con, view$id, call = call)
+  label <- table_id_label(id, call = call)
+  text <- databricks_metric_view_yaml(con, id)
+  if (is.null(text)) {
+    cli::cli_abort(
+      "Failed to read Databricks metric view {.val {label}}.",
+      call = call
+    )
+  }
+  specification <- tryCatch(
+    yaml::yaml.load(text),
+    error = function(err) {
+      cli::cli_abort(
+        "Databricks metric view {.val {label}} returned invalid YAML.",
+        parent = err,
+        call = call
+      )
+    }
+  )
+  if (
+    !is.list(specification) ||
+      is.null(specification$version) ||
+      (
+        is.null(specification$fields) &&
+          is.null(specification$dimensions) &&
+          is.null(specification$measures)
+      )
+  ) {
+    cli::cli_abort(
+      "Databricks metric view {.val {label}} returned an invalid specification.",
+      call = call
+    )
+  }
+  databricks_semantic_model_from_spec(
+    view$id,
+    specification,
+    description = view$description
+  )
+}
+
+databricks_metric_view_yaml <- function(con, id) {
+  definition <- databricks_view_definition(con, id)
+  if (!is.null(definition)) {
+    return(definition)
+  }
+  text <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste(
+        "DESCRIBE TABLE EXTENDED",
+        DBI::dbQuoteIdentifier(con, id),
+        "AS JSON"
+      )
+    )[[1]][[1]],
+    error = function(err) NULL
+  )
+  if (is.null(text)) {
+    return(NULL)
+  }
+  metadata <- tryCatch(
+    jsonlite::fromJSON(text, simplifyVector = FALSE),
+    error = function(err) NULL
+  )
+  metadata$view_text %||% metadata$viewText
+}
+
+databricks_view_definition_max_size <- 200000L
+databricks_view_definition_chunk_size <- 900L
+
+databricks_view_definition <- function(con, id) {
+  components <- id@name
+  predicates <- c(
+    paste0("table_catalog = ", DBI::dbQuoteString(con, components[["catalog"]])),
+    paste0("table_schema = ", DBI::dbQuoteString(con, components[["schema"]])),
+    paste0("table_name = ", DBI::dbQuoteString(con, components[["table"]]))
+  )
+  where <- paste(predicates, collapse = " AND ")
+  length_row <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste(
+        "SELECT length(view_definition) AS definition_length",
+        "FROM system.information_schema.views WHERE",
+        where
+      )
+    ),
+    error = function(err) NULL
+  )
+  if (
+    is.null(length_row) ||
+      nrow(length_row) == 0L ||
+      is.na(length_row[[1]][[1]])
+  ) {
+    return(NULL)
+  }
+  length <- as.integer(length_row[[1]][[1]])
+  if (length > databricks_view_definition_max_size) {
+    return(NULL)
+  }
+  # Stay below the configured ODBC driver's per-column truncation limit.
+  starts <- seq.int(
+    1L,
+    max(1L, length),
+    by = databricks_view_definition_chunk_size
+  )
+  expressions <- sprintf(
+    "substring(view_definition, %d, %d) AS chunk_%d",
+    starts,
+    databricks_view_definition_chunk_size,
+    seq_along(starts)
+  )
+  row <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste(
+        "SELECT",
+        paste(expressions, collapse = ", "),
+        "FROM system.information_schema.views WHERE",
+        where
+      )
+    ),
+    error = function(err) NULL
+  )
+  if (is.null(row) || nrow(row) == 0L) {
+    return(NULL)
+  }
+  paste(unlist(row[1, ], use.names = FALSE), collapse = "")
+}
+
+databricks_semantic_model_from_spec <- function(
+  id,
+  specification,
+  description = NULL
+) {
+  dimensions <- c(
+    databricks_semantic_members(specification$fields, "dimension"),
+    databricks_semantic_members(specification$dimensions, "dimension")
+  )
+  metrics <- databricks_semantic_members(specification$measures, "metric")
+  new_semantic_model(
+    id,
+    name = id@name[["table"]],
+    description = specification$comment %||% description,
+    backend = "databricks_metric_view",
+    dimensions = dimensions,
+    metrics = metrics
+  )
+}
+
+databricks_semantic_members <- function(entries, kind) {
+  members <- list()
+  for (item in semantic_spec_entries(entries)) {
+    name <- item$name
+    if (!rlang::is_string(name) || !nzchar(name)) {
+      next
+    }
+    members[[length(members) + 1L]] <- new_semantic_member(
+      name,
+      kind,
+      label = item$display_name,
+      description = item$comment,
+      type = item$data_type,
+      synonyms = as.character(unlist(
+        item$synonyms %||% character(),
+        use.names = FALSE
+      ))
+    )
+  }
+  members
+}
+
+databricks_semantic_metric_sql <- function(
+  model,
+  metrics,
+  dimensions,
+  where,
+  members,
+  con
+) {
+  dimension_sql <- databricks_semantic_member_references(dimensions, con)
+  metric_sql <- vapply(seq_len(nrow(metrics)), function(i) {
+    reference <- DBI::dbQuoteIdentifier(con, metrics$name[[i]])
+    sprintf("MEASURE(%s) AS %s", reference, reference)
+  }, character(1))
+  sql <- paste(
+    "SELECT",
+    paste(c(dimension_sql, metric_sql), collapse = ", "),
+    "FROM",
+    DBI::dbQuoteIdentifier(con, model$id)
+  )
+  conditions <- semantic_where_conditions(
+    where,
+    members,
+    con,
+    databricks_semantic_member_references
+  )
+  if (length(conditions)) {
+    sql <- paste(sql, "WHERE", paste(conditions, collapse = " AND "))
+  }
+  if (length(dimension_sql)) {
+    sql <- paste(sql, "GROUP BY", paste(dimension_sql, collapse = ", "))
+  }
+  sql
+}
+
+databricks_semantic_member_references <- function(members, con) {
+  vapply(
+    members$name,
+    function(name) as.character(DBI::dbQuoteIdentifier(con, name)),
+    character(1)
+  )
 }
 
 databricks_describe_relation <- function(con, id, call = rlang::caller_env()) {
