@@ -22,4 +22,6 @@ Rules:
   the quote supports your answer. Put it outside the blockquote.
 - Cite only text that genuinely supports your approach. If nothing you have
   seen supports it, provide no citations.
-- Place each citation immediately after the text it supports.
+- Citations are rendered as footnotes at the end of the preceding line. Place
+  each citation on its own line immediately after the text it supports; that
+  text should stand on its own.
