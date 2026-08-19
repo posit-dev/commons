@@ -30,8 +30,6 @@ catalog_table_registry <- function(
     relations <- c(relations, list_relations(con, id, call = call))
   }
 
-  catalog_check_object_limit(length(relations), call = call)
-
   keep <- !catalog_excluded(
     vapply(relations, catalog_relation_name, character(1)),
     exclude
@@ -41,6 +39,7 @@ catalog_table_registry <- function(
     function(id) !catalog_excluded(id@name[["table"]], exclude),
     validate
   )
+  catalog_check_object_limit(length(relations), call = call)
 
   labels <- vapply(relations, function(x) {
     table_id_label(x$id, call = call)
@@ -116,8 +115,11 @@ catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
   if (length(query_terms) == 0L || length(relations) == 0L) {
     return(list())
   }
-  scores <- vapply(relations, function(relation) {
+  relation_labels <- rlang::names2(relations)
+  scores <- vapply(seq_along(relations), function(i) {
+    relation <- relations[[i]]
     text <- paste(
+      relation_labels[[i]],
       catalog_relation_name(relation),
       relation$description %||% ""
     )
