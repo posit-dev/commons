@@ -204,9 +204,21 @@ catalog_require_queryable <- function(
 catalog_require_queryable_relations <- function(
   con,
   registry,
+  relations = NULL,
   call = rlang::caller_env()
 ) {
-  missing <- character()
+  missing <- if (is.null(relations)) {
+    character()
+  } else {
+    registry$labels[vapply(
+      registry$labels,
+      function(label) is.null(relations[[label]]$kind),
+      logical(1)
+    )]
+  }
+  if (length(missing)) {
+    catalog_abort_missing_relations(missing, call = call)
+  }
   for (i in seq_along(registry$ids)) {
     probe <- catalog_probe_relation(con, registry$ids[[i]])
     if (identical(probe$state, "queryable")) {
@@ -222,12 +234,19 @@ catalog_require_queryable_relations <- function(
     catalog_abort_access(probe, registry$labels[[i]], call = call)
   }
   if (length(missing)) {
-    cli::cli_abort(
-      "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
-      call = call
-    )
+    catalog_abort_missing_relations(missing, call = call)
   }
   invisible(registry)
+}
+
+catalog_abort_missing_relations <- function(
+  missing,
+  call = rlang::caller_env()
+) {
+  cli::cli_abort(
+    "{.arg tables} names table{?s} not on the connection: {.val {missing}}.",
+    call = call
+  )
 }
 
 catalog_relation_exists <- function(con, id) {

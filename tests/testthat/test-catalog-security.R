@@ -267,4 +267,22 @@ test_that("exact missing warehouse relations retain their diagnostic", {
     catalog_require_queryable_relations(DBI::ANSI(), registry),
     "not on the connection"
   )
+
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      testthat::fail("Missing relations must fail before the access probe")
+    }
+  )
+  relations <- list(ANALYTICS.PUBLIC.MISSING = list(
+    id = registry$ids[[1]],
+    kind = NULL
+  ))
+  expect_error(
+    catalog_require_queryable_relations(
+      DBI::ANSI(),
+      registry,
+      relations = relations
+    ),
+    "not on the connection"
+  )
 })

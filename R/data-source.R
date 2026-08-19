@@ -191,6 +191,7 @@ data_source_connection <- function(
       catalog_require_queryable_relations(
         con,
         table_registry$validate,
+        relations = table_registry$relations,
         call = call
       )
     }
@@ -242,6 +243,7 @@ data_source_connection <- function(
       catalog_require_queryable_relations(
         con,
         table_registry$validate,
+        relations = table_registry$relations,
         call = call
       )
     }
