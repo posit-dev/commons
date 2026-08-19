@@ -182,8 +182,9 @@ tool_call_measure <- function(private) {
       "Run trusted calculations returned by",
       "search_pool. `arguments` is a JSON object using exactly the argument",
       "names from search_pool. Prefer a measure's own arguments when they can",
-      "answer the question directly. Returned ggplots and gt tables are shown",
-      "directly to the user."
+      "answer the question directly. Measure results may be displayed directly",
+      "to the user. If a result says it is already visible, do not reproduce",
+      "it in your reply; summarize or interpret the relevant results instead."
     ),
     arguments = list(
       name = ellmer::type_string(
