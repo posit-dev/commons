@@ -29,6 +29,7 @@ format:
 ##
 
 ::: {.flow}
+<img src="figures/logo.png" class="commons-logo fragment" data-fragment-index="1" alt="commons hex sticker">
 <div class="fork">
 <div class="tier trusted fragment" data-fragment-index="1">(High trust)</div>
 <div class="arrow oblique up fragment" data-fragment-index="1">→</div>
@@ -52,6 +53,13 @@ format:
   margin-right: auto;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+.reveal section img.commons-logo {
+  margin: 0;
+  position: absolute;
+  right: 0.25rem;
+  top: 0.25rem;
+  width: 15rem;
 }
 .flow {
   display: flex;
