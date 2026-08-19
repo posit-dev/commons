@@ -159,6 +159,71 @@ test_that("Databricks metric YAML expands wildcard fields from metadata", {
   )
 })
 
+test_that("Databricks metric scope retains source and join dependencies", {
+  specification <- list(
+    version = 1.1,
+    comment = "Governed order metrics.",
+    ai_context = "Treat returned orders as active.",
+    source = "main.sales.orders",
+    filter = "source.is_active",
+    joins = list(list(
+      name = "customer",
+      source = "main.sales.customers",
+      on = "source.customer_id = customer.id",
+      joins = list(list(
+        name = "region",
+        source = "`main`.`sales`.`sales regions`",
+        using = "region_id"
+      ))
+    )),
+    fields = list(list(name = "region", expr = "region.name")),
+    measures = list(list(name = "revenue", expr = "SUM(source.revenue)"))
+  )
+  id <- DBI::Id(
+    catalog = "main",
+    schema = "sales",
+    table = "order_metrics"
+  )
+
+  model <- databricks_semantic_model_from_spec(id, specification)
+
+  expect_true(model$dependencies_complete)
+  expect_equal(
+    vapply(model$dependencies, table_id_label, character(1)),
+    c(
+      "main.sales.orders",
+      "main.sales.customers",
+      "main.sales.sales regions"
+    )
+  )
+  expect_equal(model$relationships, specification$joins)
+  expect_equal(model$filters, list("source.is_active"))
+  expect_true(any(grepl("Treat returned orders", model$context$retrieval)))
+  expect_true(any(grepl("customer", model$context$first_touch)))
+  expect_true(any(grepl("sales regions", model$context$retrieval)))
+})
+
+test_that("Databricks query-backed metrics fail closed for association", {
+  model <- databricks_semantic_model_from_spec(
+    DBI::Id(catalog = "main", schema = "sales", table = "order_metrics"),
+    list(
+      version = 1.1,
+      source = "SELECT * FROM main.sales.orders",
+      measures = list(list(name = "orders", expr = "COUNT(1)"))
+    )
+  )
+
+  expect_false(model$dependencies_complete)
+  expect_false(semantic_model_in_scope(
+    model,
+    list(list(id = DBI::Id(
+      catalog = "main",
+      schema = "sales",
+      table = "orders"
+    )))
+  ))
+})
+
 test_that("Databricks rejects metric semantics it cannot query faithfully", {
   id <- DBI::Id(
     catalog = "main",

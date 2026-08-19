@@ -99,6 +99,80 @@ test_that("Snowflake semantic YAML imports only public dimensions and metrics", 
   expect_equal(model$metrics[[1]]$parent, "orders")
 })
 
+test_that("Snowflake semantic scope retains dependencies and public context", {
+  specification <- list(
+    custom_instructions = "Use booked revenue for finance questions.",
+    tables = list(
+      orders = list(
+        base_table = list(
+          database = "ANALYTICS",
+          schema = "PUBLIC",
+          table = "ORDERS"
+        ),
+        dimensions = list(
+          list(
+            name = "active_only",
+            labels = "filter",
+            description = "Active orders."
+          )
+        ),
+        facts = list(
+          list(
+            name = "amount",
+            description = "Order amount.",
+            labels = "filter"
+          ),
+          list(name = "cost", access_modifier = "private_access")
+        ),
+        filters = list(
+          list(name = "recent_only", description = "Recent orders.")
+        ),
+        metrics = list(
+          list(name = "revenue"),
+          list(name = "margin", access_modifier = "private_access")
+        )
+      )
+    ),
+    relationships = list(list(
+      name = "orders_to_customers",
+      left_table = "orders",
+      right_table = "customers",
+      relationship_columns = list(list(
+        left_column = "customer_id",
+        right_column = "id"
+      ))
+    ))
+  )
+  id <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "REVENUE_MODEL"
+  )
+
+  model <- snowflake_semantic_model_from_spec(id, specification)
+
+  expect_true(model$dependencies_complete)
+  expect_identical(
+    model$dependencies[[1]],
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "ORDERS")
+  )
+  expect_equal(
+    vapply(model$facts, `[[`, character(1), "name"),
+    "amount"
+  )
+  expect_equal(
+    vapply(model$metrics, `[[`, character(1), "name"),
+    "revenue"
+  )
+  expect_true(model$dimensions[[1]]$filter)
+  expect_true(model$facts[[1]]$filter)
+  expect_equal(model$relationships, specification$relationships)
+  expect_true(any(grepl("booked revenue", model$context$first_touch)))
+  expect_true(any(grepl("orders_to_customers", model$context$retrieval)))
+  expect_true(any(grepl("Order amount", model$context$retrieval)))
+  expect_true(any(grepl("recent_only", model$context$retrieval)))
+})
+
 test_that("Snowflake semantic SQL uses model-owned references", {
   model <- test_semantic_model()
   registry <- semantic_models_registry(list(
@@ -136,6 +210,48 @@ test_that("Snowflake semantic SQL uses model-owned references", {
       ")"
     )
   )
+})
+
+test_that("Snowflake semantic SQL applies named entity filters", {
+  model <- snowflake_semantic_model_from_spec(
+    DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "REVENUE_MODEL"
+    ),
+    list(tables = list(list(
+      name = "orders",
+      base_table = list(
+        database = "ANALYTICS",
+        schema = "PUBLIC",
+        table = "ORDERS"
+      ),
+      dimensions = list(list(
+        name = "active_only",
+        labels = "filter"
+      )),
+      metrics = list(list(name = "revenue"))
+    )))
+  )
+  source <- test_source()
+  source$semantic_models <- list(model = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(snowflake = source))
+  )
+  metrics <- members[members$kind == "metric", , drop = FALSE]
+  filters <- resolve_semantic_filters("active_only", members)
+
+  sql <- snowflake_semantic_metric_sql(
+    model,
+    metrics,
+    dimensions = members[0, , drop = FALSE],
+    filters = filters,
+    where = NULL,
+    members = members,
+    con = DBI::ANSI()
+  )
+
+  expect_match(sql, 'WHERE "orders"."active_only"', fixed = TRUE)
 })
 
 test_that("semantic views are excluded from namespace relations", {

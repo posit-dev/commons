@@ -140,7 +140,7 @@ test_that("live Snowflake executes compiled definition mappings", {
   source <- data_source(con, tables = table, dictionary = dictionary)
   definitions <- source$dictionary$tables[[label]]$definitions
   expect_equal(
-    vapply(definitions, `[[`, character(1), "target"),
+    unname(vapply(definitions, `[[`, character(1), "target")),
     rep("SQL(snowflake)", length(definitions))
   )
 
@@ -250,6 +250,58 @@ test_that("live Snowflake discovers and executes a semantic view", {
   expect_equal(result@extra$commons_tag, "A")
 })
 
+test_that("live Snowflake scopes models associated with physical tables", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  components <- table@name
+  skip_if_not(
+    all(c("catalog", "schema", "table") %in% names(components)),
+    "The Snowflake test table must be fully qualified"
+  )
+  namespace <- DBI::Id(
+    catalog = components[["catalog"]],
+    schema = components[["schema"]]
+  )
+  views <- snowflake_list_semantic_views(con, namespace)
+  models <- lapply(views, function(view) {
+    tryCatch(snowflake_read_semantic_model(view, con), error = function(err) NULL)
+  })
+  models <- Filter(function(model) {
+    !is.null(model) &&
+      isTRUE(model$dependencies_complete) &&
+      length(model$dependencies) > 0L &&
+      length(model$metrics) > 0L
+  }, models)
+  skip_if(length(models) == 0L, "No queryable associated semantic view is configured")
+  model <- models[[1]]
+
+  source <- data_source(con, tables = model$dependencies)
+  label <- table_id_label(model$id)
+  registry <- semantic_models_registry(list(snowflake = source))
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(snowflake = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = registry
+  )
+
+  expect_contains(names(source$semantic_models), label)
+  expect_equal(result@extra$commons_tag, "A")
+
+  selected_key <- semantic_id_key(table, model$backend)
+  dependency_keys <- vapply(
+    model$dependencies,
+    semantic_id_key,
+    character(1),
+    backend = model$backend
+  )
+  if (!selected_key %in% dependency_keys) {
+    outside <- data_source(con, tables = table)
+    expect_false(label %in% names(outside$semantic_models))
+  }
+})
+
 test_that("live Databricks discovers and describes catalog relations", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
@@ -332,6 +384,62 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_match(tool@value, "Sample summary")
 })
 
+test_that("live Databricks scopes models associated with physical tables", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  components <- table@name
+  skip_if_not(
+    all(c("catalog", "schema", "table") %in% names(components)),
+    "The Databricks test table must be fully qualified"
+  )
+  namespace <- DBI::Id(
+    catalog = components[["catalog"]],
+    schema = components[["schema"]]
+  )
+  views <- Filter(
+    function(relation) identical(relation$kind, "metric_view"),
+    databricks_list_relations(con, namespace)
+  )
+  models <- lapply(views, function(view) {
+    tryCatch(databricks_read_semantic_model(view, con), error = function(err) NULL)
+  })
+  models <- Filter(function(model) {
+    !is.null(model) &&
+      !inherits(model, "commons_unsupported_databricks_metric_view") &&
+      isTRUE(model$dependencies_complete) &&
+      length(model$dependencies) > 0L &&
+      length(model$metrics) > 0L
+  }, models)
+  skip_if(length(models) == 0L, "No queryable associated metric view is configured")
+  model <- models[[1]]
+
+  source <- data_source(con, tables = model$dependencies)
+  label <- table_id_label(model$id)
+  registry <- semantic_models_registry(list(databricks = source))
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(databricks = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = registry
+  )
+
+  expect_contains(names(source$semantic_models), label)
+  expect_equal(result@extra$commons_tag, "A")
+
+  selected_key <- semantic_id_key(table, model$backend)
+  dependency_keys <- vapply(
+    model$dependencies,
+    semantic_id_key,
+    character(1),
+    backend = model$backend
+  )
+  if (!selected_key %in% dependency_keys) {
+    outside <- data_source(con, tables = table)
+    expect_false(label %in% names(outside$semantic_models))
+  }
+})
+
 test_that("live Databricks handles quoted relation and column names", {
   warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
@@ -368,7 +476,7 @@ test_that("live Databricks executes compiled definition mappings", {
   source <- data_source(con, tables = table, dictionary = dictionary)
   definitions <- source$dictionary$tables[[label]]$definitions
   expect_equal(
-    vapply(definitions, `[[`, character(1), "target"),
+    unname(vapply(definitions, `[[`, character(1), "target")),
     rep("SQL(databricks)", length(definitions))
   )
 

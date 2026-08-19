@@ -50,7 +50,65 @@ databricks_table_registry <- function(
   }
   registry <- catalog_exclude_relations(registry, names(semantic_views))
   registry$semantic_models <- models[!unsupported]
+  registry$semantic_models <- c(
+    registry$semantic_models,
+    databricks_associated_semantic_models(con, registry, call = call)
+  )
   registry
+}
+
+databricks_associated_semantic_models <- function(
+  con,
+  registry,
+  call = rlang::caller_env()
+) {
+  relations <- registry$relations[registry$validate$labels]
+  if (length(relations) == 0L) {
+    return(list())
+  }
+  namespaces <- lapply(relations, function(relation) {
+    identity <- relation$identity %||% relation$id
+    do.call(DBI::Id, as.list(identity@name[c("catalog", "schema")]))
+  })
+  namespace_keys <- vapply(
+    namespaces,
+    semantic_id_key,
+    character(1),
+    backend = "databricks_metric_view"
+  )
+  namespaces <- namespaces[!duplicated(namespace_keys)]
+  candidates <- unlist(lapply(
+    namespaces,
+    databricks_list_relations,
+    con = con,
+    call = call
+  ), recursive = FALSE)
+  candidates <- Filter(
+    function(relation) identical(relation$kind, "metric_view"),
+    candidates
+  )
+  labels <- vapply(candidates, function(relation) {
+    table_id_label(relation$id, call = call)
+  }, character(1))
+  candidates <- candidates[!duplicated(labels)]
+  labels <- labels[!duplicated(labels)]
+  candidates <- candidates[!labels %in% names(registry$semantic_models)]
+  models <- lapply(candidates, function(view) {
+    tryCatch(
+      databricks_read_semantic_model(view, con, call = call),
+      error = function(err) NULL
+    )
+  })
+  keep <- !vapply(models, function(model) {
+    is.null(model) || inherits(model, "commons_unsupported_databricks_metric_view")
+  }, logical(1))
+  models <- semantic_models_in_scope(models[keep], relations)
+  names(models) <- vapply(
+    models,
+    function(model) table_id_label(model$id, call = call),
+    character(1)
+  )
+  models
 }
 
 databricks_abort_unsupported_metric_views <- function(models, call) {
@@ -513,14 +571,133 @@ databricks_semantic_model_from_spec <- function(
       specification$measures
     )
   )
+  dependencies <- databricks_semantic_dependencies(specification)
+  relationships <- specification$joins %||% list()
+  filters <- Filter(Negate(is.null), list(specification$filter))
+  context <- databricks_semantic_context(
+    specification,
+    relationships,
+    filters
+  )
   new_semantic_model(
     id,
     name = id@name[["table"]],
     description = specification$comment %||% description,
     backend = "databricks_metric_view",
     dimensions = dimensions,
-    metrics = metrics
+    metrics = metrics,
+    filters = filters,
+    dependencies = dependencies$ids,
+    dependencies_complete = dependencies$complete,
+    relationships = relationships,
+    context = list(first_touch = context, retrieval = context)
   )
+}
+
+databricks_semantic_dependencies <- function(specification) {
+  sources <- c(
+    list(specification$source),
+    lapply(
+      databricks_flatten_joins(specification$joins %||% list()),
+      `[[`,
+      "source"
+    )
+  )
+  ids <- lapply(sources, databricks_dependency_id)
+  complete <- length(ids) > 0L && !any(vapply(ids, is.null, logical(1)))
+  ids <- Filter(Negate(is.null), ids)
+  keys <- vapply(
+    ids,
+    semantic_id_key,
+    character(1),
+    backend = "databricks_metric_view"
+  )
+  list(ids = ids[!duplicated(keys)], complete = complete)
+}
+
+databricks_dependency_id <- function(source) {
+  if (!rlang::is_string(source) || !nzchar(trimws(source))) {
+    return(NULL)
+  }
+  parts <- databricks_qualified_name_parts(trimws(source))
+  if (length(parts) != 3L || any(!nzchar(parts))) {
+    return(NULL)
+  }
+  DBI::Id(catalog = parts[[1]], schema = parts[[2]], table = parts[[3]])
+}
+
+databricks_qualified_name_parts <- function(value) {
+  chars <- strsplit(value, "", fixed = TRUE)[[1]]
+  parts <- character()
+  current <- character()
+  quoted <- FALSE
+  i <- 1L
+  while (i <= length(chars)) {
+    char <- chars[[i]]
+    if (identical(char, "`")) {
+      if (quoted && i < length(chars) && identical(chars[[i + 1L]], "`")) {
+        current <- c(current, "`")
+        i <- i + 2L
+        next
+      }
+      quoted <- !quoted
+    } else if (identical(char, ".") && !quoted) {
+      parts <- c(parts, paste(current, collapse = ""))
+      current <- character()
+    } else if (grepl("\\s", char) && !quoted) {
+      return(character())
+    } else {
+      current <- c(current, char)
+    }
+    i <- i + 1L
+  }
+  if (quoted) {
+    return(character())
+  }
+  c(parts, paste(current, collapse = ""))
+}
+
+databricks_semantic_context <- function(
+  specification,
+  relationships,
+  filters
+) {
+  joins <- databricks_flatten_joins(relationships)
+  texts <- c(
+    specification$comment,
+    specification$ai_context,
+    if (length(filters)) paste("Metric-view filter:", filters[[1]]),
+    vapply(joins, databricks_semantic_relationship_text, character(1))
+  )
+  unique(texts[!is.na(texts) & nzchar(texts)])
+}
+
+databricks_semantic_relationship_text <- function(relationship) {
+  condition <- relationship$on
+  if (is.null(condition) && length(relationship$using %||% character())) {
+    condition <- paste("using", paste(relationship$using, collapse = ", "))
+  }
+  paste0(
+    "Metric-view relationship `", relationship$name %||% "unnamed",
+    "` joins `", relationship$source %||% "unknown", "`",
+    if (!is.null(condition)) paste0(" on ", condition),
+    if (!is.null(relationship$cardinality)) {
+      paste0(" with ", relationship$cardinality, " cardinality")
+    },
+    "."
+  )
+}
+
+databricks_flatten_joins <- function(joins) {
+  out <- list()
+  pending <- joins
+  while (length(pending)) {
+    join <- pending[[1]]
+    pending <- pending[-1]
+    out[[length(out) + 1L]] <- join
+    pending <- c(join$joins %||% list(), pending)
+  }
+  out
 }
 
 databricks_semantic_members <- function(entries, kind) {

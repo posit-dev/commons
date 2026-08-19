@@ -29,7 +29,59 @@ snowflake_table_registry <- function(
     con = con,
     call = call
   )
+  registry$semantic_models <- c(
+    registry$semantic_models,
+    snowflake_associated_semantic_models(con, registry, call = call)
+  )
   registry
+}
+
+snowflake_associated_semantic_models <- function(
+  con,
+  registry,
+  call = rlang::caller_env()
+) {
+  relations <- registry$relations[registry$validate$labels]
+  if (length(relations) == 0L) {
+    return(list())
+  }
+  namespaces <- lapply(relations, function(relation) {
+    identity <- relation$identity %||% relation$id
+    do.call(DBI::Id, as.list(identity@name[c("catalog", "schema")]))
+  })
+  namespace_keys <- vapply(
+    namespaces,
+    semantic_id_key,
+    character(1),
+    backend = "snowflake_semantic_view"
+  )
+  namespaces <- namespaces[!duplicated(namespace_keys)]
+  views <- unlist(lapply(
+    namespaces,
+    snowflake_list_semantic_views,
+    con = con,
+    call = call
+  ), recursive = FALSE)
+  labels <- vapply(views, function(view) {
+    table_id_label(view$id, call = call)
+  }, character(1))
+  views <- views[!duplicated(labels)]
+  labels <- labels[!duplicated(labels)]
+  views <- views[!labels %in% names(registry$semantic_models)]
+  models <- lapply(views, function(view) {
+    tryCatch(
+      snowflake_read_semantic_model(view, con, call = call),
+      error = function(err) NULL
+    )
+  })
+  keep <- !vapply(models, is.null, logical(1))
+  models <- semantic_models_in_scope(models[keep], relations)
+  names(models) <- vapply(
+    models,
+    function(model) table_id_label(model$id, call = call),
+    character(1)
+  )
+  models
 }
 
 snowflake_catalog_selection <- function(
@@ -346,6 +398,8 @@ snowflake_semantic_model_from_spec <- function(
   description = NULL
 ) {
   dimensions <- list()
+  facts <- list()
+  filters <- list()
   metrics <- list()
   for (table in semantic_spec_entries(specification$tables)) {
     dimensions <- c(
@@ -357,6 +411,14 @@ snowflake_semantic_model_from_spec <- function(
         table$name
       )
     )
+    facts <- c(
+      facts,
+      snowflake_semantic_members(table$facts, "fact", table$name)
+    )
+    filters <- c(
+      filters,
+      snowflake_semantic_members(table$filters, "filter", table$name)
+    )
     metrics <- c(
       metrics,
       snowflake_semantic_members(table$metrics, "metric", table$name)
@@ -366,13 +428,28 @@ snowflake_semantic_model_from_spec <- function(
     metrics,
     snowflake_semantic_members(specification$metrics, "metric")
   )
+  dependencies <- snowflake_semantic_dependencies(id, specification)
+  relationships <- specification$relationships %||% list()
+  context <- snowflake_semantic_context(
+    specification,
+    dimensions,
+    facts,
+    filters,
+    relationships
+  )
   new_semantic_model(
     id,
     name = specification$name %||% id@name[["table"]],
     description = specification$description %||% description,
     backend = "snowflake_semantic_view",
     dimensions = dimensions,
-    metrics = metrics
+    metrics = metrics,
+    facts = facts,
+    filters = filters,
+    dependencies = dependencies$ids,
+    dependencies_complete = dependencies$complete,
+    relationships = relationships,
+    context = list(first_touch = context, retrieval = context)
   )
 }
 
@@ -393,7 +470,11 @@ snowflake_semantic_members <- function(entries, kind, parent = NULL) {
       label = item$label,
       description = item$description %||% item$comment,
       type = item$data_type,
-      synonyms = unlist(item$synonyms %||% character(), use.names = FALSE)
+      synonyms = unlist(item$synonyms %||% character(), use.names = FALSE),
+      filter = "filter" %in% tolower(unlist(
+        item$labels %||% character(),
+        use.names = FALSE
+      ))
     )
   }
   members
@@ -404,10 +485,97 @@ snowflake_semantic_member_is_public <- function(member) {
   !modifier %in% c("private", "private_access")
 }
 
+snowflake_semantic_dependencies <- function(id, specification) {
+  model <- id@name
+  ids <- list()
+  complete <- TRUE
+  for (table in semantic_spec_entries(specification$tables)) {
+    base <- table$base_table %||% list()
+    table_name <- base$table
+    catalog <- base$database %||% base$catalog %||% model[["catalog"]]
+    schema <- base$schema %||% model[["schema"]]
+    if (
+      !rlang::is_string(catalog) ||
+        !rlang::is_string(schema) ||
+        !rlang::is_string(table_name)
+    ) {
+      complete <- FALSE
+      next
+    }
+    ids[[length(ids) + 1L]] <- DBI::Id(
+      catalog = catalog,
+      schema = schema,
+      table = table_name
+    )
+  }
+  keys <- vapply(
+    ids,
+    semantic_id_key,
+    character(1),
+    backend = "snowflake_semantic_view"
+  )
+  list(ids = ids[!duplicated(keys)], complete = complete && length(ids) > 0L)
+}
+
+snowflake_semantic_context <- function(
+  specification,
+  dimensions,
+  facts,
+  filters,
+  relationships
+) {
+  instructions <- unique(as.character(unlist(c(
+    specification$custom_instructions,
+    specification$module_custom_instructions
+  ), use.names = FALSE)))
+  instructions <- instructions[!is.na(instructions) & nzchar(instructions)]
+  relationship_text <- vapply(
+    relationships,
+    snowflake_semantic_relationship_text,
+    character(1)
+  )
+  entity_filters <- c(
+    Filter(function(member) isTRUE(member$filter), dimensions),
+    Filter(function(member) isTRUE(member$filter), facts)
+  )
+  c(
+    instructions,
+    relationship_text,
+    semantic_members_context(facts, "Native semantic facts"),
+    semantic_members_context(
+      c(entity_filters, filters),
+      "Native semantic filters"
+    )
+  )
+}
+
+snowflake_semantic_relationship_text <- function(relationship) {
+  name <- relationship$name %||% "unnamed"
+  left <- relationship$left_table %||% relationship$from_table %||% "unknown"
+  right <- relationship$right_table %||% relationship$to_table %||% "unknown"
+  columns <- vapply(
+    relationship$relationship_columns %||% list(),
+    function(column) {
+      paste(
+        column$left_column %||% column$from_column %||% "?",
+        column$right_column %||% column$to_column %||% "?",
+        sep = " = "
+      )
+    },
+    character(1)
+  )
+  paste0(
+    "Semantic relationship `", name, "` links `", left, "` to `", right, "`",
+    if (length(columns)) paste0(" on ", paste(columns, collapse = ", ")),
+    "."
+  )
+}
+
 snowflake_semantic_metric_sql <- function(
   model,
   metrics,
   dimensions,
+  filters = NULL,
   where,
   members,
   con
@@ -428,7 +596,10 @@ snowflake_semantic_metric_sql <- function(
       paste(snowflake_semantic_member_references(metrics, con), collapse = ", ")
     )
   )
-  conditions <- snowflake_semantic_where(where, members, con)
+  conditions <- c(
+    snowflake_semantic_member_references(filters, con),
+    snowflake_semantic_where(where, members, con)
+  )
   if (length(conditions)) {
     parts <- c(parts, paste("WHERE", paste(conditions, collapse = " AND ")))
   }
@@ -440,6 +611,9 @@ snowflake_semantic_metric_sql <- function(
 }
 
 snowflake_semantic_member_references <- function(members, con) {
+  if (is.null(members) || nrow(members) == 0L) {
+    return(character())
+  }
   vapply(seq_len(nrow(members)), function(i) {
     parent <- members$parent[[i]]
     if (is.na(parent) || !nzchar(parent)) {

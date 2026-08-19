@@ -378,6 +378,11 @@ describe_table_tool <- function(
 ) {
   d <- source_describe(source, table)
   entry <- source$dictionary$tables[[table]]
+  context <- if (!table_touched(tracker, source_name, table)) {
+    semantic_model_first_touch(source, table)
+  } else {
+    character()
+  }
   relation <- c(
     if (!is.null(d$kind)) sprintf("Relation type: %s.", d$kind),
     if (is.null(entry)) d$description
@@ -391,10 +396,10 @@ describe_table_tool <- function(
     parts <- c(
       relation,
       sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
+      context,
       sample
     )
   } else {
-    mark_table_touched(tracker, source_name, table)
     columns <- sprintf(
       "Columns of `%s`:\n\n%s",
       table,
@@ -403,9 +408,11 @@ describe_table_tool <- function(
     parts <- c(
       relation,
       dictionary_entry_parts(source$dictionary, table, columns),
+      context,
       sample
     )
   }
+  mark_table_touched(tracker, source_name, table)
 
   body <- paste(parts, collapse = "\n\n")
   tool_result(
@@ -447,11 +454,12 @@ run_sql_tool <- function(
 # appends a harmless note.
 dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   dictionary <- source$dictionary
-  tables <- names(dictionary$tables)
+  tables <- source$tables %||% names(dictionary$tables)
   hits <- tables[vapply(
     tables,
-    dictionary_table_mentioned,
+    source_table_mentioned,
     logical(1),
+    source = source,
     dictionary = dictionary,
     text = sql
   )]
@@ -466,14 +474,51 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
     return(NULL)
   }
 
+  entries <- vapply(
+    hits,
+    source_first_touch_text,
+    character(1),
+    source = source,
+    dictionary = dictionary
+  )
+  keep <- nzchar(entries)
+  hits <- hits[keep]
+  entries <- entries[keep]
+  if (length(hits) == 0L) {
+    return(NULL)
+  }
   for (table in hits) {
     mark_table_touched(tracker, source_name, table)
   }
-  vapply(
-    hits,
-    function(table) dictionary_entry_text(dictionary, table),
-    character(1)
+  unname(entries)
+}
+
+source_first_touch_text <- function(table, source, dictionary) {
+  paste(
+    c(
+      if (!is.null(dictionary$tables[[table]])) {
+        dictionary_entry_text(dictionary, table)
+      },
+      semantic_model_first_touch(source, table)
+    ),
+    collapse = "\n\n"
   )
+}
+
+source_table_mentioned <- function(table, source, dictionary, text) {
+  if (
+    !is.null(dictionary$tables[[table]]) &&
+      dictionary_table_mentioned(table, dictionary, text)
+  ) {
+    return(TRUE)
+  }
+  id <- source$table_ids[[table]]
+  candidates <- unique(c(table, id@name[["table"]]))
+  any(vapply(
+    candidates,
+    function(candidate) grepl(word_pattern(candidate), text, ignore.case = TRUE),
+    logical(1)
+  ))
 }
 
 # Which tables' dictionary entries this conversation has already seen, so

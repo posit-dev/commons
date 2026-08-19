@@ -28,6 +28,10 @@ and dimensions. Databricks wildcard members require concrete column
 metadata from the warehouse.
 Native semantic models are available through \code{search_pool} and
 \code{call_metrics}, but are not returned by \code{\link[=list_tables]{list_tables()}}.
+An exact physical-table selection also imports associated models when
+every physical dependency is selected. Public relationships, facts,
+filters, and instructions become table-scoped first-touch and retrieval
+context; private members remain hidden.
 
 For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
