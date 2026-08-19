@@ -40,7 +40,7 @@ format:
 
 <div class="tier caution fragment" data-fragment-index="1">(Lower trust)</div>
 <div class="arrow oblique down fragment" data-fragment-index="1">→</div>
-<div class="row"><span class="pill low">Search context</span><span class="arrow">→</span><span class="pill-wrap"><span class="pill low">Write SQL/R</span><span class="tag tag-caution fragment" data-fragment-index="2"><img src="figures/warning-icon.svg" class="tag-icon" alt="">Untrusted</span></span></div>
+<div class="row"><span class="pill low">Search context</span><span class="arrow">→</span><span class="pill-wrap"><span class="pill low">Write SQL/R</span><sup class="citation-ref fragment" data-fragment-index="3">1</sup><span class="citation-action fragment" data-fragment-index="3">+ Cite trusted source</span><span class="tag tag-caution fragment current-visible" data-fragment-index="2"><img src="figures/warning-icon.svg" class="tag-icon" alt="">Untrusted</span></span></div>
 </div>
 :::
 
@@ -88,6 +88,10 @@ format:
   white-space: nowrap;
 }
 .pill-wrap { position: relative; display: inline-block; }
+.citation-action { color: #397f91; display: block; font-size: 0.65em; margin-top: 0.2rem; text-align: center; }
+.citation-action.fragment:not(.visible), .citation-ref.fragment:not(.visible) { display: none; }
+.citation-ref.fragment.visible { display: block; }
+.citation-ref { color: #397f91; font-size: 0.7em; font-weight: 600; position: absolute; right: 0; top: 0; transform: translate(45%, -40%); }
 .ghost { visibility: hidden; }
 .tag {
   position: absolute;
