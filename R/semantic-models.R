@@ -226,7 +226,7 @@ semantic_members_context <- function(members, heading) {
 }
 
 semantic_model_first_touch <- function(source, table) {
-  relation <- source$relations[[table]]
+  relation <- source_relation(source, table)
   if (is.null(relation)) {
     return(character())
   }

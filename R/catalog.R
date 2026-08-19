@@ -5,6 +5,7 @@ catalog_table_registry <- function(
   id_type,
   exact_relation,
   list_relations,
+  exclude = NULL,
   call = rlang::caller_env()
 ) {
   if (is.null(tables)) {
@@ -16,6 +17,7 @@ catalog_table_registry <- function(
 
   relations <- list()
   validate <- list()
+  namespace_selected <- FALSE
   for (id in ids) {
     type <- id_type(id, call = call)
     if (identical(type, "relation")) {
@@ -24,8 +26,21 @@ catalog_table_registry <- function(
       validate[[length(validate) + 1L]] <- id
       next
     }
+    namespace_selected <- TRUE
     relations <- c(relations, list_relations(con, id, call = call))
   }
+
+  catalog_check_object_limit(length(relations), call = call)
+
+  keep <- !catalog_excluded(
+    vapply(relations, catalog_relation_name, character(1)),
+    exclude
+  )
+  relations <- relations[keep]
+  validate <- Filter(
+    function(id) !catalog_excluded(id@name[["table"]], exclude),
+    validate
+  )
 
   labels <- vapply(relations, function(x) {
     table_id_label(x$id, call = call)
@@ -49,8 +64,140 @@ catalog_table_registry <- function(
     labels = labels,
     ids = relation_ids,
     relations = relations,
-    validate = list(labels = validate_labels, ids = validate)
+    validate = list(labels = validate_labels, ids = validate),
+    namespace_selected = namespace_selected
   )
+}
+
+catalog_check_object_limit <- function(n, call = rlang::caller_env()) {
+  if (n > catalog_object_limit) {
+    cli::cli_abort(c(
+      "The selection resolves to {n} objects, above the supported limit of {catalog_object_limit}.",
+      i = "Narrow {.arg tables} to fewer catalog or schema prefixes."
+    ), call = call)
+  }
+  invisible(n)
+}
+
+catalog_object_limit <- 25000L
+
+catalog_prompt_limit <- 3000L
+
+new_catalog_manifest <- function(relations, namespace_selected = FALSE) {
+  if (is.null(relations)) {
+    return(NULL)
+  }
+  manifest <- new.env(parent = emptyenv())
+  manifest$relations <- relations
+  labels <- names(relations)
+  manifest$searchable <- isTRUE(namespace_selected) &&
+    nchar(paste(labels, collapse = "\n"), type = "bytes") >
+      catalog_prompt_limit
+  manifest
+}
+
+catalog_searchable <- function(source) {
+  !is.null(source$manifest) && isTRUE(source$manifest$searchable)
+}
+
+catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
+  rlang::check_string(query)
+  rlang::check_number_whole(limit, min = 1)
+  relations <- source$manifest$relations %||% list()
+  if (!is.null(kinds)) {
+    if (!is.character(kinds) || anyNA(kinds)) {
+      cli::cli_abort(
+        "{.arg kinds} must be a character vector without missing values."
+      )
+    }
+    relations <- Filter(function(relation) relation$kind %in% kinds, relations)
+  }
+  query_terms <- catalog_search_terms(query)
+  if (length(query_terms) == 0L || length(relations) == 0L) {
+    return(list())
+  }
+  scores <- vapply(relations, function(relation) {
+    text <- paste(
+      catalog_relation_name(relation),
+      relation$description %||% ""
+    )
+    terms <- catalog_search_terms(text)
+    sum(query_terms %in% terms) + sum(vapply(
+      query_terms,
+      grepl,
+      logical(1),
+      x = tolower(text),
+      fixed = TRUE
+    ))
+  }, numeric(1))
+  keep <- scores > 0
+  relations <- relations[keep]
+  scores <- scores[keep]
+  relations[utils::head(order(scores, decreasing = TRUE), limit)]
+}
+
+catalog_search_terms <- function(x) {
+  text <- tolower(paste(x %||% "", collapse = " "))
+  unique(Filter(
+    nzchar,
+    strsplit(gsub("[^[:alnum:]_]+", " ", text), " +")[[1]]
+  ))
+}
+
+catalog_relation_name <- function(relation) {
+  unname(relation$id@name[["table"]])
+}
+
+catalog_excluded <- function(names, patterns) {
+  if (length(patterns) == 0L) {
+    return(rep(FALSE, length(names)))
+  }
+  Reduce(`|`, lapply(patterns, function(pattern) {
+    grepl(catalog_glob_regex(pattern), names)
+  }))
+}
+
+catalog_glob_regex <- function(pattern) {
+  escaped <- gsub("([][{}()+.^$|\\\\])", "\\\\\\1", pattern)
+  escaped <- gsub("\\*", ".*", escaped)
+  escaped <- gsub("\\?", ".", escaped)
+  paste0("^", escaped, "$")
+}
+
+check_catalog_exclude <- function(exclude, call = rlang::caller_env()) {
+  if (
+    !is.null(exclude) &&
+      (!is.character(exclude) || anyNA(exclude) || any(!nzchar(exclude)))
+  ) {
+    cli::cli_abort(
+      "{.arg exclude} must contain non-empty glob patterns without missing values.",
+      call = call
+    )
+  }
+  invisible(exclude)
+}
+
+catalog_check_nonempty <- function(registry, call = rlang::caller_env()) {
+  if (
+    length(registry$labels) == 0L &&
+      length(registry$semantic_models) == 0L
+  ) {
+    cli::cli_abort(
+      "The resolved catalog selection contains no objects.",
+      call = call
+    )
+  }
+  registry
+}
+
+catalog_exclude_semantic_models <- function(models, exclude) {
+  keep <- !catalog_excluded(
+    vapply(models, function(model) {
+      catalog_relation_name(list(id = model$identity %||% model$id))
+    }, character(1)),
+    exclude
+  )
+  models[keep]
 }
 
 catalog_exclude_relations <- function(registry, labels) {

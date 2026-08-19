@@ -8,6 +8,7 @@ is_databricks_connection <- function(con) {
 databricks_table_registry <- function(
   con,
   tables = NULL,
+  exclude = NULL,
   call = rlang::caller_env()
 ) {
   registry <- catalog_table_registry(
@@ -17,6 +18,7 @@ databricks_table_registry <- function(
     id_type = databricks_id_type,
     exact_relation = databricks_exact_relation,
     list_relations = databricks_list_relations,
+    exclude = exclude,
     call = call
   )
   semantic_views <- Filter(
@@ -54,7 +56,15 @@ databricks_table_registry <- function(
     registry$semantic_models,
     databricks_associated_semantic_models(con, registry, call = call)
   )
-  registry
+  registry$semantic_models <- catalog_exclude_semantic_models(
+    registry$semantic_models,
+    exclude
+  )
+  catalog_check_object_limit(
+    length(registry$relations) + length(registry$semantic_models),
+    call = call
+  )
+  catalog_check_nonempty(registry, call = call)
 }
 
 databricks_associated_semantic_models <- function(

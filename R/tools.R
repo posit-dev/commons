@@ -16,11 +16,60 @@ build_commons_tools <- function(self, private) {
     ) {
       list(tool_call_metrics(private))
     },
+    if (any(vapply(private$sources, catalog_searchable, logical(1)))) {
+      list(tool_search_catalog(private))
+    },
     list(
       tool_search_context(private),
       tool_describe_table(private),
       tool_run_sql(private),
       tool_run_r(private)
+    )
+  )
+}
+
+tool_search_catalog <- function(private) {
+  ellmer::tool(
+    function(query, kinds = NULL, source = NULL) {
+      src <- resolve_sql_source(private$sources, source)
+      if (!catalog_searchable(src)) {
+        return("This data source does not have a searchable catalog.")
+      }
+      results <- catalog_search(src, query, kinds)
+      body <- if (length(results)) {
+        paste(vapply(names(results), function(label) {
+          relation <- results[[label]]
+          summary <- relation$description %||% "No description."
+          sprintf("- `%s` (%s): %s", label, relation$kind, summary)
+        }, character(1)), collapse = "\n")
+      } else {
+        sprintf("No catalog objects found for \"%s\".", query)
+      }
+      tool_result(
+        body,
+        title = "Searched the data catalog",
+        icon = maybe_icon("search"),
+        markdown = body
+      )
+    },
+    paste(
+      "Search a broad selected catalog by object name and description.",
+      "Results are stable table names for describe_table."
+    ),
+    arguments = list(
+      query = ellmer::type_string("The data you need, in plain language."),
+      kinds = ellmer::type_array(
+        ellmer::type_string(),
+        "Optional object kinds such as table or view.",
+        required = FALSE
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "search_catalog",
+    annotations = ellmer::tool_annotations(
+      title = "Search the data catalog",
+      icon = maybe_icon("search"),
+      read_only_hint = TRUE
     )
   )
 }
