@@ -2,11 +2,18 @@
 # surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
   c(
-    if (pool_searchable(private$registry, private$definitions)) {
+    if (pool_searchable(
+      private$registry,
+      private$definitions,
+      private$semantic_models
+    )) {
       list(tool_search_pool(private))
     },
     if (length(private$registry) > 0) list(tool_call_measure(private)),
-    if (registry_has_metrics(private$definitions)) {
+    if (
+      registry_has_metrics(private$definitions) ||
+        semantic_registry_has_metrics(private$semantic_models)
+    ) {
       list(tool_call_metrics(private))
     },
     list(
@@ -21,8 +28,10 @@ build_commons_tools <- function(self, private) {
 # Measures are never listed in the system prompt, and definitions past their
 # ambient cap aren't either; a search tool over a fully visible pool would
 # just cost the model a verification round trip.
-pool_searchable <- function(measures, definitions) {
-  length(measures) > 0 || definitions_overflow(definitions)
+pool_searchable <- function(measures, definitions, semantic_models = NULL) {
+  has_semantic_models <- !is.null(semantic_models) &&
+    nrow(registry_semantic_members(semantic_models)) > 0L
+  length(measures) > 0 || definitions_overflow(definitions) || has_semantic_models
 }
 
 tool_search_pool <- function(private) {
@@ -35,6 +44,9 @@ tool_search_pool <- function(private) {
     if (length(private$registry) > 0) "measures (run with call_measure)",
     if (nrow(registry_defs(private$definitions)) > 0) {
       "governed definitions (apply as {{name}} tokens in run_sql)"
+    },
+    if (nrow(registry_semantic_members(private$semantic_models)) > 0) {
+      "native semantic-model metrics (run with call_metrics)"
     }
   )
   ellmer::tool(
@@ -43,7 +55,8 @@ tool_search_pool <- function(private) {
         private$registry,
         private$definitions,
         query,
-        source_names
+        source_names,
+        semantic_models = private$semantic_models
       )
       tool_result(
         body,
@@ -91,7 +104,8 @@ tool_call_metrics <- function(private) {
         dimensions = dimensions,
         filters = filters,
         where = where,
-        source_name = source
+        source_name = source,
+        semantic_models = private$semantic_models
       )
     },
     sprintf(
@@ -100,7 +114,11 @@ tool_call_metrics <- function(private) {
         "grouped and filtered. Metric, grouping, and filter names come from",
         "%s; commons compiles and runs the query."
       ),
-      if (pool_searchable(private$registry, private$definitions)) {
+      if (pool_searchable(
+        private$registry,
+        private$definitions,
+        private$semantic_models
+      )) {
         "the system prompt or search_pool"
       } else {
         "the system prompt"
@@ -109,11 +127,11 @@ tool_call_metrics <- function(private) {
     arguments = list(
       metrics = ellmer::type_array(
         ellmer::type_string(),
-        "Metric names to compute. All metrics in one call must belong to the same table."
+        "Metric names to compute. All metrics in one call must belong to the same table or native semantic model."
       ),
       dimensions = ellmer::type_array(
         ellmer::type_string(),
-        "Derived or filter definition names, or documented column names, to group by.",
+        "Derived or filter definition names, documented column names, or native semantic dimensions to group by.",
         required = FALSE
       ),
       filters = ellmer::type_array(
@@ -123,7 +141,9 @@ tool_call_metrics <- function(private) {
       ),
       where = ellmer::type_array(
         ellmer::type_object(
-          column = ellmer::type_string("A documented column name."),
+          column = ellmer::type_string(
+            "A documented column or native semantic dimension name."
+          ),
           op = ellmer::type_enum(
             c("=", "!=", "<", "<=", ">", ">="),
             "Comparison operator."

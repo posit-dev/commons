@@ -66,7 +66,7 @@ match_citation <- function(quote, corpus) {
   NULL
 }
 
-# Rejected citations render nothing so unverified markup cannot appear trusted.
+# Only the quote is verified; the explanation remains model-authored.
 render_citation_aside <- function(quote, explanation, corpus) {
   source <- match_citation(quote, corpus)
   decision <- list(
@@ -91,27 +91,17 @@ render_citation_aside <- function(quote, explanation, corpus) {
 
 citation_aside_html <- function(quote, explanation, label, kind) {
   icon <- citation_icon_url(kind)
-  source <- citation_source_html(label, icon)
   reason <- if (nzchar(explanation)) paste0(explanation, "\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   sprintf(
-    '<shiny-aside>%s%s%s</shiny-aside>',
-    source,
+    paste0(
+      '<shiny-aside display="compact" label="%s"%s>',
+      "%s%s</shiny-aside>"
+    ),
+    escape_attr(label),
+    if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
     reason,
     blockquote
-  )
-}
-
-citation_source_html <- function(label, icon) {
-  image <- if (is.null(icon)) {
-    ""
-  } else {
-    sprintf('<img src="%s" alt="">', escape_attr(icon))
-  }
-  sprintf(
-    '<div class="commons-source-heading">%s<span>%s</span></div>\n\n',
-    image,
-    escape_html(label)
   )
 }
 
@@ -164,21 +154,15 @@ normalize_citation <- function(x) {
   trimws(gsub("\\s+", " ", x))
 }
 
-# The full citation request rides on the conversation's first fallback-tagged
-# tool result; later user turns get a shorter reminder on their first fallback.
-# Conversations answered entirely by governed tools never see either prompt.
+# The citation contract is in the system prompt. The first fallback-tagged tool
+# result in each user turn carries a short reminder.
 add_citation_request <- function(result, tracker) {
   if (is.null(tracker) || isTRUE(tracker$requested)) {
     return(result)
   }
   tracker$requested <- TRUE
 
-  if (isTRUE(tracker$full_sent)) {
-    request <- tracker$reminder %||% citation_reminder_text()
-  } else {
-    request <- tracker$request %||% citation_request_text()
-    tracker$full_sent <- TRUE
-  }
+  request <- tracker$reminder %||% citation_reminder_text()
   if (is.character(result@value)) {
     result@value <- paste(c(result@value, request), collapse = "\n\n")
   } else {
@@ -198,33 +182,82 @@ citation_reminder_text <- function() {
   )
 }
 
-citation_request_text <- function(measures = list(), definitions = NULL) {
-  has_measures <- length(measures) > 0
-  has_definitions <- !is.null(definitions) &&
-    nrow(registry_defs(definitions)) > 0
-
-  # Without a tool that answers on its own (call_measure, call_metrics),
-  # every answer is a fallback answer: there is no governed path to contrast
-  # with, so don't imply one.
-  exception <- if (has_measures || registry_has_metrics(definitions)) {
-    " that does not come from a trusted calculation alone"
+citation_trust_exception <- function(tools) {
+  trusted_path_tools <- intersect(
+    tools,
+    c("search_pool", "call_measure", "call_metrics")
+  )
+  if (!length(trusted_path_tools)) {
+    return("")
   }
-  trust_note <- cli::format_inline(
-    'Note: any answer in this conversation{exception} will be presented to
-     the user as "Untrusted" unless you cite trusted text that supports your
-     approach.'
+  names <- sprintf("`%s`", trusted_path_tools)
+  paste0(
+    " that is not based solely on output from ",
+    paste(names, collapse = " or ")
   )
-  citable <- c(
-    "context search results",
-    if (has_measures) "measure definitions",
-    if (has_definitions) "governed definitions",
-    "data documentation"
+}
+
+available_tool_names <- function(tools) {
+  if (is.character(tools)) {
+    return(tools)
+  }
+  vapply(tools, tool_name, character(1))
+}
+
+citable_tool_output_text <- function(tools) {
+  items <- c(
+    "- Data-dictionary prose shown in this system prompt.",
+    if ("search_pool" %in% tools) {
+      paste(
+        "- From `search_pool`: measure definitions; descriptions, SQL",
+        "expressions, and translation notes for governed definitions."
+      )
+    },
+    if ("search_context" %in% tools) {
+      "- From `search_context`: trusted context excerpts."
+    },
+    if ("describe_table" %in% tools) {
+      paste(
+        "- From `describe_table`: data-dictionary descriptions, details,",
+        "documented columns, definitions, relationships, and terms."
+      )
+    },
+    if ("run_sql" %in% tools) {
+      paste(
+        "- From `run_sql`: data-dictionary entries appended after the query",
+        "result."
+      )
+    }
   )
-  as.character(ellmer::interpolate_file(
-    system.file("prompts/citation-request.md", package = "commons"),
-    trust_note = trust_note,
-    citable_sources = cli::format_inline("{.or {citable}}")
-  ))
+  paste(items, collapse = "\n")
+}
+
+non_citable_tool_output_text <- function(tools) {
+  items <- c(
+    if ("describe_table" %in% tools) {
+      paste(
+        "- Live relation metadata, inferred schema, and sample rows from",
+        "`describe_table`."
+      )
+    },
+    if ("call_measure" %in% tools) {
+      paste(
+        "- Result values from `call_measure`. An answer based on that tool",
+        "alone is already trusted and needs no citation."
+      )
+    },
+    if ("call_metrics" %in% tools) {
+      paste(
+        "- Result values from `call_metrics`. An answer based on that tool",
+        "alone is already trusted and needs no citation."
+      )
+    },
+    if ("run_sql" %in% tools) "- Query result rows from `run_sql`.",
+    if ("run_r" %in% tools) {
+      "- Code, measure source, plots, and textual output from `run_r`."
+    }
+  )
+  paste(items, collapse = "\n")
 }
 
 # These SVGs need a fixed stroke because images cannot inherit currentColor.
@@ -259,12 +292,6 @@ commons_icon_url <- function(file) {
 escape_attr <- function(x) {
   x <- gsub("&", "&amp;", x, fixed = TRUE)
   gsub("\"", "&quot;", x, fixed = TRUE)
-}
-
-escape_html <- function(x) {
-  x <- gsub("&", "&amp;", x, fixed = TRUE)
-  x <- gsub("<", "&lt;", x, fixed = TRUE)
-  gsub(">", "&gt;", x, fixed = TRUE)
 }
 
 # The trajectory reviewer does not register the live chat's resource path.

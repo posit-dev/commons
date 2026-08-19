@@ -20,6 +20,3 @@ without recursive interpolation, preserving governed-definition tokens and
 app-authored instructions. HTML comments are removed from the rendered prompt.
 App-authored instructions occupy the final `## Additional instructions`
 section.
-
-`citation-request.md` is delivered only when citations may be needed, rather
-than occupying every system prompt.

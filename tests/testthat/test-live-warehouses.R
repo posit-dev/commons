@@ -215,6 +215,41 @@ test_that("live Snowflake executes compiled definition mappings", {
   expect_true(is.na(empty_boolean_fold))
 })
 
+test_that("live Snowflake discovers and executes a semantic view", {
+  view <- warehouse_test_semantic_view()
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+  source <- data_source(con, tables = view)
+  label <- table_id_label(view)
+  model <- source$semantic_models[[label]]
+  skip_if(
+    length(model$metrics) == 0L,
+    "The selected Snowflake semantic view has no public metrics"
+  )
+  registry <- semantic_models_registry(list(snowflake = source))
+  metric <- model$metrics[[1]]$name
+  handles <- new_handle_store()
+
+  search <- search_pool_text(
+    list(),
+    empty_definitions(),
+    metric,
+    semantic_models = registry
+  )
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(snowflake = source),
+    handles,
+    metrics = metric,
+    semantic_models = registry
+  )
+
+  expect_length(list_tables(source), 0L)
+  expect_s3_class(model, "commons_semantic_model")
+  expect_match(search, metric, fixed = TRUE)
+  expect_s3_class(get_handle(handles, "r1"), "data.frame")
+  expect_equal(result@extra$commons_tag, "A")
+})
+
 test_that("live Databricks discovers and describes catalog relations", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")

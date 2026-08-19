@@ -76,6 +76,7 @@ test_that("the system prompt includes tables and the date", {
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")
+  expect_match(prompt, "## Citations", fixed = TRUE)
 })
 
 test_that("instructions are appended to the packaged system prompt", {
@@ -236,7 +237,7 @@ test_that("run_sql and describe_table route to the named source", {
   expect_match(S7::prop(res, "extra")$display$title, "(b)", fixed = TRUE)
 })
 
-test_that("run_sql delivers the citation request once per conversation", {
+test_that("run_sql delivers one citation reminder per user turn", {
   agent <- test_agent()
   run_sql <- agent_tool(agent, "run_sql")
 
@@ -584,6 +585,7 @@ test_that("collect_appended_tags ignores turns before from_index", {
   expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
 })
 
+# Split a real ellmer response inside reserved markup to test chunk invariance.
 stream_citations_fixture <- function(agent, raw, split_at) {
   final_turn <- ellmer::AssistantTurn(
     list(ellmer::ContentText(raw)),

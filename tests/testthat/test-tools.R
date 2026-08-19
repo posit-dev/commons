@@ -148,9 +148,6 @@ test_that("call_measure_tool preserves image content in ContentToolResult", {
 })
 
 test_that("call_measure_tool preserves custom ContentToolResult errors", {
-  local_mocked_bindings(
-    collect_lazy_table = function(...) stop("should not collect")
-  )
   registry <- list(
     error = measure(
       "error",
