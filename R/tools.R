@@ -738,9 +738,8 @@ tool_result <- function(
 
 visible_result_note <- function(type) {
   paste(
-    sprintf("This %s is already visible to the user.", type),
-    "Do not recreate or repeat it; summarize or interpret the relevant results",
-    "in words instead."
+    sprintf("This %s is now visible to the user.", type),
+    "**Do not recreate or repeat it**."
   )
 }
 
