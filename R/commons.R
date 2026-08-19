@@ -176,6 +176,7 @@ Commons <- R6::R6Class(
       private$first_touch <- new.env(parent = emptyenv())
       private$definitions <- definitions_registry(sources)
       private$semantic_models <- semantic_models_registry(sources)
+      private$calculations <- calculations_registry(sources)
       private$registry <- semantic_layer$measures
       private$fn_sources <- semantic_layer$fn_sources
       private$injections <- resolve_injections(
@@ -197,7 +198,8 @@ Commons <- R6::R6Class(
           "commons.agent.n_definitions" = nrow(private$definitions$defs),
           "commons.agent.n_semantic_members" = nrow(
             private$semantic_models$members
-          )
+          ),
+          "commons.agent.n_calculations" = length(private$calculations)
         )
       )
 
@@ -367,6 +369,7 @@ Commons <- R6::R6Class(
     registry = NULL,
     definitions = NULL,
     semantic_models = NULL,
+    calculations = NULL,
     fn_sources = NULL,
     injections = NULL,
     conversation_id = NULL,

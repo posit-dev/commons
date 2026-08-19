@@ -40,11 +40,15 @@
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
-#'   selections import unparameterized metric views, as native trusted metrics
-#'   and dimensions. Databricks wildcard members require concrete column
-#'   metadata from the warehouse.
+#'   selections import metric views, as native trusted metrics and dimensions.
+#'   Snowflake semantic variables and Databricks metric-view parameters are
+#'   passed as typed JSON arguments to `call_metrics`. Databricks wildcard
+#'   members require concrete column metadata from the warehouse.
 #'   Native semantic models are available through `search_pool` and
 #'   `call_metrics`, but are not returned by [list_tables()].
+#'   Snowflake verified queries are exposed separately as exact trusted
+#'   calculations through `search_pool` and `call_calculation`; their SQL is
+#'   executed as stored rather than parsed to infer dependencies.
 #'   An exact physical-table selection also imports associated models when
 #'   every physical dependency is selected. Public relationships, facts,
 #'   filters, and instructions become table-scoped first-touch and retrieval
@@ -421,7 +425,8 @@ new_data_source <- function(
       manifest = new_catalog_manifest(relations, namespace_selected),
       session = session,
       definition_bindings = definition_bindings,
-      semantic_models = semantic_models
+      semantic_models = semantic_models,
+      calculations = semantic_model_calculations(semantic_models)
     ),
     class = "commons_data_source"
   )
@@ -669,6 +674,18 @@ source_query <- function(source, sql) {
     }
     source_ensure_tables(source, todo)
   }
+}
+
+source_query_bind <- function(source, sql, bindings = list()) {
+  catalog_check_session(source)
+  check_query(sql)
+  if (length(bindings) == 0L) {
+    return(source_query(source, sql))
+  }
+  result <- DBI::dbSendQuery(source$con, sql)
+  on.exit(DBI::dbClearResult(result), add = TRUE)
+  DBI::dbBind(result, unname(bindings))
+  DBI::dbFetch(result)
 }
 
 # A keyword denylist, not a SQL parser: it anchors on the leading statement

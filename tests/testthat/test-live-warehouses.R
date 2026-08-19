@@ -278,6 +278,10 @@ test_that("live Snowflake executes compiled definition mappings", {
   expect_true(is.na(empty_boolean_fold))
 })
 
+test_that("live Snowflake executes typed trusted calculations", {
+  expect_warehouse_trusted_calculation("snowflake")
+})
+
 test_that("live Snowflake discovers and executes a semantic view", {
   view <- warehouse_test_semantic_view()
   con <- local_warehouse_connection("snowflake", require_table = FALSE)
@@ -683,4 +687,8 @@ test_that("live Databricks executes compiled definition mappings", {
     )
   )[[1]][[1]]
   expect_true(is.na(empty_boolean_fold))
+})
+
+test_that("live Databricks executes typed trusted calculations", {
+  expect_warehouse_trusted_calculation("databricks")
 })

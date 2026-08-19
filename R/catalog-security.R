@@ -212,7 +212,7 @@ catalog_require_queryable_relations <- function(
   } else {
     registry$labels[vapply(
       registry$labels,
-      function(label) is.null(relations[[label]]$kind),
+      function(label) identical(relations[[label]]$discovered, FALSE),
       logical(1)
     )]
   }

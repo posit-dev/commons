@@ -8,6 +8,8 @@ new_semantic_model <- function(
   metrics = list(),
   facts = list(),
   filters = list(),
+  parameters = list(),
+  calculations = list(),
   dependencies = list(),
   dependencies_complete = TRUE,
   relationships = list(),
@@ -24,6 +26,8 @@ new_semantic_model <- function(
       metrics = metrics,
       facts = facts,
       filters = filters,
+      parameters = parameters,
+      calculations = calculations,
       dependencies = dependencies,
       dependencies_complete = dependencies_complete,
       relationships = relationships,
@@ -78,13 +82,100 @@ semantic_spec_entries <- function(entries) {
   entries
 }
 
+semantic_parameters_from_spec <- function(entries, backend) {
+  parameters <- lapply(semantic_spec_entries(entries), function(entry) {
+    name <- entry$name
+    type <- semantic_parameter_type(entry$data_type %||% entry$type)
+    if (!rlang::is_string(name) || !nzchar(name) || is.null(type)) {
+      cli::cli_abort(
+        "{backend} declares an unsupported semantic parameter."
+      )
+    }
+    default_field <- if (identical(backend, "Snowflake")) {
+      "default_value"
+    } else {
+      "default"
+    }
+    has_default <- default_field %in% names(entry)
+    default <- if (has_default) {
+      coerce_semantic_default(entry[[default_field]], type)
+    }
+    new_typed_argument(
+      name,
+      type,
+      description = entry$description %||% entry$comment,
+      default = default,
+      has_default = has_default
+    )
+  })
+  names(parameters) <- vapply(parameters, `[[`, character(1), "name")
+  if (anyDuplicated(names(parameters))) {
+    cli::cli_abort("{backend} semantic parameter names must be unique.")
+  }
+  parameters
+}
+
+coerce_semantic_default <- function(value, type) {
+  if (length(value) != 1L || is.list(value) || is.na(value)) {
+    return(value)
+  }
+  switch(
+    type,
+    string = as.character(value),
+    integer = suppressWarnings(as.integer(value)),
+    number = suppressWarnings(as.numeric(value)),
+    logical = if (is.logical(value)) {
+      value
+    } else if (tolower(as.character(value)) %in% c("true", "false")) {
+      identical(tolower(as.character(value)), "true")
+    } else {
+      NA
+    },
+    date = as.character(value),
+    datetime = as.character(value)
+  )
+}
+
+semantic_parameter_type <- function(type) {
+  if (!rlang::is_string(type) || !nzchar(type)) {
+    return(NULL)
+  }
+  base <- toupper(sub("\\s*\\(.*$", "", trimws(type)))
+  if (base %in% c("STRING", "TEXT", "VARCHAR", "CHAR")) {
+    return("string")
+  }
+  if (base %in% c("BYTEINT", "SMALLINT", "INT", "INTEGER", "BIGINT")) {
+    return("integer")
+  }
+  if (base %in% c(
+    "NUMBER", "NUMERIC", "DECIMAL", "FLOAT", "DOUBLE", "REAL"
+  )) {
+    return("number")
+  }
+  if (base %in% c("BOOL", "BOOLEAN")) {
+    return("logical")
+  }
+  if (identical(base, "DATE")) {
+    return("date")
+  }
+  if (startsWith(base, "TIMESTAMP") || identical(base, "DATETIME")) {
+    return("datetime")
+  }
+  NULL
+}
+
 semantic_models_registry <- function(sources) {
   rows <- list(no_semantic_members)
+  parameters <- list()
   source_labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     models <- sources[[i]]$semantic_models
     for (model_label in names(models)) {
       model <- models[[model_label]]
+      parameters[[semantic_registry_model_key(
+        source_labels[[i]],
+        model_label
+      )]] <- model$parameters %||% list()
       # Standalone filters are context; only filter-labelled members compile.
       members <- c(
         model$dimensions,
@@ -101,7 +192,11 @@ semantic_models_registry <- function(sources) {
       )
     }
   }
-  list(members = do.call(rbind, rows))
+  list(members = do.call(rbind, rows), parameters = parameters)
+}
+
+semantic_registry_model_key <- function(source, model) {
+  paste(source, model, sep = "\034")
 }
 
 no_semantic_members <- data.frame(
@@ -264,6 +359,13 @@ registry_semantic_members <- function(registry, source = NULL) {
   members[members$source == source, , drop = FALSE]
 }
 
+registry_semantic_parameters <- function(registry, member) {
+  registry$parameters[[semantic_registry_model_key(
+    member$source[[1]],
+    member$model[[1]]
+  )]] %||% list()
+}
+
 semantic_registry_has_metrics <- function(registry) {
   any(registry$members$kind == "metric")
 }
@@ -411,7 +513,8 @@ semantic_where_conditions <- function(
 semantic_member_pool_text <- function(
   member,
   members,
-  source_names = character()
+  source_names = character(),
+  parameters = list()
 ) {
   reference <- if (nrow(semantic_member_candidates(member$name[[1]], members)) == 1L) {
     member$name[[1]]
@@ -429,6 +532,7 @@ semantic_member_pool_text <- function(
         detail
       ),
       semantic_member_sources_line(member, source_names),
+      semantic_parameters_pool_text(parameters),
       switch(
         member$kind[[1]],
         metric = sprintf(
@@ -446,6 +550,34 @@ semantic_member_pool_text <- function(
       }
     ),
     collapse = "\n"
+  )
+}
+
+semantic_parameters_pool_text <- function(parameters) {
+  if (length(parameters) == 0L) {
+    return(NULL)
+  }
+  entries <- vapply(parameters, function(parameter) {
+    default <- if (parameter$has_default) {
+      paste0(", optional; default: ", parameter$default)
+    } else {
+      ", required"
+    }
+    description <- if (
+      !is.null(parameter$description) && nzchar(parameter$description)
+    ) {
+      paste0(": ", parameter$description)
+    } else {
+      ""
+    }
+    paste0(
+      "`", parameter$name, "` (", parameter$type, default, ")", description
+    )
+  }, character(1))
+  paste0(
+    "call_metrics arguments JSON: ",
+    paste(entries, collapse = ", "),
+    "."
   )
 }
 

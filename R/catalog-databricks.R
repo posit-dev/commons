@@ -460,12 +460,6 @@ databricks_read_semantic_model <- function(
       call = call
     )
   }
-  if (length(specification$parameters %||% list())) {
-    return(databricks_unsupported_metric_view(
-      view$id,
-      "parameters are not supported"
-    ))
-  }
   if (databricks_semantic_has_wildcards(specification)) {
     metadata <- metadata %||% databricks_metric_view_metadata(con, id)
     if (length(metadata$columns %||% list()) == 0L) {
@@ -582,9 +576,6 @@ databricks_semantic_model_from_spec <- function(
   description = NULL,
   columns = list()
 ) {
-  if (length(specification$parameters %||% list())) {
-    cli::cli_abort("Parameterized Databricks metric views are not supported.")
-  }
   if (
     databricks_semantic_has_wildcards(specification) &&
       length(columns) == 0L
@@ -619,6 +610,10 @@ databricks_semantic_model_from_spec <- function(
   dependencies <- databricks_semantic_dependencies(specification)
   relationships <- specification$joins %||% list()
   filters <- Filter(Negate(is.null), list(specification$filter))
+  parameters <- semantic_parameters_from_spec(
+    specification$parameters,
+    "Databricks"
+  )
   context <- databricks_semantic_context(
     specification,
     relationships,
@@ -632,6 +627,7 @@ databricks_semantic_model_from_spec <- function(
     dimensions = dimensions,
     metrics = metrics,
     filters = filters,
+    parameters = parameters,
     dependencies = dependencies$ids,
     dependencies_complete = dependencies$complete,
     relationships = relationships,
@@ -845,18 +841,34 @@ databricks_semantic_metric_sql <- function(
   dimensions,
   where,
   members,
-  con
+  con,
+  arguments = list()
 ) {
   dimension_sql <- databricks_semantic_member_references(dimensions, con)
   metric_sql <- vapply(seq_len(nrow(metrics)), function(i) {
     reference <- DBI::dbQuoteIdentifier(con, metrics$name[[i]])
     sprintf("MEASURE(%s) AS %s", reference, reference)
   }, character(1))
+  relation <- as.character(DBI::dbQuoteIdentifier(con, model$id))
+  if (length(arguments)) {
+    relation <- paste0(
+      relation,
+      "(",
+      paste(
+        sprintf(
+          "%s => ?",
+          DBI::dbQuoteIdentifier(con, names(arguments))
+        ),
+        collapse = ", "
+      ),
+      ")"
+    )
+  }
   sql <- paste(
     "SELECT",
     paste(c(dimension_sql, metric_sql), collapse = ", "),
     "FROM",
-    DBI::dbQuoteIdentifier(con, model$id)
+    relation
   )
   conditions <- semantic_where_conditions(
     where,

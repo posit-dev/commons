@@ -5,7 +5,8 @@ build_commons_tools <- function(self, private) {
     if (pool_searchable(
       private$registry,
       private$definitions,
-      private$semantic_models
+      private$semantic_models,
+      private$calculations
     )) {
       list(tool_search_pool(private))
     },
@@ -15,6 +16,9 @@ build_commons_tools <- function(self, private) {
         semantic_registry_has_metrics(private$semantic_models)
     ) {
       list(tool_call_metrics(private))
+    },
+    if (length(private$calculations)) {
+      list(tool_call_calculation(private))
     },
     if (any(vapply(private$sources, catalog_searchable, logical(1)))) {
       list(tool_search_catalog(private))
@@ -77,10 +81,18 @@ tool_search_catalog <- function(private) {
 # Measures are never listed in the system prompt, and definitions past their
 # ambient cap aren't either; a search tool over a fully visible pool would
 # just cost the model a verification round trip.
-pool_searchable <- function(measures, definitions, semantic_models = NULL) {
+pool_searchable <- function(
+  measures,
+  definitions,
+  semantic_models = NULL,
+  calculations = list()
+) {
   has_semantic_models <- !is.null(semantic_models) &&
     nrow(registry_semantic_members(semantic_models)) > 0L
-  length(measures) > 0 || definitions_overflow(definitions) || has_semantic_models
+  length(measures) > 0 ||
+    definitions_overflow(definitions) ||
+    has_semantic_models ||
+    length(calculations) > 0L
 }
 
 tool_search_pool <- function(private) {
@@ -96,6 +108,9 @@ tool_search_pool <- function(private) {
     },
     if (nrow(registry_semantic_members(private$semantic_models)) > 0) {
       "native semantic-model metrics (run with call_metrics)"
+    },
+    if (length(private$calculations)) {
+      "exact trusted queries (run with call_calculation)"
     }
   )
   ellmer::tool(
@@ -105,7 +120,8 @@ tool_search_pool <- function(private) {
         private$definitions,
         query,
         source_names,
-        semantic_models = private$semantic_models
+        semantic_models = private$semantic_models,
+        calculations = private$calculations
       )
       tool_result(
         body,
@@ -143,6 +159,7 @@ tool_call_metrics <- function(private) {
       dimensions = NULL,
       filters = NULL,
       where = NULL,
+      arguments = "{}",
       source = NULL
     ) {
       call_metrics_impl(
@@ -154,7 +171,8 @@ tool_call_metrics <- function(private) {
         filters = filters,
         where = where,
         source_name = source,
-        semantic_models = private$semantic_models
+        semantic_models = private$semantic_models,
+        arguments = arguments
       )
     },
     sprintf(
@@ -166,7 +184,8 @@ tool_call_metrics <- function(private) {
       if (pool_searchable(
         private$registry,
         private$definitions,
-        private$semantic_models
+        private$semantic_models,
+        private$calculations
       )) {
         "the system prompt or search_pool"
       } else {
@@ -204,11 +223,50 @@ tool_call_metrics <- function(private) {
         "Simple column predicates, e.g. a date range.",
         required = FALSE
       ),
+      arguments = ellmer::type_string(
+        "A JSON object of native semantic-model parameter values.",
+        required = FALSE
+      ),
       source = sql_source_type(private$sources)
     ),
     name = "call_metrics",
     annotations = ellmer::tool_annotations(
       title = "Metrics",
+      icon = maybe_icon("shield-check"),
+      read_only_hint = TRUE
+    )
+  )
+}
+
+tool_call_calculation <- function(private) {
+  ellmer::tool(
+    function(name, arguments = "{}", source = NULL) {
+      call_calculation_impl(
+        private$calculations,
+        private$sources,
+        private$handles,
+        name,
+        arguments,
+        source_name = source
+      )
+    },
+    paste(
+      "Run an exact trusted query returned by search_pool.",
+      "Arguments are validated and bound; identifier arguments accept only",
+      "the values listed by search_pool."
+    ),
+    arguments = list(
+      name = ellmer::type_string(
+        "The calculation name, exactly as returned by search_pool."
+      ),
+      arguments = ellmer::type_string(
+        "A JSON object of the calculation's arguments."
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "call_calculation",
+    annotations = ellmer::tool_annotations(
+      title = "Trusted query",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )

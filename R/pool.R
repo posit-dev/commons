@@ -11,7 +11,8 @@ call_metrics_impl <- function(
   filters = NULL,
   where = NULL,
   source_name = NULL,
-  semantic_models = NULL
+  semantic_models = NULL,
+  arguments = "{}"
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
@@ -33,8 +34,15 @@ call_metrics_impl <- function(
       dimensions,
       filters,
       where,
-      source_name
+      source_name,
+      arguments
     ))
+  }
+
+  if (length(parse_json_args(arguments))) {
+    cli::cli_abort(
+      "{.arg arguments} is supported only for native semantic metrics."
+    )
   }
 
   metric_defs <- resolve_pool_names(metrics, defs, kind = "metric")
@@ -197,7 +205,8 @@ call_semantic_metrics <- function(
   dimensions,
   filters,
   where,
-  source_name
+  source_name,
+  arguments
 ) {
   metric_members <- resolve_semantic_members(metrics, members, "metric")
   models <- unique(metric_members$model)
@@ -212,6 +221,11 @@ call_semantic_metrics <- function(
     "dimension"
   )
   filter_members <- resolve_semantic_filters(filters, model_members)
+  arguments <- validate_typed_arguments(
+    model$parameters,
+    parse_json_args(arguments),
+    include_defaults = FALSE
+  )
   sql <- switch(
     model$backend,
     snowflake_semantic_view = snowflake_semantic_metric_sql(
@@ -221,7 +235,8 @@ call_semantic_metrics <- function(
       filter_members,
       where,
       model_members,
-      source$con
+      source$con,
+      arguments = arguments
     ),
     databricks_metric_view = {
       if (nrow(filter_members)) {
@@ -235,14 +250,15 @@ call_semantic_metrics <- function(
         dimension_members,
         where,
         model_members,
-        source$con
+        source$con,
+        arguments = arguments
       )
     },
     cli::cli_abort(
       "Unsupported native semantic-model backend {.val {model$backend}}."
     )
   )
-  result <- source_query(source, sql)
+  result <- source_query_bind(source, sql, unname(arguments))
   metric_tool_result(
     result,
     sql,
@@ -438,12 +454,18 @@ search_pool_text <- function(
   registry,
   query,
   source_names = character(),
-  semantic_models = NULL
+  semantic_models = NULL,
+  calculations = list()
 ) {
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
   semantic_members <- registry_semantic_members(semantic_models)
-  if (length(measures) == 0 && nrow(defs) == 0 && nrow(semantic_members) == 0) {
+  if (
+    length(measures) == 0 &&
+      nrow(defs) == 0 &&
+      nrow(semantic_members) == 0 &&
+      length(calculations) == 0
+  ) {
     return("The semantic layer is empty.")
   }
 
@@ -470,6 +492,23 @@ search_pool_text <- function(
       blank_na(semantic_members$label),
       blank_na(semantic_members$description),
       semantic_members$synonyms
+    ),
+    vapply(
+      calculations,
+      function(calculation) paste(
+        calculation$key,
+        calculation$name,
+        calculation$description,
+        paste(
+          vapply(
+            calculation$arguments,
+            function(argument) argument$description %||% "",
+            character(1)
+          ),
+          collapse = " "
+        )
+      ),
+      character(1)
     )
   )
 
@@ -487,10 +526,27 @@ search_pool_text <- function(
         measure_schema_text(measures[[hit]], source_names = source_names)
       } else if (hit <= length(measures) + nrow(defs)) {
         definition_pool_text(defs[hit - length(measures), ], defs)
-      } else {
+      } else if (
+        hit <= length(measures) + nrow(defs) + nrow(semantic_members)
+      ) {
         semantic_member_pool_text(
           semantic_members[hit - length(measures) - nrow(defs), , drop = FALSE],
           semantic_members,
+          source_names,
+          registry_semantic_parameters(
+            semantic_models,
+            semantic_members[
+              hit - length(measures) - nrow(defs),
+              ,
+              drop = FALSE
+            ]
+          )
+        )
+      } else {
+        calculation_pool_text(
+          calculations[[
+            hit - length(measures) - nrow(defs) - nrow(semantic_members)
+          ]],
           source_names
         )
       }
