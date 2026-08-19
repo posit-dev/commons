@@ -52,6 +52,8 @@
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
+#' @param exclude For Snowflake and Databricks namespace selections, optional
+#'   unqualified object-name globs to omit, such as `"TMP_*"`.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
 #'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
@@ -103,10 +105,16 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL, dictionary = NULL) {
+data_source <- function(..., tables = NULL, exclude = NULL, dictionary = NULL) {
   dots <- rlang::list2(...)
   dictionary <- as_data_dictionary(dictionary)
   kind <- data_source_kind(dots)
+  check_catalog_exclude(exclude)
+  if (!is.null(exclude) && !identical(kind, "connection")) {
+    cli::cli_abort(
+      "{.arg exclude} is supported only for DBI connection data sources."
+    )
+  }
 
   local_commons_span(
     "commons_data_source_create",
@@ -114,7 +122,12 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   )
 
   if (kind == "connection") {
-    return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
+    return(data_source_connection(
+      dots[[1]],
+      tables,
+      exclude = exclude,
+      dictionary = dictionary
+    ))
   }
   if (kind == "board") {
     return(data_source_board(dots[[1]], tables, dictionary = dictionary))
@@ -156,13 +169,19 @@ data_source_kind <- function(dots) {
 data_source_connection <- function(
   con,
   tables,
+  exclude = NULL,
   dictionary = NULL,
   call = rlang::caller_env()
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
 
   if (is_snowflake_connection(con)) {
-    table_registry <- snowflake_table_registry(con, tables, call = call)
+    table_registry <- snowflake_table_registry(
+      con,
+      tables,
+      exclude = exclude,
+      call = call
+    )
     if (length(table_registry$validate$labels)) {
       check_table_ids_exist(con, table_registry$validate, call = call)
     }
@@ -189,12 +208,18 @@ data_source_connection <- function(
       dictionary = dictionary,
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
-      semantic_models = table_registry$semantic_models
+      semantic_models = table_registry$semantic_models,
+      namespace_selected = table_registry$namespace_selected
     ))
   }
 
   if (is_databricks_connection(con)) {
-    table_registry <- databricks_table_registry(con, tables, call = call)
+    table_registry <- databricks_table_registry(
+      con,
+      tables,
+      exclude = exclude,
+      call = call
+    )
     if (length(table_registry$validate$labels)) {
       check_table_ids_exist(con, table_registry$validate, call = call)
     }
@@ -221,8 +246,16 @@ data_source_connection <- function(
       dictionary = dictionary,
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
-      semantic_models = table_registry$semantic_models
+      semantic_models = table_registry$semantic_models,
+      namespace_selected = table_registry$namespace_selected
     ))
+  }
+
+  if (!is.null(exclude)) {
+    cli::cli_abort(
+      "{.arg exclude} is supported only for Snowflake and Databricks connections.",
+      call = call
+    )
   }
 
   if (is.null(tables)) {
@@ -326,7 +359,8 @@ new_data_source <- function(
   pending = NULL,
   relations = NULL,
   definition_bindings = NULL,
-  semantic_models = list()
+  semantic_models = list(),
+  namespace_selected = FALSE
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -350,6 +384,7 @@ new_data_source <- function(
       dictionary = dictionary,
       pending = pending,
       relations = relations,
+      manifest = new_catalog_manifest(relations, namespace_selected),
       definition_bindings = definition_bindings,
       semantic_models = semantic_models
     ),
@@ -538,7 +573,7 @@ source_describe <- function(
       n_sample
     )
   )
-  relation <- source$relations[[table]]
+  relation <- source_relation(source, table)
   if (is.null(source$relations)) {
     schema <- data.frame(
       column = names(sample),
@@ -552,12 +587,23 @@ source_describe <- function(
   } else {
     schema <- databricks_describe_relation(source$con, id, call = call)
   }
+  if (!is.null(source$manifest) && is.null(relation$columns)) {
+    relation$columns <- schema
+    source$manifest$relations[[table]] <- relation
+  }
   list(
     schema = schema,
     sample = sample,
     kind = relation$kind,
     description = relation$description
   )
+}
+
+source_relation <- function(source, table) {
+  if (!is.null(source$manifest)) {
+    return(source$manifest$relations[[table]])
+  }
+  source$relations[[table]]
 }
 
 source_query <- function(source, sql) {

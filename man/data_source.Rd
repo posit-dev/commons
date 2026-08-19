@@ -4,7 +4,7 @@
 \alias{data_source}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL, dictionary = NULL)
+data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
 }
 \arguments{
 \item{...}{A single DBI connection, a single \code{pins} board, or named data
@@ -35,6 +35,9 @@ context; private members remain hidden.
 
 For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
+
+\item{exclude}{For Snowflake and Databricks namespace selections, optional
+unqualified object-name globs to omit, such as \code{"TMP_*"}.}
 
 \item{dictionary}{An optional path to a data dictionary describing the
 source's tables and columns, in the

@@ -7,9 +7,15 @@ is_snowflake_connection <- function(con) {
 snowflake_table_registry <- function(
   con,
   tables = NULL,
+  exclude = NULL,
   call = rlang::caller_env()
 ) {
-  selection <- snowflake_catalog_selection(con, tables, call = call)
+  selection <- snowflake_catalog_selection(
+    con,
+    tables,
+    exclude = exclude,
+    call = call
+  )
   registry <- catalog_table_registry(
     con,
     selection$relations,
@@ -17,6 +23,7 @@ snowflake_table_registry <- function(
     id_type = snowflake_id_type,
     exact_relation = snowflake_exact_relation,
     list_relations = snowflake_list_relations,
+    exclude = exclude,
     call = call
   )
   registry <- catalog_exclude_relations(
@@ -33,7 +40,15 @@ snowflake_table_registry <- function(
     registry$semantic_models,
     snowflake_associated_semantic_models(con, registry, call = call)
   )
-  registry
+  registry$semantic_models <- catalog_exclude_semantic_models(
+    registry$semantic_models,
+    exclude
+  )
+  catalog_check_object_limit(
+    length(registry$relations) + length(registry$semantic_models),
+    call = call
+  )
+  catalog_check_nonempty(registry, call = call)
 }
 
 snowflake_associated_semantic_models <- function(
@@ -100,6 +115,7 @@ snowflake_associated_semantic_models <- function(
 snowflake_catalog_selection <- function(
   con,
   tables,
+  exclude = NULL,
   call = rlang::caller_env()
 ) {
   ids <- if (is.null(tables)) {
@@ -118,6 +134,10 @@ snowflake_catalog_selection <- function(
     }),
     recursive = FALSE
   )
+  semantic_views <- semantic_views[!catalog_excluded(
+    vapply(semantic_views, catalog_relation_name, character(1)),
+    exclude
+  )]
   semantic_labels <- vapply(
     semantic_views,
     function(view) table_id_label(view$id, call = call),

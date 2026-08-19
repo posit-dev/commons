@@ -24,6 +24,7 @@ system_prompt_data <- function(
   list(
     date = as.character(Sys.Date()),
     has_multiple_sources = length(sources) > 1,
+    has_catalog_search = any(vapply(sources, catalog_searchable, logical(1))),
     has_dictionary_context = nzchar(dictionary_context) ||
       nzchar(glossary_context),
     has_glossary_context = nzchar(glossary_context),
@@ -176,5 +177,11 @@ tables_text <- function(sources) {
 }
 
 table_bullets <- function(source) {
+  if (catalog_searchable(source)) {
+    return(sprintf(
+      "%d selected catalog objects. Use `search_catalog` to find tables before calling `describe_table`.",
+      length(list_tables(source))
+    ))
+  }
   paste(sprintf("- %s", list_tables(source)), collapse = "\n")
 }

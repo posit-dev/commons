@@ -384,6 +384,46 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_match(tool@value, "Sample summary")
 })
 
+test_that("live Databricks searches a broad manifest before hydration", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  catalog <- table@name[["catalog"]]
+  skip_if(is.null(catalog), "The Databricks table needs a catalog")
+
+  source <- data_source(con, tables = DBI::Id(catalog = catalog))
+  described <- Filter(
+    function(relation) {
+      !is.null(relation$description) && nzchar(relation$description)
+    },
+    source$manifest$relations
+  )
+  skip_if(length(described) == 0L, "No described catalog relation is available")
+  target <- names(described)[[1]]
+  relation <- described[[1]]
+  terms <- setdiff(
+    catalog_search_terms(relation$description),
+    catalog_search_terms(catalog_relation_name(relation))
+  )
+  terms <- terms[order(nchar(terms), decreasing = TRUE)]
+  matching_terms <- terms[vapply(terms, function(term) {
+    target %in% names(catalog_search(source, term))
+  }, logical(1))]
+  skip_if(length(matching_terms) == 0L, "No description term finds its relation")
+  query <- matching_terms[[1]]
+
+  expect_true(catalog_searchable(source))
+  expect_contains(names(catalog_search(source, query)), target)
+  expect_null(source$manifest$relations[[target]]$columns)
+
+  described <- source_describe(source, target, n_sample = 1L)
+
+  expect_gt(nrow(described$schema), 0L)
+  expect_identical(
+    source$manifest$relations[[target]]$columns,
+    described$schema
+  )
+})
+
 test_that("live Databricks scopes models associated with physical tables", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
