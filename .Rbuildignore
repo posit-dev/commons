@@ -5,7 +5,7 @@
 ^README\.Rmd$
 ^cran-comments\.md$
 inst/resources
-inst/slides
+inst/slides/
 inst/tiles/
 plans/
 AGENTS.md
