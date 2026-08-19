@@ -25,6 +25,10 @@ databricks_table_registry <- function(
     function(relation) identical(relation$kind, "metric_view"),
     registry$relations
   )
+  semantic_validate <- intersect(
+    names(semantic_views),
+    registry$validate$labels
+  )
   models <- lapply(
     semantic_views,
     databricks_read_semantic_model,
@@ -65,6 +69,7 @@ databricks_table_registry <- function(
     registry$semantic_models,
     exclude
   )
+  registry$semantic_validate <- semantic_validate
   catalog_check_object_limit(
     length(registry$relations) + length(registry$semantic_models),
     call = call

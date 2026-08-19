@@ -35,6 +35,29 @@ options(commons.test.databricks = DBI::Id(
 ))
 ```
 
+Permission tests additionally run when an inaccessible object is configured:
+
+```r
+options(
+  commons.test.snowflake.denied_table = DBI::Id(
+    catalog = "DATABASE",
+    schema = "RESTRICTED",
+    table = "TABLE"
+  ),
+  commons.test.databricks.denied_table = DBI::Id(
+    catalog = "catalog",
+    schema = "restricted",
+    table = "table"
+  )
+)
+```
+
+The Snowflake active-role test runs when a second usable role is configured:
+
+```r
+options(commons.test.snowflake.alternate_role = "REPORTER")
+```
+
 Both warehouse tests exercise exact table selection, schema and catalog
 expansion, current-schema discovery, native column metadata, and sample rows.
 The Snowflake semantic-view test imports the selected model and executes one of

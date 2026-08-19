@@ -95,6 +95,10 @@
 #' data frames, commons additionally disables extension loading and filesystem
 #' access. These are safeguards, not a sandbox: when you supply your own
 #' connection, still open it in read-only mode where the backend supports it.
+#' Snowflake and Databricks sources snapshot the principal, active role, and
+#' namespace at creation, then reject catalog and governed execution after
+#' those values change. Authored and native semantic material is exposed only
+#' after a zero-row query succeeds for the current principal.
 #'
 #' @return A `commons_data_source` object.
 #'
@@ -174,6 +178,7 @@ data_source_connection <- function(
   call = rlang::caller_env()
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
+  session <- catalog_session_snapshot(con, call = call)
 
   if (is_snowflake_connection(con)) {
     table_registry <- snowflake_table_registry(
@@ -185,12 +190,19 @@ data_source_connection <- function(
     if (length(table_registry$validate$labels)) {
       check_table_ids_exist(con, table_registry$validate, call = call)
     }
+    table_registry <- catalog_filter_semantic_access(
+      con,
+      table_registry,
+      call = call
+    )
+    table_registry <- catalog_check_nonempty(table_registry, call = call)
     merged <- catalog_merge_dictionary(
       dictionary,
       table_registry$relations,
       con,
       snowflake_describe_relation,
       "upper",
+      access_check = catalog_require_queryable,
       call = call
     )
     dictionary <- merged$dictionary
@@ -200,6 +212,7 @@ data_source_connection <- function(
       "commons.data_source.n_tables",
       length(table_registry$labels)
     )
+    catalog_check_session_snapshot(con, session, call = call)
     return(new_data_source(
       con,
       table_registry$labels,
@@ -209,7 +222,8 @@ data_source_connection <- function(
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
       semantic_models = table_registry$semantic_models,
-      namespace_selected = table_registry$namespace_selected
+      namespace_selected = table_registry$namespace_selected,
+      session = session
     ))
   }
 
@@ -223,12 +237,19 @@ data_source_connection <- function(
     if (length(table_registry$validate$labels)) {
       check_table_ids_exist(con, table_registry$validate, call = call)
     }
+    table_registry <- catalog_filter_semantic_access(
+      con,
+      table_registry,
+      call = call
+    )
+    table_registry <- catalog_check_nonempty(table_registry, call = call)
     merged <- catalog_merge_dictionary(
       dictionary,
       table_registry$relations,
       con,
       databricks_describe_relation,
       "lower",
+      access_check = catalog_require_queryable,
       call = call
     )
     dictionary <- merged$dictionary
@@ -238,6 +259,7 @@ data_source_connection <- function(
       "commons.data_source.n_tables",
       length(table_registry$labels)
     )
+    catalog_check_session_snapshot(con, session, call = call)
     return(new_data_source(
       con,
       table_registry$labels,
@@ -247,7 +269,8 @@ data_source_connection <- function(
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
       semantic_models = table_registry$semantic_models,
-      namespace_selected = table_registry$namespace_selected
+      namespace_selected = table_registry$namespace_selected,
+      session = session
     ))
   }
 
@@ -360,7 +383,8 @@ new_data_source <- function(
   relations = NULL,
   definition_bindings = NULL,
   semantic_models = list(),
-  namespace_selected = FALSE
+  namespace_selected = FALSE,
+  session = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -385,6 +409,7 @@ new_data_source <- function(
       pending = pending,
       relations = relations,
       manifest = new_catalog_manifest(relations, namespace_selected),
+      session = session,
       definition_bindings = definition_bindings,
       semantic_models = semantic_models
     ),
@@ -556,6 +581,7 @@ source_describe <- function(
   n_sample = 5,
   call = rlang::caller_env()
 ) {
+  catalog_check_session(source, call = call)
   id <- source$table_ids[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
@@ -563,6 +589,7 @@ source_describe <- function(
       i = "Available tables: {.val {source$tables}}."
     ))
   }
+  catalog_ensure_queryable(source, table, call = call)
   source_ensure_tables(source, table)
 
   sample <- DBI::dbGetQuery(
@@ -607,6 +634,7 @@ source_relation <- function(source, table) {
 }
 
 source_query <- function(source, sql) {
+  catalog_check_session(source)
   check_query(sql)
   if (is.null(source$pending)) {
     return(DBI::dbGetQuery(source$con, sql))
