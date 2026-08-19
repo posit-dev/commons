@@ -298,14 +298,14 @@ validate_typed_value <- function(
   valid <- switch(
     specification$type,
     string = is.character(value),
-    integer = is.numeric(value) && isTRUE(value == trunc(value)),
-    number = is.numeric(value),
+    integer = is.numeric(value) &&
+      is.finite(value) &&
+      abs(value) <= 2^53 &&
+      isTRUE(value == trunc(value)),
+    number = is.numeric(value) && is.finite(value),
     logical = is.logical(value),
-    date = is.character(value) && !is.na(as.Date(value, format = "%Y-%m-%d")),
-    datetime = is.character(value) && grepl(
-      "^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9]{2}:[0-9]{2}",
-      value
-    )
+    date = is.character(value) && valid_iso_date(value),
+    datetime = is.character(value) && valid_iso_datetime(value)
   )
   if (!isTRUE(valid)) {
     cli::cli_abort(
@@ -322,7 +322,46 @@ validate_typed_value <- function(
       ), call = call)
     }
   }
-  if (identical(specification$type, "integer")) as.integer(value) else value
+  value
+}
+
+valid_iso_date <- function(value) {
+  if (!grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", value)) {
+    return(FALSE)
+  }
+  parsed <- suppressWarnings(as.Date(value, format = "%Y-%m-%d"))
+  !is.na(parsed) && identical(format(parsed, "%Y-%m-%d"), value)
+}
+
+valid_iso_datetime <- function(value) {
+  if (!grepl(
+    paste0(
+      "^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T]",
+      "[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]+)?)?",
+      "(Z|[+-][0-9]{2}:[0-9]{2})?$"
+    ),
+    value
+  )) {
+    return(FALSE)
+  }
+  date <- substr(value, 1L, 10L)
+  hour <- as.integer(substr(value, 12L, 13L))
+  minute <- as.integer(substr(value, 15L, 16L))
+  second <- if (substr(value, 17L, 17L) == ":") {
+    as.integer(substr(value, 18L, 19L))
+  } else {
+    0L
+  }
+  offset <- regmatches(value, regexpr("[+-][0-9]{2}:[0-9]{2}$", value))
+  valid_offset <- length(offset) == 0L || (
+    as.integer(substr(offset, 2L, 3L)) <= 23L &&
+      as.integer(substr(offset, 5L, 6L)) <= 59L
+  )
+  valid_iso_date(date) &&
+    hour <= 23L &&
+    minute <= 59L &&
+    second <= 59L &&
+    valid_offset
 }
 
 normalize_calculation_arguments <- function(arguments) {

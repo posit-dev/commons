@@ -46,6 +46,31 @@ test_that("trusted calculations bind values and allowlist identifiers", {
   )
 })
 
+test_that("typed values retain large integers and reject malformed times", {
+  integer <- new_typed_argument("value", "integer")
+  expect_identical(
+    validate_typed_value(2147483648, integer),
+    2147483648
+  )
+  expect_error(
+    validate_typed_value(2^53 + 2, integer),
+    "must be a integer"
+  )
+
+  date <- new_typed_argument("date", "date")
+  datetime <- new_typed_argument("datetime", "datetime")
+  expect_identical(validate_typed_value("2024-02-29", date), "2024-02-29")
+  expect_error(validate_typed_value("2024-01-01junk", date), "must be a date")
+  expect_identical(
+    validate_typed_value("2024-01-01T23:59:59Z", datetime),
+    "2024-01-01T23:59:59Z"
+  )
+  expect_error(
+    validate_typed_value("2024-99-99T99:99junk", datetime),
+    "must be a datetime"
+  )
+})
+
 test_that("identifier arguments require explicit choices", {
   expect_error(
     new_typed_argument("column", "string", identifier = TRUE),

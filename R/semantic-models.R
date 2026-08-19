@@ -85,10 +85,13 @@ semantic_spec_entries <- function(entries) {
 semantic_parameters_from_spec <- function(entries, backend) {
   parameters <- lapply(semantic_spec_entries(entries), function(entry) {
     name <- entry$name
-    type <- semantic_parameter_type(entry$data_type %||% entry$type)
+    declared_type <- entry$data_type %||% entry$type
+    type <- semantic_parameter_type(declared_type)
     if (!rlang::is_string(name) || !nzchar(name) || is.null(type)) {
-      cli::cli_abort(
-        "{backend} declares an unsupported semantic parameter."
+      semantic_abort_unsupported_parameter(
+        backend,
+        name %||% "unnamed",
+        declared_type %||% "missing"
       )
     }
     default_field <- if (identical(backend, "Snowflake")) {
@@ -122,7 +125,7 @@ coerce_semantic_default <- function(value, type) {
   switch(
     type,
     string = as.character(value),
-    integer = suppressWarnings(as.integer(value)),
+    integer = suppressWarnings(as.numeric(value)),
     number = suppressWarnings(as.numeric(value)),
     logical = if (is.logical(value)) {
       value
@@ -162,6 +165,13 @@ semantic_parameter_type <- function(type) {
     return("datetime")
   }
   NULL
+}
+
+semantic_abort_unsupported_parameter <- function(backend, name, type) {
+  cli::cli_abort(
+    "{backend} semantic parameter {.val {name}} has unsupported type {.val {type}}.",
+    class = "commons_unsupported_semantic_parameter"
+  )
 }
 
 semantic_models_registry <- function(sources) {

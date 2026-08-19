@@ -469,12 +469,20 @@ databricks_read_semantic_model <- function(
       ))
     }
   }
-  model <- databricks_semantic_model_from_spec(
-    view$id,
-    specification,
-    description = view$description,
-    columns = metadata$columns %||% list()
+  model <- tryCatch(
+    databricks_semantic_model_from_spec(
+      view$id,
+      specification,
+      description = view$description,
+      columns = metadata$columns %||% list()
+    ),
+    commons_unsupported_semantic_parameter = function(err) {
+      databricks_unsupported_metric_view(view$id, conditionMessage(err))
+    }
   )
+  if (inherits(model, "commons_unsupported_databricks_metric_view")) {
+    return(model)
+  }
   model$identity <- view$identity %||% view$id
   model
 }

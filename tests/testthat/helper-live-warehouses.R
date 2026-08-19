@@ -78,6 +78,48 @@ warehouse_test_semantic_view <- function(call = rlang::caller_env()) {
   view
 }
 
+warehouse_test_parameterized_model <- function(
+  backend,
+  call = rlang::caller_env()
+) {
+  backend <- match.arg(backend, c("snowflake", "databricks"))
+  option <- paste0("commons.test.", backend, ".parameterized_model")
+  model <- getOption(option)
+  skip_if(is.null(model), paste0("Set options(", option, " = DBI::Id(...))"))
+  if (!inherits(model, "Id")) {
+    cli::cli_abort(
+      "The {.option {option}} option must be a {.cls DBI::Id} object.",
+      call = call
+    )
+  }
+  arguments_option <- paste0(option, "_arguments")
+  arguments <- getOption(arguments_option)
+  skip_if(
+    is.null(arguments),
+    paste0("Set options(", arguments_option, " = list(...))")
+  )
+  if (!is.list(arguments) || is.null(names(arguments))) {
+    cli::cli_abort(
+      "The {.option {arguments_option}} option must be a named list.",
+      call = call
+    )
+  }
+  list(id = model, arguments = arguments)
+}
+
+warehouse_test_verified_query_view <- function(call = rlang::caller_env()) {
+  option <- "commons.test.snowflake.verified_query_view"
+  view <- getOption(option)
+  skip_if(is.null(view), paste0("Set options(", option, " = DBI::Id(...))"))
+  if (!inherits(view, "Id")) {
+    cli::cli_abort(
+      "The {.option {option}} option must be a {.cls DBI::Id} object.",
+      call = call
+    )
+  }
+  view
+}
+
 warehouse_read_one <- function(con, id) {
   sql <- paste(
     "SELECT * FROM",
