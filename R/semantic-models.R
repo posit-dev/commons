@@ -39,6 +39,20 @@ new_semantic_member <- function(
   )
 }
 
+semantic_spec_entries <- function(entries) {
+  if (length(entries) == 0L) {
+    return(list())
+  }
+  entries <- lapply(entries, as.list)
+  entry_names <- rlang::names2(entries)
+  for (i in seq_along(entries)) {
+    if (is.null(entries[[i]]$name) && nzchar(entry_names[[i]])) {
+      entries[[i]]$name <- entry_names[[i]]
+    }
+  }
+  entries
+}
+
 semantic_models_registry <- function(sources) {
   rows <- list(no_semantic_members)
   source_labels <- rlang::names2(sources)
@@ -206,6 +220,46 @@ resolve_semantic_member <- function(
     ),
     call = call
   )
+}
+
+semantic_where_conditions <- function(
+  where,
+  members,
+  con,
+  member_references,
+  call = rlang::caller_env()
+) {
+  vapply(normalize_where(where), function(triple) {
+    for (field in c("column", "op", "value")) {
+      value <- triple[[field]]
+      if (length(value) != 1L || is.na(value) || !nzchar(as.character(value))) {
+        cli::cli_abort(
+          "Each {.arg where} entry needs {.field column}, {.field op}, and {.field value}.",
+          call = call
+        )
+      }
+      triple[[field]] <- as.character(value)
+    }
+    if (!triple$op %in% where_ops) {
+      cli::cli_abort(
+        "{.arg where} operator must be one of {.val {where_ops}}, not {.val {triple$op}}.",
+        call = call
+      )
+    }
+    dimension <- resolve_semantic_member(
+      triple$column,
+      members,
+      "dimension",
+      call = call
+    )
+    reference <- member_references(dimension, con)
+    value <- if (grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)) {
+      triple$value
+    } else {
+      as.character(DBI::dbQuoteString(con, triple$value))
+    }
+    sprintf("(%s %s %s)", reference, triple$op, value)
+  }, character(1))
 }
 
 semantic_member_pool_text <- function(

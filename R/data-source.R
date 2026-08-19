@@ -39,9 +39,12 @@
 #'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
-#'   schema. Snowflake selections also import semantic views as native trusted
-#'   metrics and dimensions. Semantic views are available through
-#'   `search_pool` and `call_metrics`, but are not returned by [list_tables()].
+#'   schema. Snowflake selections import semantic views, and Databricks
+#'   selections import unparameterized metric views, as native trusted metrics
+#'   and dimensions. Databricks wildcard members require concrete column
+#'   metadata from the warehouse.
+#'   Native semantic models are available through `search_pool` and
+#'   `call_metrics`, but are not returned by [list_tables()].
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
@@ -213,7 +216,8 @@ data_source_connection <- function(
       table_ids = table_registry$ids,
       dictionary = dictionary,
       relations = table_registry$relations,
-      definition_bindings = merged$definition_bindings
+      definition_bindings = merged$definition_bindings,
+      semantic_models = table_registry$semantic_models
     ))
   }
 
