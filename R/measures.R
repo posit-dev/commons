@@ -125,9 +125,10 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #'
 #' For full control over a result, `fn` can return an
 #' [ellmer::ContentToolResult]. Its `value` is sent to the model and its
-#' `extra$display` controls the shinychat display. An optional `extra$data`
-#' value is made available to `run_r` and removed from the result before it is
-#' returned to ellmer.
+#' `extra$display` controls the shinychat display. When the display includes
+#' HTML, Markdown, or text, the model is told that the result is already visible
+#' to the user. An optional `extra$data` value is made available to `run_r` and
+#' removed from the result before it is returned to ellmer.
 #'
 #' @param name Measure name.
 #' @param description What the measure computes.

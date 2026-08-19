@@ -368,16 +368,22 @@ call_measure_tool <- function(
 measure_content_tool_result <- function(td, result, handles) {
   data <- result@extra$data
   result@extra$data <- NULL
+  display <- result@extra$display
 
   if (is.null(result@error)) {
     data <- collect_lazy_table(data)
     advert <- register_handle(handles, data)
     result@value <- append_handle_advert(result@value, advert)
+    if (measure_result_is_visible(display)) {
+      result@value <- prepend_model_note(
+        result@value,
+        visible_result_note("measure result")
+      )
+    }
   }
 
   title <- sprintf("Measure: %s", tool_title(td))
   icon <- maybe_icon("shield-check")
-  display <- result@extra$display
   if (is.null(display)) {
     display <- shinychat::tool_result_display(title = title, icon = icon)
   } else if (is.list(display)) {
@@ -387,6 +393,29 @@ measure_content_tool_result <- function(td, result, handles) {
   result@extra$display <- display
   result@extra$commons_tag <- "A"
   result
+}
+
+measure_result_is_visible <- function(display) {
+  is.list(display) && any(vapply(
+    display[c("html", "markdown", "text")],
+    Negate(is.null),
+    logical(1)
+  ))
+}
+
+prepend_model_note <- function(value, note) {
+  note <- ellmer::ContentText(note)
+  if (S7::S7_inherits(value, ellmer::Content)) {
+    return(list(note, value))
+  }
+  if (
+    is.list(value) &&
+      length(value) > 0 &&
+      all(vapply(value, S7::S7_inherits, logical(1), ellmer::Content))
+  ) {
+    return(c(list(note), value))
+  }
+  paste(c(note@text, format_measure_value(value)), collapse = "\n\n")
 }
 
 append_handle_advert <- function(value, advert) {

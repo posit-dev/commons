@@ -101,6 +101,12 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
 
   res <- call_measure_tool(registry, "table", "{}", handles = store)
 
+  expect_match(
+    res@value,
+    "This measure result is already visible to the user",
+    fixed = TRUE
+  )
+  expect_match(res@value, "Do not recreate or repeat it", fixed = TRUE)
   expect_match(res@value, "Headache: 7", fixed = TRUE)
   expect_match(res@value, "Available to `run_r` as `r1`", fixed = TRUE)
   expect_identical(get_handle(store, "r1"), table)

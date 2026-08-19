@@ -37,9 +37,10 @@ result without repeating it.
 
 For full control over a result, \code{fn} can return an
 \link[ellmer:ContentToolResult]{ellmer::ContentToolResult}. Its \code{value} is sent to the model and its
-\code{extra$display} controls the shinychat display. An optional \code{extra$data}
-value is made available to \code{run_r} and removed from the result before it is
-returned to ellmer.
+\code{extra$display} controls the shinychat display. When the display includes
+HTML, Markdown, or text, the model is told that the result is already visible
+to the user. An optional \code{extra$data} value is made available to \code{run_r} and
+removed from the result before it is returned to ellmer.
 }
 \examples{
 table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))
