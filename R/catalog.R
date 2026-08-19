@@ -102,6 +102,7 @@ catalog_match_exact_relation <- function(relations, id) {
   }
 
   relation <- relations[[which(is_requested)[[1]]]]
+  relation$identity <- relation$id
   relation$id <- id
   relation
 }

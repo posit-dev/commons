@@ -43,6 +43,62 @@ test_that("semantic members resolve by model and logical-table aliases", {
   expect_equal(dimension$parent, "orders")
 })
 
+test_that("associated semantic models require their complete dependency closure", {
+  orders <- DBI::Id(catalog = "main", schema = "sales", table = "orders")
+  customers <- DBI::Id(
+    catalog = "main",
+    schema = "sales",
+    table = "customers"
+  )
+  model <- new_semantic_model(
+    DBI::Id(catalog = "main", schema = "sales", table = "sales_metrics"),
+    "sales_metrics",
+    backend = "databricks_metric_view",
+    dependencies = list(orders, customers)
+  )
+  selected <- list(
+    orders = list(id = orders),
+    customers = list(id = customers)
+  )
+
+  expect_true(semantic_model_in_scope(model, selected))
+  expect_false(semantic_model_in_scope(model, selected["orders"]))
+  model$dependencies_complete <- FALSE
+  expect_false(semantic_model_in_scope(model, selected))
+})
+
+test_that("semantic model context follows selected dependency tables", {
+  orders <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "ORDERS"
+  )
+  model <- new_semantic_model(
+    DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "REVENUE_MODEL"
+    ),
+    "revenue_model",
+    backend = "snowflake_semantic_view",
+    dependencies = list(orders),
+    context = list(
+      first_touch = "Use booked revenue.",
+      retrieval = "Orders join customers by customer ID."
+    )
+  )
+  source <- test_source()
+  source$relations <- list(orders = list(id = orders))
+  source$semantic_models <- list(revenue = model)
+
+  expect_equal(
+    semantic_model_first_touch(source, "orders"),
+    "Use booked revenue."
+  )
+  layer <- augment_context_layer(NULL, list(warehouse = source))
+  expect_contains(layer$docs, "Orders join customers by customer ID.")
+})
+
 test_that("native semantic members appear in pool search", {
   registry <- semantic_models_registry(list(sales_db = test_semantic_source()))
   out <- search_pool_text(

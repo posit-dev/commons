@@ -4,7 +4,13 @@ new_semantic_model <- function(
   description = NULL,
   backend,
   dimensions = list(),
-  metrics = list()
+  metrics = list(),
+  facts = list(),
+  filters = list(),
+  dependencies = list(),
+  dependencies_complete = TRUE,
+  relationships = list(),
+  context = list()
 ) {
   structure(
     list(
@@ -13,7 +19,13 @@ new_semantic_model <- function(
       description = description,
       backend = backend,
       dimensions = dimensions,
-      metrics = metrics
+      metrics = metrics,
+      facts = facts,
+      filters = filters,
+      dependencies = dependencies,
+      dependencies_complete = dependencies_complete,
+      relationships = relationships,
+      context = semantic_model_context(context)
     ),
     class = "commons_semantic_model"
   )
@@ -26,7 +38,8 @@ new_semantic_member <- function(
   label = NULL,
   description = NULL,
   type = NULL,
-  synonyms = character()
+  synonyms = character(),
+  filter = FALSE
 ) {
   list(
     name = name,
@@ -35,7 +48,17 @@ new_semantic_member <- function(
     label = label,
     description = description,
     type = type,
-    synonyms = synonyms
+    synonyms = synonyms,
+    filter = filter
+  )
+}
+
+semantic_model_context <- function(context) {
+  first_touch <- unique(as.character(context$first_touch %||% character()))
+  retrieval <- unique(as.character(context$retrieval %||% character()))
+  list(
+    first_touch = first_touch[!is.na(first_touch) & nzchar(first_touch)],
+    retrieval = retrieval[!is.na(retrieval) & nzchar(retrieval)]
   )
 }
 
@@ -60,7 +83,11 @@ semantic_models_registry <- function(sources) {
     models <- sources[[i]]$semantic_models
     for (model_label in names(models)) {
       model <- models[[model_label]]
-      members <- c(model$dimensions, model$metrics)
+      members <- c(
+        model$dimensions,
+        model$metrics,
+        Filter(function(member) isTRUE(member$filter), model$facts)
+      )
       if (length(members) == 0L) {
         next
       }
@@ -83,7 +110,8 @@ no_semantic_members <- data.frame(
   label = character(),
   description = character(),
   type = character(),
-  synonyms = character()
+  synonyms = character(),
+  filter = logical()
 )
 
 semantic_member_rows <- function(members, model, source) {
@@ -116,8 +144,101 @@ semantic_member_rows <- function(members, model, source) {
       members,
       function(member) paste(member$synonyms, collapse = " "),
       character(1)
-    )
+    ),
+    filter = vapply(members, function(member) isTRUE(member$filter), logical(1))
   )
+}
+
+semantic_models_in_scope <- function(models, relations) {
+  Filter(
+    function(model) semantic_model_in_scope(model, relations),
+    models
+  )
+}
+
+semantic_model_in_scope <- function(model, relations) {
+  if (!isTRUE(model$dependencies_complete) || length(model$dependencies) == 0L) {
+    return(FALSE)
+  }
+  selected <- vapply(
+    relations,
+    function(relation) {
+      semantic_id_key(
+        relation$identity %||% relation$id,
+        model$backend
+      )
+    },
+    character(1)
+  )
+  dependencies <- vapply(
+    model$dependencies,
+    semantic_id_key,
+    character(1),
+    backend = model$backend
+  )
+  all(dependencies %in% selected)
+}
+
+semantic_id_key <- function(id, backend) {
+  values <- unname(id@name)
+  if (identical(backend, "databricks_metric_view")) {
+    values <- tolower(values)
+  }
+  paste(names(id@name), values, sep = "=", collapse = "\034")
+}
+
+semantic_members_context <- function(members, heading) {
+  if (length(members) == 0L) {
+    return(character())
+  }
+  entries <- vapply(members, function(member) {
+    parent <- member$parent %||% ""
+    reference <- paste(
+      c(parent, member$name)[nzchar(c(parent, member$name))],
+      collapse = "."
+    )
+    detail <- member$description %||% member$label
+    if (is.null(detail) || is.na(detail) || !nzchar(detail)) {
+      detail <- NULL
+    }
+    paste0(
+      "- `", reference, "`",
+      if (!is.null(detail)) paste0(": ", detail),
+      if (isTRUE(member$filter)) " (usable as a named filter)"
+    )
+  }, character(1))
+  paste(c(paste0(heading, ":"), entries), collapse = "\n")
+}
+
+semantic_model_first_touch <- function(source, table) {
+  relation <- source$relations[[table]]
+  if (is.null(relation)) {
+    return(character())
+  }
+  Filter(
+    nzchar,
+    unique(unlist(lapply(source$semantic_models, function(model) {
+      if (semantic_model_depends_on(model, relation)) {
+        model$context$first_touch
+      } else {
+        character()
+      }
+    }), use.names = FALSE))
+  )
+}
+
+semantic_model_depends_on <- function(model, relation) {
+  relation_key <- semantic_id_key(
+    relation$identity %||% relation$id,
+    model$backend
+  )
+  dependency_keys <- vapply(
+    model$dependencies,
+    semantic_id_key,
+    character(1),
+    backend = model$backend
+  )
+  relation_key %in% dependency_keys
 }
 
 registry_semantic_members <- function(registry, source = NULL) {
@@ -181,6 +302,16 @@ resolve_semantic_members <- function(
     )
   }
   out
+}
+
+resolve_semantic_filters <- function(
+  names,
+  members,
+  call = rlang::caller_env()
+) {
+  filters <- members[members$filter %in% TRUE, , drop = FALSE]
+  filters$kind <- rep("filter", nrow(filters))
+  resolve_semantic_members(names, filters, "filter", call = call)
 }
 
 resolve_semantic_member <- function(
@@ -283,10 +414,20 @@ semantic_member_pool_text <- function(
         detail
       ),
       semantic_member_sources_line(member, source_names),
-      if (identical(member$kind[[1]], "metric")) {
-        sprintf("Query with call_metrics (metrics = [\"%s\"]).", reference)
-      } else {
-        sprintf("Use as a call_metrics dimension: %s.", reference)
+      switch(
+        member$kind[[1]],
+        metric = sprintf(
+          "Query with call_metrics (metrics = [\"%s\"]).",
+          reference
+        ),
+        dimension = sprintf(
+          "Use as a call_metrics dimension: %s.",
+          reference
+        ),
+        NULL
+      ),
+      if (isTRUE(member$filter[[1]])) {
+        sprintf("May be applied as a call_metrics filter: %s.", reference)
       }
     ),
     collapse = "\n"

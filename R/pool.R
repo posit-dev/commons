@@ -204,11 +204,6 @@ call_semantic_metrics <- function(
   if (length(models) != 1L) {
     cli::cli_abort("Metrics in one call must belong to one native semantic model.")
   }
-  if (length(filters %||% character())) {
-    cli::cli_abort(
-      "Named filters from native semantic models are not supported yet."
-    )
-  }
   model <- source$semantic_models[[models[[1]]]]
   model_members <- members[members$model == models[[1]], , drop = FALSE]
   dimension_members <- resolve_semantic_members(
@@ -216,24 +211,33 @@ call_semantic_metrics <- function(
     model_members,
     "dimension"
   )
+  filter_members <- resolve_semantic_filters(filters, model_members)
   sql <- switch(
     model$backend,
     snowflake_semantic_view = snowflake_semantic_metric_sql(
       model,
       metric_members,
       dimension_members,
+      filter_members,
       where,
       model_members,
       source$con
     ),
-    databricks_metric_view = databricks_semantic_metric_sql(
-      model,
-      metric_members,
-      dimension_members,
-      where,
-      model_members,
-      source$con
-    ),
+    databricks_metric_view = {
+      if (nrow(filter_members)) {
+        cli::cli_abort(
+          "Named filters from Databricks metric views are not supported."
+        )
+      }
+      databricks_semantic_metric_sql(
+        model,
+        metric_members,
+        dimension_members,
+        where,
+        model_members,
+        source$con
+      )
+    },
     cli::cli_abort(
       "Unsupported native semantic-model backend {.val {model$backend}}."
     )
