@@ -500,6 +500,13 @@ snowflake_semantic_model_from_spec <- function(
   )
   dependencies <- snowflake_semantic_dependencies(id, specification)
   relationships <- specification$relationships %||% list()
+  parameters <- semantic_parameters_from_spec(
+    specification$variables,
+    "Snowflake"
+  )
+  calculations <- snowflake_verified_calculations(
+    specification$verified_queries
+  )
   context <- snowflake_semantic_context(
     specification,
     dimensions,
@@ -516,11 +523,36 @@ snowflake_semantic_model_from_spec <- function(
     metrics = metrics,
     facts = facts,
     filters = filters,
+    parameters = parameters,
+    calculations = calculations,
     dependencies = dependencies$ids,
     dependencies_complete = dependencies$complete,
     relationships = relationships,
     context = list(first_touch = context, retrieval = context)
   )
+}
+
+snowflake_verified_calculations <- function(entries) {
+  calculations <- lapply(semantic_spec_entries(entries), function(entry) {
+    if (
+      !rlang::is_string(entry$name) ||
+        !nzchar(entry$name) ||
+        !rlang::is_string(entry$sql) ||
+        !nzchar(entry$sql)
+    ) {
+      cli::cli_abort("Snowflake declares an invalid verified query.")
+    }
+    new_trusted_calculation(
+      entry$name,
+      entry$question %||% entry$name,
+      entry$sql
+    )
+  })
+  names(calculations) <- vapply(calculations, `[[`, character(1), "name")
+  if (anyDuplicated(names(calculations))) {
+    cli::cli_abort("Snowflake verified query names must be unique.")
+  }
+  calculations
 }
 
 snowflake_semantic_members <- function(entries, kind, parent = NULL) {
@@ -648,7 +680,8 @@ snowflake_semantic_metric_sql <- function(
   filters = NULL,
   where,
   members,
-  con
+  con,
+  arguments = list()
 ) {
   parts <- c(
     as.character(DBI::dbQuoteIdentifier(con, model$id)),
@@ -664,7 +697,19 @@ snowflake_semantic_metric_sql <- function(
     paste(
       "METRICS",
       paste(snowflake_semantic_member_references(metrics, con), collapse = ", ")
-    )
+    ),
+    if (length(arguments)) {
+      paste(
+        "VARIABLES",
+        paste(
+          sprintf(
+            "%s => ?",
+            DBI::dbQuoteIdentifier(con, names(arguments))
+          ),
+          collapse = ", "
+        )
+      )
+    }
   )
   conditions <- c(
     snowflake_semantic_member_references(filters, con),

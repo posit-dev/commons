@@ -250,12 +250,18 @@ catalog_match_exact_relation <- function(relations, id) {
     logical(1)
   )
   if (!any(is_requested)) {
-    return(list(id = id, kind = NULL, description = NULL))
+    return(list(
+      id = id,
+      kind = NULL,
+      description = NULL,
+      discovered = FALSE
+    ))
   }
 
   relation <- relations[[which(is_requested)[[1]]]]
   relation$identity <- relation$id
   relation$id <- id
+  relation$discovered <- TRUE
   relation
 }
 

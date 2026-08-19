@@ -349,6 +349,48 @@ test_that("Snowflake semantic SQL applies named entity filters", {
   expect_match(sql, 'WHERE "orders"."active_only"', fixed = TRUE)
 })
 
+test_that("Snowflake imports and binds semantic variables", {
+  model <- snowflake_semantic_model_from_spec(
+    DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "REVENUE_MODEL"
+    ),
+    list(
+      variables = list(
+        list(
+          name = "threshold",
+          data_type = "NUMBER(5,1)",
+          default_value = "42",
+          description = "Minimum revenue."
+        ),
+        list(name = "category", data_type = "TEXT")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+  source <- test_source()
+  source$semantic_models <- list(model = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(snowflake = source))
+  )
+  metrics <- members[members$kind == "metric", , drop = FALSE]
+  sql <- snowflake_semantic_metric_sql(
+    model,
+    metrics,
+    members[0, , drop = FALSE],
+    where = NULL,
+    members = members,
+    con = DBI::ANSI(),
+    arguments = list(category = "retail")
+  )
+
+  expect_equal(model$parameters$threshold$type, "number")
+  expect_equal(model$parameters$threshold$default, 42)
+  expect_false(model$parameters$category$has_default)
+  expect_match(sql, 'VARIABLES "category" => ?', fixed = TRUE)
+})
+
 test_that("semantic views are excluded from namespace relations", {
   registry <- list(
     labels = c("DB.PUBLIC.orders", "DB.PUBLIC.model"),

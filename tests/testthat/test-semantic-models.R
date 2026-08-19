@@ -220,6 +220,58 @@ test_that("call_metrics does not mix native and data-dict metrics", {
   )
 })
 
+test_that("call_metrics validates and binds native parameters", {
+  source <- test_semantic_source()
+  model <- source$semantic_models[[1]]
+  model$parameters <- list(threshold = new_typed_argument(
+    "threshold",
+    "number"
+  ))
+  source$semantic_models[[1]] <- model
+  sources <- list(sales_db = source)
+  semantic_registry <- semantic_models_registry(sources)
+  query <- NULL
+  bindings <- NULL
+  local_mocked_bindings(
+    source_query_bind = function(source, sql, values) {
+      query <<- sql
+      bindings <<- values
+      data.frame(total_revenue = 42)
+    }
+  )
+
+  result <- call_metrics_impl(
+    empty_definitions(),
+    sources,
+    new_handle_store(),
+    metrics = "total_revenue",
+    semantic_models = semantic_registry,
+    arguments = '{"threshold":100}'
+  )
+
+  expect_match(query, "VARIABLES threshold => ?", fixed = TRUE)
+  expect_equal(bindings, list(100))
+  expect_equal(result@extra$commons_tag, "A")
+  search <- search_pool_text(
+    list(),
+    empty_definitions(),
+    "total revenue threshold",
+    semantic_models = semantic_registry
+  )
+  expect_match(search, "`threshold` (number, required)", fixed = TRUE)
+  expect_error(
+    call_metrics_impl(
+      empty_definitions(),
+      sources,
+      new_handle_store(),
+      metrics = "total_revenue",
+      semantic_models = semantic_registry,
+      arguments = '{"threshold":"high"}'
+    ),
+    "must be a number"
+  )
+})
+
 test_that("native semantic metrics add pool and metric tools", {
   agent <- test_agent(
     data_sources = list(sales_db = test_semantic_source())

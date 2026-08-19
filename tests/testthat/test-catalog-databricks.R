@@ -234,21 +234,51 @@ test_that("Databricks rejects metric semantics it cannot query faithfully", {
   expect_error(
     databricks_semantic_model_from_spec(
       id,
-      list(
-        version = 1.1,
-        parameters = list(list(name = "minimum_amount")),
-        measures = list(list(name = "revenue", expr = "SUM(revenue)"))
-      )
-    ),
-    "Parameterized Databricks metric views are not supported",
-    fixed = TRUE
-  )
-  expect_error(
-    databricks_semantic_model_from_spec(
-      id,
       list(version = 1.1, fields = list(list(expr = "source.*")))
     ),
     "wildcard members require concrete column metadata",
+    fixed = TRUE
+  )
+})
+
+test_that("Databricks imports and binds metric-view parameters", {
+  model <- databricks_semantic_model_from_spec(
+    DBI::Id(
+      catalog = "main",
+      schema = "analytics",
+      table = "sales_metrics"
+    ),
+    list(
+      version = 1.1,
+      parameters = list(list(
+        name = "minimum_amount",
+        data_type = "DECIMAL(10,2)",
+        default = 10
+      )),
+      measures = list(list(name = "revenue", expr = "SUM(revenue)"))
+    )
+  )
+  source <- test_source()
+  source$semantic_models <- list(model = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(databricks = source))
+  )
+  metrics <- members[members$kind == "metric", , drop = FALSE]
+  sql <- databricks_semantic_metric_sql(
+    model,
+    metrics,
+    members[0, , drop = FALSE],
+    where = NULL,
+    members = members,
+    con = DBI::ANSI(),
+    arguments = list(minimum_amount = 25)
+  )
+
+  expect_equal(model$parameters$minimum_amount$type, "number")
+  expect_equal(model$parameters$minimum_amount$default, 10)
+  expect_match(
+    sql,
+    'FROM "main"."analytics"."sales_metrics"("minimum_amount" => ?)',
     fixed = TRUE
   )
 })

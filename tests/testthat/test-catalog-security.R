@@ -275,7 +275,8 @@ test_that("exact missing warehouse relations retain their diagnostic", {
   )
   relations <- list(ANALYTICS.PUBLIC.MISSING = list(
     id = registry$ids[[1]],
-    kind = NULL
+    kind = NULL,
+    discovered = FALSE
   ))
   expect_error(
     catalog_require_queryable_relations(
@@ -285,4 +286,31 @@ test_that("exact missing warehouse relations retain their diagnostic", {
     ),
     "not on the connection"
   )
+})
+
+test_that("discovered relations may have an unknown kind", {
+  registry <- list(
+    labels = "hive_metastore.default.sales",
+    ids = list(DBI::Id(
+      catalog = "hive_metastore",
+      schema = "default",
+      table = "sales"
+    ))
+  )
+  relations <- list(hive_metastore.default.sales = list(
+    id = registry$ids[[1]],
+    kind = NULL,
+    discovered = TRUE
+  ))
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      list(state = "queryable", error = NULL)
+    }
+  )
+
+  expect_no_error(catalog_require_queryable_relations(
+    DBI::ANSI(),
+    registry,
+    relations = relations
+  ))
 })
