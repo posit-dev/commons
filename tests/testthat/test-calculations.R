@@ -53,8 +53,8 @@ test_that("typed values retain large integers and reject malformed times", {
     2147483648
   )
   expect_error(
-    validate_typed_value(2^53 + 2, integer),
-    "must be a integer"
+    validate_typed_value(2^53, integer),
+    "must be an integer"
   )
 
   date <- new_typed_argument("date", "date")

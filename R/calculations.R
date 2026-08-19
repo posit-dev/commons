@@ -300,7 +300,7 @@ validate_typed_value <- function(
     string = is.character(value),
     integer = is.numeric(value) &&
       is.finite(value) &&
-      abs(value) <= 2^53 &&
+      abs(value) < 2^53 &&
       isTRUE(value == trunc(value)),
     number = is.numeric(value) && is.finite(value),
     logical = is.logical(value),
@@ -308,8 +308,9 @@ validate_typed_value <- function(
     datetime = is.character(value) && valid_iso_datetime(value)
   )
   if (!isTRUE(valid)) {
+    article <- if (identical(specification$type, "integer")) "an" else "a"
     cli::cli_abort(
-      "Argument {.val {name}} must be a {specification$type} value.",
+      "Argument {.val {name}} must be {article} {specification$type} value.",
       call = call
     )
   }
