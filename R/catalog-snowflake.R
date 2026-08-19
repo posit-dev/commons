@@ -30,6 +30,10 @@ snowflake_table_registry <- function(
     registry,
     names(selection$semantic_views)
   )
+  catalog_check_object_limit(
+    length(registry$relations) + length(selection$semantic_views),
+    call = call
+  )
   registry$semantic_models <- lapply(
     selection$semantic_views,
     snowflake_read_semantic_model,
