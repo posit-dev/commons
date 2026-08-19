@@ -188,7 +188,11 @@ data_source_connection <- function(
       call = call
     )
     if (length(table_registry$validate$labels)) {
-      check_table_ids_exist(con, table_registry$validate, call = call)
+      catalog_require_queryable_relations(
+        con,
+        table_registry$validate,
+        call = call
+      )
     }
     table_registry <- catalog_filter_semantic_access(
       con,
@@ -235,7 +239,11 @@ data_source_connection <- function(
       call = call
     )
     if (length(table_registry$validate$labels)) {
-      check_table_ids_exist(con, table_registry$validate, call = call)
+      catalog_require_queryable_relations(
+        con,
+        table_registry$validate,
+        call = call
+      )
     }
     table_registry <- catalog_filter_semantic_access(
       con,

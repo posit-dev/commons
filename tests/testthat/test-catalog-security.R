@@ -14,6 +14,7 @@ test_that("session snapshots retain authority-bearing fields", {
   snowflake <- catalog_session_row(data.frame(
     principal = "ANALYST",
     role = "REPORTER",
+    secondary_roles = '{"roles":"READER","value":"ALL"}',
     catalog = "ANALYTICS",
     schema = "PUBLIC"
   ), "snowflake", role = TRUE)
@@ -25,6 +26,10 @@ test_that("session snapshots retain authority-bearing fields", {
 
   expect_equal(snowflake$principal, "ANALYST")
   expect_equal(snowflake$role, "REPORTER")
+  expect_equal(
+    snowflake$secondary_roles,
+    '{"roles":"READER","value":"ALL"}'
+  )
   expect_equal(
     snowflake$namespace,
     list(catalog = "ANALYTICS", schema = "PUBLIC")
@@ -39,6 +44,7 @@ test_that("catalog operations reject changed sessions", {
     backend = "snowflake",
     principal = "ANALYST",
     role = "REPORTER",
+    secondary_roles = '{"roles":"READER","value":"ALL"}',
     namespace = list(catalog = "ANALYTICS", schema = "PUBLIC")
   )
   local_mocked_bindings(
@@ -47,6 +53,7 @@ test_that("catalog operations reject changed sessions", {
         backend = "snowflake",
         principal = "ANALYST",
         role = "ADMIN",
+        secondary_roles = '{"roles":"READER","value":"ALL"}',
         namespace = list(catalog = "ANALYTICS", schema = "PUBLIC")
       )
     }
@@ -118,6 +125,11 @@ test_that("warehouse access errors are classified conservatively", {
   )
 
   expect_equal(catalog_access_error_kind(authorization), "authorization")
+  missing_sqlstate <- structure(
+    list(message = "bad syntax", call = NULL, sqlstate = NA_character_),
+    class = c("error", "condition")
+  )
+  expect_equal(catalog_access_error_kind(missing_sqlstate), "unknown")
   expect_equal(
     catalog_access_error_kind(simpleError("warehouse is temporarily unavailable")),
     "transient"
@@ -185,4 +197,52 @@ test_that("semantic model probes use native zero-row queries", {
   expect_match(snowflake, "LIMIT 0", fixed = TRUE)
   expect_match(databricks_sql, "MEASURE", fixed = TRUE)
   expect_match(databricks_sql, "LIMIT 0", fixed = TRUE)
+
+  fact_only <- test_semantic_model()
+  fact_only$metrics <- list()
+  fact_only$dimensions <- list()
+  fact_only$facts <- list(new_semantic_member(
+    "unit_price",
+    "fact",
+    parent = "orders"
+  ))
+  fact_sql <- catalog_semantic_probe_sql(DBI::ANSI(), fact_only)
+  expect_match(fact_sql, "FACTS", fixed = TRUE)
+  expect_match(fact_sql, "unit_price", fixed = TRUE)
+})
+
+test_that("native semantic probes fail closed without public members", {
+  model <- test_semantic_model()
+  model$metrics <- list()
+  model$dimensions <- list()
+  model$facts <- list()
+  model$dependencies <- list(DBI::Id(table = "orders"))
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      testthat::fail("Native semantic access must not use base relations")
+    }
+  )
+
+  expect_equal(catalog_probe_semantic_model(DBI::ANSI(), model)$state, "unknown")
+})
+
+test_that("exact warehouse relations use classified access probes", {
+  registry <- list(
+    labels = "ANALYTICS.PUBLIC.SALES",
+    ids = list(DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "SALES"
+    ))
+  )
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      list(state = "transient", error = simpleError("warehouse starting"))
+    }
+  )
+
+  expect_error(
+    catalog_require_queryable_relations(DBI::ANSI(), registry),
+    class = "commons_catalog_transient_error"
+  )
 })

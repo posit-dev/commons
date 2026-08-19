@@ -14,6 +14,7 @@ snowflake_session_snapshot <- function(con, call = rlang::caller_env()) {
       con,
       paste(
         "SELECT CURRENT_USER() AS principal, CURRENT_ROLE() AS role,",
+        "CURRENT_SECONDARY_ROLES() AS secondary_roles,",
         "CURRENT_DATABASE() AS catalog, CURRENT_SCHEMA() AS schema"
       )
     ),
@@ -55,7 +56,12 @@ catalog_session_row <- function(
   call = rlang::caller_env()
 ) {
   names(row) <- tolower(names(row))
-  required <- c("principal", if (role) "role", "catalog", "schema")
+  required <- c(
+    "principal",
+    if (role) c("role", "secondary_roles"),
+    "catalog",
+    "schema"
+  )
   if (nrow(row) != 1L || !all(required %in% names(row))) {
     cli::cli_abort(
       "{backend} returned an invalid session identity response.",
@@ -66,6 +72,11 @@ catalog_session_row <- function(
     backend = backend,
     principal = catalog_session_value(row$principal[[1]]),
     role = if (role) catalog_session_value(row$role[[1]]) else NULL,
+    secondary_roles = if (role) {
+      catalog_session_value(row$secondary_roles[[1]])
+    } else {
+      NULL
+    },
     namespace = list(
       catalog = catalog_session_value(row$catalog[[1]]),
       schema = catalog_session_value(row$schema[[1]])
@@ -139,6 +150,9 @@ catalog_access_error_kind <- function(err) {
   sqlstate <- toupper(as.character(
     err$sqlstate %||% err$state %||% err$parent$sqlstate %||% ""
   ))
+  if (length(sqlstate) != 1L || is.na(sqlstate)) {
+    sqlstate <- ""
+  }
   if (
     startsWith(sqlstate, "28") ||
       identical(sqlstate, "42501") ||
@@ -185,6 +199,22 @@ catalog_require_queryable <- function(
     catalog_abort_access(probe, label, call = call)
   }
   invisible(id)
+}
+
+catalog_require_queryable_relations <- function(
+  con,
+  registry,
+  call = rlang::caller_env()
+) {
+  for (i in seq_along(registry$ids)) {
+    catalog_require_queryable(
+      con,
+      registry$ids[[i]],
+      registry$labels[[i]],
+      call = call
+    )
+  }
+  invisible(registry)
 }
 
 catalog_ensure_queryable <- function(source, table, call = rlang::caller_env()) {
@@ -270,6 +300,15 @@ catalog_probe_semantic_model <- function(con, model) {
   if (!is.null(sql)) {
     return(catalog_probe_sql(con, sql))
   }
+  if (model$backend %in% c(
+    "snowflake_semantic_view",
+    "databricks_metric_view"
+  )) {
+    return(list(
+      state = "unknown",
+      error = simpleError("The semantic model has no queryable public member.")
+    ))
+  }
   if (length(model$dependencies) == 0L) {
     return(list(
       state = "unknown",
@@ -288,12 +327,19 @@ catalog_probe_semantic_model <- function(con, model) {
 catalog_semantic_probe_sql <- function(con, model) {
   metric <- model$metrics[1][[1]]
   dimension <- model$dimensions[1][[1]]
+  fact <- model$facts[1][[1]]
   if (identical(model$backend, "snowflake_semantic_view")) {
-    member <- metric %||% dimension
+    member <- metric %||% dimension %||% fact
     if (is.null(member)) {
       return(NULL)
     }
-    role <- if (!is.null(metric)) "METRICS" else "DIMENSIONS"
+    role <- if (!is.null(metric)) {
+      "METRICS"
+    } else if (!is.null(dimension)) {
+      "DIMENSIONS"
+    } else {
+      "FACTS"
+    }
     reference <- catalog_semantic_member_reference(con, member)
     return(paste0(
       "SELECT * FROM SEMANTIC_VIEW(\n  ",

@@ -12,6 +12,7 @@ test_that("live Snowflake discovers and describes catalog relations", {
     paste(
       "SELECT CURRENT_USER() AS principal,",
       "CURRENT_ROLE() AS role,",
+      "CURRENT_SECONDARY_ROLES() AS secondary_roles,",
       "CURRENT_DATABASE() AS catalog,",
       "CURRENT_SCHEMA() AS schema"
     )
@@ -53,7 +54,10 @@ test_that("live Snowflake discovers and describes catalog relations", {
   current_source <- data_source(con)
 
   expect_equal(nrow(session), 1)
-  expect_named(session, c("principal", "role", "catalog", "schema"))
+  expect_named(
+    session,
+    c("principal", "role", "secondary_roles", "catalog", "schema")
+  )
   expect_true(nzchar(session$principal[[1]]))
   expect_s3_class(rows, "data.frame")
   expect_true(nrow(rows) <= 1)
@@ -145,6 +149,10 @@ test_that("live Snowflake classifies denied query access", {
   con <- local_warehouse_connection("snowflake", require_table = FALSE)
 
   expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
+  expect_error(
+    data_source(con, tables = denied),
+    class = "commons_catalog_authorization_error"
+  )
 })
 
 test_that("live Snowflake rejects an ambiguous relative dictionary table", {
@@ -464,6 +472,10 @@ test_that("live Databricks classifies denied query access", {
   con <- local_warehouse_connection("databricks", require_table = FALSE)
 
   expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
+  expect_error(
+    data_source(con, tables = denied),
+    class = "commons_catalog_authorization_error"
+  )
 })
 
 test_that("live Databricks searches a broad manifest before hydration", {
