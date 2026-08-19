@@ -40,7 +40,7 @@ format:
 
 <div class="tier caution fragment" data-fragment-index="1">(Lower trust)</div>
 <div class="arrow oblique down fragment" data-fragment-index="1">→</div>
-<div class="row"><span class="pill low">Search context</span><span class="arrow">→</span><span class="pill-wrap"><span class="pill low">Write SQL/R</span><span class="tag tag-caution fragment" data-fragment-index="2"><img src="figures/warning-icon.svg" class="tag-icon" alt="">Potentially untrusted</span></span></div>
+<div class="row"><span class="pill low">Search context</span><span class="arrow">→</span><span class="pill-wrap"><span class="pill low">Write SQL/R</span><span class="tag tag-caution fragment" data-fragment-index="2"><img src="figures/warning-icon.svg" class="tag-icon" alt="">Untrusted</span></span></div>
 </div>
 :::
 
