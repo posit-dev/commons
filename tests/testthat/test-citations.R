@@ -320,9 +320,8 @@ test_that("dataset-level dictionary prose is citable", {
   )
 })
 
-test_that("add_citation_request appends full instructions once, then reminders", {
+test_that("add_citation_request appends one reminder per user turn", {
   tracker <- new.env(parent = emptyenv())
-  tracker$request <- "FULL CITATION INSTRUCTIONS"
   tracker$reminder <- "SHORT CITATION REMINDER"
   first <- tool_result("6 rows", title = "Ran SQL", tag = "B")
   second <- tool_result("3 rows", title = "Ran SQL", tag = "B")
@@ -334,11 +333,9 @@ test_that("add_citation_request appends full instructions once, then reminders",
   third <- add_citation_request(third, tracker)
 
   expect_match(first@value, "6 rows")
-  expect_match(first@value, "FULL CITATION INSTRUCTIONS", fixed = TRUE)
-  expect_no_match(first@value, "SHORT CITATION REMINDER", fixed = TRUE)
+  expect_match(first@value, "SHORT CITATION REMINDER", fixed = TRUE)
   expect_equal(second@value, "3 rows")
   expect_match(third@value, "SHORT CITATION REMINDER", fixed = TRUE)
-  expect_no_match(third@value, "FULL CITATION INSTRUCTIONS", fixed = TRUE)
 })
 
 test_that("add_citation_request appends ContentText to content lists", {
@@ -379,9 +376,47 @@ test_that("citation_reminder_text names the commons-citation dialect", {
 })
 
 test_that("citation requests do not prescribe answer length", {
-  request <- citation_request_text()
+  request <- test_agent()$get_system_prompt()
 
   expect_no_match(request, "paragraph", fixed = TRUE)
+})
+
+test_that("citation instructions describe only available tool outputs", {
+  base <- test_agent()$get_system_prompt()
+  expect_match(base, "<commons-citation>", fixed = TRUE)
+  expect_match(base, "From `search_context`", fixed = TRUE)
+  expect_match(base, "From `describe_table`", fixed = TRUE)
+  expect_match(base, "From `run_sql`", fixed = TRUE)
+  expect_match(base, "output from `run_r`", fixed = TRUE)
+  expect_no_match(base, "`search_pool`", fixed = TRUE)
+  expect_no_match(base, "`call_measure`", fixed = TRUE)
+  expect_no_match(base, "`call_metrics`", fixed = TRUE)
+
+  with_measures <- test_agent(
+    semantic_layer = semantic_layer(count_measure_tool())
+  )$get_system_prompt()
+  expect_match(with_measures, "From `search_pool`", fixed = TRUE)
+  expect_match(with_measures, "Result values from `call_measure`", fixed = TRUE)
+  expect_no_match(with_measures, "`call_metrics`", fixed = TRUE)
+  expect_no_match(with_measures, "Native semantic-model", fixed = TRUE)
+})
+
+test_that("citation trust exception names trusted calculation tools", {
+  expect_equal(citation_trust_exception(character()), "")
+  expect_equal(
+    citation_trust_exception("call_measure"),
+    " that is not based solely on output from `call_measure`"
+  )
+  expect_equal(
+    citation_trust_exception(
+      c("search_pool", "call_measure", "call_metrics")
+    ),
+    paste0(
+      " that is not based solely on output from `search_pool`",
+      " or `call_measure`",
+      " or `call_metrics`"
+    )
+  )
 })
 
 test_that("user messages reset citation requests but tool results do not", {

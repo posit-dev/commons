@@ -209,19 +209,16 @@ Commons <- R6::R6Class(
         sources
       )
       private$citation_request <- new.env(parent = emptyenv())
-      private$citation_request$request <- citation_request_text(
-        private$registry,
-        private$definitions,
-        private$semantic_models
-      )
       private$citation_request$reminder <- citation_reminder_text()
 
-      self$register_tools(build_commons_tools(self, private))
+      commons_tools <- build_commons_tools(self, private)
+      self$register_tools(commons_tools)
       self$set_system_prompt(
         commons_system_prompt(
           private$sources,
           definitions = private$definitions,
-          instructions = instructions
+          instructions = instructions,
+          tools = commons_tools
         )
       )
     },

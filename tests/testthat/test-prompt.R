@@ -90,6 +90,9 @@ test_that("system prompt data contains facts and runtime content", {
       "dictionary_context",
       "glossary_context",
       "definition_index",
+      "citation_trust_exception",
+      "citable_tool_outputs",
+      "non_citable_tool_outputs",
       "has_instructions",
       "instructions"
     )

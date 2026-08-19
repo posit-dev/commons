@@ -1,18 +1,25 @@
 commons_system_prompt <- function(
   sources,
   definitions = NULL,
-  instructions = NULL
+  instructions = NULL,
+  tools = list()
 ) {
   definitions <- definitions %||% definitions_registry(sources)
   instructions <- read_instructions(instructions)
   template <- read_system_prompt()
-  data <- system_prompt_data(sources, definitions, instructions)
+  data <- system_prompt_data(sources, definitions, instructions, tools)
   render_system_prompt(template, data)
 }
 
-system_prompt_data <- function(sources, definitions, instructions = NULL) {
+system_prompt_data <- function(
+  sources,
+  definitions,
+  instructions = NULL,
+  tools = list()
+) {
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
+  tool_names <- available_tool_names(tools)
 
   list(
     date = as.character(Sys.Date()),
@@ -25,6 +32,9 @@ system_prompt_data <- function(sources, definitions, instructions = NULL) {
     dictionary_context = dictionary_context,
     glossary_context = glossary_context,
     definition_index = definition_index_text(definitions),
+    citation_trust_exception = citation_trust_exception(tool_names),
+    citable_tool_outputs = citable_tool_output_text(tool_names),
+    non_citable_tool_outputs = non_citable_tool_output_text(tool_names),
     has_instructions = nzchar(instructions %||% ""),
     instructions = instructions %||% ""
   )

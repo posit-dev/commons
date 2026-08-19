@@ -221,9 +221,9 @@ test_that("the pool tools follow the agent's composition", {
     definitions_agent$get_system_prompt(),
     "the complete set of governed definitions"
   )
-  expect_no_match(
+  expect_match(
     definitions_agent$get_system_prompt(),
-    "call_metrics",
+    "Result values from `call_metrics`",
     fixed = TRUE
   )
 

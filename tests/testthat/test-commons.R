@@ -76,6 +76,7 @@ test_that("the system prompt includes tables and the date", {
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
   expect_no_match(prompt, "tagged A")
   expect_no_match(prompt, "tagged B")
+  expect_match(prompt, "## Citations", fixed = TRUE)
 })
 
 test_that("instructions are appended to the packaged system prompt", {
@@ -236,7 +237,7 @@ test_that("run_sql and describe_table route to the named source", {
   expect_match(S7::prop(res, "extra")$display$title, "(b)", fixed = TRUE)
 })
 
-test_that("run_sql delivers the citation request once per conversation", {
+test_that("run_sql delivers one citation reminder per user turn", {
   agent <- test_agent()
   run_sql <- agent_tool(agent, "run_sql")
 
