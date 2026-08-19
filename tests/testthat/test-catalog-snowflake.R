@@ -364,7 +364,12 @@ test_that("Snowflake imports and binds semantic variables", {
           default_value = "42",
           description = "Minimum revenue."
         ),
-        list(name = "category", data_type = "TEXT")
+        list(name = "category", data_type = "TEXT"),
+        list(
+          name = "large_id",
+          data_type = "BIGINT",
+          default_value = "2147483648"
+        )
       ),
       metrics = list(list(name = "revenue"))
     )
@@ -388,7 +393,85 @@ test_that("Snowflake imports and binds semantic variables", {
   expect_equal(model$parameters$threshold$type, "number")
   expect_equal(model$parameters$threshold$default, 42)
   expect_false(model$parameters$category$has_default)
+  expect_identical(model$parameters$large_id$default, 2147483648)
   expect_match(sql, 'VARIABLES "category" => ?', fixed = TRUE)
+})
+
+test_that("Snowflake classifies unsupported semantic variables by scope", {
+  view <- list(id = DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "MODEL"
+  ))
+  label <- table_id_label(view$id)
+  registry <- list(
+    labels = "ANALYTICS.PUBLIC.ORDERS",
+    ids = list(DBI::Id(table = "ORDERS")),
+    relations = list(ANALYTICS.PUBLIC.ORDERS = list(
+      id = DBI::Id(table = "ORDERS"),
+      kind = "table"
+    )),
+    validate = list(labels = character(), ids = list()),
+    namespace_selected = TRUE
+  )
+  exact <- FALSE
+  local_mocked_bindings(
+    snowflake_catalog_selection = function(...) {
+      list(
+        relations = list(),
+        semantic_views = stats::setNames(list(view), label),
+        semantic_validate = if (exact) label else character()
+      )
+    },
+    catalog_table_registry = function(...) registry,
+    snowflake_read_semantic_model = function(...) {
+      snowflake_unsupported_semantic_view(
+        view$id,
+        "unsupported parameter type ARRAY"
+      )
+    },
+    snowflake_associated_semantic_models = function(...) list()
+  )
+
+  expect_warning(
+    discovered <- snowflake_table_registry(DBI::ANSI()),
+    "Skipping unsupported Snowflake semantic views"
+  )
+  expect_length(discovered$semantic_models, 0L)
+
+  exact <- TRUE
+  expect_error(
+    snowflake_table_registry(DBI::ANSI()),
+    "selected Snowflake semantic views are not supported"
+  )
+})
+
+test_that("Snowflake reads unsupported variable types as unsupported models", {
+  view <- list(
+    id = DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "MODEL"
+    ),
+    description = NULL
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(...) {
+      data.frame(specification = paste(
+        "variables:",
+        "  - name: dimensions",
+        "    data_type: ARRAY",
+        "metrics:",
+        "  - name: revenue",
+        sep = "\n"
+      ))
+    },
+    .package = "DBI"
+  )
+
+  model <- snowflake_read_semantic_model(view, DBI::ANSI())
+  expect_s3_class(model, "commons_unsupported_snowflake_semantic_view")
+  expect_match(model$reason, "unsupported type", fixed = TRUE)
 })
 
 test_that("semantic views are excluded from namespace relations", {

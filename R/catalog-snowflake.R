@@ -40,6 +40,28 @@ snowflake_table_registry <- function(
     con = con,
     call = call
   )
+  unsupported <- vapply(
+    registry$semantic_models,
+    inherits,
+    logical(1),
+    "commons_unsupported_snowflake_semantic_view"
+  )
+  exact_unsupported <- intersect(
+    names(registry$semantic_models)[unsupported],
+    selection$semantic_validate
+  )
+  if (length(exact_unsupported)) {
+    snowflake_abort_unsupported_semantic_views(
+      registry$semantic_models[exact_unsupported],
+      call = call
+    )
+  }
+  if (any(unsupported)) {
+    snowflake_warn_unsupported_semantic_views(
+      registry$semantic_models[unsupported]
+    )
+  }
+  registry$semantic_models <- registry$semantic_models[!unsupported]
   registry$semantic_models <- c(
     registry$semantic_models,
     snowflake_associated_semantic_models(
@@ -59,6 +81,25 @@ snowflake_table_registry <- function(
     call = call
   )
   catalog_check_nonempty(registry, call = call)
+}
+
+snowflake_abort_unsupported_semantic_views <- function(models, call) {
+  problems <- vapply(models, `[[`, character(1), "reason")
+  cli::cli_abort(
+    c(
+      "Some selected Snowflake semantic views are not supported:",
+      stats::setNames(paste0(names(problems), ": ", problems), "*")
+    ),
+    call = call
+  )
+}
+
+snowflake_warn_unsupported_semantic_views <- function(models) {
+  problems <- vapply(models, `[[`, character(1), "reason")
+  cli::cli_warn(c(
+    "Skipping unsupported Snowflake semantic views:",
+    stats::setNames(paste0(names(problems), ": ", problems), "*")
+  ))
 }
 
 snowflake_associated_semantic_models <- function(
@@ -123,7 +164,10 @@ snowflake_associated_semantic_models <- function(
       error = function(err) NULL
     )
   })
-  keep <- !vapply(models, is.null, logical(1))
+  keep <- !vapply(models, function(model) {
+    is.null(model) ||
+      inherits(model, "commons_unsupported_snowflake_semantic_view")
+  }, logical(1))
   models <- semantic_models_in_scope(models[keep], registry$relations)
   names(models) <- vapply(
     models,
@@ -453,13 +497,28 @@ snowflake_read_semantic_model <- function(
       )
     }
   )
-  model <- snowflake_semantic_model_from_spec(
-    view$id,
-    specification,
-    description = view$description
+  model <- tryCatch(
+    snowflake_semantic_model_from_spec(
+      view$id,
+      specification,
+      description = view$description
+    ),
+    commons_unsupported_semantic_parameter = function(err) {
+      snowflake_unsupported_semantic_view(view$id, conditionMessage(err))
+    }
   )
+  if (inherits(model, "commons_unsupported_snowflake_semantic_view")) {
+    return(model)
+  }
   model$identity <- view$identity %||% view$id
   model
+}
+
+snowflake_unsupported_semantic_view <- function(id, reason) {
+  structure(
+    list(id = id, reason = reason),
+    class = "commons_unsupported_snowflake_semantic_view"
+  )
 }
 
 snowflake_semantic_model_from_spec <- function(

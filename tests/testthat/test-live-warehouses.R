@@ -317,6 +317,44 @@ test_that("live Snowflake discovers and executes a semantic view", {
   expect_equal(result@extra$commons_tag, "A")
 })
 
+test_that("live Snowflake binds native semantic variables", {
+  configured <- warehouse_test_parameterized_model("snowflake")
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+  source <- data_source(con, tables = configured$id)
+  model <- source$semantic_models[[table_id_label(configured$id)]]
+  expect_true(length(model$parameters) > 0L)
+  expect_true(length(model$metrics) > 0L)
+
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(snowflake = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = semantic_models_registry(list(snowflake = source)),
+    arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
+})
+
+test_that("live Snowflake executes an imported verified query", {
+  view <- warehouse_test_verified_query_view()
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+  source <- data_source(con, tables = view)
+  sources <- list(snowflake = source)
+  registry <- calculations_registry(sources)
+  expect_true(length(registry) > 0L)
+
+  result <- call_calculation_impl(
+    registry,
+    sources,
+    new_handle_store(),
+    registry[[1]]$key
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
+})
+
 test_that("live Snowflake scopes models associated with physical tables", {
   table <- warehouse_test_table("snowflake")
   con <- local_warehouse_connection("snowflake")
@@ -576,6 +614,26 @@ test_that("live Databricks scopes models associated with physical tables", {
     outside <- data_source(con, tables = table)
     expect_false(label %in% names(outside$semantic_models))
   }
+})
+
+test_that("live Databricks binds native metric-view parameters", {
+  configured <- warehouse_test_parameterized_model("databricks")
+  con <- local_warehouse_connection("databricks", require_table = FALSE)
+  source <- data_source(con, tables = configured$id)
+  model <- source$semantic_models[[table_id_label(configured$id)]]
+  expect_true(length(model$parameters) > 0L)
+  expect_true(length(model$metrics) > 0L)
+
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(databricks = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = semantic_models_registry(list(databricks = source)),
+    arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
 })
 
 test_that("live Databricks handles quoted relation and column names", {
