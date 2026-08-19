@@ -175,6 +175,7 @@ Commons <- R6::R6Class(
       private$context_layer <- augment_context_layer(context_layer, sources)
       private$first_touch <- new.env(parent = emptyenv())
       private$definitions <- definitions_registry(sources)
+      private$semantic_models <- semantic_models_registry(sources)
       private$registry <- semantic_layer$measures
       private$fn_sources <- semantic_layer$fn_sources
       private$injections <- resolve_injections(
@@ -193,7 +194,10 @@ Commons <- R6::R6Class(
           "commons.agent.n_data_sources" = length(sources),
           "commons.agent.has_context_layer" = !is.null(context_layer),
           "commons.agent.n_measures" = length(semantic_layer$measures),
-          "commons.agent.n_definitions" = nrow(private$definitions$defs)
+          "commons.agent.n_definitions" = nrow(private$definitions$defs),
+          "commons.agent.n_semantic_members" = nrow(
+            private$semantic_models$members
+          )
         )
       )
 
@@ -207,7 +211,8 @@ Commons <- R6::R6Class(
       private$citation_request <- new.env(parent = emptyenv())
       private$citation_request$request <- citation_request_text(
         private$registry,
-        private$definitions
+        private$definitions,
+        private$semantic_models
       )
       private$citation_request$reminder <- citation_reminder_text()
 
@@ -361,6 +366,7 @@ Commons <- R6::R6Class(
     context_layer = NULL,
     registry = NULL,
     definitions = NULL,
+    semantic_models = NULL,
     fn_sources = NULL,
     injections = NULL,
     conversation_id = NULL,

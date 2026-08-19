@@ -39,7 +39,9 @@
 #'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
-#'   schema.
+#'   schema. Snowflake selections also import semantic views as native trusted
+#'   metrics and dimensions. Semantic views are available through
+#'   `search_pool` and `call_metrics`, but are not returned by [list_tables()].
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
@@ -179,7 +181,8 @@ data_source_connection <- function(
       table_ids = table_registry$ids,
       dictionary = dictionary,
       relations = table_registry$relations,
-      definition_bindings = merged$definition_bindings
+      definition_bindings = merged$definition_bindings,
+      semantic_models = table_registry$semantic_models
     ))
   }
 
@@ -314,7 +317,8 @@ new_data_source <- function(
   dictionary = NULL,
   pending = NULL,
   relations = NULL,
-  definition_bindings = NULL
+  definition_bindings = NULL,
+  semantic_models = list()
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -338,7 +342,8 @@ new_data_source <- function(
       dictionary = dictionary,
       pending = pending,
       relations = relations,
-      definition_bindings = definition_bindings
+      definition_bindings = definition_bindings,
+      semantic_models = semantic_models
     ),
     class = "commons_data_source"
   )
