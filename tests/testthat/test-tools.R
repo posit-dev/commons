@@ -69,6 +69,109 @@ test_that("call_measure_tool registers scalar output as a handle", {
   expect_identical(res@extra$display$open, FALSE)
 })
 
+test_that("call_measure_tool supports custom ContentToolResult values", {
+  table <- data.frame(term = "Headache", count = 7)
+  display <- shinychat::tool_result_display(
+    html = htmltools::tags$table(
+      htmltools::tags$tr(
+        htmltools::tags$td("Headache"),
+        htmltools::tags$td("7")
+      )
+    ),
+    open = TRUE
+  )
+  registry <- list(
+    table = measure(
+      "table",
+      "Summarize adverse events.",
+      function() {
+        ellmer::ContentToolResult(
+          value = "Headache: 7",
+          extra = list(
+            display = display,
+            data = table,
+            custom = "preserved"
+          )
+        )
+      },
+      title = "Adverse events & outcomes"
+    )
+  )
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "table", "{}", handles = store)
+
+  expect_match(res@value, "Headache: 7", fixed = TRUE)
+  expect_match(res@value, "Available to `run_r` as `r1`", fixed = TRUE)
+  expect_identical(get_handle(store, "r1"), table)
+  expect_null(res@extra$data)
+  expect_identical(res@extra$custom, "preserved")
+  expect_identical(res@extra$display$html, display$html)
+  expect_identical(res@extra$display$open, TRUE)
+  expect_identical(
+    res@extra$display$title,
+    "Measure: Adverse events & outcomes"
+  )
+  expect_equal(res@extra$commons_tag, "A")
+})
+
+test_that("call_measure_tool preserves image content in ContentToolResult", {
+  image <- ellmer::ContentImageInline("image/png", "YWJj")
+  data <- data.frame(x = 1)
+  registry <- list(
+    image = measure(
+      "image",
+      "Return an image.",
+      function() {
+        ellmer::ContentToolResult(
+          value = image,
+          extra = list(data = data)
+        )
+      }
+    )
+  )
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "image", "{}", handles = store)
+
+  expect_length(res@value, 2)
+  expect_identical(res@value[[1]], image)
+  expect_s7_class(res@value[[2]], ellmer::ContentText)
+  expect_match(
+    res@value[[2]]@text,
+    "Available to `run_r` as `r1`",
+    fixed = TRUE
+  )
+  expect_identical(get_handle(store, "r1"), data)
+  expect_null(res@extra$data)
+  expect_identical(res@extra$display$title, "Measure: image")
+})
+
+test_that("call_measure_tool preserves custom ContentToolResult errors", {
+  local_mocked_bindings(
+    collect_lazy_table = function(...) stop("should not collect")
+  )
+  registry <- list(
+    error = measure(
+      "error",
+      "Return an authored error.",
+      function() {
+        ellmer::ContentToolResult(
+          error = "authored error",
+          extra = list(data = structure(list(), class = "tbl_sql"))
+        )
+      }
+    )
+  )
+  store <- new_handle_store()
+
+  res <- call_measure_tool(registry, "error", "{}", handles = store)
+
+  expect_identical(res@error, "authored error")
+  expect_null(res@extra$data)
+  expect_length(handle_ids(store), 0)
+})
+
 test_that("call_measure_tool shows ggplot results to the model and user", {
   skip_if_not_installed("ggplot2")
   plot <- ggplot2::ggplot()

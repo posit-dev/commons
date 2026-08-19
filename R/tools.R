@@ -321,6 +321,9 @@ call_measure_tool <- function(
     source_ensure_all(sources[[source_name]])
   }
   value <- do.call(td, c(args, injections[[name]]))
+  if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
+    return(measure_content_tool_result(td, value, handles))
+  }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
     advert <- register_handle(handles, value)
@@ -340,6 +343,48 @@ call_measure_tool <- function(
     tag = "A",
     show_tag = FALSE
   )
+}
+
+measure_content_tool_result <- function(td, result, handles) {
+  data <- result@extra$data
+  result@extra$data <- NULL
+
+  if (is.null(result@error)) {
+    data <- collect_lazy_table(data)
+    advert <- register_handle(handles, data)
+    result@value <- append_handle_advert(result@value, advert)
+  }
+
+  title <- sprintf("Measure: %s", tool_title(td))
+  icon <- maybe_icon("shield-check")
+  display <- result@extra$display
+  if (is.null(display)) {
+    display <- shinychat::tool_result_display(title = title, icon = icon)
+  } else if (is.list(display)) {
+    display$title <- display$title %||% title
+    display$icon <- display$icon %||% icon
+  }
+  result@extra$display <- display
+  result@extra$commons_tag <- "A"
+  result
+}
+
+append_handle_advert <- function(value, advert) {
+  if (is.null(advert)) {
+    return(value)
+  }
+  note <- ellmer::ContentText(advert)
+  if (S7::S7_inherits(value, ellmer::Content)) {
+    return(list(value, note))
+  }
+  if (
+    is.list(value) &&
+      length(value) > 0 &&
+      all(vapply(value, S7::S7_inherits, logical(1), ellmer::Content))
+  ) {
+    return(c(value, list(note)))
+  }
+  paste(c(format_measure_value(value), advert), collapse = "\n\n")
 }
 
 measure_plot_tool_result <- function(td, args, value, advert) {

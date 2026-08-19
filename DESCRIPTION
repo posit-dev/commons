@@ -36,6 +36,7 @@ Imports:
     rlang (>= 1.2.0),
     roxygen2,
     S7,
+    shinychat (> 0.4.0),
     utils
 Suggests:
     bit64,
@@ -57,7 +58,6 @@ Suggests:
     readr,
     rmarkdown,
     shiny (>= 1.11.1),
-    shinychat (> 0.4.0),
     shinytest2,
     testthat (>= 3.0.0),
     vitals,
