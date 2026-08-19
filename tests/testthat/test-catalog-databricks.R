@@ -61,7 +61,41 @@ test_that("Databricks ODBC metadata identifies metric views", {
   expect_equal(relations[[3]]$description, "Governed sales metrics.")
 })
 
-test_that("Databricks metric YAML imports explicit fields and measures", {
+test_that("Databricks normalizes information schema names before ODBC lookup", {
+  schemas <- NULL
+  local_mocked_bindings(
+    dbGetQuery = function(...) {
+      data.frame(
+        TABLE_CATALOG = "main",
+        TABLE_SCHEMA = "analytics",
+        TABLE_NAME = "sales_metrics",
+        TABLE_TYPE = "VIEW",
+        COMMENT = "",
+        stringsAsFactors = FALSE
+      )
+    },
+    .package = "DBI"
+  )
+  local_mocked_bindings(
+    databricks_odbc_object_types = function(con, catalog, candidate_schemas) {
+      schemas <<- candidate_schemas
+      stats::setNames(
+        "metric view",
+        databricks_object_key("analytics", "sales_metrics")
+      )
+    }
+  )
+
+  relations <- databricks_list_unity_relations(
+    DBI::ANSI(),
+    DBI::Id(catalog = "main", schema = "analytics")
+  )
+
+  expect_equal(schemas, "analytics")
+  expect_equal(relations[[1]]$kind, "metric_view")
+})
+
+test_that("Databricks metric YAML expands wildcard fields from metadata", {
   specification <- list(
     version = 1.1,
     comment = "Governed sales metrics.",
@@ -88,21 +122,69 @@ test_that("Databricks metric YAML imports explicit fields and measures", {
     schema = "analytics",
     table = "sales_metrics"
   )
+  columns <- list(
+    list(
+      name = "order_id",
+      type = list(name = "bigint"),
+      comment = "Order identifier."
+    ),
+    list(name = "region", type = list(name = "string")),
+    list(
+      name = "order_count",
+      type = list(name = "bigint"),
+      is_measure = TRUE
+    )
+  )
 
-  model <- databricks_semantic_model_from_spec(id, specification)
+  model <- databricks_semantic_model_from_spec(
+    id,
+    specification,
+    columns = columns
+  )
 
   expect_s3_class(model, "commons_semantic_model")
   expect_equal(model$backend, "databricks_metric_view")
   expect_equal(model$description, "Governed sales metrics.")
   expect_equal(
     vapply(model$dimensions, `[[`, character(1), "name"),
-    "region"
+    c("region", "order_id")
   )
   expect_equal(model$dimensions[[1]]$label, "Sales Region")
   expect_equal(model$dimensions[[1]]$synonyms, c("territory", "market"))
+  expect_equal(model$dimensions[[2]]$type, "bigint")
+  expect_equal(model$dimensions[[2]]$description, "Order identifier.")
   expect_equal(
     vapply(model$metrics, `[[`, character(1), "name"),
     "order_count"
+  )
+})
+
+test_that("Databricks rejects metric semantics it cannot query faithfully", {
+  id <- DBI::Id(
+    catalog = "main",
+    schema = "analytics",
+    table = "sales_metrics"
+  )
+
+  expect_error(
+    databricks_semantic_model_from_spec(
+      id,
+      list(
+        version = 1.1,
+        parameters = list(list(name = "minimum_amount")),
+        measures = list(list(name = "revenue", expr = "SUM(revenue)"))
+      )
+    ),
+    "Parameterized Databricks metric views are not supported",
+    fixed = TRUE
+  )
+  expect_error(
+    databricks_semantic_model_from_spec(
+      id,
+      list(version = 1.1, fields = list(list(expr = "source.*")))
+    ),
+    "wildcard members require concrete column metadata",
+    fixed = TRUE
   )
 })
 

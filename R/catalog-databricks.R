@@ -23,14 +23,53 @@ databricks_table_registry <- function(
     function(relation) identical(relation$kind, "metric_view"),
     registry$relations
   )
-  registry <- catalog_exclude_relations(registry, names(semantic_views))
-  registry$semantic_models <- lapply(
+  models <- lapply(
     semantic_views,
     databricks_read_semantic_model,
     con = con,
     call = call
   )
+  unsupported <- vapply(
+    models,
+    inherits,
+    logical(1),
+    "commons_unsupported_databricks_metric_view"
+  )
+  exact_unsupported <- intersect(
+    names(models)[unsupported],
+    registry$validate$labels
+  )
+  if (length(exact_unsupported)) {
+    databricks_abort_unsupported_metric_views(
+      models[exact_unsupported],
+      call = call
+    )
+  }
+  if (any(unsupported)) {
+    databricks_warn_unsupported_metric_views(models[unsupported])
+  }
+  registry <- catalog_exclude_relations(registry, names(semantic_views))
+  registry$semantic_models <- models[!unsupported]
   registry
+}
+
+databricks_abort_unsupported_metric_views <- function(models, call) {
+  problems <- vapply(models, `[[`, character(1), "reason")
+  cli::cli_abort(
+    c(
+      "Some selected Databricks metric views are not supported:",
+      stats::setNames(paste0(names(problems), ": ", problems), "*")
+    ),
+    call = call
+  )
+}
+
+databricks_warn_unsupported_metric_views <- function(models) {
+  problems <- vapply(models, `[[`, character(1), "reason")
+  cli::cli_warn(c(
+    "Skipping unsupported Databricks metric views:",
+    stats::setNames(paste0(names(problems), ": ", problems), "*")
+  ))
 }
 
 databricks_current_namespace <- function(con, call = rlang::caller_env()) {
@@ -133,6 +172,7 @@ databricks_list_unity_relations <- function(
       )
     }
   )
+  names(rows) <- tolower(names(rows))
   semantic_candidates <- grepl(
     "view|metric",
     rows$table_type,
@@ -216,9 +256,12 @@ databricks_odbc_object_types <- function(con, catalog, schemas) {
     )
     if (
       is.null(rows) ||
-        nrow(rows) == 0L ||
-        !all(c("name", "type") %in% names(rows))
+        nrow(rows) == 0L
     ) {
+      return(character())
+    }
+    names(rows) <- tolower(names(rows))
+    if (!all(c("name", "type") %in% names(rows))) {
       return(character())
     }
     stats::setNames(
@@ -280,7 +323,12 @@ databricks_read_semantic_model <- function(
   rlang::check_installed("yaml", call = call)
   id <- databricks_complete_relation(con, view$id, call = call)
   label <- table_id_label(id, call = call)
-  text <- databricks_metric_view_yaml(con, id)
+  metadata <- NULL
+  text <- databricks_view_definition(con, id)
+  if (is.null(text)) {
+    metadata <- databricks_metric_view_metadata(con, id)
+    text <- metadata$view_text %||% metadata$viewText
+  }
   if (is.null(text)) {
     cli::cli_abort(
       "Failed to read Databricks metric view {.val {label}}.",
@@ -311,18 +359,30 @@ databricks_read_semantic_model <- function(
       call = call
     )
   }
+  if (length(specification$parameters %||% list())) {
+    return(databricks_unsupported_metric_view(
+      view$id,
+      "parameters are not supported"
+    ))
+  }
+  if (databricks_semantic_has_wildcards(specification)) {
+    metadata <- metadata %||% databricks_metric_view_metadata(con, id)
+    if (length(metadata$columns %||% list()) == 0L) {
+      return(databricks_unsupported_metric_view(
+        view$id,
+        "wildcard members could not be expanded from column metadata"
+      ))
+    }
+  }
   databricks_semantic_model_from_spec(
     view$id,
     specification,
-    description = view$description
+    description = view$description,
+    columns = metadata$columns %||% list()
   )
 }
 
-databricks_metric_view_yaml <- function(con, id) {
-  definition <- databricks_view_definition(con, id)
-  if (!is.null(definition)) {
-    return(definition)
-  }
+databricks_metric_view_metadata <- function(con, id) {
   text <- tryCatch(
     DBI::dbGetQuery(
       con,
@@ -335,13 +395,19 @@ databricks_metric_view_yaml <- function(con, id) {
     error = function(err) NULL
   )
   if (is.null(text)) {
-    return(NULL)
+    return(list())
   }
-  metadata <- tryCatch(
+  tryCatch(
     jsonlite::fromJSON(text, simplifyVector = FALSE),
-    error = function(err) NULL
+    error = function(err) list()
   )
-  metadata$view_text %||% metadata$viewText
+}
+
+databricks_unsupported_metric_view <- function(id, reason) {
+  structure(
+    list(id = id, reason = reason),
+    class = "commons_unsupported_databricks_metric_view"
+  )
 }
 
 databricks_view_definition_max_size <- 200000L
@@ -410,13 +476,43 @@ databricks_view_definition <- function(con, id) {
 databricks_semantic_model_from_spec <- function(
   id,
   specification,
-  description = NULL
+  description = NULL,
+  columns = list()
 ) {
+  if (length(specification$parameters %||% list())) {
+    cli::cli_abort("Parameterized Databricks metric views are not supported.")
+  }
+  if (
+    databricks_semantic_has_wildcards(specification) &&
+      length(columns) == 0L
+  ) {
+    cli::cli_abort(
+      "Databricks wildcard members require concrete column metadata."
+    )
+  }
   dimensions <- c(
     databricks_semantic_members(specification$fields, "dimension"),
     databricks_semantic_members(specification$dimensions, "dimension")
   )
   metrics <- databricks_semantic_members(specification$measures, "metric")
+  dimensions <- c(
+    dimensions,
+    databricks_semantic_wildcard_members(
+      columns,
+      "dimension",
+      dimensions,
+      c(specification$fields, specification$dimensions)
+    )
+  )
+  metrics <- c(
+    metrics,
+    databricks_semantic_wildcard_members(
+      columns,
+      "metric",
+      metrics,
+      specification$measures
+    )
+  )
   new_semantic_model(
     id,
     name = id@name[["table"]],
@@ -447,6 +543,78 @@ databricks_semantic_members <- function(entries, kind) {
     )
   }
   members
+}
+
+databricks_semantic_has_wildcards <- function(specification) {
+  entries <- c(
+    specification$fields,
+    specification$dimensions,
+    specification$measures
+  )
+  any(vapply(
+    semantic_spec_entries(entries),
+    function(item) !rlang::is_string(item$name) || !nzchar(item$name),
+    logical(1)
+  ))
+}
+
+databricks_semantic_wildcard_members <- function(
+  columns,
+  kind,
+  explicit,
+  entries
+) {
+  if (!databricks_semantic_entries_have_wildcard(entries)) {
+    return(list())
+  }
+  is_measure <- vapply(
+    columns,
+    function(column) isTRUE(column$is_measure),
+    logical(1)
+  )
+  columns <- if (identical(kind, "metric")) {
+    columns[is_measure]
+  } else {
+    columns[!is_measure]
+  }
+  explicit_names <- vapply(explicit, `[[`, character(1), "name")
+  columns <- Filter(function(column) {
+    rlang::is_string(column$name) &&
+      nzchar(column$name) &&
+      !column$name %in% explicit_names
+  }, columns)
+  lapply(columns, function(column) {
+    new_semantic_member(
+      column$name,
+      kind,
+      description = column$comment,
+      type = databricks_type_text(column$type)
+    )
+  })
+}
+
+databricks_semantic_entries_have_wildcard <- function(entries) {
+  any(vapply(
+    semantic_spec_entries(entries),
+    function(item) !rlang::is_string(item$name) || !nzchar(item$name),
+    logical(1)
+  ))
+}
+
+databricks_type_text <- function(type) {
+  if (rlang::is_string(type)) {
+    return(type)
+  }
+  if (!is.list(type) || !rlang::is_string(type$name)) {
+    return(NULL)
+  }
+  switch(
+    type$name,
+    decimal = sprintf("decimal(%s,%s)", type$precision, type$scale),
+    varchar = sprintf("varchar(%s)", type$length),
+    char = sprintf("char(%s)", type$length),
+    type$name
+  )
 }
 
 databricks_semantic_metric_sql <- function(

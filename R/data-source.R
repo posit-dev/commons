@@ -40,7 +40,9 @@
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
-#'   selections import metric views, as native trusted metrics and dimensions.
+#'   selections import unparameterized metric views, as native trusted metrics
+#'   and dimensions. Databricks wildcard members require concrete column
+#'   metadata from the warehouse.
 #'   Native semantic models are available through `search_pool` and
 #'   `call_metrics`, but are not returned by [list_tables()].
 #'
