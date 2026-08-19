@@ -38,35 +38,9 @@ citation_scanner <- function(corpus = list(), resolve = NULL) {
   decisions <- list()
   out <- character(0)
   discard_close <- NULL
-  # Keep trailing whitespace retractable until a verified aside can attach.
-  pending_whitespace <- ""
-  has_attachment_target <- FALSE
 
   emit <- function(text) {
     if (nzchar(text)) out[[length(out) + 1]] <<- text
-  }
-
-  emit_text <- function(text) {
-    text <- paste0(pending_whitespace, text)
-    trailing <- regexpr("\\s*$", text, perl = TRUE)[[1]]
-    visible <- substr(text, 1L, trailing - 1L)
-    pending_whitespace <<- substr(text, trailing, nchar(text))
-    emit(visible)
-    has_attachment_target <<- has_attachment_target || nzchar(visible)
-    invisible()
-  }
-
-  emit_attachment <- function(html) {
-    if (!nzchar(html)) {
-      return(invisible())
-    }
-    if (has_attachment_target) {
-      pending_whitespace <<- ""
-    }
-    emit(paste0(pending_whitespace, html))
-    pending_whitespace <<- ""
-    has_attachment_target <<- TRUE
-    invisible()
   }
 
   # Tag anchoring follows the model's input, not the projected output.
@@ -91,7 +65,7 @@ citation_scanner <- function(corpus = list(), resolve = NULL) {
       if (!is.null(event)) {
         prefix <- substr(buf, 1, event$pos - 1)
         literal <- substr(buf, event$pos, event$pos + event$len - 1L)
-        emit_text(prefix)
+        emit(prefix)
         note_line_start(prefix)
         buf <<- substr(buf, event$pos + event$len, nchar(buf))
         if (identical(event$mode, "citation")) {
@@ -107,7 +81,7 @@ citation_scanner <- function(corpus = list(), resolve = NULL) {
       flush_len <- nchar(buf) - holdback
       if (flush_len > 0) {
         flushed <- substr(buf, 1, flush_len)
-        emit_text(flushed)
+        emit(flushed)
         note_line_start(flushed)
         buf <<- substr(buf, flush_len + 1, nchar(buf))
       }
@@ -166,7 +140,7 @@ citation_scanner <- function(corpus = list(), resolve = NULL) {
 
   close_citation <- function(body) {
     result <- resolve(parse_commons_citation(body))
-    emit_attachment(result$html)
+    emit(result$html)
     record(result$decision)
     invisible()
   }
@@ -175,22 +149,20 @@ citation_scanner <- function(corpus = list(), resolve = NULL) {
     feed = function(chunk) {
       buf <<- paste0(buf, chunk)
       out <<- character(0)
-      while (step()) {
-      }
+      while (step()) {}
       paste(out, collapse = "")
     },
     finish = function() {
-      out <<- character(0)
       if (mode == "text") {
-        emit_text(buf)
+        flushed <- buf
+        buf <<- ""
+        return(flushed)
       }
       # Never expose incomplete model-authored markup.
       buf <<- ""
       mode <<- "text"
       discard_close <<- NULL
-      emit(pending_whitespace)
-      pending_whitespace <<- ""
-      paste(out, collapse = "")
+      ""
     },
     decisions = function() decisions
   )

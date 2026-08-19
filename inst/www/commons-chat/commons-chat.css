@@ -134,72 +134,16 @@ shiny-chat-container {
   transform: translateX(-50%) rotate(225deg);
 }
 
-shiny-chat-container .shiny-aside-pill {
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--bs-border-color, #dfe3e7);
-  color: var(--bs-secondary-color, #5c636a);
-  font-size: 0.74rem;
-  font-weight: 400;
-  padding: 0.12rem 0.45rem;
+/* Shinychat owns compact marker structure and placement through this public API. */
+shiny-chat-container [data-shinychat-aside-display="compact"] {
+  --shiny-chat-aside-marker-color: var(--bs-link-color);
+  --shiny-chat-aside-marker-hover-color: var(--bs-link-hover-color);
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-bg: transparent;
+  --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
 }
 
-shiny-chat-container .shiny-aside-pill:hover,
-shiny-chat-container .shiny-aside-pill:focus-visible,
-shiny-chat-container .shiny-aside-pill[aria-expanded="true"] {
-  background: rgba(var(--bs-emphasis-color-rgb, 33, 37, 41), 0.035);
-  color: var(--bs-body-color, #212529);
-}
-
-shiny-chat-container .shiny-aside-pill img {
-  opacity: 0.75;
-}
-
-shiny-chat-container
-  .shiny-aside-group:has(.shiny-aside-pill--count) {
-  margin-inline-start: 0;
-  vertical-align: super;
-}
-
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count {
-  background: transparent;
-  box-shadow: none;
-  color: color-mix(
-    in srgb,
-    var(--bs-primary, #007bc2) 70%,
-    var(--bs-body-bg, #fff)
-  );
-  font-size: 0.72em;
-  font-weight: 600;
-  min-height: 0;
-  padding: 0 0.12em;
-}
-
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count:hover,
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count:focus-visible,
-shiny-chat-container
-  .shiny-aside-pill.shiny-aside-pill--count[aria-expanded="true"] {
-  background: transparent;
-  color: var(--bs-primary, #007bc2);
-}
-
-.shiny-aside-popover .commons-source-heading {
-  align-items: center;
-  display: flex;
-  font-weight: 600;
-  gap: 0.4em;
-  margin-bottom: 0.4em;
-}
-
-.shiny-aside-popover .commons-source-heading img {
-  border-radius: 50%;
-  height: 1.1em;
-  opacity: 0.75;
-  width: 1.1em;
-}
-
+/* Temporary bridge until Shinychat provides a public per-aside tone API. */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
   background: #f2fbf5;
@@ -238,22 +182,17 @@ shiny-chat-container
   .shiny-aside-pill:has(
     img[src$="/trusted-icon.svg"],
     img[src$="/warning-icon.svg"]
+  ) {
+  font-weight: 400;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
   )
   img {
   opacity: 1;
-}
-
-.shiny-aside-popover__label:has(
-  img[src$="/trusted-icon.svg"],
-  img[src$="/warning-icon.svg"]
-) {
-  display: none;
-}
-
-shiny-chat-container .shiny-aside-popover__body em {
-  color: var(--bs-secondary-color, #6c757d);
-  font-size: 0.92em;
-  font-style: normal;
 }
 
 /* ---- Measure display ------------------------------------------------- */

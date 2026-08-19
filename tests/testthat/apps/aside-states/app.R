@@ -10,7 +10,7 @@ citation <- commons:::render_citation_aside(
   ))
 )$html
 
-ui <- shiny::fluidPage(
+ui <- bslib::page_fillable(
   commons_ui(
     "chat",
     messages = list(

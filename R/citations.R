@@ -66,7 +66,7 @@ match_citation <- function(quote, corpus) {
   NULL
 }
 
-# Rejected citations render nothing so unverified markup cannot appear trusted.
+# Only the quote is verified; the explanation remains model-authored.
 render_citation_aside <- function(quote, explanation, corpus) {
   source <- match_citation(quote, corpus)
   decision <- list(
@@ -91,27 +91,17 @@ render_citation_aside <- function(quote, explanation, corpus) {
 
 citation_aside_html <- function(quote, explanation, label, kind) {
   icon <- citation_icon_url(kind)
-  source <- citation_source_html(label, icon)
   reason <- if (nzchar(explanation)) paste0(explanation, "\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   sprintf(
-    '<shiny-aside>%s%s%s</shiny-aside>',
-    source,
+    paste0(
+      '<shiny-aside display="compact" label="%s"%s>',
+      "%s%s</shiny-aside>"
+    ),
+    escape_attr(label),
+    if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
     reason,
     blockquote
-  )
-}
-
-citation_source_html <- function(label, icon) {
-  image <- if (is.null(icon)) {
-    ""
-  } else {
-    sprintf('<img src="%s" alt="">', escape_attr(icon))
-  }
-  sprintf(
-    '<div class="commons-source-heading">%s<span>%s</span></div>\n\n',
-    image,
-    escape_html(label)
   )
 }
 
@@ -259,12 +249,6 @@ commons_icon_url <- function(file) {
 escape_attr <- function(x) {
   x <- gsub("&", "&amp;", x, fixed = TRUE)
   gsub("\"", "&quot;", x, fixed = TRUE)
-}
-
-escape_html <- function(x) {
-  x <- gsub("&", "&amp;", x, fixed = TRUE)
-  x <- gsub("<", "&lt;", x, fixed = TRUE)
-  gsub(">", "&gt;", x, fixed = TRUE)
 }
 
 # The trajectory reviewer does not register the live chat's resource path.

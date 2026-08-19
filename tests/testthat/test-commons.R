@@ -584,6 +584,7 @@ test_that("collect_appended_tags ignores turns before from_index", {
   expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
 })
 
+# Split a real ellmer response inside reserved markup to test chunk invariance.
 stream_citations_fixture <- function(agent, raw, split_at) {
   final_turn <- ellmer::AssistantTurn(
     list(ellmer::ContentText(raw)),
