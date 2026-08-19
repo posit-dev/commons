@@ -3,6 +3,7 @@ new_semantic_model <- function(
   name,
   description = NULL,
   backend,
+  identity = id,
   dimensions = list(),
   metrics = list(),
   facts = list(),
@@ -15,6 +16,7 @@ new_semantic_model <- function(
   structure(
     list(
       id = id,
+      identity = identity,
       name = name,
       description = description,
       backend = backend,
@@ -83,6 +85,7 @@ semantic_models_registry <- function(sources) {
     models <- sources[[i]]$semantic_models
     for (model_label in names(models)) {
       model <- models[[model_label]]
+      # Standalone filters are context; only filter-labelled members compile.
       members <- c(
         model$dimensions,
         model$metrics,
@@ -154,6 +157,18 @@ semantic_models_in_scope <- function(models, relations) {
     function(model) semantic_model_in_scope(model, relations),
     models
   )
+}
+
+semantic_model_identity_key <- function(model) {
+  semantic_id_key(model$identity %||% model$id, model$backend)
+}
+
+semantic_association_seed <- function(relation) {
+  identity <- relation$identity
+  !is.null(relation$kind) &&
+    inherits(identity, "Id") &&
+    identical(names(identity@name), c("catalog", "schema", "table")) &&
+    all(!is.na(identity@name) & nzchar(identity@name))
 }
 
 semantic_model_in_scope <- function(model, relations) {

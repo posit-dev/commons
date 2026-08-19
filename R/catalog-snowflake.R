@@ -41,12 +41,15 @@ snowflake_associated_semantic_models <- function(
   registry,
   call = rlang::caller_env()
 ) {
-  relations <- registry$relations[registry$validate$labels]
-  if (length(relations) == 0L) {
+  seeds <- Filter(
+    semantic_association_seed,
+    registry$relations[registry$validate$labels]
+  )
+  if (length(seeds) == 0L) {
     return(list())
   }
-  namespaces <- lapply(relations, function(relation) {
-    identity <- relation$identity %||% relation$id
+  namespaces <- lapply(seeds, function(relation) {
+    identity <- relation$identity
     do.call(DBI::Id, as.list(identity@name[c("catalog", "schema")]))
   })
   namespace_keys <- vapply(
@@ -62,12 +65,22 @@ snowflake_associated_semantic_models <- function(
     con = con,
     call = call
   ), recursive = FALSE)
-  labels <- vapply(views, function(view) {
-    table_id_label(view$id, call = call)
-  }, character(1))
-  views <- views[!duplicated(labels)]
-  labels <- labels[!duplicated(labels)]
-  views <- views[!labels %in% names(registry$semantic_models)]
+  view_keys <- vapply(
+    views,
+    function(view) {
+      semantic_id_key(
+        view$identity %||% view$id,
+        "snowflake_semantic_view"
+      )
+    },
+    character(1)
+  )
+  selected_keys <- vapply(
+    registry$semantic_models,
+    semantic_model_identity_key,
+    character(1)
+  )
+  views <- views[!duplicated(view_keys) & !view_keys %in% selected_keys]
   models <- lapply(views, function(view) {
     tryCatch(
       snowflake_read_semantic_model(view, con, call = call),
@@ -75,7 +88,7 @@ snowflake_associated_semantic_models <- function(
     )
   })
   keep <- !vapply(models, is.null, logical(1))
-  models <- semantic_models_in_scope(models[keep], relations)
+  models <- semantic_models_in_scope(models[keep], registry$relations)
   names(models) <- vapply(
     models,
     function(model) table_id_label(model$id, call = call),
@@ -249,6 +262,7 @@ snowflake_exact_semantic_view <- function(
     return(list())
   }
   view <- views[[which(matches)[[1]]]]
+  view$identity <- view$id
   view$id <- id
   list(view)
 }
@@ -385,11 +399,13 @@ snowflake_read_semantic_model <- function(
       )
     }
   )
-  snowflake_semantic_model_from_spec(
+  model <- snowflake_semantic_model_from_spec(
     view$id,
     specification,
     description = view$description
   )
+  model$identity <- view$identity %||% view$id
+  model
 }
 
 snowflake_semantic_model_from_spec <- function(
