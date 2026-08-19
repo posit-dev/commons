@@ -246,3 +246,25 @@ test_that("exact warehouse relations use classified access probes", {
     class = "commons_catalog_transient_error"
   )
 })
+
+test_that("exact missing warehouse relations retain their diagnostic", {
+  registry <- list(
+    labels = "ANALYTICS.PUBLIC.MISSING",
+    ids = list(DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "MISSING"
+    ))
+  )
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      list(state = "unknown", error = simpleError("object not found"))
+    },
+    catalog_relation_exists = function(...) FALSE
+  )
+
+  expect_error(
+    catalog_require_queryable_relations(DBI::ANSI(), registry),
+    "not on the connection"
+  )
+})
