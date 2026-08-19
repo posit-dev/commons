@@ -194,6 +194,29 @@ test_that("associated model candidates are bounded before hydration", {
   )
 })
 
+test_that("selected Snowflake models are bounded before hydration", {
+  views <- lapply(c("MODEL_A", "MODEL_B"), function(name) {
+    list(
+      id = DBI::Id(catalog = "DB", schema = "PUBLIC", table = name),
+      description = NULL
+    )
+  })
+  local_mocked_bindings(
+    catalog_object_limit = 1L,
+    snowflake_catalog_selection = function(...) {
+      list(relations = list(), semantic_views = views)
+    },
+    snowflake_read_semantic_model = function(...) {
+      cli::cli_abort("Semantic model was hydrated.")
+    }
+  )
+
+  expect_error(
+    snowflake_table_registry(DBI::ANSI()),
+    "above the supported limit"
+  )
+})
+
 test_that("catalog exclusion globs are validated", {
   expect_equal(
     catalog_excluded(c("TMP_ONE", "orders", "stage1"), c("TMP_*", "stage?")),
