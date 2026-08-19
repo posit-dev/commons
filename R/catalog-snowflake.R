@@ -53,6 +53,7 @@ snowflake_table_registry <- function(
     registry$semantic_models,
     exclude
   )
+  registry$semantic_validate <- selection$semantic_validate
   catalog_check_object_limit(
     length(registry$relations) + length(registry$semantic_models),
     call = call
@@ -171,12 +172,25 @@ snowflake_catalog_selection <- function(
     )
   }
   names(semantic_views) <- semantic_labels
+  exact_labels <- vapply(
+    Filter(
+      function(id) identical(snowflake_id_type(id, call = call), "relation"),
+      ids
+    ),
+    table_id_label,
+    character(1),
+    call = call
+  )
 
   relations <- Filter(function(id) {
     !identical(snowflake_id_type(id, call = call), "relation") ||
       !table_id_label(id, call = call) %in% semantic_labels
   }, ids)
-  list(relations = relations, semantic_views = semantic_views)
+  list(
+    relations = relations,
+    semantic_views = semantic_views,
+    semantic_validate = intersect(semantic_labels, exact_labels)
+  )
 }
 
 snowflake_current_namespace <- function(con, call = rlang::caller_env()) {

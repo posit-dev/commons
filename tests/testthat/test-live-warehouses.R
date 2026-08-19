@@ -24,6 +24,7 @@ test_that("live Snowflake discovers and describes catalog relations", {
   dictionary <- warehouse_test_dictionary(label, column)
   exact <- data_source(con, tables = table, dictionary = dictionary)
   described <- source_describe(exact, label)
+  tool <- describe_table_tool(exact, label)
 
   namespace <- DBI::Id(
     catalog = components[["catalog"]],
@@ -86,10 +87,64 @@ test_that("live Snowflake discovers and describes catalog relations", {
     logical(1)
   )))
 
-  tool <- describe_table_tool(exact, label)
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
   expect_match(tool@value, "Sample summary")
+})
+
+test_that("live Snowflake rejects changed session namespaces", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  source <- data_source(con, tables = table)
+  current <- source$session$namespace
+  alternate <- DBI::Id(
+    catalog = table@name[["catalog"]],
+    schema = table@name[["schema"]]
+  )
+  if (identical(unname(unlist(current)), unname(alternate@name))) {
+    skip("The configured Snowflake namespace is already active")
+  }
+  DBI::dbExecute(
+    con,
+    paste("USE SCHEMA", DBI::dbQuoteIdentifier(con, alternate))
+  )
+
+  expect_error(
+    source_query(source, paste("SELECT * FROM", DBI::dbQuoteIdentifier(con, table))),
+    class = "commons_catalog_session_changed"
+  )
+})
+
+test_that("live Snowflake rejects changed active roles", {
+  table <- warehouse_test_table("snowflake")
+  alternate_role <- warehouse_test_alternate_role()
+  con <- local_warehouse_connection("snowflake")
+  source <- data_source(con, tables = table)
+  current_role <- source$session$role
+  skip_if(identical(current_role, alternate_role), "The alternate role is active")
+  withr::defer(DBI::dbExecute(
+    con,
+    paste("USE ROLE", DBI::dbQuoteIdentifier(con, current_role))
+  ))
+  DBI::dbExecute(
+    con,
+    paste("USE ROLE", DBI::dbQuoteIdentifier(con, alternate_role))
+  )
+
+  expect_error(
+    source_query(
+      source,
+      paste("SELECT * FROM", DBI::dbQuoteIdentifier(con, table))
+    ),
+    class = "commons_catalog_session_changed"
+  )
+})
+
+test_that("live Snowflake classifies denied query access", {
+  denied <- warehouse_test_denied_table("snowflake")
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+
+  expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
 })
 
 test_that("live Snowflake rejects an ambiguous relative dictionary table", {
@@ -382,6 +437,33 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
   expect_match(tool@value, "Sample summary")
+})
+
+test_that("live Databricks rejects changed session namespaces", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  source <- data_source(con, tables = table)
+  current <- source$session$namespace
+  alternate_catalog <- table@name[["catalog"]]
+  if (identical(current$catalog, alternate_catalog)) {
+    skip("The configured Databricks catalog is already active")
+  }
+  DBI::dbExecute(
+    con,
+    paste("USE CATALOG", DBI::dbQuoteIdentifier(con, alternate_catalog))
+  )
+
+  expect_error(
+    source_query(source, paste("SELECT * FROM", DBI::dbQuoteIdentifier(con, table))),
+    class = "commons_catalog_session_changed"
+  )
+})
+
+test_that("live Databricks classifies denied query access", {
+  denied <- warehouse_test_denied_table("databricks")
+  con <- local_warehouse_connection("databricks", require_table = FALSE)
+
+  expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
 })
 
 test_that("live Databricks searches a broad manifest before hydration", {

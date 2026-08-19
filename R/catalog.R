@@ -88,6 +88,8 @@ new_catalog_manifest <- function(relations, namespace_selected = FALSE) {
   }
   manifest <- new.env(parent = emptyenv())
   manifest$relations <- relations
+  manifest$access <- stats::setNames(rep("unknown", length(relations)), names(relations))
+  manifest$access_errors <- list()
   labels <- names(relations)
   manifest$searchable <- isTRUE(namespace_selected) &&
     nchar(paste(labels, collapse = "\n"), type = "bytes") >
@@ -100,6 +102,7 @@ catalog_searchable <- function(source) {
 }
 
 catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
+  catalog_check_session(source)
   rlang::check_string(query)
   rlang::check_number_whole(limit, min = 1)
   relations <- source$manifest$relations %||% list()
@@ -262,6 +265,7 @@ catalog_merge_dictionary <- function(
   con,
   describe_relation,
   identifier_case,
+  access_check = NULL,
   call = rlang::caller_env()
 ) {
   if (is.null(dictionary) || length(dictionary$tables) == 0L) {
@@ -290,6 +294,9 @@ catalog_merge_dictionary <- function(
       next
     }
     relation <- relations[[label]]
+    if (!is.null(access_check)) {
+      access_check(con, relation$id, label, call = call)
+    }
     columns <- describe_relation(con, relation$id, call = call)
     relation$columns <- columns
     relations[[label]] <- relation

@@ -40,6 +40,28 @@ warehouse_test_table <- function(backend, call = rlang::caller_env()) {
   table
 }
 
+warehouse_test_denied_table <- function(backend, call = rlang::caller_env()) {
+  backend <- match.arg(backend, c("snowflake", "databricks"))
+  option <- paste0("commons.test.", backend, ".denied_table")
+  table <- getOption(option)
+  skip_if(is.null(table), paste0("Set options(", option, " = DBI::Id(...))"))
+  if (!inherits(table, "Id")) {
+    cli::cli_abort(
+      "The {.option {option}} option must be a {.cls DBI::Id} object.",
+      call = call
+    )
+  }
+  table
+}
+
+warehouse_test_alternate_role <- function(call = rlang::caller_env()) {
+  option <- "commons.test.snowflake.alternate_role"
+  role <- getOption(option)
+  skip_if(is.null(role), paste0("Set options(", option, " = \"ROLE\")"))
+  rlang::check_string(role, call = call)
+  role
+}
+
 warehouse_test_semantic_view <- function(call = rlang::caller_env()) {
   option <- "commons.test.snowflake.semantic_view"
   view <- getOption(option)
