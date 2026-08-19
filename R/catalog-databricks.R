@@ -62,12 +62,15 @@ databricks_associated_semantic_models <- function(
   registry,
   call = rlang::caller_env()
 ) {
-  relations <- registry$relations[registry$validate$labels]
-  if (length(relations) == 0L) {
+  seeds <- Filter(
+    semantic_association_seed,
+    registry$relations[registry$validate$labels]
+  )
+  if (length(seeds) == 0L) {
     return(list())
   }
-  namespaces <- lapply(relations, function(relation) {
-    identity <- relation$identity %||% relation$id
+  namespaces <- lapply(seeds, function(relation) {
+    identity <- relation$identity
     do.call(DBI::Id, as.list(identity@name[c("catalog", "schema")]))
   })
   namespace_keys <- vapply(
@@ -87,12 +90,21 @@ databricks_associated_semantic_models <- function(
     function(relation) identical(relation$kind, "metric_view"),
     candidates
   )
-  labels <- vapply(candidates, function(relation) {
-    table_id_label(relation$id, call = call)
-  }, character(1))
-  candidates <- candidates[!duplicated(labels)]
-  labels <- labels[!duplicated(labels)]
-  candidates <- candidates[!labels %in% names(registry$semantic_models)]
+  candidate_keys <- vapply(
+    candidates,
+    function(relation) {
+      semantic_id_key(relation$id, "databricks_metric_view")
+    },
+    character(1)
+  )
+  selected_keys <- vapply(
+    registry$semantic_models,
+    semantic_model_identity_key,
+    character(1)
+  )
+  candidates <- candidates[
+    !duplicated(candidate_keys) & !candidate_keys %in% selected_keys
+  ]
   models <- lapply(candidates, function(view) {
     tryCatch(
       databricks_read_semantic_model(view, con, call = call),
@@ -102,7 +114,7 @@ databricks_associated_semantic_models <- function(
   keep <- !vapply(models, function(model) {
     is.null(model) || inherits(model, "commons_unsupported_databricks_metric_view")
   }, logical(1))
-  models <- semantic_models_in_scope(models[keep], relations)
+  models <- semantic_models_in_scope(models[keep], registry$relations)
   names(models) <- vapply(
     models,
     function(model) table_id_label(model$id, call = call),
@@ -432,12 +444,14 @@ databricks_read_semantic_model <- function(
       ))
     }
   }
-  databricks_semantic_model_from_spec(
+  model <- databricks_semantic_model_from_spec(
     view$id,
     specification,
     description = view$description,
     columns = metadata$columns %||% list()
   )
+  model$identity <- view$identity %||% view$id
+  model
 }
 
 databricks_metric_view_metadata <- function(con, id) {

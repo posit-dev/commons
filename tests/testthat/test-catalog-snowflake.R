@@ -171,6 +171,101 @@ test_that("Snowflake semantic scope retains dependencies and public context", {
   expect_true(any(grepl("orders_to_customers", model$context$retrieval)))
   expect_true(any(grepl("Order amount", model$context$retrieval)))
   expect_true(any(grepl("recent_only", model$context$retrieval)))
+
+  source <- test_source()
+  source$semantic_models <- list(revenue = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(snowflake = source))
+  )
+  expect_contains(members$name[members$filter], c("active_only", "amount"))
+  expect_false("recent_only" %in% members$name)
+})
+
+test_that("Snowflake associated discovery uses canonical model identities", {
+  dependency <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "ORDERS"
+  )
+  identity <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "REVENUE_MODEL"
+  )
+  model <- new_semantic_model(
+    DBI::Id(table = "REVENUE_MODEL"),
+    "revenue",
+    backend = "snowflake_semantic_view",
+    identity = identity,
+    dependencies = list(dependency)
+  )
+  registry <- list(
+    relations = list(orders = list(
+      id = DBI::Id(table = "ORDERS"),
+      identity = dependency,
+      kind = "table"
+    )),
+    validate = list(labels = "orders"),
+    semantic_models = list(REVENUE_MODEL = model)
+  )
+  local_mocked_bindings(
+    snowflake_list_semantic_views = function(...) {
+      list(list(id = identity, description = NULL))
+    },
+    snowflake_read_semantic_model = function(...) {
+      cli::cli_abort("Duplicate model was read.")
+    }
+  )
+
+  expect_length(
+    snowflake_associated_semantic_models(DBI::ANSI(), registry),
+    0L
+  )
+})
+
+test_that("Snowflake association closes over every selected relation", {
+  orders <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "SALES",
+    table = "ORDERS"
+  )
+  customers <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "SHARED",
+    table = "CUSTOMERS"
+  )
+  view <- list(id = DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "SALES",
+    table = "REVENUE_MODEL"
+  ))
+  model <- new_semantic_model(
+    view$id,
+    "revenue",
+    backend = "snowflake_semantic_view",
+    dependencies = list(orders, customers)
+  )
+  registry <- list(
+    relations = list(
+      orders = list(id = DBI::Id(table = "ORDERS"), identity = orders, kind = "table"),
+      customers = list(id = customers, kind = "table")
+    ),
+    validate = list(labels = "orders"),
+    semantic_models = list()
+  )
+  local_mocked_bindings(
+    snowflake_list_semantic_views = function(...) list(view),
+    snowflake_read_semantic_model = function(...) model
+  )
+
+  associated <- snowflake_associated_semantic_models(DBI::ANSI(), registry)
+  expect_named(associated, "ANALYTICS.SALES.REVENUE_MODEL")
+
+  registry$relations$orders <- list(id = DBI::Id(table = "MISSING"), kind = NULL)
+  expect_length(
+    snowflake_associated_semantic_models(DBI::ANSI(), registry),
+    0L
+  )
 })
 
 test_that("Snowflake semantic SQL uses model-owned references", {

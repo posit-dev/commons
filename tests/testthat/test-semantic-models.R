@@ -99,6 +99,47 @@ test_that("semantic model context follows selected dependency tables", {
   expect_contains(layer$docs, "Orders join customers by customer ID.")
 })
 
+test_that("semantic first-touch context is delivered once across SQL tools", {
+  source <- test_source()
+  id <- source$table_ids$sales
+  source$relations <- list(sales = list(
+    id = id,
+    kind = "table",
+    description = NULL,
+    columns = data.frame(
+      column = names(test_sales()),
+      type = vapply(test_sales(), function(x) class(x)[[1]], character(1))
+    )
+  ))
+  source$semantic_models <- list(revenue = new_semantic_model(
+    DBI::Id(table = "revenue_model"),
+    "revenue_model",
+    backend = "snowflake_semantic_view",
+    dependencies = list(id),
+    context = list(first_touch = "Use booked revenue.")
+  ))
+
+  tracker <- new.env(parent = emptyenv())
+  first <- describe_table_tool(source, "sales", tracker = tracker)
+  second <- describe_table_tool(source, "sales", tracker = tracker)
+  expect_match(first@value, "Use booked revenue.", fixed = TRUE)
+  expect_no_match(second@value, "Use booked revenue.", fixed = TRUE)
+
+  tracker <- new.env(parent = emptyenv())
+  first <- run_sql_tool(
+    source,
+    "SELECT * FROM sales LIMIT 1",
+    tracker = tracker
+  )
+  second <- run_sql_tool(
+    source,
+    "SELECT * FROM sales LIMIT 1",
+    tracker = tracker
+  )
+  expect_match(first@value, "Use booked revenue.", fixed = TRUE)
+  expect_no_match(second@value, "Use booked revenue.", fixed = TRUE)
+})
+
 test_that("native semantic members appear in pool search", {
   registry <- semantic_models_registry(list(sales_db = test_semantic_source()))
   out <- search_pool_text(
