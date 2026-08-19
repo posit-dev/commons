@@ -571,8 +571,7 @@ turn_has_tool_result <- function(turn) {
   any(vapply(turn@contents, is_tool_result_content, logical(1)))
 }
 
-# Editable histories make exchange positions unstable, so match recorded
-# provenance by content instead of ordinal.
+# Edited histories make exchange ordinals unstable, so match reconstructed content.
 exchange_signature <- function(exchange) {
   lapply(exchange, turn_signature)
 }
@@ -817,6 +816,7 @@ exchange_key <- function(span) {
   paste(span$trace_id, span$span_id)
 }
 
+# Read provenance from managed spans; missing data fails closed.
 turn_span_provenance <- function(turn_span) {
   tag <- turn_span$attributes[["commons.provenance.tag"]]
   candidates <- turn_span$attributes[["commons.citation.candidates"]]

@@ -66,7 +66,7 @@ match_citation <- function(quote, corpus) {
   NULL
 }
 
-# Rejected citations render nothing so unverified markup cannot appear trusted.
+# Only the quote is verified; the explanation remains model-authored.
 render_citation_aside <- function(quote, explanation, corpus) {
   source <- match_citation(quote, corpus)
   decision <- list(
@@ -91,27 +91,17 @@ render_citation_aside <- function(quote, explanation, corpus) {
 
 citation_aside_html <- function(quote, explanation, label, kind) {
   icon <- citation_icon_url(kind)
-  source <- citation_source_html(label, icon)
   reason <- if (nzchar(explanation)) paste0(explanation, "\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   sprintf(
-    '<shiny-aside>%s%s%s</shiny-aside>',
-    source,
+    paste0(
+      '<shiny-aside display="compact" label="%s"%s>',
+      "%s%s</shiny-aside>"
+    ),
+    escape_attr(label),
+    if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
     reason,
     blockquote
-  )
-}
-
-citation_source_html <- function(label, icon) {
-  image <- if (is.null(icon)) {
-    ""
-  } else {
-    sprintf('<img src="%s" alt="">', escape_attr(icon))
-  }
-  sprintf(
-    '<div class="commons-source-heading">%s<span>%s</span></div>\n\n',
-    image,
-    escape_html(label)
   )
 }
 
@@ -198,15 +188,25 @@ citation_reminder_text <- function() {
   )
 }
 
-citation_request_text <- function(measures = list(), definitions = NULL) {
+citation_request_text <- function(
+  measures = list(),
+  definitions = NULL,
+  semantic_models = NULL
+) {
   has_measures <- length(measures) > 0
   has_definitions <- !is.null(definitions) &&
     nrow(registry_defs(definitions)) > 0
+  has_semantic_metrics <- !is.null(semantic_models) &&
+    semantic_registry_has_metrics(semantic_models)
 
   # Without a tool that answers on its own (call_measure, call_metrics),
   # every answer is a fallback answer: there is no governed path to contrast
   # with, so don't imply one.
-  exception <- if (has_measures || registry_has_metrics(definitions)) {
+  exception <- if (
+    has_measures ||
+      registry_has_metrics(definitions) ||
+      has_semantic_metrics
+  ) {
     " that does not come from a trusted calculation alone"
   }
   trust_note <- cli::format_inline(
@@ -259,12 +259,6 @@ commons_icon_url <- function(file) {
 escape_attr <- function(x) {
   x <- gsub("&", "&amp;", x, fixed = TRUE)
   gsub("\"", "&quot;", x, fixed = TRUE)
-}
-
-escape_html <- function(x) {
-  x <- gsub("&", "&amp;", x, fixed = TRUE)
-  x <- gsub("<", "&lt;", x, fixed = TRUE)
-  gsub(">", "&gt;", x, fixed = TRUE)
 }
 
 # The trajectory reviewer does not register the live chat's resource path.
