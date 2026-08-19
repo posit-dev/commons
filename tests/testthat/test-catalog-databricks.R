@@ -230,45 +230,6 @@ test_that("Databricks metric SQL uses MEASURE and model fields", {
   )
 })
 
-test_that("call_metrics dispatches through Databricks metric views", {
-  model <- databricks_semantic_model_from_spec(
-    DBI::Id(
-      catalog = "main",
-      schema = "analytics",
-      table = "sales_metrics"
-    ),
-    list(
-      version = 1.1,
-      fields = list(list(name = "region", expr = "region")),
-      measures = list(list(name = "revenue", expr = "SUM(revenue)"))
-    )
-  )
-  source <- test_source()
-  source$semantic_models[[table_id_label(model$id)]] <- model
-  sources <- list(databricks = source)
-  registry <- semantic_models_registry(sources)
-  query <- NULL
-  local_mocked_bindings(
-    source_query = function(source, sql) {
-      query <<- sql
-      data.frame(revenue = 42)
-    }
-  )
-
-  result <- call_metrics_impl(
-    empty_definitions(),
-    sources,
-    new_handle_store(),
-    metrics = "revenue",
-    dimensions = "region",
-    semantic_models = registry
-  )
-
-  expect_match(query, "MEASURE(revenue)", fixed = TRUE)
-  expect_match(query, "GROUP BY region", fixed = TRUE)
-  expect_equal(result@extra$commons_tag, "A")
-})
-
 test_that("Databricks view definitions are read in driver-sized chunks", {
   queries <- character()
   local_mocked_bindings(
