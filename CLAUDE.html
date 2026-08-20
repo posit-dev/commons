@@ -34,6 +34,8 @@
 
 <p>Read README.Rmd to understand the goal of the project.</p>
 <p>This package has not been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).</p>
+<p>Use soft wrapping for prose in Markdown files, including skills and vignettes.</p>
+<p><code>commons</code> supports the published table-level <code>definitions</code> field in <code>data-dict.yaml</code>. Definitions use data-dict’s expression language and are compiled to the attached source’s SQL dialect. Commons temporarily ports the definition-specific export logic until a data-dict R package is available; see <a href="https://github.com/posit-dev/commons/issues/115" class="external-link">commons #115</a> for the integration design.</p>
 <p>When writing tests for this package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn’t available. Broadly, refrain from <code>expect_match()</code> for text that is unconditionally included in a prompt or tool description, and <code>expect_no_match()</code> for text that has no feasible path to end up in the prompt or tool descriptions.</p>
 
 

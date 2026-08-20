@@ -33,7 +33,13 @@ data_source(..., tables = NULL, dictionary = NULL)
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) ending in
   `catalog` or `schema` selects every table and view in that namespace.
   Leaving `tables` unset selects the current schema. A Databricks
-  `hive_metastore` selection must include a schema.
+  `hive_metastore` selection must include a schema. Snowflake selections
+  import semantic views, and Databricks selections import
+  unparameterized metric views, as native trusted metrics and
+  dimensions. Databricks wildcard members require concrete column
+  metadata from the warehouse. Native semantic models are available
+  through `search_pool` and `call_metrics`, but are not returned by
+  [`list_tables()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/list_tables.md).
 
   For a board, a named character vector of pins to read: the names
   become table names, and the values are pin names passed to

@@ -62,7 +62,12 @@ literal table names containing dots. For Snowflake and Databricks
 connections, a <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> ending in <code>catalog</code> or <code>schema</code> selects every
 table and view in that namespace. Leaving <code>tables</code> unset selects the
 current schema. A Databricks <code>hive_metastore</code> selection must include a
-schema.</p>
+schema. Snowflake selections import semantic views, and Databricks
+selections import unparameterized metric views, as native trusted metrics
+and dimensions. Databricks wildcard members require concrete column
+metadata from the warehouse.
+Native semantic models are available through <code>search_pool</code> and
+<code>call_metrics</code>, but are not returned by <code><a href="list_tables.html">list_tables()</a></code>.</p>
 <p>For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to <code><a href="https://pins.rstudio.com/reference/pin_read.html" class="external-link">pins::pin_read()</a></code>.</p></dd>
 

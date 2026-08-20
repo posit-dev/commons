@@ -80,10 +80,47 @@ connection or keep their defaults. See <code><a href="semantic_layer.html">seman
     <p>A measure object.</p>
     </div>
     <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>Two return types receive special display handling: ggplots and <code><a href="https://gt.rstudio.com/reference/gt.html" class="external-link">gt::gt()</a></code>
+tables are shown directly to the user in the opened measure result. The model
+is told that the plot or table has already been shown, so it can interpret the
+result without repeating it.</p>
+<p>For full control over a result, <code>fn</code> can return an
+<a href="https://ellmer.tidyverse.org/reference/Content.html" class="external-link">ellmer::ContentToolResult</a>. Its <code>value</code> is sent to the model and its
+<code>extra$display</code> controls the shinychat display. When the display includes
+HTML, Markdown, or text, the model is told that the result is already visible
+to the user. An optional <code>extra$data</code> value is made available to <code>run_r</code> and
+removed from the result before it is returned to ellmer.</p>
+    </div>
+    <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
     <div class="dont-index"><p><code><a href="semantic_layer.html">semantic_layer()</a></code> to collect measures into a layer.</p></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">table</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>term <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Headache"</span>, <span class="st">"Nausea"</span><span class="op">)</span>, count <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">7</span>, <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">table_measure</span> <span class="op">&lt;-</span> <span class="fu">measure</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  <span class="st">"adverse_events"</span>,</span></span>
+<span class="r-in"><span>  <span class="st">"Summarize adverse events."</span>,</span></span>
+<span class="r-in"><span>  <span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>    <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/Content.html" class="external-link">ContentToolResult</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>      value <span class="op">=</span> <span class="st">"Headache: 7; Nausea: 5"</span>,</span></span>
+<span class="r-in"><span>      extra <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>        display <span class="op">=</span> <span class="fu">shinychat</span><span class="fu">::</span><span class="fu"><a href="https://posit-dev.github.io/shinychat/r/reference/tool_result_display.html" class="external-link">tool_result_display</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>          html <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>            <span class="st">"&lt;table&gt;&lt;tr&gt;&lt;td&gt;Headache&lt;/td&gt;&lt;td&gt;7&lt;/td&gt;&lt;/tr&gt;"</span>,</span></span>
+<span class="r-in"><span>            <span class="st">"&lt;tr&gt;&lt;td&gt;Nausea&lt;/td&gt;&lt;td&gt;5&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;"</span></span></span>
+<span class="r-in"><span>          <span class="op">)</span></span></span>
+<span class="r-in"><span>        <span class="op">)</span>,</span></span>
+<span class="r-in"><span>        data <span class="op">=</span> <span class="va">table</span></span></span>
+<span class="r-in"><span>      <span class="op">)</span></span></span>
+<span class="r-in"><span>    <span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="op">}</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

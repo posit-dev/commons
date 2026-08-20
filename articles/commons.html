@@ -70,28 +70,65 @@
 <p>A commons agent is easiest to maintain when the pieces live in
 separate files:</p>
 <pre class="text"><code>.
-|-- R/
-|   |-- data_sources.R
-|   |-- semantic_layer.R
-|   `-- context_layer.R
 |-- app.R
+|-- agent.R
+|-- DESCRIPTION
+|-- AGENTS.md                 # or the active coding agent's equivalent (e.g., CLAUDE.md)
 |-- instructions.md
+|-- dictionaries/
+|   `-- warehouse.yaml
+|-- measures/
+|   `-- sales-dashboard.R
 `-- context/
-    `-- metrics.md</code></pre>
-<p>The bundled <code>commons</code> agent skill can also be copied into
-your project. The skill helps coding agents follow best practices when
-building and iterating on commons agents.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"skills"</span>, <span class="st">"commons"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span>,</span>
-<span>  <span class="st">".agents/skills"</span>,</span>
-<span>  recursive <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span><span class="op">)</span></span></code></pre></div>
-<p>For Claude Code, copy the same directory into
-<code>.claude/skills</code> instead.</p>
+    `-- sales-dashboard.md</code></pre>
 </div>
-  </main>
+<div class="section level2">
+<h2 id="installing-the-agent-skill">Installing the agent skill<a class="anchor" aria-label="anchor" href="#installing-the-agent-skill"></a>
+</h2>
+<p>The package includes a <code>commons</code> <a href="https://agentskills.io/" class="external-link">agent skill</a> that helps coding agents
+build, evaluate, and improve commons agents. Installing the R package
+makes the skill files available, but does not automatically add them to
+an assistant’s skill discovery directory.</p>
+<p>Locate the bundled skill with:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">skill</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"skills"</span>, <span class="st">"commons"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span></span>
+<span><span class="va">skill</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="codex-and-posit-assistant">Codex and Posit Assistant<a class="anchor" aria-label="anchor" href="#codex-and-posit-assistant"></a>
+</h3>
+<p>Both <a href="https://learn.chatgpt.com/docs/build-skills" class="external-link">Codex</a>
+and <a href="https://assistant.posit.co/docs/reference/config-file#skills" class="external-link">Posit
+Assistant</a> discover project skills in
+<code>.agents/skills</code>:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span><span class="va">skill</span>, <span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p>This creates <code>.agents/skills/commons/SKILL.md</code>. Commit
+that directory when the skill should be available to everyone working in
+the project.</p>
+<p>For a user-wide installation, copy the directory to
+<code>~/.agents/skills</code>. Posit Assistant also searches
+<code>~/.posit/assistant/skills</code> and
+<code>.posit/assistant/skills</code> by default. Its
+<code>skills.paths</code> configuration controls the complete search
+path; a project-level value replaces, rather than extends, the global
+value.</p>
+</div>
+<div class="section level3">
+<h3 id="claude-code">Claude Code<a class="anchor" aria-label="anchor" href="#claude-code"></a>
+</h3>
+<p><a href="https://code.claude.com/docs/en/skills" class="external-link">Claude Code</a> uses
+<code>.claude/skills</code> for project skills:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".claude/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span><span class="va">skill</span>, <span class="st">".claude/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p>This creates <code>.claude/skills/commons/SKILL.md</code>. Use
+<code>~/.claude/skills/commons</code> instead for a personal
+installation available across local projects.</p>
+</div>
+</div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside>
 </div>
 
 

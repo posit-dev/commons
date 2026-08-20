@@ -43,7 +43,47 @@ measure(name, description, fn, arguments = list(), title = NULL)
 
 A measure object.
 
+## Details
+
+Two return types receive special display handling: ggplots and
+[`gt::gt()`](https://gt.rstudio.com/reference/gt.html) tables are shown
+directly to the user in the opened measure result. The model is told
+that the plot or table has already been shown, so it can interpret the
+result without repeating it.
+
+For full control over a result, `fn` can return an
+[ellmer::ContentToolResult](https://ellmer.tidyverse.org/reference/Content.html).
+Its `value` is sent to the model and its `extra$display` controls the
+shinychat display. When the display includes HTML, Markdown, or text,
+the model is told that the result is already visible to the user. An
+optional `extra$data` value is made available to `run_r` and removed
+from the result before it is returned to ellmer.
+
 ## See also
 
 [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md)
 to collect measures into a layer.
+
+## Examples
+
+``` r
+table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))
+table_measure <- measure(
+  "adverse_events",
+  "Summarize adverse events.",
+  function() {
+    ellmer::ContentToolResult(
+      value = "Headache: 7; Nausea: 5",
+      extra = list(
+        display = shinychat::tool_result_display(
+          html = paste0(
+            "<table><tr><td>Headache</td><td>7</td></tr>",
+            "<tr><td>Nausea</td><td>5</td></tr></table>"
+          )
+        ),
+        data = table
+      )
+    )
+  }
+)
+```
