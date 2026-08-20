@@ -17,3 +17,4 @@ inst/hex/output
 commons-reviews/
 .worktrees/
 /sandbox/commons-openai-citation-smoke/
+.kata.local.toml
