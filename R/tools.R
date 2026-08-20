@@ -289,7 +289,9 @@ tool_call_measure <- function(private) {
       "Run trusted calculations returned by",
       "search_pool. `arguments` is a JSON object using exactly the argument",
       "names from search_pool. Prefer a measure's own arguments when they can",
-      "answer the question directly."
+      "answer the question directly. Measure results may be displayed directly",
+      "to the user. If a result says it is already visible, do not reproduce",
+      "it in your reply; summarize or interpret the relevant results instead."
     ),
     arguments = list(
       name = ellmer::type_string(
@@ -447,7 +449,19 @@ call_measure_tool <- function(
     source_ensure_all(sources[[source_name]])
   }
   value <- do.call(td, c(args, injections[[name]]))
+  if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
+    return(measure_content_tool_result(td, value, handles))
+  }
   value <- collect_lazy_table(value)
+  if (is_ggplot(value)) {
+    advert <- register_handle(handles, value)
+    return(measure_plot_tool_result(td, args, value, advert))
+  }
+  if (is_gt_table(value)) {
+    data <- recover_gt_table_data(value)
+    advert <- register_handle(handles, data)
+    return(measure_gt_table_tool_result(td, args, value, data, advert))
+  }
   advert <- register_handle(handles, value)
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
@@ -455,6 +469,196 @@ call_measure_tool <- function(
     icon = maybe_icon("shield-check"),
     html = measure_display_html(args, value),
     tag = "A",
+    show_tag = FALSE
+  )
+}
+
+measure_content_tool_result <- function(td, result, handles) {
+  data <- result@extra$data
+  result@extra$data <- NULL
+  display <- result@extra$display
+
+  if (is.null(result@error)) {
+    data <- collect_lazy_table(data)
+    advert <- register_handle(handles, data)
+    result@value <- append_handle_advert(result@value, advert)
+    if (measure_result_is_visible(display)) {
+      result@value <- prepend_model_note(
+        result@value,
+        visible_result_note("measure result")
+      )
+    }
+  }
+
+  title <- sprintf("Measure: %s", tool_title(td))
+  icon <- maybe_icon("shield-check")
+  if (is.null(display)) {
+    display <- shinychat::tool_result_display(title = title, icon = icon)
+  } else if (is.list(display)) {
+    display$title <- display$title %||% title
+    display$icon <- display$icon %||% icon
+  }
+  result@extra$display <- display
+  result@extra$commons_tag <- "A"
+  result
+}
+
+measure_result_is_visible <- function(display) {
+  is.list(display) && any(vapply(
+    display[c("html", "markdown", "text")],
+    Negate(is.null),
+    logical(1)
+  ))
+}
+
+prepend_model_note <- function(value, note) {
+  note <- ellmer::ContentText(note)
+  if (S7::S7_inherits(value, ellmer::Content)) {
+    return(list(note, value))
+  }
+  if (
+    is.list(value) &&
+      length(value) > 0 &&
+      all(vapply(value, S7::S7_inherits, logical(1), ellmer::Content))
+  ) {
+    return(c(list(note), value))
+  }
+  paste(c(note@text, format_measure_value(value)), collapse = "\n\n")
+}
+
+append_handle_advert <- function(value, advert) {
+  if (is.null(advert)) {
+    return(value)
+  }
+  note <- ellmer::ContentText(advert)
+  if (S7::S7_inherits(value, ellmer::Content)) {
+    return(list(value, note))
+  }
+  if (
+    is.list(value) &&
+      length(value) > 0 &&
+      all(vapply(value, S7::S7_inherits, logical(1), ellmer::Content))
+  ) {
+    return(c(value, list(note)))
+  }
+  paste(c(format_measure_value(value), advert), collapse = "\n\n")
+}
+
+measure_plot_tool_result <- function(td, args, value, advert) {
+  title <- tool_title(td)
+  rendered <- tryCatch(
+    render_plot_image(value, sprintf("Plot returned by %s", title)),
+    error = function(error) error
+  )
+  if (inherits(rendered, "error")) {
+    return(measure_failure_result(
+      args,
+      advert,
+      title,
+      conditionMessage(rendered),
+      "a plot",
+      "commons-measure-plot-error"
+    ))
+  }
+
+  model_value <- list(
+    ellmer::ContentText(visible_result_note("plot")),
+    rendered$model
+  )
+  if (!is.null(advert)) {
+    model_value[[length(model_value) + 1L]] <- ellmer::ContentText(advert)
+  }
+  tool_result(
+    model_value,
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = measure_display_with_result_html(
+      args,
+      measure_result_html(rendered$html)
+    ),
+    tag = "A",
+    open = TRUE,
+    show_tag = FALSE
+  )
+}
+
+measure_failure_result <- function(
+  args,
+  advert,
+  title,
+  message,
+  result_type,
+  class,
+  model_content = NULL
+) {
+  note <- sprintf(
+    "The measure returned %s, but it could not be displayed: %s",
+    result_type,
+    message
+  )
+  tool_result(
+    paste(c(model_content, note, advert), collapse = "\n\n"),
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = measure_display_with_result_html(
+      args,
+      measure_result_html(html_escape(note), class)
+    ),
+    tag = "A",
+    open = TRUE,
+    show_tag = FALSE
+  )
+}
+
+measure_gt_table_tool_result <- function(td, args, value, data, advert) {
+  title <- tool_title(td)
+  rendered <- tryCatch(
+    render_gt_table(value),
+    error = function(error) error
+  )
+  model_content <- df_to_markdown(data)
+  if (inherits(rendered, "error")) {
+    return(measure_failure_result(
+      args,
+      advert,
+      title,
+      conditionMessage(rendered),
+      "a gt table",
+      "commons-measure-gt-table-error",
+      model_content = model_content
+    ))
+  }
+  model_note <- c(
+    visible_result_note("gt table"),
+    if (!is.null(advert)) {
+      paste(
+        "For calculations, use `run_r` with the table handle below instead of",
+        "parsing values from the rendered table."
+      )
+    }
+  )
+  model_note <- paste(model_note, collapse = " ")
+  display_html <- measure_display_with_result_html(
+    args,
+    measure_result_html(rendered$html, "commons-measure-gt-table")
+  )
+  if (length(rendered$dependencies) > 0) {
+    display_html <- htmltools::attachDependencies(
+      htmltools::HTML(display_html),
+      rendered$dependencies,
+      append = TRUE
+    )
+  }
+  tool_result(
+    paste(
+      c(model_note, model_content, advert),
+      collapse = "\n\n"
+    ),
+    title = sprintf("Measure: %s", html_escape(title)),
+    icon = maybe_icon("shield-check"),
+    html = display_html,
+    tag = "A",
+    open = TRUE,
     show_tag = FALSE
   )
 }
@@ -684,6 +888,13 @@ tool_result <- function(
   )
 }
 
+visible_result_note <- function(type) {
+  paste(
+    sprintf("This %s is already visible to the user.", type),
+    "**Do not recreate or repeat it**."
+  )
+}
+
 tag_label <- function(tag) {
   switch(tag, A = "Registered measure (A)", B = "SQL query (B)", tag)
 }
@@ -741,17 +952,29 @@ measure_args_html <- function(args) {
 }
 
 measure_display_html <- function(args, value) {
-  sprintf(
-    "<div class=\"commons-measure-display\">%s%s</div>",
-    measure_args_html(args),
-    measure_result_html(value)
+  measure_display_with_result_html(
+    args,
+    measure_result_html(format_measure_html(value))
   )
 }
 
-measure_result_html <- function(value) {
+measure_display_with_result_html <- function(args, result_html) {
   sprintf(
-    "<div class=\"commons-measure-result\"><strong>Tool result</strong><div class=\"commons-measure-result-value\">%s</div></div>",
-    format_measure_html(value)
+    "<div class=\"commons-measure-display\">%s%s</div>",
+    measure_args_html(args),
+    result_html
+  )
+}
+
+measure_result_html <- function(content, class = NULL) {
+  class <- if (is.null(class)) "" else paste0(" ", class)
+  sprintf(
+    paste0(
+      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
+      "<div class=\"commons-measure-result-value%s\">%s</div></div>"
+    ),
+    class,
+    content
   )
 }
 

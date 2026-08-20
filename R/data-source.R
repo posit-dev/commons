@@ -688,14 +688,25 @@ source_query_bind <- function(source, sql, bindings = list()) {
   DBI::dbFetch(result)
 }
 
-# A keyword denylist, not a SQL parser: it anchors on the leading statement
-# keyword, so it pairs with duckdb_lock_down() and the read-only-connection
-# recommendation rather than standing alone. Ported from posit-dev/querychat.
+# A conservative structural check, not a SQL parser: it pairs with
+# duckdb_lock_down() and the read-only-connection recommendation.
 check_query <- function(sql, call = rlang::caller_env()) {
+  statement <- trimws(sql)
+  statement <- sub(";$", "", statement)
+  if (grepl(";", statement, fixed = TRUE)) {
+    cli::cli_abort(
+      c(
+        "The query contains a disallowed semicolon.",
+        i = "Only a single trailing semicolon is allowed."
+      ),
+      call = call
+    )
+  }
+
   normalized <- toupper(trimws(gsub(
     " +",
     " ",
-    gsub("[\r\n\t]+", " ", sql)
+    gsub("[\r\n\t]+", " ", statement)
   )))
   blocked <- c(
     "DELETE",
@@ -720,6 +731,15 @@ check_query <- function(sql, call = rlang::caller_env()) {
     cli::cli_abort(
       c(
         "The query contains a disallowed operation: {.code {matched}}.",
+        i = "Only read-only SELECT queries are allowed."
+      ),
+      call = call
+    )
+  }
+  if (!grepl("^(SELECT|WITH)\\b", normalized)) {
+    cli::cli_abort(
+      c(
+        "The query must begin with {.code SELECT} or {.code WITH}.",
         i = "Only read-only SELECT queries are allowed."
       ),
       call = call

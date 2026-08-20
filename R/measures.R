@@ -118,6 +118,18 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' body is ordinary R; its `arguments` schema tells the model what inputs it can
 #' supply.
 #'
+#' Two return types receive special display handling: ggplots and [gt::gt()]
+#' tables are shown directly to the user in the opened measure result. The model
+#' is told that the plot or table has already been shown, so it can interpret the
+#' result without repeating it.
+#'
+#' For full control over a result, `fn` can return an
+#' [ellmer::ContentToolResult]. Its `value` is sent to the model and its
+#' `extra$display` controls the shinychat display. When the display includes
+#' HTML, Markdown, or text, the model is told that the result is already visible
+#' to the user. An optional `extra$data` value is made available to `run_r` and
+#' removed from the result before it is returned to ellmer.
+#'
 #' @param name Measure name.
 #' @param description What the measure computes.
 #' @param fn Function that computes the measure.
@@ -129,6 +141,27 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #'   `NULL`, a title is derived from `name`.
 #'
 #' @return A measure object.
+#'
+#' @examples
+#' table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))
+#' table_measure <- measure(
+#'   "adverse_events",
+#'   "Summarize adverse events.",
+#'   function() {
+#'     ellmer::ContentToolResult(
+#'       value = "Headache: 7; Nausea: 5",
+#'       extra = list(
+#'         display = shinychat::tool_result_display(
+#'           html = paste0(
+#'             "<table><tr><td>Headache</td><td>7</td></tr>",
+#'             "<tr><td>Nausea</td><td>5</td></tr></table>"
+#'           )
+#'         ),
+#'         data = table
+#'       )
+#'     )
+#'   }
+#' )
 #'
 #' @seealso [semantic_layer()] to collect measures into a layer.
 #'

@@ -5,6 +5,7 @@
 ^README\.Rmd$
 ^cran-comments\.md$
 inst/resources
+^inst/examples$
 inst/slides/
 inst/tiles/
 plans/
