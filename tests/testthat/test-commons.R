@@ -58,6 +58,16 @@ test_that("run_r describes which results are visible to the user", {
   expect_match(description, "user cannot run code in this session")
 })
 
+test_that("call_measure describes how to handle visible results", {
+  agent <- test_agent(
+    semantic_layer = semantic_layer(count_measure_tool())
+  )
+  description <- tool_description(agent_tool(agent, "call_measure"))
+
+  expect_match(description, "results may be displayed directly")
+  expect_match(description, "do not reproduce it in your reply")
+})
+
 test_that("the system prompt includes tables and the date", {
   agent <- test_agent(
     semantic_layer = semantic_layer(

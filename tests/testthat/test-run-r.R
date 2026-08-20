@@ -52,12 +52,21 @@ test_that("run_r returns plots as images and opens the display", {
 
   res <- sync_promise(run_r_tool(worker, store, "plot(r1$revenue)"))
 
+  images <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentImageInline),
+    res@value
+  )
+  expect_length(images, 1)
+  notes <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentText),
+    res@value
+  )
   expect_true(any(vapply(
-    res@value,
-    function(x) S7::S7_inherits(x, ellmer::ContentImageInline),
+    notes,
+    \(x) grepl("This plot is already visible to the user", x@text, fixed = TRUE),
     logical(1)
   )))
-  expect_true(res@extra$display$open)
+  expect_identical(res@extra$display$open, TRUE)
   expect_match(res@extra$display$html, "data:image/png;base64,")
   expect_match(res@extra$display$html, "commons-run-r-details")
 })
