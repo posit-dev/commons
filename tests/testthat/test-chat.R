@@ -1,3 +1,27 @@
+test_that("commons_app builds a single-user app from commons chat wrappers", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  app <- commons_app(test_agent())
+
+  expect_s3_class(app, "shiny.appobj")
+  expect_identical(app$appOptions$bookmarkStore, "url")
+
+  app_env <- environment(app$serverFuncSource)
+  ui <- app_env$ui(NULL)
+  chat <- htmltools::tagQuery(ui)$find("shiny-chat-container")$selectedTags()
+  deps <- htmltools::findDependencies(ui)
+
+  expect_length(chat, 1)
+  expect_true(is.na(chat[[1]]$attribs[["allow-attachments"]]))
+  expect_true(is.na(chat[[1]]$attribs[["enable-cancel"]]))
+  expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
+
+  shiny::testServer(app_env$server, {
+    session$flushReact()
+  })
+})
+
 test_that("commons_server registers no custom-message observers", {
   body_text <- paste(deparse(body(commons_server)), collapse = "\n")
   expect_false(grepl("sendCustomMessage", body_text, fixed = TRUE))
@@ -106,6 +130,13 @@ test_that("chat UI registers the packaged icon resource path", {
   expect_identical(
     unname(paths[prefix]),
     normalizePath(system.file("figs", package = "commons"))
+  )
+})
+
+test_that("commons_app requires a commons agent", {
+  expect_snapshot(
+    commons_app(test_client()),
+    error = TRUE
   )
 })
 
