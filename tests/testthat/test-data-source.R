@@ -94,11 +94,23 @@ test_that("source_query rejects non-SELECT statements", {
     source_query(src, "INSERT INTO sales VALUES ('o07', 1, 'EMEA', 'x', 'y')"),
     "disallowed operation"
   )
+  expect_error(source_query(src, "VACUUM"), "must begin with")
   expect_equal(source_query(src, "SELECT count(*) AS n FROM sales")$n, 6)
 })
 
-test_that("check_query ignores keywords that aren't the leading statement", {
+test_that("check_query accepts one SELECT statement", {
   expect_invisible(check_query("SELECT 'dropped' AS status FROM sales"))
+  expect_invisible(check_query("WITH total AS (SELECT 1) SELECT * FROM total"))
+  expect_invisible(check_query("SELECT 1;"))
+})
+
+test_that("source_query rejects multiple statements without executing them", {
+  src <- test_source()
+  expect_error(
+    source_query(src, "SELECT 1 AS ok; DROP TABLE sales;"),
+    "disallowed semicolon"
+  )
+  expect_true(DBI::dbExistsTable(src$con, "sales"))
 })
 
 test_that("the frame-path DuckDB is locked down", {
