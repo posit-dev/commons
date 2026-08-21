@@ -1,8 +1,12 @@
 ---
-title: "Getting started with commons"
-output: rmarkdown::html_vignette
+title: "Introduction to commons"
+output:
+  rmarkdown::html_vignette:
+    css:
+      - !expr system.file("rmarkdown", "templates", "html_vignette", "resources", "vignette.css", package = "rmarkdown")
+      - commons.css
 vignette: >
-  %\VignetteIndexEntry{Getting started with commons}
+  %\VignetteIndexEntry{Introduction to commons}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -16,17 +20,303 @@ knitr::opts_chunk$set(
 )
 ```
 
-:::callout-note
-Not much to see here yet. We'll be back!
-:::
-
-This vignette shows the shape of a small commons project.
+This document explains the structure of a commons project and how to get
+started.
 
 ```r
 library(commons)
 ```
 
-## Setting up the project directory
+## Design philosophy
+
+AI agents for data analysis can range from overly cautious, but narrowly
+correct, to wildly untrustworthy. Commons is intended to create agents that
+produce correct answers by leveraging existing trusted code, while still
+allowing the agent enough flexibility to answer novel, realistic questions.
+Commons distinguishes between different trust levels based on the analysis
+path chosen by the agent.
+
+A core idea behind commons is that, if you are a data analyst, data scientist,
+statistical programmer, or other data practitioner, you or your team likely
+has a collection of "trusted" code. This is code that you depend on for your
+analyses and is used to create apps, reports, and packages. Commons allows you
+to take advantage of this code base by encoding it as trusted calculations.
+
+The high-trust "happy path" for the commons agent occurs when the user asks a
+question that has a corresponding trusted calculation. In this scenario, the
+agent runs that code to get the result. For example, in the biodiversity
+example app, if you ask:
+
+> How many total animals were observed at Oak Bluff?
+
+the agent identifies that there exists trusted code that can answer the
+question. It runs that code and then reports the results along with a
+"Verified answer" tag.
+
+::: {.commons-answer}
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on
+> 28 hours of survey effort. Note this reflects observed individuals during
+> surveys, not necessarily a full census of every animal present at the site.
+>
+> `r commons:::commons_answer_pill("A")`
+:::
+
+Although the agent had to decide which piece of trusted code to run and when,
+it did not have to decide _what code to write_, reducing degrees of freedom and
+allowing the agent to take advantage of pre-vetted code.
+
+However, we expect most users of agents to also ask questions that stray from
+the "happy path." For those, the agent uses additional information to write
+custom code. We'll explain the various
+[information layers](#information-layers) and the details of the
+[trust flow](#trust-flow) in more detail later in this vignette.
+
+## Data sources
+
+One of the primary decisions you'll need to make when building a commons agent
+is which data sources to grant the agent access to.
+
+Data sources are supplied to the commons agent with `data_source()`.
+`data_source()` takes three arguments: the data, the set of tables to expose,
+and the corresponding [data dictionary](#data-dictionaries).
+
+You can supply `data_source()` with an existing DBI connection, named data
+frames, or pins. Data frames and pins will be loaded into a DuckDB database.
+Database connections will be queried directly.
+
+## Information layers
+
+Commons distinguishes between two primary layers of information: the
+_semantic_ layer and the _context_ layer. The semantic layer encodes trusted
+code, ideally lifted from verified code that you already use. In a project,
+measures are stored in `.R` files; `semantic_layer()` can also accept
+`measure()` objects directly. The _context_ layer contains everything else,
+stored in Markdown files. Data dictionaries span the two layers. Their
+descriptive fields provide context, while
+[`definitions`](#definitions) are part of the semantic layer. See
+[Data dictionaries](#data-dictionaries) for more information.
+
+| Layer | Sources | Role |
+|---|---|---|
+| Semantic layer | Measures in `.R` files, [`definitions`](#definitions) in `data-dict.yaml`, and supported [warehouse semantic models](#warehouse-semantic-layers) | Provides trusted calculations. |
+| Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL or R and guides interpretation. |
+
+A data dictionary spans both layers: its descriptive fields provide context,
+while its governed definitions participate in the semantic layer.
+
+Here are brief examples of a data dictionary, measures `.R` file, and context
+layer Markdown file for the biodiversity example app:
+
+::: {.commons-layer-sources .column-screen-inset}
+::: {.commons-layer-examples}
+::: {.commons-layer-example}
+
+#### Data dictionary
+
+Data dictionaries supply information to _both_ the semantic and context layer.
+
+`dictionaries/warehouse.yaml`
+
+```yaml
+tables:
+  - name: observations
+    description: Species observations by nature preserve.
+    columns:
+      - name: count
+        description: Individuals observed during surveys.
+```
+
+:::
+::: {.commons-layer-example}
+#### Semantic layer
+
+`measures/biodiversity.R`
+
+```r
+#' Individuals observed
+#'
+#' @param site `string` Site name.
+#' @measure
+individuals_observed <- function(site) {
+  sum(observations$count[
+    observations$site == site
+  ])
+}
+```
+
+:::
+::: {.commons-layer-example}
+
+#### Context layer
+
+`context/biodiversity.md`
+
+```markdown
+# Interpreting survey results
+
+Observed individuals reflect organisms
+recorded during surveys. They should not
+be interpreted as a complete population
+census of a nature preserve.
+```
+
+:::
+:::
+
+:::
+
+## Trust flow
+
+Commons agents will use trusted calculations whenever possible. When the user
+asks a question, the agent first searches the semantic layer for a trusted
+calculation. If it finds one, it then calls that calculation and the resulting
+answer is tagged with a green verified answer pill.
+
+If a relevant trusted calculation is not found, the agent proceeds down the
+lower trust path. It searches through the context for additional information,
+then uses that information to write custom SQL or R code to answer the user's
+question. These answers are either given a citation in a footnote or tagged as
+untrusted.
+
+<figure class="commons-flow commons-flow-trusted-calculations column-page">
+<div class="commons-branch-flow"
+     role="img"
+     aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
+<div class="commons-branch-origin">
+<span class="commons-flow-node">Search trusted<br>calculations</span>
+</div>
+<div class="commons-branch-connectors" aria-hidden="true">
+<span class="commons-flow-arrow">&nearr;</span>
+<span class="commons-flow-arrow">&searr;</span>
+</div>
+<div class="commons-branch-routes">
+<div class="commons-trust-segment commons-trust-segment-high">
+<div class="commons-trust-label">High trust</div>
+<div class="commons-trust-steps">
+<span class="commons-flow-node">Relevant calculation<br>found</span>
+<span class="commons-flow-arrow">&rarr;</span>
+<span class="commons-flow-node">Run trusted<br>calculation</span>
+<span class="commons-flow-arrow">&rarr;</span>
+`r commons:::commons_answer_pill("A")`
+</div>
+</div>
+<div class="commons-trust-segment commons-trust-segment-lower">
+<div class="commons-trust-label">Lower trust</div>
+<div class="commons-trust-steps">
+<span class="commons-flow-node">No relevant<br>calculation found</span>
+<span class="commons-flow-arrow">&rarr;</span>
+<span class="commons-flow-node">Search context</span>
+<span class="commons-flow-arrow">&rarr;</span>
+<span class="commons-flow-node">Write SQL/R</span>
+<span class="commons-flow-arrow">&rarr;</span>
+<span class="commons-flow-results">
+<span class="commons-flow-answer">Cited answer<sup class="commons-citation-ref">1</sup></span>
+<span class="commons-flow-or">or</span>
+`r commons:::commons_answer_pill("C")`
+</span>
+</div>
+</div>
+</div>
+</div>
+</figure>
+
+There are two possible trust outcomes for the "lower trust" path. When the
+agent writes custom SQL or R, it can also include a citation (from a data
+dictionary or context layer Markdown file) that supports its approach. Commons
+checks that its citation appears as cited in a trusted source. If at least one
+citation can be verified, it is displayed as a numbered footnote. If the agent
+does not include a citation, or if commons can't verify any of its citations,
+the answer gets tagged as `Untrusted`.
+
+The following table details the various ways each trust outcome can occur.
+
+| How the answer is produced | Outcome |
+|---|---|
+| A trusted R measure | `r commons:::commons_answer_pill("A")` |
+| A data-dictionary metric, possibly grouped or restricted using filter or derived-value definitions, or documented columns | `r commons:::commons_answer_pill("A")` |
+| A Snowflake semantic-view or Databricks metric-view metric | `r commons:::commons_answer_pill("A")` |
+| Custom SQL, including SQL that uses data-dictionary definitions | Cited or `r commons:::commons_answer_pill("C")` |
+| Custom R | Cited or `r commons:::commons_answer_pill("C")` |
+| No calculation because the available information is insufficient | No label |
+
+## Data dictionaries
+
+You can attach a data dictionary to a `data_source()`. Dictionaries follow the
+[`data-dict.yaml` specification](https://data-dict.tidyverse.org/) and provide
+structured, source-specific documentation.
+
+```r
+warehouse <- data_source(
+  con,
+  dictionary = "dictionaries/warehouse.yaml"
+)
+```
+
+Commons agents use data dictionaries in a few ways:
+
+* Dataset-level descriptions and details provide broad, always-available
+  context. Glossary terms are included in the system prompt as space allows.
+* The first time the agent needs a documented table, it receives the table's
+  description, column information, relationships, and relevant glossary terms
+  from the dictionary.
+* Dictionary prose is available through context search.
+* Relationships can guide the agent's join code.
+
+### Definitions
+
+As described in [Information layers](#information-layers), data dictionaries
+span the semantic and context layers. Table-level `definitions` are part of the
+semantic layer. Each definition is an expression written in
+[data-dict's expression language](https://data-dict.tidyverse.org/expressions.html),
+not in your database's SQL dialect:
+
+```yaml
+tables:
+  - name: observations
+    columns:
+      - name: count
+        type: number
+    definitions:
+      - name: total_individuals
+        label: Total individuals observed
+        description: Sum of the individuals recorded in surveys.
+        expr: SUM(count)
+```
+
+#### How commons uses definitions
+
+There are three kinds of definitions. Definitions can participate in trusted
+metric calculations or be used in custom SQL.
+
+| Kind | Example | How `call_metrics()` uses it | How custom SQL uses it |
+|---|---|---|---|
+| Metric | `SUM(n)` | Computes directly | Inserts the expression in `SELECT` or another suitable clause |
+| Filter | `status = 'active'` | Filters rows. Can also be a grouping dimension | Inserts a Boolean expression, commonly in `WHERE` |
+| Derived value | `price * quantity` | Groups a metric | Inserts a row-level expression, commonly in `SELECT` or `GROUP BY` |
+
+The kind is inferred, not declared. Aggregate and constant expressions are
+categorized as metrics, row-level Boolean expressions as filters, and other
+row-level expressions as derived values.
+
+See the
+[DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml)
+for examples of definitions.
+
+When a data source is constructed, commons checks each definition and
+translates it to the source's SQL dialect.
+
+## Warehouse semantic layers
+
+If you have trusted metrics in
+[Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview)
+or
+[Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views),
+you can use those calculations directly with commons. It can also group or
+filter metrics by approved fields from the warehouse, such as region, product,
+or date. Answers based on these warehouse-defined metrics are marked as
+verified.
+
+## Project directory organization
 
 A commons agent is easiest to maintain when the pieces live in separate files:
 
@@ -35,7 +325,7 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 |-- app.R
 |-- agent.R
 |-- DESCRIPTION
-|-- AGENTS.md                 # or the active coding agent's equivalent (e.g., CLAUDE.md)
+|-- AGENTS.md # or your coding agent's equivalent (e.g., CLAUDE.md)
 |-- instructions.md
 |-- dictionaries/
 |   `-- warehouse.yaml
@@ -47,7 +337,16 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 
 ## Installing the agent skill
 
-The package includes a `commons` [agent skill](https://agentskills.io/) that helps coding agents build, evaluate, and improve commons agents. Installing the R package makes the skill files available, but does not automatically add them to an assistant's skill discovery directory.
+The package includes a `commons` [agent skill](https://agentskills.io/) that
+helps coding agents build, evaluate, and improve commons agents. We recommend
+working with a coding agent that has access to this skill, especially when
+building a commons agent. There is a host of useful information contained in
+the skill and we assume this is the way most people will work with commons.
+That said, the skill and references are also readily understandable to human
+readers as well, and you are welcome to ingest the information that way too.
+
+Installing the R package makes the skill files available, but does not
+automatically add them to an assistant's skill discovery directory.
 
 Locate the bundled skill with:
 
@@ -58,24 +357,34 @@ skill
 
 ### Codex and Posit Assistant
 
-Both [Codex](https://learn.chatgpt.com/docs/build-skills) and [Posit Assistant](https://assistant.posit.co/docs/reference/config-file#skills) discover project skills in `.agents/skills`:
+Both [Codex](https://learn.chatgpt.com/docs/build-skills) and
+[Posit Assistant](https://assistant.posit.co/docs/reference/config-file#skills)
+discover project skills in `.agents/skills`:
 
 ```r
 dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".agents/skills", recursive = TRUE)
 ```
 
-This creates `.agents/skills/commons/SKILL.md`. Commit that directory when the skill should be available to everyone working in the project.
+This creates `.agents/skills/commons/SKILL.md`. Commit that directory when the
+skill should be available to everyone working in the project.
 
-For a user-wide installation, copy the directory to `~/.agents/skills`. Posit Assistant also searches `~/.posit/assistant/skills` and `.posit/assistant/skills` by default. Its `skills.paths` configuration controls the complete search path; a project-level value replaces, rather than extends, the global value.
+For a user-wide installation, copy the directory to `~/.agents/skills`. Posit
+Assistant also searches `~/.posit/assistant/skills` and
+`.posit/assistant/skills` by default. Its `skills.paths` configuration controls
+the complete search path; a project-level value replaces, rather than extends,
+the global value.
 
 ### Claude Code
 
-[Claude Code](https://code.claude.com/docs/en/skills) uses `.claude/skills` for project skills:
+[Claude Code](https://code.claude.com/docs/en/skills) uses `.claude/skills` for
+project skills:
 
 ```r
 dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".claude/skills", recursive = TRUE)
 ```
 
-This creates `.claude/skills/commons/SKILL.md`. Use `~/.claude/skills/commons` instead for a personal installation available across local projects.
+This creates `.claude/skills/commons/SKILL.md`. Use
+`~/.claude/skills/commons` instead for a personal installation available across
+local projects.
