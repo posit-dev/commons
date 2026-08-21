@@ -1,0 +1,15 @@
+# Review routing per language. Paths are matched last-rule-wins, so the
+# default owners come first and the more specific paths override them.
+
+*                   @simonpcouch @skaltman
+
+/pkg-r/             @simonpcouch @skaltman
+/pkg-py/            @jat255
+
+# Fixtures both implementations read. A change here alters the contract for
+# both languages, so both sides review it.
+/tests/shared/      @simonpcouch @jat255
+
+# CI and repository-level configuration affect both packages.
+/.github/           @simonpcouch @jat255
+/CODEOWNERS         @simonpcouch @jat255

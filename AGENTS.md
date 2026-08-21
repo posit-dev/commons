@@ -1,12 +1,18 @@
-Read README.Rmd to understand the goal of the project.
+This repository is a monorepo holding two implementations of commons: the R package in `pkg-r/`, the Python package in `pkg-py/`, and cross-language spec fixtures in `tests/shared/`. Read `pkg-r/README.Rmd` to understand the goal of the project, and `README.md` for how the two packages relate.
 
-This package has not been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
+Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run pytest`, `uv run ruff check`). CI is scoped the same way.
+
+Neither package has been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
 
 Use soft wrapping for prose in Markdown files, including skills and vignettes.
 
+Anything both implementations must agree on belongs in `tests/shared/` as an executable fixture read by both suites, not as prose and not as a per-language copy. A Python-only or R-only copy of a shared behavior is a review defect. See `tests/shared/README.md`.
+
 `commons` supports the published table-level `definitions` field in `data-dict.yaml`. Definitions use data-dict's expression language and are compiled to the attached source's SQL dialect. Commons temporarily ports the definition-specific export logic until a data-dict R package is available; see [commons #115](https://github.com/posit-dev/commons/issues/115) for the integration design.
 
-When writing tests for this package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn't available. Broadly, refrain from `expect_match()` for text that is unconditionally included in a prompt or tool description, and `expect_no_match()` for text that has no feasible path to end up in the prompt or tool descriptions.
+When writing tests for either package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn't available. Broadly, refrain from `expect_match()` for text that is unconditionally included in a prompt or tool description, and `expect_no_match()` for text that has no feasible path to end up in the prompt or tool descriptions.
+
+Release tags are prefixed per package: `r-v*` for the R package, `py-v*` for the Python package.
 
 ## Issue tracking with kata (optional)
 
