@@ -48,7 +48,7 @@ However, we also expect users to ask questions that stray from the "happy path."
 
 ## Working with the agent skill
 
-The package includes a `commons` [agent skill](https://agentskills.io/) that helps coding agents build, evaluate, and improve commons agents. We recommend installing it before you begin because it provides detailed guidance and a structured workflow.
+The package includes a commons [agent skill](https://agentskills.io/) that helps coding agents build, evaluate, and improve commons agents. We recommend installing it before you begin because it provides detailed guidance and a structured workflow.
 
 To make the skill available to **Posit Assistant or Codex**, copy the skill and its references to `.agents/skills`:
 
