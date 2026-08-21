@@ -5,39 +5,410 @@
 /* ---- Chat-level polish ---------------------------------------------- */
 
 shiny-chat-container {
+  --commons-chat-radius-control: 0.5rem;
+  --commons-chat-radius-surface: 0.75rem;
+  --commons-chat-radius-message: 1.25rem;
+  --commons-chat-radius-round: 999px;
+  --commons-chat-motion-fast: 120ms;
+  --commons-chat-motion-base: 180ms;
+  --commons-chat-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --commons-chat-state-hover: color-mix(
+    in srgb,
+    var(--bs-emphasis-color, #000) 6%,
+    transparent
+  );
+  --commons-chat-state-active: color-mix(
+    in srgb,
+    var(--bs-emphasis-color, #000) 10%,
+    transparent
+  );
+  --commons-chat-border-strong: color-mix(
+    in srgb,
+    var(--bs-body-color, #212529) 24%,
+    transparent
+  );
+  --commons-chat-focus-color: var(--bs-primary, #007bc2);
+  --commons-chat-focus-ring: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 16%,
+    transparent
+  );
+  --commons-chat-shadow-control:
+    0 1px 2px color-mix(in srgb, var(--bs-body-color, #212529) 8%, transparent),
+    0 8px 24px -20px
+      color-mix(in srgb, var(--bs-body-color, #212529) 30%, transparent);
   --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
-  --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
+  --shiny-chat-streaming-color: var(--bs-primary, #007bc2);
+  --shiny-tool-card-spinner-color: var(--bs-primary, #007bc2);
 }
 
-.shiny-chat-user-message {
-  border-radius: 1.25rem;
-  padding: 0.65rem 1.1rem;
+shiny-chat-container .shiny-chat-messages-content {
+  --shiny-chat-messages-padding-bottom: 4.5rem;
 }
 
-.shiny-chat-input .tiptap {
+shiny-chat-container .shiny-chat-user-message:not(:has(.shiny-chat-edit-wrap)) {
+  border-radius: var(--commons-chat-radius-message);
+  max-width: min(85%, 42rem);
+  padding: 0.625rem 1rem;
+}
+
+shiny-chat-container .shiny-chat-input .tiptap {
+  --bs-border-radius: var(--commons-chat-radius-message);
+  background-color: var(--bs-body-bg, #fff);
   border-color: var(--bs-border-color, #dee2e6);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--commons-chat-shadow-control);
+  line-height: 1.45;
+  min-height: 3.25rem;
+  padding-block: 0.8rem !important;
+  padding-right: 3rem !important;
+  transition:
+    border-color var(--commons-chat-motion-fast) ease,
+    box-shadow var(--commons-chat-motion-fast) ease,
+    background-color var(--commons-chat-motion-fast) ease;
 }
 
-/* Send/stop keep shinychat's primary/danger hues, softened toward the
- * background so they don't dominate the chat. */
-.shiny-chat-input .shiny-chat-btn-send {
-  color: color-mix(in srgb, var(--bs-primary, #007bc2) 60%, var(--bs-body-bg, #fff));
+shiny-chat-container .shiny-chat-input:has(.shiny-chat-btn-attach) .tiptap {
+  padding-left: 3rem !important;
 }
 
-.shiny-chat-input .shiny-chat-btn-send.shiny-chat-btn-cancel {
-  color: color-mix(in srgb, var(--bs-danger, #dc3545) 60%, var(--bs-body-bg, #fff));
+shiny-chat-container .shiny-chat-input .tiptap:hover:not(:focus) {
+  border-color: var(--commons-chat-border-strong);
 }
 
-.shiny-chat-input .shiny-chat-btn-send:disabled {
-  color: var(--bs-gray-400, #ced4da);
+shiny-chat-container .shiny-chat-input .tiptap:focus {
+  border-color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 50%,
+    var(--bs-border-color, #dee2e6)
+  );
+  box-shadow:
+    0 0 0 0.2rem var(--commons-chat-focus-ring),
+    var(--commons-chat-shadow-control);
+}
+
+shiny-chat-container .shiny-chat-input:has(.shiny-chat-input-attachments) {
+  background-color: var(--bs-body-bg, #fff);
+  border-color: var(--bs-border-color, #dee2e6);
+  border-radius: var(--commons-chat-radius-message);
+  box-shadow: var(--commons-chat-shadow-control);
+  transition:
+    border-color var(--commons-chat-motion-fast) ease,
+    box-shadow var(--commons-chat-motion-fast) ease;
+}
+
+shiny-chat-container
+  .shiny-chat-input:has(.shiny-chat-input-attachments):focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 50%,
+    var(--bs-border-color, #dee2e6)
+  );
+  box-shadow:
+    0 0 0 0.2rem var(--commons-chat-focus-ring),
+    var(--commons-chat-shadow-control);
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-send,
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach {
+  align-items: center;
+  bottom: calc(0.625rem + var(--_input-padding-bottom, 0px));
+  display: inline-flex;
+  height: 2rem;
+  justify-content: center;
+  transition:
+    color var(--commons-chat-motion-fast) ease,
+    background-color var(--commons-chat-motion-fast) ease,
+    opacity var(--commons-chat-motion-fast) ease,
+    transform var(--commons-chat-motion-fast) var(--commons-chat-ease-out);
+  width: 2rem;
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-send {
+  color: var(--bs-primary, #007bc2);
+  right: 0.625rem;
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-send:focus-visible,
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach:focus-visible {
+  outline: 0.125rem solid var(--commons-chat-focus-color);
+  outline-offset: 0.1rem;
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send.shiny-chat-btn-cancel {
+  color: var(--bs-body-color, #212529);
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send.shiny-chat-btn-spinner {
+  color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 72%,
+    var(--bs-body-color, #212529)
+  );
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send.shiny-chat-btn-spinner.shiny-chat-btn-cancel {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-send:disabled {
+  color: color-mix(in srgb, var(--bs-body-color, #212529) 28%, transparent);
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach {
+  border-radius: var(--commons-chat-radius-round);
+  color: var(--bs-secondary-color, #6c757d);
+  left: 0.625rem;
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach svg {
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach:disabled {
+  opacity: 0.38;
+}
+
+/* Commons removes the assistant icon, so its empty row owns pending feedback. */
+shiny-chat-container
+  .shiny-chat-message:not(:has(> .message-icon))
+  > .shiny-chat-message-content:empty::before {
+  animation: commons-chat-working 1.6s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--bs-secondary-color, #6c757d) 25%,
+    var(--bs-body-color, #212529) 50%,
+    var(--bs-secondary-color, #6c757d) 75%
+  );
+  background-clip: text;
+  background-size: 200% 100%;
+  color: var(--bs-secondary-color, #6c757d);
+  content: "Working…";
+  display: inline-block;
+  font-size: 0.8em;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes commons-chat-working {
+  from {
+    background-position: 150% 0;
+  }
+
+  to {
+    background-position: -50% 0;
+  }
+}
+
+shiny-chat-container
+  .shiny-chat-suggestion-list
+  .shiny-chat-suggestion-list-item {
+  border-radius: var(--commons-chat-radius-surface);
+  transition:
+    border-color var(--commons-chat-motion-fast) ease,
+    background-color var(--commons-chat-motion-fast) ease,
+    box-shadow var(--commons-chat-motion-fast) ease,
+    transform var(--commons-chat-motion-fast) var(--commons-chat-ease-out);
+}
+
+shiny-chat-container
+  .shiny-chat-suggestion-list
+  .shiny-chat-suggestion-list-item:hover {
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
+  border-color: var(--commons-chat-border-strong);
+  box-shadow: 0 6px 16px -12px
+    color-mix(in srgb, var(--bs-body-color, #212529) 38%, transparent);
+}
+
+shiny-chat-container
+  .shiny-chat-suggestion-list
+  .shiny-chat-suggestion-list-item:active {
+  background-color: var(--commons-chat-state-active);
+  transform: translateY(0) scale(0.99);
+}
+
+shiny-chat-container
+  .shiny-chat-suggestion-list
+  .shiny-chat-suggestion-list-item:focus-visible {
+  outline: 0.125rem solid var(--commons-chat-focus-color);
+  outline-offset: 0.1rem;
+}
+
+shiny-chat-container
+  .shiny-chat-suggestion-list
+  .shiny-chat-suggestion-list-item[data-last-clicked] {
+  background-color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 8%,
+    var(--bs-body-bg, #fff)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 42%,
+    var(--bs-border-color, #dee2e6)
+  );
+}
+
+shiny-chat-container
+  :is(
+    .shiny-chat-tool-group__row,
+    .shiny-chat-tool-call-row__summary,
+    .shiny-chat-thinking-header
+  ) {
+  border-radius: var(--commons-chat-radius-control);
+  transition:
+    background-color var(--commons-chat-motion-fast) ease,
+    color var(--commons-chat-motion-fast) ease;
+}
+
+shiny-chat-container
+  :is(
+    .shiny-chat-tool-group__row,
+    .shiny-chat-tool-call-row__summary,
+    .shiny-chat-thinking-header
+  ):is(:hover, :focus-visible) {
+  background-color: var(--commons-chat-state-hover);
+}
+
+shiny-chat-container
+  :is(
+    .shiny-chat-tool-group__row,
+    .shiny-chat-tool-call-row__summary,
+    .shiny-chat-thinking-header
+  ):active {
+  background-color: var(--commons-chat-state-active);
+}
+
+shiny-chat-container
+  :is(
+    .shiny-chat-tool-group__row,
+    .shiny-chat-tool-call-row__summary,
+    .shiny-chat-thinking-header
+  ):focus-visible {
+  outline-color: var(--commons-chat-focus-color);
+  outline-offset: 0.1rem;
+}
+
+shiny-chat-container
+  :is(
+    .shiny-chat-tool-group__chevron,
+    .shiny-chat-tool-call-row__chevron,
+    .shiny-chat-thinking-disclosure
+  ) {
+  transition: transform var(--commons-chat-motion-base)
+    var(--commons-chat-ease-out);
+}
+
+shiny-chat-container .shiny-chat-scroll-to-bottom {
+  border-radius: var(--commons-chat-radius-round);
+  box-shadow: var(--commons-chat-shadow-control);
+  transition:
+    background-color var(--commons-chat-motion-fast) ease,
+    box-shadow var(--commons-chat-motion-fast) ease,
+    transform var(--commons-chat-motion-fast) var(--commons-chat-ease-out);
+}
+
+shiny-chat-container .shiny-chat-scroll-to-bottom:hover {
+  background-color: var(--bs-tertiary-bg, #f8f9fa);
+  box-shadow: 0 4px 12px
+    color-mix(in srgb, var(--bs-body-color, #212529) 14%, transparent);
+}
+
+shiny-chat-container .shiny-chat-scroll-to-bottom:active {
+  background-color: var(--commons-chat-state-active);
+  transform: translateX(-50%) scale(0.94);
+}
+
+shiny-chat-container .shiny-chat-scroll-to-bottom:focus-visible {
+  outline-color: var(--commons-chat-focus-color);
+  outline-offset: 0.1rem;
+}
+
+shiny-chat-container .code-copy-button {
+  align-items: center;
+  border-radius: var(--commons-chat-radius-control);
+  color: var(--bs-secondary-color, #6c757d);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 2rem;
+  min-width: 2rem;
+  padding: 0.35rem;
+  transition:
+    background-color var(--commons-chat-motion-fast) ease,
+    color var(--commons-chat-motion-fast) ease,
+    transform var(--commons-chat-motion-fast) var(--commons-chat-ease-out);
+}
+
+shiny-chat-container .code-copy-button > .bi::after {
+  background-color: currentcolor;
+}
+
+shiny-chat-container .code-copy-button:hover {
+  background-color: var(--commons-chat-state-hover);
+  color: var(--bs-body-color, #212529);
+}
+
+shiny-chat-container .code-copy-button:active {
+  background-color: var(--commons-chat-state-active);
+  transform: scale(0.96);
+}
+
+shiny-chat-container .code-copy-button:focus-visible {
+  outline: 0.125rem solid var(--commons-chat-focus-color);
+  outline-offset: 0.1rem;
+}
+
+shiny-chat-container .code-copy-button-checked {
+  color: var(--bs-success, #198754);
+}
+
+@media (hover: hover) {
+  shiny-chat-container
+    .shiny-chat-input
+    .shiny-chat-btn-send:not(:disabled, .shiny-chat-btn-spinner):hover {
+    color: color-mix(
+      in srgb,
+      var(--bs-primary, #007bc2) 82%,
+      var(--bs-body-color, #212529)
+    );
+    transform: scale(1.04);
+  }
+
+  shiny-chat-container
+    .shiny-chat-input
+    .shiny-chat-btn-send.shiny-chat-btn-cancel:hover {
+    color: var(--bs-emphasis-color, #000);
+  }
+
+  shiny-chat-container
+    .shiny-chat-input
+    .shiny-chat-btn-attach:hover:not(:disabled) {
+    background-color: var(--commons-chat-state-hover);
+    color: var(--bs-body-color, #212529);
+  }
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send:not(:disabled, .shiny-chat-btn-spinner):active,
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-attach:not(:disabled):active {
+  transform: scale(0.95);
 }
 
 /* ---- Answer provenance ----------------------------------------------- */
 
 .commons-answer-pill {
   align-items: center;
-  border-radius: 999px;
+  border-radius: var(--commons-chat-radius-round, 999px);
   display: inline-flex;
   font-size: 0.74rem;
   font-weight: 400;
@@ -46,6 +417,10 @@ shiny-chat-container {
   max-width: 100%;
   padding: 0.18rem 0.45rem;
   position: relative;
+  transition:
+    background-color var(--commons-chat-motion-fast, 120ms) ease,
+    border-color var(--commons-chat-motion-fast, 120ms) ease,
+    color var(--commons-chat-motion-fast, 120ms) ease;
   vertical-align: text-bottom;
 }
 
@@ -56,21 +431,62 @@ shiny-chat-container {
 }
 
 .commons-answer-pill-trusted {
-  background: #f2fbf5;
-  border: 1px solid #cfeedd;
-  color: #286144;
+  background: color-mix(
+    in srgb,
+    var(--bs-success, #198754) 9%,
+    var(--bs-body-bg, #fff)
+  );
+  border: 1px solid var(--bs-success-border-subtle, #a3cfbb);
+  color: var(--bs-success-text-emphasis, #0a3622);
 }
 
 .commons-answer-pill-cited {
-  background: #eef7fa;
-  border: 1px solid #c9e2e9;
-  color: #285867;
+  background: color-mix(
+    in srgb,
+    var(--bs-info, #17a2b8) 9%,
+    var(--bs-body-bg, #fff)
+  );
+  border: 1px solid var(--bs-info-border-subtle, #9eeaf9);
+  color: var(--bs-info-text-emphasis, #055160);
 }
 
 .commons-answer-pill-caution {
-  background: #fff8ec;
-  border: 1px solid #f2ddbb;
-  color: #6b4b1b;
+  background: color-mix(
+    in srgb,
+    var(--bs-warning, #ffc107) 12%,
+    var(--bs-body-bg, #fff)
+  );
+  border: 1px solid var(--bs-warning-border-subtle, #ffe69c);
+  color: var(--bs-warning-text-emphasis, #664d03);
+}
+
+.commons-answer-pill-trusted:is(:hover, :focus-visible, :focus-within) {
+  background: color-mix(
+    in srgb,
+    var(--bs-success, #198754) 15%,
+    var(--bs-body-bg, #fff)
+  );
+}
+
+.commons-answer-pill-cited:is(:hover, :focus-visible, :focus-within) {
+  background: color-mix(
+    in srgb,
+    var(--bs-info, #17a2b8) 15%,
+    var(--bs-body-bg, #fff)
+  );
+}
+
+.commons-answer-pill-caution:is(:hover, :focus-visible, :focus-within) {
+  background: color-mix(
+    in srgb,
+    var(--bs-warning, #ffc107) 20%,
+    var(--bs-body-bg, #fff)
+  );
+}
+
+.commons-answer-pill:focus-visible {
+  outline: 0.125rem solid var(--commons-chat-focus-color, currentcolor);
+  outline-offset: 0.1rem;
 }
 
 /* ---- Provenance tooltips ---------------------------------------------- */
@@ -79,9 +495,10 @@ shiny-chat-container {
 .commons-tooltip {
   background: var(--bs-body-bg, #fff);
   border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 6px;
+  border-radius: var(--commons-chat-radius-control, 0.5rem);
   bottom: calc(100% + 0.45rem);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 6px 18px
+    color-mix(in srgb, var(--bs-body-color, #212529) 14%, transparent);
   color: var(--bs-body-color, #212529);
   display: none;
   font-size: 0.74rem;
@@ -144,38 +561,55 @@ shiny-chat-container [data-shinychat-aside-display="compact"] {
 }
 
 /* Temporary bridge until Shinychat provides a public per-aside tone API. */
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
-  background: #f2fbf5;
-  box-shadow: inset 0 0 0 1px #cfeedd;
-  color: #286144;
+shiny-chat-container .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
+  background: color-mix(
+    in srgb,
+    var(--bs-success, #198754) 9%,
+    var(--bs-body-bg, #fff)
+  );
+  box-shadow: inset 0 0 0 1px var(--bs-success-border-subtle, #a3cfbb);
+  color: var(--bs-success-text-emphasis, #0a3622);
 }
 
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
+shiny-chat-container .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):focus-visible,
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"])[aria-expanded="true"] {
-  background: #e4f6ea;
-  color: #204f38;
+  background: color-mix(
+    in srgb,
+    var(--bs-success, #198754) 15%,
+    var(--bs-body-bg, #fff)
+  );
+  color: var(--bs-success-text-emphasis, #0a3622);
 }
 
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
-  background: #fff8ec;
-  box-shadow: inset 0 0 0 1px #f2ddbb;
-  color: #6b4b1b;
+shiny-chat-container .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
+  background: color-mix(
+    in srgb,
+    var(--bs-warning, #ffc107) 12%,
+    var(--bs-body-bg, #fff)
+  );
+  box-shadow: inset 0 0 0 1px var(--bs-warning-border-subtle, #ffe69c);
+  color: var(--bs-warning-text-emphasis, #664d03);
 }
 
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
+shiny-chat-container .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):focus-visible,
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/warning-icon.svg"])[aria-expanded="true"] {
-  background: #fcefd8;
-  color: #583b14;
+  background: color-mix(
+    in srgb,
+    var(--bs-warning, #ffc107) 20%,
+    var(--bs-body-bg, #fff)
+  );
+  color: var(--bs-warning-text-emphasis, #664d03);
+}
+
+shiny-chat-container .shiny-aside-pill:focus-visible {
+  outline: 0.125rem solid var(--commons-chat-focus-color);
+  outline-offset: 0.1rem;
 }
 
 shiny-chat-container
@@ -269,7 +703,7 @@ shiny-chat-container
 
 .commons-measure-plot {
   border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 0.5rem;
+  border-radius: var(--commons-chat-radius-surface, 0.75rem);
   display: block;
   height: auto;
   max-width: min(100%, 34rem);
@@ -284,12 +718,33 @@ shiny-chat-container
 }
 
 .commons-run-r-details > summary {
+  border-radius: var(--commons-chat-radius-control, 0.5rem);
   color: var(--bs-secondary-color, #6c757d);
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.07em;
+  margin-left: -0.4rem;
+  padding: 0.25rem 0.4rem;
   text-transform: uppercase;
+  transition:
+    background-color var(--commons-chat-motion-fast, 120ms) ease,
+    color var(--commons-chat-motion-fast, 120ms) ease;
+  width: fit-content;
+}
+
+.commons-run-r-details > summary:hover {
+  background-color: var(--commons-chat-state-hover, rgba(0, 0, 0, 0.06));
+  color: var(--bs-body-color, #212529);
+}
+
+.commons-run-r-details > summary:active {
+  background-color: var(--commons-chat-state-active, rgba(0, 0, 0, 0.1));
+}
+
+.commons-run-r-details > summary:focus-visible {
+  outline: 0.125rem solid var(--commons-chat-focus-color, currentcolor);
+  outline-offset: 0.1rem;
 }
 
 .commons-run-r-code {
@@ -304,7 +759,84 @@ shiny-chat-container
 
 .commons-run-r-plot {
   border: 1px solid var(--bs-border-color, #dee2e6);
-  border-radius: 0.5rem;
+  border-radius: var(--commons-chat-radius-surface, 0.75rem);
   height: auto;
   max-width: min(100%, 34rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  shiny-chat-container *,
+  shiny-chat-container *::before,
+  shiny-chat-container *::after {
+    scroll-behavior: auto !important;
+  }
+
+  shiny-chat-container
+    .shiny-chat-message:not(:has(> .message-icon))
+    > .shiny-chat-message-content:empty::before {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+
+  shiny-chat-container
+    :is(
+      .shiny-chat-btn-send,
+      .shiny-chat-btn-attach,
+      .shiny-chat-suggestion-list-item,
+      .shiny-chat-scroll-to-bottom,
+      .code-copy-button,
+      .shiny-chat-tool-group__chevron,
+      .shiny-chat-tool-call-row__chevron,
+      .shiny-chat-thinking-disclosure
+    ) {
+    transition: none;
+  }
+
+  shiny-chat-container
+    :is(
+      .shiny-chat-btn-send,
+      .shiny-chat-btn-attach,
+      .shiny-chat-suggestion-list-item,
+      .code-copy-button
+    ) {
+    transform: none !important;
+  }
+
+  shiny-chat-container .shiny-chat-scroll-to-bottom {
+    transform: translateX(-50%) !important;
+  }
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  shiny-chat-container {
+    --commons-chat-border-strong: currentcolor;
+    --commons-chat-state-active: transparent;
+    --commons-chat-state-hover: transparent;
+  }
+
+  shiny-chat-container
+    .shiny-chat-message:not(:has(> .message-icon))
+    > .shiny-chat-message-content:empty::before {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+
+  shiny-chat-container
+    :is(
+      .shiny-chat-btn-send,
+      .shiny-chat-btn-attach,
+      .shiny-chat-suggestion-list-item,
+      .shiny-chat-scroll-to-bottom,
+      .code-copy-button,
+      .shiny-chat-tool-group__row,
+      .shiny-chat-tool-call-row__summary,
+      .shiny-chat-thinking-header,
+      .shiny-aside-pill
+    ):focus-visible,
+  .commons-answer-pill:focus-visible,
+  .commons-run-r-details > summary:focus-visible {
+    outline-color: Highlight;
+  }
 }
