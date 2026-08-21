@@ -202,7 +202,7 @@ If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake
 
 ## Data sources
 
-One of the primary decisions you'll need to make when building a commons agent is which data sources to grant the agent access to. Each data source combines the underlying data with the tables to expose to the agent. It can also include a data dictionary describing those tables.
+One of the primary decisions you'll need to make when building a commons agent is which data sources to grant the agent access to. Each data source combines the underlying data with the tables to expose to the agent. It can also include a data dictionary describing those tables and trusted calculations on them.
 
 Create a data source with `data_source()`. The underlying data can consist of named data frames, a `pins` board, or a DBI connection. Data frames and pins will be loaded into an in-process DuckDB database. Database connections will be queried directly.
 
