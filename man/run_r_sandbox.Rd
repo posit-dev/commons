@@ -5,9 +5,9 @@
 \title{\code{run_r} sandboxing}
 \description{
 The \code{run_r} tool executes model-authored R code, so \code{\link[=commons]{commons()}} only enables
-it inside an operating-system sandbox. macOS uses Seatbelt. Linux uses
+it inside an operating-system sandbox. On deployed Linux hosts, commons uses
 Landlock when available and otherwise falls back to unprivileged user and
-mount namespaces; Linux also requires seccomp.
+mount namespaces; it also requires seccomp.
 }
 \details{
 When these mechanisms are unavailable, \code{commons()} warns and creates the

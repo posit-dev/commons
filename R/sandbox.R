@@ -5,9 +5,9 @@
 #' `run_r` sandboxing
 #'
 #' The `run_r` tool executes model-authored R code, so [commons()] only enables
-#' it inside an operating-system sandbox. macOS uses Seatbelt. Linux uses
+#' it inside an operating-system sandbox. On deployed Linux hosts, commons uses
 #' Landlock when available and otherwise falls back to unprivileged user and
-#' mount namespaces; Linux also requires seccomp.
+#' mount namespaces; it also requires seccomp.
 #'
 #' When these mechanisms are unavailable, `commons()` warns and creates the
 #' agent without `run_r`. Its other tools remain available.

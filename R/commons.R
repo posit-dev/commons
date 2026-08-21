@@ -29,8 +29,8 @@
 #'   )
 #'   ```
 #' @param network Whether the `run_r` session has network access. One of
-#'   `"none"` (the default) or `"full"`. The session requires filesystem
-#'   sandboxing on Linux or macOS. When sandboxing is unavailable, commons
+#'   `"none"` (the default) or `"full"`. On Linux, the session requires
+#'   filesystem sandboxing. When sandboxing is unavailable, commons
 #'   warns and creates the agent without `run_r`; its other tools remain
 #'   available. See [run_r_sandbox] for platform requirements.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry

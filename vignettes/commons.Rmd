@@ -29,9 +29,9 @@ library(commons)
 ## `run_r` sandboxing {#run-r-sandboxing}
 
 The `run_r` tool executes model-authored R code, so commons only enables it
-inside an operating-system filesystem sandbox. macOS uses Seatbelt. Linux uses
-Landlock when available and otherwise falls back to unprivileged user and mount
-namespaces; Linux also requires seccomp.
+inside an operating-system filesystem sandbox. On deployed Linux hosts,
+commons uses Landlock when available and otherwise falls back to unprivileged
+user and mount namespaces; it also requires seccomp.
 
 When the required sandboxing mechanisms are unavailable, `commons()` warns and
 creates the agent without `run_r`. The agent can still search context, inspect

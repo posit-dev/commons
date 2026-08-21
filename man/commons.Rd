@@ -43,8 +43,8 @@ system prompt, as a single string or the path to a text or Markdown file.
 }\if{html}{\out{</div>}}}
 
 \item{network}{Whether the \code{run_r} session has network access. One of
-\code{"none"} (the default) or \code{"full"}. The session requires filesystem
-sandboxing on Linux or macOS. When sandboxing is unavailable, commons
+\code{"none"} (the default) or \code{"full"}. On Linux, the session requires
+filesystem sandboxing. When sandboxing is unavailable, commons
 warns and creates the agent without \code{run_r}; its other tools remain
 available. See \link{run_r_sandbox} for platform requirements.}
 
