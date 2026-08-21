@@ -4,11 +4,13 @@ Fixtures in this directory are the authority for anything the R and Python imple
 
 Prose cannot enforce agreement, so each contract here is an executable fixture that CI checks against both implementations.
 
-## How each suite reads these
+## How each suite will read these
 
-The Python suite reads this directory directly. The R suite cannot: testthat needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. So the R side consumes a copy synced into `pkg-r/tests/testthat/fixtures/`, the copy is committed, and CI re-runs the sync and fails if the result differs from what is checked in. A synced copy is the mechanism; a copy someone edits by hand is the defect.
+The Python suite can read this directory directly. The R suite cannot: testthat needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. So the R side is intended to consume a copy synced into `pkg-r/tests/testthat/fixtures/`, with the copy committed and a CI job re-running the sync to fail on a stale copy.
 
-This is the same sync-and-verify arrangement that shared shipped artifacts use (the system prompt and the browser assets), for the same reason. See the port plan's D10.
+**None of that sync machinery exists yet**, and neither does any fixture. It arrives with the first fixture, alongside the R-side runner. Until then this section describes intent, not behavior a contributor can rely on.
+
+When it does arrive, the rule to hold is that a generated copy is the mechanism and a hand-edited one is the defect. The same arrangement is planned for shared shipped artifacts, the system prompt and the browser assets, for the same underlying reason.
 
 ## Why this exists
 
