@@ -29,8 +29,10 @@
 #'   )
 #'   ```
 #' @param network Whether the `run_r` session has network access. One of
-#'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
-#'   and refuses to run without filesystem sandboxing.
+#'   `"none"` (the default) or `"full"`. The session requires filesystem
+#'   sandboxing on Linux or macOS. When sandboxing is unavailable, commons
+#'   warns and creates the agent without `run_r`; its other tools remain
+#'   available. See `vignette("commons")` for platform requirements.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -132,7 +134,10 @@ commons <- function(
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
   network <- rlang::arg_match(network)
-  check_run_r_sandbox()
+  run_r_support <- run_r_sandbox_support()
+  if (!run_r_support$available) {
+    warn_run_r_unavailable(run_r_support)
+  }
   check_instructions(instructions)
   rlang::check_bool(log)
   check_share_with(share_with)
@@ -143,6 +148,7 @@ commons <- function(
     context_layer = context_layer,
     semantic_layer = semantic_layer,
     network = network,
+    run_r_available = run_r_support$available,
     instructions = instructions,
     log = log,
     share_with = share_with
@@ -161,6 +167,7 @@ Commons <- R6::R6Class(
       ...,
       instructions = NULL,
       network = c("none", "full"),
+      run_r_available = TRUE,
       log = FALSE,
       share_with = NULL
     ) {
@@ -168,6 +175,7 @@ Commons <- R6::R6Class(
       do.call(super$initialize, ellmer_chat_initialize_args(client))
       semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
+      rlang::check_bool(run_r_available)
 
       sources <- as_data_sources(data_sources)
 
@@ -203,8 +211,8 @@ Commons <- R6::R6Class(
         )
       )
 
-      private$handles <- new_handle_store()
-      private$worker <- new_r_worker(network)
+      private$handles <- if (run_r_available) new_handle_store()
+      private$worker <- if (run_r_available) new_r_worker(network)
       private$corpus <- build_citation_corpus(
         private$context_layer,
         private$registry,

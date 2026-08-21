@@ -7,7 +7,7 @@ test_that("sandbox_capabilities reports all mechanisms", {
   expect_type(caps$userns, "logical")
 })
 
-test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
+test_that("run_r sandbox support requires seccomp and a filesystem backend", {
   capabilities <- list(
     landlock_abi = 0L,
     seccomp = TRUE,
@@ -15,29 +15,47 @@ test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
     userns = FALSE
   )
 
-  expect_error(
-    check_run_r_sandbox(capabilities, "Linux"),
-    "neither Landlock nor unprivileged user namespaces"
-  )
+  support <- run_r_sandbox_support(capabilities, "Linux")
+  expect_false(support$available)
+  expect_match(support$reason, "neither Landlock nor unprivileged user")
+
   capabilities$seccomp <- FALSE
-  expect_error(
-    check_run_r_sandbox(capabilities, "Linux"),
-    "does not support seccomp"
-  )
+  support <- run_r_sandbox_support(capabilities, "Linux")
+  expect_false(support$available)
+  expect_match(support$reason, "does not support seccomp")
 })
 
-test_that("check_run_r_sandbox accepts either Linux filesystem sandbox", {
+test_that("run_r sandbox support accepts either Linux filesystem backend", {
   capabilities <- list(
     landlock_abi = 1L,
     seccomp = TRUE,
     seatbelt = FALSE,
     userns = FALSE
   )
-  expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+  expect_true(run_r_sandbox_support(capabilities, "Linux")$available)
 
   capabilities$landlock_abi <- 0L
   capabilities$userns <- TRUE
-  expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+  expect_true(run_r_sandbox_support(capabilities, "Linux")$available)
+})
+
+test_that("run_r sandbox support covers macOS and unsupported systems", {
+  capabilities <- list(
+    landlock_abi = -1L,
+    seccomp = FALSE,
+    seatbelt = TRUE,
+    userns = FALSE
+  )
+  expect_true(run_r_sandbox_support(capabilities, "Darwin")$available)
+
+  capabilities$seatbelt <- FALSE
+  support <- run_r_sandbox_support(capabilities, "Darwin")
+  expect_false(support$available)
+  expect_match(support$reason, "Seatbelt")
+
+  support <- run_r_sandbox_support(capabilities, "Windows")
+  expect_false(support$available)
+  expect_match(support$reason, "not supported on Windows")
 })
 
 test_that("worker_init refuses to run unsandboxed off Linux and macOS", {

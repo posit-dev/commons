@@ -82,6 +82,7 @@ test_that("system prompt data contains facts and runtime content", {
     data,
     c(
       "date",
+      "has_run_r",
       "has_multiple_sources",
       "has_catalog_search",
       "has_dictionary_context",

@@ -27,9 +27,9 @@
 #' reference to a variable defined elsewhere, so the measure doesn't depend on
 #' where the semantic layer is created.
 #'
-#' The source of each measure, and of any helper functions defined alongside
-#' it in the semantic layer's files, is readable in the agent's `run_r`
-#' session: evaluating a measure's name there prints its definition. Only
+#' When `run_r` is available, the source of each measure and any helper
+#' functions defined alongside it in the semantic layer's files is readable in
+#' that session: evaluating a measure's name there prints its definition. Only
 #' source text is shared with that session; the functions' environments (and
 #' any connections or credentials in them) are not.
 #'
@@ -127,8 +127,9 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' [ellmer::ContentToolResult]. Its `value` is sent to the model and its
 #' `extra$display` controls the shinychat display. When the display includes
 #' HTML, Markdown, or text, the model is told that the result is already visible
-#' to the user. An optional `extra$data` value is made available to `run_r` and
-#' removed from the result before it is returned to ellmer.
+#' to the user. An optional `extra$data` value is removed from the result before
+#' it is returned to ellmer and, when `run_r` is available, made available to
+#' that tool.
 #'
 #' @param name Measure name.
 #' @param description What the measure computes.

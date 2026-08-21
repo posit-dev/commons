@@ -67,7 +67,11 @@ call_metrics_impl <- function(
     cli::cli_abort(
       c(
         "Metrics in one query must share a table; these span {.val {tables}}.",
-        i = "Query them separately and combine the results with run_r."
+        i = if (is.null(handles)) {
+          "Use {.fn run_sql} when documented relationships support the calculation."
+        } else {
+          "Query them separately and combine the results with run_r."
+        }
       )
     )
   }

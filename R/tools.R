@@ -33,9 +33,9 @@ build_commons_tools <- function(self, private) {
     list(
       tool_search_context(private),
       tool_describe_table(private),
-      tool_run_sql(private),
-      tool_run_r(private)
-    )
+      tool_run_sql(private)
+    ),
+    if (!is.null(private$worker)) list(tool_run_r(private))
   )
 }
 
