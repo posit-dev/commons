@@ -1,8 +1,14 @@
 # Cross-language spec fixtures
 
-Fixtures in this directory are the authority for anything the R and Python implementations of commons must agree on. Both test suites read them directly — `pkg-r/tests/testthat/` and `pkg-py/tests/` — rather than keeping parallel copies of the same expectations. A language-specific copy of a behavior described here is a review defect, not a convenience: the whole reason this directory exists is that a copy drifts silently.
+Fixtures in this directory are the authority for anything the R and Python implementations of commons must agree on. Both test suites consume them, `pkg-r/tests/testthat/` and `pkg-py/tests/`, instead of maintaining parallel copies of the same expectations. A hand-maintained per-language copy of a behavior described here is a review defect, not a convenience: the whole reason this directory exists is that such a copy drifts silently.
 
 Prose cannot enforce agreement, so each contract here is an executable fixture that CI checks against both implementations.
+
+## How each suite reads these
+
+The Python suite reads this directory directly. The R suite cannot: testthat needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. So the R side consumes a copy synced into `pkg-r/tests/testthat/fixtures/`, the copy is committed, and CI re-runs the sync and fails if the result differs from what is checked in. A synced copy is the mechanism; a copy someone edits by hand is the defect.
+
+This is the same sync-and-verify arrangement that shared shipped artifacts use (the system prompt and the browser assets), for the same reason. See the port plan's D10.
 
 ## Why this exists
 

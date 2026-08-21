@@ -25,7 +25,7 @@ The `/pkg-r` suffix is required — the package no longer lives at the repositor
 
 commons' behavior lives substantially in artifacts that have to agree across both languages: the system prompt, the citation dialect and its guards, the provenance truth table and its display copy, and the tracing span contract. Kept in separate repositories, each of those is a copy that drifts silently, and prompt drift fails invisibly — nothing errors, the agent just behaves differently in one language.
 
-`tests/shared/` is where those contracts become executable fixtures that both test suites read and CI enforces, rather than prose that rots. It currently holds only the contract describing what belongs there; the fixtures themselves land as the provenance and citation code is ported. See [`tests/shared/README.md`](tests/shared/README.md).
+`tests/shared/` is where those contracts become executable fixtures that both test suites consume and CI enforces, rather than prose that rots. It currently holds only the contract describing what belongs there; the fixtures themselves land as the provenance and citation code is ported. See [`tests/shared/README.md`](tests/shared/README.md), which also covers why the R suite reads a synced copy rather than these files directly.
 
 ## Working in this repository
 
