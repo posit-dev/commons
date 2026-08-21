@@ -65,6 +65,14 @@
   margin: 0;
 }
 
+.commons-flow-arrow-up {
+  transform: rotate(-45deg);
+}
+
+.commons-flow-arrow-down {
+  transform: rotate(45deg);
+}
+
 .commons-branch-routes {
   display: grid;
   row-gap: 0.75rem;
