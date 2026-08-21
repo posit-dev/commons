@@ -29,6 +29,6 @@ commons' behavior lives substantially in artifacts that have to agree across bot
 
 ## Working in this repository
 
-Each package builds and tests from its own directory, and CI is scoped to match. The three R package-check workflows (`R-CMD-check`, `pkgdown`, `citation-browser`) run on `pkg-r/**` and `tests/shared/**`; `py-check` runs on `pkg-py/**` and `tests/shared/**`; `deploy` runs on `pkg-r/**` only; `cleanup-previews` is unfiltered so it always runs.
+Each package builds and tests from its own directory, and CI is scoped to match: the R workflows are filtered to `pkg-r/**`, `py-check` to `pkg-py/**`, and the package-check workflows additionally to `tests/shared/**`, so a change to one package does not run the other's suite. See [`.github/workflows/`](.github/workflows) for each workflow's exact triggers.
 
 If you worked in this repository before the split, [`MIGRATING.md`](MIGRATING.md) covers what moved and what to change in your setup.
