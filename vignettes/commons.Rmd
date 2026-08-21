@@ -283,7 +283,7 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 
 Use `commons()` to construct an agent. Pass it an ellmer `Chat` and one or more data sources, along with any semantic and context layers. You can also optionally append information to the commons agent system prompt using the `instructions` argument.
 
-Use `commons_app()` to run the agent in a Shiny app. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
+Use `commons_app()` to run the agent in a local or single-user Shiny app. For multi-user deployments, use `commons_ui()` and `commons_server()` and create a new agent for each Shiny session. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
 
 ```r
 library(commons)
