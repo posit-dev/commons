@@ -116,7 +116,11 @@ shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach {
 }
 
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-send {
-  color: var(--bs-primary, #007bc2);
+  color: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 68%,
+    var(--bs-body-bg, #fff)
+  );
   right: 0.625rem;
 }
 
@@ -367,8 +371,8 @@ shiny-chat-container .code-copy-button-checked {
     .shiny-chat-btn-send:not(:disabled, .shiny-chat-btn-spinner):hover {
     color: color-mix(
       in srgb,
-      var(--bs-primary, #007bc2) 82%,
-      var(--bs-body-color, #212529)
+      var(--bs-primary, #007bc2) 78%,
+      var(--bs-body-bg, #fff)
     );
     transform: scale(1.04);
   }
