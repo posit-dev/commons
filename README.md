@@ -1,34 +1,42 @@
-# commons
+# commons <a href="https://posit-dev.github.io/commons/"><img src="pkg-r/man/figures/logo.png" align="right" height="240" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space." /></a>
 
-Build correct and easy-to-use self-service data science tools. commons assembles a data agent from three layers — data, semantic, and context — and holds it to A/B/C provenance semantics, so every answer it gives can be traced back to what produced it.
+> Both packages are highly experimental; expect their interfaces to change rapidly.
 
-This repository holds two implementations of the same design:
+commons helps data scientists build trustworthy data agents. It provides a meta-harness; you bring your data and understanding of how to do calculations on it, and the package situates that in a set of prompts and tools that make for a more accurate, fast, and cost-effective agent than a regular coding agent provided with the same information.
 
-| Directory | Package | Language |
-|---|---|---|
-| [`pkg-r/`](pkg-r) | `commons` | R |
-| [`pkg-py/`](pkg-py) | `posit-commons` (imports as `commons`) | Python |
-| [`tests/shared/`](tests/shared) | cross-language spec contract; fixtures to come | — |
+commons agents use a pool of trusted calculations drawn from your existing work, like Shiny apps and Quarto docs, to answer questions. (You can also import existing trusted calculations from semantic layers in Snowflake and Databricks.) When the question can't be answered by a trusted calculation, the agent can search across context you've compiled to query data directly, and the response will be deterministically tagged as untrusted.
 
-The R package is usable and in internal use, though still experimental: expect its interface to change. The Python package is early scaffolding. Neither has been publicly released, so both can change without a deprecation cycle.
+<img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
-## Installing
+commons agents support a wide variety of LLM providers, via [ellmer](https://ellmer.tidyverse.org/) in R and [chatlas](https://posit-dev.github.io/chatlas/) in Python. Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) alongside `.R` or `.py` files.
 
-```r
+## Two languages, one design
+
+This repository holds both implementations of commons. They are the same design, with the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so an agent behaves the same way whichever language you build it in.
+
+### R
+
+The R package is the original and the one to reach for today. It is usable and in internal use, though still experimental.
+
+``` r
 # install.packages("pak")
 pak::pak("posit-dev/commons/pkg-r")
 ```
 
-The `/pkg-r` suffix is required — the package no longer lives at the repository root.
+To learn more, see `vignette("commons", package = "commons")`, the [reference site](https://posit-dev.github.io/commons/), or [`pkg-r/README.md`](pkg-r/README.md).
 
-## Why one repository
+### Python
 
-commons' behavior lives substantially in artifacts that have to agree across both languages: the system prompt, the citation dialect and its guards, the provenance truth table and its display copy, and the tracing span contract. Kept in separate repositories, each of those is a copy that drifts silently, and prompt drift fails invisibly — nothing errors, the agent just behaves differently in one language.
+The Python package is early work and not yet usable. It will be published to PyPI as `posit-commons` and imported as `commons`:
 
-`tests/shared/` is where those contracts will become executable fixtures that both suites run against and CI enforces, rather than prose that rots. It currently holds only the contract describing what belongs there; the fixtures themselves land as the provenance and citation code is ported. See [`tests/shared/README.md`](tests/shared/README.md), which states the rule and covers why the R suite will consume a synced copy rather than reading these files directly.
+``` python
+from commons import Commons
+```
 
-## Working in this repository
+Nothing is published yet, so there is no install command to give you. Follow along in [`pkg-py/README.md`](pkg-py/README.md).
 
-Each package builds and tests from its own directory, and CI is scoped to match: the R workflows are filtered to `pkg-r/**`, `py-check` to `pkg-py/**`, and the package-check workflows additionally to `tests/shared/**`, so a change to one package does not run the other's suite. See [`.github/workflows/`](.github/workflows) for each workflow's exact triggers.
+## Contributing
 
-If you worked in this repository before the split, [`MIGRATING.md`](MIGRATING.md) covers what moved and what to change in your setup.
+Each package builds and tests from its own directory, `pkg-r/` for R and `pkg-py/` for Python, rather than from the repository root.
+
+If you worked in this repository before the two packages were split apart, [`MIGRATING.md`](MIGRATING.md) covers what moved and what to change in your setup.
