@@ -130,6 +130,8 @@ The following table details the various ways each trust outcome can occur.
 | No calculation because the available information is insufficient | No label |
 
 
+The agent itself does not tag the answer as verified, cited, untrusted—this process is handled deterministically by the commons package based on the agent's behavior.
+
 ## Information layers
 
 Commons distinguishes between two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer encodes trusted calculations, ideally lifted from reliable code that you already use. The **context layer** contains background or supporting information, useful both for figuring out what custom code to run and how to interpret results. Data dictionaries span the two layers.
