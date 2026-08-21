@@ -11,6 +11,8 @@ shiny-chat-container {
   --commons-chat-radius-round: 999px;
   --commons-chat-motion-fast: 120ms;
   --commons-chat-motion-base: 180ms;
+  /* shinychat main can leave an empty row for ~120ms between blocks. */
+  --commons-chat-working-delay: 200ms;
   --commons-chat-ease-out: cubic-bezier(0.2, 0, 0, 1);
   --commons-chat-state-hover: color-mix(
     in srgb,
@@ -171,13 +173,15 @@ shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach:disabled {
   opacity: 0.38;
 }
 
-/* Commons has no assistant icon; debounce empty rows past block handoffs. */
+/* Commons has no assistant icon, so its empty row owns pending feedback. */
 shiny-chat-container
   .shiny-chat-message:not(:has(> .message-icon))
   > .shiny-chat-message-content:empty::before {
   animation:
-    commons-chat-working-reveal 0s linear 200ms forwards,
-    commons-chat-working 1.6s ease-in-out 200ms infinite;
+    commons-chat-working-reveal 0s linear var(--commons-chat-working-delay)
+      forwards,
+    commons-chat-working 1.6s ease-in-out var(--commons-chat-working-delay)
+      infinite;
   background: linear-gradient(
     90deg,
     var(--bs-secondary-color, #6c757d) 25%,
@@ -816,7 +820,8 @@ shiny-chat-container
   shiny-chat-container
     .shiny-chat-message:not(:has(> .message-icon))
     > .shiny-chat-message-content:empty::before {
-    animation: commons-chat-working-reveal 0s linear 200ms forwards;
+    animation: commons-chat-working-reveal 0s linear
+      var(--commons-chat-working-delay) forwards;
     background: none;
     -webkit-text-fill-color: currentcolor;
   }
@@ -860,7 +865,8 @@ shiny-chat-container
   shiny-chat-container
     .shiny-chat-message:not(:has(> .message-icon))
     > .shiny-chat-message-content:empty::before {
-    animation: commons-chat-working-reveal 0s linear 200ms forwards;
+    animation: commons-chat-working-reveal 0s linear
+      var(--commons-chat-working-delay) forwards;
     background: none;
     -webkit-text-fill-color: currentcolor;
   }
