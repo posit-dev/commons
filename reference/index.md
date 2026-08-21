@@ -4,8 +4,9 @@
 
 - [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
   : Create a commons agent
-- [`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
-  [`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
+- [`commons_app()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+  [`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+  [`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
   : Shiny chat UI and server for commons agents
 - [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md)
   : Create a context layer

@@ -38,7 +38,7 @@
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">data_source</span><span class="op">(</span><span class="va">...</span>, tables <span class="op">=</span> <span class="cn">NULL</span>, dictionary <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">data_source</span><span class="op">(</span><span class="va">...</span>, tables <span class="op">=</span> <span class="cn">NULL</span>, exclude <span class="op">=</span> <span class="cn">NULL</span>, dictionary <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -63,13 +63,30 @@ connections, a <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="ex
 table and view in that namespace. Leaving <code>tables</code> unset selects the
 current schema. A Databricks <code>hive_metastore</code> selection must include a
 schema. Snowflake selections import semantic views, and Databricks
-selections import unparameterized metric views, as native trusted metrics
-and dimensions. Databricks wildcard members require concrete column
-metadata from the warehouse.
-Native semantic models are available through <code>search_pool</code> and
-<code>call_metrics</code>, but are not returned by <code><a href="list_tables.html">list_tables()</a></code>.</p>
+selections import metric views, as native trusted metrics and dimensions.
+Namespace selections retain lightweight model metadata, then read a
+model's definition when the agent describes or uses it. Explicitly
+selected models are read and validated when the data source is created.
+Snowflake semantic variables and Databricks metric-view parameters are
+passed as typed JSON arguments to <code>call_metrics</code>. Databricks wildcard
+members require concrete column metadata from the warehouse.
+Native semantic models are available through <code>search_pool</code>,
+<code>describe_table</code>, and <code>call_metrics</code>, but are not returned by
+<code><a href="list_tables.html">list_tables()</a></code>.
+Snowflake verified queries are exposed separately as exact trusted
+calculations through <code>search_pool</code> and <code>call_calculation</code>; their SQL is
+executed as stored rather than parsed to infer dependencies.
+An exact physical-table selection also imports associated models when
+every physical dependency is selected. Public relationships, facts,
+filters, and instructions become table-scoped first-touch and retrieval
+context; private members remain hidden.</p>
 <p>For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to <code><a href="https://pins.rstudio.com/reference/pin_read.html" class="external-link">pins::pin_read()</a></code>.</p></dd>
+
+
+<dt id="arg-exclude">exclude<a class="anchor" aria-label="anchor" href="#arg-exclude"></a></dt>
+<dd><p>For Snowflake and Databricks namespace selections, optional
+unqualified object-name globs to omit, such as <code>"TMP_*"</code>.</p></dd>
 
 
 <dt id="arg-dictionary">dictionary<a class="anchor" aria-label="anchor" href="#arg-dictionary"></a></dt>
@@ -95,7 +112,7 @@ in-process database: each pin in <code>tables</code> becomes a table. Pin names 
 validated against the board at construction (a single listing call), but
 each pin is downloaded only when its table is first used—by the
 <code>describe_table</code> tool, a SQL query that references it, or a measure that
-takes the source's connection. <code><a href="commons_ui.html">commons_server()</a></code> starts a background
+takes the source's connection. <code><a href="commons_app.html">commons_server()</a></code> starts a background
 process right after startup that downloads the remaining pins into the
 local pins cache, so a first use typically only reads an
 already-downloaded file. A table reflects the pin's
@@ -143,7 +160,11 @@ would modify data or schema (<code>INSERT</code>, <code>UPDATE</code>, <code>DRO
 rejected before reaching the database. For the in-process DuckDB built from
 data frames, commons additionally disables extension loading and filesystem
 access. These are safeguards, not a sandbox: when you supply your own
-connection, still open it in read-only mode where the backend supports it.</p>
+connection, still open it in read-only mode where the backend supports it.
+Snowflake and Databricks sources snapshot the principal, active role, and
+namespace at creation, then reject catalog and governed execution after
+those values change. Authored and native semantic material is exposed only
+after a zero-row query succeeds for the current principal.</p>
     </div>
 
     <div class="section level2">

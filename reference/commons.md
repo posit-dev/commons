@@ -103,9 +103,9 @@ subclass.
 
 The provider and model come from `client`; commons sets its own system
 prompt and tools. Use `agent$chat()` to ask questions,
-[`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
+[`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
 and
-[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_ui.md)
+[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
 to embed the agent in Shiny, and
 [`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
 to use the agent as a vitals solver.
