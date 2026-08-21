@@ -173,15 +173,42 @@ shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach:disabled {
   opacity: 0.38;
 }
 
-/* Commons has no assistant icon, so its empty row owns pending feedback. */
+/* Match shinychat's activity-row geometry so pending and thinking stay aligned. */
+shiny-chat-container
+  .shiny-chat-message:not(:has(> .message-icon))
+  > .shiny-chat-message-content:empty {
+  --_row-pad: 0.4rem;
+  --_row-glyph-width: 0.9em;
+
+  align-items: center;
+  animation: commons-chat-working-reveal 0s linear
+    var(--commons-chat-working-delay) forwards;
+  display: flex;
+  font-size: 0.8em;
+  gap: 0.5rem;
+  min-height: 2em;
+  opacity: 0;
+  padding: 0.25rem var(--_row-pad);
+  width: 100%;
+}
+
 shiny-chat-container
   .shiny-chat-message:not(:has(> .message-icon))
   > .shiny-chat-message-content:empty::before {
-  animation:
-    commons-chat-working-reveal 0s linear var(--commons-chat-working-delay)
-      forwards,
-    commons-chat-working 1.6s ease-in-out var(--commons-chat-working-delay)
-      infinite;
+  background-color: var(--bs-secondary-color, #6c757d);
+  content: "";
+  flex: none;
+  height: 0.4em;
+  margin-inline: calc((var(--_row-glyph-width) - 0.4em) / 2);
+  transform: rotate(45deg);
+  width: 0.4em;
+}
+
+shiny-chat-container
+  .shiny-chat-message:not(:has(> .message-icon))
+  > .shiny-chat-message-content:empty::after {
+  animation: commons-chat-working 1.6s ease-in-out
+    var(--commons-chat-working-delay) infinite;
   background: linear-gradient(
     90deg,
     var(--bs-secondary-color, #6c757d) 25%,
@@ -193,15 +220,13 @@ shiny-chat-container
   color: var(--bs-secondary-color, #6c757d);
   content: "Working…";
   display: inline-block;
-  font-size: 0.8em;
-  opacity: 0;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
 @keyframes commons-chat-working-reveal {
   to {
-    opacity: 1;
+    opacity: var(--_activity-opacity, 0.7);
   }
 }
 
@@ -823,9 +848,14 @@ shiny-chat-container
 
   shiny-chat-container
     .shiny-chat-message:not(:has(> .message-icon))
-    > .shiny-chat-message-content:empty::before {
+    > .shiny-chat-message-content:empty {
     animation: commons-chat-working-reveal 0s linear
       var(--commons-chat-working-delay) forwards;
+  }
+
+  shiny-chat-container
+    .shiny-chat-message:not(:has(> .message-icon))
+    > .shiny-chat-message-content:empty::after {
     background: none;
     -webkit-text-fill-color: currentcolor;
   }
@@ -868,9 +898,14 @@ shiny-chat-container
 
   shiny-chat-container
     .shiny-chat-message:not(:has(> .message-icon))
-    > .shiny-chat-message-content:empty::before {
+    > .shiny-chat-message-content:empty {
     animation: commons-chat-working-reveal 0s linear
       var(--commons-chat-working-delay) forwards;
+  }
+
+  shiny-chat-container
+    .shiny-chat-message:not(:has(> .message-icon))
+    > .shiny-chat-message-content:empty::after {
     background: none;
     -webkit-text-fill-color: currentcolor;
   }

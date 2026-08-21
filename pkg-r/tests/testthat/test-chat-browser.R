@@ -31,7 +31,7 @@ test_that("Commons shows feedback while a chat response is pending", {
     paste0(
       "getComputedStyle(document.querySelector(",
       "'.shiny-chat-message > .shiny-chat-message-content:empty'",
-      "), '::before').opacity === '1';"
+      ")).opacity !== '0';"
     ),
     timeout = 30 * 1000
   )
@@ -41,7 +41,7 @@ test_that("Commons shows feedback while a chat response is pending", {
       paste0(
         "getComputedStyle(document.querySelector(",
         "'.shiny-chat-message > .shiny-chat-message-content:empty'",
-        "), '::before').content;"
+        "), '::after').content;"
       )
     ),
     '"Working…"'
