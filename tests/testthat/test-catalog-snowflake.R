@@ -55,6 +55,18 @@ test_that("Snowflake SHOW results identify semantic views separately", {
   expect_null(views[[2]]$description)
 })
 
+test_that("Snowflake SHOW truncation fails closed", {
+  complete <- data.frame(row = seq_len(snowflake_show_row_limit - 1L))
+  truncated <- data.frame(row = seq_len(snowflake_show_row_limit))
+
+  expect_no_error(snowflake_check_show_complete(complete, "relations"))
+  expect_error(
+    snowflake_check_show_complete(truncated, "relations"),
+    "might be truncated",
+    fixed = TRUE
+  )
+})
+
 test_that("Snowflake semantic YAML imports only public dimensions and metrics", {
   specification <- list(
     name = "revenue",

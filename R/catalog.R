@@ -138,8 +138,36 @@ catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
   keep <- scores > 0
   relations <- relations[keep]
   scores <- scores[keep]
-  relations[utils::head(order(scores, decreasing = TRUE), limit)]
+  relations <- relations[order(scores, decreasing = TRUE)]
+  if (!is.null(source$session)) {
+    relations <- catalog_search_queryable(source, relations, limit)
+  }
+  utils::head(relations, limit)
 }
+
+catalog_search_queryable <- function(source, relations, limit) {
+  results <- list()
+  candidates <- utils::head(relations, catalog_search_probe_limit)
+  for (label in names(candidates)) {
+    queryable <- tryCatch(
+      {
+        catalog_ensure_queryable(source, label)
+        TRUE
+      },
+      commons_catalog_authorization_error = function(err) FALSE
+    )
+    if (queryable) {
+      results[[label]] <- candidates[[label]]
+    }
+    if (length(results) >= limit) {
+      break
+    }
+  }
+  results
+}
+
+# Bound zero-row checks when many high-ranking metadata matches are unauthorized.
+catalog_search_probe_limit <- 100L
 
 catalog_search_terms <- function(x) {
   text <- tolower(paste(x %||% "", collapse = " "))

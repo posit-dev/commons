@@ -295,6 +295,7 @@ snowflake_list_relations <- function(con, namespace, call = rlang::caller_env())
       )
     }
   )
+  snowflake_check_show_complete(rows, "relations", call = call)
   snowflake_relations_from_show(rows)
 }
 
@@ -323,8 +324,28 @@ snowflake_list_semantic_views <- function(
   if (is.null(rows)) {
     return(list())
   }
+  snowflake_check_show_complete(rows, "semantic views", call = call)
   snowflake_semantic_views_from_show(rows)
 }
+
+snowflake_check_show_complete <- function(
+  rows,
+  objects,
+  call = rlang::caller_env()
+) {
+  if (nrow(rows) >= snowflake_show_row_limit) {
+    cli::cli_abort(c(
+      paste(
+        "Snowflake returned {snowflake_show_row_limit} {objects}, so the",
+        "catalog selection might be truncated."
+      ),
+      i = "Narrow {.arg tables} to a smaller database or schema prefix."
+    ), call = call)
+  }
+  invisible(rows)
+}
+
+snowflake_show_row_limit <- 10000L
 
 snowflake_exact_semantic_view <- function(
   con,

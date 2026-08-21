@@ -44,7 +44,8 @@ tool_search_catalog <- function(private) {
         paste(vapply(names(results), function(label) {
           relation <- results[[label]]
           summary <- relation$description %||% "No description."
-          sprintf("- `%s` (%s): %s", label, relation$kind, summary)
+          kind <- relation$kind %||% "unknown kind"
+          sprintf("- `%s` (%s): %s", label, kind, summary)
         }, character(1)), collapse = "\n")
       } else {
         sprintf("No catalog objects found for \"%s\".", query)

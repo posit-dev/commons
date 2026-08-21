@@ -71,6 +71,58 @@ test_that("catalog search results are ready for describe_table", {
   expect_match(result@value, "Booked sales activity.", fixed = TRUE)
 })
 
+test_that("catalog search hides relations without query access", {
+  source <- test_source()
+  source$relations <- list(
+    denied = list(
+      id = DBI::Id(table = "denied"),
+      kind = "table",
+      description = "Restricted booked activity."
+    ),
+    allowed = list(
+      id = DBI::Id(table = "allowed"),
+      kind = "table",
+      description = "Available booked activity."
+    )
+  )
+  source$table_ids <- lapply(source$relations, `[[`, "id")
+  source$manifest <- new_catalog_manifest(source$relations, TRUE)
+  source$session <- list(backend = "test")
+  local_mocked_bindings(
+    catalog_check_session = function(...) invisible(NULL),
+    catalog_ensure_queryable = function(source, table, ...) {
+      if (identical(table, "denied")) {
+        cli::cli_abort(
+          "Not authorized.",
+          class = "commons_catalog_authorization_error"
+        )
+      }
+      invisible(source)
+    }
+  )
+
+  results <- catalog_search(source, "booked")
+
+  expect_named(results, "allowed")
+  expect_equal(results$allowed$description, "Available booked activity.")
+})
+
+test_that("catalog search formats relations with unknown kinds", {
+  source <- test_source()
+  source$relations <- list(sales = list(
+    id = source$table_ids$sales,
+    kind = NULL,
+    description = NULL
+  ))
+  source$manifest <- new_catalog_manifest(source$relations, TRUE)
+  source$manifest$searchable <- TRUE
+  private <- list(sources = list(warehouse = source))
+
+  result <- tool_search_catalog(private)("sales")
+
+  expect_match(result@value, "`sales` (unknown kind)", fixed = TRUE)
+})
+
 test_that("catalog descriptions hydrate columns only once", {
   source <- test_source()
   source$relations <- list(sales = list(

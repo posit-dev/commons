@@ -133,11 +133,14 @@ catalog_probe_relation <- function(con, id) {
   )
 }
 
-catalog_probe_sql <- function(con, sql) {
+catalog_probe_sql <- function(con, sql, bindings = list()) {
   tryCatch(
     {
       result <- DBI::dbSendQuery(con, sql)
       on.exit(DBI::dbClearResult(result), add = TRUE)
+      if (length(bindings)) {
+        DBI::dbBind(result, unname(bindings))
+      }
       list(state = "queryable", error = NULL)
     },
     error = function(err) {
@@ -338,9 +341,10 @@ catalog_filter_semantic_access <- function(
 }
 
 catalog_probe_semantic_model <- function(con, model) {
-  sql <- catalog_semantic_probe_sql(con, model)
+  bindings <- catalog_semantic_probe_bindings(model$parameters)
+  sql <- catalog_semantic_probe_sql(con, model, bindings)
   if (!is.null(sql)) {
-    return(catalog_probe_sql(con, sql))
+    return(catalog_probe_sql(con, sql, bindings))
   }
   if (model$backend %in% c(
     "snowflake_semantic_view",
@@ -366,7 +370,25 @@ catalog_probe_semantic_model <- function(con, model) {
   list(state = "queryable", error = NULL)
 }
 
-catalog_semantic_probe_sql <- function(con, model) {
+catalog_semantic_probe_bindings <- function(parameters) {
+  required <- Filter(function(parameter) !parameter$has_default, parameters)
+  # Typed NULLs satisfy required signatures without inventing business values.
+  values <- lapply(required, function(parameter) {
+    switch(
+      parameter$type,
+      string = NA_character_,
+      integer = NA_integer_,
+      number = NA_real_,
+      logical = NA,
+      date = NA_character_,
+      datetime = NA_character_
+    )
+  })
+  names(values) <- vapply(required, `[[`, character(1), "name")
+  values
+}
+
+catalog_semantic_probe_sql <- function(con, model, arguments = list()) {
   metric <- model$metrics[1][[1]]
   dimension <- model$dimensions[1][[1]]
   fact <- model$facts[1][[1]]
@@ -383,19 +405,49 @@ catalog_semantic_probe_sql <- function(con, model) {
       "FACTS"
     }
     reference <- catalog_semantic_member_reference(con, member)
+    variables <- if (length(arguments)) {
+      paste0(
+        "\n  VARIABLES ",
+        paste(
+          sprintf(
+            "%s => ?",
+            DBI::dbQuoteIdentifier(con, names(arguments))
+          ),
+          collapse = ", "
+        )
+      )
+    } else {
+      ""
+    }
     return(paste0(
       "SELECT * FROM SEMANTIC_VIEW(\n  ",
       DBI::dbQuoteIdentifier(con, model$id),
       "\n  ", role, " ", reference,
+      variables,
       "\n)\nLIMIT 0"
     ))
   }
   if (identical(model$backend, "databricks_metric_view")) {
+    relation <- as.character(DBI::dbQuoteIdentifier(con, model$id))
+    if (length(arguments)) {
+      relation <- paste0(
+        relation,
+        "(",
+        paste(
+          sprintf(
+            "%s => ?",
+            DBI::dbQuoteIdentifier(con, names(arguments))
+          ),
+          collapse = ", "
+        ),
+        ")"
+      )
+    }
     if (!is.null(metric)) {
       reference <- DBI::dbQuoteIdentifier(con, metric$name)
       return(paste(
         "SELECT MEASURE(", reference, ") FROM",
-        DBI::dbQuoteIdentifier(con, model$id),
+        relation,
         "LIMIT 0"
       ))
     }
@@ -404,7 +456,7 @@ catalog_semantic_probe_sql <- function(con, model) {
         "SELECT",
         DBI::dbQuoteIdentifier(con, dimension$name),
         "FROM",
-        DBI::dbQuoteIdentifier(con, model$id),
+        relation,
         "LIMIT 0"
       ))
     }

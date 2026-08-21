@@ -137,6 +137,19 @@ test_that("warehouse access errors are classified conservatively", {
   expect_equal(catalog_access_error_kind(simpleError("bad syntax")), "unknown")
 })
 
+test_that("catalog SQL probes bind typed nulls", {
+  source <- test_source()
+
+  probe <- catalog_probe_sql(
+    source$con,
+    "SELECT ? AS probe_value",
+    list(NA_real_)
+  )
+
+  expect_equal(probe$state, "queryable")
+  expect_null(probe$error)
+})
+
 test_that("namespace semantic models hide authorization failures", {
   exact <- test_semantic_model("exact_model")
   discovered <- test_semantic_model("discovered_model")
@@ -209,6 +222,44 @@ test_that("semantic model probes use native zero-row queries", {
   fact_sql <- catalog_semantic_probe_sql(DBI::ANSI(), fact_only)
   expect_match(fact_sql, "FACTS", fixed = TRUE)
   expect_match(fact_sql, "unit_price", fixed = TRUE)
+})
+
+test_that("semantic model probes bind required native parameters", {
+  model <- test_semantic_model()
+  model$parameters <- list(
+    new_typed_argument("threshold", "number"),
+    new_typed_argument(
+      "category",
+      "string",
+      default = "retail",
+      has_default = TRUE
+    )
+  )
+  sql <- NULL
+  bindings <- NULL
+  local_mocked_bindings(
+    catalog_probe_sql = function(con, query, values) {
+      sql <<- query
+      bindings <<- values
+      list(state = "queryable", error = NULL)
+    }
+  )
+
+  expect_equal(
+    catalog_probe_semantic_model(DBI::ANSI(), model)$state,
+    "queryable"
+  )
+  expect_match(sql, 'VARIABLES "threshold" => ?', fixed = TRUE)
+  expect_named(bindings, "threshold")
+  expect_true(is.na(bindings$threshold))
+
+  model$backend <- "databricks_metric_view"
+  catalog_probe_semantic_model(DBI::ANSI(), model)
+  expect_match(
+    sql,
+    '("threshold" => ?)',
+    fixed = TRUE
+  )
 })
 
 test_that("native semantic probes fail closed without public members", {
