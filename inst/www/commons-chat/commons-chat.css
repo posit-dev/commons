@@ -171,11 +171,13 @@ shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach:disabled {
   opacity: 0.38;
 }
 
-/* Commons removes the assistant icon, so its empty row owns pending feedback. */
+/* Commons has no assistant icon; debounce empty rows past block handoffs. */
 shiny-chat-container
   .shiny-chat-message:not(:has(> .message-icon))
   > .shiny-chat-message-content:empty::before {
-  animation: commons-chat-working 1.6s ease-in-out infinite;
+  animation:
+    commons-chat-working-reveal 0s linear 200ms forwards,
+    commons-chat-working 1.6s ease-in-out 200ms infinite;
   background: linear-gradient(
     90deg,
     var(--bs-secondary-color, #6c757d) 25%,
@@ -188,8 +190,15 @@ shiny-chat-container
   content: "Working…";
   display: inline-block;
   font-size: 0.8em;
+  opacity: 0;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+@keyframes commons-chat-working-reveal {
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes commons-chat-working {
@@ -807,7 +816,7 @@ shiny-chat-container
   shiny-chat-container
     .shiny-chat-message:not(:has(> .message-icon))
     > .shiny-chat-message-content:empty::before {
-    animation: none;
+    animation: commons-chat-working-reveal 0s linear 200ms forwards;
     background: none;
     -webkit-text-fill-color: currentcolor;
   }
@@ -851,7 +860,7 @@ shiny-chat-container
   shiny-chat-container
     .shiny-chat-message:not(:has(> .message-icon))
     > .shiny-chat-message-content:empty::before {
-    animation: none;
+    animation: commons-chat-working-reveal 0s linear 200ms forwards;
     background: none;
     -webkit-text-fill-color: currentcolor;
   }
