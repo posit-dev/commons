@@ -26,6 +26,29 @@ This vignette shows the shape of a small commons project.
 library(commons)
 ```
 
+## `run_r` sandboxing {#run-r-sandboxing}
+
+The `run_r` tool executes model-authored R code, so commons only enables it
+inside an operating-system filesystem sandbox. On deployed Linux hosts,
+commons uses Landlock when available and otherwise falls back to unprivileged
+user and mount namespaces; it also requires seccomp.
+
+When the required sandboxing mechanisms are unavailable, `commons()` warns and
+creates the agent without `run_r`. The agent can still search context, inspect
+and query tables, and use trusted calculations, but it cannot perform ad hoc R
+analysis or plotting.
+
+On older Linux kernels without Landlock, check whether user namespaces are
+enabled:
+
+```sh
+sysctl user.max_user_namespaces
+```
+
+A value of `0` disables the fallback. Administrators should assess the host's
+security policy before enabling user namespaces; upgrading to a Landlock-capable
+kernel avoids that dependency.
+
 ## Setting up the project directory
 
 A commons agent is easiest to maintain when the pieces live in separate files:

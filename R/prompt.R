@@ -23,6 +23,7 @@ system_prompt_data <- function(
 
   list(
     date = as.character(Sys.Date()),
+    has_run_r = "run_r" %in% tool_names,
     has_multiple_sources = length(sources) > 1,
     has_catalog_search = any(vapply(sources, catalog_searchable, logical(1))),
     has_dictionary_context = nzchar(dictionary_context) ||

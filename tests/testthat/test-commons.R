@@ -25,6 +25,55 @@ test_that("commons() registers only the tools the agent's composition earns", {
   )
 })
 
+test_that("commons() degrades cleanly when run_r cannot be sandboxed", {
+  support <- new_run_r_sandbox_support(
+    FALSE,
+    "The test host has no filesystem sandbox."
+  )
+  testthat::local_mocked_bindings(
+    run_r_sandbox_support = function() support,
+    .package = "commons"
+  )
+
+  warnings <- list()
+  agent <- withCallingHandlers(
+    test_agent(semantic_layer = semantic_layer(count_measure_tool())),
+    warning = function(cnd) {
+      warnings[[length(warnings) + 1L]] <<- cnd
+      rlang::cnd_muffle(cnd)
+    }
+  )
+
+  expect_length(warnings, 1L)
+  warning <- warnings[[1]]
+  expect_match(conditionMessage(warning), "Disabling `run_r`")
+  expect_match(conditionMessage(warning), support$reason, fixed = TRUE)
+  expect_match(conditionMessage(warning), "run_r_sandbox", fixed = TRUE)
+
+  tool_names <- vapply(agent$get_tools(), tool_name, character(1))
+  expect_false("run_r" %in% tool_names)
+  expect_contains(tool_names, c("call_measure", "run_sql"))
+
+  private <- agent$.__enclos_env__$private
+  expect_null(private$worker)
+  expect_null(private$handles)
+
+  sql_result <- agent_tool(agent, "run_sql")(
+    sql = "SELECT sum(revenue) AS revenue FROM sales"
+  )
+  measure_result <- agent_tool(agent, "call_measure")(
+    name = "order_count",
+    arguments = "{}"
+  )
+  expect_no_match(sql_result@value, "Available to `run_r`", fixed = TRUE)
+  expect_no_match(measure_result@value, "Available to `run_r`", fixed = TRUE)
+
+  prompt <- agent$get_system_prompt()
+  expect_no_match(prompt, "run_r", fixed = TRUE)
+  expect_no_match(prompt, "plot", fixed = TRUE)
+  expect_match(prompt, "express that derivation in SQL", fixed = TRUE)
+})
+
 test_that("ellmer chat initialization supports both model APIs", {
   client <- list(get_provider = function() "provider")
 

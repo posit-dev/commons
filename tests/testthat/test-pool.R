@@ -158,10 +158,19 @@ test_that("metrics in one call must share a table", {
   store <- new_handle_store()
   query <- metrics_caller(src, store)
 
-  expect_error(
+  error <- expect_error(
     query(metrics = c("total_revenue", "n_reps")),
     "must share a table"
   )
+  expect_match(conditionMessage(error), "combine the results with run_r")
+
+  error <- expect_error(
+    metrics_caller(src)(metrics = c("total_revenue", "n_reps")),
+    "must share a table"
+  )
+  expect_no_match(conditionMessage(error), "run_r", fixed = TRUE)
+  expect_match(conditionMessage(error), "run_sql", fixed = TRUE)
+
   query(metrics = "total_revenue")
   expect_equal(get_handle(store, "r1")$total_revenue, sum(test_sales()$revenue))
 })
