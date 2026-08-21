@@ -20,8 +20,8 @@ knitr::opts_chunk$set(
 )
 ```
 
-This document explains the structure of a commons project as well as how to get
-started with building a commons agent.
+This document explains the structure of a commons project and how to start
+building a commons agent.
 
 ```r
 library(commons)
@@ -43,7 +43,7 @@ packages. The core idea behind commons is that we can improve an agent's
 correctness by giving it the right access and documentation to run this code.
 
 The high-trust "happy path" occurs when the user asks a question that
-corresponds to one of these _trusted calculations_. For example, say we have a
+corresponds to one of these **trusted calculations**. For example, say we have a
 commons agent that can analyze biodiversity data. The user asks:
 
 > How many total animals were observed at Oak Bluff?
@@ -64,142 +64,8 @@ it to take advantage of pre-vetted code.
 
 However, we also expect users to ask questions that stray from the "happy
 path." For those, the agent searches for additional context and writes custom
-code (either SQL or R). Answers from this path either include a citation or are
-tagged as "Untrusted". We'll explain the various
-[information layers](#information-layers) and the details of the
-[trust flow](#trust-flow) later in this vignette.
-
-## Working with the agent skill
-
-The package includes a `commons` [agent skill](https://agentskills.io/) that
-helps coding agents build, evaluate, and improve commons agents. We recommend using the skill when creating a commons agent. It contains a host of information on creating commons agents, as well as a structured approach to the process. 
-
-To make the skill available to **Posit Assistant or Codex**, copy the skill and its references to `.agents/skills`:
-
-```r
-skill <- system.file("skills", "commons", package = "commons")
-dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
-file.copy(skill, ".agents/skills", recursive = TRUE)
-```
-
-For **Claude Code**, copy the skill and its references to `.claude/skills`:
-
-```r
-skill <- system.file("skills", "commons", package = "commons")
-dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
-file.copy(skill, ".claude/skills", recursive = TRUE)
-```
-
-## Data sources
-
-One of the primary decisions you'll need to make when building a commons agent
-is which data sources to grant the agent access to. Each data source combines
-the underlying data, the tables from that data to expose to the agent, and a
-data dictionary describing those tables.
-
-Create a data source with `data_source()`. The underlying data can consist of
-named data frames, a pin board, or a DBI connection. Data frames and pins will
-be loaded into an in-process DuckDB database. Database connections will be
-queried directly.
-
-For example, the following code creates a data source for a warehouse connection
-`con`. Only the tables `observations` and `site_area` are accessible by the
-agent. `dictionary` is an optional path to a `data-dict.yaml` file.
-
-```r
-warehouse <- data_source(
-  con,
-  tables = c("observations", "site_area"),
-  dictionary = "dictionaries/warehouse.yaml"
-)
-```
-
-## Information layers
-
-Commons distinguishes between two primary layers of information: the
-_semantic_ layer and the _context_ layer. The semantic layer encodes trusted
-calculations, ideally lifted from reliable code that you already use. The
-_context_ layer contains background or supporting information, useful both for
-figuring out what custom code to run and how to interpret results. Data
-dictionaries span the two layers.
-
-There are multiple ways to add information into the semantic layer. Probably
-the most straightforward way is as _measures_ stored in `.R` files. Measures
-are roxygen-documented R functions decorated with `@measures`. When measures
-are available, the agent will search for a measure relevant to the user's
-question. If it finds one, it calls that measure, possibly supplying arguments.
-
-`data-dict.yaml` files can also contribute to the semantic layer through
-[`definitions`](#definitions). See [Data dictionaries](#data-dictionaries) for
-more information. Supported warehouse semantic models can also provide trusted
-calculations.
-
-The context layer is composed of unstructured information in Markdown files
-and the descriptive fields in `data-dict.yaml`.
-
-| Layer | Sources | Role |
-|---|---|---|
-| Semantic layer | Measures in `.R` files, [`definitions`](#definitions) in `data-dict.yaml`, and supported [warehouse semantic models](#warehouse-semantic-layers) | Provides trusted calculations. |
-| Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL or R and guides interpretation. |
-
-Here are brief examples of a data dictionary, a measures file, and a
-context-layer Markdown file for the biodiversity example app:
-
-::: {.commons-layer-sources .column-screen-inset}
-::: {.commons-layer-examples}
-::: {.commons-layer-example}
-
-#### Data dictionary
-
-`dictionaries/warehouse.yaml`
-
-```yaml
-tables:
-  - name: observations
-    description: Species observations by nature preserve.
-    columns:
-      - name: count
-        description: Individuals observed during surveys.
-```
-
-:::
-::: {.commons-layer-example}
-#### Semantic layer
-
-`measures/biodiversity.R`
-
-```r
-#' Individuals observed
-#'
-#' @param site `string` Site name.
-#' @measure
-individuals_observed <- function(site) {
-  sum(observations$count[
-    observations$site == site
-  ])
-}
-```
-
-:::
-::: {.commons-layer-example}
-
-#### Context layer
-
-`context/biodiversity.md`
-
-```markdown
-# Interpreting survey results
-
-Observed individuals reflect organisms
-recorded during surveys. They should not
-be interpreted as a complete population
-census of a nature preserve.
-```
-
-:::
-:::
-
-:::
+code (either SQL or R). Answers from this path either include a verified
+citation or are tagged as `Untrusted`.
 
 ## Trust flow
 
@@ -211,19 +77,21 @@ answer is tagged with a green verified answer pill.
 If a relevant trusted calculation is not found, the agent proceeds down the
 lower trust path. It searches through the context for additional information,
 then uses that information to write custom SQL or R code to answer the user's
-question. These answers are either given a citation in a footnote or tagged as
-untrusted.
+question. These answers either include a verified citation in a footnote or are
+tagged as `Untrusted`.
 
 <figure class="commons-flow commons-flow-trusted-calculations column-page">
 <div class="commons-branch-flow"
      role="img"
-     aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
+     aria-label="Search trusted calculations, then follow either the high-trust
+     path through a relevant calculation or the lower-trust path through context
+     and custom SQL or R">
 <div class="commons-branch-origin">
 <span class="commons-flow-node">Search trusted<br>calculations</span>
 </div>
 <div class="commons-branch-connectors" aria-hidden="true">
-<span class="commons-flow-arrow">&nearr;</span>
-<span class="commons-flow-arrow">&searr;</span>
+<span class="commons-flow-arrow commons-flow-arrow-up"></span>
+<span class="commons-flow-arrow commons-flow-arrow-down"></span>
 </div>
 <div class="commons-branch-routes">
 <div class="commons-trust-segment commons-trust-segment-high">
@@ -241,12 +109,14 @@ untrusted.
 <div class="commons-trust-steps">
 <span class="commons-flow-node">No relevant<br>calculation found</span>
 <span class="commons-flow-arrow">&rarr;</span>
-<span class="commons-flow-node">Search context</span>
+<span class="commons-flow-node">Search<br>context</span>
 <span class="commons-flow-arrow">&rarr;</span>
-<span class="commons-flow-node">Write SQL/R</span>
+<span class="commons-flow-node">Write<br>SQL/R</span>
 <span class="commons-flow-arrow">&rarr;</span>
 <span class="commons-flow-results">
-<span class="commons-flow-answer">Cited answer<sup class="commons-citation-ref">1</sup></span>
+<span class="commons-flow-answer">
+Cited answer<sup class="commons-citation-ref">1</sup>
+</span>
 <span class="commons-flow-or">or</span>
 `r commons:::commons_answer_pill("C")`
 </span>
@@ -257,23 +127,161 @@ untrusted.
 </figure>
 
 There are two possible trust outcomes for the "lower trust" path. When the
-agent writes custom SQL or R, it can also include a citation (from a data
-dictionary or context layer Markdown file) that supports its approach. Commons
-checks that its citation appears as cited in a trusted source. If at least one
-citation can be verified, it is displayed as a numbered footnote. If the agent
-does not include a citation, or if commons can't verify any of its citations,
-the answer gets tagged as `Untrusted`.
+agent writes custom SQL or R, it can also include supporting text quoted from a
+trusted source. Commons verifies that the quoted text appears in that source.
+Verified citations are displayed as footnotes. If the agent does not include a
+citation, or if commons can't verify any of its citations, the answer gets
+tagged as `Untrusted`.
 
 The following table details the various ways each trust outcome can occur.
 
 | How the answer is produced | Outcome |
 |---|---|
-| A trusted R measure | `r commons:::commons_answer_pill("A")` |
-| A data-dictionary metric, possibly grouped or restricted using filter or derived-value definitions, or documented columns | `r commons:::commons_answer_pill("A")` |
-| A Snowflake semantic-view or Databricks metric-view metric | `r commons:::commons_answer_pill("A")` |
-| Custom SQL, including SQL that uses data-dictionary definitions | Cited or `r commons:::commons_answer_pill("C")` |
-| Custom R | Cited or `r commons:::commons_answer_pill("C")` |
+| A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_pill("A")` |
+| A [data-dictionary metric](#definitions), possibly grouped or restricted using filter or derived-value definitions, or [documented columns](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
+| Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
+| [Custom R](#context-layer) | Cited or `r commons:::commons_answer_pill("C")` |
 | No calculation because the available information is insufficient | No label |
+
+## Working with the agent skill
+
+The package includes a `commons` [agent skill](https://agentskills.io/) that
+helps coding agents build, evaluate, and improve commons agents. We recommend
+installing it before you begin because it provides detailed guidance and a
+structured workflow.
+
+To make the skill available to **Posit Assistant or Codex**, copy the skill and
+its references to `.agents/skills`:
+
+```r
+skill <- system.file("skills", "commons", package = "commons")
+dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".agents/skills", recursive = TRUE)
+```
+
+For **Claude Code**, copy the skill and its references to `.claude/skills`:
+
+```r
+skill <- system.file("skills", "commons", package = "commons")
+dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".claude/skills", recursive = TRUE)
+```
+
+## Information layers
+
+Commons distinguishes between two primary layers of information: the
+**semantic layer** and the **context layer**. The semantic layer encodes
+trusted calculations, ideally lifted from reliable code that you already use.
+The **context layer** contains background or supporting information, useful both for
+figuring out what custom code to run and how to interpret results. Data
+dictionaries span the two layers.
+
+| Layer | Sources | Role |
+|---|---|---|
+| Semantic layer | Measures in `.R` files, [`definitions`](#definitions) in `data-dict.yaml`, and supported [warehouse semantic models](#warehouse-semantic-layers) | Provides trusted calculations. |
+| Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL or R and guides interpretation. |
+
+### Semantic layer
+
+There are multiple ways to add information to the semantic layer. Probably
+the most straightforward way is as **measures** stored in `.R` files. Measures
+are R functions documented with roxygen2 and marked with `@measure`. When
+measures are available, the agent will search for a measure relevant to the
+user's question. If it finds one, it calls that measure, possibly supplying
+arguments.
+
+`data-dict.yaml` files can also contribute to the semantic layer through
+[`definitions`](#definitions). See [Data dictionaries](#data-dictionaries) for
+more information. Supported warehouse semantic models can also provide trusted
+calculations.
+
+### Context layer
+
+The context layer draws from unstructured information in Markdown files and the
+descriptive fields in `data-dict.yaml`.
+
+Here are brief examples of a data dictionary, a measure file, and a
+context-layer Markdown file for the biodiversity example app:
+
+#### Data dictionary
+
+`dictionaries/warehouse.yaml`
+
+```yaml
+tables:
+  - name: observations
+    description: Species observations by nature preserve.
+    columns:
+      - name: count
+        description: Individuals observed during surveys.
+```
+
+#### Measure file
+
+`measures/biodiversity.R`
+
+```r
+#' Species richness by site
+#'
+#' @param site `string` Site name.
+#' @measure
+biodiversity_by_site <- function(site) {
+  observations |>
+    dplyr::filter(obs_site == site) |>
+    dplyr::summarize(
+      species_richness = dplyr::n_distinct(species)
+    )
+}
+```
+
+#### Context document
+
+`context/biodiversity.md`
+
+```markdown
+# Interpreting survey results
+
+Observed individuals reflect organisms
+recorded during surveys. They should not
+be interpreted as a complete population
+census of a nature preserve.
+```
+
+### Warehouse semantic layers
+
+If you have trusted metrics in
+[Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview)
+or
+[Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views),
+you can use those calculations directly with commons. It can also group or
+filter metrics by approved fields from the warehouse, such as region, product,
+or date. Answers based on these warehouse-defined metrics are marked as
+verified.
+
+## Data sources
+
+One of the primary decisions you'll need to make when building a commons agent
+is which data sources to grant the agent access to. Each data source combines
+the underlying data with the tables to expose to the agent. It can also include
+a data dictionary describing those tables.
+
+Create a data source with `data_source()`. The underlying data can consist of
+named data frames, a `pins` board, or a DBI connection. Data frames and pins
+will be loaded into an in-process DuckDB database. Database connections will
+be queried directly.
+
+For example, the following code creates a data source for a warehouse connection
+`con`. Only the tables `observations` and `site_area` are exposed to the agent.
+`dictionary` is an optional path to a `data-dict.yaml` file.
+
+```r
+warehouse <- data_source(
+  con,
+  tables = c("observations", "site_area"),
+  dictionary = "dictionaries/warehouse.yaml"
+)
+```
 
 ## Data dictionaries
 
@@ -295,7 +303,7 @@ Commons agents use data dictionaries in a few ways:
 
 ### Definitions
 
-_Definitions_ are named, governed expressions attached to tables in
+**Definitions** are named, governed expressions attached to tables in
 `data-dict.yaml`. They allow an agent to reuse trusted metrics, filters, and
 derived values, contributing to the semantic layer.
 
@@ -340,17 +348,6 @@ for examples of definitions.
 
 When a data source is constructed, commons validates each definition and
 compiles it to the source's SQL dialect.
-
-## Warehouse semantic layers
-
-If you have trusted metrics in
-[Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview)
-or
-[Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views),
-you can use those calculations directly with commons. It can also group or
-filter metrics by approved fields from the warehouse, such as region, product,
-or date. Answers based on these warehouse-defined metrics are marked as
-verified.
 
 ## Project directory organization
 
