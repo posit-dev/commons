@@ -424,11 +424,6 @@ viewer_ui <- function(summary) {
       sidebar = bslib::sidebar(
         width = 380,
         class = "commons-viewer-sidebar",
-        bslib::navset_underline(
-          id = "group_by",
-          bslib::nav_panel("Conversations", value = "conversation"),
-          bslib::nav_panel("Questions", value = "question")
-        ),
         shiny::dateRangeInput(
           "window",
           "Dates",
@@ -437,6 +432,7 @@ viewer_ui <- function(summary) {
           min = dates$min,
           max = dates$max
         ),
+        group_by_input(),
         shiny::selectInput(
           "trust",
           "Trust Level",
@@ -488,6 +484,26 @@ viewer_ui <- function(summary) {
       # Match the dependency order used by a live commons chat.
       htmltools::findDependencies(shinychat::chat_ui("commons_viewer_probe")),
       list(commons_chat_dependency(), commons_viewer_dependency())
+    )
+  )
+}
+
+group_by_input <- function() {
+  htmltools::div(
+    class = "commons-viewer-group-by",
+    shiny::radioButtons(
+      "group_by",
+      label = htmltools::tags$span(
+        class = "visually-hidden",
+        "Group reviews by"
+      ),
+      choices = c(
+        "Conversations" = "conversation",
+        "Questions" = "question"
+      ),
+      selected = "conversation",
+      inline = TRUE,
+      width = "100%"
     )
   )
 }
@@ -597,6 +613,10 @@ viewer_server <- function(
         seq_along(summary)
       )
       timeline_legend(hit_rate(lapply(in_dates, function(i) summary[[i]]$tags)))
+    })
+
+    output$timeline_title <- shiny::renderText({
+      timeline_title(input$window)
     })
 
     output$timeline <- shiny::renderUI({
