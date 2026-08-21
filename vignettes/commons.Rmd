@@ -127,8 +127,7 @@ The following table details the various ways each trust outcome can occur:
 | A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
 | Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
 | Custom R | Cited or `r commons:::commons_answer_pill("C")` |
-| No data tool used because the agent answered from information already available or could not answer from accessible information | No label |
-
+| No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No label |
 
 The agent itself does not tag the answer as verified, cited, or untrusted. This process is instead handled deterministically by the commons package based on the agent's behavior.
 
