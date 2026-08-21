@@ -373,32 +373,24 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 
 Use `commons()` to construct an agent. Pass it an ellmer `Chat` and one or more data sources, along with any semantic and context layers. You can also optionally append information to the commons agent system prompt using the `instructions` argument.
 
-To make the agent available in Shiny, add `commons_ui()` to the app's UI and pass the agent to `commons_server()`. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
+Use `commons_app()` to run the agent in a Shiny app. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
 
 ```r
-library(bslib)
 library(commons)
-library(shiny)
 
-ui <- page_fillable(commons_ui("chat"))
+biodiversity <- data_source(
+  observations = observations,
+  site_area = site_area,
+  dictionary = "dictionaries/biodiversity.yaml"
+)
 
-server <- function(input, output, session) {
-  biodiversity <- data_source(
-    observations = observations,
-    site_area = site_area,
-    dictionary = "dictionaries/biodiversity.yaml"
-  )
+agent <- commons(
+  client = ellmer::chat("anthropic/claude-sonnet-5"),
+  data_sources = list(biodiversity = biodiversity),
+  semantic_layer = semantic_layer("measures"),
+  context_layer = context_layer("context/context.md"),
+  instructions = "instructions.md"
+)
 
-  agent <- commons(
-    client = ellmer::chat("anthropic/claude-sonnet-5"),
-    data_sources = list(biodiversity = biodiversity),
-    semantic_layer = semantic_layer("measures"),
-    context_layer = context_layer("context/context.md"),
-    instructions = "instructions.md"
-  )
-
-  commons_server("chat", agent)
-}
-
-shinyApp(ui, server)
+commons_app(agent)
 ```
