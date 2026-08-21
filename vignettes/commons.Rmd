@@ -176,8 +176,8 @@ tables:
 #'
 #' @param site `string` Site name.
 #' @measure
-biodiversity_by_site <- function(site) {
-  observations |>
+biodiversity_by_site <- function(biodiversity, site) {
+  dplyr::tbl(biodiversity, "observations") |>
     dplyr::filter(obs_site == site) |>
     dplyr::summarize(
       species_richness = dplyr::n_distinct(species)
