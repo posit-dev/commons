@@ -39,7 +39,7 @@ To install the package, run:
 
 ``` r
 # install.packages("pak")
-pak::pak("posit-dev/commons")
+pak::pak("posit-dev/commons/pkg-r")
 ```
 
 To learn more, see `vignette("commons", package = "commons")`.
