@@ -218,9 +218,9 @@ biodiversity <- data_source(
 
 ### Data dictionaries
 
-Data dictionaries provide structured, source-specific documentation for a data source. Use a data dictionary to specify what each table represents, column meanings and types, relationships between tables, glossary terms, and trusted `definitions`. Commons supports the [`data-dict.yaml` specification](https://data-dict.tidyverse.org/).
+Data dictionaries provide structured, source-specific documentation for a data source. Use a data dictionary to specify what each table represents, column meanings and types, relationships between tables, glossary terms, and trusted `definitions`. commons supports the [`data-dict.yaml` specification](https://data-dict.tidyverse.org/).
 
-Commons agents use data dictionaries in a few ways:
+commons agents use data dictionaries in a few ways:
 
 * Dataset-level descriptions and details provide broad, always-available context. Glossary terms are included in the system prompt as space allows.
 * The first time the agent uses a documented table in a conversation, it receives the table's description, column information, relationships, and relevant glossary terms.
