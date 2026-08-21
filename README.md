@@ -10,7 +10,7 @@ This repository holds two implementations of the same design:
 | [`pkg-py/`](pkg-py) | `posit-commons` (imports as `commons`) | Python |
 | [`tests/shared/`](tests/shared) | cross-language spec fixtures | — |
 
-The R package is complete and in internal use; the Python package is early scaffolding. Neither has been publicly released, so both can still change without a deprecation cycle.
+The R package is usable and in internal use, though still experimental: expect its interface to change. The Python package is early scaffolding. Neither has been publicly released, so both can change without a deprecation cycle.
 
 ## Installing
 
