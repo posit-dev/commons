@@ -3,8 +3,10 @@ name: Deploy to Connect
 on:
   push:
     branches: [main]
+    paths: [pkg-r/**, .github/workflows/deploy.yml]
   pull_request:
     branches: [main]
+    paths: [pkg-r/**, .github/workflows/deploy.yml]
 
 jobs:
   deploy:

@@ -34,8 +34,11 @@ Stayed at the root: `.github/`, `AGENTS.md` and its `CLAUDE.md` symlink, and a r
 Rebase onto the restructure rather than merging. Git's rename detection maps your edits onto the new paths, so a branch that touches `R/citations.R` lands on `pkg-r/R/citations.R` without manual intervention:
 
 ```sh
-git rebase main
+git fetch origin
+git rebase origin/main
 ```
+
+Rebase onto `origin/main` rather than `main`: `git pull` on your own branch does not move local `main`, so rebasing onto it can replay your work onto the pre-restructure tree and leave you resolving the whole move by hand.
 
 Rename detection is per-file and works on content similarity, so it can miss if a branch also rewrites the file heavily. If a conflict shows your change against a deleted path, the file is not gone — resolve it at the `pkg-r/` path.
 
@@ -47,7 +50,7 @@ This was not cosmetic. A gitignore pattern containing a separator is anchored to
 
 ## CI
 
-Each workflow now has a `paths:` filter and runs with `working-directory: pkg-r`. The R workflows trigger on `pkg-r/**` and `tests/shared/**`; the new `py-check` triggers on `pkg-py/**` and `tests/shared/**`.
+Every workflow now has a `paths:` filter. The three R package workflows (`R-CMD-check`, `pkgdown`, `citation-browser`) trigger on `pkg-r/**` and `tests/shared/**` and run their R steps in `pkg-r/`; `py-check` triggers on `pkg-py/**` and `tests/shared/**` and runs in `pkg-py/`; `deploy` triggers on `pkg-r/**`. Only `cleanup-previews` is unfiltered, so it always runs and cannot leave a stale preview behind.
 
 Two consequences worth knowing:
 

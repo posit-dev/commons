@@ -14,3 +14,8 @@ inst/hex/output
 src/*.o
 src/*.so
 src/*.dll
+
+# R CMD build / check output. Never ignored before the split either, so this
+# closes a pre-existing gap rather than restoring something the move broke.
+*.Rcheck/
+*.tar.gz

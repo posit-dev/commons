@@ -30,7 +30,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: pkg-py/uv.lock
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --locked --all-extras
       - name: Lint
         run: uv run ruff check
       - name: Test
