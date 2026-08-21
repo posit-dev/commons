@@ -1,0 +1,67 @@
+---
+title: "Security and governance for commons agents"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Governing commons agents}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+#| include: false
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+commons allows users to build and deploy agents that can execute arbitrary R code and run SQL queries against live databases. This raises several security- and governance-related questions: how can we ensure that agents don't delete data in production databases? Can commons agents damage [Connect](https://posit.co/products/enterprise/connect) deployments by running problematic R code? Can commons agents show users tables (or rows) that they should not have access to?
+
+This vignette provides details on the security-relevant questions in commons.
+
+## commons' harness
+
+There's R and SQL code execution, a bunch of data and business context injected from the data connections + data-dict.yaml + trusted calculation + context layer.
+
+We do not trust the model to refrain from leaking data or taking destructive actions. Instead, we do not allow it to. Adopters should not make data available to the agent that they are not comfortable with the agent sharing to the user. Similarly, the agent should not have access to data that they [don't trust their model provider with](https://posit.co/blog/trust-llm-tools).
+
+## SQL code execution with `run_sql()` 
+
+### Destructive actions
+
+Some light safeguards, but the actual solution is to open connections as database-enforced read-only.
+
+### Data access
+
+On Databricks and Snowflake, uses viewer-managed credentials, so row-level security is maintained.
+
+Otherwise, app-level security; like 'normal' shiny apps, should use a service account with access only the data needed to support the app. Then, share the application on Connect only with those that should have access to it.
+
+### Transmitting results to the R process
+
+`run_sql()` results are copied into the R process. Other things from the main process are not available there.
+
+## `run_r()` and its R process
+
+The R code is not run in the main app process, but an isolated subprocess.
+
+### OS-level sandboxing
+
+Landlock and, for distros with older kernels, a fallback. + seccomp for network. Describe the sandbox policy and note that the app author can _opt in to_ enabling network in the R process. This means the agent can e.g. download packages and fetch URLs. In this case, though, note exfiltration risk.
+
+(Only briefly note the local dev sandbox for macOS. Not relevant for deployments.)
+
+### Communication with the main app process
+
+It can't reach back into it.
+
+## Permissioning facts
+
+data-dict.yaml, context layer can contain business context. The app author should only track facts that should be visible to those who the app will be shared with.
+
+## Logging trajectories
+
+Both admin and app author need to opt in for user trajectories to flow: https://github.com/posit-dev/commons/issues/92#issuecomment-5209349242
+
+If so, app author can read full conversation transcripts. In memory at first, but if using `trajectory_review()`, excerpts will be written to markdown files. Only work in environments trusted to handle internal user data, e.g. [Workbench](https://posit.co/products/enterprise/workbench).
