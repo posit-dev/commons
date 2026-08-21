@@ -50,7 +50,7 @@ This was not cosmetic. A gitignore pattern containing a separator is anchored to
 
 ## CI
 
-Every workflow now has a `paths:` filter. The three R package workflows (`R-CMD-check`, `pkgdown`, `citation-browser`) trigger on `pkg-r/**` and `tests/shared/**` and run their R steps in `pkg-r/`; `py-check` triggers on `pkg-py/**` and `tests/shared/**` and runs in `pkg-py/`; `deploy` triggers on `pkg-r/**`. Only `cleanup-previews` is unfiltered, so it always runs and cannot leave a stale preview behind.
+Every workflow except `cleanup-previews` now has a `paths:` filter, and each filter also lists its own workflow file so that editing CI still triggers CI. The three package-check workflows (`R-CMD-check`, `pkgdown`, `citation-browser`) trigger on `pkg-r/**` and `tests/shared/**` and run their R steps in `pkg-r/`; `py-check` triggers on `pkg-py/**` and `tests/shared/**` and runs in `pkg-py/`; `deploy` triggers on `pkg-r/**`. `cleanup-previews` stays unfiltered deliberately, so it always runs and can never leave a stale preview behind.
 
 Two consequences worth knowing:
 
