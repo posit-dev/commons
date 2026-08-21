@@ -1,18 +1,15 @@
+# Repository-wide ignores.
+#
+# Only patterns without an internal separator belong here: those match at any
+# depth, so they cover both pkg-r/ and pkg-py/. Package-relative patterns live
+# in the package's own .gitignore (see pkg-r/.gitignore).
 .Rproj.user
-plans/
-inst/resources/
-inst/tiles/
-inst/tiles-agent/
-inst/pkgs
 .Rprofile
+plans/
 docs
-src/*.o
-src/*.so
-src/*.dll
 rsconnect/
 CLAUDE.local.md
 AGENTS.override.md
-inst/hex/output
 .shinychat/
 commons-reviews/
 .worktrees/
