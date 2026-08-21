@@ -20,8 +20,7 @@ knitr::opts_chunk$set(
 )
 ```
 
-This document explains the structure of a commons project and how to start
-building a commons agent.
+This document explains the structure of a commons project and how to start building a commons agent.
 
 ```r
 library(commons)
@@ -29,53 +28,29 @@ library(commons)
 
 ## Design philosophy
 
-AI agents for data analysis can range from overly cautious and narrowly
-correct to wildly untrustworthy. Commons increases the likelihood
-of correct answers by providing agents with access to existing trusted code,
-while still allowing them enough flexibility to answer novel, realistic
-questions. Commons also labels answers with trust tags based on the analysis
-path so that users can determine how much trust to put in a given answer.
+AI agents for data analysis can range from overly cautious and narrowly correct to wildly untrustworthy. Commons increases the likelihood of correct answers by providing agents with access to existing trusted code, while still allowing them enough flexibility to answer novel, realistic questions. Commons also labels answers with trust tags based on the analysis path so that users can determine how much trust to put in a given answer.
 
-If you are a data analyst, data scientist, statistical programmer, or other
-data practitioner, you likely have a collection of "trusted" code. This is code
-that you depend on for your analyses and use to create apps, reports, and
-packages. The core idea behind commons is that we can improve an agent's
-correctness by giving it the right access and documentation to run this code.
+If you are a data analyst, data scientist, statistical programmer, or other data practitioner, you likely have a collection of "trusted" code. This is code that you depend on for your analyses and use to create apps, reports, and packages. The core idea behind commons is that we can improve an agent's correctness by giving it the right access and documentation to run this code.
 
-The high-trust "happy path" occurs when the user asks a question that
-corresponds to one of these **trusted calculations**. For example, say we have a
-commons agent that can analyze biodiversity data. The user asks:
+The high-trust "happy path" occurs when the user asks a question that corresponds to one of these **trusted calculations**. For example, say we have a commons agent that can analyze biodiversity data. The user asks:
 
 > How many total animals were observed at Oak Bluff?
 
-The agent then searches for a trusted calculation that can answer the question.
-If it finds one, it runs that code and then reports the result along with a
-"Verified answer" tag.
+The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result along with a "Verified answer" tag.
 
-> At Oak Bluff, 59 individual animals were observed across 5 species, based on
-> 28 hours of survey effort. Note this reflects observed individuals during
-> surveys, not necessarily a full census of every animal present at the site.
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site.
 >
 > `r commons:::commons_answer_pill("A")`
 
-Although the agent had to decide which trusted calculation to run, it did not
-have to decide _what code to write_, reducing degrees of freedom and allowing
-it to take advantage of pre-vetted code.
+Although the agent had to decide which trusted calculation to run, it did not have to decide _what code to write_, reducing degrees of freedom and allowing it to take advantage of pre-vetted code.
 
-However, we also expect users to ask questions that stray from the "happy
-path." For those, the agent searches for additional context and writes custom
-code (either SQL or R). Answers from this path either include a verified
-citation or are tagged as `Untrusted`.
+However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or R). Answers from this path either include a verified citation or are tagged as `Untrusted`.
 
 ## Working with the agent skill
 
-The package includes a `commons` [agent skill](https://agentskills.io/) that
-helps coding agents build, evaluate, and improve commons agents. We recommend
-installing it before you begin because it provides detailed guidance and a
-structured workflow.
+The package includes a `commons` [agent skill](https://agentskills.io/) that helps coding agents build, evaluate, and improve commons agents. We recommend installing it before you begin because it provides detailed guidance and a structured workflow.
 
-To make the skill available to **Posit Assistant or Codex**, copy the skill and
-its references to `.agents/skills`:
+To make the skill available to **Posit Assistant or Codex**, copy the skill and its references to `.agents/skills`:
 
 ```r
 skill <- system.file("skills", "commons", package = "commons")
@@ -93,23 +68,14 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 ## Trust flow
 
-Commons agents will use trusted calculations whenever possible. When the user
-asks a question, the agent first searches the semantic layer for a trusted
-calculation. If it finds one, it then calls that calculation and the resulting
-answer is tagged with a green verified answer pill.
+Commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer is tagged with a green verified answer pill.
 
-If a relevant trusted calculation is not found, the agent proceeds down the
-lower trust path. It searches through the context for additional information,
-then uses that information to write custom SQL or R code to answer the user's
-question. These answers either include a verified citation in a footnote or are
-tagged as `Untrusted`.
+If a relevant trusted calculation is not found, the agent proceeds down the lower trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or are tagged as `Untrusted`.
 
 <figure class="commons-flow commons-flow-trusted-calculations column-page">
 <div class="commons-branch-flow"
      role="img"
-     aria-label="Search trusted calculations, then follow either the high-trust
-     path through a relevant calculation or the lower-trust path through context
-     and custom SQL or R">
+     aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
 <div class="commons-branch-origin">
 <span class="commons-flow-node">Search trusted<br>calculations</span>
 </div>
@@ -150,12 +116,7 @@ Cited answer<sup class="commons-citation-ref">1</sup>
 </div>
 </figure>
 
-There are two possible trust outcomes for the "lower trust" path. When the
-agent writes custom SQL or R, it can also include supporting text quoted from a
-trusted source. Commons verifies that the quoted text appears in that source.
-Verified citations are displayed as footnotes. If the agent does not include a
-citation, or if commons can't verify any of its citations, the answer gets
-tagged as `Untrusted`.
+There are two possible trust outcomes for the "lower trust" path. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. Commons verifies that the quoted text appears in that source. Verified citations are displayed as footnotes. If the agent does not include a citation, or if commons can't verify any of its citations, the answer gets tagged as `Untrusted`.
 
 The following table details the various ways each trust outcome can occur.
 
@@ -171,12 +132,7 @@ The following table details the various ways each trust outcome can occur.
 
 ## Information layers
 
-Commons distinguishes between two primary layers of information: the
-**semantic layer** and the **context layer**. The semantic layer encodes
-trusted calculations, ideally lifted from reliable code that you already use.
-The **context layer** contains background or supporting information, useful both for
-figuring out what custom code to run and how to interpret results. Data
-dictionaries span the two layers.
+Commons distinguishes between two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer encodes trusted calculations, ideally lifted from reliable code that you already use. The **context layer** contains background or supporting information, useful both for figuring out what custom code to run and how to interpret results. Data dictionaries span the two layers.
 
 | Layer | Sources | Role |
 |---|---|---|
@@ -185,27 +141,17 @@ dictionaries span the two layers.
 
 ### Semantic layer
 
-There are multiple ways to add information to the semantic layer. Probably
-the most straightforward way is as **measures** stored in `.R` files. Measures
-are R functions documented with roxygen2 and marked with `@measure`. When
-measures are available, the agent will search for a measure relevant to the
-user's question. If it finds one, it calls that measure, possibly supplying
-arguments.
+There are multiple ways to add information to the semantic layer. Probably the most straightforward way is as **measures** stored in `.R` files. Measures are R functions documented with roxygen2 and marked with `@measure`. When measures are available, the agent will search for a measure relevant to the user's question. If it finds one, it calls that measure, possibly supplying arguments.
 
-`data-dict.yaml` files can also contribute to the semantic layer through
-[`definitions`](#definitions). See [Data dictionaries](#data-dictionaries) for
-more information. Supported warehouse semantic models can also provide trusted
-calculations.
+`data-dict.yaml` files can also contribute to the semantic layer through [`definitions`](#definitions). See [Data dictionaries](#data-dictionaries) for more information. Supported warehouse semantic models can also provide trusted calculations.
 
 ### Context layer
 
-The context layer draws from unstructured information in Markdown files and the
-descriptive fields in `data-dict.yaml`.
+The context layer draws from unstructured information in Markdown files and the descriptive fields in `data-dict.yaml`.
 
 ### Examples
 
-Here are brief examples of a data dictionary, a measure file, and a
-context-layer Markdown file for the biodiversity example app:
+Here are brief examples of a data dictionary, a measure file, and a context-layer Markdown file for the biodiversity example app:
 
 #### Data dictionary
 
@@ -245,34 +191,18 @@ biodiversity_by_site <- function(site) {
 ```markdown
 # Interpreting survey results
 
-Observed individuals reflect organisms
-recorded during surveys. They should not
-be interpreted as a complete population
-census of a nature preserve.
+Observed individuals reflect organisms recorded during surveys. They should not be interpreted as a complete population census of a nature preserve.
 ```
 
 ### Warehouse semantic layers
 
-If you have trusted metrics in
-[Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview)
-or
-[Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views),
-you can use those calculations directly with commons. It can also group or
-filter metrics by approved fields from the warehouse, such as region, product,
-or date. Answers based on these warehouse-defined metrics are marked as
-verified.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse, such as region, product, or date. Answers based on these warehouse-defined metrics are marked as verified.
 
 ## Data sources
 
-One of the primary decisions you'll need to make when building a commons agent
-is which data sources to grant the agent access to. Each data source combines
-the underlying data with the tables to expose to the agent. It can also include
-a data dictionary describing those tables.
+One of the primary decisions you'll need to make when building a commons agent is which data sources to grant the agent access to. Each data source combines the underlying data with the tables to expose to the agent. It can also include a data dictionary describing those tables.
 
-Create a data source with `data_source()`. The underlying data can consist of
-named data frames, a `pins` board, or a DBI connection. Data frames and pins
-will be loaded into an in-process DuckDB database. Database connections will
-be queried directly.
+Create a data source with `data_source()`. The underlying data can consist of named data frames, a `pins` board, or a DBI connection. Data frames and pins will be loaded into an in-process DuckDB database. Database connections will be queried directly.
 
 For example, the following code creates a data source from two data frames. Each name becomes a table available to the agent. `dictionary` is an optional path to a `data-dict.yaml` file.
 
@@ -286,31 +216,19 @@ biodiversity <- data_source(
 
 ### Data dictionaries
 
-Data dictionaries provide structured, source-specific documentation for a data
-source. Use a data dictionary to specify what each table represents, column
-meanings and types, relationships between tables, glossary terms, and trusted
-`definitions`. Commons supports the
-[`data-dict.yaml` specification](https://data-dict.tidyverse.org/).
+Data dictionaries provide structured, source-specific documentation for a data source. Use a data dictionary to specify what each table represents, column meanings and types, relationships between tables, glossary terms, and trusted `definitions`. Commons supports the [`data-dict.yaml` specification](https://data-dict.tidyverse.org/).
 
 Commons agents use data dictionaries in a few ways:
 
-* Dataset-level descriptions and details provide broad, always-available
-  context. Glossary terms are included in the system prompt as space allows.
-* The first time the agent uses a documented table in a conversation, it
-  receives the table's description, column information, relationships, and
-  relevant glossary terms.
-* Descriptive fields (including `description` and `details`) are available to
-  the agent as part of the context layer.
+* Dataset-level descriptions and details provide broad, always-available context. Glossary terms are included in the system prompt as space allows.
+* The first time the agent uses a documented table in a conversation, it receives the table's description, column information, relationships, and relevant glossary terms.
+* Descriptive fields (including `description` and `details`) are available to the agent as part of the context layer.
 
 #### Definitions
 
-**Definitions** are named, governed expressions attached to tables in
-`data-dict.yaml`. They allow an agent to reuse trusted metrics, filters, and
-derived values, contributing to the semantic layer.
+**Definitions** are named, governed expressions attached to tables in `data-dict.yaml`. They allow an agent to reuse trusted metrics, filters, and derived values, contributing to the semantic layer.
 
-Each definition is an expression written in
-[data-dict's expression language](https://data-dict.tidyverse.org/expressions.html),
-not in your database's SQL dialect:
+Each definition is an expression written in [data-dict's expression language](https://data-dict.tidyverse.org/expressions.html), not in your database's SQL dialect:
 
 ```yaml
 tables:
@@ -325,8 +243,7 @@ tables:
         expr: SUM(count)
 ```
 
-There are three kinds of definitions. Definitions can participate in trusted
-metric calculations or be used in custom SQL.[^definition-sql]
+There are three kinds of definitions. Definitions can participate in trusted metric calculations or be used in custom SQL.[^definition-sql]
 
 | Kind | Example | Use in `call_metrics()` |
 |---|---|---|
@@ -334,21 +251,13 @@ metric calculations or be used in custom SQL.[^definition-sql]
 | Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |
 | Derived value | `price * quantity` | Provides a grouping dimension |
 
-Commons infers the definition kind from its expression. Aggregate and constant
-expressions are categorized as metrics, row-level Boolean expressions as
-filters, and other row-level expressions as derived values.
+Commons infers the definition kind from its expression. Aggregate and constant expressions are categorized as metrics, row-level Boolean expressions as filters, and other row-level expressions as derived values.
 
-[^definition-sql]: In custom SQL, the agent refers to a definition using its
-    `{{name}}` token. Commons expands the token to SQL compiled for the data
-    source. Because this is still custom SQL, the answer includes a verified
-    citation or is tagged as `Untrusted`, rather than `Verified`.
+[^definition-sql]: In custom SQL, the agent refers to a definition using its `{{name}}` token. Commons expands the token to SQL compiled for the data source. Because this is still custom SQL, the answer includes a verified citation or is tagged as `Untrusted`, rather than `Verified`.
 
-See the
-[DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml)
-for examples of definitions.
+See the [DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 
-When a data source is constructed, commons validates each definition and
-compiles it to the source's SQL dialect.
+When a data source is constructed, commons validates each definition and compiles it to the source's SQL dialect.
 
 ## Project directory organization
 
