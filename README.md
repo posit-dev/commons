@@ -8,11 +8,11 @@ commons agents use a pool of trusted calculations drawn from your existing work,
 
 <img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
-commons agents support a wide variety of LLM providers, via [ellmer](https://ellmer.tidyverse.org/) in R and [chatlas](https://posit-dev.github.io/chatlas/) in Python. Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) alongside `.R` or `.py` files.
+commons agents support a wide variety of LLM providers via [ellmer](https://ellmer.tidyverse.org/). Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R` files.
 
 ## Two languages, one design
 
-This repository holds both implementations of commons. They are the same design, with the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so an agent behaves the same way whichever language you build it in.
+This repository holds both implementations of commons. Today only the R package works; the Python port is being built to the same design, with the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so that an agent will eventually behave the same way whichever language you build it in.
 
 ### R
 
@@ -27,7 +27,7 @@ To learn more, see `vignette("commons", package = "commons")`, the [reference si
 
 ### Python
 
-The Python package is early work and not yet usable. It will be published to PyPI as `posit-commons` and imported as `commons`:
+The Python package is early work and not yet usable. It will use [chatlas](https://posit-dev.github.io/chatlas/) for provider support, and will be published to PyPI as `posit-commons` while importing as `commons`:
 
 ``` python
 from commons import Commons
