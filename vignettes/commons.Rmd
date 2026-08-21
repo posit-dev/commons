@@ -196,7 +196,7 @@ Observed individuals reflect organisms recorded during surveys. They should not 
 
 ### Warehouse semantic layers
 
-If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse, such as region, product, or date. Answers based on these warehouse-defined metrics are marked as verified.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics are marked as verified.
 
 ## Data sources
 
