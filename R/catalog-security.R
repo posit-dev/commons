@@ -313,30 +313,23 @@ catalog_abort_access <- function(probe, label, call = rlang::caller_env()) {
   )
 }
 
-catalog_filter_semantic_access <- function(
+catalog_validate_semantic_access <- function(
   con,
   registry,
   call = rlang::caller_env()
 ) {
-  keep <- rep(TRUE, length(registry$semantic_models))
-  labels <- names(registry$semantic_models)
-  for (i in seq_along(registry$semantic_models)) {
-    model <- registry$semantic_models[[i]]
+  labels <- intersect(
+    names(registry$semantic_models),
+    registry$semantic_validate %||% character()
+  )
+  for (label in labels) {
+    model <- registry$semantic_models[[label]]
     probe <- catalog_probe_semantic_model(con, model)
     if (identical(probe$state, "queryable")) {
       next
     }
-    if (
-      identical(probe$state, "authorization") &&
-        !labels[[i]] %in% registry$semantic_validate
-    ) {
-      # Hidden namespace models are safe to omit; other failures must retry.
-      keep[[i]] <- FALSE
-      next
-    }
-    catalog_abort_access(probe, labels[[i]], call = call)
+    catalog_abort_access(probe, label, call = call)
   }
-  registry$semantic_models <- registry$semantic_models[keep]
   registry
 }
 

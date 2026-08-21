@@ -82,15 +82,20 @@ catalog_object_limit <- 25000L
 
 catalog_prompt_limit <- 3000L
 
-new_catalog_manifest <- function(relations, namespace_selected = FALSE) {
-  if (is.null(relations)) {
+new_catalog_manifest <- function(
+  relations,
+  namespace_selected = FALSE,
+  semantic_stubs = list()
+) {
+  if (is.null(relations) && length(semantic_stubs) == 0L) {
     return(NULL)
   }
   manifest <- new.env(parent = emptyenv())
   manifest$relations <- relations
+  manifest$objects <- c(relations %||% list(), semantic_stubs)
   manifest$access <- stats::setNames(rep("unknown", length(relations)), names(relations))
   manifest$access_errors <- list()
-  labels <- names(relations)
+  labels <- names(manifest$objects)
   manifest$searchable <- isTRUE(namespace_selected) &&
     nchar(paste(labels, collapse = "\n"), type = "bytes") >
       catalog_prompt_limit
@@ -105,7 +110,7 @@ catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
   catalog_check_session(source)
   rlang::check_string(query)
   rlang::check_number_whole(limit, min = 1)
-  relations <- source$manifest$relations %||% list()
+  relations <- source$manifest$objects %||% list()
   if (!is.null(kinds)) {
     if (!is.character(kinds) || anyNA(kinds)) {
       cli::cli_abort(
@@ -149,6 +154,13 @@ catalog_search_queryable <- function(source, relations, limit) {
   results <- list()
   candidates <- utils::head(relations, catalog_search_probe_limit)
   for (label in names(candidates)) {
+    if (!is.null(source$semantic_stubs[[label]])) {
+      results[[label]] <- candidates[[label]]
+      if (length(results) >= limit) {
+        break
+      }
+      next
+    }
     queryable <- tryCatch(
       {
         catalog_ensure_queryable(source, label)
@@ -213,7 +225,8 @@ check_catalog_exclude <- function(exclude, call = rlang::caller_env()) {
 catalog_check_nonempty <- function(registry, call = rlang::caller_env()) {
   if (
     length(registry$labels) == 0L &&
-      length(registry$semantic_models) == 0L
+      length(registry$semantic_models) == 0L &&
+      length(registry$semantic_stubs) == 0L
   ) {
     cli::cli_abort(
       "The resolved catalog selection contains no objects.",

@@ -13,7 +13,7 @@ test_that("catalog manifests switch broad prompts to search", {
 
   expect_match(
     agent$get_system_prompt(),
-    "Use `search_catalog` to find tables",
+    "Use `search_catalog` to find objects",
     fixed = TRUE
   )
   expect_no_match(agent$get_system_prompt(), "- sales", fixed = TRUE)
@@ -105,6 +105,32 @@ test_that("catalog search hides relations without query access", {
 
   expect_named(results, "allowed")
   expect_equal(results$allowed$description, "Available booked activity.")
+})
+
+test_that("catalog search retains unverified semantic models", {
+  source <- test_source()
+  id <- DBI::Id(catalog = "DB", schema = "PUBLIC", table = "SALES_MODEL")
+  source$semantic_stubs <- list(SALES_MODEL = new_semantic_model_stub(
+    list(id = id, description = "Governed sales semantics."),
+    "snowflake_semantic_view"
+  ))
+  source$manifest <- new_catalog_manifest(
+    list(),
+    TRUE,
+    source$semantic_stubs
+  )
+  source$session <- list(backend = "test")
+  local_mocked_bindings(
+    catalog_check_session = function(...) invisible(NULL),
+    catalog_ensure_queryable = function(...) {
+      cli::cli_abort("Semantic models should not be probed during search.")
+    }
+  )
+
+  results <- catalog_search(source, "sales semantics")
+
+  expect_named(results, "SALES_MODEL")
+  expect_equal(results$SALES_MODEL$kind, "semantic_view")
 })
 
 test_that("catalog search formats relations with unknown kinds", {

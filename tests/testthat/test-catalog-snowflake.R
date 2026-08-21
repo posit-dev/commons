@@ -409,7 +409,7 @@ test_that("Snowflake imports and binds semantic variables", {
   expect_match(sql, 'VARIABLES "category" => ?', fixed = TRUE)
 })
 
-test_that("Snowflake classifies unsupported semantic variables by scope", {
+test_that("Snowflake hydrates only explicitly selected semantic views", {
   view <- list(id = DBI::Id(
     catalog = "ANALYTICS",
     schema = "PUBLIC",
@@ -445,11 +445,9 @@ test_that("Snowflake classifies unsupported semantic variables by scope", {
     snowflake_associated_semantic_models = function(...) list()
   )
 
-  expect_warning(
-    discovered <- snowflake_table_registry(DBI::ANSI()),
-    "Skipping unsupported Snowflake semantic views"
-  )
+  discovered <- snowflake_table_registry(DBI::ANSI())
   expect_length(discovered$semantic_models, 0L)
+  expect_named(discovered$semantic_stubs, label)
 
   exact <- TRUE
   expect_error(

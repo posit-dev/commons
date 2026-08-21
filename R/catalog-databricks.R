@@ -29,8 +29,10 @@ databricks_table_registry <- function(
     names(semantic_views),
     registry$validate$labels
   )
+  # Exact selections fail early; namespace models load when inspected or used.
+  eager_views <- semantic_views[semantic_validate]
   models <- lapply(
-    semantic_views,
+    eager_views,
     databricks_read_semantic_model,
     con = con,
     call = call
@@ -41,21 +43,14 @@ databricks_table_registry <- function(
     logical(1),
     "commons_unsupported_databricks_metric_view"
   )
-  exact_unsupported <- intersect(
-    names(models)[unsupported],
-    registry$validate$labels
-  )
-  if (length(exact_unsupported)) {
+  if (any(unsupported)) {
     databricks_abort_unsupported_metric_views(
-      models[exact_unsupported],
+      models[unsupported],
       call = call
     )
   }
-  if (any(unsupported)) {
-    databricks_warn_unsupported_metric_views(models[unsupported])
-  }
   registry <- catalog_exclude_relations(registry, names(semantic_views))
-  registry$semantic_models <- models[!unsupported]
+  registry$semantic_models <- models
   registry$semantic_models <- c(
     registry$semantic_models,
     databricks_associated_semantic_models(
@@ -69,9 +64,20 @@ databricks_table_registry <- function(
     registry$semantic_models,
     exclude
   )
+  stub_labels <- setdiff(
+    names(semantic_views),
+    c(semantic_validate, names(registry$semantic_models))
+  )
+  registry$semantic_stubs <- lapply(
+    semantic_views[stub_labels],
+    new_semantic_model_stub,
+    backend = "databricks_metric_view"
+  )
   registry$semantic_validate <- semantic_validate
   catalog_check_object_limit(
-    length(registry$relations) + length(registry$semantic_models),
+    length(registry$relations) +
+      length(registry$semantic_models) +
+      length(registry$semantic_stubs),
     call = call
   )
   catalog_check_nonempty(registry, call = call)
@@ -163,14 +169,6 @@ databricks_abort_unsupported_metric_views <- function(models, call) {
     ),
     call = call
   )
-}
-
-databricks_warn_unsupported_metric_views <- function(models) {
-  problems <- vapply(models, `[[`, character(1), "reason")
-  cli::cli_warn(c(
-    "Skipping unsupported Databricks metric views:",
-    stats::setNames(paste0(names(problems), ": ", problems), "*")
-  ))
 }
 
 databricks_current_namespace <- function(con, call = rlang::caller_env()) {

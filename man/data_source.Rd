@@ -24,11 +24,15 @@ table and view in that namespace. Leaving \code{tables} unset selects the
 current schema. A Databricks \code{hive_metastore} selection must include a
 schema. Snowflake selections import semantic views, and Databricks
 selections import metric views, as native trusted metrics and dimensions.
+Namespace selections retain lightweight model metadata, then read a
+model's definition when the agent describes or uses it. Explicitly
+selected models are read and validated when the data source is created.
 Snowflake semantic variables and Databricks metric-view parameters are
 passed as typed JSON arguments to \code{call_metrics}. Databricks wildcard
 members require concrete column metadata from the warehouse.
-Native semantic models are available through \code{search_pool} and
-\code{call_metrics}, but are not returned by \code{\link[=list_tables]{list_tables()}}.
+Native semantic models are available through \code{search_pool},
+\code{describe_table}, and \code{call_metrics}, but are not returned by
+\code{\link[=list_tables]{list_tables()}}.
 Snowflake verified queries are exposed separately as exact trusted
 calculations through \code{search_pool} and \code{call_calculation}; their SQL is
 executed as stored rather than parsed to infer dependencies.

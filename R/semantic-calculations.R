@@ -164,6 +164,17 @@ call_calculation_impl <- function(
 ) {
   source <- resolve_sql_source(sources, source_name)
   source_label <- source_name %||% rlang::names2(sources)[[1]]
+  n_models <- length(source$semantic_models)
+  source <- source_hydrate_semantic_models(source, name)
+  if (length(source$semantic_models) > n_models) {
+    source_index <- if (length(sources) == 1L) {
+      1L
+    } else {
+      match(source_label, names(sources))
+    }
+    sources[[source_index]] <- source
+    calculations <- calculations_registry(sources)
+  }
   calculation <- resolve_calculation(
     calculations,
     name,

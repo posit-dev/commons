@@ -37,6 +37,17 @@ new_semantic_model <- function(
   )
 }
 
+new_semantic_model_stub <- function(view, backend) {
+  view$backend <- backend
+  view$kind <- switch(
+    backend,
+    snowflake_semantic_view = "semantic_view",
+    databricks_metric_view = "metric_view",
+    "semantic_model"
+  )
+  structure(view, class = "commons_semantic_model_stub")
+}
+
 new_semantic_member <- function(
   name,
   kind,
@@ -176,6 +187,7 @@ semantic_abort_unsupported_parameter <- function(backend, name, type) {
 
 semantic_models_registry <- function(sources) {
   rows <- list(no_semantic_members)
+  stubs <- list(no_semantic_stubs)
   parameters <- list()
   source_labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
@@ -201,8 +213,19 @@ semantic_models_registry <- function(sources) {
         source_labels[[i]]
       )
     }
+    source_stubs <- sources[[i]]$semantic_stubs %||% list()
+    if (length(source_stubs)) {
+      stubs[[length(stubs) + 1L]] <- semantic_stub_rows(
+        source_stubs,
+        source_labels[[i]]
+      )
+    }
   }
-  list(members = do.call(rbind, rows), parameters = parameters)
+  list(
+    members = do.call(rbind, rows),
+    parameters = parameters,
+    stubs = do.call(rbind, stubs)
+  )
 }
 
 semantic_registry_model_key <- function(source, model) {
@@ -221,6 +244,29 @@ no_semantic_members <- data.frame(
   synonyms = character(),
   filter = logical()
 )
+
+no_semantic_stubs <- data.frame(
+  name = character(),
+  model = character(),
+  source = character(),
+  backend = character(),
+  description = character()
+)
+
+semantic_stub_rows <- function(stubs, source) {
+  labels <- names(stubs)
+  data.frame(
+    name = vapply(stubs, function(stub) stub$id@name[["table"]], character(1)),
+    model = labels,
+    source = rep(source, length(stubs)),
+    backend = vapply(stubs, `[[`, character(1), "backend"),
+    description = vapply(
+      stubs,
+      function(stub) stub$description %||% NA_character_,
+      character(1)
+    )
+  )
+}
 
 semantic_member_rows <- function(members, model, source) {
   data.frame(
@@ -367,6 +413,182 @@ registry_semantic_members <- function(registry, source = NULL) {
     return(members)
   }
   members[members$source == source, , drop = FALSE]
+}
+
+registry_semantic_stubs <- function(registry, source = NULL) {
+  stubs <- registry$stubs %||% no_semantic_stubs
+  if (is.null(source)) {
+    return(stubs)
+  }
+  stubs[stubs$source == source, , drop = FALSE]
+}
+
+source_has_semantic_stubs <- function(source, backend = NULL) {
+  stubs <- source$semantic_stubs %||% list()
+  if (is.null(backend)) {
+    return(length(stubs) > 0L)
+  }
+  any(vapply(stubs, function(stub) identical(stub$backend, backend), logical(1)))
+}
+
+sources_have_semantic_stubs <- function(sources, backend = NULL) {
+  any(vapply(
+    sources,
+    source_has_semantic_stubs,
+    logical(1),
+    backend = backend
+  ))
+}
+
+sources_have_semantic_models <- function(sources) {
+  any(vapply(
+    sources,
+    function(source) length(source$semantic_models) > 0L,
+    logical(1)
+  ))
+}
+
+semantic_model_hydrate <- function(source, label, call = rlang::caller_env()) {
+  catalog_check_session(source, call = call)
+  stub <- source$semantic_stubs[[label]]
+  if (is.null(stub)) {
+    cli::cli_abort("No semantic model named {.val {label}}.", call = call)
+  }
+  semantic_model_from_stub(source, stub, label, call = call)
+}
+
+semantic_model_from_stub <- function(
+  source,
+  stub,
+  label,
+  call = rlang::caller_env()
+) {
+  model <- switch(
+    stub$backend,
+    snowflake_semantic_view = snowflake_read_semantic_model(
+      stub,
+      source$con,
+      call = call
+    ),
+    databricks_metric_view = databricks_read_semantic_model(
+      stub,
+      source$con,
+      call = call
+    ),
+    cli::cli_abort(
+      "Unsupported semantic-model backend {.val {stub$backend}}.",
+      call = call
+    )
+  )
+  unsupported <- inherits(
+    model,
+    "commons_unsupported_snowflake_semantic_view"
+  ) || inherits(model, "commons_unsupported_databricks_metric_view")
+  if (unsupported) {
+    cli::cli_abort(
+      "Semantic model {.val {label}} is not supported: {model$reason}.",
+      call = call
+    )
+  }
+  model
+}
+
+semantic_model_description_text <- function(description) {
+  if (!is.null(description$error)) {
+    return(paste(
+      sprintf(
+        "Semantic model `%s` is listed in the catalog, but its definition could not be read.",
+        description$name
+      ),
+      conditionMessage(description$error),
+      sep = "\n\n"
+    ))
+  }
+  model <- description$model
+  members <- c(model$metrics, model$dimensions, model$facts, model$filters)
+  member_lines <- if (length(members)) {
+    vapply(members, function(member) {
+      reference <- semantic_model_member_reference(description$name, member)
+      detail <- member$description %||% member$label
+      paste0(
+        "- `", reference, "` (", member$kind, ")",
+        if (!is.null(detail) && !is.na(detail) && nzchar(detail)) {
+          paste0(": ", detail)
+        } else {
+          ""
+        }
+      )
+    }, character(1))
+  } else {
+    "- No public members."
+  }
+  calculations <- model$calculations %||% list()
+  calculation_lines <- if (length(calculations)) {
+    c(
+      "Verified queries (run with `call_calculation`):",
+      vapply(calculations, function(calculation) {
+        sprintf(
+          "- `%s::%s`: %s",
+          description$name,
+          calculation$name,
+          calculation$description
+        )
+      }, character(1))
+    )
+  }
+  parameters <- semantic_parameters_pool_text(model$parameters)
+  context <- unique(c(model$context$first_touch, model$context$retrieval))
+  paste(
+    c(
+      sprintf("Semantic model `%s`.", description$name),
+      description$description,
+      "Public members:",
+      member_lines,
+      parameters,
+      calculation_lines,
+      context
+    ),
+    collapse = "\n\n"
+  )
+}
+
+semantic_model_member_reference <- function(model, member) {
+  name <- paste(
+    c(member$parent %||% "", member$name),
+    collapse = "."
+  )
+  name <- sub("^\\.", "", name)
+  paste(model, name, sep = "::")
+}
+
+source_hydrate_semantic_models <- function(
+  source,
+  member_names,
+  call = rlang::caller_env()
+) {
+  # Before hydration, model qualification is the only member-to-model index.
+  labels <- unique(vapply(
+    member_names,
+    semantic_model_qualifier,
+    character(1)
+  ))
+  labels <- intersect(labels[nzchar(labels)], names(source$semantic_stubs))
+  if (length(labels) == 0L) {
+    return(source)
+  }
+  models <- lapply(labels, semantic_model_hydrate, source = source, call = call)
+  names(models) <- labels
+  source$semantic_models <- c(source$semantic_models, models)
+  source$calculations <- semantic_model_calculations(source$semantic_models)
+  source
+}
+
+semantic_model_qualifier <- function(name) {
+  name <- strip_token_braces(name)
+  if (!grepl("::", name, fixed = TRUE)) {
+    return("")
+  }
+  sub("::.*$", "", name)
 }
 
 registry_semantic_parameters <- function(registry, member) {

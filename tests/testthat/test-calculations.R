@@ -151,3 +151,39 @@ test_that("verified queries retain exact SQL separately from semantic models", {
   )
   expect_equal(calculations[[1]]$model, "model")
 })
+
+test_that("lazy verified queries hydrate from qualified names", {
+  source <- test_source()
+  model <- test_semantic_model()
+  model$calculations <- list(new_trusted_calculation(
+    "top_regions",
+    "Which regions lead revenue?",
+    "SELECT region, SUM(revenue) FROM sales GROUP BY region"
+  ))
+  label <- table_id_label(model$id)
+  source$semantic_stubs <- stats::setNames(list(
+    new_semantic_model_stub(
+      list(id = model$id, description = model$description),
+      "snowflake_semantic_view"
+    )
+  ), label)
+  sources <- list(sales_db = source)
+  sql <- NULL
+  local_mocked_bindings(
+    snowflake_read_semantic_model = function(...) model,
+    source_query_bind = function(source, query, bindings) {
+      sql <<- query
+      data.frame(region = "EMEA", revenue = 42)
+    }
+  )
+
+  result <- call_calculation_impl(
+    list(),
+    sources,
+    new_handle_store(),
+    paste0(label, "::top_regions")
+  )
+
+  expect_equal(sql, model$calculations[[1]]$sql)
+  expect_equal(result@extra$commons_tag, "A")
+})

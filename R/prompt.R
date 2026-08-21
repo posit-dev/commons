@@ -179,8 +179,8 @@ tables_text <- function(sources) {
 table_bullets <- function(source) {
   if (catalog_searchable(source)) {
     return(sprintf(
-      "%d selected catalog objects. Use `search_catalog` to find tables before calling `describe_table`.",
-      length(list_tables(source))
+      "%d selected catalog objects. Use `search_catalog` to find objects before calling `describe_table`.",
+      length(source$manifest$objects)
     ))
   }
   paste(sprintf("- %s", list_tables(source)), collapse = "\n")

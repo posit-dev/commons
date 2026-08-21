@@ -283,7 +283,7 @@ test_that("Databricks imports and binds metric-view parameters", {
   )
 })
 
-test_that("Databricks skips unsupported parameter types by scope", {
+test_that("Databricks hydrates only explicitly selected metric views", {
   metric <- list(
     id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
     kind = "metric_view"
@@ -320,11 +320,9 @@ test_that("Databricks skips unsupported parameter types by scope", {
     databricks_associated_semantic_models = function(...) list()
   )
 
-  expect_warning(
-    discovered <- databricks_table_registry(DBI::ANSI()),
-    "Skipping unsupported Databricks metric views"
-  )
+  discovered <- databricks_table_registry(DBI::ANSI())
   expect_length(discovered$semantic_models, 0L)
+  expect_named(discovered$semantic_stubs, label)
 
   exact <- TRUE
   expect_error(

@@ -41,11 +41,15 @@
 #'   current schema. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
 #'   selections import metric views, as native trusted metrics and dimensions.
+#'   Namespace selections retain lightweight model metadata, then read a
+#'   model's definition when the agent describes or uses it. Explicitly
+#'   selected models are read and validated when the data source is created.
 #'   Snowflake semantic variables and Databricks metric-view parameters are
 #'   passed as typed JSON arguments to `call_metrics`. Databricks wildcard
 #'   members require concrete column metadata from the warehouse.
-#'   Native semantic models are available through `search_pool` and
-#'   `call_metrics`, but are not returned by [list_tables()].
+#'   Native semantic models are available through `search_pool`,
+#'   `describe_table`, and `call_metrics`, but are not returned by
+#'   [list_tables()].
 #'   Snowflake verified queries are exposed separately as exact trusted
 #'   calculations through `search_pool` and `call_calculation`; their SQL is
 #'   executed as stored rather than parsed to infer dependencies.
@@ -199,7 +203,7 @@ data_source_connection <- function(
         call = call
       )
     }
-    table_registry <- catalog_filter_semantic_access(
+    table_registry <- catalog_validate_semantic_access(
       con,
       table_registry,
       call = call
@@ -231,6 +235,7 @@ data_source_connection <- function(
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
       semantic_models = table_registry$semantic_models,
+      semantic_stubs = table_registry$semantic_stubs,
       namespace_selected = table_registry$namespace_selected,
       session = session
     ))
@@ -251,7 +256,7 @@ data_source_connection <- function(
         call = call
       )
     }
-    table_registry <- catalog_filter_semantic_access(
+    table_registry <- catalog_validate_semantic_access(
       con,
       table_registry,
       call = call
@@ -283,6 +288,7 @@ data_source_connection <- function(
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
       semantic_models = table_registry$semantic_models,
+      semantic_stubs = table_registry$semantic_stubs,
       namespace_selected = table_registry$namespace_selected,
       session = session
     ))
@@ -397,6 +403,7 @@ new_data_source <- function(
   relations = NULL,
   definition_bindings = NULL,
   semantic_models = list(),
+  semantic_stubs = list(),
   namespace_selected = FALSE,
   session = NULL
 ) {
@@ -422,10 +429,15 @@ new_data_source <- function(
       dictionary = dictionary,
       pending = pending,
       relations = relations,
-      manifest = new_catalog_manifest(relations, namespace_selected),
+      manifest = new_catalog_manifest(
+        relations,
+        namespace_selected,
+        semantic_stubs
+      ),
       session = session,
       definition_bindings = definition_bindings,
       semantic_models = semantic_models,
+      semantic_stubs = semantic_stubs,
       calculations = semantic_model_calculations(semantic_models)
     ),
     class = "commons_data_source"
@@ -597,6 +609,12 @@ source_describe <- function(
   call = rlang::caller_env()
 ) {
   catalog_check_session(source, call = call)
+  if (
+    !is.null(source$semantic_models[[table]]) ||
+      !is.null(source$semantic_stubs[[table]])
+  ) {
+    return(source_describe_semantic_model(source, table, call = call))
+  }
   id <- source$table_ids[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
@@ -638,6 +656,45 @@ source_describe <- function(
     sample = sample,
     kind = relation$kind,
     description = relation$description
+  )
+}
+
+source_describe_semantic_model <- function(
+  source,
+  model,
+  call = rlang::caller_env()
+) {
+  loaded <- source$semantic_models[[model]]
+  if (!is.null(loaded)) {
+    return(structure(
+      list(
+        name = model,
+        kind = loaded$backend,
+        description = loaded$description,
+        model = loaded,
+        error = NULL
+      ),
+      class = "commons_semantic_model_description"
+    ))
+  }
+  stub <- source$semantic_stubs[[model]]
+  hydrated <- tryCatch(
+    semantic_model_from_stub(source, stub, model, call = call),
+    error = function(err) err
+  )
+  structure(
+    list(
+      name = model,
+      kind = stub$backend,
+      description = if (inherits(hydrated, "condition")) {
+        stub$description
+      } else {
+        hydrated$description %||% stub$description
+      },
+      model = if (inherits(hydrated, "condition")) NULL else hydrated,
+      error = if (inherits(hydrated, "condition")) hydrated else NULL
+    ),
+    class = "commons_semantic_model_description"
   )
 }
 

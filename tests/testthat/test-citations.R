@@ -408,6 +408,10 @@ test_that("citation trust exception names trusted calculation tools", {
     " that is not based solely on output from `call_measure`"
   )
   expect_equal(
+    citation_trust_exception("call_calculation"),
+    " that is not based solely on output from `call_calculation`"
+  )
+  expect_equal(
     citation_trust_exception(
       c("search_pool", "call_measure", "call_metrics")
     ),
@@ -416,6 +420,11 @@ test_that("citation trust exception names trusted calculation tools", {
       " or `call_measure`",
       " or `call_metrics`"
     )
+  )
+  expect_match(
+    non_citable_tool_output_text("call_calculation"),
+    "Result values from `call_calculation`",
+    fixed = TRUE
   )
 })
 

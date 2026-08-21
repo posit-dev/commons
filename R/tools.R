@@ -13,11 +13,18 @@ build_commons_tools <- function(self, private) {
     if (length(private$registry) > 0) list(tool_call_measure(private)),
     if (
       registry_has_metrics(private$definitions) ||
-        semantic_registry_has_metrics(private$semantic_models)
+        semantic_registry_has_metrics(private$semantic_models) ||
+        sources_have_semantic_stubs(private$sources)
     ) {
       list(tool_call_metrics(private))
     },
-    if (length(private$calculations)) {
+    if (
+      length(private$calculations) ||
+        sources_have_semantic_stubs(
+          private$sources,
+          backend = "snowflake_semantic_view"
+        )
+    ) {
       list(tool_call_calculation(private))
     },
     if (any(vapply(private$sources, catalog_searchable, logical(1)))) {
@@ -59,7 +66,7 @@ tool_search_catalog <- function(private) {
     },
     paste(
       "Search a broad selected catalog by object name and description.",
-      "Results are stable table names for describe_table."
+      "Results are stable object names for describe_table."
     ),
     arguments = list(
       query = ellmer::type_string("The data you need, in plain language."),
@@ -90,13 +97,19 @@ pool_searchable <- function(
 ) {
   has_semantic_models <- !is.null(semantic_models) &&
     nrow(registry_semantic_members(semantic_models)) > 0L
+  has_semantic_stubs <- !is.null(semantic_models) &&
+    nrow(registry_semantic_stubs(semantic_models)) > 0L
   length(measures) > 0 ||
     definitions_overflow(definitions) ||
     has_semantic_models ||
+    has_semantic_stubs ||
     length(calculations) > 0L
 }
 
 tool_search_pool <- function(private) {
+  has_semantic_stubs <- nrow(
+    registry_semantic_stubs(private$semantic_models)
+  ) > 0L
   source_names <- if (length(private$sources) > 1) {
     names(private$sources)
   } else {
@@ -109,6 +122,9 @@ tool_search_pool <- function(private) {
     },
     if (nrow(registry_semantic_members(private$semantic_models)) > 0) {
       "native semantic-model metrics (run with call_metrics)"
+    },
+    if (nrow(registry_semantic_stubs(private$semantic_models)) > 0) {
+      "semantic models (inspect with describe_table)"
     },
     if (length(private$calculations)) {
       "exact trusted queries (run with call_calculation)"
@@ -132,7 +148,11 @@ tool_search_pool <- function(private) {
     },
     sprintf(
       paste(
-        "Search the semantic layer's trusted calculations: %s.",
+        if (has_semantic_stubs) {
+          "Search the semantic layer's trusted calculations and models: %s."
+        } else {
+          "Search the semantic layer's trusted calculations: %s."
+        },
         "For every data question, use this before any other data",
         "tool, even if a table looks easy to query directly. Use the exact",
         "names it returns."
@@ -188,7 +208,11 @@ tool_call_metrics <- function(private) {
         private$semantic_models,
         private$calculations
       )) {
-        "the system prompt or search_pool"
+        if (nrow(registry_semantic_stubs(private$semantic_models))) {
+          "the system prompt, search_pool, or describe_table"
+        } else {
+          "the system prompt or search_pool"
+        }
       } else {
         "the system prompt"
       }
@@ -252,9 +276,12 @@ tool_call_calculation <- function(private) {
       )
     },
     paste(
-      "Run an exact trusted query returned by search_pool.",
+      paste(
+        "Run an exact trusted query returned by search_pool or",
+        "describe_table."
+      ),
       "Arguments are validated and bound; identifier arguments accept only",
-      "the values listed by search_pool."
+      "the values listed by search_pool or describe_table."
     ),
     arguments = list(
       name = ellmer::type_string(
@@ -336,6 +363,8 @@ tool_search_context <- function(private) {
 }
 
 tool_describe_table <- function(private) {
+  has_semantic_models <- sources_have_semantic_models(private$sources) ||
+    sources_have_semantic_stubs(private$sources)
   ellmer::tool(
     function(table, source = NULL) {
       describe_table_tool(
@@ -345,10 +374,25 @@ tool_describe_table <- function(private) {
         tracker = private$first_touch
       )
     },
-    "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table.",
+    if (has_semantic_models) {
+      paste(
+        "Describe a catalog object.",
+        "For tables, return columns, types, and sample rows.",
+        "For semantic models, return public members and any verified queries."
+      )
+    } else {
+      paste(
+        "Describe a table: columns, types, and sample rows.",
+        "Use this before writing SQL against an unfamiliar table."
+      )
+    },
     arguments = list(
       table = ellmer::type_string(
-        "The table name, as listed in the system prompt."
+        if (has_semantic_models) {
+          "The object name, as listed in the system prompt or search results."
+        } else {
+          "The table name, as listed in the system prompt."
+        }
       ),
       source = sql_source_type(private$sources)
     ),
@@ -689,6 +733,15 @@ describe_table_tool <- function(
   tracker = NULL
 ) {
   d <- source_describe(source, table)
+  if (inherits(d, "commons_semantic_model_description")) {
+    body <- semantic_model_description_text(d)
+    return(tool_result(
+      body,
+      title = sprintf("Described %s%s", table, source_label(source_name)),
+      icon = maybe_icon("table"),
+      markdown = body
+    ))
+  }
   entry <- source$dictionary$tables[[table]]
   context <- if (!table_touched(tracker, source_name, table)) {
     semantic_model_first_touch(source, table)

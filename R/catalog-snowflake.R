@@ -34,8 +34,10 @@ snowflake_table_registry <- function(
     length(registry$relations) + length(selection$semantic_views),
     call = call
   )
+  # Exact selections fail early; namespace models load when inspected or used.
+  eager_views <- selection$semantic_views[selection$semantic_validate]
   registry$semantic_models <- lapply(
-    selection$semantic_views,
+    eager_views,
     snowflake_read_semantic_model,
     con = con,
     call = call
@@ -46,22 +48,12 @@ snowflake_table_registry <- function(
     logical(1),
     "commons_unsupported_snowflake_semantic_view"
   )
-  exact_unsupported <- intersect(
-    names(registry$semantic_models)[unsupported],
-    selection$semantic_validate
-  )
-  if (length(exact_unsupported)) {
+  if (any(unsupported)) {
     snowflake_abort_unsupported_semantic_views(
-      registry$semantic_models[exact_unsupported],
+      registry$semantic_models[unsupported],
       call = call
     )
   }
-  if (any(unsupported)) {
-    snowflake_warn_unsupported_semantic_views(
-      registry$semantic_models[unsupported]
-    )
-  }
-  registry$semantic_models <- registry$semantic_models[!unsupported]
   registry$semantic_models <- c(
     registry$semantic_models,
     snowflake_associated_semantic_models(
@@ -75,9 +67,20 @@ snowflake_table_registry <- function(
     registry$semantic_models,
     exclude
   )
+  stub_labels <- setdiff(
+    names(selection$semantic_views),
+    c(selection$semantic_validate, names(registry$semantic_models))
+  )
+  registry$semantic_stubs <- lapply(
+    selection$semantic_views[stub_labels],
+    new_semantic_model_stub,
+    backend = "snowflake_semantic_view"
+  )
   registry$semantic_validate <- selection$semantic_validate
   catalog_check_object_limit(
-    length(registry$relations) + length(registry$semantic_models),
+    length(registry$relations) +
+      length(registry$semantic_models) +
+      length(registry$semantic_stubs),
     call = call
   )
   catalog_check_nonempty(registry, call = call)
@@ -92,14 +95,6 @@ snowflake_abort_unsupported_semantic_views <- function(models, call) {
     ),
     call = call
   )
-}
-
-snowflake_warn_unsupported_semantic_views <- function(models) {
-  problems <- vapply(models, `[[`, character(1), "reason")
-  cli::cli_warn(c(
-    "Skipping unsupported Snowflake semantic views:",
-    stats::setNames(paste0(names(problems), ": ", problems), "*")
-  ))
 }
 
 snowflake_associated_semantic_models <- function(

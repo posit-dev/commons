@@ -16,6 +16,17 @@ call_metrics_impl <- function(
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
+  n_models <- length(source$semantic_models)
+  source <- source_hydrate_semantic_models(source, metrics)
+  if (length(source$semantic_models) > n_models) {
+    source_index <- if (length(sources) == 1L) {
+      1L
+    } else {
+      match(label, names(sources))
+    }
+    sources[[source_index]] <- source
+    semantic_models <- semantic_models_registry(sources)
+  }
   defs <- registry_defs(registry, label)
   semantic_models <- semantic_models %||% semantic_models_registry(sources)
   semantic_members <- registry_semantic_members(semantic_models, label)
@@ -460,10 +471,12 @@ search_pool_text <- function(
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
   semantic_members <- registry_semantic_members(semantic_models)
+  semantic_stubs <- registry_semantic_stubs(semantic_models)
   if (
     length(measures) == 0 &&
       nrow(defs) == 0 &&
       nrow(semantic_members) == 0 &&
+      nrow(semantic_stubs) == 0 &&
       length(calculations) == 0
   ) {
     return("The semantic layer is empty.")
@@ -492,6 +505,12 @@ search_pool_text <- function(
       blank_na(semantic_members$label),
       blank_na(semantic_members$description),
       semantic_members$synonyms
+    ),
+    paste(
+      semantic_stubs$name,
+      semantic_stubs$model,
+      semantic_stubs$backend,
+      blank_na(semantic_stubs$description)
     ),
     vapply(
       calculations,
@@ -542,10 +561,28 @@ search_pool_text <- function(
             ]
           )
         )
+      } else if (
+        hit <= length(measures) +
+          nrow(defs) +
+          nrow(semantic_members) +
+          nrow(semantic_stubs)
+      ) {
+        semantic_stub_pool_text(
+          semantic_stubs[
+            hit - length(measures) - nrow(defs) - nrow(semantic_members),
+            ,
+            drop = FALSE
+          ],
+          source_names
+        )
       } else {
         calculation_pool_text(
           calculations[[
-            hit - length(measures) - nrow(defs) - nrow(semantic_members)
+            hit -
+              length(measures) -
+              nrow(defs) -
+              nrow(semantic_members) -
+              nrow(semantic_stubs)
           ]],
           source_names
         )
@@ -554,6 +591,37 @@ search_pool_text <- function(
     character(1)
   )
   paste(blocks, collapse = "\n\n")
+}
+
+semantic_stub_pool_text <- function(stub, source_names = character()) {
+  backend <- switch(
+    stub$backend[[1]],
+    snowflake_semantic_view = "Snowflake semantic view",
+    databricks_metric_view = "Databricks metric view",
+    "semantic model"
+  )
+  source <- if (stub$source[[1]] %in% source_names) {
+    sprintf("\nSource: `%s`.", stub$source[[1]])
+  } else {
+    ""
+  }
+  sprintf(
+    paste0(
+      "### %s --- %s\n%s%s\n",
+      if (identical(stub$backend[[1]], "snowflake_semantic_view")) {
+        paste(
+          "Inspect with `describe_table` to find its public members and",
+          "verified queries."
+        )
+      } else {
+        "Inspect with `describe_table` to find its public members."
+      }
+    ),
+    stub$model[[1]],
+    backend,
+    prose_detail(stub$description[[1]], NA_character_),
+    source
+  )
 }
 
 definition_pool_text <- function(def, defs) {

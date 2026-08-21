@@ -150,7 +150,7 @@ test_that("catalog SQL probes bind typed nulls", {
   expect_null(probe$error)
 })
 
-test_that("namespace semantic models hide authorization failures", {
+test_that("only explicitly selected semantic models are probed at startup", {
   exact <- test_semantic_model("exact_model")
   discovered <- test_semantic_model("discovered_model")
   registry <- list(
@@ -164,19 +164,19 @@ test_that("namespace semantic models hide authorization failures", {
   )
 
   expect_error(
-    catalog_filter_semantic_access(DBI::ANSI(), registry),
+    catalog_validate_semantic_access(DBI::ANSI(), registry),
     class = "commons_catalog_authorization_error"
   )
 
   registry$semantic_validate <- character()
-  filtered <- catalog_filter_semantic_access(DBI::ANSI(), registry)
-  expect_length(filtered$semantic_models, 0L)
+  filtered <- catalog_validate_semantic_access(DBI::ANSI(), registry)
+  expect_length(filtered$semantic_models, 2L)
 })
 
-test_that("transient semantic probes fail without caching startup state", {
+test_that("explicit semantic probes retry transient failures", {
   registry <- list(
     semantic_models = list(discovered = test_semantic_model()),
-    semantic_validate = character()
+    semantic_validate = "discovered"
   )
   calls <- 0L
   local_mocked_bindings(
@@ -187,11 +187,11 @@ test_that("transient semantic probes fail without caching startup state", {
   )
 
   expect_error(
-    catalog_filter_semantic_access(DBI::ANSI(), registry),
+    catalog_validate_semantic_access(DBI::ANSI(), registry),
     class = "commons_catalog_transient_error"
   )
   expect_error(
-    catalog_filter_semantic_access(DBI::ANSI(), registry),
+    catalog_validate_semantic_access(DBI::ANSI(), registry),
     class = "commons_catalog_transient_error"
   )
   expect_equal(calls, 2L)

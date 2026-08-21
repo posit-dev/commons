@@ -154,6 +154,132 @@ test_that("native semantic members appear in pool search", {
   expect_match(out, "call_metrics dimension: region", fixed = TRUE)
 })
 
+test_that("unhydrated semantic models are searchable and describable", {
+  source <- test_source()
+  model <- test_semantic_model()
+  label <- table_id_label(model$id)
+  source$semantic_stubs <- stats::setNames(list(
+    new_semantic_model_stub(
+      list(id = model$id, description = model$description),
+      "snowflake_semantic_view"
+    )
+  ), label)
+  reads <- 0L
+  local_mocked_bindings(
+    snowflake_read_semantic_model = function(...) {
+      reads <<- reads + 1L
+      model
+    }
+  )
+
+  registry <- semantic_models_registry(list(sales_db = source))
+  search <- search_pool_text(
+    list(),
+    empty_definitions(),
+    "revenue semantics",
+    semantic_models = registry
+  )
+  description <- source_describe(source, label)
+  text <- semantic_model_description_text(description)
+
+  expect_match(search, label, fixed = TRUE)
+  expect_match(search, "Inspect with `describe_table`", fixed = TRUE)
+  expect_match(text, paste0(label, "::total_revenue"), fixed = TRUE)
+  expect_length(source$semantic_models, 0L)
+  expect_equal(reads, 1L)
+})
+
+test_that("eager semantic models are describable without rereading metadata", {
+  source <- test_semantic_source()
+  label <- names(source$semantic_models)[[1]]
+  local_mocked_bindings(
+    snowflake_read_semantic_model = function(...) {
+      cli::cli_abort("Semantic model metadata was read again.")
+    }
+  )
+
+  description <- source_describe(source, label)
+
+  expect_s3_class(description, "commons_semantic_model_description")
+  expect_match(
+    semantic_model_description_text(description),
+    paste0(label, "::total_revenue"),
+    fixed = TRUE
+  )
+})
+
+test_that("semantic model descriptions retain unreadable catalog entries", {
+  source <- test_source()
+  model <- test_semantic_model()
+  label <- table_id_label(model$id)
+  source$semantic_stubs <- stats::setNames(list(
+    new_semantic_model_stub(
+      list(id = model$id, description = model$description),
+      "snowflake_semantic_view"
+    )
+  ), label)
+  local_mocked_bindings(
+    snowflake_read_semantic_model = function(...) {
+      cli::cli_abort("The current role cannot read this definition.")
+    }
+  )
+
+  result <- describe_table_tool(source, label)
+
+  expect_match(result@value, "is listed in the catalog", fixed = TRUE)
+  expect_match(result@value, "current role cannot read", fixed = TRUE)
+})
+
+test_that("lazy semantic metrics hydrate from qualified names", {
+  source <- test_source()
+  model <- test_semantic_model()
+  label <- table_id_label(model$id)
+  source$semantic_stubs <- stats::setNames(list(
+    new_semantic_model_stub(
+      list(id = model$id, description = model$description),
+      "snowflake_semantic_view"
+    )
+  ), label)
+  query <- NULL
+  local_mocked_bindings(
+    snowflake_read_semantic_model = function(...) model,
+    source_query_bind = function(source, sql, bindings) {
+      query <<- sql
+      data.frame(total_revenue = 42)
+    }
+  )
+  sources <- list(sales_db = source)
+
+  result <- call_metrics_impl(
+    empty_definitions(),
+    sources,
+    new_handle_store(),
+    metrics = paste0(label, "::total_revenue"),
+    semantic_models = semantic_models_registry(sources)
+  )
+
+  expect_match(query, "FROM SEMANTIC_VIEW", fixed = TRUE)
+  expect_equal(result@extra$commons_tag, "A")
+})
+
+test_that("semantic stubs earn fixed execution tools", {
+  source <- test_source()
+  model <- test_semantic_model()
+  label <- table_id_label(model$id)
+  source$semantic_stubs <- stats::setNames(list(
+    new_semantic_model_stub(
+      list(id = model$id, description = model$description),
+      "snowflake_semantic_view"
+    )
+  ), label)
+  agent <- test_agent(data_sources = list(sales_db = source))
+  tools <- vapply(agent$get_tools(), tool_name, character(1))
+
+  expect_contains(tools, "search_pool")
+  expect_contains(tools, "call_metrics")
+  expect_contains(tools, "call_calculation")
+})
+
 test_that("pool search identifies native members' data sources", {
   registry <- semantic_models_registry(list(
     warehouse = test_semantic_source(),
