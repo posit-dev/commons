@@ -39,7 +39,6 @@ shiny-chat-container {
     0 1px 2px color-mix(in srgb, var(--bs-body-color, #212529) 8%, transparent),
     0 8px 24px -20px
       color-mix(in srgb, var(--bs-body-color, #212529) 30%, transparent);
-  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
   --shiny-chat-user-message-border-radius: var(
     --commons-chat-radius-message
   );
