@@ -32,7 +32,7 @@
 #'   `"none"` (the default) or `"full"`. The session requires filesystem
 #'   sandboxing on Linux or macOS. When sandboxing is unavailable, commons
 #'   warns and creates the agent without `run_r`; its other tools remain
-#'   available. See `vignette("commons")` for platform requirements.
+#'   available. See [run_r_sandbox] for platform requirements.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation

@@ -2,6 +2,23 @@
 # sandbox itself in worker_init() (run-r.R), calling the C symbol directly;
 # the parent process is never sandboxed.
 
+#' `run_r` sandboxing
+#'
+#' The `run_r` tool executes model-authored R code, so [commons()] only enables
+#' it inside an operating-system sandbox. macOS uses Seatbelt. Linux uses
+#' Landlock when available and otherwise falls back to unprivileged user and
+#' mount namespaces; Linux also requires seccomp.
+#'
+#' When these mechanisms are unavailable, `commons()` warns and creates the
+#' agent without `run_r`. Its other tools remain available.
+#'
+#' On older Linux kernels without Landlock, `sysctl user.max_user_namespaces`
+#' reports whether the namespace fallback is available. A value of `0`
+#' disables it.
+#'
+#' @name run_r_sandbox
+NULL
+
 sandbox_capabilities <- function() {
   caps <- .Call(c_sandbox_capabilities)
   list(
@@ -65,10 +82,7 @@ warn_run_r_unavailable <- function(support) {
         "The agent can still query data and use trusted calculations, but",
         "cannot perform ad hoc R analysis or plotting."
       ),
-      i = paste0(
-        "See <https://posit-dev.github.io/commons/articles/",
-        "commons.html#run-r-sandboxing>."
-      )
+      i = "See the {.help [run_r_sandbox](commons::run_r_sandbox)} help page."
     ),
     .frequency = "once",
     .frequency_id = "commons_run_r_sandbox_unavailable"

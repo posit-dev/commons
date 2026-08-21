@@ -48,7 +48,7 @@ test_that("commons() degrades cleanly when run_r cannot be sandboxed", {
   warning <- warnings[[1]]
   expect_match(conditionMessage(warning), "Disabling `run_r`")
   expect_match(conditionMessage(warning), support$reason, fixed = TRUE)
-  expect_match(conditionMessage(warning), "#run-r-sandboxing", fixed = TRUE)
+  expect_match(conditionMessage(warning), "run_r_sandbox", fixed = TRUE)
 
   tool_names <- vapply(agent$get_tools(), tool_name, character(1))
   expect_false("run_r" %in% tool_names)

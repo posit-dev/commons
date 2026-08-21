@@ -46,7 +46,7 @@ system prompt, as a single string or the path to a text or Markdown file.
 \code{"none"} (the default) or \code{"full"}. The session requires filesystem
 sandboxing on Linux or macOS. When sandboxing is unavailable, commons
 warns and creates the agent without \code{run_r}; its other tools remain
-available. See \code{vignette("commons")} for platform requirements.}
+available. See \link{run_r_sandbox} for platform requirements.}
 
 \item{log}{Whether to capture conversation trajectories with OpenTelemetry
 (default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content
