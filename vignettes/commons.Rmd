@@ -30,7 +30,7 @@ library(commons)
 ## Design philosophy
 
 AI agents for data analysis can range from overly cautious and narrowly
-correct to wildly untrustworthy. Commons is intended to increase the likelihood
+correct to wildly untrustworthy. Commons increases the likelihood
 of correct answers by providing agents with access to existing trusted code,
 while still allowing them enough flexibility to answer novel, realistic
 questions. Commons also labels answers with trust tags based on the analysis
@@ -66,6 +66,30 @@ However, we also expect users to ask questions that stray from the "happy
 path." For those, the agent searches for additional context and writes custom
 code (either SQL or R). Answers from this path either include a verified
 citation or are tagged as `Untrusted`.
+
+## Working with the agent skill
+
+The package includes a `commons` [agent skill](https://agentskills.io/) that
+helps coding agents build, evaluate, and improve commons agents. We recommend
+installing it before you begin because it provides detailed guidance and a
+structured workflow.
+
+To make the skill available to **Posit Assistant or Codex**, copy the skill and
+its references to `.agents/skills`:
+
+```r
+skill <- system.file("skills", "commons", package = "commons")
+dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".agents/skills", recursive = TRUE)
+```
+
+For **Claude Code**, copy the skill and its references to `.claude/skills`:
+
+```r
+skill <- system.file("skills", "commons", package = "commons")
+dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".claude/skills", recursive = TRUE)
+```
 
 ## Trust flow
 
@@ -138,35 +162,12 @@ The following table details the various ways each trust outcome can occur.
 | How the answer is produced | Outcome |
 |---|---|
 | A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_pill("A")` |
-| A [data-dictionary metric](#definitions), possibly grouped or restricted using filter or derived-value definitions, or [documented columns](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
+| A [data-dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
 | A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
 | Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
-| [Custom R](#context-layer) | Cited or `r commons:::commons_answer_pill("C")` |
+| Custom R | Cited or `r commons:::commons_answer_pill("C")` |
 | No calculation because the available information is insufficient | No label |
 
-## Working with the agent skill
-
-The package includes a `commons` [agent skill](https://agentskills.io/) that
-helps coding agents build, evaluate, and improve commons agents. We recommend
-installing it before you begin because it provides detailed guidance and a
-structured workflow.
-
-To make the skill available to **Posit Assistant or Codex**, copy the skill and
-its references to `.agents/skills`:
-
-```r
-skill <- system.file("skills", "commons", package = "commons")
-dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
-file.copy(skill, ".agents/skills", recursive = TRUE)
-```
-
-For **Claude Code**, copy the skill and its references to `.claude/skills`:
-
-```r
-skill <- system.file("skills", "commons", package = "commons")
-dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
-file.copy(skill, ".claude/skills", recursive = TRUE)
-```
 
 ## Information layers
 
@@ -206,7 +207,7 @@ context-layer Markdown file for the biodiversity example app:
 
 #### Data dictionary
 
-`dictionaries/warehouse.yaml`
+`dictionaries/biodiversity.yaml`
 
 ```yaml
 tables:
@@ -271,19 +272,17 @@ named data frames, a `pins` board, or a DBI connection. Data frames and pins
 will be loaded into an in-process DuckDB database. Database connections will
 be queried directly.
 
-For example, the following code creates a data source for a warehouse connection
-`con`. Only the tables `observations` and `site_area` are exposed to the agent.
-`dictionary` is an optional path to a `data-dict.yaml` file.
+For example, the following code creates a data source from two data frames. Each name becomes a table available to the agent. `dictionary` is an optional path to a `data-dict.yaml` file.
 
 ```r
-warehouse <- data_source(
-  con,
-  tables = c("observations", "site_area"),
-  dictionary = "dictionaries/warehouse.yaml"
+biodiversity <- data_source(
+  observations = observations,
+  site_area = site_area,
+  dictionary = "dictionaries/biodiversity.yaml"
 )
 ```
 
-## Data dictionaries
+### Data dictionaries
 
 Data dictionaries provide structured, source-specific documentation for a data
 source. Use a data dictionary to specify what each table represents, column
@@ -301,7 +300,7 @@ Commons agents use data dictionaries in a few ways:
 * Descriptive fields (including `description` and `details`) are available to
   the agent as part of the context layer.
 
-### Definitions
+#### Definitions
 
 **Definitions** are named, governed expressions attached to tables in
 `data-dict.yaml`. They allow an agent to reuse trusted metrics, filters, and
@@ -361,9 +360,43 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 |-- AGENTS.md # or your coding agent's equivalent (e.g., CLAUDE.md)
 |-- instructions.md
 |-- dictionaries/
-|   `-- warehouse.yaml
+|   `-- biodiversity.yaml
 |-- measures/
-|   `-- sales-dashboard.R
+|   `-- measures.R
 `-- context/
-    `-- sales-dashboard.md
+    `-- context.md
+```
+
+### Constructing the agent
+
+Use `commons()` to construct an agent. Pass it an ellmer `Chat` and one or more data sources, along with any semantic and context layers. You can also optionally append information to the commons agent system prompt using the `instructions` argument.
+
+To make the agent available in Shiny, add `commons_ui()` to the app's UI and pass the agent to `commons_server()`. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
+
+```r
+library(bslib)
+library(commons)
+library(shiny)
+
+ui <- page_fillable(commons_ui("chat"))
+
+server <- function(input, output, session) {
+  biodiversity <- data_source(
+    observations = observations,
+    site_area = site_area,
+    dictionary = "dictionaries/biodiversity.yaml"
+  )
+
+  agent <- commons(
+    client = ellmer::chat("anthropic/claude-sonnet-5"),
+    data_sources = list(biodiversity = biodiversity),
+    semantic_layer = semantic_layer("measures"),
+    context_layer = context_layer("context/context.md"),
+    instructions = "instructions.md"
+  )
+
+  commons_server("chat", agent)
+}
+
+shinyApp(ui, server)
 ```
