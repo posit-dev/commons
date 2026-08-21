@@ -474,7 +474,7 @@ viewer_ui <- function(summary) {
             ),
             position = "right",
             width = 320,
-            padding = 0,
+            padding = c("3rem", 0, 0),
             resizable = TRUE
           ),
           border = FALSE,
