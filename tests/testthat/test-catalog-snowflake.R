@@ -55,6 +55,18 @@ test_that("Snowflake SHOW results identify semantic views separately", {
   expect_null(views[[2]]$description)
 })
 
+test_that("Snowflake SHOW truncation fails closed", {
+  complete <- data.frame(row = seq_len(snowflake_show_row_limit - 1L))
+  truncated <- data.frame(row = seq_len(snowflake_show_row_limit))
+
+  expect_no_error(snowflake_check_show_complete(complete, "relations"))
+  expect_error(
+    snowflake_check_show_complete(truncated, "relations"),
+    "might be truncated",
+    fixed = TRUE
+  )
+})
+
 test_that("Snowflake semantic YAML imports only public dimensions and metrics", {
   specification <- list(
     name = "revenue",
@@ -99,6 +111,175 @@ test_that("Snowflake semantic YAML imports only public dimensions and metrics", 
   expect_equal(model$metrics[[1]]$parent, "orders")
 })
 
+test_that("Snowflake semantic scope retains dependencies and public context", {
+  specification <- list(
+    custom_instructions = "Use booked revenue for finance questions.",
+    tables = list(
+      orders = list(
+        base_table = list(
+          database = "ANALYTICS",
+          schema = "PUBLIC",
+          table = "ORDERS"
+        ),
+        dimensions = list(
+          list(
+            name = "active_only",
+            labels = "filter",
+            description = "Active orders."
+          )
+        ),
+        facts = list(
+          list(
+            name = "amount",
+            description = "Order amount.",
+            labels = "filter"
+          ),
+          list(name = "cost", access_modifier = "private_access")
+        ),
+        filters = list(
+          list(name = "recent_only", description = "Recent orders.")
+        ),
+        metrics = list(
+          list(name = "revenue"),
+          list(name = "margin", access_modifier = "private_access")
+        )
+      )
+    ),
+    relationships = list(list(
+      name = "orders_to_customers",
+      left_table = "orders",
+      right_table = "customers",
+      relationship_columns = list(list(
+        left_column = "customer_id",
+        right_column = "id"
+      ))
+    ))
+  )
+  id <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "REVENUE_MODEL"
+  )
+
+  model <- snowflake_semantic_model_from_spec(id, specification)
+
+  expect_true(model$dependencies_complete)
+  expect_identical(
+    model$dependencies[[1]],
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "ORDERS")
+  )
+  expect_equal(
+    vapply(model$facts, `[[`, character(1), "name"),
+    "amount"
+  )
+  expect_equal(
+    vapply(model$metrics, `[[`, character(1), "name"),
+    "revenue"
+  )
+  expect_true(model$dimensions[[1]]$filter)
+  expect_true(model$facts[[1]]$filter)
+  expect_equal(model$relationships, specification$relationships)
+  expect_true(any(grepl("booked revenue", model$context$first_touch)))
+  expect_true(any(grepl("orders_to_customers", model$context$retrieval)))
+  expect_true(any(grepl("Order amount", model$context$retrieval)))
+  expect_true(any(grepl("recent_only", model$context$retrieval)))
+
+  source <- test_source()
+  source$semantic_models <- list(revenue = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(snowflake = source))
+  )
+  expect_contains(members$name[members$filter], c("active_only", "amount"))
+  expect_false("recent_only" %in% members$name)
+})
+
+test_that("Snowflake associated discovery uses canonical model identities", {
+  dependency <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "ORDERS"
+  )
+  identity <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "REVENUE_MODEL"
+  )
+  model <- new_semantic_model(
+    DBI::Id(table = "REVENUE_MODEL"),
+    "revenue",
+    backend = "snowflake_semantic_view",
+    identity = identity,
+    dependencies = list(dependency)
+  )
+  registry <- list(
+    relations = list(orders = list(
+      id = DBI::Id(table = "ORDERS"),
+      identity = dependency,
+      kind = "table"
+    )),
+    validate = list(labels = "orders"),
+    semantic_models = list(REVENUE_MODEL = model)
+  )
+  local_mocked_bindings(
+    snowflake_list_semantic_views = function(...) {
+      list(list(id = identity, description = NULL))
+    },
+    snowflake_read_semantic_model = function(...) {
+      cli::cli_abort("Duplicate model was read.")
+    }
+  )
+
+  expect_length(
+    snowflake_associated_semantic_models(DBI::ANSI(), registry),
+    0L
+  )
+})
+
+test_that("Snowflake association closes over every selected relation", {
+  orders <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "SALES",
+    table = "ORDERS"
+  )
+  customers <- DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "SHARED",
+    table = "CUSTOMERS"
+  )
+  view <- list(id = DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "SALES",
+    table = "REVENUE_MODEL"
+  ))
+  model <- new_semantic_model(
+    view$id,
+    "revenue",
+    backend = "snowflake_semantic_view",
+    dependencies = list(orders, customers)
+  )
+  registry <- list(
+    relations = list(
+      orders = list(id = DBI::Id(table = "ORDERS"), identity = orders, kind = "table"),
+      customers = list(id = customers, kind = "table")
+    ),
+    validate = list(labels = "orders"),
+    semantic_models = list()
+  )
+  local_mocked_bindings(
+    snowflake_list_semantic_views = function(...) list(view),
+    snowflake_read_semantic_model = function(...) model
+  )
+
+  associated <- snowflake_associated_semantic_models(DBI::ANSI(), registry)
+  expect_named(associated, "ANALYTICS.SALES.REVENUE_MODEL")
+
+  registry$relations$orders <- list(id = DBI::Id(table = "MISSING"), kind = NULL)
+  expect_length(
+    snowflake_associated_semantic_models(DBI::ANSI(), registry),
+    0L
+  )
+})
+
 test_that("Snowflake semantic SQL uses model-owned references", {
   model <- test_semantic_model()
   registry <- semantic_models_registry(list(
@@ -136,6 +317,171 @@ test_that("Snowflake semantic SQL uses model-owned references", {
       ")"
     )
   )
+})
+
+test_that("Snowflake semantic SQL applies named entity filters", {
+  model <- snowflake_semantic_model_from_spec(
+    DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "REVENUE_MODEL"
+    ),
+    list(tables = list(list(
+      name = "orders",
+      base_table = list(
+        database = "ANALYTICS",
+        schema = "PUBLIC",
+        table = "ORDERS"
+      ),
+      dimensions = list(list(
+        name = "active_only",
+        labels = "filter"
+      )),
+      metrics = list(list(name = "revenue"))
+    )))
+  )
+  source <- test_source()
+  source$semantic_models <- list(model = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(snowflake = source))
+  )
+  metrics <- members[members$kind == "metric", , drop = FALSE]
+  filters <- resolve_semantic_filters("active_only", members)
+
+  sql <- snowflake_semantic_metric_sql(
+    model,
+    metrics,
+    dimensions = members[0, , drop = FALSE],
+    filters = filters,
+    where = NULL,
+    members = members,
+    con = DBI::ANSI()
+  )
+
+  expect_match(sql, 'WHERE "orders"."active_only"', fixed = TRUE)
+})
+
+test_that("Snowflake imports and binds semantic variables", {
+  model <- snowflake_semantic_model_from_spec(
+    DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "REVENUE_MODEL"
+    ),
+    list(
+      variables = list(
+        list(
+          name = "threshold",
+          data_type = "NUMBER(5,1)",
+          default_value = "42",
+          description = "Minimum revenue."
+        ),
+        list(name = "category", data_type = "TEXT"),
+        list(
+          name = "large_id",
+          data_type = "BIGINT",
+          default_value = "2147483648"
+        )
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+  source <- test_source()
+  source$semantic_models <- list(model = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(snowflake = source))
+  )
+  metrics <- members[members$kind == "metric", , drop = FALSE]
+  sql <- snowflake_semantic_metric_sql(
+    model,
+    metrics,
+    members[0, , drop = FALSE],
+    where = NULL,
+    members = members,
+    con = DBI::ANSI(),
+    arguments = list(category = "retail")
+  )
+
+  expect_equal(model$parameters$threshold$type, "number")
+  expect_equal(model$parameters$threshold$default, 42)
+  expect_false(model$parameters$category$has_default)
+  expect_identical(model$parameters$large_id$default, 2147483648)
+  expect_match(sql, 'VARIABLES "category" => ?', fixed = TRUE)
+})
+
+test_that("Snowflake hydrates only explicitly selected semantic views", {
+  view <- list(id = DBI::Id(
+    catalog = "ANALYTICS",
+    schema = "PUBLIC",
+    table = "MODEL"
+  ))
+  label <- table_id_label(view$id)
+  registry <- list(
+    labels = "ANALYTICS.PUBLIC.ORDERS",
+    ids = list(DBI::Id(table = "ORDERS")),
+    relations = list(ANALYTICS.PUBLIC.ORDERS = list(
+      id = DBI::Id(table = "ORDERS"),
+      kind = "table"
+    )),
+    validate = list(labels = character(), ids = list()),
+    namespace_selected = TRUE
+  )
+  exact <- FALSE
+  local_mocked_bindings(
+    snowflake_catalog_selection = function(...) {
+      list(
+        relations = list(),
+        semantic_views = stats::setNames(list(view), label),
+        semantic_validate = if (exact) label else character()
+      )
+    },
+    catalog_table_registry = function(...) registry,
+    snowflake_read_semantic_model = function(...) {
+      snowflake_unsupported_semantic_view(
+        view$id,
+        "unsupported parameter type ARRAY"
+      )
+    },
+    snowflake_associated_semantic_models = function(...) list()
+  )
+
+  discovered <- snowflake_table_registry(DBI::ANSI())
+  expect_length(discovered$semantic_models, 0L)
+  expect_named(discovered$semantic_stubs, label)
+
+  exact <- TRUE
+  expect_error(
+    snowflake_table_registry(DBI::ANSI()),
+    "selected Snowflake semantic views are not supported"
+  )
+})
+
+test_that("Snowflake reads unsupported variable types as unsupported models", {
+  view <- list(
+    id = DBI::Id(
+      catalog = "ANALYTICS",
+      schema = "PUBLIC",
+      table = "MODEL"
+    ),
+    description = NULL
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(...) {
+      data.frame(specification = paste(
+        "variables:",
+        "  - name: dimensions",
+        "    data_type: ARRAY",
+        "metrics:",
+        "  - name: revenue",
+        sep = "\n"
+      ))
+    },
+    .package = "DBI"
+  )
+
+  model <- snowflake_read_semantic_model(view, DBI::ANSI())
+  expect_s3_class(model, "commons_unsupported_snowflake_semantic_view")
+  expect_match(model$reason, "unsupported type", fixed = TRUE)
 })
 
 test_that("semantic views are excluded from namespace relations", {

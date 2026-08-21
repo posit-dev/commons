@@ -3,9 +3,19 @@ tool_run_r <- function(private) {
     if (length(private$registry) > 0) "call_measure",
     if (
       registry_has_metrics(private$definitions) ||
-        semantic_registry_has_metrics(private$semantic_models)
+        semantic_registry_has_metrics(private$semantic_models) ||
+        sources_have_semantic_stubs(private$sources)
     ) {
       "call_metrics"
+    },
+    if (
+      length(private$calculations) ||
+        sources_have_semantic_stubs(
+          private$sources,
+          backend = "snowflake_semantic_view"
+        )
+    ) {
+      "call_calculation"
     },
     "run_sql"
   )

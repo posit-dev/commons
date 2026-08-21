@@ -185,7 +185,7 @@ citation_reminder_text <- function() {
 citation_trust_exception <- function(tools) {
   trusted_path_tools <- intersect(
     tools,
-    c("search_pool", "call_measure", "call_metrics")
+    c("search_pool", "call_measure", "call_metrics", "call_calculation")
   )
   if (!length(trusted_path_tools)) {
     return("")
@@ -249,6 +249,12 @@ non_citable_tool_output_text <- function(tools) {
     if ("call_metrics" %in% tools) {
       paste(
         "- Result values from `call_metrics`. An answer based on that tool",
+        "alone is already trusted and needs no citation."
+      )
+    },
+    if ("call_calculation" %in% tools) {
+      paste(
+        "- Result values from `call_calculation`. An answer based on that tool",
         "alone is already trusted and needs no citation."
       )
     },

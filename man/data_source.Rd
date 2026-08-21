@@ -4,7 +4,7 @@
 \alias{data_source}
 \title{Create a data source}
 \usage{
-data_source(..., tables = NULL, dictionary = NULL)
+data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
 }
 \arguments{
 \item{...}{A single DBI connection, a single \code{pins} board, or named data
@@ -23,14 +23,29 @@ connections, a \code{DBI::Id} ending in \code{catalog} or \code{schema} selects 
 table and view in that namespace. Leaving \code{tables} unset selects the
 current schema. A Databricks \code{hive_metastore} selection must include a
 schema. Snowflake selections import semantic views, and Databricks
-selections import unparameterized metric views, as native trusted metrics
-and dimensions. Databricks wildcard members require concrete column
-metadata from the warehouse.
-Native semantic models are available through \code{search_pool} and
-\code{call_metrics}, but are not returned by \code{\link[=list_tables]{list_tables()}}.
+selections import metric views, as native trusted metrics and dimensions.
+Namespace selections retain lightweight model metadata, then read a
+model's definition when the agent describes or uses it. Explicitly
+selected models are read and validated when the data source is created.
+Snowflake semantic variables and Databricks metric-view parameters are
+passed as typed JSON arguments to \code{call_metrics}. Databricks wildcard
+members require concrete column metadata from the warehouse.
+Native semantic models are available through \code{search_pool},
+\code{describe_table}, and \code{call_metrics}, but are not returned by
+\code{\link[=list_tables]{list_tables()}}.
+Snowflake verified queries are exposed separately as exact trusted
+calculations through \code{search_pool} and \code{call_calculation}; their SQL is
+executed as stored rather than parsed to infer dependencies.
+An exact physical-table selection also imports associated models when
+every physical dependency is selected. Public relationships, facts,
+filters, and instructions become table-scoped first-touch and retrieval
+context; private members remain hidden.
 
 For a board, a named character vector of pins to read: the names become
 table names, and the values are pin names passed to \code{\link[pins:pin_read]{pins::pin_read()}}.}
+
+\item{exclude}{For Snowflake and Databricks namespace selections, optional
+unqualified object-name globs to omit, such as \code{"TMP_*"}.}
 
 \item{dictionary}{An optional path to a data dictionary describing the
 source's tables and columns, in the
@@ -108,6 +123,10 @@ rejected before reaching the database. For the in-process DuckDB built from
 data frames, commons additionally disables extension loading and filesystem
 access. These are safeguards, not a sandbox: when you supply your own
 connection, still open it in read-only mode where the backend supports it.
+Snowflake and Databricks sources snapshot the principal, active role, and
+namespace at creation, then reject catalog and governed execution after
+those values change. Authored and native semantic material is exposed only
+after a zero-row query succeeds for the current principal.
 }
 
 \examples{

@@ -12,6 +12,7 @@ test_that("live Snowflake discovers and describes catalog relations", {
     paste(
       "SELECT CURRENT_USER() AS principal,",
       "CURRENT_ROLE() AS role,",
+      "CURRENT_SECONDARY_ROLES() AS secondary_roles,",
       "CURRENT_DATABASE() AS catalog,",
       "CURRENT_SCHEMA() AS schema"
     )
@@ -24,6 +25,7 @@ test_that("live Snowflake discovers and describes catalog relations", {
   dictionary <- warehouse_test_dictionary(label, column)
   exact <- data_source(con, tables = table, dictionary = dictionary)
   described <- source_describe(exact, label)
+  tool <- describe_table_tool(exact, label)
 
   namespace <- DBI::Id(
     catalog = components[["catalog"]],
@@ -52,7 +54,10 @@ test_that("live Snowflake discovers and describes catalog relations", {
   current_source <- data_source(con)
 
   expect_equal(nrow(session), 1)
-  expect_named(session, c("principal", "role", "catalog", "schema"))
+  expect_named(
+    session,
+    c("principal", "role", "secondary_roles", "catalog", "schema")
+  )
   expect_true(nzchar(session$principal[[1]]))
   expect_s3_class(rows, "data.frame")
   expect_true(nrow(rows) <= 1)
@@ -86,10 +91,68 @@ test_that("live Snowflake discovers and describes catalog relations", {
     logical(1)
   )))
 
-  tool <- describe_table_tool(exact, label)
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
   expect_match(tool@value, "Sample summary")
+})
+
+test_that("live Snowflake rejects changed session namespaces", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  source <- data_source(con, tables = table)
+  current <- source$session$namespace
+  alternate <- DBI::Id(
+    catalog = table@name[["catalog"]],
+    schema = table@name[["schema"]]
+  )
+  if (identical(unname(unlist(current)), unname(alternate@name))) {
+    skip("The configured Snowflake namespace is already active")
+  }
+  DBI::dbExecute(
+    con,
+    paste("USE SCHEMA", DBI::dbQuoteIdentifier(con, alternate))
+  )
+
+  expect_error(
+    source_query(source, paste("SELECT * FROM", DBI::dbQuoteIdentifier(con, table))),
+    class = "commons_catalog_session_changed"
+  )
+})
+
+test_that("live Snowflake rejects changed active roles", {
+  table <- warehouse_test_table("snowflake")
+  alternate_role <- warehouse_test_alternate_role()
+  con <- local_warehouse_connection("snowflake")
+  source <- data_source(con, tables = table)
+  current_role <- source$session$role
+  skip_if(identical(current_role, alternate_role), "The alternate role is active")
+  withr::defer(DBI::dbExecute(
+    con,
+    paste("USE ROLE", DBI::dbQuoteIdentifier(con, current_role))
+  ))
+  DBI::dbExecute(
+    con,
+    paste("USE ROLE", DBI::dbQuoteIdentifier(con, alternate_role))
+  )
+
+  expect_error(
+    source_query(
+      source,
+      paste("SELECT * FROM", DBI::dbQuoteIdentifier(con, table))
+    ),
+    class = "commons_catalog_session_changed"
+  )
+})
+
+test_that("live Snowflake classifies denied query access", {
+  denied <- warehouse_test_denied_table("snowflake")
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+
+  expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
+  expect_error(
+    data_source(con, tables = denied),
+    class = "commons_catalog_authorization_error"
+  )
 })
 
 test_that("live Snowflake rejects an ambiguous relative dictionary table", {
@@ -140,7 +203,7 @@ test_that("live Snowflake executes compiled definition mappings", {
   source <- data_source(con, tables = table, dictionary = dictionary)
   definitions <- source$dictionary$tables[[label]]$definitions
   expect_equal(
-    vapply(definitions, `[[`, character(1), "target"),
+    unname(vapply(definitions, `[[`, character(1), "target")),
     rep("SQL(snowflake)", length(definitions))
   )
 
@@ -215,6 +278,10 @@ test_that("live Snowflake executes compiled definition mappings", {
   expect_true(is.na(empty_boolean_fold))
 })
 
+test_that("live Snowflake executes typed trusted calculations", {
+  expect_warehouse_trusted_calculation("snowflake")
+})
+
 test_that("live Snowflake discovers and executes a semantic view", {
   view <- warehouse_test_semantic_view()
   con <- local_warehouse_connection("snowflake", require_table = FALSE)
@@ -248,6 +315,96 @@ test_that("live Snowflake discovers and executes a semantic view", {
   expect_match(search, metric, fixed = TRUE)
   expect_s3_class(get_handle(handles, "r1"), "data.frame")
   expect_equal(result@extra$commons_tag, "A")
+})
+
+test_that("live Snowflake binds native semantic variables", {
+  configured <- warehouse_test_parameterized_model("snowflake")
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+  source <- data_source(con, tables = configured$id)
+  model <- source$semantic_models[[table_id_label(configured$id)]]
+  expect_true(length(model$parameters) > 0L)
+  expect_true(length(model$metrics) > 0L)
+
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(snowflake = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = semantic_models_registry(list(snowflake = source)),
+    arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
+})
+
+test_that("live Snowflake executes an imported verified query", {
+  view <- warehouse_test_verified_query_view()
+  con <- local_warehouse_connection("snowflake", require_table = FALSE)
+  source <- data_source(con, tables = view)
+  sources <- list(snowflake = source)
+  registry <- calculations_registry(sources)
+  expect_true(length(registry) > 0L)
+
+  result <- call_calculation_impl(
+    registry,
+    sources,
+    new_handle_store(),
+    registry[[1]]$key
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
+})
+
+test_that("live Snowflake scopes models associated with physical tables", {
+  table <- warehouse_test_table("snowflake")
+  con <- local_warehouse_connection("snowflake")
+  components <- table@name
+  skip_if_not(
+    all(c("catalog", "schema", "table") %in% names(components)),
+    "The Snowflake test table must be fully qualified"
+  )
+  namespace <- DBI::Id(
+    catalog = components[["catalog"]],
+    schema = components[["schema"]]
+  )
+  views <- snowflake_list_semantic_views(con, namespace)
+  models <- lapply(views, function(view) {
+    tryCatch(snowflake_read_semantic_model(view, con), error = function(err) NULL)
+  })
+  models <- Filter(function(model) {
+    !is.null(model) &&
+      isTRUE(model$dependencies_complete) &&
+      length(model$dependencies) > 0L &&
+      length(model$metrics) > 0L
+  }, models)
+  skip_if(length(models) == 0L, "No queryable associated semantic view is configured")
+  model <- models[[1]]
+
+  source <- data_source(con, tables = model$dependencies)
+  label <- table_id_label(model$id)
+  registry <- semantic_models_registry(list(snowflake = source))
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(snowflake = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = registry
+  )
+
+  expect_contains(names(source$semantic_models), label)
+  expect_equal(result@extra$commons_tag, "A")
+
+  selected_key <- semantic_id_key(table, model$backend)
+  dependency_keys <- vapply(
+    model$dependencies,
+    semantic_id_key,
+    character(1),
+    backend = model$backend
+  )
+  if (!selected_key %in% dependency_keys) {
+    outside <- data_source(con, tables = table)
+    expect_false(label %in% names(outside$semantic_models))
+  }
 })
 
 test_that("live Databricks discovers and describes catalog relations", {
@@ -332,6 +489,153 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_match(tool@value, "Sample summary")
 })
 
+test_that("live Databricks rejects changed session namespaces", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  source <- data_source(con, tables = table)
+  current <- source$session$namespace
+  alternate_catalog <- table@name[["catalog"]]
+  if (identical(current$catalog, alternate_catalog)) {
+    skip("The configured Databricks catalog is already active")
+  }
+  DBI::dbExecute(
+    con,
+    paste("USE CATALOG", DBI::dbQuoteIdentifier(con, alternate_catalog))
+  )
+
+  expect_error(
+    source_query(source, paste("SELECT * FROM", DBI::dbQuoteIdentifier(con, table))),
+    class = "commons_catalog_session_changed"
+  )
+})
+
+test_that("live Databricks classifies denied query access", {
+  denied <- warehouse_test_denied_table("databricks")
+  con <- local_warehouse_connection("databricks", require_table = FALSE)
+
+  expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
+  expect_error(
+    data_source(con, tables = denied),
+    class = "commons_catalog_authorization_error"
+  )
+})
+
+test_that("live Databricks searches a broad manifest before hydration", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  catalog <- table@name[["catalog"]]
+  skip_if(is.null(catalog), "The Databricks table needs a catalog")
+
+  source <- data_source(con, tables = DBI::Id(catalog = catalog))
+  described <- Filter(
+    function(relation) {
+      !is.null(relation$description) && nzchar(relation$description)
+    },
+    source$manifest$relations
+  )
+  skip_if(length(described) == 0L, "No described catalog relation is available")
+  target <- names(described)[[1]]
+  relation <- described[[1]]
+  terms <- setdiff(
+    catalog_search_terms(relation$description),
+    catalog_search_terms(catalog_relation_name(relation))
+  )
+  terms <- terms[order(nchar(terms), decreasing = TRUE)]
+  matching_terms <- terms[vapply(terms, function(term) {
+    target %in% names(catalog_search(source, term))
+  }, logical(1))]
+  skip_if(length(matching_terms) == 0L, "No description term finds its relation")
+  query <- matching_terms[[1]]
+
+  expect_true(catalog_searchable(source))
+  expect_contains(names(catalog_search(source, query)), target)
+  expect_null(source$manifest$relations[[target]]$columns)
+
+  described <- source_describe(source, target, n_sample = 1L)
+
+  expect_gt(nrow(described$schema), 0L)
+  expect_identical(
+    source$manifest$relations[[target]]$columns,
+    described$schema
+  )
+})
+
+test_that("live Databricks scopes models associated with physical tables", {
+  table <- warehouse_test_table("databricks")
+  con <- local_warehouse_connection("databricks")
+  components <- table@name
+  skip_if_not(
+    all(c("catalog", "schema", "table") %in% names(components)),
+    "The Databricks test table must be fully qualified"
+  )
+  namespace <- DBI::Id(
+    catalog = components[["catalog"]],
+    schema = components[["schema"]]
+  )
+  views <- Filter(
+    function(relation) identical(relation$kind, "metric_view"),
+    databricks_list_relations(con, namespace)
+  )
+  models <- lapply(views, function(view) {
+    tryCatch(databricks_read_semantic_model(view, con), error = function(err) NULL)
+  })
+  models <- Filter(function(model) {
+    !is.null(model) &&
+      !inherits(model, "commons_unsupported_databricks_metric_view") &&
+      isTRUE(model$dependencies_complete) &&
+      length(model$dependencies) > 0L &&
+      length(model$metrics) > 0L
+  }, models)
+  skip_if(length(models) == 0L, "No queryable associated metric view is configured")
+  model <- models[[1]]
+
+  source <- data_source(con, tables = model$dependencies)
+  label <- table_id_label(model$id)
+  registry <- semantic_models_registry(list(databricks = source))
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(databricks = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = registry
+  )
+
+  expect_contains(names(source$semantic_models), label)
+  expect_equal(result@extra$commons_tag, "A")
+
+  selected_key <- semantic_id_key(table, model$backend)
+  dependency_keys <- vapply(
+    model$dependencies,
+    semantic_id_key,
+    character(1),
+    backend = model$backend
+  )
+  if (!selected_key %in% dependency_keys) {
+    outside <- data_source(con, tables = table)
+    expect_false(label %in% names(outside$semantic_models))
+  }
+})
+
+test_that("live Databricks binds native metric-view parameters", {
+  configured <- warehouse_test_parameterized_model("databricks")
+  con <- local_warehouse_connection("databricks", require_table = FALSE)
+  source <- data_source(con, tables = configured$id)
+  model <- source$semantic_models[[table_id_label(configured$id)]]
+  expect_true(length(model$parameters) > 0L)
+  expect_true(length(model$metrics) > 0L)
+
+  result <- call_metrics_impl(
+    empty_definitions(),
+    list(databricks = source),
+    new_handle_store(),
+    metrics = model$metrics[[1]]$name,
+    semantic_models = semantic_models_registry(list(databricks = source)),
+    arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
+  )
+
+  expect_equal(result@extra$commons_tag, "A")
+})
+
 test_that("live Databricks handles quoted relation and column names", {
   warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
@@ -368,7 +672,7 @@ test_that("live Databricks executes compiled definition mappings", {
   source <- data_source(con, tables = table, dictionary = dictionary)
   definitions <- source$dictionary$tables[[label]]$definitions
   expect_equal(
-    vapply(definitions, `[[`, character(1), "target"),
+    unname(vapply(definitions, `[[`, character(1), "target")),
     rep("SQL(databricks)", length(definitions))
   )
 
@@ -441,4 +745,8 @@ test_that("live Databricks executes compiled definition mappings", {
     )
   )[[1]][[1]]
   expect_true(is.na(empty_boolean_fold))
+})
+
+test_that("live Databricks executes typed trusted calculations", {
+  expect_warehouse_trusted_calculation("databricks")
 })

@@ -159,6 +159,71 @@ test_that("Databricks metric YAML expands wildcard fields from metadata", {
   )
 })
 
+test_that("Databricks metric scope retains source and join dependencies", {
+  specification <- list(
+    version = 1.1,
+    comment = "Governed order metrics.",
+    ai_context = "Treat returned orders as active.",
+    source = "main.sales.orders",
+    filter = "source.is_active",
+    joins = list(list(
+      name = "customer",
+      source = "main.sales.customers",
+      on = "source.customer_id = customer.id",
+      joins = list(list(
+        name = "region",
+        source = "`main`.`sales`.`sales regions`",
+        using = "region_id"
+      ))
+    )),
+    fields = list(list(name = "region", expr = "region.name")),
+    measures = list(list(name = "revenue", expr = "SUM(source.revenue)"))
+  )
+  id <- DBI::Id(
+    catalog = "main",
+    schema = "sales",
+    table = "order_metrics"
+  )
+
+  model <- databricks_semantic_model_from_spec(id, specification)
+
+  expect_true(model$dependencies_complete)
+  expect_equal(
+    vapply(model$dependencies, table_id_label, character(1)),
+    c(
+      "main.sales.orders",
+      "main.sales.customers",
+      "main.sales.sales regions"
+    )
+  )
+  expect_equal(model$relationships, specification$joins)
+  expect_equal(model$filters, list("source.is_active"))
+  expect_true(any(grepl("Treat returned orders", model$context$retrieval)))
+  expect_true(any(grepl("customer", model$context$first_touch)))
+  expect_true(any(grepl("sales regions", model$context$retrieval)))
+})
+
+test_that("Databricks query-backed metrics fail closed for association", {
+  model <- databricks_semantic_model_from_spec(
+    DBI::Id(catalog = "main", schema = "sales", table = "order_metrics"),
+    list(
+      version = 1.1,
+      source = "SELECT * FROM main.sales.orders",
+      measures = list(list(name = "orders", expr = "COUNT(1)"))
+    )
+  )
+
+  expect_false(model$dependencies_complete)
+  expect_false(semantic_model_in_scope(
+    model,
+    list(list(id = DBI::Id(
+      catalog = "main",
+      schema = "sales",
+      table = "orders"
+    )))
+  ))
+})
+
 test_that("Databricks rejects metric semantics it cannot query faithfully", {
   id <- DBI::Id(
     catalog = "main",
@@ -169,23 +234,123 @@ test_that("Databricks rejects metric semantics it cannot query faithfully", {
   expect_error(
     databricks_semantic_model_from_spec(
       id,
-      list(
-        version = 1.1,
-        parameters = list(list(name = "minimum_amount")),
-        measures = list(list(name = "revenue", expr = "SUM(revenue)"))
-      )
-    ),
-    "Parameterized Databricks metric views are not supported",
-    fixed = TRUE
-  )
-  expect_error(
-    databricks_semantic_model_from_spec(
-      id,
       list(version = 1.1, fields = list(list(expr = "source.*")))
     ),
     "wildcard members require concrete column metadata",
     fixed = TRUE
   )
+})
+
+test_that("Databricks imports and binds metric-view parameters", {
+  model <- databricks_semantic_model_from_spec(
+    DBI::Id(
+      catalog = "main",
+      schema = "analytics",
+      table = "sales_metrics"
+    ),
+    list(
+      version = 1.1,
+      parameters = list(list(
+        name = "minimum_amount",
+        data_type = "DECIMAL(10,2)",
+        default = 10
+      )),
+      measures = list(list(name = "revenue", expr = "SUM(revenue)"))
+    )
+  )
+  source <- test_source()
+  source$semantic_models <- list(model = model)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(databricks = source))
+  )
+  metrics <- members[members$kind == "metric", , drop = FALSE]
+  sql <- databricks_semantic_metric_sql(
+    model,
+    metrics,
+    members[0, , drop = FALSE],
+    where = NULL,
+    members = members,
+    con = DBI::ANSI(),
+    arguments = list(minimum_amount = 25)
+  )
+
+  expect_equal(model$parameters$minimum_amount$type, "number")
+  expect_equal(model$parameters$minimum_amount$default, 10)
+  expect_match(
+    sql,
+    'FROM "main"."analytics"."sales_metrics"("minimum_amount" => ?)',
+    fixed = TRUE
+  )
+})
+
+test_that("Databricks hydrates only explicitly selected metric views", {
+  metric <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    kind = "metric_view"
+  )
+  label <- table_id_label(metric$id)
+  orders <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "orders"),
+    kind = "table"
+  )
+  orders_label <- table_id_label(orders$id)
+  exact <- FALSE
+  local_mocked_bindings(
+    catalog_table_registry = function(...) {
+      list(
+        labels = c(orders_label, label),
+        ids = stats::setNames(list(orders$id, metric$id), c(orders_label, label)),
+        relations = stats::setNames(
+          list(orders, metric),
+          c(orders_label, label)
+        ),
+        validate = list(
+          labels = if (exact) label else character(),
+          ids = if (exact) stats::setNames(list(metric$id), label) else list()
+        ),
+        namespace_selected = !exact
+      )
+    },
+    databricks_read_semantic_model = function(...) {
+      databricks_unsupported_metric_view(
+        metric$id,
+        "unsupported parameter type ARRAY"
+      )
+    },
+    databricks_associated_semantic_models = function(...) list()
+  )
+
+  discovered <- databricks_table_registry(DBI::ANSI())
+  expect_length(discovered$semantic_models, 0L)
+  expect_named(discovered$semantic_stubs, label)
+
+  exact <- TRUE
+  expect_error(
+    databricks_table_registry(DBI::ANSI()),
+    "selected Databricks metric views are not supported"
+  )
+})
+
+test_that("Databricks reads unsupported parameter types as unsupported models", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  local_mocked_bindings(
+    databricks_view_definition = function(...) paste(
+      "version: 1.1",
+      "parameters:",
+      "  - name: dimensions",
+      "    data_type: ARRAY",
+      "measures:",
+      "  - name: revenue",
+      sep = "\n"
+    )
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+  expect_s3_class(model, "commons_unsupported_databricks_metric_view")
+  expect_match(model$reason, "unsupported type", fixed = TRUE)
 })
 
 test_that("Databricks metric SQL uses MEASURE and model fields", {

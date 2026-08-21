@@ -5,16 +5,30 @@ build_commons_tools <- function(self, private) {
     if (pool_searchable(
       private$registry,
       private$definitions,
-      private$semantic_models
+      private$semantic_models,
+      private$calculations
     )) {
       list(tool_search_pool(private))
     },
     if (length(private$registry) > 0) list(tool_call_measure(private)),
     if (
       registry_has_metrics(private$definitions) ||
-        semantic_registry_has_metrics(private$semantic_models)
+        semantic_registry_has_metrics(private$semantic_models) ||
+        sources_have_semantic_stubs(private$sources)
     ) {
       list(tool_call_metrics(private))
+    },
+    if (
+      length(private$calculations) ||
+        sources_have_semantic_stubs(
+          private$sources,
+          backend = "snowflake_semantic_view"
+        )
+    ) {
+      list(tool_call_calculation(private))
+    },
+    if (any(vapply(private$sources, catalog_searchable, logical(1)))) {
+      list(tool_search_catalog(private))
     },
     list(
       tool_search_context(private),
@@ -25,16 +39,77 @@ build_commons_tools <- function(self, private) {
   )
 }
 
+tool_search_catalog <- function(private) {
+  ellmer::tool(
+    function(query, kinds = NULL, source = NULL) {
+      src <- resolve_sql_source(private$sources, source)
+      if (!catalog_searchable(src)) {
+        return("This data source does not have a searchable catalog.")
+      }
+      results <- catalog_search(src, query, kinds)
+      body <- if (length(results)) {
+        paste(vapply(names(results), function(label) {
+          relation <- results[[label]]
+          summary <- relation$description %||% "No description."
+          kind <- relation$kind %||% "unknown kind"
+          sprintf("- `%s` (%s): %s", label, kind, summary)
+        }, character(1)), collapse = "\n")
+      } else {
+        sprintf("No catalog objects found for \"%s\".", query)
+      }
+      tool_result(
+        body,
+        title = "Searched the data catalog",
+        icon = maybe_icon("search"),
+        markdown = body
+      )
+    },
+    paste(
+      "Search a broad selected catalog by object name and description.",
+      "Results are stable object names for describe_table."
+    ),
+    arguments = list(
+      query = ellmer::type_string("The data you need, in plain language."),
+      kinds = ellmer::type_array(
+        ellmer::type_string(),
+        "Optional object kinds such as table or view.",
+        required = FALSE
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "search_catalog",
+    annotations = ellmer::tool_annotations(
+      title = "Search the data catalog",
+      icon = maybe_icon("search"),
+      read_only_hint = TRUE
+    )
+  )
+}
+
 # Measures are never listed in the system prompt, and definitions past their
 # ambient cap aren't either; a search tool over a fully visible pool would
 # just cost the model a verification round trip.
-pool_searchable <- function(measures, definitions, semantic_models = NULL) {
+pool_searchable <- function(
+  measures,
+  definitions,
+  semantic_models = NULL,
+  calculations = list()
+) {
   has_semantic_models <- !is.null(semantic_models) &&
     nrow(registry_semantic_members(semantic_models)) > 0L
-  length(measures) > 0 || definitions_overflow(definitions) || has_semantic_models
+  has_semantic_stubs <- !is.null(semantic_models) &&
+    nrow(registry_semantic_stubs(semantic_models)) > 0L
+  length(measures) > 0 ||
+    definitions_overflow(definitions) ||
+    has_semantic_models ||
+    has_semantic_stubs ||
+    length(calculations) > 0L
 }
 
 tool_search_pool <- function(private) {
+  has_semantic_stubs <- nrow(
+    registry_semantic_stubs(private$semantic_models)
+  ) > 0L
   source_names <- if (length(private$sources) > 1) {
     names(private$sources)
   } else {
@@ -47,6 +122,12 @@ tool_search_pool <- function(private) {
     },
     if (nrow(registry_semantic_members(private$semantic_models)) > 0) {
       "native semantic-model metrics (run with call_metrics)"
+    },
+    if (nrow(registry_semantic_stubs(private$semantic_models)) > 0) {
+      "semantic models (inspect with describe_table)"
+    },
+    if (length(private$calculations)) {
+      "exact trusted queries (run with call_calculation)"
     }
   )
   ellmer::tool(
@@ -56,7 +137,8 @@ tool_search_pool <- function(private) {
         private$definitions,
         query,
         source_names,
-        semantic_models = private$semantic_models
+        semantic_models = private$semantic_models,
+        calculations = private$calculations
       )
       tool_result(
         body,
@@ -66,7 +148,11 @@ tool_search_pool <- function(private) {
     },
     sprintf(
       paste(
-        "Search the semantic layer's trusted calculations: %s.",
+        if (has_semantic_stubs) {
+          "Search the semantic layer's trusted calculations and models: %s."
+        } else {
+          "Search the semantic layer's trusted calculations: %s."
+        },
         "For every data question, use this before any other data",
         "tool, even if a table looks easy to query directly. Use the exact",
         "names it returns."
@@ -94,6 +180,7 @@ tool_call_metrics <- function(private) {
       dimensions = NULL,
       filters = NULL,
       where = NULL,
+      arguments = "{}",
       source = NULL
     ) {
       call_metrics_impl(
@@ -105,7 +192,8 @@ tool_call_metrics <- function(private) {
         filters = filters,
         where = where,
         source_name = source,
-        semantic_models = private$semantic_models
+        semantic_models = private$semantic_models,
+        arguments = arguments
       )
     },
     sprintf(
@@ -117,9 +205,14 @@ tool_call_metrics <- function(private) {
       if (pool_searchable(
         private$registry,
         private$definitions,
-        private$semantic_models
+        private$semantic_models,
+        private$calculations
       )) {
-        "the system prompt or search_pool"
+        if (nrow(registry_semantic_stubs(private$semantic_models))) {
+          "the system prompt, search_pool, or describe_table"
+        } else {
+          "the system prompt or search_pool"
+        }
       } else {
         "the system prompt"
       }
@@ -155,11 +248,53 @@ tool_call_metrics <- function(private) {
         "Simple column predicates, e.g. a date range.",
         required = FALSE
       ),
+      arguments = ellmer::type_string(
+        "A JSON object of native semantic-model parameter values.",
+        required = FALSE
+      ),
       source = sql_source_type(private$sources)
     ),
     name = "call_metrics",
     annotations = ellmer::tool_annotations(
       title = "Metrics",
+      icon = maybe_icon("shield-check"),
+      read_only_hint = TRUE
+    )
+  )
+}
+
+tool_call_calculation <- function(private) {
+  ellmer::tool(
+    function(name, arguments = "{}", source = NULL) {
+      call_calculation_impl(
+        private$calculations,
+        private$sources,
+        private$handles,
+        name,
+        arguments,
+        source_name = source
+      )
+    },
+    paste(
+      paste(
+        "Run an exact trusted query returned by search_pool or",
+        "describe_table."
+      ),
+      "Arguments are validated and bound; identifier arguments accept only",
+      "the values listed by search_pool or describe_table."
+    ),
+    arguments = list(
+      name = ellmer::type_string(
+        "The calculation name, exactly as returned by search_pool."
+      ),
+      arguments = ellmer::type_string(
+        "A JSON object of the calculation's arguments."
+      ),
+      source = sql_source_type(private$sources)
+    ),
+    name = "call_calculation",
+    annotations = ellmer::tool_annotations(
+      title = "Trusted query",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -228,6 +363,8 @@ tool_search_context <- function(private) {
 }
 
 tool_describe_table <- function(private) {
+  has_semantic_models <- sources_have_semantic_models(private$sources) ||
+    sources_have_semantic_stubs(private$sources)
   ellmer::tool(
     function(table, source = NULL) {
       describe_table_tool(
@@ -237,10 +374,25 @@ tool_describe_table <- function(private) {
         tracker = private$first_touch
       )
     },
-    "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table.",
+    if (has_semantic_models) {
+      paste(
+        "Describe a catalog object.",
+        "For tables, return columns, types, and sample rows.",
+        "For semantic models, return public members and any verified queries."
+      )
+    } else {
+      paste(
+        "Describe a table: columns, types, and sample rows.",
+        "Use this before writing SQL against an unfamiliar table."
+      )
+    },
     arguments = list(
       table = ellmer::type_string(
-        "The table name, as listed in the system prompt."
+        if (has_semantic_models) {
+          "The object name, as listed in the system prompt or search results."
+        } else {
+          "The table name, as listed in the system prompt."
+        }
       ),
       source = sql_source_type(private$sources)
     ),
@@ -581,7 +733,21 @@ describe_table_tool <- function(
   tracker = NULL
 ) {
   d <- source_describe(source, table)
+  if (inherits(d, "commons_semantic_model_description")) {
+    body <- semantic_model_description_text(d)
+    return(tool_result(
+      body,
+      title = sprintf("Described %s%s", table, source_label(source_name)),
+      icon = maybe_icon("table"),
+      markdown = body
+    ))
+  }
   entry <- source$dictionary$tables[[table]]
+  context <- if (!table_touched(tracker, source_name, table)) {
+    semantic_model_first_touch(source, table)
+  } else {
+    character()
+  }
   relation <- c(
     if (!is.null(d$kind)) sprintf("Relation type: %s.", d$kind),
     if (is.null(entry)) d$description
@@ -595,10 +761,10 @@ describe_table_tool <- function(
     parts <- c(
       relation,
       sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
+      context,
       sample
     )
   } else {
-    mark_table_touched(tracker, source_name, table)
     columns <- sprintf(
       "Columns of `%s`:\n\n%s",
       table,
@@ -607,9 +773,11 @@ describe_table_tool <- function(
     parts <- c(
       relation,
       dictionary_entry_parts(source$dictionary, table, columns),
+      context,
       sample
     )
   }
+  mark_table_touched(tracker, source_name, table)
 
   body <- paste(parts, collapse = "\n\n")
   tool_result(
@@ -651,11 +819,12 @@ run_sql_tool <- function(
 # appends a harmless note.
 dictionary_sql_entries <- function(source, sql, source_name, tracker) {
   dictionary <- source$dictionary
-  tables <- names(dictionary$tables)
+  tables <- source$tables %||% names(dictionary$tables)
   hits <- tables[vapply(
     tables,
-    dictionary_table_mentioned,
+    source_table_mentioned,
     logical(1),
+    source = source,
     dictionary = dictionary,
     text = sql
   )]
@@ -670,14 +839,51 @@ dictionary_sql_entries <- function(source, sql, source_name, tracker) {
     return(NULL)
   }
 
+  entries <- vapply(
+    hits,
+    source_first_touch_text,
+    character(1),
+    source = source,
+    dictionary = dictionary
+  )
+  keep <- nzchar(entries)
+  hits <- hits[keep]
+  entries <- entries[keep]
+  if (length(hits) == 0L) {
+    return(NULL)
+  }
   for (table in hits) {
     mark_table_touched(tracker, source_name, table)
   }
-  vapply(
-    hits,
-    function(table) dictionary_entry_text(dictionary, table),
-    character(1)
+  unname(entries)
+}
+
+source_first_touch_text <- function(table, source, dictionary) {
+  paste(
+    c(
+      if (!is.null(dictionary$tables[[table]])) {
+        dictionary_entry_text(dictionary, table)
+      },
+      semantic_model_first_touch(source, table)
+    ),
+    collapse = "\n\n"
   )
+}
+
+source_table_mentioned <- function(table, source, dictionary, text) {
+  if (
+    !is.null(dictionary$tables[[table]]) &&
+      dictionary_table_mentioned(table, dictionary, text)
+  ) {
+    return(TRUE)
+  }
+  id <- source$table_ids[[table]]
+  candidates <- unique(c(table, id@name[["table"]]))
+  any(vapply(
+    candidates,
+    function(candidate) grepl(word_pattern(candidate), text, ignore.case = TRUE),
+    logical(1)
+  ))
 }
 
 # Which tables' dictionary entries this conversation has already seen, so
@@ -738,7 +944,7 @@ tool_result <- function(
 
 visible_result_note <- function(type) {
   paste(
-    sprintf("This %s is now visible to the user.", type),
+    sprintf("This %s is already visible to the user.", type),
     "**Do not recreate or repeat it**."
   )
 }

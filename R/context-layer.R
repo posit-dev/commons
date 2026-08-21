@@ -43,7 +43,13 @@ context_layer <- function(files = character()) {
 augment_context_layer <- function(context_layer, sources) {
   chunks <- unlist(lapply(
     sources,
-    function(source) dictionary_context_chunks(source$dictionary)
+    function(source) c(
+      dictionary_context_chunks(source$dictionary),
+      unlist(lapply(
+        source$semantic_models,
+        function(model) model$context$retrieval
+      ), use.names = FALSE)
+    )
   ))
   if (length(chunks) == 0) {
     return(context_layer)

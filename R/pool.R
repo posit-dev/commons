@@ -11,10 +11,22 @@ call_metrics_impl <- function(
   filters = NULL,
   where = NULL,
   source_name = NULL,
-  semantic_models = NULL
+  semantic_models = NULL,
+  arguments = "{}"
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
+  n_models <- length(source$semantic_models)
+  source <- source_hydrate_semantic_models(source, metrics)
+  if (length(source$semantic_models) > n_models) {
+    source_index <- if (length(sources) == 1L) {
+      1L
+    } else {
+      match(label, names(sources))
+    }
+    sources[[source_index]] <- source
+    semantic_models <- semantic_models_registry(sources)
+  }
   defs <- registry_defs(registry, label)
   semantic_models <- semantic_models %||% semantic_models_registry(sources)
   semantic_members <- registry_semantic_members(semantic_models, label)
@@ -33,8 +45,15 @@ call_metrics_impl <- function(
       dimensions,
       filters,
       where,
-      source_name
+      source_name,
+      arguments
     ))
+  }
+
+  if (length(parse_json_args(arguments))) {
+    cli::cli_abort(
+      "{.arg arguments} is supported only for native semantic metrics."
+    )
   }
 
   metric_defs <- resolve_pool_names(metrics, defs, kind = "metric")
@@ -197,17 +216,13 @@ call_semantic_metrics <- function(
   dimensions,
   filters,
   where,
-  source_name
+  source_name,
+  arguments
 ) {
   metric_members <- resolve_semantic_members(metrics, members, "metric")
   models <- unique(metric_members$model)
   if (length(models) != 1L) {
     cli::cli_abort("Metrics in one call must belong to one native semantic model.")
-  }
-  if (length(filters %||% character())) {
-    cli::cli_abort(
-      "Named filters from native semantic models are not supported yet."
-    )
   }
   model <- source$semantic_models[[models[[1]]]]
   model_members <- members[members$model == models[[1]], , drop = FALSE]
@@ -216,29 +231,45 @@ call_semantic_metrics <- function(
     model_members,
     "dimension"
   )
+  filter_members <- resolve_semantic_filters(filters, model_members)
+  arguments <- validate_typed_arguments(
+    model$parameters,
+    parse_json_args(arguments),
+    include_defaults = FALSE
+  )
   sql <- switch(
     model$backend,
     snowflake_semantic_view = snowflake_semantic_metric_sql(
       model,
       metric_members,
       dimension_members,
+      filter_members,
       where,
       model_members,
-      source$con
+      source$con,
+      arguments = arguments
     ),
-    databricks_metric_view = databricks_semantic_metric_sql(
-      model,
-      metric_members,
-      dimension_members,
-      where,
-      model_members,
-      source$con
-    ),
+    databricks_metric_view = {
+      if (nrow(filter_members)) {
+        cli::cli_abort(
+          "Named filters from Databricks metric views are not supported."
+        )
+      }
+      databricks_semantic_metric_sql(
+        model,
+        metric_members,
+        dimension_members,
+        where,
+        model_members,
+        source$con,
+        arguments = arguments
+      )
+    },
     cli::cli_abort(
       "Unsupported native semantic-model backend {.val {model$backend}}."
     )
   )
-  result <- source_query(source, sql)
+  result <- source_query_bind(source, sql, unname(arguments))
   metric_tool_result(
     result,
     sql,
@@ -434,12 +465,20 @@ search_pool_text <- function(
   registry,
   query,
   source_names = character(),
-  semantic_models = NULL
+  semantic_models = NULL,
+  calculations = list()
 ) {
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
   semantic_members <- registry_semantic_members(semantic_models)
-  if (length(measures) == 0 && nrow(defs) == 0 && nrow(semantic_members) == 0) {
+  semantic_stubs <- registry_semantic_stubs(semantic_models)
+  if (
+    length(measures) == 0 &&
+      nrow(defs) == 0 &&
+      nrow(semantic_members) == 0 &&
+      nrow(semantic_stubs) == 0 &&
+      length(calculations) == 0
+  ) {
     return("The semantic layer is empty.")
   }
 
@@ -466,6 +505,29 @@ search_pool_text <- function(
       blank_na(semantic_members$label),
       blank_na(semantic_members$description),
       semantic_members$synonyms
+    ),
+    paste(
+      semantic_stubs$name,
+      semantic_stubs$model,
+      semantic_stubs$backend,
+      blank_na(semantic_stubs$description)
+    ),
+    vapply(
+      calculations,
+      function(calculation) paste(
+        calculation$key,
+        calculation$name,
+        calculation$description,
+        paste(
+          vapply(
+            calculation$arguments,
+            function(argument) argument$description %||% "",
+            character(1)
+          ),
+          collapse = " "
+        )
+      ),
+      character(1)
     )
   )
 
@@ -483,10 +545,45 @@ search_pool_text <- function(
         measure_schema_text(measures[[hit]], source_names = source_names)
       } else if (hit <= length(measures) + nrow(defs)) {
         definition_pool_text(defs[hit - length(measures), ], defs)
-      } else {
+      } else if (
+        hit <= length(measures) + nrow(defs) + nrow(semantic_members)
+      ) {
         semantic_member_pool_text(
           semantic_members[hit - length(measures) - nrow(defs), , drop = FALSE],
           semantic_members,
+          source_names,
+          registry_semantic_parameters(
+            semantic_models,
+            semantic_members[
+              hit - length(measures) - nrow(defs),
+              ,
+              drop = FALSE
+            ]
+          )
+        )
+      } else if (
+        hit <= length(measures) +
+          nrow(defs) +
+          nrow(semantic_members) +
+          nrow(semantic_stubs)
+      ) {
+        semantic_stub_pool_text(
+          semantic_stubs[
+            hit - length(measures) - nrow(defs) - nrow(semantic_members),
+            ,
+            drop = FALSE
+          ],
+          source_names
+        )
+      } else {
+        calculation_pool_text(
+          calculations[[
+            hit -
+              length(measures) -
+              nrow(defs) -
+              nrow(semantic_members) -
+              nrow(semantic_stubs)
+          ]],
           source_names
         )
       }
@@ -494,6 +591,37 @@ search_pool_text <- function(
     character(1)
   )
   paste(blocks, collapse = "\n\n")
+}
+
+semantic_stub_pool_text <- function(stub, source_names = character()) {
+  backend <- switch(
+    stub$backend[[1]],
+    snowflake_semantic_view = "Snowflake semantic view",
+    databricks_metric_view = "Databricks metric view",
+    "semantic model"
+  )
+  source <- if (stub$source[[1]] %in% source_names) {
+    sprintf("\nSource: `%s`.", stub$source[[1]])
+  } else {
+    ""
+  }
+  sprintf(
+    paste0(
+      "### %s --- %s\n%s%s\n",
+      if (identical(stub$backend[[1]], "snowflake_semantic_view")) {
+        paste(
+          "Inspect with `describe_table` to find its public members and",
+          "verified queries."
+        )
+      } else {
+        "Inspect with `describe_table` to find its public members."
+      }
+    ),
+    stub$model[[1]],
+    backend,
+    prose_detail(stub$description[[1]], NA_character_),
+    source
+  )
 }
 
 definition_pool_text <- function(def, defs) {

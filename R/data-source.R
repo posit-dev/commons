@@ -40,14 +40,28 @@
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
-#'   selections import unparameterized metric views, as native trusted metrics
-#'   and dimensions. Databricks wildcard members require concrete column
-#'   metadata from the warehouse.
-#'   Native semantic models are available through `search_pool` and
-#'   `call_metrics`, but are not returned by [list_tables()].
+#'   selections import metric views, as native trusted metrics and dimensions.
+#'   Namespace selections retain lightweight model metadata, then read a
+#'   model's definition when the agent describes or uses it. Explicitly
+#'   selected models are read and validated when the data source is created.
+#'   Snowflake semantic variables and Databricks metric-view parameters are
+#'   passed as typed JSON arguments to `call_metrics`. Databricks wildcard
+#'   members require concrete column metadata from the warehouse.
+#'   Native semantic models are available through `search_pool`,
+#'   `describe_table`, and `call_metrics`, but are not returned by
+#'   [list_tables()].
+#'   Snowflake verified queries are exposed separately as exact trusted
+#'   calculations through `search_pool` and `call_calculation`; their SQL is
+#'   executed as stored rather than parsed to infer dependencies.
+#'   An exact physical-table selection also imports associated models when
+#'   every physical dependency is selected. Public relationships, facts,
+#'   filters, and instructions become table-scoped first-touch and retrieval
+#'   context; private members remain hidden.
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
+#' @param exclude For Snowflake and Databricks namespace selections, optional
+#'   unqualified object-name globs to omit, such as `"TMP_*"`.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
 #'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
@@ -89,6 +103,10 @@
 #' data frames, commons additionally disables extension loading and filesystem
 #' access. These are safeguards, not a sandbox: when you supply your own
 #' connection, still open it in read-only mode where the backend supports it.
+#' Snowflake and Databricks sources snapshot the principal, active role, and
+#' namespace at creation, then reject catalog and governed execution after
+#' those values change. Authored and native semantic material is exposed only
+#' after a zero-row query succeeds for the current principal.
 #'
 #' @return A `commons_data_source` object.
 #'
@@ -99,10 +117,16 @@
 #' list_tables(src)
 #'
 #' @export
-data_source <- function(..., tables = NULL, dictionary = NULL) {
+data_source <- function(..., tables = NULL, exclude = NULL, dictionary = NULL) {
   dots <- rlang::list2(...)
   dictionary <- as_data_dictionary(dictionary)
   kind <- data_source_kind(dots)
+  check_catalog_exclude(exclude)
+  if (!is.null(exclude) && !identical(kind, "connection")) {
+    cli::cli_abort(
+      "{.arg exclude} is supported only for DBI connection data sources."
+    )
+  }
 
   local_commons_span(
     "commons_data_source_create",
@@ -110,7 +134,12 @@ data_source <- function(..., tables = NULL, dictionary = NULL) {
   )
 
   if (kind == "connection") {
-    return(data_source_connection(dots[[1]], tables, dictionary = dictionary))
+    return(data_source_connection(
+      dots[[1]],
+      tables,
+      exclude = exclude,
+      dictionary = dictionary
+    ))
   }
   if (kind == "board") {
     return(data_source_board(dots[[1]], tables, dictionary = dictionary))
@@ -152,22 +181,41 @@ data_source_kind <- function(dots) {
 data_source_connection <- function(
   con,
   tables,
+  exclude = NULL,
   dictionary = NULL,
   call = rlang::caller_env()
 ) {
   span <- local_commons_span("commons_data_source_list_tables")
+  session <- catalog_session_snapshot(con, call = call)
 
   if (is_snowflake_connection(con)) {
-    table_registry <- snowflake_table_registry(con, tables, call = call)
+    table_registry <- snowflake_table_registry(
+      con,
+      tables,
+      exclude = exclude,
+      call = call
+    )
     if (length(table_registry$validate$labels)) {
-      check_table_ids_exist(con, table_registry$validate, call = call)
+      catalog_require_queryable_relations(
+        con,
+        table_registry$validate,
+        relations = table_registry$relations,
+        call = call
+      )
     }
+    table_registry <- catalog_validate_semantic_access(
+      con,
+      table_registry,
+      call = call
+    )
+    table_registry <- catalog_check_nonempty(table_registry, call = call)
     merged <- catalog_merge_dictionary(
       dictionary,
       table_registry$relations,
       con,
       snowflake_describe_relation,
       "upper",
+      access_check = catalog_require_queryable,
       call = call
     )
     dictionary <- merged$dictionary
@@ -177,6 +225,7 @@ data_source_connection <- function(
       "commons.data_source.n_tables",
       length(table_registry$labels)
     )
+    catalog_check_session_snapshot(con, session, call = call)
     return(new_data_source(
       con,
       table_registry$labels,
@@ -185,21 +234,41 @@ data_source_connection <- function(
       dictionary = dictionary,
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
-      semantic_models = table_registry$semantic_models
+      semantic_models = table_registry$semantic_models,
+      semantic_stubs = table_registry$semantic_stubs,
+      namespace_selected = table_registry$namespace_selected,
+      session = session
     ))
   }
 
   if (is_databricks_connection(con)) {
-    table_registry <- databricks_table_registry(con, tables, call = call)
+    table_registry <- databricks_table_registry(
+      con,
+      tables,
+      exclude = exclude,
+      call = call
+    )
     if (length(table_registry$validate$labels)) {
-      check_table_ids_exist(con, table_registry$validate, call = call)
+      catalog_require_queryable_relations(
+        con,
+        table_registry$validate,
+        relations = table_registry$relations,
+        call = call
+      )
     }
+    table_registry <- catalog_validate_semantic_access(
+      con,
+      table_registry,
+      call = call
+    )
+    table_registry <- catalog_check_nonempty(table_registry, call = call)
     merged <- catalog_merge_dictionary(
       dictionary,
       table_registry$relations,
       con,
       databricks_describe_relation,
       "lower",
+      access_check = catalog_require_queryable,
       call = call
     )
     dictionary <- merged$dictionary
@@ -209,6 +278,7 @@ data_source_connection <- function(
       "commons.data_source.n_tables",
       length(table_registry$labels)
     )
+    catalog_check_session_snapshot(con, session, call = call)
     return(new_data_source(
       con,
       table_registry$labels,
@@ -217,8 +287,18 @@ data_source_connection <- function(
       dictionary = dictionary,
       relations = table_registry$relations,
       definition_bindings = merged$definition_bindings,
-      semantic_models = table_registry$semantic_models
+      semantic_models = table_registry$semantic_models,
+      semantic_stubs = table_registry$semantic_stubs,
+      namespace_selected = table_registry$namespace_selected,
+      session = session
     ))
+  }
+
+  if (!is.null(exclude)) {
+    cli::cli_abort(
+      "{.arg exclude} is supported only for Snowflake and Databricks connections.",
+      call = call
+    )
   }
 
   if (is.null(tables)) {
@@ -322,7 +402,10 @@ new_data_source <- function(
   pending = NULL,
   relations = NULL,
   definition_bindings = NULL,
-  semantic_models = list()
+  semantic_models = list(),
+  semantic_stubs = list(),
+  namespace_selected = FALSE,
+  session = NULL
 ) {
   # Disconnect only the DuckDB connection we created; a user-supplied connection
   # has its own owner and lifetime.
@@ -346,8 +429,16 @@ new_data_source <- function(
       dictionary = dictionary,
       pending = pending,
       relations = relations,
+      manifest = new_catalog_manifest(
+        relations,
+        namespace_selected,
+        semantic_stubs
+      ),
+      session = session,
       definition_bindings = definition_bindings,
-      semantic_models = semantic_models
+      semantic_models = semantic_models,
+      semantic_stubs = semantic_stubs,
+      calculations = semantic_model_calculations(semantic_models)
     ),
     class = "commons_data_source"
   )
@@ -517,6 +608,13 @@ source_describe <- function(
   n_sample = 5,
   call = rlang::caller_env()
 ) {
+  catalog_check_session(source, call = call)
+  if (
+    !is.null(source$semantic_models[[table]]) ||
+      !is.null(source$semantic_stubs[[table]])
+  ) {
+    return(source_describe_semantic_model(source, table, call = call))
+  }
   id <- source$table_ids[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
@@ -524,6 +622,7 @@ source_describe <- function(
       i = "Available tables: {.val {source$tables}}."
     ))
   }
+  catalog_ensure_queryable(source, table, call = call)
   source_ensure_tables(source, table)
 
   sample <- DBI::dbGetQuery(
@@ -534,7 +633,7 @@ source_describe <- function(
       n_sample
     )
   )
-  relation <- source$relations[[table]]
+  relation <- source_relation(source, table)
   if (is.null(source$relations)) {
     schema <- data.frame(
       column = names(sample),
@@ -548,6 +647,10 @@ source_describe <- function(
   } else {
     schema <- databricks_describe_relation(source$con, id, call = call)
   }
+  if (!is.null(source$manifest) && is.null(relation$columns)) {
+    relation$columns <- schema
+    source$manifest$relations[[table]] <- relation
+  }
   list(
     schema = schema,
     sample = sample,
@@ -556,7 +659,54 @@ source_describe <- function(
   )
 }
 
+source_describe_semantic_model <- function(
+  source,
+  model,
+  call = rlang::caller_env()
+) {
+  loaded <- source$semantic_models[[model]]
+  if (!is.null(loaded)) {
+    return(structure(
+      list(
+        name = model,
+        kind = loaded$backend,
+        description = loaded$description,
+        model = loaded,
+        error = NULL
+      ),
+      class = "commons_semantic_model_description"
+    ))
+  }
+  stub <- source$semantic_stubs[[model]]
+  hydrated <- tryCatch(
+    semantic_model_from_stub(source, stub, model, call = call),
+    error = function(err) err
+  )
+  structure(
+    list(
+      name = model,
+      kind = stub$backend,
+      description = if (inherits(hydrated, "condition")) {
+        stub$description
+      } else {
+        hydrated$description %||% stub$description
+      },
+      model = if (inherits(hydrated, "condition")) NULL else hydrated,
+      error = if (inherits(hydrated, "condition")) hydrated else NULL
+    ),
+    class = "commons_semantic_model_description"
+  )
+}
+
+source_relation <- function(source, table) {
+  if (!is.null(source$manifest)) {
+    return(source$manifest$relations[[table]])
+  }
+  source$relations[[table]]
+}
+
 source_query <- function(source, sql) {
+  catalog_check_session(source)
   check_query(sql)
   if (is.null(source$pending)) {
     return(DBI::dbGetQuery(source$con, sql))
@@ -581,6 +731,18 @@ source_query <- function(source, sql) {
     }
     source_ensure_tables(source, todo)
   }
+}
+
+source_query_bind <- function(source, sql, bindings = list()) {
+  catalog_check_session(source)
+  check_query(sql)
+  if (length(bindings) == 0L) {
+    return(source_query(source, sql))
+  }
+  result <- DBI::dbSendQuery(source$con, sql)
+  on.exit(DBI::dbClearResult(result), add = TRUE)
+  DBI::dbBind(result, unname(bindings))
+  DBI::dbFetch(result)
 }
 
 # A conservative structural check, not a SQL parser: it pairs with
