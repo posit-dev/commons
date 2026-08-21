@@ -12,6 +12,7 @@ test_that("Shiny Chat renders native numbered streamed citations", {
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
   skip_if_browser_tests_disabled()
+  skip_if_ellmer_streaming_hooks_unavailable()
 
   app <- shinytest2::AppDriver$new(
     browser_test_app("citation-stream"),

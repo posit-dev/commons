@@ -597,6 +597,7 @@ test_that("collect_appended_tags ignores turns before from_index", {
 
 # Split a real ellmer response inside reserved markup to test chunk invariance.
 stream_citations_fixture <- function(agent, raw, split_at) {
+  skip_if_ellmer_streaming_hooks_unavailable()
   final_turn <- ellmer::AssistantTurn(
     list(ellmer::ContentText(raw)),
     tokens = c(0, 0, 0),
@@ -664,6 +665,7 @@ test_that("stream_async projects citations without touching stored turns", {
 })
 
 test_that("stream_async preserves structured provider content", {
+  skip_if_ellmer_streaming_hooks_unavailable()
   structured <- ellmer::ContentThinking("provider citation metadata")
   final_turn <- ellmer::AssistantTurn(
     list(
