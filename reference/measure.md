@@ -46,7 +46,7 @@ A measure object.
 ## Details
 
 Two return types receive special display handling: ggplots and
-[`gt::gt()`](https://rdrr.io/pkg/gt/man/gt.html) tables are shown
+[`gt::gt()`](https://gt.rstudio.com/reference/gt.html) tables are shown
 directly to the user in the opened measure result. The model is told
 that the plot or table has already been shown, so it can interpret the
 result without repeating it.
