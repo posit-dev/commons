@@ -5,12 +5,13 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Getting started with commons • commons</title>
+<title>Introduction to commons • commons</title>
 <script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
-<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="Getting started with commons">
+<script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
+<meta property="og:title" content="Introduction to commons">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -49,7 +50,7 @@
 
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
-      <img src="../logo.png" class="logo" alt=""><h1>Getting started with commons</h1>
+      <img src="../logo.png" class="logo" alt=""><h1>Introduction to commons</h1>
             
       
       <small class="dont-index">Source: <a href="https://github.com/posit-dev/commons/blob/main/vignettes/commons.Rmd" class="external-link"><code>vignettes/commons.Rmd</code></a></small>
@@ -58,14 +59,403 @@
 
     
     
-<div class="callout-note">
-<p>Not much to see here yet. We’ll be back!</p>
-</div>
-<p>This vignette shows the shape of a small commons project.</p>
+<p>This document explains the structure of a commons project and how to
+start building a commons agent.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/posit-dev/commons" class="external-link">commons</a></span><span class="op">)</span></span></code></pre></div>
 <div class="section level2">
-<h2 id="setting-up-the-project-directory">Setting up the project directory<a class="anchor" aria-label="anchor" href="#setting-up-the-project-directory"></a>
+<h2 id="design-philosophy">Design philosophy<a class="anchor" aria-label="anchor" href="#design-philosophy"></a>
+</h2>
+<p>AI agents for data analysis can range from overly cautious and
+narrowly correct to wildly untrustworthy. commons increases the
+likelihood of correct answers by providing agents with access to
+existing trusted code, while still allowing them enough flexibility to
+answer novel, realistic questions. commons also labels answers with
+trust tags based on the analysis path so that users can determine how
+much trust to put in a given answer.</p>
+<p>If you are a data analyst, data scientist, statistical programmer, or
+other data practitioner, you likely have a collection of “trusted” code.
+This is code that you depend on for your analyses and use to create
+apps, reports, and packages. The core idea behind commons is that we can
+improve an agent’s correctness by giving it the right access and
+documentation to run this code.</p>
+<p>The high-trust “happy path” occurs when the user asks a question that
+corresponds to one of these <strong>trusted calculations</strong>. For
+example, say we have a commons agent that can analyze biodiversity data.
+The user asks:</p>
+<blockquote>
+<p>How many total animals were observed at Oak Bluff?</p>
+</blockquote>
+<p>The agent then searches for a trusted calculation that can answer the
+question. If it finds one, it runs that code and then reports the result
+along with a “Verified answer” tag.</p>
+<blockquote>
+<p>At Oak Bluff, 59 individual animals were observed across 5 species,
+based on 28 hours of survey effort. Note this reflects observed
+individuals during surveys, not necessarily a full census of every
+animal present at the site.</p>
+<p><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23fff%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%232fa37b%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8%2C15.47c-.06%2C0-.13-.01-.22-.04s-.18-.06-.27-.11c-1.04-.59-1.92-1.11-2.63-1.56s-1.29-.89-1.72-1.32c-.44-.42-.75-.88-.95-1.38s-.29-1.07-.29-1.74V3.72c0-.39.08-.66.25-.83.16-.17.4-.32.71-.44.17-.07.41-.17.71-.29s.64-.24%2C1-.38c.37-.14.73-.27%2C1.1-.41.36-.13.7-.25%2C1-.36.3-.1.54-.18.72-.23.1-.02.2-.05.3-.07.1-.02.21-.04.31-.04s.21.01.31.03c.1.02.21.05.3.08.17.06.41.14.71.25s.64.23%2C1%2C.36c.37.13.73.27%2C1.09.4.37.13.7.26%2C1%2C.37s.54.21.71.28c.31.13.55.28.71.45.16.17.24.44.24.83v5.6c0%2C.67-.1%2C1.25-.29%2C1.75-.19.5-.51.96-.94%2C1.38-.44.42-1.01.86-1.73%2C1.31-.71.45-1.6.97-2.64%2C1.56-.09.05-.18.09-.27.11s-.16.04-.22.04Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-1%22%20d%3D%22M7.36%2C11.46c-.26%2C0-.47-.1-.64-.31l-1.8-2.49c-.07-.08-.12-.17-.15-.25s-.04-.16-.04-.25c0-.19.06-.35.19-.47s.29-.19.49-.19c.22%2C0%2C.4.09.55.27l1.39%2C2.05%2C2.65-4.78c.09-.13.17-.22.26-.27.09-.05.2-.08.34-.08.19%2C0%2C.35.06.48.19s.19.28.19.47c0%2C.07-.01.15-.04.23-.03.08-.07.16-.12.24l-3.1%2C5.31c-.15.23-.37.34-.65.34Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></p>
+</blockquote>
+<p>Although the agent had to decide which trusted calculation to run, it
+did not have to decide <em>what code to write</em>, reducing degrees of
+freedom and allowing it to take advantage of pre-vetted code.</p>
+<p>However, we also expect users to ask questions that stray from the
+“happy path.” For those, the agent searches for additional context and
+writes custom code (either SQL or R). Answers from this path either
+include a verified citation or are tagged as <code>Untrusted</code>.</p>
+</div>
+<div class="section level2">
+<h2 id="working-with-the-agent-skill">Working with the agent skill<a class="anchor" aria-label="anchor" href="#working-with-the-agent-skill"></a>
+</h2>
+<p>The package includes a commons <a href="https://agentskills.io/" class="external-link">agent skill</a> that helps coding agents
+build, evaluate, and improve commons agents. We recommend installing it
+before you begin because it provides detailed guidance and a structured
+workflow.</p>
+<p>To make the skill available to <strong>Posit Assistant or
+Codex</strong>, copy the skill and its references to
+<code>.agents/skills</code>:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">skill</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"skills"</span>, <span class="st">"commons"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span><span class="va">skill</span>, <span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p>For <strong>Claude Code</strong>, copy the skill and its references
+to <code>.claude/skills</code>:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">skill</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"skills"</span>, <span class="st">"commons"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".claude/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span><span class="va">skill</span>, <span class="st">".claude/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="trust-flow">Trust flow<a class="anchor" aria-label="anchor" href="#trust-flow"></a>
+</h2>
+<p>commons agents will use trusted calculations whenever possible. When
+the user asks a question, the agent first searches the semantic layer
+for a trusted calculation. If it finds one, it then calls that
+calculation and the resulting answer is tagged with a green verified
+answer pill.</p>
+<p>If a relevant trusted calculation is not found, the agent proceeds
+down the lower trust path. It searches through the context for
+additional information, then uses that information to write custom SQL
+or R code to answer the user’s question. These answers either include a
+verified citation in a footnote or are tagged as
+<code>Untrusted</code>.</p>
+<figure class="commons-flow commons-flow-trusted-calculations column-page"><div class="commons-branch-flow" role="img" aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
+<div class="commons-branch-origin">
+<p><span class="commons-flow-node">Search
+trusted<br>calculations</span></p>
+</div>
+<div class="commons-branch-connectors" aria-hidden="true">
+<p><span class="commons-flow-arrow commons-flow-arrow-up">→</span> <span class="commons-flow-arrow commons-flow-arrow-down">→</span></p>
+</div>
+<div class="commons-branch-routes">
+<div class="commons-trust-segment commons-trust-segment-high">
+<div class="commons-trust-label">
+High trust
+</div>
+<div class="commons-trust-steps">
+<p><span class="commons-flow-node">Relevant calculation<br>found</span>
+<span class="commons-flow-arrow">→</span> <span class="commons-flow-node">Run trusted<br>calculation</span> <span class="commons-flow-arrow">→</span>
+<span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23fff%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%232fa37b%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8%2C15.47c-.06%2C0-.13-.01-.22-.04s-.18-.06-.27-.11c-1.04-.59-1.92-1.11-2.63-1.56s-1.29-.89-1.72-1.32c-.44-.42-.75-.88-.95-1.38s-.29-1.07-.29-1.74V3.72c0-.39.08-.66.25-.83.16-.17.4-.32.71-.44.17-.07.41-.17.71-.29s.64-.24%2C1-.38c.37-.14.73-.27%2C1.1-.41.36-.13.7-.25%2C1-.36.3-.1.54-.18.72-.23.1-.02.2-.05.3-.07.1-.02.21-.04.31-.04s.21.01.31.03c.1.02.21.05.3.08.17.06.41.14.71.25s.64.23%2C1%2C.36c.37.13.73.27%2C1.09.4.37.13.7.26%2C1%2C.37s.54.21.71.28c.31.13.55.28.71.45.16.17.24.44.24.83v5.6c0%2C.67-.1%2C1.25-.29%2C1.75-.19.5-.51.96-.94%2C1.38-.44.42-1.01.86-1.73%2C1.31-.71.45-1.6.97-2.64%2C1.56-.09.05-.18.09-.27.11s-.16.04-.22.04Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-1%22%20d%3D%22M7.36%2C11.46c-.26%2C0-.47-.1-.64-.31l-1.8-2.49c-.07-.08-.12-.17-.15-.25s-.04-.16-.04-.25c0-.19.06-.35.19-.47s.29-.19.49-.19c.22%2C0%2C.4.09.55.27l1.39%2C2.05%2C2.65-4.78c.09-.13.17-.22.26-.27.09-.05.2-.08.34-.08.19%2C0%2C.35.06.48.19s.19.28.19.47c0%2C.07-.01.15-.04.23-.03.08-.07.16-.12.24l-3.1%2C5.31c-.15.23-.37.34-.65.34Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></p>
+</div>
+</div>
+<div class="commons-trust-segment commons-trust-segment-lower">
+<div class="commons-trust-label">
+Lower trust
+</div>
+<div class="commons-trust-steps">
+<p><span class="commons-flow-node">No relevant<br>calculation
+found</span> <span class="commons-flow-arrow">→</span> <span class="commons-flow-node">Search<br>context</span> <span class="commons-flow-arrow">→</span> <span class="commons-flow-node">Write<br>SQL/R</span> <span class="commons-flow-arrow">→</span> <span class="commons-flow-results">
+<span class="commons-flow-answer"> Cited
+answer<sup class="commons-citation-ref">1</sup></span> <span class="commons-flow-or">or</span>
+<span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23e7b921%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23965b25%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Ccircle%20class%3D%22cls-1%22%20cx%3D%228%22%20cy%3D%228%22%20r%3D%227%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8.15%2C12.64c-.26%2C0-.47-.09-.65-.27-.18-.18-.27-.4-.27-.65s.09-.48.27-.66c.18-.18.4-.27.65-.27s.47.09.64.27.27.4.27.66-.09.47-.27.65-.39.27-.64.27ZM7.46%2C9.49l-.13-6.13h1.62l-.12%2C6.13h-1.38Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong.</span> </span>
+</span></p>
+</div>
+</div>
+</div>
+</div>
+</figure><p>There are two possible trust outcomes for the “lower trust” path.
+When the agent writes custom SQL or R, it can also include supporting
+text quoted from a trusted source. commons verifies that the quoted text
+appears in that source. Verified citations are displayed as footnotes.
+If the agent does not include a citation, or if commons can’t verify any
+of its citations, the answer gets tagged as <code>Untrusted</code>.</p>
+<p>The following table details the various ways each trust outcome can
+occur:</p>
+<table class="table">
+<colgroup>
+<col width="50%">
+<col width="50%">
+</colgroup>
+<thead><tr class="header">
+<th>How the answer is produced</th>
+<th>Outcome</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>A trusted R <a href="#semantic-layer">measure</a>
+</td>
+<td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23fff%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%232fa37b%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8%2C15.47c-.06%2C0-.13-.01-.22-.04s-.18-.06-.27-.11c-1.04-.59-1.92-1.11-2.63-1.56s-1.29-.89-1.72-1.32c-.44-.42-.75-.88-.95-1.38s-.29-1.07-.29-1.74V3.72c0-.39.08-.66.25-.83.16-.17.4-.32.71-.44.17-.07.41-.17.71-.29s.64-.24%2C1-.38c.37-.14.73-.27%2C1.1-.41.36-.13.7-.25%2C1-.36.3-.1.54-.18.72-.23.1-.02.2-.05.3-.07.1-.02.21-.04.31-.04s.21.01.31.03c.1.02.21.05.3.08.17.06.41.14.71.25s.64.23%2C1%2C.36c.37.13.73.27%2C1.09.4.37.13.7.26%2C1%2C.37s.54.21.71.28c.31.13.55.28.71.45.16.17.24.44.24.83v5.6c0%2C.67-.1%2C1.25-.29%2C1.75-.19.5-.51.96-.94%2C1.38-.44.42-1.01.86-1.73%2C1.31-.71.45-1.6.97-2.64%2C1.56-.09.05-.18.09-.27.11s-.16.04-.22.04Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-1%22%20d%3D%22M7.36%2C11.46c-.26%2C0-.47-.1-.64-.31l-1.8-2.49c-.07-.08-.12-.17-.15-.25s-.04-.16-.04-.25c0-.19.06-.35.19-.47s.29-.19.49-.19c.22%2C0%2C.4.09.55.27l1.39%2C2.05%2C2.65-4.78c.09-.13.17-.22.26-.27.09-.05.2-.08.34-.08.19%2C0%2C.35.06.48.19s.19.28.19.47c0%2C.07-.01.15-.04.23-.03.08-.07.16-.12.24l-3.1%2C5.31c-.15.23-.37.34-.65.34Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></td>
+</tr>
+<tr class="even">
+<td>A <a href="#definitions">data-dictionary metric</a>, possibly
+grouped or filtered with <a href="#data-dictionaries">definitions</a>
+</td>
+<td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23fff%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%232fa37b%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8%2C15.47c-.06%2C0-.13-.01-.22-.04s-.18-.06-.27-.11c-1.04-.59-1.92-1.11-2.63-1.56s-1.29-.89-1.72-1.32c-.44-.42-.75-.88-.95-1.38s-.29-1.07-.29-1.74V3.72c0-.39.08-.66.25-.83.16-.17.4-.32.71-.44.17-.07.41-.17.71-.29s.64-.24%2C1-.38c.37-.14.73-.27%2C1.1-.41.36-.13.7-.25%2C1-.36.3-.1.54-.18.72-.23.1-.02.2-.05.3-.07.1-.02.21-.04.31-.04s.21.01.31.03c.1.02.21.05.3.08.17.06.41.14.71.25s.64.23%2C1%2C.36c.37.13.73.27%2C1.09.4.37.13.7.26%2C1%2C.37s.54.21.71.28c.31.13.55.28.71.45.16.17.24.44.24.83v5.6c0%2C.67-.1%2C1.25-.29%2C1.75-.19.5-.51.96-.94%2C1.38-.44.42-1.01.86-1.73%2C1.31-.71.45-1.6.97-2.64%2C1.56-.09.05-.18.09-.27.11s-.16.04-.22.04Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-1%22%20d%3D%22M7.36%2C11.46c-.26%2C0-.47-.1-.64-.31l-1.8-2.49c-.07-.08-.12-.17-.15-.25s-.04-.16-.04-.25c0-.19.06-.35.19-.47s.29-.19.49-.19c.22%2C0%2C.4.09.55.27l1.39%2C2.05%2C2.65-4.78c.09-.13.17-.22.26-.27.09-.05.2-.08.34-.08.19%2C0%2C.35.06.48.19s.19.28.19.47c0%2C.07-.01.15-.04.23-.03.08-.07.16-.12.24l-3.1%2C5.31c-.15.23-.37.34-.65.34Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></td>
+</tr>
+<tr class="odd">
+<td>A <a href="#warehouse-semantic-layers">Snowflake semantic-view or
+Databricks metric-view metric</a>
+</td>
+<td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23fff%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%232fa37b%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8%2C15.47c-.06%2C0-.13-.01-.22-.04s-.18-.06-.27-.11c-1.04-.59-1.92-1.11-2.63-1.56s-1.29-.89-1.72-1.32c-.44-.42-.75-.88-.95-1.38s-.29-1.07-.29-1.74V3.72c0-.39.08-.66.25-.83.16-.17.4-.32.71-.44.17-.07.41-.17.71-.29s.64-.24%2C1-.38c.37-.14.73-.27%2C1.1-.41.36-.13.7-.25%2C1-.36.3-.1.54-.18.72-.23.1-.02.2-.05.3-.07.1-.02.21-.04.31-.04s.21.01.31.03c.1.02.21.05.3.08.17.06.41.14.71.25s.64.23%2C1%2C.36c.37.13.73.27%2C1.09.4.37.13.7.26%2C1%2C.37s.54.21.71.28c.31.13.55.28.71.45.16.17.24.44.24.83v5.6c0%2C.67-.1%2C1.25-.29%2C1.75-.19.5-.51.96-.94%2C1.38-.44.42-1.01.86-1.73%2C1.31-.71.45-1.6.97-2.64%2C1.56-.09.05-.18.09-.27.11s-.16.04-.22.04Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-1%22%20d%3D%22M7.36%2C11.46c-.26%2C0-.47-.1-.64-.31l-1.8-2.49c-.07-.08-.12-.17-.15-.25s-.04-.16-.04-.25c0-.19.06-.35.19-.47s.29-.19.49-.19c.22%2C0%2C.4.09.55.27l1.39%2C2.05%2C2.65-4.78c.09-.13.17-.22.26-.27.09-.05.2-.08.34-.08.19%2C0%2C.35.06.48.19s.19.28.19.47c0%2C.07-.01.15-.04.23-.03.08-.07.16-.12.24l-3.1%2C5.31c-.15.23-.37.34-.65.34Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></td>
+</tr>
+<tr class="even">
+<td>Custom SQL, including SQL that uses <a href="#definitions">data-dictionary definitions</a>
+</td>
+<td>Cited or
+<span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23e7b921%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23965b25%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Ccircle%20class%3D%22cls-1%22%20cx%3D%228%22%20cy%3D%228%22%20r%3D%227%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8.15%2C12.64c-.26%2C0-.47-.09-.65-.27-.18-.18-.27-.4-.27-.65s.09-.48.27-.66c.18-.18.4-.27.65-.27s.47.09.64.27.27.4.27.66-.09.47-.27.65-.39.27-.64.27ZM7.46%2C9.49l-.13-6.13h1.62l-.12%2C6.13h-1.38Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong.</span> </span>
+</td>
+</tr>
+<tr class="odd">
+<td>Custom R</td>
+<td>Cited or
+<span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2016%2016%22%3E%0A%20%20%3Cdefs%3E%0A%20%20%20%20%3Cstyle%3E%0A%20%20%20%20%20%20.cls-1%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23e7b921%3B%0A%20%20%20%20%20%20%7D%0A%0A%20%20%20%20%20%20.cls-2%20%7B%0A%20%20%20%20%20%20%20%20fill%3A%20%23965b25%3B%0A%20%20%20%20%20%20%7D%0A%20%20%20%20%3C%2Fstyle%3E%0A%20%20%3C%2Fdefs%3E%0A%20%20%3Cg%20id%3D%22Layer_1%22%20data-name%3D%22Layer%201%22%3E%0A%20%20%20%20%3Ccircle%20class%3D%22cls-1%22%20cx%3D%228%22%20cy%3D%228%22%20r%3D%227%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%20%20%3Cg%20id%3D%22Layer_2%22%20data-name%3D%22Layer%202%22%3E%0A%20%20%20%20%3Cpath%20class%3D%22cls-2%22%20d%3D%22M8.15%2C12.64c-.26%2C0-.47-.09-.65-.27-.18-.18-.27-.4-.27-.65s.09-.48.27-.66c.18-.18.4-.27.65-.27s.47.09.64.27.27.4.27.66-.09.47-.27.65-.39.27-.64.27ZM7.46%2C9.49l-.13-6.13h1.62l-.12%2C6.13h-1.38Z%22%2F%3E%0A%20%20%3C%2Fg%3E%0A%3C%2Fsvg%3E" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong.</span> </span>
+</td>
+</tr>
+<tr class="even">
+<td>No data tool used (e.g., because the agent already had sufficient
+information or the question could not be answered from accessible
+information)</td>
+<td>No label</td>
+</tr>
+</tbody>
+</table>
+<p>The agent itself does not tag the answer as verified, cited, or
+untrusted. This process is instead handled deterministically by the
+commons package based on the agent’s behavior.</p>
+</div>
+<div class="section level2">
+<h2 id="information-layers">Information layers<a class="anchor" aria-label="anchor" href="#information-layers"></a>
+</h2>
+<p>commons distinguishes between two primary layers of information: the
+<strong>semantic layer</strong> and the <strong>context layer</strong>.
+The semantic layer encodes trusted calculations, ideally lifted from
+reliable code that you already use. The <strong>context layer</strong>
+contains background or supporting information, useful both for figuring
+out what custom code to run and how to interpret results. Data
+dictionaries span the two layers.</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Layer</th>
+<th>Sources</th>
+<th>Role</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Semantic layer</td>
+<td>Measures in <code>.R</code> files, <a href="#definitions"><code>definitions</code></a> in
+<code>data-dict.yaml</code>, and supported <a href="#warehouse-semantic-layers">warehouse semantic models</a>
+</td>
+<td>Provides trusted calculations.</td>
+</tr>
+<tr class="even">
+<td>Context layer</td>
+<td>Markdown files and descriptive fields in <a href="#data-dictionaries"><code>data-dict.yaml</code></a>
+</td>
+<td>Informs custom SQL or R and guides interpretation.</td>
+</tr>
+</tbody>
+</table>
+<div class="section level3">
+<h3 id="semantic-layer">Semantic layer<a class="anchor" aria-label="anchor" href="#semantic-layer"></a>
+</h3>
+<p>There are multiple ways to add information to the semantic layer.
+Probably the most straightforward way is as <strong>measures</strong>
+stored in <code>.R</code> files. Measures are R functions documented
+with roxygen2 and marked with <code>@measure</code>. When measures are
+available, the agent will search for a measure relevant to the user’s
+question. If it finds one, it calls that measure, possibly supplying
+arguments.</p>
+<p><code>data-dict.yaml</code> files can also contribute to the semantic
+layer through <a href="#definitions"><code>definitions</code></a>. See
+<a href="#data-dictionaries">Data dictionaries</a> for more information.
+Supported warehouse semantic models can also provide trusted
+calculations.</p>
+</div>
+<div class="section level3">
+<h3 id="context-layer">Context layer<a class="anchor" aria-label="anchor" href="#context-layer"></a>
+</h3>
+<p>The context layer draws from unstructured information in Markdown
+files and the descriptive fields in <code>data-dict.yaml</code>.</p>
+</div>
+<div class="section level3">
+<h3 id="examples">Examples<a class="anchor" aria-label="anchor" href="#examples"></a>
+</h3>
+<p>Here are brief examples of a data dictionary, a measure file, and a
+context-layer Markdown file for the biodiversity example app:</p>
+<div class="section level4">
+<h4 id="data-dictionary">Data dictionary<a class="anchor" aria-label="anchor" href="#data-dictionary"></a>
+</h4>
+<p><code>dictionaries/biodiversity.yaml</code></p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> observations</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="at">    </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Species observations by nature preserve.</span></span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a><span class="at">    </span><span class="fu">columns</span><span class="kw">:</span></span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> count</span></span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Individuals observed during surveys.</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="measure-file">Measure file<a class="anchor" aria-label="anchor" href="#measure-file"></a>
+</h4>
+<p><code>measures/biodiversity.R</code></p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co">#' Species richness by site</span></span>
+<span><span class="co">#'</span></span>
+<span><span class="co">#' @param site `string` Site name.</span></span>
+<span><span class="co">#' @measure</span></span>
+<span><span class="va">biodiversity_by_site</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">biodiversity</span>, <span class="va">site</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/tbl.html" class="external-link">tbl</a></span><span class="op">(</span><span class="va">biodiversity</span>, <span class="st">"observations"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html" class="external-link">filter</a></span><span class="op">(</span><span class="va">obs_site</span> <span class="op">==</span> <span class="va">site</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>    <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/summarise.html" class="external-link">summarize</a></span><span class="op">(</span></span>
+<span>      species_richness <span class="op">=</span> <span class="fu">dplyr</span><span class="fu">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/n_distinct.html" class="external-link">n_distinct</a></span><span class="op">(</span><span class="va">species</span><span class="op">)</span></span>
+<span>    <span class="op">)</span></span>
+<span><span class="op">}</span></span></code></pre></div>
+</div>
+<div class="section level4">
+<h4 id="context-document">Context document<a class="anchor" aria-label="anchor" href="#context-document"></a>
+</h4>
+<p><code>context/biodiversity.md</code></p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode markdown"><code class="sourceCode markdown"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu"># Interpreting survey results</span></span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>Observed individuals reflect organisms recorded during surveys. They should not be interpreted as a complete population census of a nature preserve.</span></code></pre></div>
+</div>
+</div>
+<div class="section level3">
+<h3 id="warehouse-semantic-layers">Warehouse semantic layers<a class="anchor" aria-label="anchor" href="#warehouse-semantic-layers"></a>
+</h3>
+<p>If you have trusted metrics in <a href="https://docs.snowflake.com/en/user-guide/views-semantic/overview" class="external-link">Snowflake
+semantic views</a> or <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views" class="external-link">Databricks
+metric views</a>, you can use those calculations directly with commons.
+It can also group or filter metrics by approved fields from the
+warehouse. Answers based on these warehouse-defined metrics are marked
+as verified.</p>
+</div>
+</div>
+<div class="section level2">
+<h2 id="data-sources">Data sources<a class="anchor" aria-label="anchor" href="#data-sources"></a>
+</h2>
+<p>One of the primary decisions you’ll need to make when building a
+commons agent is which data sources to grant the agent access to. Each
+data source combines the underlying data with the tables to expose to
+the agent. It can also include a data dictionary describing those tables
+and trusted calculations on them.</p>
+<p>Create a data source with <code><a href="../reference/data_source.html">data_source()</a></code>. The underlying
+data can consist of named data frames, a <a href="https://pins.rstudio.com/" class="external-link">pins</a> board, or a DBI connection.
+Data frames and pins boards will be loaded into an in-process DuckDB
+database. Database connections will be queried directly.</p>
+<p>For example, the following code creates a data source from two data
+frames. Each name becomes a table available to the agent.
+<code>dictionary</code> is an optional path to a
+<code>data-dict.yaml</code> file.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">biodiversity</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/data_source.html">data_source</a></span><span class="op">(</span></span>
+<span>  observations <span class="op">=</span> <span class="va">observations</span>,</span>
+<span>  site_area <span class="op">=</span> <span class="va">site_area</span>,</span>
+<span>  dictionary <span class="op">=</span> <span class="st">"dictionaries/biodiversity.yaml"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="data-dictionaries">Data dictionaries<a class="anchor" aria-label="anchor" href="#data-dictionaries"></a>
+</h3>
+<p>Data dictionaries provide structured, source-specific documentation
+for a data source. Use a data dictionary to specify what each table
+represents, column meanings and types, relationships between tables,
+glossary terms, and trusted <code>definitions</code>. commons supports
+the <a href="https://data-dict.tidyverse.org/" class="external-link"><code>data-dict.yaml</code>
+specification</a>.</p>
+<p>commons agents use data dictionaries in a few ways:</p>
+<ul>
+<li>Dataset-level descriptions and details provide broad,
+always-available context. Glossary terms are included in the system
+prompt as space allows.</li>
+<li>The first time the agent uses a documented table in a conversation,
+it receives the table’s description, column information, relationships,
+and relevant glossary terms.</li>
+<li>Descriptive fields (including <code>description</code> and
+<code>details</code>) are available to the agent as part of the context
+layer.</li>
+</ul>
+<div class="section level4">
+<h4 id="definitions">Definitions<a class="anchor" aria-label="anchor" href="#definitions"></a>
+</h4>
+<p><strong>Definitions</strong> are named, governed expressions attached
+to tables in <code>data-dict.yaml</code>. They allow an agent to reuse
+trusted metrics, filters, and derived values, contributing to the
+semantic layer.</p>
+<p>Each definition is an expression written in <a href="https://data-dict.tidyverse.org/expressions.html" class="external-link">data-dict’s
+expression language</a>, not in your database’s SQL dialect:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode yaml"><code class="sourceCode yaml"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">tables</span><span class="kw">:</span></span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="at">  </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> observations</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="at">    </span><span class="fu">columns</span><span class="kw">:</span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> count</span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="at">        </span><span class="fu">type</span><span class="kw">:</span><span class="at"> number</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="at">    </span><span class="fu">definitions</span><span class="kw">:</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="at">      </span><span class="kw">-</span><span class="at"> </span><span class="fu">name</span><span class="kw">:</span><span class="at"> total_individuals</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="at">        </span><span class="fu">label</span><span class="kw">:</span><span class="at"> Total individuals observed</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="at">        </span><span class="fu">description</span><span class="kw">:</span><span class="at"> Sum of the individuals recorded in surveys.</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="at">        </span><span class="fu">expr</span><span class="kw">:</span><span class="at"> SUM(count)</span></span></code></pre></div>
+<p>There are three kinds of definitions. Definitions can participate in
+trusted metric calculations or be used in custom SQL:<a class="footnote-ref" tabindex="0" data-bs-toggle="popover" data-bs-content="&lt;p&gt;In custom SQL, the agent refers to a definition using
+its &lt;code&gt;{{name}}&lt;/code&gt; token. commons expands the token to SQL
+compiled for the data source. Because this is still custom SQL, the
+answer includes a verified citation or is tagged as
+&lt;code&gt;Untrusted&lt;/code&gt;, rather than &lt;code&gt;Verified&lt;/code&gt;.&lt;/p&gt;"><sup>1</sup></a></p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>Kind</th>
+<th>Example</th>
+<th>Use in <code>call_metrics()</code>
+</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td>Metric</td>
+<td><code>SUM(n)</code></td>
+<td>Computes the metric</td>
+</tr>
+<tr class="even">
+<td>Filter</td>
+<td><code>status = 'active'</code></td>
+<td>Restricts rows or provides a grouping dimension</td>
+</tr>
+<tr class="odd">
+<td>Derived value</td>
+<td><code>price * quantity</code></td>
+<td>Provides a grouping dimension</td>
+</tr>
+</tbody>
+</table>
+<p>commons infers the definition kind from its expression. Aggregate and
+constant expressions are categorized as metrics, row-level Boolean
+expressions as filters, and other row-level expressions as derived
+values.</p>
+<p>See the <a href="https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml" class="external-link">DevRel
+Agent <code>data-dict.yaml</code></a> for examples of definitions.</p>
+<p>When a data source is constructed, commons validates each definition
+and compiles it to the source’s SQL dialect.</p>
+</div>
+</div>
+</div>
+<div class="section level2">
+<h2 id="project-directory-organization">Project directory organization<a class="anchor" aria-label="anchor" href="#project-directory-organization"></a>
 </h2>
 <p>A commons agent is easiest to maintain when the pieces live in
 separate files:</p>
@@ -73,60 +463,49 @@ separate files:</p>
 |-- app.R
 |-- agent.R
 |-- DESCRIPTION
-|-- AGENTS.md                 # or the active coding agent's equivalent (e.g., CLAUDE.md)
+|-- AGENTS.md # or your coding agent's equivalent (e.g., CLAUDE.md)
 |-- instructions.md
 |-- dictionaries/
-|   `-- warehouse.yaml
+|   `-- biodiversity.yaml
 |-- measures/
-|   `-- sales-dashboard.R
+|   `-- measures.R
 `-- context/
-    `-- sales-dashboard.md</code></pre>
+    `-- context.md</code></pre>
 </div>
 <div class="section level2">
-<h2 id="installing-the-agent-skill">Installing the agent skill<a class="anchor" aria-label="anchor" href="#installing-the-agent-skill"></a>
+<h2 id="constructing-the-agent">Constructing the agent<a class="anchor" aria-label="anchor" href="#constructing-the-agent"></a>
 </h2>
-<p>The package includes a <code>commons</code> <a href="https://agentskills.io/" class="external-link">agent skill</a> that helps coding agents
-build, evaluate, and improve commons agents. Installing the R package
-makes the skill files available, but does not automatically add them to
-an assistant’s skill discovery directory.</p>
-<p>Locate the bundled skill with:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">skill</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"skills"</span>, <span class="st">"commons"</span>, package <span class="op">=</span> <span class="st">"commons"</span><span class="op">)</span></span>
-<span><span class="va">skill</span></span></code></pre></div>
-<div class="section level3">
-<h3 id="codex-and-posit-assistant">Codex and Posit Assistant<a class="anchor" aria-label="anchor" href="#codex-and-posit-assistant"></a>
-</h3>
-<p>Both <a href="https://learn.chatgpt.com/docs/build-skills" class="external-link">Codex</a>
-and <a href="https://assistant.posit.co/docs/reference/config-file#skills" class="external-link">Posit
-Assistant</a> discover project skills in
-<code>.agents/skills</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span><span class="va">skill</span>, <span class="st">".agents/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
-<p>This creates <code>.agents/skills/commons/SKILL.md</code>. Commit
-that directory when the skill should be available to everyone working in
-the project.</p>
-<p>For a user-wide installation, copy the directory to
-<code>~/.agents/skills</code>. Posit Assistant also searches
-<code>~/.posit/assistant/skills</code> and
-<code>.posit/assistant/skills</code> by default. Its
-<code>skills.paths</code> configuration controls the complete search
-path; a project-level value replaces, rather than extends, the global
-value.</p>
+<p>Use <code><a href="../reference/commons.html">commons()</a></code> to construct an agent. Pass it an ellmer
+<code>Chat</code> and one or more data sources, along with any semantic
+and context layers. You can also optionally append information to the
+commons agent system prompt using the <code>instructions</code>
+argument.</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/posit-dev/commons" class="external-link">commons</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">biodiversity</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/data_source.html">data_source</a></span><span class="op">(</span></span>
+<span>  observations <span class="op">=</span> <span class="va">observations</span>,</span>
+<span>  site_area <span class="op">=</span> <span class="va">site_area</span>,</span>
+<span>  dictionary <span class="op">=</span> <span class="st">"dictionaries/biodiversity.yaml"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span></span>
+<span>  client <span class="op">=</span> <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat-any.html" class="external-link">chat</a></span><span class="op">(</span><span class="st">"anthropic/claude-sonnet-5"</span><span class="op">)</span>,</span>
+<span>  data_sources <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>biodiversity <span class="op">=</span> <span class="va">biodiversity</span><span class="op">)</span>,</span>
+<span>  semantic_layer <span class="op">=</span> <span class="fu"><a href="../reference/semantic_layer.html">semantic_layer</a></span><span class="op">(</span><span class="st">"measures"</span><span class="op">)</span>,</span>
+<span>  context_layer <span class="op">=</span> <span class="fu"><a href="../reference/context_layer.html">context_layer</a></span><span class="op">(</span><span class="st">"context/context.md"</span><span class="op">)</span>,</span>
+<span>  instructions <span class="op">=</span> <span class="st">"instructions.md"</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="../reference/commons_app.html">commons_app</a></span><span class="op">(</span><span class="va">agent</span><span class="op">)</span></span></code></pre></div>
+<p>Use <code><a href="../reference/commons_app.html">commons_app()</a></code> to run the agent in a local or
+single-user Shiny app. For multi-user deployments, use
+<code><a href="../reference/commons_app.html">commons_ui()</a></code> and <code><a href="../reference/commons_app.html">commons_server()</a></code> and create a
+new agent for each Shiny session. This example assumes that
+<code>observations</code> and <code>site_area</code> are data frames
+loaded when the app starts.</p>
 </div>
-<div class="section level3">
-<h3 id="claude-code">Claude Code<a class="anchor" aria-label="anchor" href="#claude-code"></a>
-</h3>
-<p><a href="https://code.claude.com/docs/en/skills" class="external-link">Claude Code</a> uses
-<code>.claude/skills</code> for project skills:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="st">".claude/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/files.html" class="external-link">file.copy</a></span><span class="op">(</span><span class="va">skill</span>, <span class="st">".claude/skills"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
-<p>This creates <code>.claude/skills/commons/SKILL.md</code>. Use
-<code>~/.claude/skills/commons</code> instead for a personal
-installation available across local projects.</p>
-</div>
-</div>
+
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>
 </div>
