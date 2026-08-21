@@ -1,60 +1,22 @@
-.commons-answer-pill {
-  align-items: center;
-  border-radius: 999px;
-  display: inline-flex;
-  font-size: 0.74rem;
-  font-weight: 400;
-  gap: 0.3rem;
-  line-height: 1.2;
-  max-width: 100%;
-  padding: 0.18rem 0.45rem;
-  position: relative;
-  vertical-align: text-bottom;
-}
-
 .commons-answer-pill-icon {
-  flex: 0 0 auto;
-  height: 0.82rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   margin: 0;
-  width: 0.82rem;
-}
-
-.commons-answer-pill-trusted {
-  background: #f2fbf5;
-  border: 1px solid #cfeedd;
-  color: #286144;
-}
-
-.commons-answer-pill-caution {
-  background: #fff8ec;
-  border: 1px solid #f2ddbb;
-  color: #6b4b1b;
-}
-
-.commons-tooltip {
-  display: none;
-}
-
-.commons-answer blockquote {
-  border-left: 3px solid #cfeedd;
-  margin-left: 0;
-}
-
-.commons-answer blockquote p:last-child {
-  margin-top: 0.75rem;
+  padding: 0;
 }
 
 .commons-flow {
   margin: 1.5rem 0;
   overflow-x: auto;
-  padding: 1.5rem 0.75rem;
+  padding: 1.5rem 0.5rem;
 }
 
 .commons-trust-segment {
   border: 1px solid #ddd;
   border-left-width: 4px;
   border-radius: 6px;
-  padding: 0.65rem 0.75rem;
+  padding: 0.65rem 0.6rem;
   width: max-content;
 }
 
@@ -80,9 +42,9 @@
 
 .commons-branch-flow {
   align-items: center;
-  column-gap: 0.4rem;
+  column-gap: 0.25rem;
   display: grid;
-  grid-template-columns: max-content 1.4rem max-content;
+  grid-template-columns: max-content 1.15rem max-content;
   margin: 0 auto;
   width: max-content;
 }
@@ -105,6 +67,39 @@
 
 .commons-branch-connectors .commons-flow-arrow {
   display: block;
+  height: 1rem;
+  margin: 0 auto;
+  position: relative;
+  width: 1rem;
+}
+
+.commons-branch-connectors .commons-flow-arrow::before {
+  border-top: 1.5px solid currentColor;
+  content: "";
+  left: 0;
+  position: absolute;
+  top: 50%;
+  width: 100%;
+}
+
+.commons-branch-connectors .commons-flow-arrow::after {
+  border-right: 1.5px solid currentColor;
+  border-top: 1.5px solid currentColor;
+  content: "";
+  height: 0.35rem;
+  position: absolute;
+  right: 0;
+  top: calc(50% - 0.175rem);
+  transform: rotate(45deg);
+  width: 0.35rem;
+}
+
+.commons-flow-arrow-up {
+  transform: rotate(-45deg);
+}
+
+.commons-flow-arrow-down {
+  transform: rotate(45deg);
 }
 
 .commons-branch-routes {
@@ -172,51 +167,6 @@
 .commons-trust-steps p {
   align-items: center;
   display: flex;
-  gap: 0.45rem;
+  gap: 0.3rem;
   margin: 0;
-}
-
-.commons-layer-examples {
-  display: grid;
-  gap: 1.5rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.commons-layer-example {
-  min-width: 0;
-}
-
-.commons-layer-example:last-child {
-  grid-column: 1 / -1;
-  justify-self: center;
-  width: calc((100% - 1.5rem) / 2);
-}
-
-.commons-layer-example > :first-child {
-  margin-top: 0;
-}
-
-.commons-layer-example pre {
-  white-space: pre-wrap;
-}
-
-.commons-layer-example pre code {
-  overflow-wrap: anywhere;
-}
-
-.commons-layer-example pre > code.sourceCode > span {
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
-@media (max-width: 900px) {
-  .commons-layer-examples {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .commons-layer-example:last-child {
-    grid-column: auto;
-    justify-self: stretch;
-    width: auto;
-  }
 }
