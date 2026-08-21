@@ -149,9 +149,17 @@ commons <- function(
   )
 }
 
+ellmer_chat_class <- function() {
+  # Chat will be exported in the next ellmer release.
+  tryCatch(
+    ellmer::Chat,
+    error = function(err) getFromNamespace("Chat", "ellmer")
+  )
+}
+
 Commons <- R6::R6Class(
   "Commons",
-  inherit = ellmer::Chat,
+  inherit = ellmer_chat_class(),
   public = list(
     initialize = function(
       client,
