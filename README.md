@@ -10,7 +10,7 @@ This repository holds two implementations of the same design:
 | [`pkg-py/`](pkg-py) | `posit-commons` (imports as `commons`) | Python |
 | [`tests/shared/`](tests/shared) | cross-language spec fixtures | — |
 
-The R package is released and in use; the Python package is early scaffolding.
+The R package is complete and in internal use; the Python package is early scaffolding. Neither has been publicly released, so both can still change without a deprecation cycle.
 
 ## Installing
 
@@ -25,7 +25,7 @@ The `/pkg-r` suffix is required — the package no longer lives at the repositor
 
 commons' behavior lives substantially in artifacts that have to agree across both languages: the system prompt, the citation dialect and its guards, the provenance truth table and its display copy, and the tracing span contract. Kept in separate repositories, each of those is a copy that drifts silently, and prompt drift fails invisibly — nothing errors, the agent just behaves differently in one language.
 
-`tests/shared/` exists so those contracts are executable fixtures that CI enforces, read by both test suites, rather than prose that rots. See [`tests/shared/README.md`](tests/shared/README.md).
+`tests/shared/` is where those contracts become executable fixtures that both test suites read and CI enforces, rather than prose that rots. It currently holds only the contract describing what belongs there; the fixtures themselves land as the provenance and citation code is ported. See [`tests/shared/README.md`](tests/shared/README.md).
 
 ## Working in this repository
 
