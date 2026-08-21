@@ -1,0 +1,37 @@
+name: py-check
+
+on:
+  push:
+    branches: [main]
+    paths: [pkg-py/**, tests/shared/**, .github/workflows/py-check.yaml]
+  pull_request:
+    paths: [pkg-py/**, tests/shared/**, .github/workflows/py-check.yaml]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.13"]
+    defaults:
+      run:
+        working-directory: pkg-py
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: pkg-py/uv.lock
+      - name: Install dependencies
+        run: uv sync --all-extras
+      - name: Lint
+        run: uv run ruff check
+      - name: Test
+        run: uv run pytest
