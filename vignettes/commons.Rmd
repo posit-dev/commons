@@ -202,6 +202,8 @@ calculations.
 The context layer draws from unstructured information in Markdown files and the
 descriptive fields in `data-dict.yaml`.
 
+### Examples
+
 Here are brief examples of a data dictionary, a measure file, and a
 context-layer Markdown file for the biodiversity example app:
 
@@ -367,7 +369,7 @@ A commons agent is easiest to maintain when the pieces live in separate files:
     `-- context.md
 ```
 
-### Constructing the agent
+## Constructing the agent
 
 Use `commons()` to construct an agent. Pass it an ellmer `Chat` and one or more data sources, along with any semantic and context layers. You can also optionally append information to the commons agent system prompt using the `instructions` argument.
 
