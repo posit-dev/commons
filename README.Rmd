@@ -23,7 +23,11 @@ library(ggplot2)
 
 > This package is highly experimental.
 
-commons helps data scientists build trustworthy data agents. Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons gives agents access to that information, situating it in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent. 
+commons helps data scientists build trustworthy data agents. 
+
+Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons gives agents access to that information, situating it in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent. 
+
+Trusted calculations can come from R code, data dictionaries, or semantic layers in Snowflake and Databricks.
 
 ```{r}
 #| echo: false
@@ -44,11 +48,11 @@ pak::pak("posit-dev/commons")
 
 ## Trusted answers
 
-There are two provenance paths availabe to a commons agent: when users ask questions for which there is trusted code, the agent follows the "happy path," running that code and reporting the result. If the user asks a question for which is not trusted code, the agent writes custom R or SQL code, leaning on additional context provided to the agent. 
+There are two provenance paths available to a commons agent: when users ask questions for which there is trusted code, the agent follows the "happy path," running that code and reporting the result. If the user asks a question for which trusted code is not available, the agent writes custom R or SQL code, leaning on additional context provided to the agent. 
 
 Answers are tagged according to the analysis path followed, so users can determine how much trust to put in a given answer.
 
-For more information, see Getting Started. 
+For more information, see the [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette.
 
 ```{r trust-flow}
 #| echo: false
@@ -61,9 +65,11 @@ knitr::include_graphics("man/figures/README-trust-flow.png")
 
 ## Get started
 
+commons uses [ellmer](https://ellmer.tidyverse.org/) to access LLMs, so you will need credentials for one of ellmer's supported providers.
+
 We recommend building commons agents with the help of the [agent skill](https://agentskills.io/) that ships with the package. The skill helps coding agents build, evaluate, and improve commons agents.
 
-To make the skill available to **Posit Assistant or Codex**, copy the skill and its references to `.agents/skills`:
+To make the skill available to Posit Assistant or Codex, copy the skill and its references to `.agents/skills`:
 
 ```r
 skill <- system.file("skills", "commons", package = "commons")
@@ -71,13 +77,15 @@ dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".agents/skills", recursive = TRUE)
 ```
 
-For **Claude Code**, copy the skill and its references to `.claude/skills`:
+For Claude Code, copy the skill and its references to `.claude/skills`:
 
 ```r
 skill <- system.file("skills", "commons", package = "commons")
 dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".claude/skills", recursive = TRUE)
 ```
+
+The [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette also explains the structure of a commons agent and the creation process.
 
 ## Evaluation
 
@@ -108,7 +116,7 @@ In this evaluation, the commons agent had higher mean accuracy (`r sprintf("%.1f
 #| echo: false
 #| fig-width: 10
 #| fig-height: 4
-#| fig-alt: "Three faceted bar charts compare Claude Code on the left with commons on the right. Commons has mean accuracy of 86.3% compared with 83.5%, median solver time of 29.2 seconds compared with 62.7 seconds, and 243,360 total output tokens compared with 439,200."
+#| fig-alt: "Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens."
 metric_columns <- c(
   "Mean accuracy (%)",
   "Median solver time (seconds)",

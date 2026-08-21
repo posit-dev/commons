@@ -11,11 +11,15 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 
 > This package is highly experimental.
 
-commons helps data scientists build trustworthy data agents. Data teams
-typically have trusted code that they use to analyze their data and
-build reports and apps. commons gives agents access to that information,
-situating it in a series of prompts and tools designed to create an
-accurate, fast, and cost-effective agent.
+commons helps data scientists build trustworthy data agents.
+
+Data teams typically have trusted code that they use to analyze their
+data and build reports and apps. commons gives agents access to that
+information, situating it in a series of prompts and tools designed to
+create an accurate, fast, and cost-effective agent.
+
+Trusted calculations can come from R code, data dictionaries, or
+semantic layers in Snowflake and Databricks.
 
 <img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
@@ -30,27 +34,34 @@ pak::pak("posit-dev/commons")
 
 ## Trusted answers
 
-There are two provenance paths availabe to a commons agent: when users
+There are two provenance paths available to a commons agent: when users
 ask questions for which there is trusted code, the agent follows the
 “happy path,” running that code and reporting the result. If the user
-asks a question for which is not trusted code, the agent writes custom R
-or SQL code, leaning on additional context provided to the agent.
+asks a question for which trusted code is not available, the agent
+writes custom R or SQL code, leaning on additional context provided to
+the agent.
 
 Answers are tagged according to the analysis path followed, so users can
 determine how much trust to put in a given answer.
 
-For more information, see Getting Started.
+For more information, see the [Introduction to
+commons](https://posit-dev.github.io/commons/articles/commons.html)
+vignette.
 
 <img src="man/figures/README-trust-flow.png" alt="A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer." width="100%" />
 
 ## Get started
 
+commons uses [ellmer](https://ellmer.tidyverse.org/) to access language
+models, so you will need credentials for one of ellmer’s supported
+providers.
+
 We recommend building commons agents with the help of the [agent
 skill](https://agentskills.io/) that ships with the package. The skill
 helps coding agents build, evaluate, and improve commons agents.
 
-To make the skill available to **Posit Assistant or Codex**, copy the
-skill and its references to `.agents/skills`:
+To make the skill available to Posit Assistant or Codex, copy the skill
+and its references to `.agents/skills`:
 
 ``` r
 skill <- system.file("skills", "commons", package = "commons")
@@ -58,14 +69,18 @@ dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".agents/skills", recursive = TRUE)
 ```
 
-For **Claude Code**, copy the skill and its references to
-`.claude/skills`:
+For Claude Code, copy the skill and its references to `.claude/skills`:
 
 ``` r
 skill <- system.file("skills", "commons", package = "commons")
 dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".claude/skills", recursive = TRUE)
 ```
+
+The [Introduction to
+commons](https://posit-dev.github.io/commons/articles/commons.html)
+vignette also explains the structure of a commons agent and the creation
+process.
 
 ## Evaluation
 
@@ -82,10 +97,9 @@ vs. 83.5%), took less time to answer questions (a median of 29.2
 vs. 62.7 seconds), and used fewer output tokens (243,360 vs. 439,200
 total).
 
-<img src="man/figures/README-eval-plot-1.png" alt="Three faceted bar charts compare Claude Code on the left with commons on the right. Commons has mean accuracy of 86.3% compared with 83.5%, median solver time of 29.2 seconds compared with 62.7 seconds, and 243,360 total output tokens compared with 439,200." width="100%" />
+<img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
 
-Both systems use Claude Sonnet 5 at medium effort. The evaluation
-includes 32 numeric, table, nuanced, and not-answerable questions, each
-run 3 times. A Claude Opus 5 scorer grades numeric and table results
-against machine-derived targets and other responses against
-question-specific rubrics.
+Both systems use Claude Sonnet 5 at medium effort. The evaluation runs
+each of 32 questions 3 times. Questions require either a numeric answer,
+a table, a nuanced response, or recognition that the available data
+cannot answer them.
