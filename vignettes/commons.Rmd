@@ -114,8 +114,8 @@ tagged as `Untrusted`.
 <span class="commons-flow-node">Search trusted<br>calculations</span>
 </div>
 <div class="commons-branch-connectors" aria-hidden="true">
-<span class="commons-flow-arrow commons-flow-arrow-up"></span>
-<span class="commons-flow-arrow commons-flow-arrow-down"></span>
+<span class="commons-flow-arrow">&nearr;</span>
+<span class="commons-flow-arrow">&searr;</span>
 </div>
 <div class="commons-branch-routes">
 <div class="commons-trust-segment commons-trust-segment-high">

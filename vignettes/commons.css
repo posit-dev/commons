@@ -65,43 +65,6 @@
   margin: 0;
 }
 
-.commons-branch-connectors .commons-flow-arrow {
-  display: block;
-  height: 1rem;
-  margin: 0 auto;
-  position: relative;
-  width: 1rem;
-}
-
-.commons-branch-connectors .commons-flow-arrow::before {
-  border-top: 1.5px solid currentColor;
-  content: "";
-  left: 0;
-  position: absolute;
-  top: 50%;
-  width: 100%;
-}
-
-.commons-branch-connectors .commons-flow-arrow::after {
-  border-right: 1.5px solid currentColor;
-  border-top: 1.5px solid currentColor;
-  content: "";
-  height: 0.35rem;
-  position: absolute;
-  right: 0;
-  top: calc(50% - 0.175rem);
-  transform: rotate(45deg);
-  width: 0.35rem;
-}
-
-.commons-flow-arrow-up {
-  transform: rotate(-45deg);
-}
-
-.commons-flow-arrow-down {
-  transform: rotate(45deg);
-}
-
 .commons-branch-routes {
   display: grid;
   row-gap: 0.75rem;
@@ -116,7 +79,6 @@
 
 .commons-flow-answer {
   font-size: 0.9rem;
-  font-weight: 400;
 }
 
 .commons-flow-or {
@@ -128,8 +90,6 @@
   color: #397f91;
   font-size: 0.7em;
   font-weight: 700;
-  position: relative;
-  top: -0.35em;
 }
 
 .commons-flow-arrow {
@@ -144,26 +104,17 @@
   border-radius: 6px;
   display: inline-block;
   font-size: 0.82rem;
-  padding: 0.35rem 0.65rem;
-  white-space: nowrap;
-}
-
-.commons-flow-trusted-calculations .commons-flow-node {
-  box-sizing: border-box;
   line-height: 1.2;
-  max-width: none;
   padding: 0.25rem 0.45rem;
-  text-align: left;
+  white-space: nowrap;
 }
 
 .commons-trust-label {
   font-size: 0.85rem;
-  font-style: normal;
   font-weight: 600;
   margin-bottom: 0.5rem;
 }
 
-.commons-trust-steps,
 .commons-trust-steps p {
   align-items: center;
   display: flex;
