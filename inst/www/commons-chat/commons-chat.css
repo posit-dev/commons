@@ -7,7 +7,7 @@
 shiny-chat-container {
   --commons-chat-radius-control: 0.5rem;
   --commons-chat-radius-surface: 0.75rem;
-  --commons-chat-radius-message: 1.25rem;
+  --commons-chat-radius-message: 0.75rem;
   --commons-chat-radius-round: 999px;
   --commons-chat-motion-fast: 120ms;
   --commons-chat-motion-base: 180ms;
@@ -39,7 +39,15 @@ shiny-chat-container {
     0 1px 2px color-mix(in srgb, var(--bs-body-color, #212529) 8%, transparent),
     0 8px 24px -20px
       color-mix(in srgb, var(--bs-body-color, #212529) 30%, transparent);
-  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
+  --shiny-chat-user-message-bg: color-mix(
+    in srgb,
+    var(--bs-tertiary-bg, #f4f5f7) 88%,
+    var(--bs-primary, #007bc2)
+  );
+  --shiny-chat-user-message-border-radius: var(
+    --commons-chat-radius-message
+  );
+  --shiny-chat-user-message-padding: 0.5rem 1.5rem;
   --shiny-chat-streaming-color: var(--bs-primary, #007bc2);
   --shiny-tool-card-spinner-color: var(--bs-primary, #007bc2);
 }
@@ -49,9 +57,10 @@ shiny-chat-container .shiny-chat-messages-content {
 }
 
 shiny-chat-container .shiny-chat-user-message:not(:has(.shiny-chat-edit-wrap)) {
-  border-radius: var(--commons-chat-radius-message);
-  max-width: min(85%, 42rem);
-  padding: 0.625rem 1rem;
+  border-radius: var(--shiny-chat-user-message-border-radius);
+  max-width: 100%;
+  padding: var(--shiny-chat-user-message-padding);
+  width: min(85%, 42rem);
 }
 
 shiny-chat-container .shiny-chat-input .tiptap {
@@ -60,8 +69,8 @@ shiny-chat-container .shiny-chat-input .tiptap {
   border-color: var(--bs-border-color, #dee2e6);
   box-shadow: var(--commons-chat-shadow-control);
   line-height: 1.45;
-  min-height: 3.25rem;
-  padding-block: 0.8rem !important;
+  min-height: 3rem;
+  padding-block: 0.65rem !important;
   padding-right: 3rem !important;
   transition:
     border-color var(--commons-chat-motion-fast) ease,
@@ -105,7 +114,7 @@ shiny-chat-container
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-send,
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach {
   align-items: center;
-  bottom: calc(0.625rem + var(--_input-padding-bottom, 0px));
+  bottom: calc(0.5rem + var(--_input-padding-bottom, 0px));
   display: inline-flex;
   height: 2rem;
   justify-content: center;
@@ -118,12 +127,54 @@ shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach {
 }
 
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-send {
-  color: color-mix(
-    in srgb,
-    var(--bs-primary, #007bc2) 68%,
-    var(--bs-body-bg, #fff)
-  );
-  right: 0.625rem;
+  color: var(--bs-secondary-color, #6c757d);
+  right: 0.5rem;
+}
+
+/* Preserve shinychat's button states while presenting an outlined send icon. */
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send:not(.shiny-chat-btn-cancel, .shiny-chat-btn-spinner) {
+  background-color: transparent;
+  border: var(--bs-border-width, 1px) solid
+    var(--bs-border-color, #dee2e6);
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send:not(
+    :disabled,
+    .shiny-chat-btn-cancel,
+    .shiny-chat-btn-spinner
+  ) {
+  border-color: var(--commons-chat-border-strong);
+  color: var(--bs-body-color, #212529);
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send:not(
+    .shiny-chat-btn-cancel,
+    .shiny-chat-btn-spinner
+  )
+  svg {
+  display: none;
+}
+
+shiny-chat-container
+  .shiny-chat-input
+  .shiny-chat-btn-send:not(
+    .shiny-chat-btn-cancel,
+    .shiny-chat-btn-spinner
+  )::before {
+  --_send-icon: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path d="m4 8 4-4 4 4M8 4v8" fill="none" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25"/></svg>');
+
+  background-color: currentcolor;
+  content: "";
+  height: 1rem;
+  mask: var(--_send-icon) center / contain no-repeat;
+  -webkit-mask: var(--_send-icon) center / contain no-repeat;
+  width: 1rem;
 }
 
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-send:focus-visible,
@@ -141,11 +192,7 @@ shiny-chat-container
 shiny-chat-container
   .shiny-chat-input
   .shiny-chat-btn-send.shiny-chat-btn-spinner {
-  color: color-mix(
-    in srgb,
-    var(--bs-primary, #007bc2) 72%,
-    var(--bs-body-color, #212529)
-  );
+  color: var(--bs-secondary-color, #6c757d);
 }
 
 shiny-chat-container
@@ -161,7 +208,7 @@ shiny-chat-container .shiny-chat-input .shiny-chat-btn-send:disabled {
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach {
   border-radius: var(--commons-chat-radius-round);
   color: var(--bs-secondary-color, #6c757d);
-  left: 0.625rem;
+  left: 0.5rem;
 }
 
 shiny-chat-container .shiny-chat-input .shiny-chat-btn-attach svg {
@@ -406,12 +453,14 @@ shiny-chat-container .code-copy-button-checked {
 @media (hover: hover) {
   shiny-chat-container
     .shiny-chat-input
-    .shiny-chat-btn-send:not(:disabled, .shiny-chat-btn-spinner):hover {
-    color: color-mix(
-      in srgb,
-      var(--bs-primary, #007bc2) 78%,
-      var(--bs-body-bg, #fff)
-    );
+    .shiny-chat-btn-send:not(
+      :disabled,
+      .shiny-chat-btn-spinner,
+      .shiny-chat-btn-cancel
+    ):hover {
+    background-color: var(--commons-chat-state-hover);
+    border-color: var(--commons-chat-border-strong);
+    color: var(--bs-body-color, #212529);
     transform: scale(1.04);
   }
 
