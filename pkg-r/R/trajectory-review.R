@@ -424,21 +424,40 @@ viewer_ui <- function(summary) {
       sidebar = bslib::sidebar(
         width = 380,
         class = "commons-viewer-sidebar",
-        shiny::dateRangeInput(
-          "window",
-          "Dates",
-          start = dates$min,
-          end = dates$max,
-          min = dates$min,
-          max = dates$max
+        htmltools::div(
+          class = "commons-viewer-sidebar-controls",
+          shiny::dateRangeInput(
+            "window",
+            "Dates",
+            start = dates$min,
+            end = dates$max,
+            min = dates$min,
+            max = dates$max,
+            width = "100%"
+          ),
+          htmltools::div(
+            class = "commons-viewer-segmented",
+            shiny::radioButtons(
+              "group_by",
+              NULL,
+              choices = c(
+                Conversations = "conversation",
+                Questions = "question"
+              ),
+              inline = TRUE
+            )
+          ),
+          shiny::selectInput(
+            "trust",
+            "Trust Level",
+            trust_choices("conversation"),
+            width = "100%"
+          )
         ),
-        group_by_input(),
-        shiny::selectInput(
-          "trust",
-          "Trust Level",
-          trust_choices("conversation")
-        ),
-        shiny::uiOutput("entries")
+        htmltools::div(
+          class = "commons-viewer-sidebar-entries",
+          shiny::uiOutput("entries")
+        )
       ),
       trust_timeline_card(),
       bslib::card(
@@ -470,7 +489,7 @@ viewer_ui <- function(summary) {
             ),
             position = "right",
             width = 320,
-            padding = c("3rem", 0, 0),
+            padding = 0,
             resizable = TRUE
           ),
           border = FALSE,
@@ -484,26 +503,6 @@ viewer_ui <- function(summary) {
       # Match the dependency order used by a live commons chat.
       htmltools::findDependencies(shinychat::chat_ui("commons_viewer_probe")),
       list(commons_chat_dependency(), commons_viewer_dependency())
-    )
-  )
-}
-
-group_by_input <- function() {
-  htmltools::div(
-    class = "commons-viewer-group-by",
-    shiny::radioButtons(
-      "group_by",
-      label = htmltools::tags$span(
-        class = "visually-hidden",
-        "Group reviews by"
-      ),
-      choices = c(
-        "Conversations" = "conversation",
-        "Questions" = "question"
-      ),
-      selected = "conversation",
-      inline = TRUE,
-      width = "100%"
     )
   )
 }
@@ -607,16 +606,16 @@ viewer_server <- function(
       )
     })
 
+    output$timeline_title <- shiny::renderText({
+      timeline_title(input$window)
+    })
+
     output$timeline_legend <- shiny::renderUI({
       in_dates <- Filter(
         function(i) in_window(summary[[i]], input$window),
         seq_along(summary)
       )
       timeline_legend(hit_rate(lapply(in_dates, function(i) summary[[i]]$tags)))
-    })
-
-    output$timeline_title <- shiny::renderText({
-      timeline_title(input$window)
     })
 
     output$timeline <- shiny::renderUI({
