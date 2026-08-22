@@ -58,7 +58,7 @@ For more information, see the [Introduction to commons](https://posit-dev.github
 #| echo: false
 #| fig-alt: "A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer."
 
-# diagram source: getting started vignette. Update the diagram there, then save the image
+# Diagram source: Introduction to commons vignette. Update it there, then save the image.
 knitr::include_graphics("man/figures/README-trust-flow.png")
 ```
 
@@ -91,6 +91,8 @@ The [Introduction to commons](https://posit-dev.github.io/commons/articles/commo
 
 ```{r eval-data}
 #| include: false
+
+# placeholder data
 eval_questions <- 32
 eval_epochs <- 3
 eval_results <- data.frame(
@@ -100,12 +102,10 @@ eval_results <- data.frame(
   ),
   `Mean accuracy (%)` = c(83.5, 86.3),
   `Median solver time (seconds)` = c(62.7, 29.2),
-  `Mean output tokens` = c(4575, 2535),
+  `Total output tokens` = c(439188, 243403),
   row.names = c("Claude Code", "commons"),
   check.names = FALSE
 )
-eval_results$`Total output tokens` <-
-  eval_results$`Mean output tokens` * eval_questions * eval_epochs
 ```
 
 The [DevRel agent](https://github.com/posit-dev/devrel-agent) is a commons agent that answers questions about adoption, engagement, and growth across Posit's open-source projects. The DevRel agent repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) that compares performance between the commons agent and Claude Code. Both have access to the same underlying data. 
