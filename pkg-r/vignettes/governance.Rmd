@@ -1,0 +1,83 @@
+---
+title: "Security and governance for commons agents"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Security and governance for commons agents}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r}
+#| include: false
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE
+)
+```
+
+commons allows users to build and deploy agents that can run SQL queries against live databases and execute arbitrary R code. This raises several security- and governance-related questions. How do you ensure that an agent can't delete production data? Can model-generated R code interfere with a [Posit Connect](https://posit.co/products/enterprise/connect) deployment? Can an agent show users tables, rows, or business context that they shouldn't be able to see?
+
+This vignette explains the boundaries that commons provides and the responsibilities that remain with the application author and server administrator.
+
+## commons' harness
+
+A commons agent is an ellmer chat with a system prompt and a set of tools. The system prompt excerpts available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, run a SQL query, or execute R code.
+
+We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like "never reveal sensitive data." Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider, so the agent should not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
+
+## SQL code execution with `run_sql()` 
+
+### Destructive actions
+
+`run_sql()` accepts a single statement beginning with `SELECT` or `WITH`. commons rejects stacked statements and statements beginning with operations such as `INSERT`, `UPDATE`, `DELETE`, `DROP`, or `GRANT`. For data frames and pins, which commons loads into its own DuckDB database, it also disables extension loading and external filesystem access.
+
+These checks provide defense in depth, but they are not a SQL parser or a database sandbox. When you supply a DBI connection, commons queries that connection as-is. The primary safeguard against destructive SQL is therefore database-enforced read-only access.
+
+### Data access
+
+The `tables` argument to `data_source()` controls which tables commons describes to the model. It is not an authorization boundary: `run_sql()` can query any object available to the connection.
+
+On Posit Connect, [viewer OAuth integrations](https://docs.posit.co/connect/admin/access-controls/) can give an interactive application the current viewer's Snowflake or Databricks credentials. If the application creates its connection from those credentials, the warehouse continues to enforce that viewer's existing access policies, including row- and column-level security. commons snapshots the connection's principal, active role, and namespace when it creates a Snowflake or Databricks data source, and rejects subsequent operations if that identity changes.
+
+Viewer credentials are not automatic: commons uses the DBI connection supplied by the application. When using viewer credentials, create the connection and the commons agent inside the Shiny server function so that each session has the correct database identity.
+
+When viewer credentials are not available, use a service account with access to only the data needed by the application. Every viewer then has the same database permissions, so share the application only with users who should have that access.
+
+### Transmitting results to the R process
+
+The SQL query runs through the DBI connection in the main application process. Its result is both returned to the model and registered as a handle in the R process, allowing the model to analyze it with `run_r()`.
+
+## `run_r()` and its R process
+
+The code requested through `run_r()` does not run in the main application process. Each commons agent instead gets a persistent R subprocess, created on first use. Its state remains available to later `run_r()` calls made by the same agent.
+
+### OS-level sandboxing
+
+On Linux (which underlies [Posit Connect](https://posit.co/products/enterprise/connect)), commons combines a filesystem sandbox with seccomp system-call filters. It uses Landlock when the kernel supports it and otherwise falls back to unprivileged user and mount namespaces. If neither filesystem mechanism is available, or if seccomp is unavailable, commons refuses to create an agent.
+
+The filesystem sandbox gives the subprocess read access to R, installed packages, and required operating-system directories. It can write only to temporary directories used by the subprocess and its communication with the main R process. The seccomp filters prevent it from inspecting another process's memory or changing mount and namespace configuration.
+
+By default, the subprocess cannot create network sockets. An application author can opt in to unrestricted network access with `commons(network = "full")`; the filesystem sandbox remains in place, but R code can then contact services reachable from the deployment and transmit data from result handles. Only enable network access when that egress is required and acceptable.
+
+For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Deployed Connect applications run on Linux and use the Linux mechanisms described above.
+
+### Communication with the main app process
+
+The subprocess starts with a small allowlist of environment variables rather than inheriting the application's complete environment. In particular, API keys, session tokens, and database URLs are not inherited.
+
+Communication happens through [callr](https://callr.r-lib.org/). commons serializes registered result handles and measure source into the subprocess, then receives captured output and plots in return. Function environments and database connections are not transferred.
+
+## Permissioning facts
+
+The rows returned by SQL are not the only potentially sensitive information available to an agent. Dataset descriptions and glossary entries from `data-dict.yaml` are included in the system prompt. Table documentation and sample values are supplied when a table is first used, context documents are available through search, and measure source can be read by the model in `run_r()`.
+
+Only include facts and source code that may be shared with both the application's viewers and its model provider. If one audience should not see a fact, use separate applications with separate context or place the facts behind viewer credentials rather than asking the model to hide it from that audience.
+
+## Logging trajectories
+
+Trajectory logging is disabled by default. With `commons(log = TRUE)`, commons asks ellmer to include message content in OpenTelemetry spans. These spans contain full conversation histories, including user messages, model responses, tool requests, and tool results. Treat them as another copy of the data available to the agent.
+
+On Connect, both the server administrator and application author must opt in for the data to flow. The administrator must enable OpenTelemetry and allow content instrumentation; the application author sets `commons(log = TRUE)`. commons enables [Content Observability](https://docs.posit.co/connect/user/content-settings/#content-observability) for the content item when needed, although capture begins only after the content process restarts.
+
+Content owners and collaborators can read Connect trajectories with `trajectory_read()`. If a conversation is flagged or annotated in `trajectory_review()`, the reviewer writes a Markdown document containing the complete reviewer-visible conversation and its tool activity. Store these files only in an appropriately protected location, and carry out reviews in an environment trusted to handle internal user data, such as [Posit Workbench](https://posit.co/products/enterprise/workbench). Retention and access controls for the underlying OpenTelemetry data are determined by Connect or the configured exporter, not by commons.
