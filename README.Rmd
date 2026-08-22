@@ -27,7 +27,7 @@ commons helps data scientists build trustworthy data agents.
 
 Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons gives agents access to that information, situating it in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
 
-Trusted calculations can come from R code, data dictionaries, or semantic layers in Snowflake and Databricks.
+Trusted calculations can come from R code, [data dictionaries](https://data-dict.tidyverse.org/), or semantic layers in Snowflake and Databricks.
 
 ```{r}
 #| echo: false
