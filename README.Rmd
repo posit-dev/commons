@@ -23,9 +23,9 @@ library(ggplot2)
 
 > This package is highly experimental.
 
-commons helps data scientists build trustworthy data agents. 
+commons helps data scientists build trustworthy data agents.
 
-Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons gives agents access to that information, situating it in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent. 
+Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons gives agents access to that information, situating it in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
 
 Trusted calculations can come from R code, data dictionaries, or semantic layers in Snowflake and Databricks.
 
@@ -45,23 +45,6 @@ To install the package, run:
 # install.packages("pak")
 pak::pak("posit-dev/commons")
 ```
-
-## Trusted answers
-
-There are two provenance paths available to a commons agent: when users ask questions for which there is trusted code, the agent follows the "happy path," running that code and reporting the result. If the user asks a question for which trusted code is not available, the agent writes custom R or SQL code, leaning on additional context provided to the agent. 
-
-Answers are tagged according to the analysis path followed, so users can determine how much trust to put in a given answer.
-
-For more information, see the [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette.
-
-```{r trust-flow}
-#| echo: false
-#| fig-alt: "A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer."
-
-# Diagram source: Introduction to commons vignette. Update it there, then save the image.
-knitr::include_graphics("man/figures/README-trust-flow.png")
-```
-
 
 ## Get started
 
@@ -87,16 +70,31 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 The [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette also explains the structure of a commons agent and the creation process.
 
+## Trusted answers
+
+There are two provenance paths available to a commons agent: when users ask questions for which there is trusted code, the agent follows the "happy path," running that code and reporting the result. If the user asks a question for which trusted code is not available, the agent writes custom R or SQL code, leaning on additional context provided to the agent.
+
+Answers are tagged according to the analysis path followed, so users can determine how much trust to put in a given answer.
+
+For more information, see the [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette.
+
+```{r trust-flow}
+#| echo: false
+#| fig-alt: "A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer."
+
+# Diagram source: Introduction to commons vignette. Update it there, then save the image.
+knitr::include_graphics("man/figures/README-trust-flow.png")
+```
+
 ## Evaluation
 
 ```{r eval-data}
 #| include: false
 
-# placeholder data
+# Placeholder data until the devrel agent data is more easily accessible
 eval_questions <- 32
-eval_epochs <- 3
 eval_results <- data.frame(
-  System = factor(
+  system = factor(
     c("Claude Code", "commons"),
     levels = c("Claude Code", "commons")
   ),
@@ -108,7 +106,7 @@ eval_results <- data.frame(
 )
 ```
 
-The [DevRel agent](https://github.com/posit-dev/devrel-agent) is a commons agent that answers questions about adoption, engagement, and growth across Posit's open-source projects. The DevRel agent repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) that compares performance between the commons agent and Claude Code. Both have access to the same underlying data. 
+The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an example commons agent that answers questions about adoption, engagement, and growth across Posit's open-source projects. The DevRel agent repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) that compares performance between the commons agent and Claude Code. Both have access to the same underlying data.
 
 In this evaluation, the commons agent had higher mean accuracy (`r sprintf("%.1f%%", eval_results["commons", "Mean accuracy (%)"])` vs. `r sprintf("%.1f%%", eval_results["Claude Code", "Mean accuracy (%)"])`), took less time to answer questions (a median of `r sprintf("%.1f", eval_results["commons", "Median solver time (seconds)"])` vs. `r sprintf("%.1f", eval_results["Claude Code", "Median solver time (seconds)"])` seconds), and used fewer output tokens (`r format(eval_results["commons", "Total output tokens"], big.mark = ",", scientific = FALSE, trim = TRUE)` vs. `r format(eval_results["Claude Code", "Total output tokens"], big.mark = ",", scientific = FALSE, trim = TRUE)` total).
 
@@ -124,22 +122,20 @@ metric_columns <- c(
 )
 eval_plot <- stack(eval_results[metric_columns])
 names(eval_plot) <- c("value", "metric")
-eval_plot$harness <- rep(
-  eval_results$System,
+eval_plot$system <- rep(
+  eval_results$system,
   times = length(metric_columns)
 )
 accuracy <- eval_plot$metric == "Mean accuracy (%)"
 eval_plot$value[accuracy] <- eval_plot$value[accuracy] / 100
 
 eval_plot |>
-  ggplot(aes(x = "", y = value, fill = harness)) +
-  geom_col(
-    position = position_dodge(width = 0.8),
-    width = 0.7
-  ) +
+  ggplot(aes(x = system, y = value, fill = system)) +
+  geom_col(width = 0.7) +
   facet_wrap(vars(metric), scales = "free_y") +
   scale_fill_manual(
-    values = c("Claude Code" = "grey85", "commons" = "#438EB5")
+    values = c("Claude Code" = "grey85", "commons" = "#438EB5"),
+    guide = "none"
   ) +
   scale_y_continuous(
     labels = \(x) {
@@ -153,15 +149,14 @@ eval_plot |>
   labs(
     x = NULL,
     y = NULL,
-    fill = NULL,
     caption = paste(
       eval_questions,
-      "questions across",
-      eval_epochs,
-      "epochs. Higher accuracy is better. Lower time and tokens are better."
-    )
+      "questions across three epochs. Higher accuracy is better. Lower time and tokens are better."
+    ),
+    title = "commons was more accurate, faster, and used fewer tokens than Claude Code",
+    subtitle = "Results from the DevRel agent evaluation"
   ) +
   theme_minimal()
 ```
 
-Both systems use Claude Sonnet 5 at medium effort. The evaluation runs each of `r eval_questions` questions `r eval_epochs` times. Questions require either a numeric answer, a table, a nuanced response, or recognition that the available data cannot answer them.
+In the evaluation, both harnesses use Claude Sonnet 5 at medium effort. The evaluation runs each of `r eval_questions` questions three times. Questions require either a numeric answer, a table, a nuanced response, or recognition that the available data cannot answer them.

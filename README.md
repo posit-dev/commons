@@ -52,9 +52,8 @@ vignette.
 
 ## Get started
 
-commons uses [ellmer](https://ellmer.tidyverse.org/) to access language
-models, so you will need credentials for one of ellmer’s supported
-providers.
+commons uses [ellmer](https://ellmer.tidyverse.org/) to access LLMs, so
+you will need credentials for one of ellmer’s supported providers.
 
 We recommend building commons agents with the help of the [agent
 skill](https://agentskills.io/) that ships with the package. The skill
@@ -84,22 +83,22 @@ process.
 
 ## Evaluation
 
-The [DevRel agent](https://github.com/posit-dev/devrel-agent) is a
-commons agent that answers questions about adoption, engagement, and
-growth across Posit’s open-source projects. The DevRel agent repository
-contains an
+The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an
+example commons agent that answers questions about adoption, engagement,
+and growth across Posit’s open-source projects. The DevRel agent
+repository contains an
 [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals)
 that compares performance between the commons agent and Claude Code.
 Both have access to the same underlying data.
 
 In this evaluation, the commons agent had higher mean accuracy (86.3%
 vs. 83.5%), took less time to answer questions (a median of 29.2
-vs. 62.7 seconds), and used fewer output tokens (243,360 vs. 439,200
+vs. 62.7 seconds), and used fewer output tokens (243,403 vs. 439,188
 total).
 
 <img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
 
 Both systems use Claude Sonnet 5 at medium effort. The evaluation runs
-each of 32 questions 3 times. Questions require either a numeric answer,
-a table, a nuanced response, or recognition that the available data
-cannot answer them.
+each of 32 questions three times. Questions require either a numeric
+answer, a table, a nuanced response, or recognition that the available
+data cannot answer them.
