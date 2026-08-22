@@ -18,8 +18,9 @@ data and build reports and apps. commons gives agents access to that
 information, situating it in a series of prompts and tools designed to
 create an accurate, fast, and cost-effective agent.
 
-Trusted calculations can come from R code, data dictionaries, or
-semantic layers in Snowflake and Databricks.
+Trusted calculations can come from R code, [data
+dictionaries](https://data-dict.tidyverse.org/), or semantic layers in
+Snowflake and Databricks.
 
 <img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
@@ -31,24 +32,6 @@ To install the package, run:
 # install.packages("pak")
 pak::pak("posit-dev/commons")
 ```
-
-## Trusted answers
-
-There are two provenance paths available to a commons agent: when users
-ask questions for which there is trusted code, the agent follows the
-“happy path,” running that code and reporting the result. If the user
-asks a question for which trusted code is not available, the agent
-writes custom R or SQL code, leaning on additional context provided to
-the agent.
-
-Answers are tagged according to the analysis path followed, so users can
-determine how much trust to put in a given answer.
-
-For more information, see the [Introduction to
-commons](https://posit-dev.github.io/commons/articles/commons.html)
-vignette.
-
-<img src="man/figures/README-trust-flow.png" alt="A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer." width="100%" />
 
 ## Get started
 
@@ -81,6 +64,24 @@ commons](https://posit-dev.github.io/commons/articles/commons.html)
 vignette also explains the structure of a commons agent and the creation
 process.
 
+## Trusted answers
+
+There are two provenance paths available to a commons agent: when users
+ask questions for which there is trusted code, the agent follows the
+“happy path,” running that code and reporting the result. If the user
+asks a question for which trusted code is not available, the agent
+writes custom R or SQL code, leaning on additional context provided to
+the agent.
+
+Answers are tagged according to the analysis path followed, so users can
+determine how much trust to put in a given answer.
+
+For more information, see the [Introduction to
+commons](https://posit-dev.github.io/commons/articles/commons.html)
+vignette.
+
+<img src="man/figures/README-trust-flow.png" alt="A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer." width="100%" />
+
 ## Evaluation
 
 The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an
@@ -98,7 +99,7 @@ total).
 
 <img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
 
-Both systems use Claude Sonnet 5 at medium effort. The evaluation runs
-each of 32 questions three times. Questions require either a numeric
-answer, a table, a nuanced response, or recognition that the available
-data cannot answer them.
+In the evaluation, both harnesses use Claude Sonnet 5 at medium effort.
+The evaluation runs each of 32 questions three times. Questions require
+either a numeric answer, a table, a nuanced response, or recognition
+that the available data cannot answer them.
