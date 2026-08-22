@@ -1,11 +1,3 @@
-# Package-relative ignores.
-#
-# These live here rather than in the repository root because a gitignore
-# pattern containing a separator is anchored to the directory of the
-# .gitignore that declares it. `inst/resources/` and `src/*.o` at the root
-# stopped matching the moment the package moved under pkg-r/, which would
-# have let compiled objects and generated asset directories become
-# committable without anyone noticing.
 inst/resources/
 inst/tiles/
 inst/tiles-agent/
@@ -14,8 +6,5 @@ inst/hex/output
 src/*.o
 src/*.so
 src/*.dll
-
-# R CMD build / check output. Never ignored before the split either, so this
-# closes a pre-existing gap rather than restoring something the move broke.
 *.Rcheck/
 *.tar.gz

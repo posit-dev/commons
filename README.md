@@ -8,11 +8,11 @@ commons agents use a pool of trusted calculations drawn from your existing work,
 
 <img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
-commons agents support a wide variety of LLM providers via [ellmer](https://ellmer.tidyverse.org/). Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R` files.
+commons agents support a wide variety of LLM providers, via [ellmer](https://ellmer.tidyverse.org/) in R and, once the Python package is ready, [chatlas](https://posit-dev.github.io/chatlas/). Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R` files.
 
 ## Two languages, one design
 
-This repository holds both implementations of commons. Today only the R package works; the Python port is being built to the same design, with the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so that an agent will eventually behave the same way whichever language you build it in.
+This repository holds both implementations of commons. Today only the R package works. The Python package is being built to the same design, with the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so that an agent will eventually behave the same way whichever language you build it in.
 
 ### R
 
@@ -27,16 +27,10 @@ To learn more, see `vignette("commons", package = "commons")`, the [reference si
 
 ### Python
 
-The Python package is early work and not yet usable. It will use [chatlas](https://posit-dev.github.io/chatlas/) for provider support, and will be published to PyPI as `posit-commons` while importing as `commons`:
+The Python package is in development and not yet installable. It will be published to PyPI as `posit-commons` while importing as `commons`:
 
 ``` python
 from commons import Commons
 ```
 
-Nothing is published yet, so there is no install command to give you. Follow along in [`pkg-py/README.md`](pkg-py/README.md).
-
-## Contributing
-
-Each package builds and tests from its own directory, `pkg-r/` for R and `pkg-py/` for Python, rather than from the repository root.
-
-If you worked in this repository before the two packages were split apart, [`MIGRATING.md`](MIGRATING.md) covers what moved and what to change in your setup.
+Follow along in [`pkg-py/README.md`](pkg-py/README.md).
