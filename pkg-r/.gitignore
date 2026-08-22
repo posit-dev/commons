@@ -1,0 +1,10 @@
+inst/resources/
+inst/tiles/
+inst/tiles-agent/
+inst/pkgs
+inst/hex/output
+src/*.o
+src/*.so
+src/*.dll
+*.Rcheck/
+*.tar.gz

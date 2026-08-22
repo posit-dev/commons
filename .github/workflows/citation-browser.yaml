@@ -3,7 +3,9 @@ name: Citation browser tests
 on:
   push:
     branches: [main]
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/citation-browser.yaml]
   pull_request:
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/citation-browser.yaml]
   workflow_dispatch:
 
 permissions: read-all
@@ -11,6 +13,9 @@ permissions: read-all
 jobs:
   browser:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkg-r
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -22,6 +27,7 @@ jobs:
         with:
           extra-packages: local::., any::devtools, any::shinytest2, any::chromote
           needs: check
+          working-directory: pkg-r
       - name: Locate Chrome
         run: Rscript -e 'stopifnot(nzchar(chromote::find_chrome()))'
       - name: Run citation browser tests

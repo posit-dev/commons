@@ -3,7 +3,9 @@ name: R CMD check
 on:
   push:
     branches: [main]
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/R-CMD-check.yaml]
   pull_request:
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/R-CMD-check.yaml]
   workflow_dispatch:
 
 permissions: read-all
@@ -24,4 +26,7 @@ jobs:
         with:
           extra-packages: any::rcmdcheck, local::.
           needs: check
+          working-directory: pkg-r
       - uses: r-lib/actions/check-r-package@v2
+        with:
+          working-directory: pkg-r

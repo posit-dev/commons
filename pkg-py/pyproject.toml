@@ -1,0 +1,22 @@
+# Minimal placeholder so py-check has something real to run against. The
+# actual package definition (hatchling build backend, src/commons/ layout,
+# the [execute]/[tracing]/[ui] extras, runtime dependencies) is the scaffold
+# task's job; this file exists only so CI is green rather than vacuous.
+#
+# `package = false` keeps uv from trying to build a distribution that has no
+# source tree yet. The scaffold task removes it along with this comment.
+[project]
+name = "posit-commons"
+version = "0.0.0.9000"
+description = "Trustworthy data agents for Python (port in progress)"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py310"
