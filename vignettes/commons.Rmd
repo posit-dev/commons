@@ -18,6 +18,7 @@ knitr::opts_chunk$set(
   comment = "#>",
   eval = FALSE
 )
+knitr::knit_meta_add(list(commons:::commons_chat_dependency()))
 ```
 
 This document explains the structure of a commons project and how to start building a commons agent.
