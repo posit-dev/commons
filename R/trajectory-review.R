@@ -424,25 +424,40 @@ viewer_ui <- function(summary) {
       sidebar = bslib::sidebar(
         width = 380,
         class = "commons-viewer-sidebar",
-        bslib::navset_underline(
-          id = "group_by",
-          bslib::nav_panel("Conversations", value = "conversation"),
-          bslib::nav_panel("Questions", value = "question")
+        htmltools::div(
+          class = "commons-viewer-sidebar-controls",
+          shiny::dateRangeInput(
+            "window",
+            "Dates",
+            start = dates$min,
+            end = dates$max,
+            min = dates$min,
+            max = dates$max,
+            width = "100%"
+          ),
+          htmltools::div(
+            class = "commons-viewer-segmented",
+            shiny::radioButtons(
+              "group_by",
+              NULL,
+              choices = c(
+                Conversations = "conversation",
+                Questions = "question"
+              ),
+              inline = TRUE
+            )
+          ),
+          shiny::selectInput(
+            "trust",
+            "Trust Level",
+            trust_choices("conversation"),
+            width = "100%"
+          )
         ),
-        shiny::dateRangeInput(
-          "window",
-          "Dates",
-          start = dates$min,
-          end = dates$max,
-          min = dates$min,
-          max = dates$max
-        ),
-        shiny::selectInput(
-          "trust",
-          "Trust Level",
-          trust_choices("conversation")
-        ),
-        shiny::uiOutput("entries")
+        htmltools::div(
+          class = "commons-viewer-sidebar-entries",
+          shiny::uiOutput("entries")
+        )
       ),
       trust_timeline_card(),
       bslib::card(
@@ -589,6 +604,10 @@ viewer_server <- function(
         function(k) question_visible(questions[[k]], input$window, input$trust),
         seq_along(questions)
       )
+    })
+
+    output$timeline_title <- shiny::renderText({
+      timeline_title(input$window)
     })
 
     output$timeline_legend <- shiny::renderUI({

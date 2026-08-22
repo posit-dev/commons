@@ -18,7 +18,11 @@ trust_timeline_card <- function() {
     class = "commons-viewer-timeline-card",
     bslib::card_header(
       class = "commons-viewer-timeline-header",
-      htmltools::tags$strong("Trust levels over time"),
+      shiny::textOutput(
+        "timeline_title",
+        container = htmltools::tags$strong,
+        inline = TRUE
+      ),
       shiny::uiOutput("timeline_legend", inline = TRUE)
     ),
     shiny::uiOutput("timeline")
@@ -147,6 +151,17 @@ timeline_bin_label <- function(start, unit, bounds) {
     return(format(start, "%B %Y"))
   }
   timeline_range_label(from, to)
+}
+
+timeline_title <- function(window) {
+  if (length(window) < 2 || anyNA(window)) {
+    return("Trust levels over time")
+  }
+  sprintf(
+    "Trust levels from %s to %s",
+    day_label(as.Date(window[[1]])),
+    day_label(as.Date(window[[2]]))
+  )
 }
 
 timeline_range_label <- function(from, to) {
