@@ -24,6 +24,17 @@ test_client <- function() {
   ellmer::chat_anthropic(model = "claude-sonnet-4-5")
 }
 
+skip_if_ellmer_streaming_hooks_unavailable <- function() {
+  skip_if_not(
+    exists(
+      "stream_content_with_turns",
+      envir = asNamespace("ellmer"),
+      inherits = FALSE
+    ),
+    "Development ellmer streaming hooks are unavailable."
+  )
+}
+
 # A board_temp() holding the given named values, each written as an rds pin.
 board_with_pins <- function(...) {
   values <- rlang::list2(...)
