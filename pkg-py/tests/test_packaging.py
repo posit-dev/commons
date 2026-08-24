@@ -1,9 +1,9 @@
 """Pin the distribution/import name split.
 
-The distribution is ``posit-commons`` and the import name is ``commons``
-(D7: the PyPI name ``commons`` is taken). Hatchling infers the package
-directory from the distribution name, so the split works only because
-``[tool.hatch.build.targets.wheel]`` names ``src/commons`` explicitly.
+The distribution is ``posit-commons`` (the PyPI name ``commons`` is taken).
+Hatchling infers the package directory from the distribution name, so
+the split works because ``[tool.hatch.build.targets.wheel]``
+names ``src/commons`` explicitly.
 
 Without that setting the wheel build fails outright, which is loud but invites
 the wrong fix: renaming ``src/commons/`` to ``src/posit_commons/`` also makes
