@@ -2,12 +2,13 @@ commons_system_prompt <- function(
   sources,
   definitions = NULL,
   instructions = NULL,
-  tools = list()
+  tools = list(),
+  model = NULL
 ) {
   definitions <- definitions %||% definitions_registry(sources)
   instructions <- read_instructions(instructions)
   template <- read_system_prompt()
-  data <- system_prompt_data(sources, definitions, instructions, tools)
+  data <- system_prompt_data(sources, definitions, instructions, tools, model)
   render_system_prompt(template, data)
 }
 
@@ -15,7 +16,8 @@ system_prompt_data <- function(
   sources,
   definitions,
   instructions = NULL,
-  tools = list()
+  tools = list(),
+  model = NULL
 ) {
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
@@ -23,6 +25,7 @@ system_prompt_data <- function(
 
   list(
     date = as.character(Sys.Date()),
+    is_claude_5 = is_claude_5_model(model),
     has_multiple_sources = length(sources) > 1,
     has_catalog_search = any(vapply(sources, catalog_searchable, logical(1))),
     has_dictionary_context = nzchar(dictionary_context) ||
@@ -38,6 +41,17 @@ system_prompt_data <- function(
     non_citable_tool_outputs = non_citable_tool_output_text(tool_names),
     has_instructions = nzchar(instructions %||% ""),
     instructions = instructions %||% ""
+  )
+}
+
+is_claude_5_model <- function(model) {
+  if (!rlang::is_string(model)) {
+    return(FALSE)
+  }
+  grepl(
+    "(^|[./:_-])claude-[^-]+-5($|[./:@_-])",
+    tolower(model),
+    perl = TRUE
   )
 }
 

@@ -225,7 +225,8 @@ Commons <- R6::R6Class(
           private$sources,
           definitions = private$definitions,
           instructions = instructions,
-          tools = commons_tools
+          tools = commons_tools,
+          model = self$get_model()
         )
       )
     },
@@ -241,7 +242,8 @@ Commons <- R6::R6Class(
       if (private$tracing) {
         local_conversation_turn_span(private$conversation_id)
       }
-      super$chat(..., echo = echo)
+      inputs <- append_turn_reminder(rlang::list2(...), self$get_model())
+      do.call(super$chat, c(inputs, list(echo = echo)))
     },
 
     stream_async = function(
@@ -253,11 +255,17 @@ Commons <- R6::R6Class(
       private$refresh_conversation_id()
       from_index <- length(self$get_turns()) + 1L
       stream <- rlang::arg_match(stream)
-      raw_stream <- super$stream_async(
-        ...,
-        tool_mode = tool_mode,
-        stream = stream,
-        controller = controller
+      inputs <- append_turn_reminder(rlang::list2(...), self$get_model())
+      raw_stream <- do.call(
+        super$stream_async,
+        c(
+          inputs,
+          list(
+            tool_mode = tool_mode,
+            stream = stream,
+            controller = controller
+          )
+        )
       )
 
       tracing <- private$tracing
