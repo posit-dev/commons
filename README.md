@@ -1,5 +1,10 @@
 # commons <a href="https://posit-dev.github.io/commons/"><img src="pkg-r/man/figures/logo.png" align="right" height="240" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space." /></a>
 
+<!-- badges: start -->
+
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+<!-- badges: end -->
+
 > Both packages are highly experimental; expect their interfaces to change rapidly.
 
 commons helps data scientists build trustworthy data agents. It provides a meta-harness; you bring your data and understanding of how to do calculations on it, and the package situates that in a set of prompts and tools that make for a more accurate, fast, and cost-effective agent than a regular coding agent provided with the same information.
@@ -8,15 +13,13 @@ commons agents use a pool of trusted calculations drawn from your existing work,
 
 <img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
-commons agents support a wide variety of LLM providers, via [ellmer](https://ellmer.tidyverse.org/) in R and, once the Python package is ready, [chatlas](https://posit-dev.github.io/chatlas/). Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) and `.R` files.
+commons agents support a wide variety of LLM providers, via [ellmer](https://ellmer.tidyverse.org/) in R and [chatlas](https://posit-dev.github.io/chatlas/) in Python. Extracted context is stored in plain-text [data-dict.yaml](https://data-dict.tidyverse.org/) alongside `.R` or `.py` files.
 
 ## Two languages, one design
 
-This repository holds both implementations of commons. Today only the R package works. The Python package is being built to the same design, with the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so that an agent will eventually behave the same way whichever language you build it in.
+This repository holds both implementations of commons. They share one design: the same three layers (data, semantic, and context), the same tools, and the same provenance semantics, so an agent behaves the same way whichever language you build it in. Pick the one your team already works in.
 
 ### R
-
-The R package is the original and the one to reach for today. It is usable and in internal use, though still experimental.
 
 ``` r
 # install.packages("pak")
@@ -27,10 +30,14 @@ To learn more, see `vignette("commons", package = "commons")`, the [reference si
 
 ### Python
 
-The Python package is in development and not yet installable. It will be published to PyPI as `posit-commons` while importing as `commons`:
+Published to PyPI as `posit-commons`, imported as `commons`:
+
+``` sh
+pip install posit-commons
+```
 
 ``` python
 from commons import Commons
 ```
 
-Follow along in [`pkg-py/README.md`](pkg-py/README.md).
+To learn more, see [`pkg-py/README.md`](pkg-py/README.md).
