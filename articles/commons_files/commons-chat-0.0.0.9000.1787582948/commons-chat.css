@@ -1,0 +1,310 @@
+/* Quiet, text-like chat styling layered over shinychat's defaults: tool
+ * calls read as muted single-line rows rather than cards, and provenance
+ * markers read as annotations rather than badges. */
+
+/* ---- Chat-level polish ---------------------------------------------- */
+
+shiny-chat-container {
+  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
+  --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
+}
+
+.shiny-chat-user-message {
+  border-radius: 1.25rem;
+  padding: 0.65rem 1.1rem;
+}
+
+.shiny-chat-input .tiptap {
+  border-color: var(--bs-border-color, #dee2e6);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+/* Send/stop keep shinychat's primary/danger hues, softened toward the
+ * background so they don't dominate the chat. */
+.shiny-chat-input .shiny-chat-btn-send {
+  color: color-mix(in srgb, var(--bs-primary, #007bc2) 60%, var(--bs-body-bg, #fff));
+}
+
+.shiny-chat-input .shiny-chat-btn-send.shiny-chat-btn-cancel {
+  color: color-mix(in srgb, var(--bs-danger, #dc3545) 60%, var(--bs-body-bg, #fff));
+}
+
+.shiny-chat-input .shiny-chat-btn-send:disabled {
+  color: var(--bs-gray-400, #ced4da);
+}
+
+/* ---- Answer provenance ----------------------------------------------- */
+
+.commons-answer-pill {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 400;
+  gap: 0.3rem;
+  line-height: 1.2;
+  max-width: 100%;
+  padding: 0.18rem 0.45rem;
+  position: relative;
+  vertical-align: text-bottom;
+}
+
+.commons-answer-pill-icon {
+  flex: 0 0 auto;
+  height: 0.82rem;
+  width: 0.82rem;
+}
+
+.commons-answer-pill-trusted {
+  background: #f2fbf5;
+  border: 1px solid #cfeedd;
+  color: #286144;
+}
+
+.commons-answer-pill-cited {
+  background: #eef7fa;
+  border: 1px solid #c9e2e9;
+  color: #285867;
+}
+
+.commons-answer-pill-caution {
+  background: #fff8ec;
+  border: 1px solid #f2ddbb;
+  color: #6b4b1b;
+}
+
+/* ---- Provenance tooltips ---------------------------------------------- */
+
+/* Use a real element so JavaScript can keep tooltips inside the pane. */
+.commons-tooltip {
+  background: var(--bs-body-bg, #fff);
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 6px;
+  bottom: calc(100% + 0.45rem);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+  color: var(--bs-body-color, #212529);
+  display: none;
+  font-size: 0.74rem;
+  font-weight: 400;
+  left: 50%;
+  line-height: 1.25;
+  max-width: min(18rem, 70vw);
+  padding: 0.42rem 0.55rem;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  transform: translateX(calc(-50% + var(--commons-tooltip-shift, 0px)));
+  white-space: normal;
+  width: max-content;
+  z-index: 1000;
+}
+
+.commons-answer-pill:hover > .commons-tooltip,
+.commons-answer-pill:focus > .commons-tooltip,
+.commons-answer-pill:focus-within > .commons-tooltip {
+  display: block;
+}
+
+.commons-answer-pill:hover::before,
+.commons-answer-pill:focus::before,
+.commons-answer-pill:focus-within::before {
+  background: var(--bs-body-bg, #fff);
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  border-right: 1px solid var(--bs-border-color, #dee2e6);
+  bottom: calc(100% + 0.28rem);
+  content: "";
+  height: 0.55rem;
+  left: 50%;
+  pointer-events: none;
+  position: absolute;
+  transform: translateX(-50%) rotate(45deg);
+  width: 0.55rem;
+  z-index: 1000;
+}
+
+/* Markers with too little room above open downward instead */
+.commons-tooltip-below > .commons-tooltip {
+  bottom: auto;
+  top: calc(100% + 0.45rem);
+}
+
+.commons-answer-pill.commons-tooltip-below::before {
+  bottom: auto;
+  top: calc(100% + 0.28rem);
+  transform: translateX(-50%) rotate(225deg);
+}
+
+/* Shinychat owns compact marker structure and placement through this public API. */
+shiny-chat-container [data-shinychat-aside-display="compact"] {
+  --shiny-chat-aside-marker-color: var(--bs-link-color);
+  --shiny-chat-aside-marker-hover-color: var(--bs-link-hover-color);
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-bg: transparent;
+  --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
+}
+
+/* Temporary bridge until Shinychat provides a public per-aside tone API. */
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
+  background: #f2fbf5;
+  box-shadow: inset 0 0 0 1px #cfeedd;
+  color: #286144;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"])[aria-expanded="true"] {
+  background: #e4f6ea;
+  color: #204f38;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
+  background: #fff8ec;
+  box-shadow: inset 0 0 0 1px #f2ddbb;
+  color: #6b4b1b;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"])[aria-expanded="true"] {
+  background: #fcefd8;
+  color: #583b14;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ) {
+  font-weight: 400;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )
+  img {
+  opacity: 1;
+}
+
+/* ---- Measure display ------------------------------------------------- */
+
+.commons-measure-display {
+  display: grid;
+  gap: 1rem;
+}
+
+.commons-measure-args {
+  display: grid;
+  gap: 0.38rem;
+  line-height: 1.35;
+}
+
+.commons-measure-arg {
+  min-width: 0;
+}
+
+.commons-measure-arg-name {
+  color: var(--bs-secondary-color, #6c757d);
+  font-weight: 600;
+}
+
+.commons-measure-arg-value {
+  color: var(--bs-body-color, #212529);
+}
+
+.commons-measure-arg-empty {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.commons-measure-result {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.commons-measure-result-value {
+  color: var(--bs-body-color, #212529);
+  white-space: pre-wrap;
+}
+
+.commons-measure-result-value > table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.commons-measure-result-value > table th,
+.commons-measure-result-value > table td {
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  padding: 0.3rem 0.5rem;
+}
+
+.commons-measure-result-value > table th {
+  font-weight: 600;
+}
+
+.commons-measure-result-value > table tbody tr:nth-child(even) {
+  background: var(--bs-tertiary-bg, #f3f4f6);
+}
+
+.commons-measure-gt-table {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+.commons-measure-gt-table-error,
+.commons-measure-plot-error {
+  color: var(--bs-secondary-color, #6c757d);
+  white-space: normal;
+}
+
+.commons-measure-plot {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  display: block;
+  height: auto;
+  max-width: min(100%, 34rem);
+  white-space: normal;
+}
+
+/* ---- run_r display ---------------------------------------------------- */
+
+.commons-run-r-display {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.commons-run-r-details > summary {
+  color: var(--bs-secondary-color, #6c757d);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.commons-run-r-code {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.commons-run-r-details > .commons-run-r-code {
+  margin-top: 0.4rem;
+}
+
+.commons-run-r-plot {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  height: auto;
+  max-width: min(100%, 34rem);
+}
