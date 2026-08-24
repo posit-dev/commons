@@ -217,6 +217,7 @@ Commons <- R6::R6Class(
       )
       private$citation_request <- new.env(parent = emptyenv())
       private$citation_request$reminder <- citation_reminder_text()
+      private$restore_reminder_pending <- FALSE
 
       commons_tools <- build_commons_tools(self, private)
       self$register_tools(commons_tools)
@@ -242,7 +243,7 @@ Commons <- R6::R6Class(
       if (private$tracing) {
         local_conversation_turn_span(private$conversation_id)
       }
-      inputs <- append_turn_reminder(rlang::list2(...), self$get_model())
+      inputs <- private$prepare_turn_inputs(rlang::list2(...))
       do.call(super$chat, c(inputs, list(echo = echo)))
     },
 
@@ -255,7 +256,7 @@ Commons <- R6::R6Class(
       private$refresh_conversation_id()
       from_index <- length(self$get_turns()) + 1L
       stream <- rlang::arg_match(stream)
-      inputs <- append_turn_reminder(rlang::list2(...), self$get_model())
+      inputs <- private$prepare_turn_inputs(rlang::list2(...))
       raw_stream <- do.call(
         super$stream_async,
         c(
@@ -355,6 +356,11 @@ Commons <- R6::R6Class(
       invisible(self)
     },
 
+    queue_restore_reminder = function() {
+      private$restore_reminder_pending <- TRUE
+      invisible(self)
+    },
+
     prewarm = function() {
       layer <- private$context_layer
       if (!is.null(layer) && length(layer$docs) > 0) {
@@ -390,6 +396,16 @@ Commons <- R6::R6Class(
     worker = NULL,
     corpus = NULL,
     citation_request = NULL,
+    restore_reminder_pending = FALSE,
+
+    prepare_turn_inputs = function(inputs) {
+      inputs <- append_turn_reminder(inputs, self$get_model())
+      if (private$restore_reminder_pending) {
+        private$restore_reminder_pending <- FALSE
+        inputs <- append_restored_conversation_reminder(inputs)
+      }
+      inputs
+    },
 
     # Divergent histories need distinct trace identities.
     refresh_conversation_id = function() {

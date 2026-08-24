@@ -5,8 +5,126 @@
       return;
     }
 
-    if (window.commonsAnswerPillTooltipInitialized) return;
-    window.commonsAnswerPillTooltipInitialized = true;
+    if (window.commonsChatInitialized) return;
+    window.commonsChatInitialized = true;
+
+    var resumeMessages = function(chat) {
+      var content = chat.querySelector(".shiny-chat-messages-content");
+      if (!content) return [];
+      return content.querySelectorAll(
+        ":scope > .shiny-chat-message, :scope > .shiny-chat-user-message"
+      );
+    };
+
+    var resumeBoundaries = function(boundaries, count) {
+      return Array.from(new Set(boundaries))
+        .filter(function(index) {
+          return Number.isInteger(index) && index > 0 && index <= count;
+        })
+        .sort(function(a, b) { return a - b; });
+    };
+
+    var reportResumeBoundaries = function(state) {
+      var serialized = JSON.stringify(state.boundaries);
+      if (serialized === state.lastReported) return;
+      state.lastReported = serialized;
+      Shiny.setInputValue(
+        state.inputId,
+        state.boundaries,
+        { priority: "event" }
+      );
+    };
+
+    var renderResumeBoundaries = function(chat, state, trim) {
+      var messages = resumeMessages(chat);
+      chat.querySelectorAll(".commons-resume-boundary").forEach(function(node) {
+        node.classList.remove("commons-resume-boundary");
+      });
+      if (trim) {
+        state.boundaries = resumeBoundaries(
+          state.boundaries,
+          messages.length
+        );
+      }
+      state.boundaries.forEach(function(index) {
+        if (messages[index - 1]) {
+          messages[index - 1].classList.add("commons-resume-boundary");
+        }
+      });
+      reportResumeBoundaries(state);
+    };
+
+    var scheduleResumeRender = function(chat, state) {
+      window.clearTimeout(state.renderTimer);
+      state.renderTimer = window.setTimeout(function() {
+        var messages = resumeMessages(chat);
+        if (messages.length === 0) {
+          window.clearTimeout(state.clearTimer);
+          state.clearTimer = window.setTimeout(function() {
+            if (resumeMessages(chat).length === 0) {
+              state.boundaries = [];
+              reportResumeBoundaries(state);
+            }
+          }, 50);
+          return;
+        }
+        window.clearTimeout(state.clearTimer);
+        renderResumeBoundaries(chat, state, !state.restoring);
+      }, 50);
+    };
+
+    Shiny.addCustomMessageHandler("commonsResumeConversation", function(message) {
+      var chat = document.getElementById(message.id);
+      if (!chat) return;
+
+      var state = chat.commonsResumeState;
+      if (!state) {
+        state = {
+          boundaries: [],
+          inputId: message.input_id,
+          lastReported: null,
+          renderTimer: null,
+          clearTimer: null,
+          restoring: false,
+          restoreGeneration: 0
+        };
+        chat.commonsResumeState = state;
+        state.observer = new MutationObserver(function() {
+          scheduleResumeRender(chat, state);
+        });
+        state.observer.observe(chat, { childList: true, subtree: true });
+      }
+      state.inputId = message.input_id;
+      window.clearTimeout(state.clearTimer);
+      state.restoring = true;
+      var generation = ++state.restoreGeneration;
+      state.boundaries = Array.isArray(message.boundaries)
+        ? message.boundaries.slice()
+        : Number.isInteger(message.boundaries)
+          ? [message.boundaries]
+          : [];
+
+      var attempts = 0;
+      var previousCount = -1;
+      var markBoundary = function() {
+        if (generation !== state.restoreGeneration) return;
+        var messages = resumeMessages(chat);
+        if (messages.length !== previousCount && attempts++ < 10) {
+          previousCount = messages.length;
+          window.requestAnimationFrame(markBoundary);
+          return;
+        }
+        if (messages.length > 0) state.boundaries.push(messages.length);
+        state.boundaries = resumeBoundaries(
+          state.boundaries,
+          messages.length
+        );
+        state.restoring = false;
+        renderResumeBoundaries(chat, state, false);
+      };
+
+      window.requestAnimationFrame(markBoundary);
+    });
 
     // Keep the viewport still when a tool card is expanded or collapsed;
     // otherwise shinychat's stick-to-bottom scrolling chases the height
