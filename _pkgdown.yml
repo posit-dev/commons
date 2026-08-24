@@ -2,3 +2,21 @@ url: https://solid-adventure-ny1mpqy.pages.github.io/
 template:
   bootstrap: 5
 
+reference:
+- title: Main functions
+  description: The main agent constructor, plus the building blocks for a commons agent.
+  contents:
+  - commons
+  - data_source
+  - semantic_layer
+  - context_layer
+- title: Shiny UI and server
+  description: Put a commons agent inside of an interactive chat app.
+  contents: starts_with("commons_")
+- title: Trajectories
+  description: Read and annotate conversation histories.
+  contents: starts_with("trajectory_")
+- title: Miscellaneous
+  contents:
+  - list_tables
+  - measure
