@@ -95,8 +95,7 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
             code = code,
             new_handles = new_handles,
             plot_width = dims$width,
-            plot_height = dims$height,
-            guardrails = worker$guardrails
+            plot_height = dims$height
           )
         )
         worker$synced <- length(ids)
@@ -251,7 +250,6 @@ new_r_worker <- function(network = "none", protection = "sandbox") {
   worker <- new.env(parent = emptyenv())
   worker$network <- network
   worker$protection <- protection
-  worker$guardrails <- NULL
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
@@ -295,7 +293,11 @@ worker_ensure <- function(worker, fn_sources = character()) {
     )
   )
   if (identical(worker$protection, "guardrails")) {
-    worker$guardrails <- worker_guardrails(work_dir, worker$network)
+    # Build hooks in the worker so their captured functions stay worker-local.
+    rs$run(
+      worker_guardrails,
+      args = list(work_dir = work_dir, network = worker$network)
+    )
   }
   # Defining sources at spawn (rather than syncing per call like handles)
   # means a respawned worker gets them again for free.
@@ -332,7 +334,6 @@ worker_close <- function(worker) {
   if (!is.null(worker$rs)) {
     try(worker$rs$close(), silent = TRUE)
     worker$rs <- NULL
-    worker$guardrails <- NULL
     worker$synced <- 0L
   }
   invisible(worker)
@@ -544,7 +545,7 @@ worker_guardrails <- function(work_dir, network = "none") {
     }
     list(package = package, name = name, replacement = replacement)
   }
-  connection_hook <- function(name, open_argument = 2L) {
+  connection_hook <- function(name) {
     original <- namespace_function("base", name)
     replacement <- function(...) {
       args <- list(...)
@@ -729,7 +730,8 @@ worker_guardrails <- function(work_dir, network = "none") {
       )
     )
   }
-  hooks
+  assign(".commons_guardrails", hooks, envir = globalenv())
+  invisible(TRUE)
 }
 
 # Close the worker after a quiet stretch; it respawns lazily on the next
@@ -949,8 +951,7 @@ worker_run_code <- function(
   code,
   new_handles,
   plot_width,
-  plot_height,
-  guardrails = NULL
+  plot_height
 ) {
   for (id in names(new_handles)) {
     assign(id, new_handles[[id]], envir = globalenv())
@@ -1038,6 +1039,11 @@ worker_run_code <- function(
     }
   )
 
+  guardrails <- get0(
+    ".commons_guardrails",
+    envir = globalenv(),
+    inherits = FALSE
+  )
   if (!is.null(guardrails)) {
     restore <- list()
     on.exit({
