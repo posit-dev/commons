@@ -75,8 +75,8 @@ Snowflake semantic variables and Databricks metric-view parameters are
 passed as typed JSON arguments to <code>call_metrics</code>. Databricks wildcard
 members require concrete column metadata from the warehouse.
 Native semantic models are available through <code>search_pool</code>,
-<code>describe_table</code>, and <code>call_metrics</code>, but are not returned by
-<code><a href="list_tables.html">list_tables()</a></code>.
+<code>describe_table</code>, and <code>call_metrics</code>, but are not registered as physical
+tables.
 Snowflake verified queries are exposed separately as exact trusted
 calculations through <code>search_pool</code> and <code>call_calculation</code>; their SQL is
 executed as stored rather than parsed to infer dependencies.
@@ -123,8 +123,7 @@ already-downloaded file. A table reflects the pin's
 value at first use and is not refreshed for the lifetime of the data
 source; if a pin can't be read (e.g. a network failure), the error
 surfaces at that first use and the read is retried on the next one.</p></li>
-</ul><p>The resulting object gives the agent a DBI connection plus a table registry.
-Use <code><a href="list_tables.html">list_tables()</a></code> to list the registered tables.</p>
+</ul><p>The resulting object gives the agent a DBI connection plus a table registry.</p>
     </div>
     <div class="section level2">
     <h2 id="data-dictionaries">Data dictionaries<a class="anchor" aria-label="anchor" href="#data-dictionaries"></a></h2>
@@ -176,8 +175,6 @@ after a zero-row query succeeds for the current principal.</p>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">src</span> <span class="op">&lt;-</span> <span class="fu">data_source</span><span class="op">(</span></span></span>
 <span class="r-in"><span>  sales <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>id <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">2</span>, revenue <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">100</span>, <span class="fl">200</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="fu"><a href="list_tables.html">list_tables</a></span><span class="op">(</span><span class="va">src</span><span class="op">)</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "sales"</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

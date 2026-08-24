@@ -43,15 +43,14 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
   JSON arguments to `call_metrics`. Databricks wildcard members require
   concrete column metadata from the warehouse. Native semantic models
   are available through `search_pool`, `describe_table`, and
-  `call_metrics`, but are not returned by
-  [`list_tables()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/list_tables.md).
-  Snowflake verified queries are exposed separately as exact trusted
-  calculations through `search_pool` and `call_calculation`; their SQL
-  is executed as stored rather than parsed to infer dependencies. An
-  exact physical-table selection also imports associated models when
-  every physical dependency is selected. Public relationships, facts,
-  filters, and instructions become table-scoped first-touch and
-  retrieval context; private members remain hidden.
+  `call_metrics`, but are not registered as physical tables. Snowflake
+  verified queries are exposed separately as exact trusted calculations
+  through `search_pool` and `call_calculation`; their SQL is executed as
+  stored rather than parsed to infer dependencies. An exact
+  physical-table selection also imports associated models when every
+  physical dependency is selected. Public relationships, facts, filters,
+  and instructions become table-scoped first-touch and retrieval
+  context; private members remain hidden.
 
   For a board, a named character vector of pins to read: the names
   become table names, and the values are pin names passed to
@@ -99,9 +98,7 @@ what you pass:
   surfaces at that first use and the read is retried on the next one.
 
 The resulting object gives the agent a DBI connection plus a table
-registry. Use
-[`list_tables()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/list_tables.md)
-to list the registered tables.
+registry.
 
 ## Data dictionaries
 
@@ -158,6 +155,4 @@ the current principal.
 src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))
 )
-list_tables(src)
-#> [1] "sales"
 ```
