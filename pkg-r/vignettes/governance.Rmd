@@ -62,6 +62,27 @@ By default, the subprocess cannot create network sockets. An application author 
 
 For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Deployed Connect applications run on Linux and use the Linux mechanisms described above.
 
+Windows has no OS-level `run_r()` sandbox. By default, commons therefore
+refuses to create an agent on Windows. An application author can enable a
+local-development fallback explicitly:
+
+```r
+options(commons.dangerously_disable_sandbox = TRUE)
+```
+
+The fallback places best-effort checks around ordinary R functions while
+model-authored code evaluates. It limits filesystem reads to R, installed
+packages, and the worker directory; limits writes to the worker directory;
+denies subprocess functions; and follows the requested network policy. These
+checks reduce accidental access and damage, but native code and other R
+mechanisms can bypass them. They are not a sandbox or security boundary and
+should not be enabled in a deployment.
+
+The model-facing `run_r()` description still calls this fallback an OS-level
+sandbox. This wording encourages the model to follow the same conservative
+filesystem and network expectations on every platform; it does not describe
+the fallback's actual security properties.
+
 ### Communication with the main app process
 
 The subprocess starts with a small allowlist of environment variables rather than inheriting the application's complete environment. In particular, API keys, session tokens, and database URLs are not inherited.
