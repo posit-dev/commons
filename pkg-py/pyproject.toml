@@ -19,11 +19,6 @@ dependencies = [
     "pyarrow>=17",
 ]
 
-# `execute` and `ui` are deliberately absent until the code that needs them
-# lands. Execution is a plain subprocess worker for v1, which needs nothing
-# beyond the standard library and pyarrow, so jupyter-client/ipykernel arrive
-# only if M6 moves to the kernel worker (D3). The py-shiny surface arrives with
-# M8 (D6).
 [project.optional-dependencies]
 tracing = [
     "opentelemetry-sdk>=1.39",
@@ -39,11 +34,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 # Hatchling derives the package directory from the *distribution* name, so
-# `posit-commons` makes it look for `src/posit_commons/` and the build fails.
-# The error message invites the wrong fix: renaming `src/commons/` also makes
-# it go away, and silently discards the decision that the import name is
-# `commons`. tests/test_packaging.py pins the split so that cannot happen
-# quietly.
+# this packages line is required to have a package import name that differs
+# from the PyPI distribution name
 [tool.hatch.build.targets.wheel]
 packages = ["src/commons"]
 

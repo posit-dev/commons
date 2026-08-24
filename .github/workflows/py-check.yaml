@@ -17,8 +17,6 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        # 3.11 is the floor: raghilda requires >=3.11,<3.14. 3.13 is the
-        # ceiling that bound allows.
         python-version: ["3.11", "3.13"]
     defaults:
       run:
