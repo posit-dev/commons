@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.10", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
     defaults:
       run:
         working-directory: pkg-py
@@ -33,5 +33,7 @@ jobs:
         run: uv sync --locked --all-extras
       - name: Lint
         run: uv run ruff check
+      - name: Type check
+        run: uv run pyrefly check
       - name: Test
         run: uv run pytest
