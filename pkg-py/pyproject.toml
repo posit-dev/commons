@@ -7,9 +7,10 @@
 # source tree yet. The scaffold task removes it along with this comment.
 [project]
 name = "posit-commons"
-version = "0.0.0.9000"
-description = "Trustworthy data agents for Python (port in progress)"
+version = "0.0.0a1"
+description = "Trustworthy data agents for Python"
 requires-python = ">=3.10"
+classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = []
 
 [dependency-groups]
