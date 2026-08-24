@@ -4,7 +4,7 @@
 
 ## The rule
 
-Anything the R and Python implementations must agree on belongs here as a single source. Do not restate the same expectation in the test suite of each language. A hand-maintained per-language copy of a behavior that this directory governs will drift is a review defect.
+Anything the R and Python implementations must agree on belongs here as a single source. Do not restate the same expectation in the test suite of each language. A hand-maintained per-language copy of a behavior that this directory governs is a review defect because it will drift.
 
 Prose cannot enforce agreement. Every contract added here should be an executable fixture that both suites run, not a description of one.
 
