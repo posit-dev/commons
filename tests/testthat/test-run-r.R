@@ -18,6 +18,18 @@ test_that("run_r executes code against stored handles", {
   expect_match(res@value, "5650")
   expect_equal(res@extra$commons_tag, "B")
   expect_false(res@extra$display$open)
+  expect_match(
+    res@extra$display$html,
+    '<pre class="commons-run-r-code"><code class="language-r">',
+    fixed = TRUE
+  )
+  expect_match(res@extra$display$html, "#&gt; [1] 5650", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
+  expect_no_match(
+    res@extra$display$html,
+    "<summary>Details</summary>",
+    fixed = TRUE
+  )
 })
 
 test_that("run_r session state persists across calls, and handles sync lazily", {
@@ -69,6 +81,8 @@ test_that("run_r returns plots as images and opens the display", {
   expect_identical(res@extra$display$open, TRUE)
   expect_match(res@extra$display$html, "data:image/png;base64,")
   expect_match(res@extra$display$html, "commons-run-r-details")
+  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_match(res@extra$display$html, "<summary>Details</summary>", fixed = TRUE)
 })
 
 test_that("run_r collapses code and output above plots", {
@@ -130,6 +144,35 @@ test_that("run_r surfaces errors from model code without failing the tool", {
 
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_match(res@value, "Error: boom")
+  expect_false(res@extra$display$open)
+  expect_match(res@extra$display$html, "#&gt; boom", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
+})
+
+test_that("run_r displays code directly when it produces no output", {
+  worker <- local_worker()
+  store <- new_handle_store()
+
+  res <- sync_promise(run_r_tool(worker, store, "x <- 1"))
+
+  expect_match(res@value, "produced no output", fixed = TRUE)
+  expect_false(res@extra$display$open)
+  expect_match(res@extra$display$html, "x &lt;- 1", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "#&gt;", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
+})
+
+test_that("run_r displays worker failures directly and escapes their HTML", {
+  res <- run_r_result("x <- '<unsafe>'", list(failure = "worker <broke>"))
+
+  expect_match(res@value, "Error: worker <broke>", fixed = TRUE)
+  expect_false(res@extra$display$open)
+  expect_match(res@extra$display$html, "&#39;&lt;unsafe&gt;&#39;", fixed = TRUE)
+  expect_match(res@extra$display$html, "#&gt; worker &lt;broke&gt;", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
 })
 
 test_that("the worker cannot see parent-only environment variables", {
