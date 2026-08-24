@@ -339,6 +339,10 @@ Commons <- R6::R6Class(
             ),
             error = function(err) NULL
           )
+          tryCatch(
+            record_provenance_span(conversation_id, tag, decisions),
+            error = function(err) NULL
+          )
         }
 
         aside <- provenance_aside(tag)

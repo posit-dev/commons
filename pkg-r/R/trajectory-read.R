@@ -656,7 +656,8 @@ build_trajectories <- function(spans) {
     return(list())
   }
   latest <- latest_chat_spans(chat_spans, index)
-  calls <- latest_recorded_call_spans(chat_spans, index)
+  provenance_spans <- latest_provenance_spans(spans, index)
+  calls <- latest_recorded_call_spans(chat_spans, index, provenance_spans)
   selected <- c(
     unname(latest),
     lapply(calls, function(call) call$chat_span)
@@ -709,7 +710,31 @@ empty_turn_provenance <- function() {
   list(provenance_tag = NA_character_, citation_decisions = list())
 }
 
-latest_recorded_call_spans <- function(chat_spans, index) {
+latest_provenance_spans <- function(spans, index) {
+  latest <- list()
+  provenance_spans <- Filter(
+    function(span) identical(span$name, "commons_provenance"),
+    spans
+  )
+  for (span in provenance_spans) {
+    turn_span <- conversation_turn_ancestor(span, index)
+    if (is.null(turn_span)) {
+      next
+    }
+    key <- exchange_key(turn_span)
+    previous <- latest[[key]]
+    if (is.null(previous) || span_time(span) > span_time(previous)) {
+      latest[[key]] <- span
+    }
+  }
+  latest
+}
+
+latest_recorded_call_spans <- function(
+  chat_spans,
+  index,
+  provenance_spans = list()
+) {
   latest <- list()
   for (span in chat_spans) {
     turn_span <- conversation_turn_ancestor(span, index)
@@ -725,6 +750,7 @@ latest_recorded_call_spans <- function(chat_spans, index) {
       latest[[key]] <- list(
         conversation_id = span_conversation_id(span, index),
         turn_span = turn_span,
+        provenance_span = provenance_spans[[key]] %||% turn_span,
         chat_span = span
       )
     }
@@ -754,7 +780,7 @@ recorded_call_candidates <- function(call_spans, parsed_turns) {
       candidates[[id]],
       list(list(
         signature = lapply(exchanges, exchange_signature),
-        provenance = turn_span_provenance(call$turn_span)
+        provenance = turn_span_provenance(call$provenance_span)
       ))
     )
   }

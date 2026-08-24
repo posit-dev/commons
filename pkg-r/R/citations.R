@@ -105,45 +105,6 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   )
 }
 
-render_recorded_citation_aside <- function(parsed, decision) {
-  fallback <- list(
-    quote = if (is.null(parsed)) NA_character_ else parsed$quote,
-    status = "missing"
-  )
-  if (is.null(parsed) || is.null(decision) || !is.list(decision)) {
-    return(list(html = "", decision = fallback))
-  }
-  valid <- is.character(parsed$quote) &&
-    length(parsed$quote) == 1 &&
-    is.character(parsed$explanation) &&
-    length(parsed$explanation) == 1 &&
-    identical(decision$status %||% "", "accepted") &&
-    is.character(decision$quote) &&
-    length(decision$quote) == 1 &&
-    identical(
-      normalize_citation(parsed$quote),
-      normalize_citation(decision$quote)
-    ) &&
-    is.character(decision$label) &&
-    length(decision$label) == 1 &&
-    nzchar(decision$label) &&
-    is.character(decision$kind) &&
-    length(decision$kind) == 1 &&
-    decision$kind %in% c("prose", "definition", "schema")
-  if (!valid) {
-    return(list(html = "", decision = decision))
-  }
-  list(
-    html = citation_aside_html(
-      parsed$quote,
-      parsed$explanation,
-      decision$label,
-      decision$kind
-    ),
-    decision = decision
-  )
-}
-
 # Forgiving of the ways a faithful quote can still drift from its source:
 # reflowed whitespace, markdown emphasis, and typographic quotes/dashes.
 normalize_citation <- function(x) {
