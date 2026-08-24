@@ -23,7 +23,6 @@
 #'   surfaces at that first use and the read is retried on the next one.
 #'
 #' The resulting object gives the agent a DBI connection plus a table registry.
-#' Use [list_tables()] to list the registered tables.
 #'
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
@@ -48,8 +47,8 @@
 #'   passed as typed JSON arguments to `call_metrics`. Databricks wildcard
 #'   members require concrete column metadata from the warehouse.
 #'   Native semantic models are available through `search_pool`,
-#'   `describe_table`, and `call_metrics`, but are not returned by
-#'   [list_tables()].
+#'   `describe_table`, and `call_metrics`, but are not registered as physical
+#'   tables.
 #'   Snowflake verified queries are exposed separately as exact trusted
 #'   calculations through `search_pool` and `call_calculation`; their SQL is
 #'   executed as stored rather than parsed to infer dependencies.
@@ -114,7 +113,6 @@
 #' src <- data_source(
 #'   sales = data.frame(id = 1:2, revenue = c(100, 200))
 #' )
-#' list_tables(src)
 #'
 #' @export
 data_source <- function(..., tables = NULL, exclude = NULL, dictionary = NULL) {
@@ -381,13 +379,6 @@ new_pending_pins <- function(board, tables) {
   pending
 }
 
-#' List the tables an agent can query
-#'
-#' @param data_source A [data_source()].
-#'
-#' @return A character vector of table names.
-#'
-#' @export
 list_tables <- function(data_source) {
   check_data_source(data_source)
   data_source$tables

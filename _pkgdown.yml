@@ -18,5 +18,4 @@ reference:
   contents: starts_with("trajectory_")
 - title: Miscellaneous
   contents:
-  - list_tables
   - measure
