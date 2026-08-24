@@ -3,8 +3,10 @@ name: Deploy to Connect
 on:
   push:
     branches: [main]
+    paths: [pkg-r/**, .github/workflows/deploy.yml]
   pull_request:
     branches: [main]
+    paths: [pkg-r/**, .github/workflows/deploy.yml]
 
 jobs:
   deploy:
@@ -21,7 +23,7 @@ jobs:
         with:
           connect-server: ${{ secrets.CONNECT_SERVER_DEV }}
           content-guid: d7a36cae-8f27-448b-a478-61b81fbe3942
-          path: inst
+          path: pkg-r/inst
           github-token: ${{ github.token }}
           rsconnect-args: --title biodiversity-explorer
 
@@ -30,6 +32,6 @@ jobs:
         with:
           connect-server: ${{ secrets.CONNECT_SERVER_STAGING }}
           content-guid: ad662e1b-5048-4acc-9ad7-f9478c92274e
-          path: inst
+          path: pkg-r/inst
           github-token: ${{ github.token }}
           rsconnect-args: --title biodiversity-explorer
