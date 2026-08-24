@@ -18,9 +18,9 @@ data and build reports and apps. commons leverages their expertise,
 situating that information in a series of prompts and tools designed to
 create an accurate, fast, and cost-effective agent.
 
-Trusted calculations can come from R code (as *measures*),
-[data-dictionary definitions](https://data-dict.tidyverse.org/),
-Snowflake semantic views, or Databricks metric views.
+Trusted calculations can come from R code (as *measures*), [data
+dictionary](https://data-dict.tidyverse.org/) definitions, Snowflake
+semantic views, or Databricks metric views.
 
 <img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
 
