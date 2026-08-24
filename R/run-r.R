@@ -224,13 +224,20 @@ run_r_html <- function(code, segments) {
       )
     }
   }
-  details_html <- sprintf(
-    "<details class=\"commons-run-r-details\"><summary>Details</summary><pre><code class=\"language-r\">%s</code></pre></details>",
+  code_html <- sprintf(
+    "<pre class=\"commons-run-r-code\"><code class=\"language-r\">%s</code></pre>",
     html_escape(paste(c(code, output), collapse = "\n"))
   )
+  if (length(plot_html)) {
+    code_html <- paste0(
+      "<details class=\"commons-run-r-details\"><summary>Details</summary>",
+      code_html,
+      "</details>"
+    )
+  }
   sprintf(
     "<div class=\"commons-run-r-display\">%s</div>",
-    paste(c(details_html, plot_html), collapse = "\n")
+    paste(c(code_html, plot_html), collapse = "\n")
   )
 }
 
