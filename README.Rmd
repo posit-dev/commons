@@ -25,9 +25,9 @@ library(ggplot2)
 
 commons helps data scientists build trustworthy data agents.
 
-Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons gives agents access to that information, situating it in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
+Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons leverages their expertise, situating that information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
 
-Trusted calculations can come from R code, [data dictionaries](https://data-dict.tidyverse.org/), or semantic layers in Snowflake and Databricks.
+Trusted calculations can come from R code (as _measures_), [data-dictionary definitions](https://data-dict.tidyverse.org/), Snowflake semantic views, or Databricks metric views.
 
 ```{r}
 #| echo: false
@@ -48,7 +48,7 @@ pak::pak("posit-dev/commons")
 
 ## Get started
 
-commons uses [ellmer](https://ellmer.tidyverse.org/) to access LLMs, so you will need credentials for one of ellmer's supported providers.
+commons uses [ellmer](https://ellmer.tidyverse.org/) to access LLMs, so you will need access to one of ellmer's supported providers.
 
 We recommend building commons agents with the help of the [agent skill](https://agentskills.io/) that ships with the package. The skill helps coding agents build, evaluate, and improve commons agents.
 
@@ -74,7 +74,7 @@ The [Introduction to commons](https://posit-dev.github.io/commons/articles/commo
 
 There are two provenance paths available to a commons agent: when users ask questions for which there is trusted code, the agent follows the "happy path," running that code and reporting the result. If the user asks a question for which trusted code is not available, the agent writes custom R or SQL code, leaning on additional context provided to the agent.
 
-Answers are tagged according to the analysis path followed, so users can determine how much trust to put in a given answer.
+Answers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.
 
 For more information, see the [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette.
 
@@ -99,7 +99,7 @@ eval_results <- data.frame(
     levels = c("Claude Code", "commons")
   ),
   `Mean accuracy (%)` = c(83.5, 86.3),
-  `Median solver time (seconds)` = c(62.7, 29.2),
+  `Median solver time (seconds)` = c(60.5, 31.0),
   `Total output tokens` = c(439188, 243403),
   row.names = c("Claude Code", "commons"),
   check.names = FALSE
