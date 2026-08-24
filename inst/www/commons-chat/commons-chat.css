@@ -33,20 +33,6 @@ shiny-chat-container {
   color: var(--bs-gray-400, #ced4da);
 }
 
-.shiny-chat-message.commons-resume-boundary::after,
-.shiny-chat-user-message.commons-resume-boundary::after {
-  color: var(--bs-secondary-color, #6c757d);
-  content: "— Resuming previous conversation —";
-  display: block;
-  font-size: 0.75rem;
-  font-style: italic;
-  font-weight: 400;
-  grid-column: 1 / -1;
-  margin-top: 2rem;
-  text-align: center;
-  width: 100%;
-}
-
 /* ---- Answer provenance ----------------------------------------------- */
 
 .commons-answer-pill {

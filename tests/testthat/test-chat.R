@@ -22,6 +22,11 @@ test_that("commons_app builds a single-user app from commons chat wrappers", {
   })
 })
 
+test_that("commons_server registers no custom-message observers", {
+  body_text <- paste(deparse(body(commons_server)), collapse = "\n")
+  expect_false(grepl("sendCustomMessage", body_text, fixed = TRUE))
+})
+
 test_that("commons_server runs under shiny::testServer without error", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
@@ -37,137 +42,32 @@ test_that("commons_server runs under shiny::testServer without error", {
   succeed()
 })
 
-test_that("conversation state round-trips through history hooks", {
+test_that("persist_conversation_id round-trips the id through history hooks", {
   agent <- test_agent()
   hooks <- new.env(parent = emptyenv())
-  messages <- new.env(parent = emptyenv())
   fake_chat <- list(
     history = list(
       on_save = function(fn) hooks$on_save <- fn,
       on_restore = function(fn) hooks$on_restore <- fn
     )
   )
-  fake_session <- list(
-    input = list(
-      chat_resume_boundaries = c(2L, 4L, 7L),
-      chat_messages = rep(list(list(role = "assistant")), 5)
-    ),
-    ns = function(id) paste0("module-", id),
-    sendCustomMessage = function(type, message) {
-      messages$type <- type
-      messages$message <- message
-    }
-  )
 
-  persist_conversation_state(fake_chat, agent, "chat", fake_session)
+  persist_conversation_id(fake_chat, agent)
 
   values <- hooks$on_save(list(app_state = 1))
   expect_identical(
     values$commons_conversation_id,
     agent$get_conversation_id()
   )
-  expect_identical(values$commons_resume_boundaries, c(2L, 4L))
   expect_identical(values$app_state, 1)
 
   hooks$on_restore(list(commons_conversation_id = "restored-id"))
   expect_identical(agent$get_conversation_id(), "restored-id")
   expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
-  expect_identical(messages$type, "commonsResumeConversation")
-  expect_identical(
-    messages$message,
-    list(
-      id = "module-chat",
-      input_id = "module-chat_resume_boundaries",
-      boundaries = integer()
-    )
-  )
-
-  hooks$on_restore(list(commons_resume_boundaries = c(2, 4)))
-  expect_identical(agent$get_conversation_id(), "restored-id")
-  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
-  expect_identical(messages$message$boundaries, c(2L, 4L))
 
   hooks$on_restore(list())
-  expect_identical(messages$message$boundaries, integer())
-})
-
-test_that("resume boundary ordinals are valid message positions", {
-  expect_identical(
-    resume_boundary_ordinals(c(4, NA, 2, 4, 0, 7), message_count = 5),
-    c(2L, 4L)
-  )
-  expect_identical(resume_boundary_ordinals(NULL), integer())
-})
-
-test_that("resume boundaries accumulate and survive UI replay", {
-  skip_on_cran()
-  skip_if_not_installed("shinytest2")
-  skip_if_not_installed("chromote")
-  skip_if_browser_tests_disabled()
-
-  app <- shinytest2::AppDriver$new(
-    browser_test_app("resume-boundaries"),
-    name = "resume-boundaries",
-    timeout = 30 * 1000,
-    load_timeout = 30 * 1000
-  )
-  withr::defer(app$stop())
-
-  boundary_positions <- paste0(
-    "Array.from(document.querySelectorAll(",
-    "'.shiny-chat-messages-content > div'))",
-    ".map((node, index) => node.classList.contains(",
-    "'commons-resume-boundary') ? index + 1 : null)",
-    ".filter((index) => index !== null).join(',');"
-  )
-  app$wait_for_js(
-    "document.querySelectorAll('.commons-resume-boundary').length === 3;",
-    timeout = 30 * 1000
-  )
-  expect_identical(app$get_js(boundary_positions), "2,4,6")
-  expect_match(
-    app$get_js(
-      paste0(
-        "getComputedStyle(document.querySelector(",
-        "'.commons-resume-boundary'), '::after').content;"
-      )
-    ),
-    "Resuming previous conversation",
-    fixed = TRUE
-  )
-
-  app$click("replay")
-  app$wait_for_js(
-    paste0(
-      "document.querySelector('.shiny-chat-messages-content')",
-      ".textContent.includes('Replayed Answer three');"
-    ),
-    timeout = 30 * 1000
-  )
-  app$wait_for_js(
-    "document.querySelectorAll('.commons-resume-boundary').length === 3;",
-    timeout = 30 * 1000
-  )
-  expect_identical(app$get_js(boundary_positions), "2,4,6")
-
-  app$click("clear")
-  app$wait_for_js(
-    "document.querySelectorAll('.shiny-chat-messages-content > div').length === 0;",
-    timeout = 30 * 1000
-  )
-  app$wait_for_js(
-    "document.getElementById('chat').commonsResumeState.boundaries.length === 0;",
-    timeout = 30 * 1000
-  )
-  app$click("append")
-  app$wait_for_js(
-    "document.querySelectorAll('.shiny-chat-messages-content > div').length === 1;",
-    timeout = 30 * 1000
-  )
-  expect_identical(
-    app$get_js("document.querySelectorAll('.commons-resume-boundary').length;"),
-    0L
-  )
+  expect_identical(agent$get_conversation_id(), "restored-id")
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
 })
 
 test_that("commons_server wires conversation-id persistence into shinychat", {

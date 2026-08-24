@@ -114,57 +114,25 @@ commons_server <- function(id, client, ...) {
   })
 
   chat <- shinychat::chat_server(id, client = client, ...)
-  persist_conversation_state(
-    chat,
-    client,
-    id,
-    shiny::getDefaultReactiveDomain()
-  )
+  persist_conversation_id(chat, client)
   chat
 }
 
-# shinychat reuses one client and DOM across saved conversations, so persist
-# each conversation's trace identity and UI boundaries with its history.
-persist_conversation_state <- function(chat, client, id = NULL, session = NULL) {
+# shinychat reuses one client across saved conversations, so persist each
+# conversation's trace identity with its history.
+persist_conversation_id <- function(chat, client) {
   chat$history$on_save(function(values) {
     values$commons_conversation_id <- client$get_conversation_id()
-    if (!is.null(session) && rlang::is_string(id)) {
-      boundaries <- shiny::isolate(
-        session$input[[paste0(id, "_resume_boundaries")]]
-      )
-      messages <- shiny::isolate(session$input[[paste0(id, "_messages")]])
-      values$commons_resume_boundaries <- resume_boundary_ordinals(
-        boundaries,
-        length(messages)
-      )
-    }
     values
   })
   chat$history$on_restore(function(values) {
-    conversation_id <- values$commons_conversation_id
-    if (rlang::is_string(conversation_id) && nzchar(conversation_id)) {
-      client$set_conversation_id(conversation_id)
+    id <- values$commons_conversation_id
+    if (rlang::is_string(id) && nzchar(id)) {
+      client$set_conversation_id(id)
     }
     client$queue_restore_reminder()
-    if (!is.null(session) && rlang::is_string(id)) {
-      session$sendCustomMessage(
-        "commonsResumeConversation",
-        list(
-          id = session$ns(id),
-          input_id = session$ns(paste0(id, "_resume_boundaries")),
-          boundaries = resume_boundary_ordinals(
-            values$commons_resume_boundaries
-          )
-        )
-      )
-    }
   })
   invisible(chat)
-}
-
-resume_boundary_ordinals <- function(x, message_count = Inf) {
-  x <- suppressWarnings(as.integer(unlist(x, use.names = FALSE)))
-  sort(unique(x[!is.na(x) & x > 0L & x <= message_count]))
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
