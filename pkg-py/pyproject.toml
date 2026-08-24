@@ -1,23 +1,59 @@
-# Minimal placeholder so py-check has something real to run against. The
-# actual package definition (hatchling build backend, src/commons/ layout,
-# the [execute]/[tracing]/[ui] extras, runtime dependencies) is the scaffold
-# task's job; this file exists only so CI is green rather than vacuous.
-#
-# `package = false` keeps uv from trying to build a distribution that has no
-# source tree yet. The scaffold task removes it along with this comment.
 [project]
 name = "posit-commons"
-version = "0.0.0a1"
-description = "Trustworthy data agents for Python"
-requires-python = ">=3.10"
+version = "0.1.0.dev0"
+description = "Build trustworthy data agents (Python port of the commons R package)."
+readme = "README.md"
+# The PyPI name `commons` is taken, so the distribution is `posit-commons` and
+# the import name is `commons` (D7). Nothing infers that split; see
+# [tool.hatch.build.targets.wheel] below.
+requires-python = ">=3.11"
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
-dependencies = []
+dependencies = [
+    "chatlas>=0.21.2",
+    "pydantic>=2",
+    "duckdb>=1.0",
+    "raghilda>=0.2",
+    "sqlalchemy>=2.0",
+    "pyyaml>=6",
+    "jinja2>=3",
+    "pyarrow>=17",
+]
+
+# `execute` and `ui` are deliberately absent until the code that needs them
+# lands. Execution is a plain subprocess worker for v1, which needs nothing
+# beyond the standard library and pyarrow, so jupyter-client/ipykernel arrive
+# only if M6 moves to the kernel worker (D3). The py-shiny surface arrives with
+# M8 (D6).
+[project.optional-dependencies]
+tracing = [
+    "opentelemetry-sdk>=1.39",
+    "opentelemetry-exporter-otlp-json-file",
+    "httpx>=0.27",
+]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyright"]
 
-[tool.uv]
-package = false
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# Hatchling derives the package directory from the *distribution* name, so
+# `posit-commons` makes it look for `src/posit_commons/` and the build fails.
+# The error message invites the wrong fix: renaming `src/commons/` also makes
+# it go away, and silently discards the decision that the import name is
+# `commons`. tests/test_packaging.py pins the split so that cannot happen
+# quietly.
+[tool.hatch.build.targets.wheel]
+packages = ["src/commons"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.ruff]
-target-version = "py310"
+src = ["src", "tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.11"

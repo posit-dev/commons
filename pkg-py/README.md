@@ -4,6 +4,6 @@
 
 The distribution name on PyPI is `posit-commons`, but the package is imported as `commons`.
 
-**Status: pre-alpha.** This directory currently holds only enough to allow CI; the package itself is not yet implemented.
+**Status: pre-alpha.** The package installs, imports, lints, type-checks, and tests, but exports nothing yet: `commons.__all__` is empty and there is no public API. Python 3.11 or later is required.
 
 Behavior shared across implementations is pinned by fixtures in [`tests/shared/`](../tests/shared), which this suite reads directly rather than restating.

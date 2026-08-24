@@ -17,7 +17,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.10", "3.13"]
+        # 3.11 is the floor: raghilda requires >=3.11,<3.14. 3.13 is the
+        # ceiling that bound allows.
+        python-version: ["3.11", "3.13"]
     defaults:
       run:
         working-directory: pkg-py
@@ -33,5 +35,7 @@ jobs:
         run: uv sync --locked --all-extras
       - name: Lint
         run: uv run ruff check
+      - name: Type check
+        run: uv run pyright
       - name: Test
         run: uv run pytest
