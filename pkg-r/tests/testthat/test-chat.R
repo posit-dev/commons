@@ -63,9 +63,11 @@ test_that("persist_conversation_id round-trips the id through history hooks", {
 
   hooks$on_restore(list(commons_conversation_id = "restored-id"))
   expect_identical(agent$get_conversation_id(), "restored-id")
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
 
   hooks$on_restore(list())
   expect_identical(agent$get_conversation_id(), "restored-id")
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
 })
 
 test_that("commons_server wires conversation-id persistence into shinychat", {
@@ -75,7 +77,7 @@ test_that("commons_server wires conversation-id persistence into shinychat", {
   shiny::testServer(
     function(input, output, session) {
       agent <- test_agent()
-      commons_server("chat", client = agent)
+      chat <- commons_server("chat", client = agent)
     },
     {
       controller <- shinychat:::get_session_chat_bookmark_info(
@@ -86,6 +88,16 @@ test_that("commons_server wires conversation-id persistence into shinychat", {
         list(commons_conversation_id = "restored-id")
       )
       expect_identical(agent$get_conversation_id(), "restored-id")
+      expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
+
+      chat$clear()
+      expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
+
+      controller$restore_app_state(
+        list(commons_conversation_id = "restored-id")
+      )
+      controller$new_chat()
+      expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
     }
   )
 })

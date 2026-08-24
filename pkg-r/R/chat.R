@@ -130,6 +130,7 @@ persist_conversation_id <- function(chat, client) {
     if (rlang::is_string(id) && nzchar(id)) {
       client$set_conversation_id(id)
     }
+    client$queue_restore_reminder()
   })
   invisible(chat)
 }
