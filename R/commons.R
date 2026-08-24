@@ -239,12 +239,20 @@ Commons <- R6::R6Class(
       super$add_turn(user, assistant, log_tokens = log_tokens)
     },
 
+    set_turns = function(value) {
+      private$restore_reminder_pending <- FALSE
+      super$set_turns(value)
+    },
+
     chat = function(..., echo = NULL) {
       if (private$tracing) {
         local_conversation_turn_span(private$conversation_id)
       }
+      restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
-      do.call(super$chat, c(inputs, list(echo = echo)))
+      result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
+      private$consume_restore_reminder(restore_reminder_pending)
+      if (result$visible) result$value else invisible(result$value)
     },
 
     stream_async = function(
@@ -256,6 +264,7 @@ Commons <- R6::R6Class(
       private$refresh_conversation_id()
       from_index <- length(self$get_turns()) + 1L
       stream <- rlang::arg_match(stream)
+      restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
       raw_stream <- do.call(
         super$stream_async,
@@ -293,6 +302,8 @@ Commons <- R6::R6Class(
             yield(chunk)
           }
         }
+
+        private$consume_restore_reminder(restore_reminder_pending)
 
         tail <- scanner$finish()
         if (nzchar(tail)) {
@@ -401,10 +412,16 @@ Commons <- R6::R6Class(
     prepare_turn_inputs = function(inputs) {
       inputs <- append_turn_reminder(inputs, self$get_model())
       if (private$restore_reminder_pending) {
-        private$restore_reminder_pending <- FALSE
         inputs <- append_restored_conversation_reminder(inputs)
       }
       inputs
+    },
+
+    consume_restore_reminder = function(was_pending) {
+      if (was_pending) {
+        private$restore_reminder_pending <- FALSE
+      }
+      invisible(NULL)
     },
 
     # Divergent histories need distinct trace identities.
