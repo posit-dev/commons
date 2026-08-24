@@ -240,6 +240,15 @@ test_that("concurrent run_r calls take turns on the worker", {
 test_that("guardrails allow computation and worker-local files", {
   worker <- local_guardrail_worker()
   store <- new_handle_store()
+  worker_ensure(worker)
+
+  expect_false(worker$rs$run(function() {
+    exists(".commons_guardrails", envir = globalenv(), inherits = FALSE)
+  }))
+  expect_true(worker$rs$run(function() {
+    ".commons_guardrails" %in%
+      ls(as.environment("commons:guardrails"), all.names = TRUE)
+  }))
 
   res <- sync_promise(run_r_tool(
     worker,

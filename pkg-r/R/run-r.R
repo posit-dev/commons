@@ -28,8 +28,7 @@ tool_run_r <- function(private) {
     },
     paste(
       # The model sees OS-sandbox framing even when Windows uses guardrails.
-      "Run R code in your OS-level sandboxed R session to analyze results or",
-      "render plots.",
+      "Run R code in your sandboxed R session to analyze results or render plots.",
       "R code and textual output are visible only to you; rendered plots are",
       "also shown to the user.",
       "The user cannot run code in this session themselves.",
@@ -730,7 +729,12 @@ worker_guardrails <- function(work_dir, network = "none") {
       )
     )
   }
-  assign(".commons_guardrails", hooks, envir = globalenv())
+  attach(NULL, name = "commons:guardrails")
+  assign(
+    ".commons_guardrails",
+    hooks,
+    envir = as.environment("commons:guardrails")
+  )
   invisible(TRUE)
 }
 
@@ -1039,11 +1043,13 @@ worker_run_code <- function(
     }
   )
 
-  guardrails <- get0(
-    ".commons_guardrails",
-    envir = globalenv(),
-    inherits = FALSE
-  )
+  guardrails <- if ("commons:guardrails" %in% search()) {
+    get(
+      ".commons_guardrails",
+      envir = as.environment("commons:guardrails"),
+      inherits = FALSE
+    )
+  }
   if (!is.null(guardrails)) {
     restore <- list()
     on.exit({
