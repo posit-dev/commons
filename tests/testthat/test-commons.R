@@ -657,6 +657,51 @@ test_that("Claude 5 user turns contain one hidden reminder", {
   )
 })
 
+test_that("restored conversations add one hidden reminder to the next turn", {
+  agent <- test_agent()
+  agent$queue_restore_reminder()
+
+  unused_stream <- agent$stream_async("Do not consume this stream.")
+  expect_s3_class(unused_stream, "coro_generator_instance")
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  expect_error(agent$chat("Invalid request.", echo = "invalid"))
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  stream_citations_fixture(agent, "First answer.", split_at = 5)
+  expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  turn <- agent$last_turn("user")
+  reminders <- Filter(
+    function(content) S7::S7_inherits(content, ContentTurnReminder),
+    turn@contents
+  )
+  expect_length(reminders, 1)
+  expect_identical(reminders[[1]]@text, restored_conversation_turn_reminder)
+  expect_equal(
+    shinychat::contents_shinychat(turn),
+    list("What does canopy cover mean?")
+  )
+
+  stream_citations_fixture(agent, "Second answer.", split_at = 6)
+
+  turn <- agent$last_turn("user")
+  reminders <- Filter(
+    function(content) S7::S7_inherits(content, ContentTurnReminder),
+    turn@contents
+  )
+  expect_length(reminders, 0)
+})
+
+test_that("replacing restored history clears its queued reminder", {
+  agent <- test_agent()
+  agent$queue_restore_reminder()
+
+  agent$set_turns(list())
+
+  expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
+})
+
 test_that("stream_async projects citations without touching stored turns", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines("Canopy cover is always acre-weighted for reporting.", path)
