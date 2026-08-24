@@ -27,7 +27,7 @@ tracing = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyright"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly"]
 
 [build-system]
 requires = ["hatchling"]
@@ -46,6 +46,6 @@ asyncio_mode = "auto"
 [tool.ruff]
 src = ["src", "tests"]
 
-[tool.pyright]
-include = ["src", "tests"]
-pythonVersion = "3.11"
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+python-version = "3.11"
