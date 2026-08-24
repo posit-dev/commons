@@ -8,6 +8,8 @@ readme = "README.md"
 # [tool.hatch.build.targets.wheel] below.
 # Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
 requires-python = ">=3.11,<3.14"
+license = "MIT"
+license-files = ["LICENSE.md"]
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
     "chatlas>=0.21.2",
@@ -19,6 +21,10 @@ dependencies = [
     "jinja2>=3",
     "pyarrow>=17",
 ]
+
+[project.urls]
+Homepage = "https://github.com/posit-dev/commons"
+Issues = "https://github.com/posit-dev/commons/issues"
 
 [project.optional-dependencies]
 tracing = [

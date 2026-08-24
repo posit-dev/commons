@@ -1,0 +1,39 @@
+name: py-release
+
+# Publishes pkg-py to PyPI via trusted publishing (OIDC); no API token is stored.
+# PyPI's publisher config for posit-commons names this file, so renaming it
+# breaks releases with an OIDC error until PyPI is updated to match.
+on:
+  push:
+    tags: ["py-v*"]
+
+permissions: read-all
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: pkg-py/uv.lock
+      - name: Build
+        working-directory: pkg-py
+        run: uv build
+      - name: Check the tag matches the built version
+        working-directory: pkg-py
+        run: |
+          expected="${GITHUB_REF_NAME#py-v}"
+          built="$(basename dist/*.whl | cut -d- -f2)"
+          if [ "$built" != "$expected" ]; then
+            echo "Tag ${GITHUB_REF_NAME} implies version ${expected}, but the wheel is ${built}." >&2
+            echo "Tags must spell the PEP 440 normalized version exactly." >&2
+            exit 1
+          fi
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pkg-py/dist
