@@ -6,7 +6,8 @@ readme = "README.md"
 # The PyPI name `commons` is taken, so the distribution is `posit-commons` and
 # the import name is `commons` (D7). Nothing infers that split; see
 # [tool.hatch.build.targets.wheel] below.
-requires-python = ">=3.11"
+# Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
+requires-python = ">=3.11,<3.14"
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
     "chatlas>=0.21.2",
