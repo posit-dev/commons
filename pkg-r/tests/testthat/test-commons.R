@@ -630,10 +630,32 @@ stream_citations_fixture <- function(agent, raw, split_at) {
     ) final_turn,
     .package = "ellmer"
   )
-  sync_promise(coro::async_collect(agent$stream_async(
-    "What does canopy cover mean?"
-  )))
+  user_input <- list("What does canopy cover mean?")
+  sync_promise(coro::async_collect(agent$stream_async(!!!user_input)))
 }
+
+test_that("Claude 5 user turns contain one hidden reminder", {
+  agent <- commons(
+    ellmer::chat_anthropic(model = "claude-sonnet-5"),
+    data_sources = list(sales_db = test_source())
+  )
+
+  stream_citations_fixture(agent, "Answer.", split_at = 3)
+
+  turn <- agent$last_turn("user")
+  reminders <- vapply(
+    turn@contents,
+    S7::S7_inherits,
+    logical(1),
+    class = ContentTurnReminder
+  )
+
+  expect_equal(sum(reminders), 1)
+  expect_equal(
+    shinychat::contents_shinychat(turn),
+    list("What does canopy cover mean?")
+  )
+})
 
 test_that("stream_async projects citations without touching stored turns", {
   path <- withr::local_tempfile(fileext = ".md")

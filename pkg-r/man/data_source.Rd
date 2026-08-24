@@ -31,8 +31,8 @@ Snowflake semantic variables and Databricks metric-view parameters are
 passed as typed JSON arguments to \code{call_metrics}. Databricks wildcard
 members require concrete column metadata from the warehouse.
 Native semantic models are available through \code{search_pool},
-\code{describe_table}, and \code{call_metrics}, but are not returned by
-\code{\link[=list_tables]{list_tables()}}.
+\code{describe_table}, and \code{call_metrics}, but are not registered as physical
+tables.
 Snowflake verified queries are exposed separately as exact trusted
 calculations through \code{search_pool} and \code{call_calculation}; their SQL is
 executed as stored rather than parsed to infer dependencies.
@@ -81,7 +81,6 @@ surfaces at that first use and the read is retried on the next one.
 }
 
 The resulting object gives the agent a DBI connection plus a table registry.
-Use \code{\link[=list_tables]{list_tables()}} to list the registered tables.
 }
 \section{Data dictionaries}{
 
@@ -133,6 +132,5 @@ after a zero-row query succeeds for the current principal.
 src <- data_source(
   sales = data.frame(id = 1:2, revenue = c(100, 200))
 )
-list_tables(src)
 
 }

@@ -292,10 +292,14 @@ shiny-chat-container
   text-transform: uppercase;
 }
 
-.commons-run-r-details > pre {
-  margin: 0.4rem 0 0;
+.commons-run-r-code {
+  margin: 0;
   overflow-x: auto;
   white-space: pre;
+}
+
+.commons-run-r-details > .commons-run-r-code {
+  margin-top: 0.4rem;
 }
 
 .commons-run-r-plot {

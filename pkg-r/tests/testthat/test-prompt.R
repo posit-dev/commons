@@ -82,6 +82,7 @@ test_that("system prompt data contains facts and runtime content", {
     data,
     c(
       "date",
+      "is_claude_5",
       "has_multiple_sources",
       "has_catalog_search",
       "has_dictionary_context",
@@ -98,6 +99,16 @@ test_that("system prompt data contains facts and runtime content", {
       "instructions"
     )
   )
+})
+
+test_that("Claude 5 model IDs are recognized across providers", {
+  expect_true(is_claude_5_model("claude-sonnet-5"))
+  expect_true(is_claude_5_model("anthropic/claude-opus-5"))
+  expect_true(is_claude_5_model("us.anthropic.claude-fable-5"))
+  expect_true(is_claude_5_model("databricks-claude-sonnet-5"))
+  expect_false(is_claude_5_model("claude-sonnet-4-5"))
+  expect_false(is_claude_5_model("gpt-5.4"))
+  expect_false(is_claude_5_model(NULL))
 })
 
 test_that("instructions are not interpreted as prompt template expressions", {
