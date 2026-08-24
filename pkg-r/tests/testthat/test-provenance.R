@@ -1,8 +1,31 @@
-test_that("derive_provenance_tag follows the A/B/C rules", {
-  expect_identical(derive_provenance_tag(c("A", "B"), verified = TRUE), "B")
-  expect_identical(derive_provenance_tag(c("A", "B"), verified = FALSE), "C")
-  expect_identical(derive_provenance_tag("A", verified = FALSE), "A")
-  expect_identical(derive_provenance_tag(character(), FALSE), NA_character_)
+test_that("derive_provenance_tag matches the shared truth table", {
+  cases <- shared_fixture("provenance")$derive_provenance_tag$cases
+  # An empty table would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    tags <- vapply(case$tags, as.character, character(1))
+    expected <- if (is.null(case$expected)) NA_character_ else case$expected
+    expect_identical(
+      derive_provenance_tag(tags, case$verified),
+      expected,
+      info = case$name
+    )
+  }
+})
+
+test_that("provenance_display matches the shared copy word for word", {
+  display <- shared_fixture("provenance")$provenance_display$tags
+  expect_setequal(names(display), names(provenance_display))
+
+  for (tag in names(display)) {
+    entry <- provenance_display[[tag]]
+    expected <- display[[tag]]
+    expect_identical(entry$label, expected$label, info = tag)
+    expect_identical(entry$body, expected$body, info = tag)
+    expect_identical(entry$icon, expected$icon, info = tag)
+    expect_identical(entry$pill_class, expected$pill_class, info = tag)
+  }
 })
 
 test_that("provenance_aside renders A and C, nothing for B/NA", {

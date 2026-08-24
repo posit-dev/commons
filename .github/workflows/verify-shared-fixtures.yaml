@@ -1,0 +1,39 @@
+name: verify-shared-fixtures
+
+# tests/shared/ is the source of truth; the R package reads a committed copy
+# because testthat cannot reach outside the package. Fail when that copy no
+# longer matches what the sync script produces.
+on:
+  push:
+    branches: [main]
+    paths:
+      - tests/shared/**
+      - pkg-r/tests/testthat/fixtures/shared/**
+      - scripts/sync-shared-fixtures.sh
+      - .github/workflows/verify-shared-fixtures.yaml
+  pull_request:
+    paths:
+      - tests/shared/**
+      - pkg-r/tests/testthat/fixtures/shared/**
+      - scripts/sync-shared-fixtures.sh
+      - .github/workflows/verify-shared-fixtures.yaml
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Re-run the sync
+        run: scripts/sync-shared-fixtures.sh
+      - name: Fail when the committed copy is stale
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The synced fixtures under pkg-r/ do not match tests/shared/." >&2
+            echo "Run scripts/sync-shared-fixtures.sh and commit the result." >&2
+            git --no-pager status --short
+            git --no-pager diff
+            exit 1
+          fi
