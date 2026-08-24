@@ -60,9 +60,9 @@ The filesystem sandbox gives the subprocess read access to R, installed packages
 
 By default, the subprocess cannot create network sockets. An application author can opt in to unrestricted network access with `commons(network = "full")`; the filesystem sandbox remains in place, but R code can then contact services reachable from the deployment and transmit data from result handles. Only enable network access when that egress is required and acceptable.
 
-For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Deployed Connect applications run on Linux and use the Linux mechanisms described above. Windows has no OS-level `run_r()` sandbox.
+For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Windows has no OS-level `run_r()` sandbox. Deployed Connect applications run on Linux and use the Linux mechanisms described above.
 
-By default, commons therefore refuses to create an agent when an OS-level sandbox is not available. An application author can enable a local-development fallback explicitly:
+By default, commons refuses to create an agent when an OS-level sandbox is not available. An application author can enable a local-development fallback explicitly:
 
 ```r
 options(commons.dangerously_disable_sandbox = TRUE)
