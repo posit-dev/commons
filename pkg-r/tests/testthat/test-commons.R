@@ -627,7 +627,9 @@ stream_citations_fixture <- function(agent, raw, split_at) {
       result,
       has_type = FALSE,
       turns = list()
-    ) final_turn,
+    ) {
+      final_turn
+    },
     .package = "ellmer"
   )
   user_input <- list("What does canopy cover mean?")
@@ -764,7 +766,9 @@ test_that("stream_async preserves structured provider content", {
       result,
       has_type = FALSE,
       turns = list()
-    ) final_turn,
+    ) {
+      final_turn
+    },
     .package = "ellmer"
   )
   agent <- test_agent()
@@ -897,10 +901,11 @@ test_that("conversation id accessors get and set the active id", {
   expect_snapshot(agent$set_conversation_id(c("a", "b")), error = TRUE)
 })
 
-test_that("stream_async records citation candidates on the conversation span", {
+test_that("stream_async records provenance at span creation and completion", {
   skip_if_not_installed("otelsdk")
   path <- withr::local_tempfile(fileext = ".md")
   writeLines("Canopy cover is always acre-weighted for reporting.", path)
+  local_mocked_bindings(collect_appended_tags = function(...) "B")
 
   raw <- paste0(
     "Answer sentence.\n\n",
@@ -917,8 +922,16 @@ test_that("stream_async records citation candidates on the conversation span", {
 
   names <- vapply(recorded$traces, `[[`, character(1), "name")
   span <- recorded$traces[[which(names == "commons_conversation_turn")]]
+  provenance_span <- recorded$traces[[which(names == "commons_provenance")]]
+  expect_identical(span$attributes[["commons.provenance.tag"]], "B")
+  expect_identical(
+    provenance_span$attributes[["commons.provenance.tag"]],
+    "B"
+  )
+  expect_identical(provenance_span$parent, span$span_id)
+
   candidates <- jsonlite::fromJSON(
-    span$attributes[["commons.citation.candidates"]],
+    provenance_span$attributes[["commons.citation.candidates"]],
     simplifyVector = FALSE
   )
 
