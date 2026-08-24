@@ -1,0 +1,73 @@
+Package: commons
+Title: AI Agents for Data Analysis
+Version: 0.0.0.9002
+Authors@R: c(
+    person("Simon", "Couch", , "simon.couch@posit.co", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-5676-5107")),
+    person("Sara", "Altman", , "sara.altman@posit.co", role = "aut"),
+    person("Posit Software, PBC", role = c("cph", "fnd"),
+           comment = c(ROR = "03wc8by49"))
+  )
+Description: Implements trustworthy large language model agents. 
+    Connect raw data sources, a pool of trusted calculations, and a searchable 
+    context layer that demonstrates how to interpret them.
+    Then, deploy data agents that answer questions, log interactions, and
+    can be evaluated and improved over time.
+License: MIT + file LICENSE
+URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
+BugReports: https://github.com/posit-dev/commons/issues
+Imports:
+    callr,
+    cli,
+    coro,
+    DBI,
+    duckdb (>= 1.5.4.2),
+    ellmer (>= 0.4.1),
+    evaluate,
+    glue,
+    httr2 (>= 1.1.0),
+    jsonlite,
+    knitr,
+    later,
+    processx,
+    promises (>= 1.5.0),
+    R6,
+    ragnar,
+    rlang (>= 1.2.0),
+    roxygen2,
+    S7,
+    shinychat (> 0.4.0),
+    utils
+Suggests:
+    bit64,
+    bsicons,
+    bslib (>= 0.11.0),
+    chromote,
+    dbplyr,
+    dplyr,
+    ggplot2,
+    gt,
+    htmltools,
+    odbc,
+    otel (>= 0.2.0),
+    otelsdk (>= 0.2.0),
+    pins,
+    plotly,
+    pkgload,
+    ragg,
+    readr,
+    rmarkdown,
+    shiny (>= 1.11.1),
+    shinytest2,
+    testthat (>= 3.0.0),
+    vitals,
+    withr,
+    yaml
+VignetteBuilder: knitr
+Remotes:
+    posit-dev/shinychat/pkg-r
+Config/testthat/edition: 3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.0.0
+Config/Needs/website: tidyverse/tidytemplate
