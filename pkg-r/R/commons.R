@@ -32,7 +32,7 @@
 #'   `"none"` (the default) or `"full"`. The session uses OS sandboxing on
 #'   Linux and macOS. On unsupported hosts, local development can opt in to
 #'   best-effort R guardrails with
-#'   `options(commons.dangerously_disable_sandbox = TRUE)`. These guardrails
+#'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
 #'   are not a security boundary.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content

@@ -50,16 +50,17 @@ test_that("unsupported hosts require an explicit guardrail opt-in", {
 
   expect_error(
     run_r_protection_mode(capabilities, "Windows", FALSE),
-    "commons.dangerously_disable_sandbox = TRUE",
+    "commons.allow_unsafe_fallback = TRUE",
     fixed = TRUE
   )
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   expect_identical(
-    run_r_protection_mode(capabilities, "Windows", TRUE),
+    run_r_protection_mode(capabilities, "Windows"),
     "guardrails"
   )
   capabilities$seatbelt <- TRUE
   expect_identical(
-    run_r_protection_mode(capabilities, "Darwin", TRUE),
+    run_r_protection_mode(capabilities, "Darwin"),
     "sandbox"
   )
 })

@@ -16,7 +16,7 @@ run_r_protection_mode <- function(
   capabilities = sandbox_capabilities(),
   sysname = Sys.info()[["sysname"]],
   allow_guardrails = isTRUE(getOption(
-    "commons.dangerously_disable_sandbox",
+    "commons.allow_unsafe_fallback",
     FALSE
   )),
   call = rlang::caller_env()
@@ -42,7 +42,7 @@ run_r_protection_mode <- function(
          host does not support seccomp.",
         i = "For local development only, explicitly accept best-effort R
              guardrails with
-             {.code options(commons.dangerously_disable_sandbox = TRUE)}."
+             {.code options(commons.allow_unsafe_fallback = TRUE)}."
       ),
       call = call
     )
@@ -57,7 +57,7 @@ run_r_protection_mode <- function(
              its seccomp profile.",
         i = "For local development only, explicitly accept best-effort R
              guardrails with
-             {.code options(commons.dangerously_disable_sandbox = TRUE)}."
+             {.code options(commons.allow_unsafe_fallback = TRUE)}."
       ),
       call = call
     )
@@ -68,7 +68,7 @@ run_r_protection_mode <- function(
       "commons cannot sandbox the {.code run_r} session on {sysname}.",
       i = "For local development only, explicitly accept best-effort R
            guardrails with
-           {.code options(commons.dangerously_disable_sandbox = TRUE)}.",
+           {.code options(commons.allow_unsafe_fallback = TRUE)}.",
       i = "These guardrails are not a security boundary."
     ),
     call = call
