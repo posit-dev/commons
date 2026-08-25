@@ -121,7 +121,10 @@ test_that("trajectory messages use ShinyChat's standard conversion", {
     list(
       ellmer::SystemTurn("Be helpful."),
       ellmer::AssistantTurn("Welcome!"),
-      ellmer::UserTurn("How many orders?")
+      ellmer::UserTurn(list(
+        ellmer::ContentText("How many orders?"),
+        ellmer::ContentText(claude_5_turn_reminder)
+      ))
     ),
     test_tool_turns("run_sql"),
     list(
@@ -138,6 +141,9 @@ test_that("trajectory messages use ShinyChat's standard conversion", {
     )
   )
   attr(turns, "provenance") <- list(provenance_record("A"))
+
+  sanitized <- sanitize_trajectory_turns(turns)
+  expect_identical(attr(sanitized, "provenance"), attr(turns, "provenance"))
 
   messages <- trajectory_messages(turns)
 
@@ -320,7 +326,8 @@ test_that("the viewer filters conversations and follows selection", {
       session$setInputs(
         conversation_select = list(conversation = 1, nonce = 3)
       )
-      expect_equal(review_target(), list(conversation = 1, exchange = 1L))
+      expect_equal(selected(), list(conversation = 1L))
+      expect_null(review_target())
       session$setInputs(
         conversation_select = list(conversation = 2, nonce = 4)
       )
