@@ -13,7 +13,10 @@ commons_ui(id, ...)
 commons_server(id, client, ...)
 }
 \arguments{
-\item{client}{A \code{\link[=commons]{commons()}} agent. Create a new agent for each Shiny session.}
+\item{client}{A \code{\link[=commons]{commons()}} agent. \code{commons_app()} uses one agent for the
+lifetime of its local or single-user app. In a multi-user app, create an
+agent inside the app's server function and pass it to \code{commons_server()}.
+This gives each Shiny session its own agent state.}
 
 \item{...}{In \code{commons_app()}, extra arguments passed to
 \code{\link[shiny:shinyApp]{shiny::shinyApp()}}. In \code{commons_ui()}, extra arguments passed to
@@ -29,6 +32,12 @@ returns UI. \code{commons_server()} returns the \code{\link[shinychat:chat_serve
 result.
 }
 \description{
+\code{commons_app()} is a convenience for running a commons agent locally or in a
+single-user Shiny app. For a multi-user app, combine \code{commons_ui()} and
+\code{commons_server()}, creating a new agent inside the server function for each
+session.
+}
+\details{
 These functions wrap \code{\link[shinychat:chat_app]{shinychat::chat_app()}}, \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}, and
 \code{\link[shinychat:chat_server]{shinychat::chat_server()}} for commons agents. The server verifies each
 \verb{<commons-citation>} the model writes against its own context, measure
@@ -40,13 +49,14 @@ governed calculation, or when a fallback answer cites nothing verified.
 }
 \examples{
 \dontrun{
+# Local or single-user app
 agent <- commons(
   ellmer::chat_anthropic(),
   data_sources = data_source(sales = sales)
 )
 commons_app(agent)
 
-# Inside a custom Shiny app
+# Multi-user Shiny app
 library(shiny)
 
 ui <- bslib::page_fillable(

@@ -1,5 +1,10 @@
 #' Shiny chat UI and server for commons agents
 #'
+#' `commons_app()` is a convenience for running a commons agent locally or in a
+#' single-user Shiny app. For a multi-user app, combine `commons_ui()` and
+#' `commons_server()`, creating a new agent inside the server function for each
+#' session.
+#'
 #' These functions wrap [shinychat::chat_app()], [shinychat::chat_ui()], and
 #' [shinychat::chat_server()] for commons agents. The server verifies each
 #' `<commons-citation>` the model writes against its own context, measure
@@ -15,7 +20,10 @@
 #'   [shiny::shinyApp()]. In `commons_ui()`, extra arguments passed to
 #'   [shinychat::chat_ui()]. In `commons_server()`, arguments passed to
 #'   [shinychat::chat_server()].
-#' @param client A [commons()] agent. Create a new agent for each Shiny session.
+#' @param client A [commons()] agent. `commons_app()` uses one agent for the
+#'   lifetime of its local or single-user app. In a multi-user app, create an
+#'   agent inside the app's server function and pass it to `commons_server()`.
+#'   This gives each Shiny session its own agent state.
 #'
 #' @return `commons_app()` returns a [shiny::shinyApp()] object. `commons_ui()`
 #'   returns UI. `commons_server()` returns the [shinychat::chat_server()]
@@ -23,13 +31,14 @@
 #'
 #' @examples
 #' \dontrun{
+#' # Local or single-user app
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
 #'   data_sources = data_source(sales = sales)
 #' )
 #' commons_app(agent)
 #'
-#' # Inside a custom Shiny app
+#' # Multi-user Shiny app
 #' library(shiny)
 #'
 #' ui <- bslib::page_fillable(
