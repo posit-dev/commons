@@ -70,7 +70,9 @@ def test_matching_matches_the_shared_cases(case: dict[str, Any]) -> None:
 
 def test_the_length_guard_sits_where_the_fixture_says() -> None:
     minimum = MATCH["min_normalized_length"]
-    entry = CorpusEntry(label="documentation", kind="prose", text="x" * 40)
+    # Size the corpus from the minimum, so raising it cannot make the acceptance
+    # fail for absence rather than for disagreeing with the fixture.
+    entry = CorpusEntry(label="documentation", kind="prose", text="x" * minimum)
 
     assert match_citation("x" * (minimum - 1), [entry]) is None
     assert match_citation("x" * minimum, [entry]) is entry

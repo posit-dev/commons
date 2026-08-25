@@ -52,10 +52,13 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   corpus
 }
 
+# A quote this short can occur in a trusted source by coincidence, so it must
+# not promote an unsupported answer. Enforced/tested by tests/shared/citations.json.
+CITATION_MIN_NORMALIZED_LENGTH <- 10
+
 match_citation <- function(quote, corpus) {
   needle <- normalize_citation(quote)
-  # Reject trivial matches that could promote an unsupported answer.
-  if (nchar(needle) < 10) {
+  if (nchar(needle) < CITATION_MIN_NORMALIZED_LENGTH) {
     return(NULL)
   }
   for (entry in corpus) {
@@ -108,7 +111,7 @@ citation_aside_html <- function(quote, explanation, label, kind) {
 # To share an implementation contract with the Python side, we need to
 # explicitly reference the Unicode White_Space set. Due to inconsistencies
 # between R and Python, we intentionally don't use either engine's `\s`.
-# On R, the default TRE engine defers to locale-dependent C library classification, 
+# On R, the default TRE engine defers to locale-dependent C library classification,
 # which disagrees with Python about a non-breaking space and may disagree with itself
 # across platforms. This behavior is enforced/checked by tests/shared/citations.json.
 CITATION_WHITESPACE <- paste0(

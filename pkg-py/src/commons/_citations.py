@@ -19,10 +19,12 @@ __all__ = ["CorpusEntry", "match_citation", "normalize_citation"]
 # appear in a trusted source by coincidence and must not promote an answer.
 MIN_NORMALIZED_LENGTH = 10
 
-# The Unicode White_Space set, spelled out. Neither `\s` is used: Python's is
-# Unicode-aware while R's default engine defers to locale-dependent C library
-# classification, so relying on either would let the same quote verify in one
-# language and not the other, with nothing erroring.
+# To share an implementation contract with the R side, we need to
+# explicitly reference the Unicode White_Space set. Due to inconsistencies
+# between R and Python, we intentionally don't use either engine's `\s`.
+# On R, the default TRE engine defers to locale-dependent C library classification,
+# which disagrees with Python about a non-breaking space and may disagree with itself
+# across platforms. This behavior is enforced/checked by tests/shared/citations.json.
 _WHITESPACE = re.compile(
     "[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+"
 )

@@ -35,6 +35,21 @@ test_that("normalize_citation folds exactly the shared whitespace set", {
   }
 })
 
+test_that("match_citation uses the shared minimum quote length", {
+  # The fixture declares the minimum as a value, not only through the boundary
+  # cases, so both implementations must read the same number from it.
+  minimum <- shared_fixture("citations")$match_citation$min_normalized_length
+  # Size the corpus from the minimum, so raising it cannot make the acceptance
+  # fail for absence rather than for disagreeing with the fixture.
+  entry <- list(label = "documentation", kind = "prose", text = strrep("x", minimum))
+
+  expect_null(match_citation(strrep("x", minimum - 1), list(entry)))
+  expect_identical(
+    match_citation(strrep("x", minimum), list(entry)),
+    list(label = "documentation", kind = "prose")
+  )
+})
+
 test_that("match_citation matches the shared verdicts", {
   spec <- shared_fixture("citations")$match_citation
   expect_gt(length(spec$cases), 0)
