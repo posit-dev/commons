@@ -11,7 +11,7 @@ Use this reference when asked to turn a trusted, existing data artifact into con
 
 The task is to lift the calculations an artifact already encodes into measures or governed definitions, and its table knowledge and prose into dictionaries and the context layer. Every contribution carries provenance back to the artifact version it came from, so a maintainer can always trace a definition to its origin.
 
-Extraction assumes an agent project already exists. When creating a new agent, follow the [onboarding reference](onboarding.md) first; it establishes the project, scope, and data-source mapping before invoking this workflow.
+Extraction assumes an agent project already exists. When creating a new agent, follow the [onboarding reference](onboarding.md) first; it establishes the project, scope, and data source mapping before invoking this workflow.
 
 The user decides which artifacts and calculations are trusted. Do not treat code as trusted merely because it exists. Do not invent calculations, cleaning, or transformation logic during extraction. Carry existing trusted logic into the agent, making only the mechanical changes needed to expose it through commons. If a required calculation does not already have trusted code, surface the gap instead of implementing it here.
 
@@ -30,7 +30,7 @@ The user decides which artifacts and calculations are trusted. Do not treat code
 
    Exercise representative outputs and inputs while tracing their computation. Read the artifact's connection code and attribute each table it queries to one of the agent's `data_source()`s. Verify the mapping by running the relevant code. A table with no corresponding data source is surfaced to the user, not guessed at.
 
-4. Draft semantic-layer contributions. For each trusted calculation, propose either a measure or a governed definition rather than representing the same calculation in both places. Consider a governed definition when the artifact contains a reusable SQL expression scoped to one table; otherwise, default to a measure. Follow the [data dictionary reference](data-dictionaries.md) when proposing a definition.
+4. Draft semantic layer contributions. For each trusted calculation, propose either a measure or a governed definition rather than representing the same calculation in both places. Consider a governed definition when the artifact contains a reusable SQL expression scoped to one table; otherwise, default to a measure. Follow the [data dictionary reference](data-dictionaries.md) when proposing a definition.
 
    For each proposed measure:
    - Inputs the user would vary become documented `@param`s (use the type code spans, e.g. `` `string` ``, `` `enum[EMEA, APAC]` ``).

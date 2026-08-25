@@ -71,7 +71,7 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer is tagged with a green verified answer pill.
 
-If a relevant trusted calculation is not found, the agent proceeds down the lower trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or are tagged as `Untrusted`.
+If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or are tagged as `Untrusted`.
 
 <figure class="commons-flow commons-flow-trusted-calculations column-page">
 <div class="commons-branch-flow"
@@ -117,16 +117,16 @@ Cited answer<sup class="commons-citation-ref">1</sup>
 </div>
 </figure>
 
-There are two possible trust outcomes for the "lower trust" path. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. commons verifies that the quoted text appears in that source. Verified citations are displayed as footnotes. If the agent does not include a citation, or if commons can't verify any of its citations, the answer gets tagged as `Untrusted`.
+There are two possible trust outcomes for the lower-trust path. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. commons verifies that the quoted text appears in that source. Verified citations are displayed as footnotes. If the agent does not include a citation, or if commons can't verify any of its citations, the answer gets tagged as `Untrusted`.
 
 The following table details the various ways each trust outcome can occur:
 
 | How the answer is produced | Outcome |
 |---|---|
 | A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_pill("A")` |
-| A [data-dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
 | A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
-| Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
 | Custom R | Cited or `r commons:::commons_answer_pill("C")` |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No label |
 
@@ -153,7 +153,7 @@ The context layer draws from unstructured information in Markdown files and the 
 
 ### Examples
 
-Here are brief examples of a data dictionary, a measure file, and a context-layer Markdown file for the biodiversity example app:
+Here are brief examples of a data dictionary, a measure file, and a context layer Markdown file for the biodiversity example app:
 
 #### Data dictionary
 
