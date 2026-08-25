@@ -1,6 +1,6 @@
 #' Shiny chat UI and server for commons agents
 #'
-#' These functions wrap [shinychat::chat_app()], [shinychat::chat_ui()], and
+#' These functions wrap [shinychat::page_chat()], [shinychat::chat_ui()], and
 #' [shinychat::chat_server()] for commons agents. The server verifies each
 #' `<commons-citation>` the model writes against its own context, measure
 #' definitions, and data documentation as the answer streams, and rewrites
@@ -54,21 +54,24 @@ commons_app <- function(client, ...) {
   check_commons_client(client)
 
   ui <- function(req) {
-    bslib::page_fillable(
-      commons_ui(
-        "chat",
-        height = "100%",
+    with_commons_chat_assets(
+      shinychat::page_chat(
+        "commons",
+        id = "chat",
         enable_cancel = TRUE,
-        allow_attachments = TRUE
-      ),
-      if (rlang::is_interactive()) {
-        shiny::actionButton(
-          "close_btn",
-          label = "",
-          class = "btn-close",
-          style = "position: fixed; top: 6px; right: 6px;"
+        allow_attachments = TRUE,
+        toolbar_global = bslib::toolbar(
+          bslib::input_dark_mode(),
+          if (rlang::is_interactive()) {
+            shiny::actionButton(
+              "close_btn",
+              label = "",
+              class = "btn-close",
+              `aria-label` = "Close"
+            )
+          }
         )
-      }
+      )
     )
   }
 
@@ -89,9 +92,7 @@ commons_app <- function(client, ...) {
 #' @export
 commons_ui <- function(id, ...) {
   check_chat_packages()
-  register_commons_icon_resources()
-  ui <- shinychat::chat_ui(id, icon_assistant = htmltools::HTML(""), ...)
-  htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
+  with_commons_chat_assets(shinychat::chat_ui(id, ...))
 }
 
 #' @rdname commons_app
@@ -170,6 +171,11 @@ register_commons_icon_resources <- function() {
     COMMONS_ICON_RESOURCE_PREFIX,
     system.file("figs", package = "commons")
   )
+}
+
+with_commons_chat_assets <- function(ui) {
+  register_commons_icon_resources()
+  htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
 }
 
 # Asset mtimes ride in the version so the dependency URL changes whenever

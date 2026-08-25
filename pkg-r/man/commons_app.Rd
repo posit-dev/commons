@@ -29,7 +29,7 @@ returns UI. \code{commons_server()} returns the \code{\link[shinychat:chat_serve
 result.
 }
 \description{
-These functions wrap \code{\link[shinychat:chat_app]{shinychat::chat_app()}}, \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}, and
+These functions wrap \code{\link[shinychat:page_chat]{shinychat::page_chat()}}, \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}, and
 \code{\link[shinychat:chat_server]{shinychat::chat_server()}} for commons agents. The server verifies each
 \verb{<commons-citation>} the model writes against its own context, measure
 definitions, and data documentation as the answer streams, and rewrites

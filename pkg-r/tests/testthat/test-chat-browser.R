@@ -1,4 +1,4 @@
-test_that("Commons shows feedback while a chat response is pending", {
+test_that("Commons customizes shinychat's pending feedback", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -20,17 +20,13 @@ test_that("Commons shows feedback while a chat response is pending", {
     "document.querySelector('.suggestion').click();"
   )
   app$wait_for_js(
-    paste0(
-      "document.querySelector(",
-      "'.shiny-chat-message > .shiny-chat-message-content:empty'",
-      ");"
-    ),
+    "document.querySelector('.shiny-chat-pending-indicator');",
     timeout = 30 * 1000
   )
   app$wait_for_js(
     paste0(
       "getComputedStyle(document.querySelector(",
-      "'.shiny-chat-message > .shiny-chat-message-content:empty'",
+      "'.shiny-chat-pending-indicator'",
       ")).opacity !== '0';"
     ),
     timeout = 30 * 1000
@@ -40,11 +36,21 @@ test_that("Commons shows feedback while a chat response is pending", {
     app$get_js(
       paste0(
         "getComputedStyle(document.querySelector(",
-        "'.shiny-chat-message > .shiny-chat-message-content:empty'",
+        "'.shiny-chat-pending-indicator'",
         "), '::after').content;"
       )
     ),
     '"Working…"'
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "getComputedStyle(document.querySelector(",
+        "'.shiny-chat-pending-indicator > svg'",
+        ")).display;"
+      )
+    ),
+    "none"
   )
   expect_identical(
     app$get_js(
@@ -64,11 +70,7 @@ test_that("Commons shows feedback while a chat response is pending", {
   )
   expect_identical(
     app$get_js(
-      paste0(
-        "document.querySelector(",
-        "'.shiny-chat-message > .shiny-chat-message-content:empty'",
-        ") === null;"
-      )
+      "document.querySelector('.shiny-chat-pending-indicator') === null;"
     ),
     TRUE
   )

@@ -1,4 +1,4 @@
-test_that("commons_app builds a single-user app from commons chat wrappers", {
+test_that("commons_app builds a single-user page chat", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
 
@@ -9,9 +9,12 @@ test_that("commons_app builds a single-user app from commons chat wrappers", {
 
   app_env <- environment(app$serverFuncSource)
   ui <- app_env$ui(NULL)
+  page <- htmltools::tagQuery(ui)$find("shiny-chat-page")$selectedTags()
   chat <- htmltools::tagQuery(ui)$find("shiny-chat-container")$selectedTags()
   deps <- htmltools::findDependencies(ui)
 
+  expect_length(page, 1)
+  expect_identical(page[[1]]$attribs$id, "chat_page")
   expect_length(chat, 1)
   expect_true(is.na(chat[[1]]$attribs[["allow-attachments"]]))
   expect_true(is.na(chat[[1]]$attribs[["enable-cancel"]]))
