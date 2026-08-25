@@ -276,14 +276,9 @@ is_internal_turn_reminder <- function(content) {
 }
 
 new_trajectory_chat <- function() {
-  ellmer::Chat$new(
-    provider = ellmer::Provider(
-      name = "trajectory-review",
-      base_url = "",
-      extra_headers = character(),
-      credentials = NULL
-    ),
-    model = ellmer::Model(name = "trajectory-review")
+  ellmer::chat_openai(
+    credentials = \() "unused",
+    model = "trajectory-review"
   )
 }
 
