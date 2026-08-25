@@ -301,8 +301,8 @@ add_message_provenance <- function(messages, provenance) {
     } else {
       record$provenance_tag %||% NA_character_
     }
-    aside <- provenance_aside(tag)
-    if (!nzchar(aside)) {
+    pill <- commons_answer_pill(tag, inline_icon = FALSE)
+    if (is.null(pill)) {
       next
     }
     candidates <- which(vapply(
@@ -317,28 +317,22 @@ add_message_provenance <- function(messages, provenance) {
       next
     }
     index <- candidates[[length(candidates)]]
-    messages[[index]]$content <- append_provenance_aside(
+    messages[[index]]$content <- append_provenance_pill(
       messages[[index]]$content,
-      aside
+      pill
     )
   }
   messages
 }
 
-append_provenance_aside <- function(content, aside) {
+append_provenance_pill <- function(content, pill) {
   if (is.character(content)) {
-    return(paste(content, aside, sep = "\n\n"))
+    return(list(content, pill))
   }
-  text <- which(vapply(content, is.character, logical(1)))
-  if (length(text) == 0) {
-    return(c(content, list(aside)))
-  }
-  index <- text[[length(text)]]
-  content[[index]] <- paste(content[[index]], aside, sep = "\n\n")
-  content
+  c(content, list(pill))
 }
 
-commons_answer_pill <- function(tag) {
+commons_answer_pill <- function(tag, inline_icon = TRUE) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {
     return(NULL)
@@ -351,7 +345,7 @@ commons_answer_pill <- function(tag) {
     title = entry$body,
     `aria-label` = paste0(entry$label, ". ", entry$body),
     tabindex = "0",
-    commons_pill_icon(entry$icon, entry$label),
+    commons_pill_icon(entry$icon, entry$label, inline_icon),
     htmltools::tags$span(entry$label),
     commons_pill_tooltip(entry$body)
   )
@@ -361,11 +355,15 @@ commons_pill_tooltip <- function(text) {
   htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
 }
 
-commons_pill_icon <- function(file, alt) {
+commons_pill_icon <- function(file, alt, inline = TRUE) {
   if (is.null(file)) {
     return(NULL)
   }
-  src <- svg_data_uri(file)
+  src <- if (inline) {
+    svg_data_uri(file)
+  } else {
+    paste0(COMMONS_ICON_RESOURCE_PREFIX, "/", file)
+  }
   if (is.null(src)) {
     return(NULL)
   }
