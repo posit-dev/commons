@@ -1,6 +1,6 @@
 # Cross-language spec fixtures
 
-This directory defines the contract that governs the fixtures. `provenance.json` is the first one; the rest arrive with the citation code. Each fixture lands together with the runners that read it.
+This directory defines the contracts that govern shared fixtures between the R and Python code.
 
 ## The rule
 
@@ -14,9 +14,9 @@ Most Posit R/Python pairs (ellmer/chatlas, ragnar/raghilda, shiny/py-shiny) shar
 
 ## How each suite consumes these
 
-The Python suite reads this directory directly. The R suite cannot. testthat needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite reads a copy synced into `pkg-r/tests/testthat/fixtures/shared/`. That copy is committed, `scripts/sync-shared-fixtures.sh` generates it, and a CI job re-runs the script and fails when the copy is stale.
+The Python suite reads this directory directly. The R suite cannot. `testthat` needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite reads a copy synced into `pkg-r/tests/testthat/fixtures/shared/`. That copy is committed, `scripts/sync-shared-fixtures.sh` generates it, and a CI job re-runs the script and fails when the copy is stale.
 
-A generated copy is the mechanism, and a hand-edited copy is the defect. The same arrangement is planned for the shared shipped artifacts, the system prompt and the browser assets, for the same reason.
+
 
 ## What belongs here
 
