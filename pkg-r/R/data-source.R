@@ -92,7 +92,7 @@
 #' [data-dict expression language](https://data-dict.tidyverse.org/expressions.html).
 #' commons validates their inferred types and references, compiles them for
 #' the source's SQL backend, and lets the model apply them as `{{name}}`
-#' tokens in `run_sql` or through `call_metrics()`. Definitions are delivered
+#' tokens in `run_sql` or through `call_metrics`. Definitions are delivered
 #' through all three channels above.
 #'
 #' @section Trust:

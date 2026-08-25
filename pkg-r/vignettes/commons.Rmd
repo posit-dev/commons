@@ -247,7 +247,7 @@ tables:
 
 There are three kinds of definitions. Definitions can participate in trusted metric calculations or be used in custom SQL:[^definition-sql]
 
-| Kind | Example | Use in `call_metrics()` |
+| Kind | Example | Use in `call_metrics` |
 |---|---|---|
 | Metric | `SUM(n)` | Computes the metric |
 | Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |

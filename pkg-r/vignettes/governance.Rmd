@@ -26,17 +26,17 @@ A commons agent is an ellmer chat with a system prompt and a set of tools. The s
 
 We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like "never reveal sensitive data." Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider, so the agent should not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
 
-## SQL code execution with `run_sql()` 
+## SQL code execution with `run_sql`
 
 ### Destructive actions
 
-`run_sql()` accepts a single statement beginning with `SELECT` or `WITH`. commons rejects stacked statements and statements beginning with operations such as `INSERT`, `UPDATE`, `DELETE`, `DROP`, or `GRANT`. For data frames and pins, which commons loads into its own DuckDB database, it also disables extension loading and external filesystem access.
+`run_sql` accepts a single statement beginning with `SELECT` or `WITH`. commons rejects stacked statements and statements beginning with operations such as `INSERT`, `UPDATE`, `DELETE`, `DROP`, or `GRANT`. For data frames and pins, which commons loads into its own DuckDB database, it also disables extension loading and external filesystem access.
 
 These checks provide defense in depth, but they are not a SQL parser or a database sandbox. When you supply a DBI connection, commons queries that connection as-is. The primary safeguard against destructive SQL is therefore database-enforced read-only access.
 
 ### Data access
 
-The `tables` argument to `data_source()` controls which tables commons describes to the model. It is not an authorization boundary: `run_sql()` can query any object available to the connection.
+The `tables` argument to `data_source()` controls which tables commons describes to the model. It is not an authorization boundary: `run_sql` can query any object available to the connection.
 
 On Posit Connect, [viewer OAuth integrations](https://docs.posit.co/connect/admin/access-controls/) can give an interactive application the current viewer's Snowflake or Databricks credentials. If the application creates its connection from those credentials, the warehouse continues to enforce that viewer's existing access policies, including row- and column-level security. commons snapshots the connection's principal, active role, and namespace when it creates a Snowflake or Databricks data source, and rejects subsequent operations if that identity changes.
 
@@ -46,11 +46,11 @@ When viewer credentials are not available, use a service account with access to 
 
 ### Transmitting results to the R process
 
-The SQL query runs through the DBI connection in the main application process. Its result is both returned to the model and registered as a handle in the R process, allowing the model to analyze it with `run_r()`.
+The SQL query runs through the DBI connection in the main application process. Its result is both returned to the model and registered as a handle in the R process, allowing the model to analyze it with `run_r`.
 
-## `run_r()` and its R process
+## `run_r` and its R process
 
-The code requested through `run_r()` does not run in the main application process. Each commons agent instead gets a persistent R subprocess, created on first use. Its state remains available to later `run_r()` calls made by the same agent.
+The code requested through `run_r` does not run in the main application process. Each commons agent instead gets a persistent R subprocess, created on first use. Its state remains available to later `run_r` calls made by the same agent.
 
 ### OS-level sandboxing
 
@@ -60,7 +60,7 @@ The filesystem sandbox gives the subprocess read access to R, installed packages
 
 By default, the subprocess cannot create network sockets. An application author can opt in to unrestricted network access with `commons(network = "full")`; the filesystem sandbox remains in place, but R code can then contact services reachable from the deployment and transmit data from result handles. Only enable network access when that egress is required and acceptable.
 
-For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Windows has no OS-level `run_r()` sandbox. Deployed Connect applications run on Linux and use the Linux mechanisms described above.
+For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Windows has no OS-level `run_r` sandbox. Deployed Connect applications run on Linux and use the Linux mechanisms described above.
 
 By default, commons refuses to create an agent when an OS-level sandbox is not available. An application author can enable a local-development fallback explicitly:
 
@@ -80,7 +80,7 @@ Communication happens through [callr](https://callr.r-lib.org/). commons seriali
 
 ## Permissioning facts
 
-The rows returned by SQL are not the only potentially sensitive information available to an agent. Dataset descriptions and glossary entries from `data-dict.yaml` are included in the system prompt. Table documentation and sample values are supplied when a table is first used, context documents are available through search, and measure source can be read by the model in `run_r()`.
+The rows returned by SQL are not the only potentially sensitive information available to an agent. Dataset descriptions and glossary entries from `data-dict.yaml` are included in the system prompt. Table documentation and sample values are supplied when a table is first used, context documents are available through search, and measure source can be read by the model in `run_r`.
 
 Only include facts and source code that may be shared with both the application's viewers and its model provider. If one audience should not see a fact, use separate applications with separate context or place the facts behind viewer credentials rather than asking the model to hide it from that audience.
 
