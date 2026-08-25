@@ -1,11 +1,10 @@
 [project]
 name = "posit-commons"
 version = "0.1.0.dev0"
-description = "Build trustworthy data agents (Python port of the commons R package)."
+description = "AI Agents for Data Analysis"
 readme = "README.md"
 # The PyPI name `commons` is taken, so the distribution is `posit-commons` and
-# the import name is `commons` (D7). Nothing infers that split; see
-# [tool.hatch.build.targets.wheel] below.
+# the import name is `commons`.
 # Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
 requires-python = ">=3.11,<3.14"
 license = "MIT"
@@ -55,4 +54,7 @@ src = ["src", "tests"]
 
 [tool.pyrefly]
 project-includes = ["src", "tests"]
+# `tests` is a package rooted here, not under src/, so imports between test
+# modules only resolve with this directory on the search path.
+search-path = [".", "src"]
 python-version = "3.11"

@@ -43,8 +43,11 @@ system prompt, as a single string or the path to a text or Markdown file.
 }\if{html}{\out{</div>}}}
 
 \item{network}{Whether the \code{run_r} session has network access. One of
-\code{"none"} (the default) or \code{"full"}. The session requires Linux or macOS
-and refuses to run without filesystem sandboxing.}
+\code{"none"} (the default) or \code{"full"}. The session uses OS sandboxing on
+Linux and macOS. On unsupported hosts, local development can opt in to
+best-effort R guardrails with
+\code{options(commons.allow_unsafe_fallback = TRUE)}. These guardrails
+are not a security boundary.}
 
 \item{log}{Whether to capture conversation trajectories with OpenTelemetry
 (default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content

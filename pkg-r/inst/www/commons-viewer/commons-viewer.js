@@ -29,9 +29,11 @@
       var last = selected[selected.length - 1].getBoundingClientRect();
       var parent = content.getBoundingClientRect();
       var padding = 8;
+      var top = Math.max(0, first.top - parent.top - padding);
+      var bottom = last.bottom - parent.top + padding;
       highlight.style.display = "block";
-      highlight.style.top = first.top - parent.top - padding + "px";
-      highlight.style.height = last.bottom - first.top + 2 * padding + "px";
+      highlight.style.top = top + "px";
+      highlight.style.height = Math.max(0, bottom - top) + "px";
     };
 
     var ensureHighlight = function(chat) {
@@ -57,13 +59,35 @@
       exchangeMessages(chat).forEach(function(node) {
         var selected = node.dataset.exchange === String(exchange);
         node.classList.toggle("commons-viewer-exchange-selected", selected);
-        if (node.dataset.exchange) {
+        if (node.getAttribute("role") === "button") {
           node.setAttribute("aria-pressed", selected ? "true" : "false");
         }
       });
       ensureHighlight(chat);
       window.requestAnimationFrame(function() {
         positionHighlight(chat);
+      });
+    };
+
+    var selectSidebar = function(conversation, exchange) {
+      var accordion = document.getElementById("conversation_groups");
+      if (!accordion) return;
+
+      accordion.querySelectorAll(".accordion-item").forEach(function(item) {
+        var selected =
+          exchange == null &&
+          item.dataset.value === String(conversation);
+        item.classList.toggle(
+          "commons-viewer-conversation-selected",
+          selected
+        );
+      });
+      accordion.querySelectorAll(".commons-viewer-entry").forEach(function(node) {
+        var selected =
+          exchange != null &&
+          node.dataset.conversation === String(conversation) &&
+          node.dataset.exchange === String(exchange);
+        node.classList.toggle("commons-viewer-entry-selected", selected);
       });
     };
 
@@ -84,6 +108,35 @@
 
     document.addEventListener("click", function(event) {
       if (!event.target || !event.target.closest) return;
+
+      var conversationTitle = event.target.closest(
+        "#conversation_groups .commons-viewer-question-group-title"
+      );
+      if (conversationTitle) {
+        var conversationButton = conversationTitle.closest(
+          ".accordion-button"
+        );
+        var item = conversationButton.closest(".accordion-item");
+        var conversation = item && Number(item.dataset.value);
+        if (Number.isInteger(conversation)) {
+          Shiny.setInputValue(
+            "conversation_select",
+            { conversation: conversation, nonce: Math.random() },
+            { priority: "event" }
+          );
+        }
+      }
+
+      var entry = event.target.closest(
+        "#conversation_groups .commons-viewer-entry"
+      );
+      if (entry) {
+        selectSidebar(
+          Number(entry.dataset.conversation),
+          Number(entry.dataset.exchange)
+        );
+      }
+
       var node = event.target.closest(".commons-viewer-exchange-message");
       if (!node) return;
       var control = event.target.closest(
@@ -105,6 +158,13 @@
       var chat = document.getElementById(message.id);
       if (!chat) return;
       selectExchange(chat, message.exchange == null ? null : message.exchange);
+    });
+
+    Shiny.addCustomMessageHandler("commonsViewerSidebarSelect", function(message) {
+      selectSidebar(
+        message.conversation == null ? null : message.conversation,
+        message.exchange == null ? null : message.exchange
+      );
     });
 
     Shiny.addCustomMessageHandler("commonsViewerExchangeSeed", function(message) {
@@ -133,12 +193,14 @@
           if (!node) return;
           node.classList.add("commons-viewer-exchange-message");
           node.dataset.exchange = exchange;
-          node.setAttribute("role", "button");
-          node.setAttribute("tabindex", "0");
-          node.setAttribute(
-            "aria-label",
-            "Select question " + exchange + " for review notes"
-          );
+          if (node.classList.contains("shiny-chat-user-message")) {
+            node.setAttribute("role", "button");
+            node.setAttribute("tabindex", "0");
+            node.setAttribute(
+              "aria-label",
+              "Select question " + exchange + " for review notes"
+            );
+          }
         });
         selectExchange(chat, message.selected);
         if (message.selected != null) {

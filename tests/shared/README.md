@@ -1,6 +1,6 @@
 # Cross-language spec fixtures
 
-**Status: no fixtures exist yet.** This directory defines the contract that will govern the fixtures. CI enforces nothing here today, and the sync machinery described below is not built. Fixtures will arrive with the provenance and citation code. Each fixture will land together with the runners that read it.
+This directory defines the contracts that govern shared fixtures between the R and Python code.
 
 ## The rule
 
@@ -12,11 +12,11 @@ Prose cannot enforce agreement. Every contract added here should be an executabl
 
 Most Posit R/Python pairs (ellmer/chatlas, ragnar/raghilda, shiny/py-shiny) share concepts and no artifacts. Nothing in them must stay byte-identical. commons is different. Much of its behavior lives in artifacts that must match across languages. The failure mode is invisible. When the system prompt drifts, nothing errors. The agent only behaves differently in one language.
 
-## How each suite will consume these
+## How each suite consumes these
 
-The Python suite can read this directory directly. The R suite cannot. testthat needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite will consume a copy synced into `pkg-r/tests/testthat/fixtures/`. That copy is committed, and a CI job re-runs the sync. A stale copy fails the build.
+The Python suite reads this directory directly. The R suite cannot. `testthat` needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite reads a copy synced into `pkg-r/tests/testthat/fixtures/shared/`. That copy is committed, `scripts/sync-shared-fixtures.sh` generates it, and a CI job re-runs the script and fails when the copy is stale.
 
-The sync target and the CI job are not built yet. When they land, the rule is: a generated copy is the mechanism, and a hand-edited copy is the defect. The same arrangement is planned for the shared shipped artifacts, the system prompt and the browser assets, for the same reason.
+
 
 ## What belongs here
 
@@ -28,4 +28,4 @@ The sync target and the CI job are not built yet. When they land, the rule is: a
 
 ## Conventions
 
-Fixtures are JSON. If a case genuinely needs a different format, use that format. Each file carries enough structure for a runner to enumerate the cases without hardcoding them. Land the R-side runner together with the first fixture. Then the authority claim is real from the start.
+Fixtures are JSON. If a case genuinely needs a different format, use that format. Each file carries enough structure for a runner to enumerate the cases without hardcoding them. Land both runners together with the fixture, so the authority claim is real rather than aspirational. A runner that enumerates cases must also assert that the set it enumerated is not empty, because an empty fixture otherwise passes.

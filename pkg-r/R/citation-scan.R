@@ -20,17 +20,15 @@ ASIDE_OPEN <- "<shiny-aside"
 ASIDE_CLOSE <- "</shiny-aside>"
 ELEMENT_BODY_CAP <- 16384L
 
-citation_scanner <- function(corpus = list(), resolve = NULL) {
-  if (is.null(resolve)) {
-    resolve <- function(parsed) {
-      if (is.null(parsed)) {
-        return(list(
-          html = "",
-          decision = list(quote = NA_character_, status = "malformed")
-        ))
-      }
-      render_citation_aside(parsed$quote, parsed$explanation, corpus)
+citation_scanner <- function(corpus = list()) {
+  resolve <- function(parsed) {
+    if (is.null(parsed)) {
+      return(list(
+        html = "",
+        decision = list(quote = NA_character_, status = "malformed")
+      ))
     }
+    render_citation_aside(parsed$quote, parsed$explanation, corpus)
   }
   buf <- ""
   mode <- "text"
@@ -165,19 +163,6 @@ citation_scanner <- function(corpus = list(), resolve = NULL) {
       ""
     },
     decisions = function() decisions
-  )
-}
-
-recorded_citation_resolver <- function(decisions) {
-  index <- 0L
-  resolve <- function(parsed) {
-    index <<- index + 1L
-    decision <- if (index <= length(decisions)) decisions[[index]] else NULL
-    render_recorded_citation_aside(parsed, decision)
-  }
-  list(
-    resolve = resolve,
-    remaining = function() max(0L, length(decisions) - index)
   )
 }
 

@@ -8,6 +8,8 @@ Neither package has been widely adopted or publicly released; changes can be mad
 
 Use soft wrapping for prose in Markdown files, including skills and vignettes.
 
+Both packages are first-class implementations. Never describe the Python package as a port, translation, or mirror of the R one, in code comments, docstrings, documentation, commit messages, or package metadata. Where one implementation needs to point at the other, name the shared contract that governs them both, or refer to the sibling file plainly.
+
 Anything both implementations must agree on belongs in `tests/shared/` as an executable fixture read by both suites, not as prose and not as a per-language copy. A Python-only or R-only copy of a shared behavior is a review defect. See `tests/shared/README.md`.
 
 `commons` supports the published table-level `definitions` field in `data-dict.yaml`. Definitions use data-dict's expression language and are compiled to the attached source's SQL dialect. Commons temporarily ports the definition-specific export logic until a data-dict R package is available; see [commons #115](https://github.com/posit-dev/commons/issues/115) for the integration design.
@@ -18,7 +20,7 @@ Release tags are prefixed per package: `r-v*` for the R package, `py-v*` for the
 
 ## Issue tracking with kata (optional)
 
-This project's Python port is tracked in [kata](https://www.katatracker.com/), a local-first issue ledger. `.kata.toml` binds this repository to the `commons` project; the ledger itself is machine-local, so adopting kata is per-developer and entirely optional.
+Work on the Python implementation is tracked in [kata](https://www.katatracker.com/), a local-first issue ledger. `.kata.toml` binds this repository to the `commons` project; the ledger itself is machine-local, so adopting kata is per-developer and entirely optional.
 
 **If `kata --version` does not succeed, skip the rest of this section** — nothing else in this repository depends on it. If it does, treat kata as the system of record for intent and follow the contract below.
 

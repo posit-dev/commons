@@ -29,8 +29,11 @@
 #'   )
 #'   ```
 #' @param network Whether the `run_r` session has network access. One of
-#'   `"none"` (the default) or `"full"`. The session requires Linux or macOS
-#'   and refuses to run without filesystem sandboxing.
+#'   `"none"` (the default) or `"full"`. The session uses OS sandboxing on
+#'   Linux and macOS. On unsupported hosts, local development can opt in to
+#'   best-effort R guardrails with
+#'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
+#'   are not a security boundary.
 #' @param log Whether to capture conversation trajectories with OpenTelemetry
 #'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
 #'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
@@ -132,7 +135,7 @@ commons <- function(
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
   network <- rlang::arg_match(network)
-  check_run_r_sandbox()
+  protection <- run_r_protection_mode()
   check_instructions(instructions)
   rlang::check_bool(log)
   check_share_with(share_with)
@@ -143,6 +146,7 @@ commons <- function(
     context_layer = context_layer,
     semantic_layer = semantic_layer,
     network = network,
+    protection = protection,
     instructions = instructions,
     log = log,
     share_with = share_with
@@ -166,6 +170,7 @@ Commons <- R6::R6Class(
       ...,
       instructions = NULL,
       network = c("none", "full"),
+      protection = run_r_protection_mode(),
       log = FALSE,
       share_with = NULL
     ) {
@@ -209,7 +214,7 @@ Commons <- R6::R6Class(
       )
 
       private$handles <- new_handle_store()
-      private$worker <- new_r_worker(network)
+      private$worker <- new_r_worker(network, protection)
       private$corpus <- build_citation_corpus(
         private$context_layer,
         private$registry,
@@ -337,6 +342,10 @@ Commons <- R6::R6Class(
               "commons.citation.candidates",
               jsonlite::toJSON(decisions, auto_unbox = TRUE)
             ),
+            error = function(err) NULL
+          )
+          tryCatch(
+            record_provenance_span(conversation_id, tag, decisions),
             error = function(err) NULL
           )
         }

@@ -239,7 +239,8 @@ recorded_call_test_spans <- function(
   messages,
   tag,
   end_time,
-  citation_decisions = list()
+  citation_decisions = list(),
+  dedicated_provenance_span = FALSE
 ) {
   root_id <- paste0(trace_id, "-root")
   agent_id <- paste0(trace_id, "-agent")
@@ -251,12 +252,16 @@ recorded_call_test_spans <- function(
       jsonlite::toJSON(citation_decisions, auto_unbox = TRUE)
     )
   )
-  list(
+  spans <- list(
     otlp_test_span(
       trace_id,
       root_id,
       name = "commons_conversation_turn",
-      attributes = attributes,
+      attributes = if (dedicated_provenance_span) {
+        attributes[1]
+      } else {
+        attributes
+      },
       end_time = end_time
     ),
     otlp_test_span(
@@ -275,6 +280,17 @@ recorded_call_test_spans <- function(
       end_time = end_time
     )
   )
+  if (dedicated_provenance_span) {
+    spans[[length(spans) + 1]] <- otlp_test_span(
+      trace_id,
+      paste0(trace_id, "-provenance"),
+      parent_span_id = root_id,
+      name = "commons_provenance",
+      attributes = attributes,
+      end_time = end_time
+    )
+  }
+  spans
 }
 
 test_that("linear calls attach records to their own final exchanges", {
@@ -289,7 +305,8 @@ test_that("linear calls attach records to their own final exchanges", {
       "conv-a",
       list(q1, a1, q2, a2),
       "B",
-      "20"
+      "20",
+      dedicated_provenance_span = TRUE
     )
   )))
 
