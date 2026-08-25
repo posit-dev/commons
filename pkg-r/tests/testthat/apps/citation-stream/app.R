@@ -89,7 +89,8 @@ agent$.__enclos_env__$private$corpus <- list(
 )
 
 ui <- bslib::page_fillable(
-  commons_ui("chat")
+  theme = commons_theme(),
+  shinychat::chat_ui("chat", icon_assistant = shiny::HTML(""))
 )
 
 server <- function(input, output, session) {

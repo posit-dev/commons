@@ -11,7 +11,8 @@ citation <- commons:::render_citation_aside(
 )$html
 
 ui <- bslib::page_fillable(
-  commons_ui(
+  theme = commons_theme(),
+  shinychat::chat_ui(
     "chat",
     messages = list(
       list(
@@ -26,7 +27,8 @@ ui <- bslib::page_fillable(
         role = "assistant",
         content = paste("Fallback result.", commons:::provenance_aside("C"))
       )
-    )
+    ),
+    icon_assistant = shiny::HTML("")
   )
 )
 

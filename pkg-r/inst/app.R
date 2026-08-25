@@ -83,9 +83,12 @@ greeting <- paste(
   "- <span class='suggestion'>Compare wetlands with the other habitats.</span>"
 )
 
-ui <- page_fillable(
-  title = "Biodiversity explorer",
-  commons_ui("chat", greeting = greeting)
+ui <- page_chat(
+  "Biodiversity explorer",
+  id = "chat",
+  greeting = greeting,
+  icon_assistant = shiny::HTML(""),
+  theme = commons_theme()
 )
 
 server <- function(input, output, session) {

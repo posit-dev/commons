@@ -2,13 +2,10 @@
 % Please edit documentation in R/chat.R
 \name{commons_app}
 \alias{commons_app}
-\alias{commons_ui}
 \alias{commons_server}
-\title{Shiny chat UI and server for commons agents}
+\title{Shiny chat app and server for commons agents}
 \usage{
 commons_app(client, ...)
-
-commons_ui(id, ...)
 
 commons_server(id, client, ...)
 }
@@ -16,20 +13,18 @@ commons_server(id, client, ...)
 \item{client}{A \code{\link[=commons]{commons()}} agent. Create a new agent for each Shiny session.}
 
 \item{...}{In \code{commons_app()}, extra arguments passed to
-\code{\link[shiny:shinyApp]{shiny::shinyApp()}}. In \code{commons_ui()}, extra arguments passed to
-\code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}. In \code{commons_server()}, arguments passed to
+\code{\link[shiny:shinyApp]{shiny::shinyApp()}}. In \code{commons_server()}, arguments passed to
 \code{\link[shinychat:chat_server]{shinychat::chat_server()}}.}
 
-\item{id}{The ID of the chat element; must match between \code{commons_ui()}
-and \code{commons_server()}.}
+\item{id}{The ID of the chat element; must match the \code{id} of the
+\code{\link[shinychat:page_chat]{shinychat::page_chat()}} or \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} on the page.}
 }
 \value{
-\code{commons_app()} returns a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object. \code{commons_ui()}
-returns UI. \code{commons_server()} returns the \code{\link[shinychat:chat_server]{shinychat::chat_server()}}
-result.
+\code{commons_app()} returns a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
+\code{commons_server()} returns the \code{\link[shinychat:chat_server]{shinychat::chat_server()}} result.
 }
 \description{
-These functions wrap \code{\link[shinychat:chat_app]{shinychat::chat_app()}}, \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}}, and
+These functions compose \code{\link[shinychat:page_chat]{shinychat::page_chat()}} and
 \code{\link[shinychat:chat_server]{shinychat::chat_server()}} for commons agents. The server verifies each
 \verb{<commons-citation>} the model writes against its own context, measure
 definitions, and data documentation as the answer streams, and rewrites
@@ -37,6 +32,12 @@ verified citations inline as numbered, server-authored \verb{<shiny-aside>}
 elements. Citation details name the trusted source.
 A compact provenance aside follows the answer when it was produced by a
 governed calculation, or when a fallback answer cites nothing verified.
+}
+\details{
+The UI side is ordinary shinychat UI: use \code{\link[shinychat:page_chat]{shinychat::page_chat()}} for a
+full-window chat, or \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} embedded in any bslib page.
+Either way, pass \code{theme = commons_theme()} to the page so the commons chat
+CSS and JavaScript are on the page.
 }
 \examples{
 \dontrun{
@@ -48,10 +49,9 @@ commons_app(agent)
 
 # Inside a custom Shiny app
 library(shiny)
+library(shinychat)
 
-ui <- bslib::page_fillable(
-  commons_ui("chat")
-)
+ui <- page_chat("Assistant", id = "chat", theme = commons_theme())
 
 server <- function(input, output, session) {
   session_agent <- commons(

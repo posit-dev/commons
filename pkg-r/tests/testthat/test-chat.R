@@ -102,24 +102,20 @@ test_that("commons_server wires conversation-id persistence into shinychat", {
   )
 })
 
-test_that("chat UI preserves shinychat's top-level fill container", {
-  ui <- commons_ui("chat", height = "100%")
-  classes <- unlist(ui$attribs[names(ui$attribs) == "class"], use.names = FALSE)
-  deps <- htmltools::findDependencies(ui)
+test_that("commons_theme() bundles the commons chat assets", {
+  theme <- commons_theme()
 
-  expect_equal(ui$name, "shiny-chat-container")
-  expect_identical(ui$attribs[["icon-assistant"]], "")
-  # shinychat controls the width property's name (it moved from `width` to a
-  # `--_chat-width` variable in 0.5.0); commons only cares that arguments in
-  # `...` reach chat_ui()'s formals and the default width cap is intact.
-  expect_match(ui$attribs$style, "min\\(680px, 100%\\)")
-  expect_match(ui$attribs$style, "height:100%;")
-  expect_true("html-fill-item" %in% classes)
-  expect_true("html-fill-container" %in% classes)
-  expect_true("commons-chat" %in% vapply(deps, `[[`, character(1), "name"))
+  expect_s3_class(theme, "bs_theme")
+  deps <- bslib::bs_theme_dependencies(theme)
+  names <- vapply(deps, `[[`, character(1), "name")
+  expect_true("commons-chat" %in% names)
+
+  commons_dep <- deps[[which(names == "commons-chat")]]
+  expect_identical(commons_dep$stylesheet, "commons-chat.css")
+  expect_identical(commons_dep$script, "commons-chat.js")
 })
 
-test_that("chat UI registers the packaged icon resource path", {
+test_that("commons_theme() registers the packaged icon resource path", {
   prefix <- "commons-icons"
   paths <- shiny::resourcePaths()
   previous <- if (prefix %in% names(paths)) unname(paths[[prefix]])
@@ -135,7 +131,7 @@ test_that("chat UI registers the packaged icon resource path", {
     }
   })
 
-  commons_ui("chat")
+  commons_theme()
 
   paths <- shiny::resourcePaths()
   expect_in(prefix, names(paths))

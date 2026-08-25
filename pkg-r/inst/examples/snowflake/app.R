@@ -15,9 +15,12 @@ greeting <- paste(
   "- <span class='suggestion'>What is total revenue by region?</span>"
 )
 
-ui <- page_fillable(
-  title = "Snowflake semantic view",
-  commons_ui("chat", greeting = greeting)
+ui <- shinychat::page_chat(
+  "Snowflake semantic view",
+  id = "chat",
+  greeting = greeting,
+  icon_assistant = shiny::HTML(""),
+  theme = commons_theme()
 )
 
 server <- function(input, output, session) {

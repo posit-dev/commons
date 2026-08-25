@@ -1,6 +1,6 @@
-#' Shiny chat UI and server for commons agents
+#' Shiny chat app and server for commons agents
 #'
-#' These functions wrap [shinychat::chat_app()], [shinychat::chat_ui()], and
+#' These functions compose [shinychat::page_chat()] and
 #' [shinychat::chat_server()] for commons agents. The server verifies each
 #' `<commons-citation>` the model writes against its own context, measure
 #' definitions, and data documentation as the answer streams, and rewrites
@@ -9,17 +9,20 @@
 #' A compact provenance aside follows the answer when it was produced by a
 #' governed calculation, or when a fallback answer cites nothing verified.
 #'
-#' @param id The ID of the chat element; must match between `commons_ui()`
-#'   and `commons_server()`.
+#' The UI side is ordinary shinychat UI: use [shinychat::page_chat()] for a
+#' full-window chat, or [shinychat::chat_ui()] embedded in any bslib page.
+#' Either way, pass `theme = commons_theme()` to the page so the commons chat
+#' CSS and JavaScript are on the page.
+#'
+#' @param id The ID of the chat element; must match the `id` of the
+#'   [shinychat::page_chat()] or [shinychat::chat_ui()] on the page.
 #' @param ... In `commons_app()`, extra arguments passed to
-#'   [shiny::shinyApp()]. In `commons_ui()`, extra arguments passed to
-#'   [shinychat::chat_ui()]. In `commons_server()`, arguments passed to
+#'   [shiny::shinyApp()]. In `commons_server()`, arguments passed to
 #'   [shinychat::chat_server()].
 #' @param client A [commons()] agent. Create a new agent for each Shiny session.
 #'
-#' @return `commons_app()` returns a [shiny::shinyApp()] object. `commons_ui()`
-#'   returns UI. `commons_server()` returns the [shinychat::chat_server()]
-#'   result.
+#' @return `commons_app()` returns a [shiny::shinyApp()] object.
+#'   `commons_server()` returns the [shinychat::chat_server()] result.
 #'
 #' @examples
 #' \dontrun{
@@ -31,10 +34,9 @@
 #'
 #' # Inside a custom Shiny app
 #' library(shiny)
+#' library(shinychat)
 #'
-#' ui <- bslib::page_fillable(
-#'   commons_ui("chat")
-#' )
+#' ui <- page_chat("Assistant", id = "chat", theme = commons_theme())
 #'
 #' server <- function(input, output, session) {
 #'   session_agent <- commons(
@@ -54,19 +56,17 @@ commons_app <- function(client, ...) {
   check_commons_client(client)
 
   ui <- function(req) {
-    bslib::page_fillable(
-      commons_ui(
-        "chat",
-        height = "100%",
-        enable_cancel = TRUE,
-        allow_attachments = TRUE
-      ),
-      if (rlang::is_interactive()) {
-        shiny::actionButton(
-          "close_btn",
-          label = "",
-          class = "btn-close",
-          style = "position: fixed; top: 6px; right: 6px;"
+    shinychat::page_chat(
+      "commons",
+      id = "chat",
+      theme = commons_theme(),
+      icon_assistant = shiny::HTML(""),
+      enable_cancel = TRUE,
+      allow_attachments = TRUE,
+      toolbar_global = if (rlang::is_interactive()) {
+        bslib::toolbar(
+          bslib::input_dark_mode(),
+          shiny::actionButton("close_btn", label = "", class = "btn-close")
         )
       }
     )
@@ -83,15 +83,6 @@ commons_app <- function(client, ...) {
   }
 
   shiny::shinyApp(ui, server, ..., enableBookmarking = "url")
-}
-
-#' @rdname commons_app
-#' @export
-commons_ui <- function(id, ...) {
-  check_chat_packages()
-  register_commons_icon_resources()
-  ui <- shinychat::chat_ui(id, icon_assistant = htmltools::HTML(""), ...)
-  htmltools::attachDependencies(ui, commons_chat_dependency(), append = TRUE)
 }
 
 #' @rdname commons_app
