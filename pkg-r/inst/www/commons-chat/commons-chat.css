@@ -46,7 +46,7 @@ shiny-chat-container {
   line-height: 0;
   margin-inline-start: 0.125em;
   position: relative;
-  vertical-align: super;
+  vertical-align: middle;
   width: 1rem;
 }
 
@@ -61,8 +61,8 @@ shiny-chat-container {
   border-radius: 50%;
   box-sizing: border-box;
   display: block;
-  height: 0.5rem;
-  width: 0.5rem;
+  height: 0.625rem;
+  width: 0.625rem;
 }
 
 .commons-answer-dot-verified {
@@ -164,7 +164,7 @@ shiny-chat-container
   min-height: 1rem;
   min-inline-size: 1rem;
   padding: 0;
-  vertical-align: super;
+  vertical-align: middle;
   width: 1rem;
 }
 
@@ -179,8 +179,8 @@ shiny-chat-container
   box-sizing: border-box;
   color: var(--commons-answer-dot-color);
   content: "";
-  height: 0.5rem;
-  width: 0.5rem;
+  height: 0.625rem;
+  width: 0.625rem;
 }
 
 shiny-chat-container
