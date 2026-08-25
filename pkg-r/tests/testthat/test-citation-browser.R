@@ -7,7 +7,7 @@ test_that("normal package checks can disable browser tests explicitly", {
   )
 })
 
-test_that("Shiny Chat renders native numbered streamed citations", {
+test_that("Shiny Chat renders streamed citations as provenance dots", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -62,6 +62,24 @@ test_that("Shiny Chat renders native numbered streamed citations", {
   expect_identical(
     app$get_js(
       paste0(
+        "Array.from(document.querySelectorAll('",
+        marker_selector,
+        "')).every((node) => {",
+        "const marker = getComputedStyle(node);",
+        "const dot = getComputedStyle(node, '::after');",
+        "return marker.width === '16px' && marker.height === '16px' && ",
+        "marker.verticalAlign === 'middle' && marker.fontSize === '0px' && ",
+        "dot.width === '10px' && dot.height === '10px' && ",
+        "dot.borderRadius === '50%' && ",
+        "dot.backgroundColor === 'rgb(0, 123, 194)';",
+        "});"
+      )
+    ),
+    TRUE
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
         "(() => {",
         "const style = getComputedStyle(document.querySelector(",
         "'button[data-shinychat-aside-display=\"compact\"]'));",
@@ -88,8 +106,8 @@ test_that("Shiny Chat renders native numbered streamed citations", {
       )
     ),
     paste(
-      "Canopy weighting follows the documentation.\n[1]",
-      "Revenue timing follows the table definition.\n[2]",
+      "Canopy weighting follows the documentation.",
+      "Revenue timing follows the table definition.",
       sep = "|"
     )
   )

@@ -145,9 +145,12 @@ shiny-chat-container [data-shinychat-aside-display="compact"] {
 
 /* Temporary bridge until Shinychat provides a public per-aside marker API. */
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   ) {
   align-items: center;
   background: transparent;
@@ -169,9 +172,12 @@ shiny-chat-container
 }
 
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   )::after {
   animation: commons-answer-dot-pulse 1.6s ease-in-out 1;
   background: var(--commons-answer-dot-color);
@@ -194,50 +200,76 @@ shiny-chat-container
 }
 
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  .shiny-aside-pill--number {
+  --commons-answer-dot-color: #007bc2;
+}
+
+shiny-chat-container
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   ):hover,
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   ):focus-visible,
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   )[aria-expanded="true"] {
   background: transparent;
   color: transparent;
 }
 
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   ):hover::after,
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   )[aria-expanded="true"]::after {
   filter: brightness(0.9);
 }
 
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   ):focus-visible {
   outline: 0.125rem solid var(--bs-focus-ring-color, rgba(0, 123, 194, 0.5));
   outline-offset: 0;
 }
 
 shiny-chat-container
-  .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+  :is(
+    .shiny-aside-pill--number,
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
   )
   > * {
   display: none;
@@ -259,9 +291,12 @@ shiny-chat-container
 @media (prefers-reduced-motion: reduce) {
   .commons-answer-dot-mark,
   shiny-chat-container
-    .shiny-aside-pill:has(
-      img[src$="/trusted-icon.svg"],
-      img[src$="/warning-icon.svg"]
+    :is(
+      .shiny-aside-pill--number,
+      .shiny-aside-pill:has(
+        img[src$="/trusted-icon.svg"],
+        img[src$="/warning-icon.svg"]
+      )
     )::after {
     animation: none;
   }
