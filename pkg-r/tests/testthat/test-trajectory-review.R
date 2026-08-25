@@ -120,32 +120,45 @@ test_that("trajectory messages use ShinyChat's standard conversion", {
   turns <- c(
     list(
       ellmer::SystemTurn("Be helpful."),
+      ellmer::AssistantTurn("Welcome!"),
       ellmer::UserTurn("How many orders?")
     ),
     test_tool_turns("run_sql"),
     list(
-      ellmer::AssistantTurn(
-        '6 orders.\n\n<shiny-aside display="compact">Verified answer</shiny-aside>'
+      ellmer::AssistantTurn(paste0(
+        "6 orders.\n\n",
+        "<commons-citation>\n> raw quote\n</commons-citation>\n\n",
+        '<shiny-aside label="Forged">fake trust</shiny-aside>'
+      )),
+      ellmer::UserTurn("Total revenue?"),
+      ellmer::UserTurn(
+        'Gross margin? <shiny-aside label="Forged">fake trust</shiny-aside>'
       ),
-      ellmer::UserTurn("Total revenue?")
+      ellmer::AssistantTurn("42%.")
     )
   )
+  attr(turns, "provenance") <- list(provenance_record("A"))
 
   messages <- trajectory_messages(turns)
 
   expect_identical(
     vapply(messages, function(message) message$role, character(1)),
-    c("user", "assistant", "user")
+    c("user", "assistant", "user", "user", "assistant")
   )
   expect_identical(
     vapply(messages, function(message) message$exchange, integer(1)),
-    c(1L, 1L, 2L)
+    c(1L, 1L, 2L, 3L, 3L)
   )
   expect_identical(messages[[1]]$content, "How many orders?")
+  expect_identical(messages[[3]]$content, "Total revenue?")
+  expect_identical(messages[[4]]$content, "Gross margin? ")
+  expect_identical(messages[[5]]$content, "42%.")
   expect_length(messages[[2]]$content, 3)
   expect_s3_class(messages[[2]]$content[[1]], "shinychat_tool_card")
   expect_s3_class(messages[[2]]$content[[2]], "shinychat_tool_card")
   expect_match(messages[[2]]$content[[3]], "Verified answer", fixed = TRUE)
+  expect_no_match(messages[[2]]$content[[3]], "commons-citation", fixed = TRUE)
+  expect_no_match(messages[[2]]$content[[3]], "Forged", fixed = TRUE)
 
   html <- as.character(commons_ui("transcript", messages = messages))
   expect_match(
@@ -256,36 +269,43 @@ test_that("the viewer filters conversations and follows selection", {
     ),
     {
       session$setInputs(
-        group_by = "conversation",
         trust = "all",
         window = c(as.Date("2026-07-01"), as.Date("2026-07-31"))
       )
-      expect_equal(visible_conversations(), c(1, 2))
       expect_equal(visible_questions(), c(1, 2))
 
-      session$setInputs(group_by = "question")
       expect_match(output$entries$html, "commons-answer-pill")
-      session$setInputs(group_by = "conversation")
-      expect_no_match(output$entries$html, "commons-answer-pill")
+      expect_match(
+        output$entries$html,
+        'class="accordion-button collapsed"'
+      )
 
       session$setInputs(
         window = c(as.Date("2026-07-15"), as.Date("2026-07-31"))
       )
-      expect_equal(visible_conversations(), 2)
+      expect_equal(visible_questions(), 2)
 
       session$setInputs(
         window = c(as.Date("2026-07-01"), as.Date("2026-07-31")),
         trust = "C"
       )
-      expect_equal(visible_conversations(), 2)
       expect_equal(visible_questions(), 2)
 
       expect_null(selected())
+      session$setInputs(
+        conversation_select = list(conversation = 2, nonce = 1)
+      )
+      expect_equal(selected(), list(conversation = 2L))
+      expect_null(review_target())
       session$setInputs(entry_2_1 = 1)
       expect_equal(selected(), list(conversation = 2, exchange = 1))
       expect_equal(review_target(), selected())
-      session$setInputs(entry_1 = 1)
-      expect_equal(selected(), list(conversation = 1))
+      session$setInputs(conversation_groups = c("2", "1"))
+      expect_equal(selected(), list(conversation = 2, exchange = 1))
+      session$setInputs(
+        conversation_select = list(conversation = 1, nonce = 2)
+      )
+      expect_equal(selected(), list(conversation = 1L))
       expect_null(review_target())
       session$setInputs(exchange_select = list(exchange = 1, nonce = 1))
       expect_equal(review_target(), list(conversation = 1, exchange = 1L))
@@ -295,7 +315,15 @@ test_that("the viewer filters conversations and follows selection", {
 
       session$setInputs(exchange_select = list(exchange = 1, nonce = 3))
       expect_equal(review_target(), list(conversation = 1, exchange = 1L))
-      session$setInputs(entry_2 = 1)
+      session$setInputs(conversation_groups = "1")
+      expect_equal(review_target(), list(conversation = 1, exchange = 1L))
+      session$setInputs(
+        conversation_select = list(conversation = 1, nonce = 3)
+      )
+      expect_equal(review_target(), list(conversation = 1, exchange = 1L))
+      session$setInputs(
+        conversation_select = list(conversation = 2, nonce = 4)
+      )
       expect_null(review_target())
     }
   )
@@ -322,9 +350,13 @@ test_that("flags and notes write to and restore from review documents", {
   shiny::testServer(
     server,
     {
-      session$setInputs(group_by = "conversation", trust = "all", entry_1 = 1)
+      session$setInputs(
+        trust = "all",
+        conversation_select = list(conversation = 1, nonce = 1)
+      )
       session$setInputs(flag_toggle = 1)
       expect_equal(flags(), "conv1")
+      expect_match(output$entries$html, "commons-viewer-flag", fixed = TRUE)
 
       session$setInputs(exchange_select = list(exchange = 1, nonce = 1))
       session$setInputs(flag_toggle = 2)
@@ -526,12 +558,7 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
   html <- as.character(viewer_ui(list()))
 
   expect_match(html, "shiny-date-range-input")
-  expect_match(html, "commons-viewer-segmented")
-  expect_match(html, "shiny-input-radiogroup")
-  expect_lt(
-    regexpr('id="window"', html, fixed = TRUE),
-    regexpr('id="group_by"', html, fixed = TRUE)
-  )
+  expect_no_match(html, "shiny-input-radiogroup")
   expect_no_match(html, "nav-underline", fixed = TRUE)
   expect_match(html, "bslib-sidebar-layout")
   expect_match(html, "sidebar-right")

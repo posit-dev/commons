@@ -207,10 +207,60 @@ question_snippet <- function(exchange, max_chars = 80) {
 
 trajectory_messages <- function(turns) {
   provenance <- attr(turns, "provenance") %||% list()
+  exchanges <- split_exchanges(sanitize_trajectory_turns(turns))
+  messages <- unlist(
+    Map(trajectory_exchange_messages, exchanges, seq_along(exchanges)),
+    recursive = FALSE
+  )
+  add_message_provenance(messages, provenance)
+}
+
+trajectory_exchange_messages <- function(turns, exchange) {
   chat <- new_trajectory_chat()
   chat$set_turns(turns)
-  messages <- add_message_exchanges(shinychat::contents_shinychat(chat))
-  add_message_provenance(messages, provenance)
+  messages <- shinychat::contents_shinychat(chat)
+  for (i in seq_along(messages)) {
+    messages[[i]]$exchange <- as.integer(exchange)
+  }
+  messages
+}
+
+sanitize_trajectory_turns <- function(turns) {
+  lapply(turns, function(turn) {
+    if (turn@role %in% c("assistant", "user")) {
+      turn@contents <- sanitize_trajectory_contents(turn@contents)
+    }
+    turn
+  })
+}
+
+sanitize_trajectory_contents <- function(contents) {
+  scanner <- citation_scanner()
+  last_text <- NULL
+
+  for (i in seq_along(contents)) {
+    content <- contents[[i]]
+    if (S7::S7_inherits(content, ellmer::ContentText)) {
+      contents[[i]]@text <- scanner$feed(content@text)
+      last_text <- i
+    } else {
+      if (!is.null(last_text)) {
+        contents[[last_text]]@text <- paste0(
+          contents[[last_text]]@text,
+          scanner$finish()
+        )
+        last_text <- NULL
+      }
+      scanner <- citation_scanner()
+    }
+  }
+  if (!is.null(last_text)) {
+    contents[[last_text]]@text <- paste0(
+      contents[[last_text]]@text,
+      scanner$finish()
+    )
+  }
+  contents
 }
 
 new_trajectory_chat <- function() {
@@ -223,17 +273,6 @@ new_trajectory_chat <- function() {
     ),
     model = ellmer::Model(name = "trajectory-review")
   )
-}
-
-add_message_exchanges <- function(messages) {
-  exchange <- 0L
-  for (i in seq_along(messages)) {
-    if (identical(messages[[i]]$role, "user")) {
-      exchange <- exchange + 1L
-    }
-    messages[[i]]$exchange <- exchange
-  }
-  messages
 }
 
 add_message_provenance <- function(messages, provenance) {
@@ -547,10 +586,12 @@ viewer_server <- function(
 
     shiny::observeEvent(input$conversation_select, {
       index <- as.integer(input$conversation_select$conversation)
+      current <- selected()
       if (
         length(index) == 1 &&
           !is.na(index) &&
-          index %in% seq_along(trajectories)
+          index %in% seq_along(trajectories) &&
+          !identical(current$conversation, index)
       ) {
         selected(list(conversation = index))
         review_target(NULL)
@@ -906,6 +947,7 @@ question_group <- function(
       ),
       htmltools::tags$span(
         class = "commons-viewer-question-group-meta",
+        flag_marker(review_key(conversation$id) %in% flags),
         conversation_meta(conversation)
       )
     ),

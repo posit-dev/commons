@@ -116,7 +116,6 @@
         var item = conversationButton.closest(".accordion-item");
         var conversation = item && Number(item.dataset.value);
         if (Number.isInteger(conversation)) {
-          selectSidebar(conversation, null);
           Shiny.setInputValue(
             "conversation_select",
             { conversation: conversation, nonce: Math.random() },
