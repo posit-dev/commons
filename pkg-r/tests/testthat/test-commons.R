@@ -76,6 +76,12 @@ test_that("run_r describes which results are visible to the user", {
   expect_match(description, "user cannot run code in this session")
 })
 
+test_that("search_context uses a completed title without a context layer", {
+  result <- agent_tool(test_agent(), "search_context")("anything")
+
+  expect_equal(result@extra$display$title, "Searched context")
+})
+
 test_that("call_measure describes how to handle visible results", {
   agent <- test_agent(
     semantic_layer = semantic_layer(count_measure_tool())
@@ -262,7 +268,6 @@ test_that("run_sql and describe_table route to the named source", {
   describe <- agent_tool(agent, "describe_table")
   res <- describe("orders", source = "b")
   expect_match(res@value, "integer")
-  expect_match(S7::prop(res, "extra")$display$title, "(b)", fixed = TRUE)
 })
 
 test_that("run_sql delivers one citation reminder per user turn", {

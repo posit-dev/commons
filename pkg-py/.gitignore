@@ -8,3 +8,6 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# The root ignores any directory named "docs"; this package's is committed.
+!docs/
