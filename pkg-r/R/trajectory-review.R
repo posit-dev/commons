@@ -757,6 +757,7 @@ viewer_server <- function(
     # Seed decorations only after the new chat element is bound in the browser.
     shiny::observeEvent(selected_conversation(), {
       conversation <- selected_conversation()
+      exchange <- selected_exchange()
       messages <- selected_messages()
       session$onFlushed(
         function() {
@@ -764,7 +765,7 @@ viewer_server <- function(
             session,
             transcript_id(conversation),
             messages,
-            selected_exchange = selected_exchange()
+            selected_exchange = exchange
           )
         },
         once = TRUE
