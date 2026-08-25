@@ -6,7 +6,18 @@
   display: none;
 }
 
+/* The chart and the transcript read as plain sections rather than boxes, so a
+   single rule separates them instead of two outlines. */
+.commons-viewer-timeline-card,
+.commons-viewer-transcript {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .commons-viewer-timeline-card {
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
   flex: 0 0 auto;
 }
 
@@ -74,10 +85,13 @@
   padding: 0.75rem 1rem;
 }
 
+/* The pane's collapse toggle is absolutely positioned over its top-left
+   corner, so indent the heading clear of it. */
 .commons-viewer-review-bar {
   align-items: center;
   display: flex;
   justify-content: space-between;
+  padding-left: 2.5rem;
 }
 
 .commons-viewer-review-bar strong {
@@ -185,7 +199,9 @@
   color: #b54708;
 }
 
-.shiny-chat-messages-content {
+.commons-viewer-transcript .shiny-chat-messages-content {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
   position: relative;
 }
 
@@ -240,8 +256,139 @@
   margin-bottom: 0.25rem;
 }
 
-.commons-viewer-sidebar .tab-content:empty {
-  display: none;
+/* Pin the filters to the top of the sidebar and scroll only the entry list.
+   The sidebar itself is the default scroller, so hand that job to the entry
+   list and let the content track the sidebar's height. */
+.bslib-sidebar-layout > .commons-viewer-sidebar {
+  overflow-y: hidden;
+}
+
+.commons-viewer-sidebar > .sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow-y: hidden;
+}
+
+.commons-viewer-sidebar-controls {
+  --commons-viewer-control-radius: 8px;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--bslib-spacer, 1rem);
+  padding-bottom: var(--bslib-spacer, 1rem);
+}
+
+/* Every control spans the sidebar, so their left and right edges line up.
+   Spacing between them comes from the flex gap above, not form-group margins. */
+.commons-viewer-sidebar-controls .form-group,
+.commons-viewer-sidebar-controls .shiny-input-container {
+  margin-bottom: 0;
+  width: 100%;
+}
+
+.commons-viewer-sidebar-controls .input-daterange,
+.commons-viewer-sidebar-controls .selectize-input,
+.commons-viewer-sidebar-controls .form-control,
+.commons-viewer-sidebar-controls .form-select {
+  border-radius: var(--commons-viewer-control-radius);
+}
+
+/* The date range is one control, so round its outer corners only. Both corners
+   are set here to outrank Bootstrap's `.input-group-sm > .form-control`. */
+.commons-viewer-sidebar-controls .input-daterange > .form-control:first-child {
+  border-bottom-left-radius: var(--commons-viewer-control-radius);
+  border-bottom-right-radius: 0;
+  border-top-left-radius: var(--commons-viewer-control-radius);
+  border-top-right-radius: 0;
+}
+
+.commons-viewer-sidebar-controls .input-daterange > .form-control:last-child {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: var(--commons-viewer-control-radius);
+  border-top-left-radius: 0;
+  border-top-right-radius: var(--commons-viewer-control-radius);
+}
+
+.commons-viewer-sidebar-controls .selectize-dropdown {
+  border-bottom-left-radius: var(--commons-viewer-control-radius);
+  border-bottom-right-radius: var(--commons-viewer-control-radius);
+}
+
+.commons-viewer-sidebar-entries {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.commons-viewer-question-groups {
+  --bs-accordion-border-color: var(--bs-border-color, #dee2e6);
+  --bs-accordion-border-radius: 0;
+  --bs-accordion-inner-border-radius: 0;
+}
+
+.commons-viewer-question-groups .accordion-item {
+  border: 0;
+  border-bottom: 1px solid var(--bs-accordion-border-color);
+}
+
+.commons-viewer-question-groups .accordion-button,
+.commons-viewer-question-groups .accordion-button:not(.collapsed) {
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  padding: 0.75rem;
+}
+
+.commons-viewer-question-groups .accordion-button:focus,
+.commons-viewer-question-groups .accordion-button:not(.collapsed):focus {
+  box-shadow: none;
+}
+
+.commons-viewer-question-groups .accordion-button::after {
+  background-size: 0.75rem;
+  filter: grayscale(1);
+  flex: 0 0 auto;
+  height: 0.75rem;
+  margin-left: 0.5rem;
+  opacity: 0.55;
+  width: 0.75rem;
+}
+
+.commons-viewer-question-groups .accordion-title {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.commons-viewer-question-group-title {
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.commons-viewer-question-group-meta {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.commons-viewer-question-groups .accordion-body {
+  padding: 0 0 0.5rem;
+}
+
+.commons-viewer-question-groups
+  .commons-viewer-conversation-selected
+  > .accordion-header
+  > .accordion-button {
+  background: color-mix(in srgb, #007bc2 8%, var(--bs-body-bg, #fff));
+}
+
+.commons-viewer-question-group-entries .commons-viewer-entry {
+  padding-left: 1.25rem;
 }
 
 .commons-viewer-entry {
@@ -266,7 +413,8 @@
 }
 
 .commons-viewer-entry-snippet {
-  font-weight: 500;
+  font-size: 0.9375rem;
+  font-weight: 400;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

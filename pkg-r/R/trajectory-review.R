@@ -4,12 +4,11 @@
 #' `trajectory_review()` launches a Shiny app for browsing conversation
 #' trajectories read with [trajectory_read()]. The app charts each trust
 #' level's share of answers over time—binned by day, week, or month, using
-#' the finest unit the volume of answers supports—alongside a list of
-#' conversations or of individual questions, filterable by date and trust
-#' level. The transcript reconstructs each answer's recorded Commons
-#' presentation: accepted citations appear inline at their original locations,
-#' A/C provenance appears after the answer, and rejected citation attempts
-#' appear in a separate "Review audit" aside.
+#' the finest unit the volume of answers supports—alongside a list of questions
+#' grouped by conversation, filterable by date and trust level. The transcript
+#' uses the same Commons and ShinyChat renderer as live conversations,
+#' preserving recorded messages and tool activity without a separate
+#' reviewer-specific rendering path.
 #'
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review and annotated with notes. Notes apply to the
@@ -26,11 +25,8 @@
 #' are omitted because later tool calls record any selected measure; other tool
 #' results are limited to 50 lines or 20,000 characters.
 #'
-#' Each answer's trust tag and citation outcomes are read back exactly as
-#' [trajectory_read()] recorded them. The viewer uses those decisions to
-#' reconstruct Commons citation asides from the raw ellmer answer; it never
-#' re-verifies citations against a corpus. Missing or conflicting records are
-#' omitted rather than inferred.
+#' Trust filters use each answer's tag exactly as [trajectory_read()] recorded
+#' it. Missing or conflicting records are omitted rather than inferred.
 #'
 #' Logged calls that aren't part of the agent's question-and-answer record—
 #' shinychat's conversation-title generation, and completions with no user
@@ -80,6 +76,7 @@ trajectory_review <- function(
   check_trajectories(trajectories)
   review_dir <- resolve_review_dir(review_dir)
   trajectories <- drop_side_conversations(trajectories)
+  trajectories[] <- lapply(trajectories, sanitize_trajectory_turns)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
@@ -154,15 +151,16 @@ summarize_trajectories <- function(trajectories) {
 
 conversation_record <- function(id, turns) {
   exchanges <- split_exchanges(turns)
-  provenance <- lapply(
-    attr(turns, "provenance") %||% list(),
-    exchange_provenance
-  )
+  provenance <- attr(turns, "provenance") %||% list()
   list(
     id = id,
     snippet = first_user_snippet(exchanges),
     n_user_turns = length(exchanges),
-    tags = vapply(provenance, function(p) p$tag, character(1)),
+    tags = vapply(
+      provenance,
+      \(record) record$provenance_tag %||% NA_character_,
+      character(1)
+    ),
     last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
   )
 }
@@ -172,26 +170,24 @@ summarize_questions <- function(trajectories) {
   for (i in rlang::seq2(1, length(trajectories))) {
     turns <- trajectories[[i]]
     exchanges <- split_exchanges(turns)
-    provenance <- lapply(
-      attr(turns, "provenance") %||% list(),
-      exchange_provenance
-    )
+    provenance <- attr(turns, "provenance") %||% list()
     for (j in rlang::seq2(1, length(exchanges))) {
+      record <- provenance[j][[1]]
       records[[length(records) + 1]] <- list(
         conversation = i,
         conversation_id = names(trajectories)[[i]],
         exchange = j,
         snippet = question_snippet(exchanges[[j]]),
-        tag = (provenance[j][[1]] %||% list(tag = NA_character_))$tag,
+        tag = if (is.null(record)) {
+          NA_character_
+        } else {
+          record$provenance_tag %||% NA_character_
+        },
         last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
       )
     }
   }
   records
-}
-
-exchange_provenance <- function(record) {
-  list(tag = record$provenance_tag)
 }
 
 first_user_snippet <- function(exchanges, max_chars = 80) {
@@ -209,68 +205,125 @@ question_snippet <- function(exchange, max_chars = 80) {
   paste0(substr(text, 1, max_chars - 1), "\u2026")
 }
 
-trajectory_transcript <- function(turns) {
+trajectory_messages <- function(turns) {
+  provenance <- attr(turns, "provenance") %||% list()
   exchanges <- split_exchanges(turns)
-  records <- attr(turns, "provenance") %||% list()
-  messages <- list()
+  messages <- unlist(
+    Map(trajectory_exchange_messages, exchanges, seq_along(exchanges)),
+    recursive = FALSE
+  )
+  add_message_provenance(messages, provenance)
+}
 
-  for (i in seq_along(exchanges)) {
-    exchange <- exchanges[[i]]
-    messages[[length(messages) + 1]] <- list(
-      role = "user",
-      content = exchange[[1]]@text,
-      exchange = i
+trajectory_exchange_messages <- function(turns, exchange) {
+  chat <- new_trajectory_chat()
+  chat$set_turns(turns)
+  messages <- shinychat::contents_shinychat(chat)
+  for (i in seq_along(messages)) {
+    messages[[i]]$exchange <- as.integer(exchange)
+  }
+  messages
+}
+
+sanitize_trajectory_turns <- function(turns) {
+  sanitized <- lapply(turns, function(turn) {
+    if (turn@role %in% c("assistant", "user")) {
+      turn@contents <- sanitize_trajectory_contents(turn@contents)
+    }
+    turn
+  })
+  attributes(sanitized) <- attributes(turns)
+  sanitized
+}
+
+sanitize_trajectory_contents <- function(contents) {
+  contents <- Filter(\(content) !is_internal_turn_reminder(content), contents)
+  scanner <- citation_scanner()
+  last_text <- NULL
+
+  for (i in seq_along(contents)) {
+    content <- contents[[i]]
+    if (S7::S7_inherits(content, ellmer::ContentText)) {
+      contents[[i]]@text <- scanner$feed(content@text)
+      last_text <- i
+    } else {
+      if (!is.null(last_text)) {
+        contents[[last_text]]@text <- paste0(
+          contents[[last_text]]@text,
+          scanner$finish()
+        )
+        last_text <- NULL
+      }
+      scanner <- citation_scanner()
+    }
+  }
+  if (!is.null(last_text)) {
+    contents[[last_text]]@text <- paste0(
+      contents[[last_text]]@text,
+      scanner$finish()
     )
-    record <- records[i][[1]] %||% empty_turn_provenance()
-    chunks <- exchange_answer_chunks(
-      exchange[-1],
-      record$citation_decisions
-    )
-    if (length(chunks) == 0) {
+  }
+  contents
+}
+
+is_internal_turn_reminder <- function(content) {
+  S7::S7_inherits(content, ellmer::ContentText) &&
+    content@text %in%
+      c(
+        claude_5_turn_reminder,
+        restored_conversation_turn_reminder
+      )
+}
+
+new_trajectory_chat <- function() {
+  ellmer::chat_openai(
+    credentials = \() "unused",
+    model = "trajectory-review"
+  )
+}
+
+add_message_provenance <- function(messages, provenance) {
+  exchanges <- unique(vapply(
+    messages,
+    function(message) message$exchange,
+    integer(1)
+  ))
+  for (exchange in exchanges) {
+    record <- provenance[exchange][[1]]
+    tag <- if (is.null(record)) {
+      NA_character_
+    } else {
+      record$provenance_tag %||% NA_character_
+    }
+    pill <- commons_answer_pill(tag)
+    if (is.null(pill)) {
       next
     }
-    chip <- exchange_chip(record)
-    if (!is.null(chip)) {
-      chunks[[length(chunks) + 1]] <- chip
+    candidates <- which(vapply(
+      messages,
+      function(message) {
+        identical(message$role, "assistant") &&
+          identical(message$exchange, exchange)
+      },
+      logical(1)
+    ))
+    if (length(candidates) == 0) {
+      next
     }
-    messages[[length(messages) + 1]] <- list(
-      role = "assistant",
-      content = chunks,
-      exchange = i
+    index <- candidates[[length(candidates)]]
+    messages[[index]]$content <- append_provenance_pill(
+      messages[[index]]$content,
+      pill
     )
   }
-
-  list(messages = messages)
+  messages
 }
 
-exchange_chip <- function(record) {
-  pieces <- c(
-    provenance_aside(record$provenance_tag %||% NA_character_),
-    review_audit_aside(record$citation_decisions)
-  )
-  pieces <- pieces[nzchar(pieces)]
-  if (length(pieces) == 0) {
-    return(NULL)
+append_provenance_pill <- function(content, pill) {
+  if (is.character(content)) {
+    return(list(content, pill))
   }
-  paste(pieces, collapse = "\n\n")
-}
-
-review_audit_aside <- function(decisions) {
-  rejected <- sum(vapply(
-    decisions,
-    function(decision) {
-      is.list(decision) && identical(decision$status, "rejected")
-    },
-    logical(1)
-  ))
-  if (rejected == 0) {
-    return("")
-  }
-  sprintf(
-    '<shiny-aside label="Review audit">%d citation%s rejected.</shiny-aside>',
-    rejected,
-    if (rejected == 1) "" else "s"
-  )
+  c(content, list(pill))
 }
 
 commons_answer_pill <- function(tag) {
@@ -300,7 +353,7 @@ commons_pill_icon <- function(file, alt) {
   if (is.null(file)) {
     return(NULL)
   }
-  src <- svg_data_uri(file)
+  src <- commons_icon_url(file)
   if (is.null(src)) {
     return(NULL)
   }
@@ -312,101 +365,20 @@ commons_pill_icon <- function(file, alt) {
   )
 }
 
-exchange_answer_chunks <- function(turns, decisions) {
-  chunks <- list()
-  resolver <- recorded_citation_resolver(decisions)
-  scanner <- citation_scanner(resolve = resolver$resolve)
-
-  append_text <- function(text) {
-    if (nzchar(text)) {
-      chunks[[length(chunks) + 1]] <<-
-        shinychat::contents_shinychat(ellmer::ContentText(text))
-    }
-  }
-  reset_text_scanner <- function() {
-    append_text(scanner$finish())
-    scanner <<- citation_scanner(resolve = resolver$resolve)
-  }
-
-  for (turn in turns) {
-    for (content in turn@contents) {
-      if (S7::S7_inherits(content, ellmer::ContentText)) {
-        append_text(scanner$feed(content@text))
-        next
-      }
-
-      reset_text_scanner()
-      if (S7::S7_inherits(content, ellmer::ContentToolRequest)) {
-        next
-      }
-      if (S7::S7_inherits(content, ellmer::ContentToolResult)) {
-        content@extra$display <- content@extra$display %||%
-          viewer_tool_display(content@request, content@value)
-      }
-      chunks[[length(chunks) + 1]] <- shinychat::contents_shinychat(content)
-    }
-  }
-  append_text(scanner$finish())
-  drop_nulls(chunks)
-}
-
-# Rebuild display metadata that is not retained by the OTLP round trip.
-viewer_tool_display <- function(request, value = NULL) {
-  if (is.null(request)) {
-    return(NULL)
-  }
-  arguments <- request@arguments
-  info <- switch(
-    request@name,
-    search_pool = list(title = "Found a trusted calculation", icon = "search"),
-    call_metrics = list(
-      title = sprintf(
-        "Ran a trusted calculation: %s",
-        html_escape(paste(unlist(arguments$metrics), collapse = ", "))
-      ),
-      icon = "shield-check"
-    ),
-    call_measure = list(
-      title = sprintf(
-        "Ran a trusted calculation: %s",
-        html_escape(humanize_name(arguments$name %||% ""))
-      ),
-      icon = "shield-check"
-    ),
-    search_context = list(title = "Searched context", icon = "book"),
-    describe_table = list(
-      title = sprintf("Inspected %s", html_escape(arguments$table %||% "")),
-      icon = "table"
-    ),
-    run_sql = list(title = "Grabbed data", icon = "code-square"),
-    run_r = list(title = "Analyzed data", icon = "terminal"),
-    return(NULL)
-  )
-  display <- list(title = info$title, open = FALSE, show_request = FALSE)
-  display$icon <- maybe_icon(info$icon)
-  if (identical(request@name, "run_sql") && is.character(arguments$sql)) {
-    display$markdown <- paste(
-      c(sprintf("```sql\n%s\n```", arguments$sql), value),
-      collapse = "\n\n"
-    )
-  }
-  display
-}
-
 seed_transcript_decorations <- function(
   session,
   id,
-  transcript,
+  messages,
   selected_exchange = NULL
 ) {
-  if (length(transcript$messages) > 0) {
+  if (length(messages) > 0) {
     session$sendCustomMessage(
       "commonsViewerExchangeSeed",
       list(
         id = id,
-        count = length(transcript$messages),
+        count = length(messages),
         exchanges = vapply(
-          transcript$messages,
+          messages,
           function(message) message$exchange,
           integer(1)
         ),
@@ -417,32 +389,36 @@ seed_transcript_decorations <- function(
 }
 
 viewer_ui <- function(summary) {
+  register_commons_icon_resources()
   dates <- viewer_date_range(summary)
   htmltools::attachDependencies(
     bslib::page_sidebar(
       title = "Trajectory reviewer",
       sidebar = bslib::sidebar(
-        width = 380,
+        width = 420,
         class = "commons-viewer-sidebar",
-        bslib::navset_underline(
-          id = "group_by",
-          bslib::nav_panel("Conversations", value = "conversation"),
-          bslib::nav_panel("Questions", value = "question")
+        htmltools::div(
+          class = "commons-viewer-sidebar-controls",
+          shiny::dateRangeInput(
+            "window",
+            "Dates",
+            start = dates$min,
+            end = dates$max,
+            min = dates$min,
+            max = dates$max,
+            width = "100%"
+          ),
+          shiny::selectInput(
+            "trust",
+            "Trust Level",
+            trust_choices(),
+            width = "100%"
+          )
         ),
-        shiny::dateRangeInput(
-          "window",
-          "Dates",
-          start = dates$min,
-          end = dates$max,
-          min = dates$min,
-          max = dates$max
-        ),
-        shiny::selectInput(
-          "trust",
-          "Trust Level",
-          trust_choices("conversation")
-        ),
-        shiny::uiOutput("entries")
+        htmltools::div(
+          class = "commons-viewer-sidebar-entries",
+          shiny::uiOutput("entries")
+        )
       ),
       trust_timeline_card(),
       bslib::card(
@@ -492,24 +468,14 @@ viewer_ui <- function(summary) {
   )
 }
 
-trust_choices <- function(group_by) {
-  if (identical(group_by, "question")) {
-    c(
-      "All answers" = "all",
-      "Verified" = "A",
-      "Cited" = "B",
-      "Untrusted" = "C",
-      "No data tool" = "none"
-    )
-  } else {
-    c(
-      "All conversations" = "all",
-      "Has a verified answer" = "A",
-      "Has a cited answer" = "B",
-      "Has an untrusted answer" = "C",
-      "Has an answer with no data tool" = "none"
-    )
-  }
+trust_choices <- function() {
+  c(
+    "All answers" = "all",
+    "Verified" = "A",
+    "Cited" = "B",
+    "Untrusted" = "C",
+    "No data tool" = "none"
+  )
 }
 
 viewer_server <- function(
@@ -526,17 +492,26 @@ viewer_server <- function(
   function(input, output, session) {
     flags <- app_flags
     notes <- app_notes
-    selected <- shiny::reactiveVal(NULL)
-    selected_transcript <- shiny::reactive({
-      key <- selected()
-      if (is.null(key)) {
+    selected_conversation <- shiny::reactiveVal(NULL)
+    selected_exchange <- shiny::reactiveVal(NULL)
+    selected_messages <- shiny::reactive({
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
         return(NULL)
       }
-      trajectory_transcript(trajectories[[key$conversation]])
+      trajectory_messages(trajectories[[conversation]])
     })
-    review_target <- shiny::reactiveVal(NULL)
     review_selection <- shiny::reactive({
-      review_target() %||% selected()["conversation"]
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
+        return(NULL)
+      }
+      exchange <- selected_exchange()
+      if (is.null(exchange)) {
+        list(conversation = conversation)
+      } else {
+        list(conversation = conversation, exchange = exchange)
+      }
     })
     user <- review_user(session)
 
@@ -566,29 +541,15 @@ viewer_server <- function(
       }
     )
 
-    shiny::observeEvent(input$group_by, {
-      shiny::updateSelectInput(
-        session,
-        "trust",
-        choices = trust_choices(input$group_by),
-        selected = input$trust
-      )
-    })
-
-    visible_conversations <- shiny::reactive({
-      Filter(
-        function(i) {
-          conversation_visible(summary[[i]], input$window, input$trust)
-        },
-        seq_along(summary)
-      )
-    })
-
     visible_questions <- shiny::reactive({
       Filter(
         function(k) question_visible(questions[[k]], input$window, input$trust),
         seq_along(questions)
       )
+    })
+
+    output$timeline_title <- shiny::renderText({
+      timeline_title(input$window)
     })
 
     output$timeline_legend <- shiny::renderUI({
@@ -604,17 +565,13 @@ viewer_server <- function(
     })
 
     output$entries <- shiny::renderUI({
-      entries <- if (identical(input$group_by, "question")) {
-        lapply(
-          visible_questions(),
-          function(k) question_entry(questions[[k]], selected(), flags())
-        )
-      } else {
-        lapply(
-          visible_conversations(),
-          function(i) conversation_entry(i, summary[[i]], selected(), flags())
-        )
-      }
+      entries <- grouped_question_entries(
+        visible_questions(),
+        questions,
+        summary,
+        shiny::isolate(review_selection()),
+        flags()
+      )
       if (length(entries) == 0) {
         return(viewer_empty_note(
           if (length(summary) == 0) {
@@ -624,20 +581,56 @@ viewer_server <- function(
           }
         ))
       }
-      entries
+      open <- intersect(
+        shiny::isolate(input$conversation_groups) %||% character(),
+        names(entries)
+      )
+      rlang::exec(
+        bslib::accordion,
+        !!!unname(entries),
+        id = "conversation_groups",
+        open = if (length(open)) open else FALSE,
+        multiple = TRUE,
+        class = "commons-viewer-question-groups"
+      )
     })
 
-    # Register once because filtering does not change trajectory indices.
-    all_keys <- c(
-      lapply(seq_along(trajectories), function(i) list(conversation = i)),
-      lapply(questions, function(record) record[c("conversation", "exchange")])
+    shiny::observeEvent(input$conversation_select, {
+      index <- as.integer(input$conversation_select$conversation)
+      current <- selected_conversation()
+      if (
+        length(index) == 1 &&
+          !is.na(index) &&
+          index %in% seq_along(trajectories) &&
+          (!identical(current, index) || !is.null(selected_exchange()))
+      ) {
+        selected_conversation(index)
+        selected_exchange(NULL)
+      }
+    })
+
+    shiny::observeEvent(
+      review_selection(),
+      ignoreNULL = FALSE,
+      {
+        session$sendCustomMessage(
+          "commonsViewerSidebarSelect",
+          review_selection() %||% list()
+        )
+      }
+    )
+
+    # Register once because filtering does not change question indices.
+    all_keys <- lapply(
+      questions,
+      function(record) record[c("conversation", "exchange")]
     )
     for (key in all_keys) {
       local({
         k <- key
         shiny::observeEvent(input[[entry_link_id(k)]], {
-          selected(k)
-          review_target(if (is.null(k$exchange)) NULL else k)
+          selected_conversation(k$conversation)
+          selected_exchange(k$exchange)
         })
       })
     }
@@ -678,42 +671,38 @@ viewer_server <- function(
     })
 
     shiny::observeEvent(input$exchange_select, {
-      navigation <- selected()
-      if (is.null(navigation)) {
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
         return()
       }
       exchange <- as.integer(input$exchange_select$exchange)
       if (length(exchange) != 1 || is.na(exchange)) {
-        review_target(NULL)
+        selected_exchange(NULL)
         return()
       }
       if (
         !exchange %in%
-          seq_along(split_exchanges(trajectories[[navigation$conversation]]))
+          seq_along(split_exchanges(trajectories[[conversation]]))
       ) {
         return()
       }
-      review_target(list(
-        conversation = navigation$conversation,
-        exchange = exchange
-      ))
+      selected_exchange(exchange)
     })
 
     shiny::observeEvent(
-      review_target(),
+      selected_exchange(),
       ignoreNULL = FALSE,
       ignoreInit = TRUE,
       {
-        key <- selected()
-        if (is.null(key)) {
+        conversation <- selected_conversation()
+        if (is.null(conversation)) {
           return()
         }
-        target <- review_target()
         session$sendCustomMessage(
           "commonsViewerExchangeSelect",
           list(
-            id = transcript_id(key),
-            exchange = if (!is.null(target)) target$exchange
+            id = transcript_id(conversation),
+            exchange = selected_exchange()
           )
         )
       }
@@ -747,41 +736,37 @@ viewer_server <- function(
 
     # A fresh id prevents stale pill timers from targeting a new transcript.
     output$transcript <- shiny::renderUI({
-      key <- selected()
-      if (is.null(key)) {
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
         return(viewer_empty_note(
           "Select a conversation to view its transcript."
         ))
       }
       commons_ui(
-        transcript_id(key),
-        messages = selected_transcript()$messages,
+        transcript_id(conversation),
+        messages = selected_messages(),
         height = "100%"
       )
     })
 
     # Seed decorations only after the new chat element is bound in the browser.
-    shiny::observeEvent(selected(), {
-      key <- selected()
-      transcript <- selected_transcript()
+    shiny::observeEvent(selected_conversation(), {
+      conversation <- selected_conversation()
+      exchange <- selected_exchange()
+      messages <- selected_messages()
       session$onFlushed(
         function() {
           seed_transcript_decorations(
             session,
-            transcript_id(key),
-            transcript,
-            selected_exchange = key$exchange
+            transcript_id(conversation),
+            messages,
+            selected_exchange = exchange
           )
         },
         once = TRUE
       )
     })
   }
-}
-
-conversation_visible <- function(record, window, trust) {
-  in_window(record, window) &&
-    (identical(trust, "all") || any(tag_matches(record$tags, trust)))
 }
 
 question_visible <- function(record, window, trust) {
@@ -801,8 +786,8 @@ entry_link_id <- function(key) {
   paste(c("entry", key$conversation, key$exchange), collapse = "_")
 }
 
-transcript_id <- function(key) {
-  paste(c("transcript", key$conversation, key$exchange), collapse = "_")
+transcript_id <- function(conversation) {
+  paste("transcript", conversation, sep = "_")
 }
 
 review_bar_notes <- function(key, flagged, notes) {
@@ -902,50 +887,94 @@ flag_marker <- function(flagged) {
   )
 }
 
-conversation_entry <- function(
-  index,
+question_entry <- function(
   record,
   selected = NULL,
   flags = character()
 ) {
-  key <- list(conversation = index)
-  shiny::actionLink(
-    entry_link_id(key),
-    class = entry_class(identical(selected, key)),
-    label = htmltools::tagList(
-      htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
-      htmltools::div(
-        class = "commons-viewer-entry-meta",
-        flag_marker(review_key(record$id) %in% flags),
-        htmltools::tags$span(conversation_meta(record))
-      )
-    )
-  )
-}
-
-question_entry <- function(record, selected = NULL, flags = character()) {
   key <- record[c("conversation", "exchange")]
   flagged <- review_key(record$conversation_id, record$exchange) %in% flags
   shiny::actionLink(
     entry_link_id(key),
-    class = entry_class(identical(selected, key)),
+    `data-conversation` = key$conversation,
+    `data-exchange` = key$exchange,
+    class = if (identical(selected, key)) {
+      "commons-viewer-entry commons-viewer-entry-selected"
+    } else {
+      "commons-viewer-entry"
+    },
     label = htmltools::tagList(
       htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
       htmltools::div(
         class = "commons-viewer-entry-meta",
         flag_marker(flagged),
-        htmltools::tags$span(entry_date(record)),
         commons_answer_pill(record$tag)
       )
     )
   )
 }
 
-entry_class <- function(selected) {
-  if (selected) {
-    "commons-viewer-entry commons-viewer-entry-selected"
+grouped_question_entries <- function(
+  indices,
+  questions,
+  summary,
+  selected = NULL,
+  flags = character()
+) {
+  conversations <- vapply(
+    indices,
+    \(i) questions[[i]]$conversation,
+    integer(1)
+  )
+  groups <- split(indices, conversations)
+  lapply(groups, function(indices) {
+    index <- questions[[indices[[1]]]]$conversation
+    question_group(
+      index,
+      summary[[index]],
+      questions[indices],
+      selected,
+      flags
+    )
+  })
+}
+
+question_group <- function(
+  index,
+  conversation,
+  questions,
+  selected,
+  flags
+) {
+  key <- list(conversation = index)
+  panel <- bslib::accordion_panel(
+    title = htmltools::tagList(
+      htmltools::tags$span(
+        class = "commons-viewer-question-group-title",
+        conversation$snippet
+      ),
+      htmltools::tags$span(
+        class = "commons-viewer-question-group-meta",
+        flag_marker(review_key(conversation$id) %in% flags),
+        conversation_meta(conversation)
+      )
+    ),
+    value = as.character(index),
+    htmltools::div(
+      class = "commons-viewer-question-group-entries",
+      lapply(
+        questions,
+        \(record) question_entry(record, selected, flags)
+      )
+    )
+  )
+  if (identical(selected, key)) {
+    htmltools::tagAppendAttributes(
+      panel,
+      class = "commons-viewer-conversation-selected"
+    )
   } else {
-    "commons-viewer-entry"
+    panel
   }
 }
 

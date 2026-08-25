@@ -88,7 +88,7 @@ repair_connect_trace_routing <- function() {
 
   correctly_routed <-
     any(names == "content.guid" & values == guid) &&
-      any(names == "job.key" & values == job_key)
+    any(names == "job.key" & values == job_key)
   if (correctly_routed) {
     return(invisible(FALSE))
   }
@@ -110,7 +110,11 @@ repair_connect_trace_routing <- function() {
 # `log = TRUE`: they cover product setup (data source and agent construction),
 # not conversation content, and otel's default tracer provider is a no-op
 # until an exporter is configured, so this is cheap even when tracing is off.
-local_commons_span <- function(name, attributes = NULL, envir = parent.frame()) {
+local_commons_span <- function(
+  name,
+  attributes = NULL,
+  envir = parent.frame()
+) {
   if (!is_installed("otel")) {
     return(invisible(NULL))
   }
@@ -129,6 +133,27 @@ commons_span_set_attribute <- function(span, name, value) {
   if (!is.null(span)) {
     span$set_attribute(name, value)
   }
+  invisible(NULL)
+}
+
+# Connect can snapshot attributes when a span starts, before late mutations.
+record_provenance_span <- function(conversation_id, tag, decisions) {
+  attributes <- list(
+    "gen_ai.conversation.id" = conversation_id,
+    "commons.citation.candidates" = jsonlite::toJSON(
+      decisions,
+      auto_unbox = TRUE
+    )
+  )
+  if (!is.na(tag)) {
+    attributes[["commons.provenance.tag"]] <- tag
+  }
+  span <- otel::start_span(
+    "commons_provenance",
+    attributes = attributes,
+    tracer = otel::get_tracer("co.posit.r-package.commons")
+  )
+  otel::end_span(span)
   invisible(NULL)
 }
 
@@ -340,7 +365,10 @@ warn_tracing_disabled <- function() {
 }
 
 commons_traces_dir <- function() {
-  Sys.getenv("COMMONS_TRACES_DIR", unset = file.path(tempdir(), "commons-traces"))
+  Sys.getenv(
+    "COMMONS_TRACES_DIR",
+    unset = file.path(tempdir(), "commons-traces")
+  )
 }
 
 # Grant `share_with` users access to this content's traces. Reading traces

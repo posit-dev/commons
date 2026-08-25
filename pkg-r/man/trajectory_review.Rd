@@ -23,12 +23,11 @@ expression of an \code{app.R}.
 \code{trajectory_review()} launches a Shiny app for browsing conversation
 trajectories read with \code{\link[=trajectory_read]{trajectory_read()}}. The app charts each trust
 level's share of answers over time—binned by day, week, or month, using
-the finest unit the volume of answers supports—alongside a list of
-conversations or of individual questions, filterable by date and trust
-level. The transcript reconstructs each answer's recorded Commons
-presentation: accepted citations appear inline at their original locations,
-A/C provenance appears after the answer, and rejected citation attempts
-appear in a separate "Review audit" aside.
+the finest unit the volume of answers supports—alongside a list of questions
+grouped by conversation, filterable by date and trust level. The transcript
+uses the same Commons and ShinyChat renderer as live conversations,
+preserving recorded messages and tool activity without a separate
+reviewer-specific rendering path.
 
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the
@@ -45,11 +44,8 @@ human-readable transcript for joint human-agent review. Search-pool results
 are omitted because later tool calls record any selected measure; other tool
 results are limited to 50 lines or 20,000 characters.
 
-Each answer's trust tag and citation outcomes are read back exactly as
-\code{\link[=trajectory_read]{trajectory_read()}} recorded them. The viewer uses those decisions to
-reconstruct Commons citation asides from the raw ellmer answer; it never
-re-verifies citations against a corpus. Missing or conflicting records are
-omitted rather than inferred.
+Trust filters use each answer's tag exactly as \code{\link[=trajectory_read]{trajectory_read()}} recorded
+it. Missing or conflicting records are omitted rather than inferred.
 
 Logged calls that aren't part of the agent's question-and-answer record—
 shinychat's conversation-title generation, and completions with no user

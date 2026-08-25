@@ -234,7 +234,7 @@ review_exchange_markdown <- function(
   notes,
   provenance = empty_turn_provenance()
 ) {
-  tag <- exchange_provenance(provenance)$tag
+  tag <- provenance$provenance_tag %||% NA_character_
   contents <- review_exchange_contents_markdown(exchange)
   citation_section <- review_citations_markdown(provenance$citation_decisions)
 
