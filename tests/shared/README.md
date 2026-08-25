@@ -8,6 +8,10 @@ Anything the R and Python implementations must agree on belongs here as a single
 
 Prose cannot enforce agreement. Every contract added here should be an executable fixture that both suites run, not a description of one.
 
+The rule covers behavior, not implementation. Each package should read idiomatically in its own language, and the two are not expected to match line for line. Before adding a fixture, weigh how often a difference would surface and what it costs when it does.
+
+`normalize_citation()` is the worked example. Each package folds whitespace with its own language's regex, so a quote and a corpus entry differing only by a non-breaking space verify in Python but not in R. That is accepted: the input is uncommon, and the cost is a citation that fails to verify rather than one that verifies wrongly.
+
 ## Why this exists
 
 Most Posit R/Python pairs (ellmer/chatlas, ragnar/raghilda, shiny/py-shiny) share concepts and no artifacts. Nothing in them must stay byte-identical. commons is different. Much of its behavior lives in artifacts that must match across languages. The failure mode is invisible. When the system prompt drifts, nothing errors. The agent only behaves differently in one language.
@@ -15,8 +19,6 @@ Most Posit R/Python pairs (ellmer/chatlas, ragnar/raghilda, shiny/py-shiny) shar
 ## How each suite consumes these
 
 The Python suite reads this directory directly. The R suite cannot. `testthat` needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite reads a copy synced into `pkg-r/tests/testthat/fixtures/shared/`. That copy is committed, `scripts/sync-shared-fixtures.sh` generates it, and a CI job re-runs the script and fails when the copy is stale.
-
-
 
 ## What belongs here
 
