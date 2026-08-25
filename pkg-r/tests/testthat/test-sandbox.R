@@ -208,11 +208,13 @@ sandboxed_worker_probes <- function(
           }
           status
         }),
-        address_space = as.double(system2(
-          "/bin/sh",
-          c("-c", shQuote("ulimit -v")),
-          stdout = TRUE
-        )),
+        address_space = if (identical(Sys.info()[["sysname"]], "Linux")) {
+          as.double(system2(
+            "/bin/sh",
+            c("-c", shQuote("ulimit -v")),
+            stdout = TRUE
+          ))
+        },
         compute = sum(1:10)
       )
     },
