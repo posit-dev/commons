@@ -5,8 +5,8 @@
       return;
     }
 
-    if (window.commonsAnswerPillTooltipInitialized) return;
-    window.commonsAnswerPillTooltipInitialized = true;
+    if (window.commonsAnswerDotTooltipInitialized) return;
+    window.commonsAnswerDotTooltipInitialized = true;
 
     // Keep the viewport still when a tool card is expanded or collapsed;
     // otherwise shinychat's stick-to-bottom scrolling chases the height
@@ -96,7 +96,7 @@
 
     var onMarker = function(event) {
       if (!event.target || !event.target.closest) return;
-      var marker = event.target.closest(".commons-answer-pill");
+      var marker = event.target.closest(".commons-answer-dot");
       if (marker) placeTooltip(marker);
     };
 

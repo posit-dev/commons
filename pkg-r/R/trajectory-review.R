@@ -273,43 +273,30 @@ review_audit_aside <- function(decisions) {
   )
 }
 
-commons_answer_pill <- function(tag) {
+commons_answer_dot <- function(tag) {
   entry <- provenance_display[[tag]]
-  if (is.null(entry)) {
+  if (is.null(entry) || is.null(entry$dot_class)) {
     return(NULL)
   }
-  htmltools::tags$span(
+  htmltools::tags$sup(
     class = paste0(
-      "commons-answer-pill commons-answer-pill-",
-      entry$pill_class
+      "commons-answer-dot commons-answer-dot-",
+      entry$dot_class
     ),
     title = entry$body,
     `aria-label` = paste0(entry$label, ". ", entry$body),
+    role = "img",
     tabindex = "0",
-    commons_pill_icon(entry$icon, entry$label),
-    htmltools::tags$span(entry$label),
-    commons_pill_tooltip(entry$body)
+    htmltools::tags$span(
+      class = "commons-answer-dot-mark",
+      `aria-hidden` = "true"
+    ),
+    commons_dot_tooltip(entry$body)
   )
 }
 
-commons_pill_tooltip <- function(text) {
+commons_dot_tooltip <- function(text) {
   htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
-}
-
-commons_pill_icon <- function(file, alt) {
-  if (is.null(file)) {
-    return(NULL)
-  }
-  src <- svg_data_uri(file)
-  if (is.null(src)) {
-    return(NULL)
-  }
-
-  htmltools::tags$img(
-    src = src,
-    alt = alt,
-    class = "commons-answer-pill-icon"
-  )
 }
 
 exchange_answer_chunks <- function(turns, decisions) {
@@ -745,7 +732,7 @@ viewer_server <- function(
       )
     })
 
-    # A fresh id prevents stale pill timers from targeting a new transcript.
+    # A fresh id prevents stale decoration timers from targeting a new transcript.
     output$transcript <- shiny::renderUI({
       key <- selected()
       if (is.null(key)) {
@@ -935,7 +922,7 @@ question_entry <- function(record, selected = NULL, flags = character()) {
         class = "commons-viewer-entry-meta",
         flag_marker(flagged),
         htmltools::tags$span(entry_date(record)),
-        commons_answer_pill(record$tag)
+        commons_answer_dot(record$tag)
       )
     )
   )

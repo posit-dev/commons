@@ -87,30 +87,31 @@ test_that("hit_rate counts exchange tags across conversations", {
   expect_equal(rate$counts, c(A = 1, B = 1, C = 1, none = 1))
 })
 
-test_that("answer pills describe trusted, cited, and uncited answers", {
+test_that("answer dots describe verified and untrusted answers", {
   skip_if_not_installed("htmltools")
 
-  trusted <- htmltools::renderTags(commons_answer_pill("A"))$html
-  cited <- htmltools::renderTags(commons_answer_pill("B"))$html
-  uncited <- htmltools::renderTags(commons_answer_pill("C"))$html
+  verified <- htmltools::renderTags(commons_answer_dot("A"))$html
+  untrusted <- htmltools::renderTags(commons_answer_dot("C"))$html
 
-  expect_match(trusted, "Verified answer")
-  expect_match(trusted, "governed calculation")
-  expect_match(trusted, "commons-tooltip")
-  expect_match(trusted, "commons-answer-pill-icon")
-  expect_match(trusted, "commons-answer-pill-trusted")
+  expect_match(verified, "<sup", fixed = TRUE)
+  expect_match(verified, 'role="img"', fixed = TRUE)
+  expect_match(verified, "Verified answer")
+  expect_match(verified, "governed calculation")
+  expect_match(verified, "commons-tooltip")
+  expect_match(verified, "commons-answer-dot-mark")
+  expect_match(verified, "commons-answer-dot-verified")
 
-  expect_match(cited, "Cited")
-  expect_match(cited, "verified against a trusted source")
-  expect_match(cited, "commons-tooltip")
-  expect_match(cited, "commons-answer-pill-cited")
+  expect_match(untrusted, "<sup", fixed = TRUE)
+  expect_match(untrusted, 'role="img"', fixed = TRUE)
+  expect_match(untrusted, "Untrusted")
+  expect_match(untrusted, "AI can be wrong")
+  expect_match(untrusted, "not produced by a governed calculation")
+  expect_match(untrusted, "commons-tooltip")
+  expect_match(untrusted, "commons-answer-dot-mark")
+  expect_match(untrusted, "commons-answer-dot-untrusted")
 
-  expect_match(uncited, "Untrusted")
-  expect_match(uncited, "AI can be wrong")
-  expect_match(uncited, "not produced by a governed calculation")
-  expect_match(uncited, "commons-tooltip")
-  expect_match(uncited, "commons-answer-pill-icon")
-  expect_match(uncited, "commons-answer-pill-caution")
+  expect_null(commons_answer_dot("B"))
+  expect_null(commons_answer_dot(NA_character_))
 })
 
 test_that("trajectory_transcript merges each exchange into chat messages", {

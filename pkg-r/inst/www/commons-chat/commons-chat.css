@@ -35,42 +35,43 @@ shiny-chat-container {
 
 /* ---- Answer provenance ----------------------------------------------- */
 
-.commons-answer-pill {
+.commons-answer-dot {
+  --commons-answer-dot-color: currentColor;
   align-items: center;
-  border-radius: 999px;
+  border-radius: 50%;
+  color: var(--commons-answer-dot-color);
   display: inline-flex;
-  font-size: 0.74rem;
-  font-weight: 400;
-  gap: 0.3rem;
-  line-height: 1.2;
-  max-width: 100%;
-  padding: 0.18rem 0.45rem;
+  height: 1rem;
+  justify-content: center;
+  line-height: 0;
+  margin-inline-start: 0.125em;
   position: relative;
-  vertical-align: text-bottom;
+  vertical-align: super;
+  width: 1rem;
 }
 
-.commons-answer-pill-icon {
-  flex: 0 0 auto;
-  height: 0.82rem;
-  width: 0.82rem;
+.commons-answer-dot:focus-visible {
+  outline: 0.125rem solid var(--bs-focus-ring-color, rgba(0, 123, 194, 0.5));
+  outline-offset: 0;
 }
 
-.commons-answer-pill-trusted {
-  background: #f2fbf5;
-  border: 1px solid #cfeedd;
-  color: #286144;
+.commons-answer-dot-mark {
+  animation: commons-answer-dot-pulse 1.4s ease-out 1;
+  background: currentColor;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 50%;
+  box-sizing: border-box;
+  display: block;
+  height: 0.625rem;
+  width: 0.625rem;
 }
 
-.commons-answer-pill-cited {
-  background: #eef7fa;
-  border: 1px solid #c9e2e9;
-  color: #285867;
+.commons-answer-dot-verified {
+  --commons-answer-dot-color: #28c840;
 }
 
-.commons-answer-pill-caution {
-  background: #fff8ec;
-  border: 1px solid #f2ddbb;
-  color: #6b4b1b;
+.commons-answer-dot-untrusted {
+  --commons-answer-dot-color: #febc2e;
 }
 
 /* ---- Provenance tooltips ---------------------------------------------- */
@@ -99,15 +100,15 @@ shiny-chat-container {
   z-index: 1000;
 }
 
-.commons-answer-pill:hover > .commons-tooltip,
-.commons-answer-pill:focus > .commons-tooltip,
-.commons-answer-pill:focus-within > .commons-tooltip {
+.commons-answer-dot:hover > .commons-tooltip,
+.commons-answer-dot:focus > .commons-tooltip,
+.commons-answer-dot:focus-within > .commons-tooltip {
   display: block;
 }
 
-.commons-answer-pill:hover::before,
-.commons-answer-pill:focus::before,
-.commons-answer-pill:focus-within::before {
+.commons-answer-dot:hover::before,
+.commons-answer-dot:focus::before,
+.commons-answer-dot:focus-within::before {
   background: var(--bs-body-bg, #fff);
   border-bottom: 1px solid var(--bs-border-color, #dee2e6);
   border-right: 1px solid var(--bs-border-color, #dee2e6);
@@ -128,7 +129,7 @@ shiny-chat-container {
   top: calc(100% + 0.45rem);
 }
 
-.commons-answer-pill.commons-tooltip-below::before {
+.commons-answer-dot.commons-tooltip-below::before {
   bottom: auto;
   top: calc(100% + 0.28rem);
   transform: translateX(-50%) rotate(225deg);
@@ -143,47 +144,96 @@ shiny-chat-container [data-shinychat-aside-display="compact"] {
   --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
 }
 
-/* Temporary bridge until Shinychat provides a public per-aside tone API. */
+/* Temporary bridge until Shinychat provides a public per-aside marker API. */
 shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
-  background: #f2fbf5;
-  box-shadow: inset 0 0 0 1px #cfeedd;
-  color: #286144;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"])[aria-expanded="true"] {
-  background: #e4f6ea;
-  color: #204f38;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
-  background: #fff8ec;
-  box-shadow: inset 0 0 0 1px #f2ddbb;
-  color: #6b4b1b;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"])[aria-expanded="true"] {
-  background: #fcefd8;
-  color: #583b14;
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ) {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  box-shadow: none;
+  color: transparent;
+  display: inline-flex;
+  font-size: 0;
+  height: 1rem;
+  justify-content: center;
+  margin-inline-start: 0.125em;
+  max-inline-size: none;
+  min-height: 1rem;
+  min-inline-size: 1rem;
+  padding: 0;
+  vertical-align: super;
+  width: 1rem;
 }
 
 shiny-chat-container
   .shiny-aside-pill:has(
     img[src$="/trusted-icon.svg"],
     img[src$="/warning-icon.svg"]
-  ) {
-  font-weight: 400;
+  )::after {
+  animation: commons-answer-dot-pulse 1.4s ease-out 1;
+  background: var(--commons-answer-dot-color);
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 50%;
+  box-sizing: border-box;
+  color: var(--commons-answer-dot-color);
+  content: "";
+  height: 0.625rem;
+  width: 0.625rem;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
+  --commons-answer-dot-color: #28c840;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
+  --commons-answer-dot-color: #febc2e;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ):hover,
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ):focus-visible,
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )[aria-expanded="true"] {
+  background: transparent;
+  color: transparent;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ):hover::after,
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )[aria-expanded="true"]::after {
+  filter: brightness(0.9);
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ):focus-visible {
+  outline: 0.125rem solid var(--bs-focus-ring-color, rgba(0, 123, 194, 0.5));
+  outline-offset: 0;
 }
 
 shiny-chat-container
@@ -191,8 +241,32 @@ shiny-chat-container
     img[src$="/trusted-icon.svg"],
     img[src$="/warning-icon.svg"]
   )
-  img {
-  opacity: 1;
+  > * {
+  display: none;
+}
+
+@keyframes commons-answer-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    transform: scale(1);
+  }
+
+  35% {
+    box-shadow: 0 0 0 0.3rem color-mix(in srgb, currentColor 18%, transparent);
+    transform: scale(1.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commons-answer-dot-mark,
+  shiny-chat-container
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )::after {
+    animation: none;
+  }
 }
 
 /* ---- Measure display ------------------------------------------------- */

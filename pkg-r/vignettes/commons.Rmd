@@ -37,11 +37,11 @@ The high-trust "happy path" occurs when the user asks a question that correspond
 
 > How many total animals were observed at Oak Bluff?
 
-The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result along with a "Verified answer" tag.
+The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result with a green verified dot.
 
 > At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site.
 >
-> `r commons:::commons_answer_pill("A")`
+> `r commons:::commons_answer_dot("A")`
 
 Although the agent had to decide which trusted calculation to run, it did not have to decide _what code to write_, reducing degrees of freedom and allowing it to take advantage of pre-vetted code.
 
@@ -69,7 +69,7 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 ## Trust flow
 
-commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer is tagged with a green verified answer pill.
+commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer is marked with a green verified dot.
 
 If a relevant trusted calculation is not found, the agent proceeds down the lower trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or are tagged as `Untrusted`.
 
@@ -92,7 +92,7 @@ If a relevant trusted calculation is not found, the agent proceeds down the lowe
 <span class="commons-flow-arrow">&rarr;</span>
 <span class="commons-flow-node">Run trusted<br>calculation</span>
 <span class="commons-flow-arrow">&rarr;</span>
-`r commons:::commons_answer_pill("A")`
+`r commons:::commons_answer_dot("A")`
 </div>
 </div>
 <div class="commons-trust-segment commons-trust-segment-lower">
@@ -109,7 +109,7 @@ If a relevant trusted calculation is not found, the agent proceeds down the lowe
 Cited answer<sup class="commons-citation-ref">1</sup>
 </span>
 <span class="commons-flow-or">or</span>
-`r commons:::commons_answer_pill("C")`
+`r commons:::commons_answer_dot("C")`
 </span>
 </div>
 </div>
@@ -123,11 +123,11 @@ The following table details the various ways each trust outcome can occur:
 
 | How the answer is produced | Outcome |
 |---|---|
-| A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_pill("A")` |
-| A [data-dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
-| Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
-| Custom R | Cited or `r commons:::commons_answer_pill("C")` |
+| A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_dot("A")` |
+| A [data-dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_dot("A")` |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_dot("A")` |
+| Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_dot("C")` |
+| Custom R | Cited or `r commons:::commons_answer_dot("C")` |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No label |
 
 The agent itself does not tag the answer as verified, cited, or untrusted. This process is instead handled deterministically by the commons package based on the agent's behavior.

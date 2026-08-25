@@ -6,13 +6,13 @@ provenance_display <- list(
       "This answer comes from a governed calculation defined by",
       "your data team."
     ),
-    pill_class = "trusted"
+    dot_class = "verified"
   ),
   B = list(
     label = "Cited",
     icon = NULL,
     body = "This answer includes supporting text verified against a trusted source.",
-    pill_class = "cited"
+    dot_class = NULL
   ),
   C = list(
     label = "Untrusted",
@@ -21,7 +21,7 @@ provenance_display <- list(
       "This answer was not produced by a governed calculation and has",
       "no verified supporting citation. AI can be wrong."
     ),
-    pill_class = "caution"
+    dot_class = "untrusted"
   )
 )
 

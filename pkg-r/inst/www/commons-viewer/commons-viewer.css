@@ -282,16 +282,6 @@
   margin-top: 0.125rem;
 }
 
-.commons-viewer-entry-meta .commons-answer-pill {
-  font-size: 0.68rem;
-  padding: 0.12rem 0.4rem;
-}
-
-.commons-viewer-entry-meta .commons-answer-pill-icon {
-  height: 0.75rem;
-  width: 0.75rem;
-}
-
 .commons-viewer-empty {
   color: var(--bs-secondary-color, #6c757d);
   padding: 1rem 0;

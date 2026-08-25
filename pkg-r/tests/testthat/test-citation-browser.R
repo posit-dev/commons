@@ -197,7 +197,7 @@ test_that("Shiny Chat renders native numbered streamed citations", {
   expect_no_match(answer_html, "commons-citation", fixed = TRUE)
 })
 
-test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
+test_that("Shiny Chat renders provenance dots and numbered citations", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -228,7 +228,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
         "['Verified answer', 'Untrusted']",
         ".map((label) => document.querySelector(",
         "`button[aria-label=\"${label}\"]`",
-        ").textContent).join('|');"
+        ").textContent.trim()).join('|');"
       )
     ),
     "Verified answer|Untrusted"
@@ -236,13 +236,44 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   expect_identical(
     app$get_js(
       paste0(
-        "['Verified answer', 'Untrusted']",
-        ".map((label) => getComputedStyle(document.querySelector(",
-        "`button[aria-label=\"${label}\"]`",
-        ")).fontWeight).join('|');"
+        "(() => {",
+        "const nodes = ['Verified answer', 'Untrusted'].map((label) => ",
+        "document.querySelector(`button[aria-label=\"${label}\"]`));",
+        "return nodes.every((node) => {",
+        "const marker = getComputedStyle(node);",
+        "const dot = getComputedStyle(node, '::after');",
+        "return marker.width === '16px' && marker.height === '16px' && ",
+        "marker.verticalAlign === 'super' && dot.width === '10px' && ",
+        "dot.height === '10px' && dot.borderRadius === '50%' && ",
+        "dot.animationName === 'commons-answer-dot-pulse' && ",
+        "dot.animationIterationCount === '1';",
+        "});",
+        "})()"
       )
     ),
-    "400|400"
+    TRUE
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "['Verified answer', 'Untrusted']",
+        ".map((label) => getComputedStyle(",
+        "document.querySelector(`button[aria-label=\"${label}\"]`), ",
+        "'::after').backgroundColor).join('|');"
+      )
+    ),
+    "rgb(40, 200, 64)|rgb(254, 188, 46)"
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "['Verified answer', 'Untrusted']",
+        ".map((label) => document.querySelector(",
+        "`button[aria-label=\"${label}\"]`",
+        ").closest('p')?.innerText.trim()).join('|');"
+      )
+    ),
+    "Governed result.|Fallback result."
   )
   expect_identical(
     app$get_js(
@@ -267,22 +298,6 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     ),
     TRUE
   )
-  expect_identical(
-    app$get_js(
-      paste0(
-        "(() => {",
-        "const trusted = document.querySelector(",
-        "'button[aria-label=\"Verified answer\"]');",
-        "const warning = document.querySelector(",
-        "'button[aria-label=\"Untrusted\"]');",
-        "return trusted && warning && ",
-        "getComputedStyle(trusted).color !== getComputedStyle(warning).color;",
-        "})()"
-      )
-    ),
-    TRUE
-  )
-
   app$get_js(
     'document.querySelector(\'button[aria-label="Verified answer"]\').click();'
   )
@@ -299,6 +314,23 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     verified,
     "This answer comes from a governed calculation defined by your data team.",
     fixed = TRUE
+  )
+
+  app$get_chromote_session()$Emulation$setEmulatedMedia(
+    features = list(list(
+      name = "prefers-reduced-motion",
+      value = "reduce"
+    ))
+  )
+  expect_identical(
+    app$get_js(
+      paste0(
+        "getComputedStyle(",
+        "document.querySelector('button[aria-label=\"Untrusted\"]'), ",
+        "'::after').animationName;"
+      )
+    ),
+    "none"
   )
 })
 
