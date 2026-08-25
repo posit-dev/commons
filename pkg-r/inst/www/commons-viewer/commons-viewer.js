@@ -59,7 +59,7 @@
       exchangeMessages(chat).forEach(function(node) {
         var selected = node.dataset.exchange === String(exchange);
         node.classList.toggle("commons-viewer-exchange-selected", selected);
-        if (node.dataset.exchange) {
+        if (node.getAttribute("role") === "button") {
           node.setAttribute("aria-pressed", selected ? "true" : "false");
         }
       });
@@ -193,12 +193,14 @@
           if (!node) return;
           node.classList.add("commons-viewer-exchange-message");
           node.dataset.exchange = exchange;
-          node.setAttribute("role", "button");
-          node.setAttribute("tabindex", "0");
-          node.setAttribute(
-            "aria-label",
-            "Select question " + exchange + " for review notes"
-          );
+          if (node.classList.contains("shiny-chat-user-message")) {
+            node.setAttribute("role", "button");
+            node.setAttribute("tabindex", "0");
+            node.setAttribute(
+              "aria-label",
+              "Select question " + exchange + " for review notes"
+            );
+          }
         });
         selectExchange(chat, message.selected);
         if (message.selected != null) {

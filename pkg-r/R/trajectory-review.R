@@ -151,15 +151,16 @@ summarize_trajectories <- function(trajectories) {
 
 conversation_record <- function(id, turns) {
   exchanges <- split_exchanges(turns)
-  provenance <- lapply(
-    attr(turns, "provenance") %||% list(),
-    exchange_provenance
-  )
+  provenance <- attr(turns, "provenance") %||% list()
   list(
     id = id,
     snippet = first_user_snippet(exchanges),
     n_user_turns = length(exchanges),
-    tags = vapply(provenance, function(p) p$tag, character(1)),
+    tags = vapply(
+      provenance,
+      \(record) record$provenance_tag %||% NA_character_,
+      character(1)
+    ),
     last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
   )
 }
@@ -169,26 +170,24 @@ summarize_questions <- function(trajectories) {
   for (i in rlang::seq2(1, length(trajectories))) {
     turns <- trajectories[[i]]
     exchanges <- split_exchanges(turns)
-    provenance <- lapply(
-      attr(turns, "provenance") %||% list(),
-      exchange_provenance
-    )
+    provenance <- attr(turns, "provenance") %||% list()
     for (j in rlang::seq2(1, length(exchanges))) {
+      record <- provenance[j][[1]]
       records[[length(records) + 1]] <- list(
         conversation = i,
         conversation_id = names(trajectories)[[i]],
         exchange = j,
         snippet = question_snippet(exchanges[[j]]),
-        tag = (provenance[j][[1]] %||% list(tag = NA_character_))$tag,
+        tag = if (is.null(record)) {
+          NA_character_
+        } else {
+          record$provenance_tag %||% NA_character_
+        },
         last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
       )
     }
   }
   records
-}
-
-exchange_provenance <- function(record) {
-  list(tag = record$provenance_tag)
 }
 
 first_user_snippet <- function(exchanges, max_chars = 80) {
@@ -208,7 +207,7 @@ question_snippet <- function(exchange, max_chars = 80) {
 
 trajectory_messages <- function(turns) {
   provenance <- attr(turns, "provenance") %||% list()
-  exchanges <- split_exchanges(sanitize_trajectory_turns(turns))
+  exchanges <- split_exchanges(turns)
   messages <- unlist(
     Map(trajectory_exchange_messages, exchanges, seq_along(exchanges)),
     recursive = FALSE
@@ -301,7 +300,7 @@ add_message_provenance <- function(messages, provenance) {
     } else {
       record$provenance_tag %||% NA_character_
     }
-    pill <- commons_answer_pill(tag, inline_icon = FALSE)
+    pill <- commons_answer_pill(tag)
     if (is.null(pill)) {
       next
     }
@@ -332,7 +331,7 @@ append_provenance_pill <- function(content, pill) {
   c(content, list(pill))
 }
 
-commons_answer_pill <- function(tag, inline_icon = TRUE) {
+commons_answer_pill <- function(tag) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {
     return(NULL)
@@ -345,7 +344,7 @@ commons_answer_pill <- function(tag, inline_icon = TRUE) {
     title = entry$body,
     `aria-label` = paste0(entry$label, ". ", entry$body),
     tabindex = "0",
-    commons_pill_icon(entry$icon, entry$label, inline_icon),
+    commons_pill_icon(entry$icon, entry$label),
     htmltools::tags$span(entry$label),
     commons_pill_tooltip(entry$body)
   )
@@ -355,15 +354,11 @@ commons_pill_tooltip <- function(text) {
   htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
 }
 
-commons_pill_icon <- function(file, alt, inline = TRUE) {
+commons_pill_icon <- function(file, alt) {
   if (is.null(file)) {
     return(NULL)
   }
-  src <- if (inline) {
-    svg_data_uri(file)
-  } else {
-    paste0(COMMONS_ICON_RESOURCE_PREFIX, "/", file)
-  }
+  src <- commons_icon_url(file)
   if (is.null(src)) {
     return(NULL)
   }
@@ -399,6 +394,7 @@ seed_transcript_decorations <- function(
 }
 
 viewer_ui <- function(summary) {
+  register_commons_icon_resources()
   dates <- viewer_date_range(summary)
   htmltools::attachDependencies(
     bslib::page_sidebar(
@@ -501,17 +497,26 @@ viewer_server <- function(
   function(input, output, session) {
     flags <- app_flags
     notes <- app_notes
-    selected <- shiny::reactiveVal(NULL)
+    selected_conversation <- shiny::reactiveVal(NULL)
+    selected_exchange <- shiny::reactiveVal(NULL)
     selected_messages <- shiny::reactive({
-      key <- selected()
-      if (is.null(key)) {
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
         return(NULL)
       }
-      trajectory_messages(trajectories[[key$conversation]])
+      trajectory_messages(trajectories[[conversation]])
     })
-    review_target <- shiny::reactiveVal(NULL)
     review_selection <- shiny::reactive({
-      review_target() %||% selected()["conversation"]
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
+        return(NULL)
+      }
+      exchange <- selected_exchange()
+      if (is.null(exchange)) {
+        list(conversation = conversation)
+      } else {
+        list(conversation = conversation, exchange = exchange)
+      }
     })
     user <- review_user(session)
 
@@ -597,16 +602,15 @@ viewer_server <- function(
 
     shiny::observeEvent(input$conversation_select, {
       index <- as.integer(input$conversation_select$conversation)
-      current <- selected()
+      current <- selected_conversation()
       if (
         length(index) == 1 &&
           !is.na(index) &&
           index %in% seq_along(trajectories) &&
-          (!identical(current, list(conversation = index)) ||
-            !is.null(review_target()))
+          (!identical(current, index) || !is.null(selected_exchange()))
       ) {
-        selected(list(conversation = index))
-        review_target(NULL)
+        selected_conversation(index)
+        selected_exchange(NULL)
       }
     })
 
@@ -630,8 +634,8 @@ viewer_server <- function(
       local({
         k <- key
         shiny::observeEvent(input[[entry_link_id(k)]], {
-          selected(k)
-          review_target(if (is.null(k$exchange)) NULL else k)
+          selected_conversation(k$conversation)
+          selected_exchange(k$exchange)
         })
       })
     }
@@ -672,42 +676,38 @@ viewer_server <- function(
     })
 
     shiny::observeEvent(input$exchange_select, {
-      navigation <- selected()
-      if (is.null(navigation)) {
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
         return()
       }
       exchange <- as.integer(input$exchange_select$exchange)
       if (length(exchange) != 1 || is.na(exchange)) {
-        review_target(NULL)
+        selected_exchange(NULL)
         return()
       }
       if (
         !exchange %in%
-          seq_along(split_exchanges(trajectories[[navigation$conversation]]))
+          seq_along(split_exchanges(trajectories[[conversation]]))
       ) {
         return()
       }
-      review_target(list(
-        conversation = navigation$conversation,
-        exchange = exchange
-      ))
+      selected_exchange(exchange)
     })
 
     shiny::observeEvent(
-      review_target(),
+      selected_exchange(),
       ignoreNULL = FALSE,
       ignoreInit = TRUE,
       {
-        key <- selected()
-        if (is.null(key)) {
+        conversation <- selected_conversation()
+        if (is.null(conversation)) {
           return()
         }
-        target <- review_target()
         session$sendCustomMessage(
           "commonsViewerExchangeSelect",
           list(
-            id = transcript_id(key),
-            exchange = if (!is.null(target)) target$exchange
+            id = transcript_id(conversation),
+            exchange = selected_exchange()
           )
         )
       }
@@ -741,30 +741,30 @@ viewer_server <- function(
 
     # A fresh id prevents stale pill timers from targeting a new transcript.
     output$transcript <- shiny::renderUI({
-      key <- selected()
-      if (is.null(key)) {
+      conversation <- selected_conversation()
+      if (is.null(conversation)) {
         return(viewer_empty_note(
           "Select a conversation to view its transcript."
         ))
       }
       commons_ui(
-        transcript_id(key),
+        transcript_id(conversation),
         messages = selected_messages(),
         height = "100%"
       )
     })
 
     # Seed decorations only after the new chat element is bound in the browser.
-    shiny::observeEvent(selected(), {
-      key <- selected()
+    shiny::observeEvent(selected_conversation(), {
+      conversation <- selected_conversation()
       messages <- selected_messages()
       session$onFlushed(
         function() {
           seed_transcript_decorations(
             session,
-            transcript_id(key),
+            transcript_id(conversation),
             messages,
-            selected_exchange = key$exchange
+            selected_exchange = selected_exchange()
           )
         },
         once = TRUE
@@ -790,8 +790,8 @@ entry_link_id <- function(key) {
   paste(c("entry", key$conversation, key$exchange), collapse = "_")
 }
 
-transcript_id <- function(key) {
-  paste(c("transcript", key$conversation, key$exchange), collapse = "_")
+transcript_id <- function(conversation) {
+  paste("transcript", conversation, sep = "_")
 }
 
 review_bar_notes <- function(key, flagged, notes) {

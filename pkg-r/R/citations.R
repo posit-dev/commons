@@ -261,17 +261,6 @@ escape_attr <- function(x) {
   gsub("\"", "&quot;", x, fixed = TRUE)
 }
 
-# The trajectory reviewer does not register the live chat's resource path.
-svg_data_uri <- function(file) {
-  path <- commons_icon_path(file)
-  if (is.null(path)) {
-    return(NULL)
-  }
-  svg <- paste(readLines(path, warn = FALSE), collapse = "\n")
-  svg <- sub("^\\s*<\\?xml[^>]*\\?>\\s*", "", svg)
-  paste0("data:image/svg+xml,", utils::URLencode(svg, reserved = TRUE))
-}
-
 commons_icon_path <- function(file) {
   path <- system.file("figs", file, package = "commons")
   if (!nzchar(path)) NULL else path

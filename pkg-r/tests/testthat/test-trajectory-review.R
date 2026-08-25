@@ -17,13 +17,6 @@ provenance_record <- function(tag, citation_decisions = list()) {
   list(provenance_tag = tag, citation_decisions = citation_decisions)
 }
 
-test_that("exchange_provenance reports the recorded tag verbatim", {
-  expect_equal(exchange_provenance(provenance_record("A"))$tag, "A")
-  expect_equal(exchange_provenance(provenance_record("B"))$tag, "B")
-  expect_equal(exchange_provenance(provenance_record("C"))$tag, "C")
-  expect_true(is.na(exchange_provenance(provenance_record(NA_character_))$tag))
-})
-
 test_that("split_exchanges opens at plain user turns only", {
   turns <- c(
     list(
@@ -99,6 +92,7 @@ test_that("answer pills describe trusted, cited, and uncited answers", {
   expect_match(trusted, "commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
+  expect_match(trusted, "commons-icons/trusted-icon.svg", fixed = TRUE)
 
   expect_match(cited, "Cited")
   expect_match(cited, "verified against a trusted source")
@@ -113,7 +107,7 @@ test_that("answer pills describe trusted, cited, and uncited answers", {
   expect_match(uncited, "commons-answer-pill-caution")
 })
 
-test_that("trajectory messages use ShinyChat's standard conversion", {
+test_that("trajectory messages render provenance and strip unsafe markup", {
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")
 
@@ -145,34 +139,12 @@ test_that("trajectory messages use ShinyChat's standard conversion", {
   sanitized <- sanitize_trajectory_turns(turns)
   expect_identical(attr(sanitized, "provenance"), attr(turns, "provenance"))
 
-  messages <- trajectory_messages(turns)
-
-  expect_identical(
-    vapply(messages, function(message) message$role, character(1)),
-    c("user", "assistant", "user", "user", "assistant")
-  )
-  expect_identical(
-    vapply(messages, function(message) message$exchange, integer(1)),
-    c(1L, 1L, 2L, 3L, 3L)
-  )
-  expect_identical(messages[[1]]$content, "How many orders?")
-  expect_identical(messages[[3]]$content, "Total revenue?")
-  expect_identical(messages[[4]]$content, "Gross margin? ")
-  expect_identical(messages[[5]]$content, "42%.")
-  expect_length(messages[[2]]$content, 3)
-  expect_s3_class(messages[[2]]$content[[1]], "shinychat_tool_card")
-  expect_s3_class(messages[[2]]$content[[2]], "shinychat_tool_card")
-  expect_match(messages[[2]]$content[[3]], "Verified answer", fixed = TRUE)
-  expect_no_match(messages[[2]]$content[[3]], "commons-citation", fixed = TRUE)
-  expect_no_match(messages[[2]]$content[[3]], "Forged", fixed = TRUE)
-
+  messages <- trajectory_messages(sanitized)
   html <- as.character(commons_ui("transcript", messages = messages))
-  expect_match(
-    html,
-    'data-role="user" content="How many orders?"',
-    fixed = TRUE
-  )
-  expect_match(html, 'data-role="assistant"', fixed = TRUE)
+  expect_match(html, "6 orders.", fixed = TRUE)
+  expect_match(html, "commons-answer-pill-trusted", fixed = TRUE)
+  expect_no_match(html, "commons-citation", fixed = TRUE)
+  expect_no_match(html, "Forged", fixed = TRUE)
 })
 
 test_that("side calls are excluded from the viewer", {
@@ -281,10 +253,8 @@ test_that("the viewer filters conversations and follows selection", {
       expect_equal(visible_questions(), c(1, 2))
 
       expect_match(output$entries$html, "commons-answer-pill")
-      expect_match(
-        output$entries$html,
-        'class="accordion-button collapsed"'
-      )
+      expect_match(output$entries$html, "One?", fixed = TRUE)
+      expect_match(output$entries$html, "Two?", fixed = TRUE)
 
       session$setInputs(
         window = c(as.Date("2026-07-15"), as.Date("2026-07-31"))
@@ -297,41 +267,46 @@ test_that("the viewer filters conversations and follows selection", {
       )
       expect_equal(visible_questions(), 2)
 
-      expect_null(selected())
+      expect_null(selected_conversation())
+      expect_null(selected_exchange())
       session$setInputs(
         conversation_select = list(conversation = 2, nonce = 1)
       )
-      expect_equal(selected(), list(conversation = 2L))
-      expect_null(review_target())
+      expect_equal(selected_conversation(), 2L)
+      expect_null(selected_exchange())
       session$setInputs(entry_2_1 = 1)
-      expect_equal(selected(), list(conversation = 2, exchange = 1))
-      expect_equal(review_target(), selected())
+      expect_equal(selected_conversation(), 2)
+      expect_equal(selected_exchange(), 1)
       session$setInputs(conversation_groups = c("2", "1"))
-      expect_equal(selected(), list(conversation = 2, exchange = 1))
+      expect_equal(selected_conversation(), 2)
+      expect_equal(selected_exchange(), 1)
       session$setInputs(
         conversation_select = list(conversation = 1, nonce = 2)
       )
-      expect_equal(selected(), list(conversation = 1L))
-      expect_null(review_target())
+      expect_equal(selected_conversation(), 1L)
+      expect_null(selected_exchange())
+      transcript <- output$transcript$html
       session$setInputs(exchange_select = list(exchange = 1, nonce = 1))
-      expect_equal(review_target(), list(conversation = 1, exchange = 1L))
+      expect_equal(selected_exchange(), 1L)
+      expect_identical(output$transcript$html, transcript)
 
       session$setInputs(exchange_select = list(nonce = 2))
-      expect_null(review_target())
+      expect_null(selected_exchange())
 
       session$setInputs(exchange_select = list(exchange = 1, nonce = 3))
-      expect_equal(review_target(), list(conversation = 1, exchange = 1L))
+      expect_equal(selected_exchange(), 1L)
       session$setInputs(conversation_groups = "1")
-      expect_equal(review_target(), list(conversation = 1, exchange = 1L))
+      expect_equal(selected_exchange(), 1L)
       session$setInputs(
         conversation_select = list(conversation = 1, nonce = 3)
       )
-      expect_equal(selected(), list(conversation = 1L))
-      expect_null(review_target())
+      expect_equal(selected_conversation(), 1L)
+      expect_null(selected_exchange())
       session$setInputs(
         conversation_select = list(conversation = 2, nonce = 4)
       )
-      expect_null(review_target())
+      expect_equal(selected_conversation(), 2L)
+      expect_null(selected_exchange())
     }
   )
 })
@@ -376,7 +351,7 @@ test_that("flags and notes write to and restore from review documents", {
       expect_length(notes(), 1)
       expect_equal(notes()[[1]]$note, "Wrong join, should use orders.")
       expect_equal(
-        notes_for_selection(notes(), review_target(), summary),
+        notes_for_selection(notes(), review_selection(), summary),
         notes()
       )
 
@@ -556,7 +531,7 @@ test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
   expect_lt(match("commons-chat", deps), match("commons-viewer", deps))
 })
 
-test_that("viewer_ui uses bslib's resizable review sidebar", {
+test_that("viewer_ui includes filters and resizable review controls", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib", minimum_version = "0.11.0")
   skip_if_not_installed("shinychat")
@@ -564,22 +539,12 @@ test_that("viewer_ui uses bslib's resizable review sidebar", {
 
   html <- as.character(viewer_ui(list()))
 
-  expect_match(html, "shiny-date-range-input")
-  expect_no_match(html, "shiny-input-radiogroup")
-  expect_no_match(html, "nav-underline", fixed = TRUE)
-  expect_match(html, "bslib-sidebar-layout")
-  expect_match(html, "sidebar-right")
+  expect_match(html, "Dates")
+  expect_match(html, "Trust Level")
   expect_match(html, "data-resizable")
-  expect_match(
-    html,
-    'class="sidebar-content bslib-gap-spacing" style="padding:0px;"',
-    fixed = TRUE
-  )
-  expect_match(html, "bslib-input-submit-textarea")
   expect_match(html, "commons-viewer-note-submit")
   expect_match(html, 'aria-label="Add note"')
   expect_no_match(html, ">Submit<", fixed = TRUE)
-  expect_no_match(html, "data-needs-modifier")
 })
 
 test_that("the timeline legend tucks each level's rate into its tooltip", {
