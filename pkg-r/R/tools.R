@@ -44,7 +44,11 @@ tool_search_catalog <- function(private) {
     function(query, kinds = NULL, source = NULL) {
       src <- resolve_sql_source(private$sources, source)
       if (!catalog_searchable(src)) {
-        return("This data source does not have a searchable catalog.")
+        return(tool_result(
+          "This data source does not have a searchable catalog.",
+          title = "Searched for a trusted calculation",
+          icon = maybe_icon("search")
+        ))
       }
       results <- catalog_search(src, query, kinds)
       body <- if (length(results)) {
@@ -59,7 +63,7 @@ tool_search_catalog <- function(private) {
       }
       tool_result(
         body,
-        title = "Searched the data catalog",
+        title = "Searched for a trusted calculation",
         icon = maybe_icon("search"),
         markdown = body
       )
@@ -79,7 +83,7 @@ tool_search_catalog <- function(private) {
     ),
     name = "search_catalog",
     annotations = ellmer::tool_annotations(
-      title = "Search the data catalog",
+      title = "Searching for a trusted calculation",
       icon = maybe_icon("search"),
       read_only_hint = TRUE
     )
@@ -142,7 +146,7 @@ tool_search_pool <- function(private) {
       )
       tool_result(
         body,
-        title = "Searched the semantic layer",
+        title = "Searched for a trusted calculation",
         icon = maybe_icon("search")
       )
     },
@@ -166,7 +170,7 @@ tool_search_pool <- function(private) {
     ),
     name = "search_pool",
     annotations = ellmer::tool_annotations(
-      title = "Search the semantic layer",
+      title = "Searching for a trusted calculation",
       icon = maybe_icon("search"),
       read_only_hint = TRUE
     )
@@ -256,7 +260,7 @@ tool_call_metrics <- function(private) {
     ),
     name = "call_metrics",
     annotations = ellmer::tool_annotations(
-      title = "Metrics",
+      title = "Running a trusted calculation",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -294,7 +298,7 @@ tool_call_calculation <- function(private) {
     ),
     name = "call_calculation",
     annotations = ellmer::tool_annotations(
-      title = "Trusted query",
+      title = "Running a trusted calculation",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -331,7 +335,7 @@ tool_call_measure <- function(private) {
     ),
     name = "call_measure",
     annotations = ellmer::tool_annotations(
-      title = "Measure",
+      title = "Running a trusted calculation",
       icon = maybe_icon("shield-check"),
       read_only_hint = TRUE
     )
@@ -343,7 +347,12 @@ tool_search_context <- function(private) {
     function(query) {
       result <- search_context_tool(private$context_layer, query)
       if (!S7::S7_inherits(result, ellmer::ContentToolResult)) {
-        return(result)
+        return(tool_result(
+          result,
+          title = "Searched context",
+          icon = maybe_icon("book"),
+          markdown = result
+        ))
       }
       add_citation_request(result, private$citation_request)
     },
@@ -355,7 +364,7 @@ tool_search_context <- function(private) {
     ),
     name = "search_context",
     annotations = ellmer::tool_annotations(
-      title = "Search context",
+      title = "Searching context",
       icon = maybe_icon("book"),
       read_only_hint = TRUE
     )
@@ -398,7 +407,7 @@ tool_describe_table <- function(private) {
     ),
     name = "describe_table",
     annotations = ellmer::tool_annotations(
-      title = "Describe table",
+      title = "Inspecting a table",
       icon = maybe_icon("table"),
       read_only_hint = TRUE
     )
@@ -434,7 +443,7 @@ tool_run_sql <- function(private) {
     ),
     name = "run_sql",
     annotations = ellmer::tool_annotations(
-      title = "SQL",
+      title = "Retrieving data",
       icon = maybe_icon("code-square"),
       read_only_hint = TRUE
     )
@@ -495,7 +504,7 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
-    return(measure_content_tool_result(td, value, handles))
+    return(measure_content_tool_result(value, handles))
   }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
@@ -505,12 +514,12 @@ call_measure_tool <- function(
   if (is_gt_table(value)) {
     data <- recover_gt_table_data(value)
     advert <- register_handle(handles, data)
-    return(measure_gt_table_tool_result(td, args, value, data, advert))
+    return(measure_gt_table_tool_result(args, value, data, advert))
   }
   advert <- register_handle(handles, value)
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
-    title = sprintf("Measure: %s", html_escape(tool_title(td))),
+    title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = measure_display_html(args, value),
     tag = "A",
@@ -518,7 +527,7 @@ call_measure_tool <- function(
   )
 }
 
-measure_content_tool_result <- function(td, result, handles) {
+measure_content_tool_result <- function(result, handles) {
   data <- result@extra$data
   result@extra$data <- NULL
   display <- result@extra$display
@@ -535,7 +544,7 @@ measure_content_tool_result <- function(td, result, handles) {
     }
   }
 
-  title <- sprintf("Measure: %s", tool_title(td))
+  title <- "Ran a trusted calculation"
   icon <- maybe_icon("shield-check")
   if (is.null(display)) {
     display <- shinychat::tool_result_display(title = title, icon = icon)
@@ -599,7 +608,6 @@ measure_plot_tool_result <- function(td, args, value, advert) {
     return(measure_failure_result(
       args,
       advert,
-      title,
       conditionMessage(rendered),
       "a plot",
       "commons-measure-plot-error"
@@ -615,7 +623,7 @@ measure_plot_tool_result <- function(td, args, value, advert) {
   }
   tool_result(
     model_value,
-    title = sprintf("Measure: %s", html_escape(title)),
+    title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
@@ -630,7 +638,6 @@ measure_plot_tool_result <- function(td, args, value, advert) {
 measure_failure_result <- function(
   args,
   advert,
-  title,
   message,
   result_type,
   class,
@@ -643,7 +650,7 @@ measure_failure_result <- function(
   )
   tool_result(
     paste(c(model_content, note, advert), collapse = "\n\n"),
-    title = sprintf("Measure: %s", html_escape(title)),
+    title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
@@ -655,8 +662,7 @@ measure_failure_result <- function(
   )
 }
 
-measure_gt_table_tool_result <- function(td, args, value, data, advert) {
-  title <- tool_title(td)
+measure_gt_table_tool_result <- function(args, value, data, advert) {
   rendered <- tryCatch(
     render_gt_table(value),
     error = function(error) error
@@ -666,7 +672,6 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     return(measure_failure_result(
       args,
       advert,
-      title,
       conditionMessage(rendered),
       "a gt table",
       "commons-measure-gt-table-error",
@@ -699,7 +704,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
       c(model_note, model_content, advert),
       collapse = "\n\n"
     ),
-    title = sprintf("Measure: %s", html_escape(title)),
+    title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = display_html,
     tag = "A",
@@ -737,7 +742,7 @@ describe_table_tool <- function(
     body <- semantic_model_description_text(d)
     return(tool_result(
       body,
-      title = sprintf("Described %s%s", table, source_label(source_name)),
+      title = "Inspected a table",
       icon = maybe_icon("table"),
       markdown = body
     ))
@@ -782,7 +787,7 @@ describe_table_tool <- function(
   body <- paste(parts, collapse = "\n\n")
   tool_result(
     body,
-    title = sprintf("Described %s%s", table, source_label(source_name)),
+    title = "Inspected a table",
     icon = maybe_icon("table"),
     markdown = body
   )
@@ -804,7 +809,7 @@ run_sql_tool <- function(
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
   tool_result(
     paste(c(body, note, advert, entries), collapse = "\n\n"),
-    title = sprintf("Ran SQL%s", source_label(source_name)),
+    title = "Retrieved data",
     icon = maybe_icon("code-square"),
     markdown = display_md,
     tag = "B",
@@ -902,13 +907,6 @@ mark_table_touched <- function(tracker, source_name, table) {
 
 touch_key <- function(source_name, table) {
   paste(source_name %||% "", table, sep = "\n")
-}
-
-source_label <- function(source_name) {
-  if (is.null(source_name)) {
-    return("")
-  }
-  sprintf(" (%s)", html_escape(source_name))
 }
 
 tool_result <- function(

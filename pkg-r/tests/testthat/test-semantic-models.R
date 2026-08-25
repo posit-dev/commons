@@ -260,6 +260,7 @@ test_that("lazy semantic metrics hydrate from qualified names", {
 
   expect_match(query, "FROM SEMANTIC_VIEW", fixed = TRUE)
   expect_equal(result@extra$commons_tag, "A")
+  expect_equal(result@extra$display$title, "Ran a trusted calculation")
 })
 
 test_that("semantic stubs earn fixed execution tools", {

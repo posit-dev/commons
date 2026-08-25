@@ -12,7 +12,7 @@ test_that("call_measure_tool runs a measure and tags the result", {
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_equal(res@value, "2")
   expect_equal(res@extra$commons_tag, "A")
-  expect_equal(res@extra$display$title, "Measure: order count")
+  expect_equal(res@extra$display$title, "Ran a trusted calculation")
   expect_false(res@extra$display$show_request)
   expect_match(res@extra$display$html, "Region:")
   expect_match(res@extra$display$html, "EMEA")
@@ -22,7 +22,7 @@ test_that("call_measure_tool runs a measure and tags the result", {
   expect_match(res@extra$display$html, "2")
 })
 
-test_that("call_measure_tool uses measure display titles", {
+test_that("call_measure_tool uses the trusted calculation result title", {
   registry <- list(
     order_count = measure(
       "order_count",
@@ -34,7 +34,7 @@ test_that("call_measure_tool uses measure display titles", {
 
   res <- call_measure_tool(registry, "order_count", "{}")
 
-  expect_equal(res@extra$display$title, "Measure: Order count")
+  expect_equal(res@extra$display$title, "Ran a trusted calculation")
   expect_match(res@extra$display$html, "No arguments")
 })
 
@@ -116,7 +116,7 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
   expect_identical(res@extra$display$open, TRUE)
   expect_identical(
     res@extra$display$title,
-    "Measure: Adverse events & outcomes"
+    "Ran a trusted calculation"
   )
   expect_equal(res@extra$commons_tag, "A")
 })
@@ -150,7 +150,7 @@ test_that("call_measure_tool preserves image content in ContentToolResult", {
   )
   expect_identical(get_handle(store, "r1"), data)
   expect_null(res@extra$data)
-  expect_identical(res@extra$display$title, "Measure: image")
+  expect_identical(res@extra$display$title, "Ran a trusted calculation")
 })
 
 test_that("call_measure_tool preserves custom ContentToolResult errors", {
@@ -320,7 +320,7 @@ test_that("run_sql_tool runs SQL and tags the result", {
   expect_s7_class(res, ellmer::ContentToolResult)
   expect_match(res@value, "6")
   expect_equal(res@extra$commons_tag, "B")
-  expect_equal(res@extra$display$title, "Ran SQL")
+  expect_equal(res@extra$display$title, "Retrieved data")
   expect_false(res@extra$display$open)
   expect_false(res@extra$display$show_request)
   expect_match(res@extra$display$markdown, "```sql")
@@ -353,6 +353,7 @@ test_that("format_measure_value collects a lazy dbplyr table", {
 
 test_that("describe_table_tool reports columns and samples", {
   res <- describe_table_tool(test_source(), "sales")
+  expect_equal(res@extra$display$title, "Inspected a table")
   expect_match(res@value, "order_id")
   expect_match(res@value, "Sample summary")
   expect_match(

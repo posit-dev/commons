@@ -140,7 +140,6 @@ call_metrics_impl <- function(
     metrics,
     dimensions,
     filters,
-    source_name,
     note = note,
     advert = advert,
     args = args
@@ -276,8 +275,7 @@ call_semantic_metrics <- function(
     handles,
     metrics,
     dimensions,
-    filters,
-    source_name
+    filters
   )
 }
 
@@ -288,7 +286,6 @@ metric_tool_result <- function(
   metrics,
   dimensions,
   filters,
-  source_name,
   note = NULL,
   advert = register_handle(handles, result),
   args = drop_nulls(list(
@@ -299,11 +296,7 @@ metric_tool_result <- function(
 ) {
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
-    title = sprintf(
-      "Metrics: %s%s",
-      html_escape(paste(metrics, collapse = ", ")),
-      source_label(source_name)
-    ),
+    title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     markdown = sprintf("```sql\n%s\n```\n\n%s", sql, df_to_markdown(result)),
     html = measure_display_html(args, result),
