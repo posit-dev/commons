@@ -36,10 +36,6 @@
 #'
 #' @export
 commons_theme <- function(..., preset = "shiny") {
-  rlang::check_installed(
-    c("bslib", "sass", "shinychat"),
-    reason = "to use `commons_theme()`."
-  )
   theme <- shinychat::page_chat_theme(
     # User-message geometry, formerly a CSS override in commons-chat.css;
     # shinychat exposes these as public theme variables.

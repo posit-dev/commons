@@ -17,6 +17,7 @@ License: MIT + file LICENSE
 URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
 BugReports: https://github.com/posit-dev/commons/issues
 Imports:
+    bslib (>= 0.11.0),
     callr,
     cli,
     coro,
@@ -25,6 +26,7 @@ Imports:
     ellmer (>= 0.4.1),
     evaluate,
     glue,
+    htmltools,
     httr2 (>= 1.1.0),
     jsonlite,
     knitr,
@@ -36,18 +38,17 @@ Imports:
     rlang (>= 1.2.0),
     roxygen2,
     S7,
+    sass,
     shinychat (> 0.4.0),
     utils
 Suggests:
     bit64,
     bsicons,
-    bslib (>= 0.11.0),
     chromote,
     dbplyr,
     dplyr,
     ggplot2,
     gt,
-    htmltools,
     odbc,
     otel (>= 0.2.0),
     otelsdk (>= 0.2.0),
@@ -57,7 +58,6 @@ Suggests:
     ragg,
     readr,
     rmarkdown,
-    sass,
     shiny (>= 1.11.1),
     shinytest2,
     testthat (>= 3.0.0),
