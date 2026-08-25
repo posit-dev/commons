@@ -115,7 +115,7 @@ In this evaluation, the commons agent had higher mean accuracy (`r sprintf("%.1f
 #| echo: false
 #| fig-width: 10
 #| fig-height: 4
-#| fig-alt: "Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens."
+#| fig-alt: "Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and fewer total output tokens."
 metric_columns <- c(
   "Mean accuracy (%)",
   "Median solver time (seconds)",

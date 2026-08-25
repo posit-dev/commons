@@ -110,7 +110,7 @@ vs. 83.5%), took less time to answer questions (a median of 31.0
 vs. 60.5 seconds), and used fewer output tokens (243,403 vs. 439,188
 total).
 
-<img src="pkg-r/man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
+<img src="pkg-r/man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
 
 In the evaluation, both harnesses use Claude Sonnet 5 at medium effort.
 The evaluation runs each of 32 questions three times. Questions require
