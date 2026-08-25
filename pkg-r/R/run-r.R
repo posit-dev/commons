@@ -27,6 +27,7 @@ tool_run_r <- function(private) {
       )
     },
     paste(
+      # The model sees OS-sandbox framing even when Windows uses guardrails.
       "Run R code in your sandboxed R session to analyze results or render plots.",
       "R code and textual output are visible only to you; rendered plots are",
       "also shown to the user.",
@@ -243,9 +244,11 @@ run_r_html <- function(code, segments) {
 
 # --- worker lifecycle --------------------------------------------------------
 
-new_r_worker <- function(network = "none") {
+new_r_worker <- function(network = "none", protection = "sandbox") {
+  protection <- rlang::arg_match(protection, c("sandbox", "guardrails"))
   worker <- new.env(parent = emptyenv())
   worker$network <- network
+  worker$protection <- protection
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
@@ -284,9 +287,17 @@ worker_ensure <- function(worker, fn_sources = character()) {
       parent_tmp = tempdir(),
       work_dir = work_dir,
       dll_path = commons_dll_path(),
-      network = worker$network
+      network = worker$network,
+      protection = worker$protection
     )
   )
+  if (identical(worker$protection, "guardrails")) {
+    # Build hooks in the worker so their captured functions stay worker-local.
+    rs$run(
+      worker_guardrails,
+      args = list(work_dir = work_dir, network = worker$network)
+    )
+  }
   # Defining sources at spawn (rather than syncing per call like handles)
   # means a respawned worker gets them again for free.
   if (length(fn_sources)) {
@@ -355,6 +366,376 @@ worker_scrubbed_env <- function(work_dir, single_thread = FALSE) {
     env[["OMP_NUM_THREADS"]] <- "1"
   }
   env
+}
+
+worker_guardrails <- function(work_dir, network = "none") {
+  normalize <- base::normalizePath
+  file_exists <- base::file.exists
+  dir_exists <- base::dir.exists
+  path_exists <- function(path) {
+    file_exists(path) || dir_exists(path)
+  }
+  canonical_path <- function(path) {
+    path <- path.expand(path)
+    if (!grepl("^([A-Za-z]:[/\\\\]|[/\\\\]{1,2})", path)) {
+      path <- file.path(getwd(), path)
+    }
+    suffix <- character()
+    # Resolving an existing ancestor exposes symlinks beneath nonexistent paths.
+    while (!path_exists(path) && !identical(dirname(path), path)) {
+      suffix <- c(basename(path), suffix)
+      path <- dirname(path)
+    }
+    path <- normalize(path, winslash = "/", mustWork = FALSE)
+    if (length(suffix)) {
+      path <- do.call(file.path, as.list(c(path, suffix)))
+    }
+    if (nchar(path) > 1L && !grepl("^[A-Za-z]:/$", path)) {
+      path <- sub("/+$", "", path)
+    }
+    path
+  }
+  canonical_paths <- function(paths) {
+    unique(vapply(paths, canonical_path, character(1), USE.NAMES = FALSE))
+  }
+  package_dirs <- unlist(
+    lapply(.libPaths(), base::list.dirs, recursive = FALSE, full.names = TRUE),
+    use.names = FALSE
+  )
+  read_roots <- canonical_paths(c(R.home(), .libPaths(), package_dirs, work_dir))
+  write_roots <- canonical_paths(work_dir)
+  windows <- identical(Sys.info()[["sysname"]], "Windows")
+
+  in_roots <- function(path, roots) {
+    if (windows) {
+      path <- tolower(path)
+      roots <- tolower(roots)
+    }
+    any(vapply(
+      roots,
+      function(root) {
+        identical(path, root) ||
+          identical(root, "/") ||
+          startsWith(path, paste0(root, "/"))
+      },
+      logical(1)
+    ))
+  }
+  deny <- function(kind, target = NULL) {
+    detail <- if (is.null(target)) "" else paste0(" to '", target, "'")
+    stop("commons run_r guardrails denied ", kind, detail, call. = FALSE)
+  }
+  check_path <- function(paths, access) {
+    if (is.null(paths)) {
+      return(invisible())
+    }
+    if (inherits(paths, "connection")) {
+      description <- tryCatch(
+        summary(paths)$description,
+        error = function(e) ""
+      )
+      if (
+        !nzchar(description) ||
+          description %in% c("stdin", "stdout", "stderr", "terminal") ||
+          startsWith(description, "textConnection") ||
+          startsWith(description, "rawConnection")
+      ) {
+        return(invisible())
+      }
+      paths <- description
+    }
+    paths <- as.character(paths)
+    paths <- paths[!is.na(paths) & nzchar(paths)]
+    for (path in paths) {
+      uri <- grepl("^[A-Za-z][A-Za-z0-9+.-]*:", path) &&
+        !grepl("^[A-Za-z]:[/\\\\]", path)
+      if (uri) {
+        if (startsWith(tolower(path), "file:")) {
+          deny(paste(access, "access"), path)
+        }
+        if (identical(network, "none")) {
+          deny("network access", path)
+        }
+        next
+      }
+      resolved <- canonical_path(path)
+      roots <- if (identical(access, "write")) write_roots else read_roots
+      if (!in_roots(resolved, roots)) {
+        deny(paste(access, "access"), path)
+      }
+    }
+    invisible()
+  }
+  namespace_function <- function(package, name) {
+    get(name, envir = asNamespace(package), inherits = FALSE)
+  }
+  matched_arguments <- function(original, args) {
+    call <- as.call(c(list(quote(.guarded_call)), args))
+    names(call) <- c("", names(args))
+    match.call(original, call, expand.dots = FALSE)
+  }
+  path_hook <- function(
+    package,
+    name,
+    access,
+    argument,
+    dots = FALSE,
+    exclude = character()
+  ) {
+    original <- namespace_function(package, name)
+    replacement <- function(...) {
+      args <- list(...)
+      if (identical(name, "load") && is.null(args$envir)) {
+        args$envir <- parent.frame()
+      }
+      matched <- matched_arguments(original, args)
+      paths <- if (dots) {
+        values <- as.list(matched$...)
+        value_names <- names(values)
+        if (is.null(value_names)) {
+          value_names <- rep("", length(values))
+        }
+        values <- values[!nzchar(value_names) | !value_names %in% exclude]
+        unlist(values, use.names = FALSE)
+      } else if (!is.null(matched[[argument]])) {
+        matched[[argument]]
+      } else {
+        NULL
+      }
+      check_path(paths, access)
+      do.call(original, args)
+    }
+    list(package = package, name = name, replacement = replacement)
+  }
+  named_path_hook <- function(package, name, access, argument, default = NULL) {
+    original <- namespace_function(package, name)
+    replacement <- function(...) {
+      args <- list(...)
+      path <- args[[argument]]
+      if (is.null(path)) {
+        path <- default
+      }
+      check_path(path, access)
+      do.call(original, args)
+    }
+    list(package = package, name = name, replacement = replacement)
+  }
+  pair_hook <- function(package, name, first_access, second_access) {
+    original <- namespace_function(package, name)
+    replacement <- function(...) {
+      args <- list(...)
+      matched <- matched_arguments(original, args)
+      formal_names <- names(formals(original))
+      check_path(matched[[formal_names[[1L]]]], first_access)
+      check_path(matched[[formal_names[[2L]]]], second_access)
+      do.call(original, args)
+    }
+    list(package = package, name = name, replacement = replacement)
+  }
+  arguments_hook <- function(package, name, accesses) {
+    original <- namespace_function(package, name)
+    replacement <- function(...) {
+      args <- list(...)
+      matched <- matched_arguments(original, args)
+      for (argument in names(accesses)) {
+        check_path(matched[[argument]], accesses[[argument]])
+      }
+      do.call(original, args)
+    }
+    list(package = package, name = name, replacement = replacement)
+  }
+  connection_hook <- function(name) {
+    original <- namespace_function("base", name)
+    replacement <- function(...) {
+      args <- list(...)
+      matched <- matched_arguments(original, args)
+      description <- matched$description
+      open <- matched$open
+      if (is.null(description)) description <- ""
+      if (is.null(open)) open <- ""
+      access <- if (grepl("[wa+]", open)) "write" else "read"
+      check_path(description, access)
+      do.call(original, args)
+    }
+    list(package = "base", name = name, replacement = replacement)
+  }
+  open_connection_hook <- function() {
+    original <- namespace_function("base", "open.connection")
+    replacement <- function(con, open = "r", blocking = TRUE, ...) {
+      access <- if (grepl("[wa+]", open)) "write" else "read"
+      check_path(con, access)
+      original(con, open = open, blocking = blocking, ...)
+    }
+    list(
+      package = "base",
+      name = "open.connection",
+      replacement = replacement
+    )
+  }
+  save_hook <- function() {
+    original <- namespace_function("base", "save")
+    replacement <- function(
+      ...,
+      list = character(),
+      file = stop("'file' must be specified"),
+      ascii = FALSE,
+      version = NULL,
+      envir = parent.frame(),
+      compress = isTRUE(!ascii),
+      compression_level,
+      eval.promises = TRUE,
+      precheck = TRUE
+    ) {
+      check_path(file, "write")
+      dots <- as.list(substitute(list(...)))[-1L]
+      dot_names <- vapply(dots, deparse1, character(1))
+      args <- list(
+        list = unique(c(dot_names, list)),
+        file = file,
+        ascii = ascii,
+        version = version,
+        envir = envir,
+        compress = compress,
+        eval.promises = eval.promises,
+        precheck = precheck
+      )
+      if (!missing(compression_level)) {
+        args$compression_level <- compression_level
+      }
+      do.call(original, args)
+    }
+    list(package = "base", name = "save", replacement = replacement)
+  }
+  denied_hook <- function(package, name, kind) {
+    original <- namespace_function(package, name)
+    replacement <- function(...) {
+      deny(kind)
+      do.call(original, list(...))
+    }
+    list(package = package, name = name, replacement = replacement)
+  }
+
+  read_arguments <- c(
+    file.access = "names", list.files = "path", list.dirs = "path",
+    dir = "path", normalizePath = "path", setwd = "dir",
+    readLines = "con", readChar = "con", readBin = "con", scan = "file",
+    dget = "file", load = "file", readRDS = "file", source = "file",
+    sys.source = "file", parse = "file",
+    read.dcf = "file", readRenviron = "path", dyn.load = "x"
+  )
+  write_arguments <- c(
+    dir.create = "path", unlink = "x", Sys.chmod = "paths",
+    Sys.setFileTime = "path", sink = "file"
+  )
+  pair_access <- list(
+    file.rename = c("write", "write"),
+    file.copy = c("read", "write"),
+    file.append = c("write", "read"),
+    file.symlink = c("read", "write"),
+    file.link = c("read", "write")
+  )
+  hooks <- c(
+    list(
+      path_hook("base", "file.exists", "read", "...", dots = TRUE),
+      path_hook("base", "dir.exists", "read", "paths"),
+      path_hook(
+        "base", "file.info", "read", "...", dots = TRUE,
+        exclude = "extra_cols"
+      ),
+      path_hook("base", "Sys.readlink", "read", "paths"),
+      path_hook("base", "Sys.glob", "read", "paths"),
+      path_hook("base", "file.show", "read", "...", dots = TRUE)
+    ),
+    Map(
+      function(name, argument) path_hook("base", name, "read", argument),
+      names(read_arguments),
+      unname(read_arguments)
+    ),
+    list(
+      path_hook(
+        "base", "file.create", "write", "...", dots = TRUE,
+        exclude = "showWarnings"
+      ),
+      path_hook("base", "file.remove", "write", "...", dots = TRUE)
+    ),
+    Map(
+      function(name, argument) path_hook("base", name, "write", argument),
+      names(write_arguments),
+      unname(write_arguments)
+    ),
+    list(
+      path_hook("base", "writeLines", "write", "con"),
+      path_hook("base", "writeChar", "write", "con"),
+      path_hook("base", "writeBin", "write", "con"),
+      path_hook("base", "dput", "write", "file"),
+      path_hook("base", "saveRDS", "write", "file"),
+      path_hook("base", "write.dcf", "write", "file"),
+      named_path_hook("base", "cat", "write", "file", ""),
+      save_hook()
+    ),
+    Map(
+      function(name, access) {
+        pair_hook("base", name, access[[1L]], access[[2L]])
+      },
+      names(pair_access),
+      unname(pair_access)
+    ),
+    lapply(c("file", "gzfile", "bzfile", "xzfile", "fifo"), connection_hook),
+    list(
+      path_hook("base", "unz", "read", "description"),
+      open_connection_hook()
+    ),
+    lapply(
+      c("system", "system2", "pipe"),
+      function(name) denied_hook("base", name, "subprocess creation")
+    ),
+    list(denied_hook("utils", "browseURL", "subprocess creation"))
+  )
+  if (exists("shell", envir = baseenv(), inherits = FALSE)) {
+    hooks <- c(hooks, list(denied_hook("base", "shell", "subprocess creation")))
+  }
+  for (package in c("base", "utils")) {
+    namespace <- asNamespace(package)
+    if (exists("shell.exec", envir = namespace, inherits = FALSE)) {
+      hooks <- c(
+        hooks,
+        list(denied_hook(package, "shell.exec", "subprocess creation"))
+      )
+    }
+  }
+  if (identical(network, "none")) {
+    hooks <- c(
+      hooks,
+      lapply(
+        c("url", "socketConnection", "serverSocket", "socketAccept"),
+        function(name) denied_hook("base", name, "network access")
+      ),
+      lapply(
+        c("download.file", "url.show"),
+        function(name) denied_hook("utils", name, "network access")
+      )
+    )
+  } else {
+    hooks <- c(
+      hooks,
+      list(
+        connection_hook("url"),
+        pair_hook("utils", "download.file", "read", "write"),
+        arguments_hook(
+          "utils",
+          "url.show",
+          c(url = "read", file = "write")
+        )
+      )
+    )
+  }
+  attach(NULL, name = "commons:guardrails")
+  assign(
+    ".commons_guardrails",
+    hooks,
+    envir = as.environment("commons:guardrails")
+  )
+  invisible(TRUE)
 }
 
 # Close the worker after a quiet stretch; it respawns lazily on the next
@@ -470,11 +851,18 @@ worker_init <- function(
   work_dir,
   dll_path,
   network = "none",
+  protection = "sandbox",
   sandbox_mode = "auto"
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
-  # Every platform that runs worker code must engage a sandbox.
+  if (!protection %in% c("sandbox", "guardrails")) {
+    stop("unknown run_r protection mode: ", protection)
+  }
+  if (identical(protection, "guardrails")) {
+    requireNamespace("bit64", quietly = TRUE)
+    return(invisible(TRUE))
+  }
   sysname <- Sys.info()[["sysname"]]
   if (!sysname %in% c("Linux", "Darwin")) {
     stop(
@@ -563,7 +951,12 @@ worker_define_functions <- function(fn_sources) {
   invisible(TRUE)
 }
 
-worker_run_code <- function(code, new_handles, plot_width, plot_height) {
+worker_run_code <- function(
+  code,
+  new_handles,
+  plot_width,
+  plot_height
+) {
   for (id in names(new_handles)) {
     assign(id, new_handles[[id]], envir = globalenv())
   }
@@ -649,6 +1042,58 @@ worker_run_code <- function(code, new_handles, plot_width, plot_height) {
       }
     }
   )
+
+  guardrails <- if ("commons:guardrails" %in% search()) {
+    get(
+      ".commons_guardrails",
+      envir = as.environment("commons:guardrails"),
+      inherits = FALSE
+    )
+  }
+  if (!is.null(guardrails)) {
+    restore <- list()
+    on.exit({
+      for (item in rev(restore)) {
+        if (bindingIsLocked(item$name, item$environment)) {
+          unlockBinding(item$name, item$environment)
+        }
+        assign(item$name, item$original, envir = item$environment)
+        if (item$locked) {
+          lockBinding(item$name, item$environment)
+        }
+      }
+    }, add = TRUE)
+    for (hook in guardrails) {
+      namespace <- asNamespace(hook$package)
+      environments <- list(namespace)
+      attached_name <- paste0("package:", hook$package)
+      # Attached exports are copied bindings rather than namespace lookups.
+      if (attached_name %in% search()) {
+        attached <- as.environment(attached_name)
+        if (!identical(attached, namespace) &&
+          exists(hook$name, envir = attached, inherits = FALSE)) {
+          environments <- c(environments, list(attached))
+        }
+      }
+      for (environment in environments) {
+        original <- get(hook$name, envir = environment, inherits = FALSE)
+        locked <- bindingIsLocked(hook$name, environment)
+        if (locked) {
+          unlockBinding(hook$name, environment)
+        }
+        assign(hook$name, hook$replacement, envir = environment)
+        if (locked) {
+          lockBinding(hook$name, environment)
+        }
+        restore[[length(restore) + 1L]] <- list(
+          name = hook$name,
+          environment = environment,
+          original = original,
+          locked = locked
+        )
+      }
+    }
+  }
 
   evaluate::evaluate(
     code,

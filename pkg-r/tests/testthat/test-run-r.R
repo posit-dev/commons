@@ -7,6 +7,16 @@ local_worker <- function(env = parent.frame()) {
   worker
 }
 
+local_guardrail_worker <- function(network = "none", env = parent.frame()) {
+  worker <- new_r_worker(network, "guardrails")
+  withr::defer(worker_close(worker), envir = env)
+  worker
+}
+
+worker_read_lines <- function(worker, path) {
+  worker$rs$run(function(path) readLines(path), args = list(path = path))
+}
+
 test_that("run_r executes code against stored handles", {
   worker <- local_worker()
   store <- new_handle_store()
@@ -225,4 +235,177 @@ test_that("concurrent run_r calls take turns on the worker", {
 
   res <- sync_promise(promises::promise_all(p1, p2))
   expect_match(res[[2]]@value, "20")
+})
+
+test_that("guardrails allow computation and worker-local files", {
+  worker <- local_guardrail_worker()
+  store <- new_handle_store()
+  worker_ensure(worker)
+
+  expect_false(worker$rs$run(function() {
+    exists(".commons_guardrails", envir = globalenv(), inherits = FALSE)
+  }))
+  expect_true(worker$rs$run(function() {
+    ".commons_guardrails" %in%
+      ls(as.environment("commons:guardrails"), all.names = TRUE)
+  }))
+
+  res <- sync_promise(run_r_tool(
+    worker,
+    store,
+    paste(
+      "copying <- readLines(file.path(R.home(), 'COPYING'), n = 1)",
+      "writeLines(copying, 'copying.txt')",
+      "parse(text = '1 + 1')",
+      "list.files(pattern = 'copying')",
+      "c(sum(1:10), length(readLines('copying.txt')))",
+      sep = "; "
+    )
+  ))
+
+  expect_match(res@value, "55")
+  expect_match(res@value, "1")
+})
+
+test_that("guardrails deny external filesystem access and subprocesses", {
+  worker <- local_guardrail_worker()
+  store <- new_handle_store()
+  outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
+  writeLines("secret", outside)
+
+  read <- sync_promise(run_r_tool(
+    worker,
+    store,
+    sprintf("readLines(%s)", encodeString(outside, quote = "\""))
+  ))
+  write <- sync_promise(run_r_tool(
+    worker,
+    store,
+    sprintf("writeLines('changed', %s)", encodeString(outside, quote = "\""))
+  ))
+  probe <- sync_promise(run_r_tool(
+    worker,
+    store,
+    sprintf("file.exists(%s)", encodeString(outside, quote = "\""))
+  ))
+  subprocess <- sync_promise(run_r_tool(
+    worker,
+    store,
+    "system2('R', '--version')"
+  ))
+  download <- sync_promise(run_r_tool(
+    worker,
+    store,
+    sprintf(
+      "download.file('https://example.com', %s)",
+      encodeString(outside, quote = "\"")
+    )
+  ))
+
+  expect_match(read@value, "denied read access", fixed = TRUE)
+  expect_match(write@value, "denied write access", fixed = TRUE)
+  expect_match(probe@value, "denied read access", fixed = TRUE)
+  expect_match(subprocess@value, "denied subprocess creation", fixed = TRUE)
+  expect_match(download@value, "denied network access", fixed = TRUE)
+  expect_identical(readLines(outside), "secret")
+})
+
+test_that("guardrails resolve symlinks and nonexistent descendants", {
+  worker <- local_guardrail_worker()
+  store <- new_handle_store()
+  worker_ensure(worker)
+  work_dir <- worker$rs$run(getwd)
+  outside <- withr::local_tempdir(tmpdir = dirname(tempdir()))
+  writeLines("secret", file.path(outside, "secret.txt"))
+  linked <- file.symlink(outside, file.path(work_dir, "outside-link"))
+  skip_if_not(linked, "cannot create symlinks")
+
+  read <- sync_promise(run_r_tool(
+    worker,
+    store,
+    "readLines('outside-link/secret.txt')"
+  ))
+  write <- sync_promise(run_r_tool(
+    worker,
+    store,
+    "writeLines('changed', 'outside-link/new/nested.txt')"
+  ))
+
+  expect_match(read@value, "denied read access", fixed = TRUE)
+  expect_match(write@value, "denied write access", fixed = TRUE)
+  expect_false(file.exists(file.path(outside, "new", "nested.txt")))
+})
+
+test_that("guardrails follow the configured network policy", {
+  restricted <- local_guardrail_worker()
+  full <- local_guardrail_worker("full")
+  store <- new_handle_store()
+
+  denied <- sync_promise(run_r_tool(
+    restricted,
+    store,
+    "con <- serverSocket(0); close(con)"
+  ))
+  allowed <- sync_promise(run_r_tool(
+    full,
+    store,
+    "con <- serverSocket(0); close(con); TRUE"
+  ))
+  outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
+  local_url <- paste0("file://", file.path(R.home(), "COPYING"))
+  local_file <- sync_promise(run_r_tool(
+    full,
+    store,
+    sprintf(
+      "download.file(%s, %s)",
+      encodeString(local_url, quote = "\""),
+      encodeString(outside, quote = "\"")
+    )
+  ))
+  external_destination <- sync_promise(run_r_tool(
+    full,
+    store,
+    sprintf(
+      "download.file('https://example.com', %s)",
+      encodeString(outside, quote = "\"")
+    )
+  ))
+
+  expect_match(denied@value, "denied network access", fixed = TRUE)
+  expect_match(allowed@value, "TRUE", fixed = TRUE)
+  expect_match(local_file@value, "denied read access", fixed = TRUE)
+  expect_match(
+    external_destination@value,
+    "denied write access",
+    fixed = TRUE
+  )
+})
+
+test_that("guardrails restore bindings after success and model errors", {
+  worker <- local_guardrail_worker()
+  store <- new_handle_store()
+  outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
+  writeLines("available after restoration", outside)
+
+  sync_promise(run_r_tool(worker, store, "sum(1:10)"))
+  expect_identical(
+    worker_read_lines(worker, outside),
+    "available after restoration"
+  )
+  expect_identical(
+    worker$rs$run(
+      function(url, path) {
+        suppressWarnings(download.file(url, path, quiet = TRUE))
+        readLines(path)
+      },
+      args = list(url = paste0("file://", outside), path = tempfile())
+    ),
+    "available after restoration"
+  )
+
+  sync_promise(run_r_tool(worker, store, "stop('boom')"))
+  expect_identical(
+    worker_read_lines(worker, outside),
+    "available after restoration"
+  )
 })

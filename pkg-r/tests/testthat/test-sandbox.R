@@ -7,7 +7,7 @@ test_that("sandbox_capabilities reports all mechanisms", {
   expect_type(caps$userns, "logical")
 })
 
-test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
+test_that("run_r protection rejects unsupported Linux hosts", {
   capabilities <- list(
     landlock_abi = 0L,
     seccomp = TRUE,
@@ -16,28 +16,53 @@ test_that("check_run_r_sandbox rejects unsupported Linux hosts", {
   )
 
   expect_error(
-    check_run_r_sandbox(capabilities, "Linux"),
+    run_r_protection_mode(capabilities, "Linux"),
     "neither Landlock nor unprivileged user namespaces"
   )
   capabilities$seccomp <- FALSE
   expect_error(
-    check_run_r_sandbox(capabilities, "Linux"),
+    run_r_protection_mode(capabilities, "Linux"),
     "does not support seccomp"
   )
 })
 
-test_that("check_run_r_sandbox accepts either Linux filesystem sandbox", {
+test_that("run_r protection accepts either Linux filesystem sandbox", {
   capabilities <- list(
     landlock_abi = 1L,
     seccomp = TRUE,
     seatbelt = FALSE,
     userns = FALSE
   )
-  expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+  expect_identical(run_r_protection_mode(capabilities, "Linux"), "sandbox")
 
   capabilities$landlock_abi <- 0L
   capabilities$userns <- TRUE
-  expect_invisible(check_run_r_sandbox(capabilities, "Linux"))
+  expect_identical(run_r_protection_mode(capabilities, "Linux"), "sandbox")
+})
+
+test_that("unsupported hosts require an explicit guardrail opt-in", {
+  capabilities <- list(
+    landlock_abi = 0L,
+    seccomp = FALSE,
+    seatbelt = FALSE,
+    userns = FALSE
+  )
+
+  expect_error(
+    run_r_protection_mode(capabilities, "Windows", FALSE),
+    "commons.allow_unsafe_fallback = TRUE",
+    fixed = TRUE
+  )
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
+  expect_identical(
+    run_r_protection_mode(capabilities, "Windows"),
+    "guardrails"
+  )
+  capabilities$seatbelt <- TRUE
+  expect_identical(
+    run_r_protection_mode(capabilities, "Darwin"),
+    "sandbox"
+  )
 })
 
 test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
@@ -68,6 +93,18 @@ test_that("worker_init errors without the compiled library", {
     ),
     "compiled library"
   )
+})
+
+test_that("worker_init permits the explicit guardrail mode", {
+  expect_true(callr::r(
+    worker_init,
+    args = list(
+      parent_tmp = tempdir(),
+      work_dir = tempdir(),
+      dll_path = NA_character_,
+      protection = "guardrails"
+    )
+  ))
 })
 
 sandboxed_worker_probes <- function(

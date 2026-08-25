@@ -50,6 +50,24 @@ test_that("commons() configures run_r network access", {
   expect_true(S7::prop(full, "annotations")$open_world_hint)
 })
 
+test_that("run_r describes both protection modes as sandboxed", {
+  sandboxed <- Commons$new(
+    client = test_client(),
+    data_sources = list(sales_db = test_source()),
+    protection = "sandbox"
+  )
+  guarded <- Commons$new(
+    client = test_client(),
+    data_sources = list(sales_db = test_source()),
+    protection = "guardrails"
+  )
+  sandboxed_description <- tool_description(agent_tool(sandboxed, "run_r"))
+  guarded_description <- tool_description(agent_tool(guarded, "run_r"))
+
+  expect_identical(guarded_description, sandboxed_description)
+  expect_match(guarded_description, "sandboxed R session", fixed = TRUE)
+})
+
 test_that("run_r describes which results are visible to the user", {
   description <- tool_description(agent_tool(test_agent(), "run_r"))
 
