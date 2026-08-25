@@ -189,11 +189,7 @@ call_calculation_impl <- function(
   advert <- register_handle(handles, result)
   tool_result(
     paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
-    title = sprintf(
-      "Calculation: %s%s",
-      html_escape(calculation$key),
-      source_label(source_name)
-    ),
+    title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     markdown = sprintf(
       "```sql\n%s\n```\n\n%s",

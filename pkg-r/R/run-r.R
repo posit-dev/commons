@@ -63,7 +63,7 @@ tool_run_r <- function(private) {
     ),
     name = "run_r",
     annotations = ellmer::tool_annotations(
-      title = "R code",
+      title = "Analyzing data",
       icon = maybe_icon("terminal"),
       read_only_hint = FALSE,
       open_world_hint = identical(private$worker$network, "full")
@@ -125,7 +125,7 @@ run_r_result <- function(code, res) {
   if (!is.null(res$failure)) {
     return(tool_result(
       sprintf("Error: %s", res$failure),
-      title = "Ran R code",
+      title = "Analyzed data",
       icon = maybe_icon("terminal"),
       html = run_r_html(code, list(list(type = "error", text = res$failure))),
       tag = "B",
@@ -139,7 +139,7 @@ run_r_result <- function(code, res) {
   )
   tool_result(
     run_r_value(segments),
-    title = "Ran R code",
+    title = "Analyzed data",
     icon = maybe_icon("terminal"),
     html = run_r_html(code, segments),
     tag = "B",

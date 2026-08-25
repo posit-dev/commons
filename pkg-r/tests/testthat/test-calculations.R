@@ -108,6 +108,7 @@ test_that("trusted calculation execution is tagged after DBI binding", {
 
   expect_equal(get_handle(handles, "r1")$bound_value, 2)
   expect_equal(result@extra$commons_tag, "A")
+  expect_equal(result@extra$display$title, "Ran a trusted calculation")
 })
 
 test_that("trusted calculations are searchable and earn their tools", {

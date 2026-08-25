@@ -178,6 +178,7 @@ test_that("run_r displays worker failures directly and escapes their HTML", {
   res <- run_r_result("x <- '<unsafe>'", list(failure = "worker <broke>"))
 
   expect_match(res@value, "Error: worker <broke>", fixed = TRUE)
+  expect_equal(res@extra$display$title, "Analyzed data")
   expect_false(res@extra$display$open)
   expect_match(res@extra$display$html, "&#39;&lt;unsafe&gt;&#39;", fixed = TRUE)
   expect_match(res@extra$display$html, "#&gt; worker &lt;broke&gt;", fixed = TRUE)
