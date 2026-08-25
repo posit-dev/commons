@@ -40,7 +40,6 @@ commons_theme <- function(..., preset = "shiny") {
     c("bslib", "sass", "shinychat"),
     reason = "to use `commons_theme()`."
   )
-  register_commons_icon_resources()
   theme <- shinychat::page_chat_theme(
     # User-message geometry, formerly a CSS override in commons-chat.css;
     # shinychat exposes these as public theme variables.

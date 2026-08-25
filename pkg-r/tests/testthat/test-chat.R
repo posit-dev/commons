@@ -116,30 +116,13 @@ test_that("commons_theme() bundles the commons chat assets", {
   expect_identical(commons_dep$script, "commons-chat.js")
 })
 
-test_that("commons_theme() registers the packaged icon resource path", {
-  prefix <- "commons-icons"
-  paths <- shiny::resourcePaths()
-  previous <- if (prefix %in% names(paths)) unname(paths[[prefix]])
-  if (!is.null(previous)) {
-    shiny::removeResourcePath(prefix)
-  }
-  withr::defer({
-    if (prefix %in% names(shiny::resourcePaths())) {
-      shiny::removeResourcePath(prefix)
-    }
-    if (!is.null(previous)) {
-      shiny::addResourcePath(prefix, previous)
-    }
-  })
+test_that("icon URLs resolve inside the commons-chat dependency", {
+  url <- commons_icon_url("trusted-icon.svg")
+  expect_match(url, "^commons-chat-[^/]+/figs/trusted-icon\\.svg$")
 
-  commons_theme()
-
-  paths <- shiny::resourcePaths()
-  expect_in(prefix, names(paths))
-  expect_identical(
-    unname(paths[prefix]),
-    normalizePath(system.file("figs", package = "commons"))
-  )
+  # The dependency ships the file the URL points to
+  dep <- commons_chat_dependency()
+  expect_true(file.exists(file.path(dep$src$file, "figs", "trusted-icon.svg")))
 })
 
 test_that("commons_app requires a commons agent", {

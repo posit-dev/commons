@@ -228,8 +228,6 @@ non_citable_tool_output_text <- function(tools) {
 }
 
 # These SVGs need a fixed stroke because images cannot inherit currentColor.
-COMMONS_ICON_RESOURCE_PREFIX <- "commons-icons"
-
 citation_icon_url <- function(kind) {
   file <- switch(
     kind,
@@ -244,13 +242,18 @@ citation_icon_url <- function(kind) {
   commons_icon_url(file)
 }
 
+# Icons are served by the commons-chat HTML dependency (see
+# commons_theme()), so their URLs carry the dependency's version.
 commons_icon_url <- function(file) {
   if (is.null(commons_icon_path(file))) {
     return(NULL)
   }
+  dep <- commons_chat_dependency()
   paste0(
-    COMMONS_ICON_RESOURCE_PREFIX,
-    "/",
+    dep$name,
+    "-",
+    dep$version,
+    "/figs/",
     utils::URLencode(file, reserved = TRUE)
   )
 }
@@ -262,6 +265,6 @@ escape_attr <- function(x) {
 }
 
 commons_icon_path <- function(file) {
-  path <- system.file("figs", file, package = "commons")
+  path <- system.file("www", "commons-chat", "figs", file, package = "commons")
   if (!nzchar(path)) NULL else path
 }

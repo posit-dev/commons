@@ -391,7 +391,8 @@ test_that("render_citation_aside emits a numbered aside with source details", {
     out$html,
     paste0(
       '^<shiny-aside display="compact" label="sales table" ',
-      'icon="commons-icons/citation-schema.svg'
+      'icon="',
+      commons_icon_url("citation-schema.svg")
     )
   )
   expect_no_match(out$html, "data:image", fixed = TRUE)

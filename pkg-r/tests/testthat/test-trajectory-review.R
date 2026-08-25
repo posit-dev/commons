@@ -92,7 +92,7 @@ test_that("answer pills describe trusted, cited, and uncited answers", {
   expect_match(trusted, "commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
-  expect_match(trusted, "commons-icons/trusted-icon.svg", fixed = TRUE)
+  expect_match(trusted, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
 
   expect_match(cited, "Cited")
   expect_match(cited, "verified against a trusted source")

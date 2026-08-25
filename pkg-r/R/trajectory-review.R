@@ -389,7 +389,6 @@ seed_transcript_decorations <- function(
 }
 
 viewer_ui <- function(summary) {
-  register_commons_icon_resources()
   dates <- viewer_date_range(summary)
   htmltools::attachDependencies(
     bslib::page_sidebar(

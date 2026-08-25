@@ -153,25 +153,19 @@ check_commons_client <- function(client, call = rlang::caller_env()) {
   }
 }
 
-register_commons_icon_resources <- function() {
-  shiny::addResourcePath(
-    COMMONS_ICON_RESOURCE_PREFIX,
-    system.file("figs", package = "commons")
-  )
-}
-
 # Asset mtimes ride in the version so the dependency URL changes whenever
 # the files do; browsers otherwise cache edited assets under the stable
 # version's URL indefinitely.
 commons_chat_dependency <- function() {
   src <- system.file("www", "commons-chat", package = "commons")
-  stamp <- max(file.mtime(list.files(src, full.names = TRUE)))
+  stamp <- max(file.mtime(list.files(src, full.names = TRUE, recursive = TRUE)))
 
   htmltools::htmlDependency(
     name = "commons-chat",
     version = paste0("0.0.0.9000.", as.integer(stamp)),
     src = c(file = src),
     stylesheet = "commons-chat.css",
-    script = "commons-chat.js"
+    script = "commons-chat.js",
+    all_files = TRUE
   )
 }
