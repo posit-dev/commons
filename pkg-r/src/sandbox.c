@@ -674,6 +674,16 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
 
   if (memory_limit != R_NilValue) {
     rlim_t bytes = (rlim_t) REAL(memory_limit)[0];
+    struct rlimit inherited;
+    if (getrlimit(RLIMIT_AS, &inherited) != 0) {
+      Rf_error("getrlimit(RLIMIT_AS) failed: %s", strerror(errno));
+    }
+    if (inherited.rlim_cur != RLIM_INFINITY && inherited.rlim_cur < bytes) {
+      bytes = inherited.rlim_cur;
+    }
+    if (inherited.rlim_max != RLIM_INFINITY && inherited.rlim_max < bytes) {
+      bytes = inherited.rlim_max;
+    }
     struct rlimit lim = { .rlim_cur = bytes, .rlim_max = bytes };
     if (setrlimit(RLIMIT_AS, &lim) != 0) {
       Rf_error("setrlimit(RLIMIT_AS) failed: %s", strerror(errno));
@@ -778,11 +788,20 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   }
 
   if (memory_limit != R_NilValue) {
-    /* Accepted but not reliably enforced by the macOS kernel; kept for
-     * interface parity with the Linux branch. */
+    /* RLIMIT_AS is unavailable on some macOS versions. */
     rlim_t bytes = (rlim_t) REAL(memory_limit)[0];
+    struct rlimit inherited;
+    if (getrlimit(RLIMIT_AS, &inherited) != 0) {
+      Rf_error("getrlimit(RLIMIT_AS) failed: %s", strerror(errno));
+    }
+    if (inherited.rlim_cur != RLIM_INFINITY && inherited.rlim_cur < bytes) {
+      bytes = inherited.rlim_cur;
+    }
+    if (inherited.rlim_max != RLIM_INFINITY && inherited.rlim_max < bytes) {
+      bytes = inherited.rlim_max;
+    }
     struct rlimit lim = { .rlim_cur = bytes, .rlim_max = bytes };
-    if (setrlimit(RLIMIT_AS, &lim) != 0) {
+    if (setrlimit(RLIMIT_AS, &lim) != 0 && errno != EINVAL) {
       Rf_error("setrlimit(RLIMIT_AS) failed: %s", strerror(errno));
     }
   }

@@ -927,7 +927,7 @@ worker_init <- function(
     sym,
     read_roots,
     write_roots,
-    NULL,
+    8 * 1024^3,
     sandbox_mode,
     preserve_fds,
     network
