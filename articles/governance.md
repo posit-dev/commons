@@ -109,8 +109,30 @@ transmit data from result handles. Only enable network access when that
 egress is required and acceptable.
 
 For local development on macOS, commons applies a similar filesystem and
-network policy using Seatbelt. Deployed Connect applications run on
-Linux and use the Linux mechanisms described above.
+network policy using Seatbelt. Windows has no OS-level `run_r()`
+sandbox. Deployed Connect applications run on Linux and use the Linux
+mechanisms described above.
+
+By default, commons refuses to create an agent when an OS-level sandbox
+is not available. An application author can enable a local-development
+fallback explicitly:
+
+``` r
+
+options(commons.allow_unsafe_fallback = TRUE)
+```
+
+commons always uses OS-level sandboxing when it is available. This
+option cannot disable or bypass it; it only permits commons to fall back
+to best-effort R guardrails when no OS-level sandbox is available.
+
+The fallback places checks around ordinary R functions while
+model-authored code evaluates. It limits filesystem reads to R,
+installed packages, and the worker directory, limits writes to the
+worker directory, denies subprocess functions, and follows the requested
+network policy. These checks reduce accidental access and damage, but
+native code and other R mechanisms can bypass them. They are not a
+sandbox or security boundary and should not be enabled in a deployment.
 
 ### Communication with the main app process
 

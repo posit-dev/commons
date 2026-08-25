@@ -173,8 +173,25 @@ in place, but R code can then contact services reachable from the
 deployment and transmit data from result handles. Only enable network
 access when that egress is required and acceptable.</p>
 <p>For local development on macOS, commons applies a similar filesystem
-and network policy using Seatbelt. Deployed Connect applications run on
-Linux and use the Linux mechanisms described above.</p>
+and network policy using Seatbelt. Windows has no OS-level
+<code>run_r()</code> sandbox. Deployed Connect applications run on Linux
+and use the Linux mechanisms described above.</p>
+<p>By default, commons refuses to create an agent when an OS-level
+sandbox is not available. An application author can enable a
+local-development fallback explicitly:</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>commons.allow_unsafe_fallback <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<p>commons always uses OS-level sandboxing when it is available. This
+option cannot disable or bypass it; it only permits commons to fall back
+to best-effort R guardrails when no OS-level sandbox is available.</p>
+<p>The fallback places checks around ordinary R functions while
+model-authored code evaluates. It limits filesystem reads to R,
+installed packages, and the worker directory, limits writes to the
+worker directory, denies subprocess functions, and follows the requested
+network policy. These checks reduce accidental access and damage, but
+native code and other R mechanisms can bypass them. They are not a
+sandbox or security boundary and should not be enabled in a
+deployment.</p>
 </div>
 <div class="section level3">
 <h3 id="communication-with-the-main-app-process">Communication with the main app process<a class="anchor" aria-label="anchor" href="#communication-with-the-main-app-process"></a>

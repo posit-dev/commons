@@ -69,8 +69,11 @@ commons(
 - network:
 
   Whether the `run_r` session has network access. One of `"none"` (the
-  default) or `"full"`. The session requires Linux or macOS and refuses
-  to run without filesystem sandboxing.
+  default) or `"full"`. The session uses OS sandboxing on Linux and
+  macOS. On unsupported hosts, local development can opt in to
+  best-effort R guardrails with
+  `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails are
+  not a security boundary.
 
 - log:
 
