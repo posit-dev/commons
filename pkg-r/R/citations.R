@@ -105,6 +105,17 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   )
 }
 
+# The Unicode White_Space set, spelled out. Neither engine's `\s` is used: the
+# default TRE engine defers to locale-dependent C library classification, so it
+# disagrees with Python about a non-breaking space and may disagree with itself
+# across platforms. Either way the same quote could verify in one language and
+# not the other with nothing erroring. Pinned by tests/shared/citations.json.
+CITATION_WHITESPACE <- paste0(
+  "(*UTF)[ \\t\\n\\v\\f\\r",
+  "\\x{0085}\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}",
+  "\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}]+"
+)
+
 # Forgiving of the ways a faithful quote can still drift from its source:
 # reflowed whitespace, markdown emphasis, and typographic quotes/dashes.
 normalize_citation <- function(x) {
@@ -112,7 +123,9 @@ normalize_citation <- function(x) {
   x <- gsub("[\u2018\u2019]", "'", x)
   x <- gsub("[\u201c\u201d]", "\"", x)
   x <- gsub("[\u2013\u2014]", "-", x)
-  trimws(gsub("\\s+", " ", x))
+  # Collapsing first leaves at most a single space at each end, so trimws()
+  # never has to consider anything outside its default set.
+  trimws(gsub(CITATION_WHITESPACE, " ", x, perl = TRUE))
 }
 
 # The citation contract is in the system prompt. The first fallback-tagged tool
