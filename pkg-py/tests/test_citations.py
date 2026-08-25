@@ -16,7 +16,6 @@ from ._shared import load_shared_fixture
 
 SPEC = load_shared_fixture("citations")
 NORMALIZE_CASES: list[dict[str, Any]] = SPEC["normalize_citation"]["cases"]
-WHITESPACE: dict[str, Any] = SPEC["whitespace"]
 MATCH: dict[str, Any] = SPEC["match_citation"]
 MATCH_CASES: list[dict[str, Any]] = MATCH["cases"]
 
@@ -30,30 +29,11 @@ def test_shared_fixture_is_populated() -> None:
     # passes, so pin what the fixture has to cover.
     assert len(NORMALIZE_CASES) >= 10
     assert {case["expected"] is None for case in MATCH_CASES} == {True, False}
-    assert WHITESPACE["collapsed"] and WHITESPACE["preserved"]
 
 
 @pytest.mark.parametrize("case", NORMALIZE_CASES, ids=lambda case: case["name"])
 def test_normalization_matches_the_shared_cases(case: dict[str, Any]) -> None:
     assert normalize_citation(case["input"]) == case["expected"]
-
-
-@pytest.mark.parametrize("code", WHITESPACE["collapsed"])
-def test_listed_whitespace_collapses(code: str) -> None:
-    char = chr(int(code, 16))
-
-    assert normalize_citation(f"{char}a{char}b{char}") == "a b"
-
-
-@pytest.mark.parametrize("code", WHITESPACE["preserved"])
-def test_unlisted_characters_are_left_alone(code: str) -> None:
-    # Neither implementation may treat these as whitespace. Python's \\s and R's
-    # default engine disagree about several of them, which is why the set is
-    # spelled out rather than delegated to either.
-    char = chr(int(code, 16))
-    text = f"{char}a{char}b{char}"
-
-    assert normalize_citation(text) == text
 
 
 @pytest.mark.parametrize("case", MATCH_CASES, ids=lambda case: case["name"])

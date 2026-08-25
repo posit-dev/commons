@@ -19,15 +19,7 @@ __all__ = ["CorpusEntry", "match_citation", "normalize_citation"]
 # appear in a trusted source by coincidence and must not promote an answer.
 MIN_NORMALIZED_LENGTH = 10
 
-# To share an implementation contract with the R side, we need to
-# explicitly reference the Unicode White_Space set. Due to inconsistencies
-# between R and Python, we intentionally don't use either engine's `\s`.
-# On R, the default TRE engine defers to locale-dependent C library classification,
-# which disagrees with Python about a non-breaking space and may disagree with itself
-# across platforms. This behavior is enforced/checked by tests/shared/citations.json.
-_WHITESPACE = re.compile(
-    "[ \t\n\v\f\r\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+"
-)
+_WHITESPACE = re.compile(r"\s+")
 _EMPHASIS = re.compile(r"[*_`]")
 _SINGLE_QUOTES = re.compile("[\u2018\u2019]")
 _DOUBLE_QUOTES = re.compile("[\u201c\u201d]")
@@ -59,9 +51,7 @@ def normalize_citation(text: str) -> str:
     text = _SINGLE_QUOTES.sub("'", text)
     text = _DOUBLE_QUOTES.sub('"', text)
     text = _DASHES.sub("-", text)
-    # Collapsing first leaves at most a single space at each end, so stripping
-    # only the space matches R's trimws() default rather than exceeding it.
-    return _WHITESPACE.sub(" ", text).strip(" ")
+    return _WHITESPACE.sub(" ", text).strip()
 
 
 def match_citation(quote: str, corpus: Sequence[CorpusEntry]) -> CorpusEntry | None:

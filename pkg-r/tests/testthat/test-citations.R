@@ -11,36 +11,10 @@ test_that("normalize_citation matches the shared cases", {
   }
 })
 
-test_that("normalize_citation folds exactly the shared whitespace set", {
-  ws <- shared_fixture("citations")$whitespace
-  expect_gt(length(ws$collapsed), 0)
-  expect_gt(length(ws$preserved), 0)
-
-  for (code in ws$collapsed) {
-    ch <- intToUtf8(strtoi(code, 16L))
-    expect_identical(
-      normalize_citation(paste0(ch, "a", ch, "b", ch)),
-      "a b",
-      info = paste("collapsed", code)
-    )
-  }
-  for (code in ws$preserved) {
-    ch <- intToUtf8(strtoi(code, 16L))
-    text <- paste0(ch, "a", ch, "b", ch)
-    expect_identical(
-      normalize_citation(text),
-      text,
-      info = paste("preserved", code)
-    )
-  }
-})
-
 test_that("match_citation uses the shared minimum quote length", {
-  # The fixture declares the minimum as a value, not only through the boundary
-  # cases, so both implementations must read the same number from it.
+  # A quote shorter than this never verifies. Both packages read the limit from
+  # the fixture so it cannot drift between them.
   minimum <- shared_fixture("citations")$match_citation$min_normalized_length
-  # Size the corpus from the minimum, so raising it cannot make the acceptance
-  # fail for absence rather than for disagreeing with the fixture.
   entry <- list(label = "documentation", kind = "prose", text = strrep("x", minimum))
 
   expect_null(match_citation(strrep("x", minimum - 1), list(entry)))

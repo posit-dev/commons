@@ -52,13 +52,10 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   corpus
 }
 
-# A quote this short can occur in a trusted source by coincidence, so it must
-# not promote an unsupported answer. Enforced/tested by tests/shared/citations.json.
-CITATION_MIN_NORMALIZED_LENGTH <- 10
-
 match_citation <- function(quote, corpus) {
   needle <- normalize_citation(quote)
-  if (nchar(needle) < CITATION_MIN_NORMALIZED_LENGTH) {
+  # Reject trivial matches that could promote an unsupported answer.
+  if (nchar(needle) < 10) {
     return(NULL)
   }
   for (entry in corpus) {
@@ -108,18 +105,6 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   )
 }
 
-# To share an implementation contract with the Python side, we need to
-# explicitly reference the Unicode White_Space set. Due to inconsistencies
-# between R and Python, we intentionally don't use either engine's `\s`.
-# On R, the default TRE engine defers to locale-dependent C library classification,
-# which disagrees with Python about a non-breaking space and may disagree with itself
-# across platforms. This behavior is enforced/checked by tests/shared/citations.json.
-CITATION_WHITESPACE <- paste0(
-  "(*UTF)[ \\t\\n\\v\\f\\r",
-  "\\x{0085}\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}",
-  "\\x{2028}\\x{2029}\\x{202f}\\x{205f}\\x{3000}]+"
-)
-
 # Forgiving of the ways a faithful quote can still drift from its source:
 # reflowed whitespace, markdown emphasis, and typographic quotes/dashes.
 normalize_citation <- function(x) {
@@ -127,9 +112,7 @@ normalize_citation <- function(x) {
   x <- gsub("[\u2018\u2019]", "'", x)
   x <- gsub("[\u201c\u201d]", "\"", x)
   x <- gsub("[\u2013\u2014]", "-", x)
-  # Collapsing first leaves at most a single space at each end, so trimws()
-  # never has to consider anything outside its default set.
-  trimws(gsub(CITATION_WHITESPACE, " ", x, perl = TRUE))
+  trimws(gsub("\\s+", " ", x))
 }
 
 # The citation contract is in the system prompt. The first fallback-tagged tool
