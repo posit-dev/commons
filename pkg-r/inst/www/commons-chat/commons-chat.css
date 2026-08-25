@@ -58,12 +58,11 @@ shiny-chat-container {
 .commons-answer-dot-mark {
   animation: commons-answer-dot-pulse 1.4s ease-out 1;
   background: currentColor;
-  border: 1px solid rgba(0, 0, 0, 0.18);
   border-radius: 50%;
   box-sizing: border-box;
   display: block;
-  height: 0.625rem;
-  width: 0.625rem;
+  height: 0.5rem;
+  width: 0.5rem;
 }
 
 .commons-answer-dot-verified {
@@ -176,13 +175,12 @@ shiny-chat-container
   )::after {
   animation: commons-answer-dot-pulse 1.4s ease-out 1;
   background: var(--commons-answer-dot-color);
-  border: 1px solid rgba(0, 0, 0, 0.18);
   border-radius: 50%;
   box-sizing: border-box;
   color: var(--commons-answer-dot-color);
   content: "";
-  height: 0.625rem;
-  width: 0.625rem;
+  height: 0.5rem;
+  width: 0.5rem;
 }
 
 shiny-chat-container
