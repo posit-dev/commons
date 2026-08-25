@@ -287,11 +287,20 @@ commons_answer_dot <- function(tag) {
     `aria-label` = paste0(entry$label, ". ", entry$body),
     role = "img",
     tabindex = "0",
-    htmltools::tags$span(
-      class = "commons-answer-dot-mark",
-      `aria-hidden` = "true"
-    ),
+    commons_dot_icon(entry$icon),
     commons_dot_tooltip(entry$body)
+  )
+}
+
+commons_dot_icon <- function(file) {
+  src <- svg_data_uri(file)
+  if (is.null(src)) {
+    return(NULL)
+  }
+  htmltools::tags$img(
+    src = src,
+    alt = "",
+    class = "commons-answer-dot-mark"
   )
 }
 

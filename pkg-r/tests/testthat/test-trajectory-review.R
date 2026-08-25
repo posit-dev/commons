@@ -87,7 +87,7 @@ test_that("hit_rate counts exchange tags across conversations", {
   expect_equal(rate$counts, c(A = 1, B = 1, C = 1, none = 1))
 })
 
-test_that("answer dots describe verified and untrusted answers", {
+test_that("answer markers describe verified and untrusted answers", {
   skip_if_not_installed("htmltools")
 
   verified <- htmltools::renderTags(commons_answer_dot("A"))$html
@@ -98,6 +98,8 @@ test_that("answer dots describe verified and untrusted answers", {
   expect_match(verified, "Verified answer")
   expect_match(verified, "governed calculation")
   expect_match(verified, "commons-tooltip")
+  expect_match(verified, "<img", fixed = TRUE)
+  expect_match(verified, "data:image/svg+xml", fixed = TRUE)
   expect_match(verified, "commons-answer-dot-mark")
   expect_match(verified, "commons-answer-dot-verified")
 
@@ -107,6 +109,8 @@ test_that("answer dots describe verified and untrusted answers", {
   expect_match(untrusted, "AI can be wrong")
   expect_match(untrusted, "not produced by a governed calculation")
   expect_match(untrusted, "commons-tooltip")
+  expect_match(untrusted, "<img", fixed = TRUE)
+  expect_match(untrusted, "data:image/svg+xml", fixed = TRUE)
   expect_match(untrusted, "commons-answer-dot-mark")
   expect_match(untrusted, "commons-answer-dot-untrusted")
 

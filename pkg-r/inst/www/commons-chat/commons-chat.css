@@ -57,12 +57,9 @@ shiny-chat-container {
 
 .commons-answer-dot-mark {
   animation: commons-answer-dot-pulse 1.6s ease-in-out 1;
-  background: currentColor;
-  border-radius: 50%;
-  box-sizing: border-box;
   display: block;
-  height: 0.625rem;
-  width: 0.625rem;
+  height: 0.75rem;
+  width: 0.75rem;
 }
 
 .commons-answer-dot-verified {
@@ -205,6 +202,16 @@ shiny-chat-container
 }
 
 shiny-chat-container
+  button.shiny-aside-pill.shiny-aside-pill--number::after {
+  background-image: url("citation-mark.svg");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 0.625rem;
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+shiny-chat-container
   :is(
     .shiny-aside-pill--number,
     .shiny-aside-pill:has(
@@ -275,6 +282,41 @@ shiny-chat-container
   display: none;
 }
 
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )::after {
+  display: none;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )
+  > img {
+  animation: commons-answer-dot-pulse 1.6s ease-in-out 1;
+  display: block;
+  height: 0.75rem;
+  width: 0.75rem;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  ):hover
+  > img,
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"]
+  )[aria-expanded="true"]
+  > img {
+  filter: brightness(0.9);
+}
+
 @keyframes commons-answer-dot-pulse {
   0%,
   100% {
@@ -290,6 +332,12 @@ shiny-chat-container
 
 @media (prefers-reduced-motion: reduce) {
   .commons-answer-dot-mark,
+  shiny-chat-container
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
+    > img,
   shiny-chat-container
     :is(
       .shiny-aside-pill--number,

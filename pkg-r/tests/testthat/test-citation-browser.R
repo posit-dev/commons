@@ -7,7 +7,7 @@ test_that("normal package checks can disable browser tests explicitly", {
   )
 })
 
-test_that("Shiny Chat renders streamed citations as provenance dots", {
+test_that("Shiny Chat renders streamed citation markers", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -69,9 +69,10 @@ test_that("Shiny Chat renders streamed citations as provenance dots", {
         "const dot = getComputedStyle(node, '::after');",
         "return marker.width === '16px' && marker.height === '16px' && ",
         "marker.verticalAlign === 'middle' && marker.fontSize === '0px' && ",
-        "dot.width === '10px' && dot.height === '10px' && ",
+        "dot.width === '12px' && dot.height === '12px' && ",
         "dot.borderRadius === '50%' && ",
-        "dot.backgroundColor === 'rgb(0, 123, 194)';",
+        "dot.backgroundColor === 'rgb(0, 123, 194)' && ",
+        "dot.backgroundImage !== 'none';",
         "});"
       )
     ),
@@ -215,7 +216,7 @@ test_that("Shiny Chat renders streamed citations as provenance dots", {
   expect_no_match(answer_html, "commons-citation", fixed = TRUE)
 })
 
-test_that("Shiny Chat renders provenance dots and numbered citations", {
+test_that("Shiny Chat renders distinct provenance markers", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -259,15 +260,15 @@ test_that("Shiny Chat renders provenance dots and numbered citations", {
         "document.querySelector(`button[aria-label=\"${label}\"]`));",
         "return nodes.every((node) => {",
         "const marker = getComputedStyle(node);",
-        "const dot = getComputedStyle(node, '::after');",
+        "const icon = node.querySelector('img');",
+        "const iconStyle = getComputedStyle(icon);",
         "return marker.width === '16px' && marker.height === '16px' && ",
-        "marker.verticalAlign === 'middle' && dot.width === '10px' && ",
-        "dot.height === '10px' && dot.borderRadius === '50%' && ",
-        "dot.borderStyle === 'none' && ",
-        "dot.animationName === 'commons-answer-dot-pulse' && ",
-        "dot.animationDuration === '1.6s' && ",
-        "dot.animationTimingFunction === 'ease-in-out' && ",
-        "dot.animationIterationCount === '1';",
+        "marker.verticalAlign === 'middle' && iconStyle.width === '12px' && ",
+        "iconStyle.height === '12px' && iconStyle.display === 'block' && ",
+        "iconStyle.animationName === 'commons-answer-dot-pulse' && ",
+        "iconStyle.animationDuration === '1.6s' && ",
+        "iconStyle.animationTimingFunction === 'ease-in-out' && ",
+        "iconStyle.animationIterationCount === '1';",
         "});",
         "})()"
       )
@@ -278,12 +279,12 @@ test_that("Shiny Chat renders provenance dots and numbered citations", {
     app$get_js(
       paste0(
         "['Verified answer', 'Untrusted']",
-        ".map((label) => getComputedStyle(",
-        "document.querySelector(`button[aria-label=\"${label}\"]`), ",
-        "'::after').backgroundColor).join('|');"
+        ".map((label) => document.querySelector(",
+        "`button[aria-label=\"${label}\"] img`",
+        ").getAttribute('src').split('/').pop()).join('|');"
       )
     ),
-    "rgb(40, 200, 64)|rgb(254, 188, 46)"
+    "trusted-icon.svg|warning-icon.svg"
   )
   expect_identical(
     app$get_js(
@@ -347,8 +348,8 @@ test_that("Shiny Chat renders provenance dots and numbered citations", {
     app$get_js(
       paste0(
         "getComputedStyle(",
-        "document.querySelector('button[aria-label=\"Untrusted\"]'), ",
-        "'::after').animationName;"
+        "document.querySelector('button[aria-label=\"Untrusted\"] img')",
+        ").animationName;"
       )
     ),
     "none"
