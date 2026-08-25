@@ -23,11 +23,11 @@ expression of an \code{app.R}.
 \code{trajectory_review()} launches a Shiny app for browsing conversation
 trajectories read with \code{\link[=trajectory_read]{trajectory_read()}}. The app charts each trust
 level's share of answers over time—binned by day, week, or month, using
-the finest unit the volume of answers supports—alongside a list of
-conversations or of individual questions, filterable by date and trust
-level. The transcript uses the same Commons and ShinyChat renderer as live
-conversations, preserving recorded messages and tool activity without a
-separate reviewer-specific rendering path.
+the finest unit the volume of answers supports—alongside a list of questions
+grouped by conversation, filterable by date and trust level. The transcript
+uses the same Commons and ShinyChat renderer as live conversations,
+preserving recorded messages and tool activity without a separate
+reviewer-specific rendering path.
 
 Transcripts are reviewable rather than live: conversations and questions
 can be flagged for review and annotated with notes. Notes apply to the

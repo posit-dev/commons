@@ -4,11 +4,11 @@
 #' `trajectory_review()` launches a Shiny app for browsing conversation
 #' trajectories read with [trajectory_read()]. The app charts each trust
 #' level's share of answers over time—binned by day, week, or month, using
-#' the finest unit the volume of answers supports—alongside a list of
-#' conversations or of individual questions, filterable by date and trust
-#' level. The transcript uses the same Commons and ShinyChat renderer as live
-#' conversations, preserving recorded messages and tool activity without a
-#' separate reviewer-specific rendering path.
+#' the finest unit the volume of answers supports—alongside a list of questions
+#' grouped by conversation, filterable by date and trust level. The transcript
+#' uses the same Commons and ShinyChat renderer as live conversations,
+#' preserving recorded messages and tool activity without a separate
+#' reviewer-specific rendering path.
 #'
 #' Transcripts are reviewable rather than live: conversations and questions
 #' can be flagged for review and annotated with notes. Notes apply to the
@@ -206,9 +206,11 @@ question_snippet <- function(exchange, max_chars = 80) {
 }
 
 trajectory_messages <- function(turns) {
+  provenance <- attr(turns, "provenance") %||% list()
   chat <- new_trajectory_chat()
   chat$set_turns(turns)
-  add_message_exchanges(shinychat::contents_shinychat(chat))
+  messages <- add_message_exchanges(shinychat::contents_shinychat(chat))
+  add_message_provenance(messages, provenance)
 }
 
 new_trajectory_chat <- function() {
@@ -232,6 +234,56 @@ add_message_exchanges <- function(messages) {
     messages[[i]]$exchange <- exchange
   }
   messages
+}
+
+add_message_provenance <- function(messages, provenance) {
+  exchanges <- unique(vapply(
+    messages,
+    function(message) message$exchange,
+    integer(1)
+  ))
+  for (exchange in exchanges) {
+    record <- provenance[exchange][[1]]
+    tag <- if (is.null(record)) {
+      NA_character_
+    } else {
+      record$provenance_tag %||% NA_character_
+    }
+    aside <- provenance_aside(tag)
+    if (!nzchar(aside)) {
+      next
+    }
+    candidates <- which(vapply(
+      messages,
+      function(message) {
+        identical(message$role, "assistant") &&
+          identical(message$exchange, exchange)
+      },
+      logical(1)
+    ))
+    if (length(candidates) == 0) {
+      next
+    }
+    index <- candidates[[length(candidates)]]
+    messages[[index]]$content <- append_provenance_aside(
+      messages[[index]]$content,
+      aside
+    )
+  }
+  messages
+}
+
+append_provenance_aside <- function(content, aside) {
+  if (is.character(content)) {
+    return(paste(content, aside, sep = "\n\n"))
+  }
+  text <- which(vapply(content, is.character, logical(1)))
+  if (length(text) == 0) {
+    return(c(content, list(aside)))
+  }
+  index <- text[[length(text)]]
+  content[[index]] <- paste(content[[index]], aside, sep = "\n\n")
+  content
 }
 
 commons_answer_pill <- function(tag) {
@@ -315,22 +367,10 @@ viewer_ui <- function(summary) {
             max = dates$max,
             width = "100%"
           ),
-          htmltools::div(
-            class = "commons-viewer-segmented",
-            shiny::radioButtons(
-              "group_by",
-              NULL,
-              choices = c(
-                Conversations = "conversation",
-                Questions = "question"
-              ),
-              inline = TRUE
-            )
-          ),
           shiny::selectInput(
             "trust",
             "Trust Level",
-            trust_choices("conversation"),
+            trust_choices(),
             width = "100%"
           )
         ),
@@ -387,24 +427,14 @@ viewer_ui <- function(summary) {
   )
 }
 
-trust_choices <- function(group_by) {
-  if (identical(group_by, "question")) {
-    c(
-      "All answers" = "all",
-      "Verified" = "A",
-      "Cited" = "B",
-      "Untrusted" = "C",
-      "No data tool" = "none"
-    )
-  } else {
-    c(
-      "All conversations" = "all",
-      "Has a verified answer" = "A",
-      "Has a cited answer" = "B",
-      "Has an untrusted answer" = "C",
-      "Has an answer with no data tool" = "none"
-    )
-  }
+trust_choices <- function() {
+  c(
+    "All answers" = "all",
+    "Verified" = "A",
+    "Cited" = "B",
+    "Untrusted" = "C",
+    "No data tool" = "none"
+  )
 }
 
 viewer_server <- function(
@@ -461,24 +491,6 @@ viewer_server <- function(
       }
     )
 
-    shiny::observeEvent(input$group_by, {
-      shiny::updateSelectInput(
-        session,
-        "trust",
-        choices = trust_choices(input$group_by),
-        selected = input$trust
-      )
-    })
-
-    visible_conversations <- shiny::reactive({
-      Filter(
-        function(i) {
-          conversation_visible(summary[[i]], input$window, input$trust)
-        },
-        seq_along(summary)
-      )
-    })
-
     visible_questions <- shiny::reactive({
       Filter(
         function(k) question_visible(questions[[k]], input$window, input$trust),
@@ -503,17 +515,13 @@ viewer_server <- function(
     })
 
     output$entries <- shiny::renderUI({
-      entries <- if (identical(input$group_by, "question")) {
-        lapply(
-          visible_questions(),
-          function(k) question_entry(questions[[k]], selected(), flags())
-        )
-      } else {
-        lapply(
-          visible_conversations(),
-          function(i) conversation_entry(i, summary[[i]], selected(), flags())
-        )
-      }
+      entries <- grouped_question_entries(
+        visible_questions(),
+        questions,
+        summary,
+        shiny::isolate(review_selection()),
+        flags()
+      )
       if (length(entries) == 0) {
         return(viewer_empty_note(
           if (length(summary) == 0) {
@@ -523,13 +531,47 @@ viewer_server <- function(
           }
         ))
       }
-      entries
+      open <- intersect(
+        shiny::isolate(input$conversation_groups) %||% character(),
+        names(entries)
+      )
+      rlang::exec(
+        bslib::accordion,
+        !!!unname(entries),
+        id = "conversation_groups",
+        open = if (length(open)) open else FALSE,
+        multiple = TRUE,
+        class = "commons-viewer-question-groups"
+      )
     })
 
-    # Register once because filtering does not change trajectory indices.
-    all_keys <- c(
-      lapply(seq_along(trajectories), function(i) list(conversation = i)),
-      lapply(questions, function(record) record[c("conversation", "exchange")])
+    shiny::observeEvent(input$conversation_select, {
+      index <- as.integer(input$conversation_select$conversation)
+      if (
+        length(index) == 1 &&
+          !is.na(index) &&
+          index %in% seq_along(trajectories)
+      ) {
+        selected(list(conversation = index))
+        review_target(NULL)
+      }
+    })
+
+    shiny::observeEvent(
+      review_selection(),
+      ignoreNULL = FALSE,
+      {
+        session$sendCustomMessage(
+          "commonsViewerSidebarSelect",
+          review_selection() %||% list()
+        )
+      }
+    )
+
+    # Register once because filtering does not change question indices.
+    all_keys <- lapply(
+      questions,
+      function(record) record[c("conversation", "exchange")]
     )
     for (key in all_keys) {
       local({
@@ -678,11 +720,6 @@ viewer_server <- function(
   }
 }
 
-conversation_visible <- function(record, window, trust) {
-  in_window(record, window) &&
-    (identical(trust, "all") || any(tag_matches(record$tags, trust)))
-}
-
 question_visible <- function(record, window, trust) {
   in_window(record, window) && tag_matches(record$tag, trust)
 }
@@ -801,50 +838,93 @@ flag_marker <- function(flagged) {
   )
 }
 
-conversation_entry <- function(
-  index,
+question_entry <- function(
   record,
   selected = NULL,
   flags = character()
 ) {
-  key <- list(conversation = index)
-  shiny::actionLink(
-    entry_link_id(key),
-    class = entry_class(identical(selected, key)),
-    label = htmltools::tagList(
-      htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
-      htmltools::div(
-        class = "commons-viewer-entry-meta",
-        flag_marker(review_key(record$id) %in% flags),
-        htmltools::tags$span(conversation_meta(record))
-      )
-    )
-  )
-}
-
-question_entry <- function(record, selected = NULL, flags = character()) {
   key <- record[c("conversation", "exchange")]
   flagged <- review_key(record$conversation_id, record$exchange) %in% flags
   shiny::actionLink(
     entry_link_id(key),
-    class = entry_class(identical(selected, key)),
+    `data-conversation` = key$conversation,
+    `data-exchange` = key$exchange,
+    class = if (identical(selected, key)) {
+      "commons-viewer-entry commons-viewer-entry-selected"
+    } else {
+      "commons-viewer-entry"
+    },
     label = htmltools::tagList(
       htmltools::div(class = "commons-viewer-entry-snippet", record$snippet),
       htmltools::div(
         class = "commons-viewer-entry-meta",
         flag_marker(flagged),
-        htmltools::tags$span(entry_date(record)),
         commons_answer_pill(record$tag)
       )
     )
   )
 }
 
-entry_class <- function(selected) {
-  if (selected) {
-    "commons-viewer-entry commons-viewer-entry-selected"
+grouped_question_entries <- function(
+  indices,
+  questions,
+  summary,
+  selected = NULL,
+  flags = character()
+) {
+  conversations <- vapply(
+    indices,
+    \(i) questions[[i]]$conversation,
+    integer(1)
+  )
+  groups <- split(indices, conversations)
+  lapply(groups, function(indices) {
+    index <- questions[[indices[[1]]]]$conversation
+    question_group(
+      index,
+      summary[[index]],
+      questions[indices],
+      selected,
+      flags
+    )
+  })
+}
+
+question_group <- function(
+  index,
+  conversation,
+  questions,
+  selected,
+  flags
+) {
+  key <- list(conversation = index)
+  panel <- bslib::accordion_panel(
+    title = htmltools::tagList(
+      htmltools::tags$span(
+        class = "commons-viewer-question-group-title",
+        sprintf("Conversation %d", index)
+      ),
+      htmltools::tags$span(
+        class = "commons-viewer-question-group-meta",
+        conversation_meta(conversation)
+      )
+    ),
+    value = as.character(index),
+    htmltools::div(
+      class = "commons-viewer-question-group-entries",
+      lapply(
+        questions,
+        \(record) question_entry(record, selected, flags)
+      )
+    )
+  )
+  if (identical(selected, key)) {
+    htmltools::tagAppendAttributes(
+      panel,
+      class = "commons-viewer-conversation-selected"
+    )
   } else {
-    "commons-viewer-entry"
+    panel
   }
 }
 

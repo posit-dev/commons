@@ -199,7 +199,9 @@
   color: #b54708;
 }
 
-.shiny-chat-messages-content {
+.commons-viewer-transcript .shiny-chat-messages-content {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
   position: relative;
 }
 
@@ -315,60 +317,78 @@
   border-bottom-right-radius: var(--commons-viewer-control-radius);
 }
 
-/* Segmented control: one track holding two equal-width options. */
-.commons-viewer-segmented .shiny-label-null {
-  display: none;
-}
-
-.commons-viewer-segmented .shiny-options-group {
-  background: var(--bs-secondary-bg, #f1f3f5);
-  border-radius: var(--commons-viewer-control-radius);
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-}
-
-/* The `.shiny-options-group` class is needed to outrank Shiny's inline-radio
-   rule, which reserves padding for the radio circle this control hides. */
-.commons-viewer-segmented .shiny-options-group label.radio-inline {
-  border-radius: calc(var(--commons-viewer-control-radius) - 2px);
-  color: var(--bs-secondary-color, #6c757d);
-  cursor: pointer;
-  flex: 1 1 0;
-  font-size: 0.875rem;
-  margin: 0;
-  padding: 0.25rem 0.5rem;
-  text-align: center;
-}
-
-.commons-viewer-segmented label.radio-inline input[type="radio"] {
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-  position: absolute;
-  width: 0;
-}
-
-.commons-viewer-segmented label.radio-inline:hover {
-  color: var(--bs-body-color, #212529);
-}
-
-.commons-viewer-segmented label.radio-inline:has(input:checked) {
-  background: var(--bs-body-bg, #fff);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-  color: var(--bs-body-color, #212529);
-  font-weight: 600;
-}
-
-.commons-viewer-segmented label.radio-inline:has(input:focus-visible) {
-  outline: 2px solid var(--bs-primary, #0d6efd);
-  outline-offset: 1px;
-}
-
 .commons-viewer-sidebar-entries {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+.commons-viewer-question-groups {
+  --bs-accordion-border-color: var(--bs-border-color, #dee2e6);
+  --bs-accordion-border-radius: 0;
+  --bs-accordion-inner-border-radius: 0;
+}
+
+.commons-viewer-question-groups .accordion-item {
+  border: 0;
+  border-bottom: 1px solid var(--bs-accordion-border-color);
+}
+
+.commons-viewer-question-groups .accordion-button,
+.commons-viewer-question-groups .accordion-button:not(.collapsed) {
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  padding: 0.75rem;
+}
+
+.commons-viewer-question-groups .accordion-button:focus,
+.commons-viewer-question-groups .accordion-button:not(.collapsed):focus {
+  box-shadow: none;
+}
+
+.commons-viewer-question-groups .accordion-button::after {
+  background-size: 0.75rem;
+  filter: grayscale(1);
+  flex: 0 0 auto;
+  height: 0.75rem;
+  margin-left: 0.5rem;
+  opacity: 0.55;
+  width: 0.75rem;
+}
+
+.commons-viewer-question-groups .accordion-title {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.commons-viewer-question-group-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.commons-viewer-question-group-meta {
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.commons-viewer-question-groups .accordion-body {
+  padding: 0 0 0.5rem;
+}
+
+.commons-viewer-question-groups
+  .commons-viewer-conversation-selected
+  > .accordion-header
+  > .accordion-button {
+  background: color-mix(in srgb, #007bc2 8%, var(--bs-body-bg, #fff));
+}
+
+.commons-viewer-question-group-entries .commons-viewer-entry {
+  padding-left: 1.25rem;
 }
 
 .commons-viewer-entry {
@@ -393,6 +413,7 @@
 }
 
 .commons-viewer-entry-snippet {
+  font-size: 0.9375rem;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
