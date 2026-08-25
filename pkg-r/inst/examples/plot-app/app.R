@@ -29,8 +29,7 @@ ui <- page_fillable(
   theme = commons_theme(),
   shinychat::chat_ui(
     "chat",
-    greeting = "Try: <span class='suggestion'>Show the values by group.</span>",
-    icon_assistant = shiny::HTML("")
+    greeting = "Try: <span class='suggestion'>Show the values by group.</span>"
   )
 )
 

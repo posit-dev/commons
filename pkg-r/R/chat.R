@@ -60,7 +60,6 @@ commons_app <- function(client, ...) {
       "commons",
       id = "chat",
       theme = commons_theme(),
-      icon_assistant = shiny::HTML(""),
       enable_cancel = TRUE,
       allow_attachments = TRUE,
       toolbar_global = if (rlang::is_interactive()) {

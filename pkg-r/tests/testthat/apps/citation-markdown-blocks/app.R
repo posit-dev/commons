@@ -26,8 +26,7 @@ ui <- bslib::page_fillable(
     messages = list(
       list(role = "assistant", content = code),
       list(role = "assistant", content = table)
-    ),
-    icon_assistant = shiny::HTML("")
+    )
   )
 )
 

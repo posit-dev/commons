@@ -27,8 +27,7 @@ ui <- bslib::page_fillable(
         role = "assistant",
         content = paste("Fallback result.", commons:::provenance_aside("C"))
       )
-    ),
-    icon_assistant = shiny::HTML("")
+    )
   )
 )
 

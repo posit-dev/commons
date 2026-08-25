@@ -19,7 +19,6 @@ ui <- shinychat::page_chat(
   "Snowflake semantic view",
   id = "chat",
   greeting = greeting,
-  icon_assistant = shiny::HTML(""),
   theme = commons_theme()
 )
 

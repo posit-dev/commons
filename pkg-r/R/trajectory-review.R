@@ -747,8 +747,7 @@ viewer_server <- function(
       shinychat::chat_ui(
         transcript_id(conversation),
         messages = selected_messages(),
-        height = "100%",
-        icon_assistant = shiny::HTML("")
+        height = "100%"
       )
     })
 

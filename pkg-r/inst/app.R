@@ -87,7 +87,6 @@ ui <- page_chat(
   "Biodiversity explorer",
   id = "chat",
   greeting = greeting,
-  icon_assistant = shiny::HTML(""),
   theme = commons_theme()
 )
 

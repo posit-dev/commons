@@ -98,7 +98,6 @@ ui <- shinychat::page_chat(
   "Canopy cover explorer",
   id = "chat",
   greeting = welcome_message,
-  icon_assistant = shiny::HTML(""),
   theme = commons_theme()
 )
 

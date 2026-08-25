@@ -142,8 +142,7 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
   messages <- trajectory_messages(sanitized)
   html <- as.character(shinychat::chat_ui(
     "transcript",
-    messages = messages,
-    icon_assistant = shiny::HTML("")
+    messages = messages
   ))
   expect_match(html, "6 orders.", fixed = TRUE)
   expect_match(html, "commons-answer-pill-trusted", fixed = TRUE)
