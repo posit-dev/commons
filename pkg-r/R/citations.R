@@ -105,11 +105,12 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   )
 }
 
-# The Unicode White_Space set, spelled out. Neither engine's `\s` is used: the
-# default TRE engine defers to locale-dependent C library classification, so it
-# disagrees with Python about a non-breaking space and may disagree with itself
-# across platforms. Either way the same quote could verify in one language and
-# not the other with nothing erroring. Pinned by tests/shared/citations.json.
+# To share an implementation contract with the Python side, we need to
+# explicitly reference the Unicode White_Space set. Due to inconsistencies
+# between R and Python, we intentionally don't use either engine's `\s`.
+# On R, the default TRE engine defers to locale-dependent C library classification, 
+# which disagrees with Python about a non-breaking space and may disagree with itself
+# across platforms. This behavior is enforced/checked by tests/shared/citations.json.
 CITATION_WHITESPACE <- paste0(
   "(*UTF)[ \\t\\n\\v\\f\\r",
   "\\x{0085}\\x{00a0}\\x{1680}\\x{2000}-\\x{200a}",
