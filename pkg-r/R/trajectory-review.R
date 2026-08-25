@@ -393,7 +393,7 @@ viewer_ui <- function(summary) {
     bslib::page_sidebar(
       title = "Trajectory reviewer",
       sidebar = bslib::sidebar(
-        width = 380,
+        width = 420,
         class = "commons-viewer-sidebar",
         htmltools::div(
           class = "commons-viewer-sidebar-controls",
@@ -943,7 +943,7 @@ question_group <- function(
     title = htmltools::tagList(
       htmltools::tags$span(
         class = "commons-viewer-question-group-title",
-        sprintf("Conversation %d", index)
+        conversation$snippet
       ),
       htmltools::tags$span(
         class = "commons-viewer-question-group-meta",
