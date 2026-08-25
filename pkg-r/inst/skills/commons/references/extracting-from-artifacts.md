@@ -49,8 +49,8 @@ The user decides which artifacts and calculations are trusted. Do not treat code
 
 7. Reconcile against existing context. Classify each candidate against what the agent already has:
    - **new** — add it.
-   - **duplicate** — same concept, same computation: do not create another contribution. For a measure, add an `@provenance` tag to the existing measure.
-   - **extension** — same concept, superset behavior: propose editing the existing contribution. For a measure, add the relevant `@param` and provenance tag. Never create `revenue2`.
+   - **duplicate** — same concept, same computation: do not create another contribution. For a measure, add `@provenance` to the existing measure.
+   - **extension** — same concept, superset behavior: propose editing the existing contribution. For a measure, add the relevant `@param` and `@provenance` entries. Never create `revenue2`.
    - **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides. Do not resolve silently.
 
 8. Wait before editing. Present proposals highest-value first (mirroring the iterate reference) and apply only what the user confirms. The data scientist should confirm any new business definition, canonical table, exclusion rule, or dictionary caveat.

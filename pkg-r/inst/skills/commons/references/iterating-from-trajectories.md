@@ -86,8 +86,8 @@ Files in a Posit Connect app's working directory are replaced on redeployment. U
 
    Classify each proposal the same way the extraction reference does, so the two skills reconcile against existing context identically:
    * **new** — add it.
-   * **duplicate** — same concept, same computation: add an `@provenance` roxygen tag to the existing measure instead of creating a new one.
-   * **extension** — same concept, superset behavior: edit the existing measure, adding the `@param` and an `@provenance` roxygen tag. Never create `revenue2`.
+   * **duplicate** — same concept, same computation: add `@provenance` to the existing measure instead of creating a new one.
+   * **extension** — same concept, superset behavior: edit the existing measure, adding the relevant `@param` and `@provenance` entries. Never create `revenue2`.
    * **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides; do not resolve silently.
 
 5. Wait before editing.
