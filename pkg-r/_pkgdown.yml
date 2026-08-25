@@ -9,6 +9,7 @@ reference:
   - commons
   - data_source
   - semantic_layer
+  - measure
   - context_layer
 - title: Shiny UI and server
   description: Put a commons agent inside of an interactive chat app.
@@ -16,6 +17,3 @@ reference:
 - title: Trajectories
   description: Read and annotate conversation histories.
   contents: starts_with("trajectory_")
-- title: Miscellaneous
-  contents:
-  - measure
