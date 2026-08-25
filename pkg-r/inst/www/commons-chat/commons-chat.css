@@ -203,10 +203,12 @@ shiny-chat-container
 
 shiny-chat-container
   button.shiny-aside-pill.shiny-aside-pill--number::after {
+  animation: commons-citation-mark-pulse 1.6s ease-in-out 1;
   background-image: url("citation-mark.svg");
   background-position: center;
   background-repeat: no-repeat;
-  background-size: 0.625rem;
+  background-size: 0.75rem;
+  box-shadow: none;
   height: 0.75rem;
   width: 0.75rem;
 }
@@ -326,6 +328,17 @@ shiny-chat-container
 
   35% {
     box-shadow: 0 0 0 0.3rem color-mix(in srgb, currentColor 18%, transparent);
+    transform: scale(1.18);
+  }
+}
+
+@keyframes commons-citation-mark-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  35% {
     transform: scale(1.18);
   }
 }

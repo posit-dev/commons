@@ -72,7 +72,8 @@ test_that("Shiny Chat renders streamed citation markers", {
         "dot.width === '12px' && dot.height === '12px' && ",
         "dot.borderRadius === '50%' && ",
         "dot.backgroundColor === 'rgb(0, 123, 194)' && ",
-        "dot.backgroundImage !== 'none';",
+        "dot.backgroundImage !== 'none' && dot.boxShadow === 'none' && ",
+        "dot.animationName === 'commons-citation-mark-pulse';",
         "});"
       )
     ),
