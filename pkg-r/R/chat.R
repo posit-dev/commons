@@ -60,8 +60,6 @@ commons_app <- function(client, ...) {
       "commons",
       id = "chat",
       theme = commons_theme(),
-      enable_cancel = TRUE,
-      allow_attachments = TRUE,
       toolbar_global = if (rlang::is_interactive()) {
         bslib::toolbar(
           bslib::input_dark_mode(),
