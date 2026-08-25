@@ -208,6 +208,7 @@ shiny-chat-container
   background-position: center;
   background-repeat: no-repeat;
   background-size: 0.75rem;
+  border-radius: 0.1875rem;
   box-shadow: none;
   height: 0.75rem;
   width: 0.75rem;
