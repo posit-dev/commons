@@ -2,9 +2,7 @@
 
 The normalization rules and the matching verdicts are a cross-language contract
 pinned by ``tests/shared/citations.json``; change that fixture, not just this
-file. ``pkg-r/R/citations.R`` implements the same contract for R. Which
-characters count as whitespace is left to each language's own regex, so the two
-differ on exotic spaces that no real citation contains.
+file. ``pkg-r/R/citations.R`` implements the same contract for R.
 """
 
 from __future__ import annotations
