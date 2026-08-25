@@ -76,6 +76,7 @@ trajectory_review <- function(
   check_trajectories(trajectories)
   review_dir <- resolve_review_dir(review_dir)
   trajectories <- drop_side_conversations(trajectories)
+  trajectories[] <- lapply(trajectories, sanitize_trajectory_turns)
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
@@ -226,15 +227,18 @@ trajectory_exchange_messages <- function(turns, exchange) {
 }
 
 sanitize_trajectory_turns <- function(turns) {
-  lapply(turns, function(turn) {
+  sanitized <- lapply(turns, function(turn) {
     if (turn@role %in% c("assistant", "user")) {
       turn@contents <- sanitize_trajectory_contents(turn@contents)
     }
     turn
   })
+  attributes(sanitized) <- attributes(turns)
+  sanitized
 }
 
 sanitize_trajectory_contents <- function(contents) {
+  contents <- Filter(\(content) !is_internal_turn_reminder(content), contents)
   scanner <- citation_scanner()
   last_text <- NULL
 
@@ -261,6 +265,15 @@ sanitize_trajectory_contents <- function(contents) {
     )
   }
   contents
+}
+
+is_internal_turn_reminder <- function(content) {
+  S7::S7_inherits(content, ellmer::ContentText) &&
+    content@text %in%
+      c(
+        claude_5_turn_reminder,
+        restored_conversation_turn_reminder
+      )
 }
 
 new_trajectory_chat <- function() {
@@ -591,7 +604,8 @@ viewer_server <- function(
         length(index) == 1 &&
           !is.na(index) &&
           index %in% seq_along(trajectories) &&
-          !identical(current$conversation, index)
+          (!identical(current, list(conversation = index)) ||
+            !is.null(review_target()))
       ) {
         selected(list(conversation = index))
         review_target(NULL)
