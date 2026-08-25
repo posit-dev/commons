@@ -247,6 +247,8 @@ test_that("Shiny Chat renders provenance dots and numbered citations", {
         "dot.height === '8px' && dot.borderRadius === '50%' && ",
         "dot.borderStyle === 'none' && ",
         "dot.animationName === 'commons-answer-dot-pulse' && ",
+        "dot.animationDuration === '1.6s' && ",
+        "dot.animationTimingFunction === 'ease-in-out' && ",
         "dot.animationIterationCount === '1';",
         "});",
         "})()"

@@ -56,7 +56,7 @@ shiny-chat-container {
 }
 
 .commons-answer-dot-mark {
-  animation: commons-answer-dot-pulse 1.4s ease-out 1;
+  animation: commons-answer-dot-pulse 1.6s ease-in-out 1;
   background: currentColor;
   border-radius: 50%;
   box-sizing: border-box;
@@ -173,7 +173,7 @@ shiny-chat-container
     img[src$="/trusted-icon.svg"],
     img[src$="/warning-icon.svg"]
   )::after {
-  animation: commons-answer-dot-pulse 1.4s ease-out 1;
+  animation: commons-answer-dot-pulse 1.6s ease-in-out 1;
   background: var(--commons-answer-dot-color);
   border-radius: 50%;
   box-sizing: border-box;
@@ -246,7 +246,7 @@ shiny-chat-container
 @keyframes commons-answer-dot-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 transparent;
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 18%, transparent);
     transform: scale(1);
   }
 
