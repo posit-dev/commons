@@ -44,8 +44,9 @@ These functions wrap \code{\link[shinychat:chat_app]{shinychat::chat_app()}}, \c
 definitions, and data documentation as the answer streams, and rewrites
 verified citations inline as numbered, server-authored \verb{<shiny-aside>}
 elements. Citation details name the trusted source.
-A compact provenance aside follows the answer when it was produced by a
-governed calculation, or when a fallback answer cites nothing verified.
+A provenance marker in a compact \verb{<shiny-aside>} follows the answer when it
+was produced by a governed calculation, or when a fallback answer cites
+nothing verified.
 }
 \examples{
 \dontrun{
