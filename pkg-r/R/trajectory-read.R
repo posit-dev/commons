@@ -33,29 +33,30 @@
 #' must own it or be a collaborator. See the `share_with` argument of
 #' [commons()].
 #'
-#' @section Agent skill:
-#' commons includes an agent skill scaffold for iterating on a deployed agent.
-#' To locate it:
-#'
-#' ```r
-#' system.file("skills", "commons", "SKILL.md", package = "commons")
-#' ```
-#'
-#' To use it, copy the skill directory into your agent's skills directory,
-#' like `./.agents/skills`:
-#'
-#' ```r
-#' skill <- system.file("skills", "commons", package = "commons")
-#' dir.create("./.agents/skills", recursive = TRUE, showWarnings = FALSE)
-#' file.copy(skill, "./.agents/skills", recursive = TRUE)
-#' ```
-#'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list of [ellmer::Turn]s and carries
 #'   a `last_active` attribute: a `POSIXct` giving the time of the
 #'   conversation's most recent chat activity. The list carries a `source`
 #'   attribute identifying the local trace directory or Connect content from
 #'   which it was read.
+#'
+#' @examples
+#' \dontrun{
+#' # Read all of the app's local or deployed trajectories, using the
+#' # automatically resolved source.
+#' trajectories <- trajectory_read()
+#'
+#' # Read a recent subset.
+#' recent <- trajectory_read(n = 20, from = "2026-07-01")
+#'
+#' # Read trajectories for a specific Connect content item or a local trace
+#' # directory.
+#' deployed <- trajectory_read(
+#'   "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"
+#' )
+#' local <- trajectory_read("path/to/traces")
+#' }
+#'
 #' @export
 trajectory_read <- function(
   source = NULL,

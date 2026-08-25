@@ -52,20 +52,21 @@ project's deployment record), and editor-level access to the content: you
 must own it or be a collaborator. See the \code{share_with} argument of
 \code{\link[=commons]{commons()}}.
 }
-\section{Agent skill}{
+\examples{
+\dontrun{
+# Read all of the app's local or deployed trajectories, using the
+# automatically resolved source.
+trajectories <- trajectory_read()
 
-commons includes an agent skill scaffold for iterating on a deployed agent.
-To locate it:
+# Read a recent subset.
+recent <- trajectory_read(n = 20, from = "2026-07-01")
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{system.file("skills", "commons", "SKILL.md", package = "commons")
-}\if{html}{\out{</div>}}
-
-To use it, copy the skill directory into your agent's skills directory,
-like \code{./.agents/skills}:
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{skill <- system.file("skills", "commons", package = "commons")
-dir.create("./.agents/skills", recursive = TRUE, showWarnings = FALSE)
-file.copy(skill, "./.agents/skills", recursive = TRUE)
-}\if{html}{\out{</div>}}
+# Read trajectories for a specific Connect content item or a local trace
+# directory.
+deployed <- trajectory_read(
+  "https://connect.example.com/content/01234567-89ab-cdef-0123-456789abcdef/"
+)
+local <- trajectory_read("path/to/traces")
 }
 
+}
