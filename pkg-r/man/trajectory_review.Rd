@@ -20,36 +20,15 @@ console launches the reviewer; the result can also be served as the last
 expression of an \code{app.R}.
 }
 \description{
-\code{trajectory_review()} launches a Shiny app for browsing conversation
-trajectories read with \code{\link[=trajectory_read]{trajectory_read()}}. The app charts each trust
-level's share of answers over time—binned by day, week, or month, using
-the finest unit the volume of answers supports—alongside a list of questions
-grouped by conversation, filterable by date and trust level. The transcript
-uses the same Commons and ShinyChat renderer as live conversations,
-preserving recorded messages and tool activity without a separate
-reviewer-specific rendering path.
+\code{trajectory_review()} launches a Shiny app for browsing and annotating
+conversation trajectories read with \code{\link[=trajectory_read]{trajectory_read()}}. Reviewers can
+filter questions by date and trust level, inspect complete conversations,
+flag conversations or individual question-and-answer exchanges, and record
+notes.
 
-Transcripts are reviewable rather than live: conversations and questions
-can be flagged for review and annotated with notes. Notes apply to the
-whole conversation, or to a single question-and-answer exchange selected
-in the transcript. Flags and notes are stored as one generated Markdown
-document per reviewed conversation and are restored when the viewer
-reopens.
-
-Each Markdown document contains the complete reviewer-visible conversation
-and its tool activity. YAML frontmatter stores active flags and note history
-so the reviewer can restore its state and agents can identify flagged
-conversations, exchanges, and reviewer notes. The Markdown body is the
-human-readable transcript for joint human-agent review. Search-pool results
-are omitted because later tool calls record any selected measure; other tool
-results are limited to 50 lines or 20,000 characters.
-
-Trust filters use each answer's tag exactly as \code{\link[=trajectory_read]{trajectory_read()}} recorded
-it. Missing or conflicting records are omitted rather than inferred.
-
-Logged calls that aren't part of the agent's question-and-answer record—
-shinychat's conversation-title generation, and completions with no user
-turn—are excluded from the viewer.
+Use the reviewer to assess answer quality, track trust outcomes over time,
+record feedback to guide agent improvements, and identify conversations for
+further review.
 }
 \details{
 A single reviewer app writes all review documents to \code{review_dir}. Pass it
@@ -58,15 +37,61 @@ directly, set \code{COMMONS_REVIEW_DIR} for the current R process with
 sessions. Without either, reviews land in \code{commons-reviews} relative to the
 app's working directory.
 
-Files in a Posit Connect app's working directory are replaced on
-redeployment. Review apps should use one Connect process because separate
-processes do not coordinate file writes or in-memory review state.
+On Posit Connect, opening a new browser session does not reset review files.
+By default, review documents are written to the app's working directory,
+where they are replaced on redeployment. Set \code{review_dir} to persistent
+storage when reviews must survive redeployment. Review apps should use one
+Connect process because separate processes do not coordinate file writes or
+in-memory review state.
 
 All sessions of one reviewer app share the same flags and notes; review
 state is not separated by user. Notes record \code{session$user}, the login
 information supplied by the Shiny host, or \code{"unknown"} when it is
 unavailable. Flags do not record who changed them.
 }
+\section{Viewer}{
+
+The app charts each trust level's share of answers over time. It uses the
+finest daily, weekly, or monthly grouping that averages at least five answers
+per displayed bin, or the coarsest available grouping if none does. Weekly
+and monthly groupings require windows of at least 14 and 60 days,
+respectively. A question list is grouped by conversation and can be filtered
+by date and trust level.
+}
+
+\section{Review records}{
+
+Notes can apply to a whole conversation or to one question-and-answer
+exchange selected in the transcript. Flags and notes are stored as one
+generated Markdown document per reviewed conversation and are restored when
+the viewer reopens.
+
+Each document contains the complete reviewer-visible conversation and its
+tool activity. YAML frontmatter stores active flags and note history so the
+reviewer can restore its state and agents can identify flagged
+conversations, exchanges, and reviewer notes. The Markdown body is the
+human-readable transcript for joint human-agent review.
+}
+
+\section{Transcript contents}{
+
+The transcript uses the same commons and shinychat renderer as live
+conversations, preserving recorded messages and tool activity. Provenance
+pills are reconstructed from recorded trust tags, but inline citations are
+not recreated. Generated review documents list the recorded citation
+decisions separately.
+
+Search-pool results are omitted because later tool calls record any selected
+measure; other tool results are limited to 50 lines or 20,000 characters.
+
+Trust filters use each answer's tag exactly as \code{\link[=trajectory_read]{trajectory_read()}} recorded
+it. Missing or conflicting records are omitted rather than inferred.
+
+Logged calls that aren't part of the agent's question-and-answer record are
+excluded from the viewer. These include shinychat's conversation-title
+generation and completions with no user turn.
+}
+
 \examples{
 \dontrun{
 trajectory_review()
