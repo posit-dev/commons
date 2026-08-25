@@ -109,10 +109,13 @@
     document.addEventListener("click", function(event) {
       if (!event.target || !event.target.closest) return;
 
-      var conversationButton = event.target.closest(
-        "#conversation_groups .accordion-button"
+      var conversationTitle = event.target.closest(
+        "#conversation_groups .commons-viewer-question-group-title"
       );
-      if (conversationButton) {
+      if (conversationTitle) {
+        var conversationButton = conversationTitle.closest(
+          ".accordion-button"
+        );
         var item = conversationButton.closest(".accordion-item");
         var conversation = item && Number(item.dataset.value);
         if (Number.isInteger(conversation)) {
