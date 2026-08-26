@@ -80,7 +80,8 @@ test_that("hit_rate counts exchange tags across conversations", {
   expect_equal(rate$counts, c(A = 1, B = 1, C = 1, none = 1))
 })
 
-test_that("provenance markers describe trusted, cited, and uncited answers", {
+test_that("provenance pills describe trusted, cited, and uncited answers", {
+  skip_if_not_installed("bslib")
   skip_if_not_installed("htmltools")
 
   trusted <- htmltools::renderTags(commons_answer_pill("A"))$html
@@ -89,35 +90,24 @@ test_that("provenance markers describe trusted, cited, and uncited answers", {
 
   expect_match(trusted, "Verified answer")
   expect_match(trusted, "trusted calculation")
-  expect_match(trusted, "commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
   expect_match(trusted, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
 
   expect_match(cited, "Cited")
   expect_match(cited, "verified against a trusted source")
-  expect_match(cited, "commons-tooltip")
   expect_match(cited, "commons-answer-pill-cited")
 
   expect_match(uncited, "Untrusted")
   expect_match(uncited, "AI can be wrong")
   expect_match(uncited, "not produced by a trusted calculation")
-  expect_match(uncited, "commons-tooltip")
   expect_match(uncited, "commons-answer-pill-icon")
   expect_match(uncited, "commons-answer-pill-caution")
-})
 
-test_that("bslib pill tooltip defers positioning to bslib", {
-  skip_if_not_installed("bslib")
-  skip_if_not_installed("htmltools")
-
-  html <- htmltools::renderTags(commons_answer_pill("A", tooltip = "bslib"))$html
-
-  expect_match(html, "bslib-tooltip", fixed = TRUE)
-  expect_match(html, "governed calculation")
-  # No CSS-only tooltip span or title fallback: bslib owns the tooltip.
-  expect_no_match(html, "commons-tooltip")
-  expect_no_match(html, "title=")
+  # bslib owns the tooltip: no CSS-only tooltip span or title fallback.
+  expect_match(trusted, "bslib-tooltip", fixed = TRUE)
+  expect_no_match(trusted, "commons-tooltip")
+  expect_no_match(trusted, "title=")
 })
 
 test_that("trajectory messages render provenance and strip unsafe markup", {
@@ -158,9 +148,28 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
     messages = messages
   ))
   expect_match(html, "6 orders.", fixed = TRUE)
-  expect_match(html, "commons-answer-pill-trusted", fixed = TRUE)
+  # The transcript replays the live chat's provenance marker (escaped
+  # inside the message content attribute; the client unescapes it).
+  expect_match(html, "shiny-aside label=&quot;Verified answer&quot;", fixed = TRUE)
   expect_no_match(html, "commons-citation", fixed = TRUE)
   expect_no_match(html, "Forged", fixed = TRUE)
+})
+
+test_that("review transcripts mark cited answers the live chat leaves bare", {
+  skip_if_not_installed("shinychat")
+
+  turns <- list(
+    ellmer::SystemTurn("Be helpful."),
+    ellmer::UserTurn("How many orders?"),
+    ellmer::AssistantTurn("6 orders.")
+  )
+  attr(turns, "provenance") <- list(provenance_record("B"))
+
+  html <- as.character(shinychat::chat_ui(
+    "transcript",
+    messages = trajectory_messages(turns)
+  ))
+  expect_match(html, "shiny-aside label=&quot;Cited&quot;", fixed = TRUE)
 })
 
 test_that("side calls are excluded from the viewer", {

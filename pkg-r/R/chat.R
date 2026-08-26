@@ -184,7 +184,6 @@ commons_chat_dependency <- function() {
     version = paste0("0.0.0.9000.", as.integer(stamp)),
     src = c(file = src),
     stylesheet = "commons-chat.css",
-    script = "commons-chat.js",
     all_files = TRUE
   )
 }

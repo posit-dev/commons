@@ -58,4 +58,8 @@ test_that("provenance_aside renders A and C, nothing for B/NA", {
 
   expect_identical(provenance_aside("B"), "")
   expect_identical(provenance_aside(NA_character_), "")
+
+  cited <- provenance_aside("B", include_cited = TRUE)
+  expect_match(cited, '^<shiny-aside label="Cited"')
+  expect_match(cited, "verified against a trusted source", fixed = TRUE)
 })

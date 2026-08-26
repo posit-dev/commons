@@ -241,8 +241,38 @@ trajectory_exchange_messages <- function(turns, exchange) {
   messages <- shinychat::contents_shinychat(chat)
   for (i in seq_along(messages)) {
     messages[[i]]$exchange <- as.integer(exchange)
+    messages[[i]]$content <- flatten_message_content(messages[[i]]$content)
   }
   messages
+}
+
+# shinychat's static chat_ui() serialization folds mixed content (tool cards
+# plus markdown text) into a single raw-HTML island, escaping the text and
+# hiding it from aside grouping. Flatten to one markdown string instead: tool
+# cards serialize to custom elements the markdown pipeline routes anyway.
+# If shinychat ever keeps strings as markdown in mixed content (as its
+# chat_ui() docs already promise), this workaround can be removed.
+# Caveats: htmlwidget deps in message content are not collected, and thinking
+# blocks lose their styling.
+flatten_message_content <- function(content) {
+  if (is.character(content)) {
+    return(paste(content, collapse = "\n"))
+  }
+  # Leave classed content (shiny tags, HTML) to shinychat's own serialization.
+  if (!is.list(content) || is.object(content)) {
+    return(content)
+  }
+  parts <- vapply(
+    content,
+    function(x) {
+      if (is.character(x)) {
+        return(x)
+      }
+      as.character(htmltools::renderTags(htmltools::as.tags(x))[["html"]])
+    },
+    character(1)
+  )
+  paste(parts, collapse = "\n\n")
 }
 
 sanitize_trajectory_turns <- function(turns) {
@@ -315,8 +345,11 @@ add_message_provenance <- function(messages, provenance) {
     } else {
       record$provenance_tag %||% NA_character_
     }
-    pill <- commons_answer_pill(tag)
-    if (is.null(pill)) {
+    # The transcript replays what the live chat streamed: the same
+    # <shiny-aside> marker, grouped and positioned by shinychat itself.
+    # Reviewers also get a "Cited" marker the live chat omits.
+    aside <- provenance_aside(tag, include_cited = TRUE)
+    if (!nzchar(aside)) {
       next
     }
     candidates <- which(vapply(
@@ -331,51 +364,41 @@ add_message_provenance <- function(messages, provenance) {
       next
     }
     index <- candidates[[length(candidates)]]
-    messages[[index]]$content <- append_provenance_pill(
+    messages[[index]]$content <- append_provenance_aside(
       messages[[index]]$content,
-      pill
+      aside
     )
   }
   messages
 }
 
-append_provenance_pill <- function(content, pill) {
-  if (is.character(content)) {
-    return(list(content, pill))
-  }
-  c(content, list(pill))
+# The aside must stay markdown, not HTML: htmltools::HTML() would mark the
+# whole message as a raw-HTML island, which shinychat's aside grouping does
+# not reach into. Plain text joined with a blank line is also exactly how a
+# live-streamed aside lands in contents_shinychat(). Message content is
+# always a single markdown string here thanks to flatten_message_content().
+append_provenance_aside <- function(content, aside) {
+  paste(content, aside, sep = "\n\n")
 }
 
-# The transcript renders inside shinychat, where the CSS-only tooltip gets
-# clipped near pane edges and commons-chat.js nudges it back inside. The
-# question list is ordinary server-rendered HTML, so there a bslib tooltip
-# (Popper, container = body) positions itself without the JS fix.
-commons_answer_pill <- function(tag, tooltip = c("inline", "bslib")) {
+# The question list is ordinary server-rendered HTML outside shinychat's
+# React tree, so a bslib tooltip (Popper, container = body) owns positioning.
+commons_answer_pill <- function(tag) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {
     return(NULL)
   }
-  tooltip <- match.arg(tooltip)
   pill <- htmltools::tags$span(
     class = paste0(
       "commons-answer-pill commons-answer-pill-",
       entry$pill_class
     ),
-    title = if (tooltip == "inline") entry$body,
     `aria-label` = paste0(entry$label, ". ", entry$body),
     tabindex = "0",
     commons_pill_icon(entry$icon, entry$label),
-    htmltools::tags$span(entry$label),
-    if (tooltip == "inline") commons_pill_tooltip(entry$body)
+    htmltools::tags$span(entry$label)
   )
-  if (tooltip == "bslib") {
-    return(bslib::tooltip(pill, entry$body))
-  }
-  pill
-}
-
-commons_pill_tooltip <- function(text) {
-  htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
+  bslib::tooltip(pill, entry$body)
 }
 
 commons_pill_icon <- function(file, alt) {
@@ -938,7 +961,7 @@ question_entry <- function(
       htmltools::div(
         class = "commons-viewer-entry-meta",
         flag_marker(flagged),
-        commons_answer_pill(record$tag, tooltip = "bslib")
+        commons_answer_pill(record$tag)
       )
     )
   )
