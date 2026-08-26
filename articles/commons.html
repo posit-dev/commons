@@ -53,8 +53,8 @@
 
 
 
-<link href="commons_files/commons-chat-0.0.0.9000.1787756574/commons-chat.css" rel="stylesheet">
-<script src="commons_files/commons-chat-0.0.0.9000.1787756574/commons-chat.js"></script><div class="row">
+<link href="commons_files/commons-chat-0.0.0.9000.1787762418/commons-chat.css" rel="stylesheet">
+<script src="commons_files/commons-chat-0.0.0.9000.1787762418/commons-chat.js"></script><div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Introduction to commons</h1>
             
@@ -76,9 +76,9 @@ start building a commons agent.</p>
 narrowly correct to wildly untrustworthy. commons increases the
 likelihood of correct answers by providing agents with access to
 existing trusted code, while still allowing them enough flexibility to
-answer novel, realistic questions. commons also labels answers with
-trust tags based on the analysis path so that users can determine how
-much trust to put in a given answer.</p>
+answer novel, realistic questions. commons also derives provenance
+outcomes from the analysis path so that users can determine how much
+trust to put in a given answer.</p>
 <p>If you are a data analyst, data scientist, statistical programmer, or
 other data practitioner, you likely have a collection of “trusted” code.
 This is code that you depend on for your analyses and use to create
@@ -94,7 +94,7 @@ The user asks:</p>
 </blockquote>
 <p>The agent then searches for a trusted calculation that can answer the
 question. If it finds one, it runs that code and then reports the result
-along with a “Verified answer” tag.</p>
+with a <code>Verified answer</code> provenance marker.</p>
 <blockquote>
 <p>At Oak Bluff, 59 individual animals were observed across 5 species,
 based on 28 hours of survey effort. Note this reflects observed
@@ -108,7 +108,8 @@ freedom and allowing it to take advantage of pre-vetted code.</p>
 <p>However, we also expect users to ask questions that stray from the
 “happy path.” For those, the agent searches for additional context and
 writes custom code (either SQL or R). Answers from this path either
-include a verified citation or are tagged as <code>Untrusted</code>.</p>
+include a verified citation or display an <code>Untrusted</code>
+provenance marker.</p>
 </div>
 <div class="section level2">
 <h2 id="working-with-the-agent-skill">Working with the agent skill<a class="anchor" aria-label="anchor" href="#working-with-the-agent-skill"></a>
@@ -137,14 +138,14 @@ to <code>.claude/skills</code>:</p>
 <p>commons agents will use trusted calculations whenever possible. When
 the user asks a question, the agent first searches the semantic layer
 for a trusted calculation. If it finds one, it then calls that
-calculation and the resulting answer is tagged with a green verified
-answer pill.</p>
+calculation and the resulting answer displays a green provenance marker
+labeled <code>Verified answer</code>.</p>
 <p>If a relevant trusted calculation is not found, the agent proceeds
-down the lower trust path. It searches through the context for
+down the lower-trust path. It searches through the context for
 additional information, then uses that information to write custom SQL
 or R code to answer the user’s question. These answers either include a
-verified citation in a footnote or are tagged as
-<code>Untrusted</code>.</p>
+verified citation in a footnote or display an <code>Untrusted</code>
+provenance marker.</p>
 <figure class="commons-flow commons-flow-trusted-calculations column-page"><div class="commons-branch-flow" role="img" aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
 <div class="commons-branch-origin">
 <p><span class="commons-flow-node">Search
@@ -179,14 +180,15 @@ answer<sup class="commons-citation-ref">1</sup></span> <span class="commons-flow
 </div>
 </div>
 </div>
-</figure><p>There are two possible trust outcomes for the “lower trust” path.
-When the agent writes custom SQL or R, it can also include supporting
-text quoted from a trusted source. commons verifies that the quoted text
-appears in that source. Verified citations are displayed as footnotes.
-If the agent does not include a citation, or if commons can’t verify any
-of its citations, the answer gets tagged as <code>Untrusted</code>.</p>
-<p>The following table details the various ways each trust outcome can
-occur:</p>
+</figure><p>The lower-trust path has two possible provenance outcomes. When the
+agent writes custom SQL or R, it can also include supporting text quoted
+from a trusted source. If commons verifies that the quoted text appears
+in that source, the provenance outcome is <code>Cited</code> and the
+verified citations are displayed as footnotes. If no citation verifies,
+the provenance outcome is <code>Untrusted</code> and the answer displays
+a provenance marker.</p>
+<p>The following table details the various ways each provenance outcome
+can occur:</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -194,7 +196,7 @@ occur:</p>
 </colgroup>
 <thead><tr class="header">
 <th>How the answer is produced</th>
-<th>Outcome</th>
+<th>Provenance outcome</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
@@ -203,7 +205,7 @@ occur:</p>
 <td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="commons-icons/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></td>
 </tr>
 <tr class="even">
-<td>A <a href="#definitions">data-dictionary metric</a>, possibly
+<td>A <a href="#definitions">data dictionary metric</a>, possibly
 grouped or filtered with <a href="#data-dictionaries">definitions</a>
 </td>
 <td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="commons-icons/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></td>
@@ -215,7 +217,8 @@ Databricks metric-view metric</a>
 <td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a governed calculation defined by your data team." aria-label="Verified answer. This answer comes from a governed calculation defined by your data team." tabindex="0"> <img src="commons-icons/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a governed calculation defined by your data team.</span> </span></td>
 </tr>
 <tr class="even">
-<td>Custom SQL, including SQL that uses <a href="#definitions">data-dictionary definitions</a>
+<td>Custom SQL, including SQL that uses <a href="#definitions">data
+dictionary definitions</a>
 </td>
 <td>Cited or
 <span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="commons-icons/warning-icon.svg" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong.</span> </span>
@@ -231,13 +234,12 @@ Databricks metric-view metric</a>
 <td>No data tool used (e.g., because the agent already had sufficient
 information or the question could not be answered from accessible
 information)</td>
-<td>No label</td>
+<td>No provenance outcome</td>
 </tr>
 </tbody>
 </table>
-<p>The agent itself does not tag the answer as verified, cited, or
-untrusted. This process is instead handled deterministically by the
-commons package based on the agent’s behavior.</p>
+<p>The agent itself does not determine the provenance outcome. commons
+derives it deterministically from the agent’s behavior.</p>
 </div>
 <div class="section level2">
 <h2 id="information-layers">Information layers<a class="anchor" aria-label="anchor" href="#information-layers"></a>
@@ -302,7 +304,7 @@ files and the descriptive fields in <code>data-dict.yaml</code>.</p>
 <h3 id="examples">Examples<a class="anchor" aria-label="anchor" href="#examples"></a>
 </h3>
 <p>Here are brief examples of a data dictionary, a measure file, and a
-context-layer Markdown file for the biodiversity example app:</p>
+context layer Markdown file for the biodiversity example app:</p>
 <div class="section level4">
 <h4 id="data-dictionary">Data dictionary<a class="anchor" aria-label="anchor" href="#data-dictionary"></a>
 </h4>
@@ -347,8 +349,9 @@ context-layer Markdown file for the biodiversity example app:</p>
 semantic views</a> or <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views" class="external-link">Databricks
 metric views</a>, you can use those calculations directly with commons.
 It can also group or filter metrics by approved fields from the
-warehouse. Answers based on these warehouse-defined metrics are marked
-as verified.</p>
+warehouse. Answers based on these warehouse-defined metrics have the
+<code>Verified answer</code> provenance outcome and display the
+corresponding provenance marker.</p>
 </div>
 </div>
 <div class="section level2">
@@ -417,8 +420,8 @@ expression language</a>, not in your database’s SQL dialect:</p>
 trusted metric calculations or be used in custom SQL:<a class="footnote-ref" tabindex="0" data-bs-toggle="popover" data-bs-content="&lt;p&gt;In custom SQL, the agent refers to a definition using
 its &lt;code&gt;{{name}}&lt;/code&gt; token. commons expands the token to SQL
 compiled for the data source. Because this is still custom SQL, the
-answer includes a verified citation or is tagged as
-&lt;code&gt;Untrusted&lt;/code&gt;, rather than &lt;code&gt;Verified&lt;/code&gt;.&lt;/p&gt;"><sup>1</sup></a></p>
+provenance outcome is &lt;code&gt;Cited&lt;/code&gt; or &lt;code&gt;Untrusted&lt;/code&gt;,
+rather than &lt;code&gt;Verified answer&lt;/code&gt;.&lt;/p&gt;"><sup>1</sup></a></p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -428,7 +431,7 @@ answer includes a verified citation or is tagged as
 <thead><tr class="header">
 <th>Kind</th>
 <th>Example</th>
-<th>Use in <code>call_metrics()</code>
+<th>Use in <code>call_metrics</code>
 </th>
 </tr></thead>
 <tbody>

@@ -1,7 +1,7 @@
 # Create a data source
 
 A data source is the set of tables available to a
-[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+[`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
 agent.
 
 ## Usage
@@ -89,7 +89,7 @@ what you pass:
   construction (a single listing call), but each pin is downloaded only
   when its table is first used—by the `describe_table` tool, a SQL query
   that references it, or a measure that takes the source's connection.
-  [`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+  [`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
   starts a background process right after startup that downloads the
   remaining pins into the local pins cache, so a first use typically
   only reads an already-downloaded file. A table reflects the pin's
@@ -124,15 +124,15 @@ reaches the agent three ways:
   takes precedence, while warehouse column types remain authoritative.
 
 - When the agent also has a
-  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md),
+  [`context_layer()`](https://posit-dev.github.io/commons/reference/context_layer.md),
   the dictionary's prose is indexed for the `search_context` tool.
 
 A table's entry can also declare `definitions`: named expressions in the
 [data-dict expression
-language](https://data-dict.tidyverse.org/expressions.html). Commons
+language](https://data-dict.tidyverse.org/expressions.html). commons
 validates their inferred types and references, compiles them for the
 source's SQL backend, and lets the model apply them as `{{name}}` tokens
-in `run_sql` or through `call_metrics()`. Definitions are delivered
+in `run_sql` or through `call_metrics`. Definitions are delivered
 through all three channels above.
 
 ## Trust

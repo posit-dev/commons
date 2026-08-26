@@ -34,22 +34,22 @@ commons(
 - data_sources:
 
   A
-  [`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md),
+  [`data_source()`](https://posit-dev.github.io/commons/reference/data_source.md),
   or a named list of them. Measures can take a source's connection as an
   argument named after the source; see
-  [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
+  [`semantic_layer()`](https://posit-dev.github.io/commons/reference/semantic_layer.md).
   When there are several sources, the `run_sql` and `describe_table`
   tools take a source's name as a `source` argument.
 
 - semantic_layer:
 
   An optional
-  [`semantic_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/semantic_layer.md).
+  [`semantic_layer()`](https://posit-dev.github.io/commons/reference/semantic_layer.md).
 
 - context_layer:
 
   An optional
-  [`context_layer()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/context_layer.md).
+  [`context_layer()`](https://posit-dev.github.io/commons/reference/context_layer.md).
 
 - ...:
 
@@ -86,7 +86,7 @@ commons(
   setting itself when needed, though capture only starts once the
   content restarts. Locally, commons configures otelsdk's file exporter
   automatically when no exporter is set up. Read trajectories back with
-  [`trajectory_read()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_read.md).
+  [`trajectory_read()`](https://posit-dev.github.io/commons/reference/trajectory_read.md).
 
 - share_with:
 
@@ -106,9 +106,9 @@ subclass.
 
 The provider and model come from `client`; commons sets its own system
 prompt and tools. Use `agent$chat()` to ask questions,
-[`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+[`commons_ui()`](https://posit-dev.github.io/commons/reference/commons_app.md)
 and
-[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
 to embed the agent in Shiny, and
 [`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
 to use the agent as a vitals solver.

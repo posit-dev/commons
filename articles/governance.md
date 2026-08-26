@@ -28,12 +28,12 @@ sent to the model provider, so the agent should not have access to data
 that you [do not trust that provider to
 process](https://posit.co/blog/trust-llm-tools).
 
-## SQL code execution with `run_sql()`
+## SQL code execution with `run_sql`
 
 ### Destructive actions
 
-`run_sql()` accepts a single statement beginning with `SELECT` or
-`WITH`. commons rejects stacked statements and statements beginning with
+`run_sql` accepts a single statement beginning with `SELECT` or `WITH`.
+commons rejects stacked statements and statements beginning with
 operations such as `INSERT`, `UPDATE`, `DELETE`, `DROP`, or `GRANT`. For
 data frames and pins, which commons loads into its own DuckDB database,
 it also disables extension loading and external filesystem access.
@@ -46,10 +46,10 @@ therefore database-enforced read-only access.
 ### Data access
 
 The `tables` argument to
-[`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md)
+[`data_source()`](https://posit-dev.github.io/commons/reference/data_source.md)
 controls which tables commons describes to the model. It is not an
-authorization boundary: `run_sql()` can query any object available to
-the connection.
+authorization boundary: `run_sql` can query any object available to the
+connection.
 
 On Posit Connect, [viewer OAuth
 integrations](https://docs.posit.co/connect/admin/access-controls/) can
@@ -75,15 +75,14 @@ who should have that access.
 
 The SQL query runs through the DBI connection in the main application
 process. Its result is both returned to the model and registered as a
-handle in the R process, allowing the model to analyze it with
-`run_r()`.
+handle in the R process, allowing the model to analyze it with `run_r`.
 
-## `run_r()` and its R process
+## `run_r` and its R process
 
-The code requested through `run_r()` does not run in the main
-application process. Each commons agent instead gets a persistent R
-subprocess, created on first use. Its state remains available to later
-`run_r()` calls made by the same agent.
+The code requested through `run_r` does not run in the main application
+process. Each commons agent instead gets a persistent R subprocess,
+created on first use. Its state remains available to later `run_r` calls
+made by the same agent.
 
 ### OS-level sandboxing
 
@@ -111,9 +110,9 @@ transmit data from result handles. Only enable network access when that
 egress is required and acceptable.
 
 For local development on macOS, commons applies a similar filesystem and
-network policy using Seatbelt. Windows has no OS-level `run_r()`
-sandbox. Deployed Connect applications run on Linux and use the Linux
-mechanisms described above.
+network policy using Seatbelt. Windows has no OS-level `run_r` sandbox.
+Deployed Connect applications run on Linux and use the Linux mechanisms
+described above.
 
 By default, commons refuses to create an agent when an OS-level sandbox
 is not available. An application author can enable a local-development
@@ -155,7 +154,7 @@ information available to an agent. Dataset descriptions and glossary
 entries from `data-dict.yaml` are included in the system prompt. Table
 documentation and sample values are supplied when a table is first used,
 context documents are available through search, and measure source can
-be read by the model in `run_r()`.
+be read by the model in `run_r`.
 
 Only include facts and source code that may be shared with both the
 application’s viewers and its model provider. If one audience should not
@@ -180,9 +179,9 @@ for the content item when needed, although capture begins only after the
 content process restarts.
 
 Content owners and collaborators can read Connect trajectories with
-[`trajectory_read()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_read.md).
+[`trajectory_read()`](https://posit-dev.github.io/commons/reference/trajectory_read.md).
 If a conversation is flagged or annotated in
-[`trajectory_review()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/trajectory_review.md),
+[`trajectory_review()`](https://posit-dev.github.io/commons/reference/trajectory_review.md),
 the reviewer writes a Markdown document containing the complete
 reviewer-visible conversation and its tool activity. Store these files
 only in an appropriately protected location, and carry out reviews in an

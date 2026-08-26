@@ -15,9 +15,9 @@ semantic views, or Databricks metric views.
 
 ![A screencast demonstrating a commons data agent answering questions
 with a trusted calculation and then a direct data query. In the first
-case, there's a provenance pill that marks the answer as verified. In
-the second case, the pill reads
-'Untrusted.'](https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb)
+case, a provenance marker reads 'Verified answer', while in the second
+it reads
+'Untrusted'.](https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb)
 
 ## Installation
 
@@ -99,7 +99,7 @@ vs. 83.5%), took less time to answer questions (a median of 31.0
 vs. 60.5 seconds), and used fewer output tokens (243,403 vs. 439,188
 total).
 
-![Three bar charts compare commons with Claude Code. Commons has higher
+![Three bar charts compare commons with Claude Code. commons has higher
 mean accuracy, lower median solver time, and fewer total output
 tokens.](reference/figures/README-eval-plot-1.png)
 

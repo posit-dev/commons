@@ -1,10 +1,10 @@
-# commons: Build Self-Service Data Science Agents
+# commons: AI Agents for Data Analysis
 
-Build correct and easy-to-use self-service data science agents for your
-organization. Connect raw data sources and a searchable context layer
-that demonstrates how to interpret them, then deploy agents that answer
-data questions, log interactions, and can be evaluated and improved over
-time.
+Implements trustworthy large language model agents. Connect raw data
+sources, a pool of trusted calculations, and a searchable context layer
+that demonstrates how to interpret them. Then, deploy data agents that
+answer questions, log interactions, and can be evaluated and improved
+over time.
 
 ## See also
 
@@ -13,8 +13,6 @@ Useful links:
 - <https://github.com/posit-dev/commons>
 
 - <https://posit-dev.github.io/commons/>
-
-- <https://solid-adventure-ny1mpqy.pages.github.io/>
 
 - Report bugs at <https://github.com/posit-dev/commons/issues>
 

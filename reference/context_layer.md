@@ -1,7 +1,7 @@
 # Create a context layer
 
 A context layer contains text that helps a
-[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+[`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
 agent interpret its data source.
 
 ## Usage
@@ -25,7 +25,7 @@ A `commons_context_layer` object.
 Files are chunked and indexed with ragnar when the agent first searches
 its context. Facts that should be in every prompt belong in the
 `instructions` passed to
-[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md),
+[`commons()`](https://posit-dev.github.io/commons/reference/commons.md),
 not here.
 
 ## Examples

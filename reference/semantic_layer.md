@@ -1,8 +1,10 @@
 # Create a semantic layer
 
-A semantic layer is a collection of governed measures available to a
-[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
-agent.
+`semantic_layer()` collects governed R measures for a
+[`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
+agent. Data dictionary definitions and warehouse semantic models
+contribute through
+[`data_source()`](https://posit-dev.github.io/commons/reference/data_source.md).
 
 ## Usage
 
@@ -14,29 +16,46 @@ semantic_layer(...)
 
 - ...:
 
-  [`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)
-  objects, lists of measures, or paths to R scripts or directories. File
-  and inline measures can be freely mixed.
+  [`measure()`](https://posit-dev.github.io/commons/reference/measure.md)
+  objects, lists of measures, or paths to R scripts or directories
+  containing R scripts. Directory searches are not recursive. File and
+  inline measures can be freely mixed.
 
 ## Value
 
 A `commons_semantic_layer` object.
 
-## Details
+## Measures from files
+
+Character paths can name R scripts or directories containing them.
+Functions marked with `@measure` become measures; other functions in
+those files can be used as helpers.
+
+The roxygen title, description, and `@return` text describe the measure.
+Each `@param` marks a model-supplied argument and can declare its type:
+`string`, `integer`, `number`, `boolean`, `enum[value, ...]`, or an
+array such as `string[]`. Without a declaration, commons infers the type
+from the default, falling back to `string`.
+
+Measure and helper source is visible in `run_r`; evaluating a measure's
+name there prints its definition. Function environments, connections,
+and credentials are not shared with that session.
+
+## Measure arguments
 
 A measure function can take two kinds of arguments:
 
 - Arguments documented with `@param` (or listed in `arguments`, for
   inline
-  [`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)s)
+  [`measure()`](https://posit-dev.github.io/commons/reference/measure.md)s)
   are supplied by the model.
 
 - Undocumented arguments are supplied by
-  [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+  [`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
   when the measure runs. An argument named after a data source receives
   its connection, even if the argument has a default. Any other
   undocumented argument keeps its default; if it has no default,
-  [`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+  [`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
   errors. The model never sees these arguments.
 
 This means a measure can take the connection it needs as an argument
@@ -49,15 +68,9 @@ client, give the argument a default that builds the object, e.g.
 a reference to a variable defined elsewhere, so the measure doesn't
 depend on where the semantic layer is created.
 
-The source of each measure, and of any helper functions defined
-alongside it in the semantic layer's files, is readable in the agent's
-`run_r` session: evaluating a measure's name there prints its
-definition. Only source text is shared with that session; the functions'
-environments (and any connections or credentials in them) are not.
-
 ## See also
 
-[`measure()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/measure.md)
+[`measure()`](https://posit-dev.github.io/commons/reference/measure.md)
 to define a measure.
 
 ## Examples
@@ -80,7 +93,7 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x5620e009ca60>
+#> <environment: 0x55c7c69bf5c0>
 #> 
 #> 
 #> $fn_sources

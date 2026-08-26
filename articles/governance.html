@@ -92,12 +92,12 @@ that you <a href="https://posit.co/blog/trust-llm-tools" class="external-link">d
 that provider to process</a>.</p>
 </div>
 <div class="section level2">
-<h2 id="sql-code-execution-with-run_sql">SQL code execution with <code>run_sql()</code><a class="anchor" aria-label="anchor" href="#sql-code-execution-with-run_sql"></a>
+<h2 id="sql-code-execution-with-run_sql">SQL code execution with <code>run_sql</code><a class="anchor" aria-label="anchor" href="#sql-code-execution-with-run_sql"></a>
 </h2>
 <div class="section level3">
 <h3 id="destructive-actions">Destructive actions<a class="anchor" aria-label="anchor" href="#destructive-actions"></a>
 </h3>
-<p><code>run_sql()</code> accepts a single statement beginning with
+<p><code>run_sql</code> accepts a single statement beginning with
 <code>SELECT</code> or <code>WITH</code>. commons rejects stacked
 statements and statements beginning with operations such as
 <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>,
@@ -114,7 +114,7 @@ therefore database-enforced read-only access.</p>
 </h3>
 <p>The <code>tables</code> argument to <code><a href="../reference/data_source.html">data_source()</a></code>
 controls which tables commons describes to the model. It is not an
-authorization boundary: <code>run_sql()</code> can query any object
+authorization boundary: <code>run_sql</code> can query any object
 available to the connection.</p>
 <p>On Posit Connect, <a href="https://docs.posit.co/connect/admin/access-controls/" class="external-link">viewer OAuth
 integrations</a> can give an interactive application the current
@@ -140,17 +140,17 @@ who should have that access.</p>
 <p>The SQL query runs through the DBI connection in the main application
 process. Its result is both returned to the model and registered as a
 handle in the R process, allowing the model to analyze it with
-<code>run_r()</code>.</p>
+<code>run_r</code>.</p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="run_r-and-its-r-process">
-<code>run_r()</code> and its R process<a class="anchor" aria-label="anchor" href="#run_r-and-its-r-process"></a>
+<code>run_r</code> and its R process<a class="anchor" aria-label="anchor" href="#run_r-and-its-r-process"></a>
 </h2>
-<p>The code requested through <code>run_r()</code> does not run in the
+<p>The code requested through <code>run_r</code> does not run in the
 main application process. Each commons agent instead gets a persistent R
 subprocess, created on first use. Its state remains available to later
-<code>run_r()</code> calls made by the same agent.</p>
+<code>run_r</code> calls made by the same agent.</p>
 <div class="section level3">
 <h3 id="os-level-sandboxing">OS-level sandboxing<a class="anchor" aria-label="anchor" href="#os-level-sandboxing"></a>
 </h3>
@@ -176,7 +176,7 @@ deployment and transmit data from result handles. Only enable network
 access when that egress is required and acceptable.</p>
 <p>For local development on macOS, commons applies a similar filesystem
 and network policy using Seatbelt. Windows has no OS-level
-<code>run_r()</code> sandbox. Deployed Connect applications run on Linux
+<code>run_r</code> sandbox. Deployed Connect applications run on Linux
 and use the Linux mechanisms described above.</p>
 <p>By default, commons refuses to create an agent when an OS-level
 sandbox is not available. An application author can enable a
@@ -216,7 +216,7 @@ information available to an agent. Dataset descriptions and glossary
 entries from <code>data-dict.yaml</code> are included in the system
 prompt. Table documentation and sample values are supplied when a table
 is first used, context documents are available through search, and
-measure source can be read by the model in <code>run_r()</code>.</p>
+measure source can be read by the model in <code>run_r</code>.</p>
 <p>Only include facts and source code that may be shared with both the
 application’s viewers and its model provider. If one audience should not
 see a fact, use separate applications with separate context or place the

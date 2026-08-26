@@ -14,9 +14,9 @@ AI agents for data analysis can range from overly cautious and narrowly
 correct to wildly untrustworthy. commons increases the likelihood of
 correct answers by providing agents with access to existing trusted
 code, while still allowing them enough flexibility to answer novel,
-realistic questions. commons also labels answers with trust tags based
-on the analysis path so that users can determine how much trust to put
-in a given answer.
+realistic questions. commons also derives provenance outcomes from the
+analysis path so that users can determine how much trust to put in a
+given answer.
 
 If you are a data analyst, data scientist, statistical programmer, or
 other data practitioner, you likely have a collection of “trusted” code.
@@ -34,7 +34,7 @@ asks:
 
 The agent then searches for a trusted calculation that can answer the
 question. If it finds one, it runs that code and then reports the result
-along with a “Verified answer” tag.
+with a `Verified answer` provenance marker.
 
 > At Oak Bluff, 59 individual animals were observed across 5 species,
 > based on 28 hours of survey effort. Note this reflects observed
@@ -51,7 +51,7 @@ and allowing it to take advantage of pre-vetted code.
 However, we also expect users to ask questions that stray from the
 “happy path.” For those, the agent searches for additional context and
 writes custom code (either SQL or R). Answers from this path either
-include a verified citation or are tagged as `Untrusted`.
+include a verified citation or display an `Untrusted` provenance marker.
 
 ## Working with the agent skill
 
@@ -85,13 +85,14 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 commons agents will use trusted calculations whenever possible. When the
 user asks a question, the agent first searches the semantic layer for a
 trusted calculation. If it finds one, it then calls that calculation and
-the resulting answer is tagged with a green verified answer pill.
+the resulting answer displays a green provenance marker labeled
+`Verified answer`.
 
 If a relevant trusted calculation is not found, the agent proceeds down
-the lower trust path. It searches through the context for additional
+the lower-trust path. It searches through the context for additional
 information, then uses that information to write custom SQL or R code to
 answer the user’s question. These answers either include a verified
-citation in a footnote or are tagged as `Untrusted`.
+citation in a footnote or display an `Untrusted` provenance marker.
 
 Search trusted  
 calculations
@@ -116,28 +117,28 @@ SQL/R → Cited answer¹ or
 not produced by a governed calculation and has no verified supporting
 citation. AI can be wrong.
 
-There are two possible trust outcomes for the “lower trust” path. When
-the agent writes custom SQL or R, it can also include supporting text
-quoted from a trusted source. commons verifies that the quoted text
-appears in that source. Verified citations are displayed as footnotes.
-If the agent does not include a citation, or if commons can’t verify any
-of its citations, the answer gets tagged as `Untrusted`.
+The lower-trust path has two possible provenance outcomes. When the
+agent writes custom SQL or R, it can also include supporting text quoted
+from a trusted source. If commons verifies that the quoted text appears
+in that source, the provenance outcome is `Cited` and the verified
+citations are displayed as footnotes. If no citation verifies, the
+provenance outcome is `Untrusted` and the answer displays a provenance
+marker.
 
-The following table details the various ways each trust outcome can
+The following table details the various ways each provenance outcome can
 occur:
 
-| How the answer is produced | Outcome |
+| How the answer is produced | Provenance outcome |
 |----|----|
 | A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| A [data-dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
 | A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-icons/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-icons/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
 | Custom R | Cited or  ![Untrusted](commons-icons/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
-| No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No label |
+| No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
-The agent itself does not tag the answer as verified, cited, or
-untrusted. This process is instead handled deterministically by the
-commons package based on the agent’s behavior.
+The agent itself does not determine the provenance outcome. commons
+derives it deterministically from the agent’s behavior.
 
 ## Information layers
 
@@ -175,7 +176,7 @@ and the descriptive fields in `data-dict.yaml`.
 ### Examples
 
 Here are brief examples of a data dictionary, a measure file, and a
-context-layer Markdown file for the biodiversity example app:
+context layer Markdown file for the biodiversity example app:
 
 #### Data dictionary
 
@@ -227,7 +228,8 @@ or [Databricks metric
 views](https://docs.databricks.com/aws/en/uc-semantics/metric-views),
 you can use those calculations directly with commons. It can also group
 or filter metrics by approved fields from the warehouse. Answers based
-on these warehouse-defined metrics are marked as verified.
+on these warehouse-defined metrics have the `Verified answer` provenance
+outcome and display the corresponding provenance marker.
 
 ## Data sources
 
@@ -238,7 +240,7 @@ agent. It can also include a data dictionary describing those tables and
 trusted calculations on them.
 
 Create a data source with
-[`data_source()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/data_source.md).
+[`data_source()`](https://posit-dev.github.io/commons/reference/data_source.md).
 The underlying data can consist of named data frames, a
 [pins](https://pins.rstudio.com/) board, or a DBI connection. Data
 frames and pins boards will be loaded into an in-process DuckDB
@@ -302,7 +304,7 @@ tables:
 There are three kinds of definitions. Definitions can participate in
 trusted metric calculations or be used in custom SQL:[^1]
 
-| Kind | Example | Use in `call_metrics()` |
+| Kind | Example | Use in `call_metrics` |
 |----|----|----|
 | Metric | `SUM(n)` | Computes the metric |
 | Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |
@@ -343,7 +345,7 @@ files:
 ## Constructing the agent
 
 Use
-[`commons()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons.md)
+[`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
 to construct an agent. Pass it an ellmer `Chat` and one or more data
 sources, along with any semantic and context layers. You can also
 optionally append information to the commons agent system prompt using
@@ -371,18 +373,17 @@ commons_app(agent)
 ```
 
 Use
-[`commons_app()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+[`commons_app()`](https://posit-dev.github.io/commons/reference/commons_app.md)
 to run the agent in a local or single-user Shiny app. For multi-user
 deployments, use
-[`commons_ui()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+[`commons_ui()`](https://posit-dev.github.io/commons/reference/commons_app.md)
 and
-[`commons_server()`](https://solid-adventure-ny1mpqy.pages.github.io/reference/commons_app.md)
+[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
 and create a new agent for each Shiny session. This example assumes that
 `observations` and `site_area` are data frames loaded when the app
 starts.
 
 [^1]: In custom SQL, the agent refers to a definition using its
     `{{name}}` token. commons expands the token to SQL compiled for the
-    data source. Because this is still custom SQL, the answer includes a
-    verified citation or is tagged as `Untrusted`, rather than
-    `Verified`.
+    data source. Because this is still custom SQL, the provenance
+    outcome is `Cited` or `Untrusted`, rather than `Verified answer`.
