@@ -107,6 +107,19 @@ test_that("provenance markers describe trusted, cited, and uncited answers", {
   expect_match(uncited, "commons-answer-pill-caution")
 })
 
+test_that("bslib pill tooltip defers positioning to bslib", {
+  skip_if_not_installed("bslib")
+  skip_if_not_installed("htmltools")
+
+  html <- htmltools::renderTags(commons_answer_pill("A", tooltip = "bslib"))$html
+
+  expect_match(html, "bslib-tooltip", fixed = TRUE)
+  expect_match(html, "governed calculation")
+  # No CSS-only tooltip span or title fallback: bslib owns the tooltip.
+  expect_no_match(html, "commons-tooltip")
+  expect_no_match(html, "title=")
+})
+
 test_that("trajectory messages render provenance and strip unsafe markup", {
   skip_if_not_installed("shinychat")
   skip_if_not_installed("htmltools")

@@ -346,23 +346,32 @@ append_provenance_pill <- function(content, pill) {
   c(content, list(pill))
 }
 
-commons_answer_pill <- function(tag) {
+# The transcript renders inside shinychat, where the CSS-only tooltip gets
+# clipped near pane edges and commons-chat.js nudges it back inside. The
+# question list is ordinary server-rendered HTML, so there a bslib tooltip
+# (Popper, container = body) positions itself without the JS fix.
+commons_answer_pill <- function(tag, tooltip = c("inline", "bslib")) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {
     return(NULL)
   }
-  htmltools::tags$span(
+  tooltip <- match.arg(tooltip)
+  pill <- htmltools::tags$span(
     class = paste0(
       "commons-answer-pill commons-answer-pill-",
       entry$pill_class
     ),
-    title = entry$body,
+    title = if (tooltip == "inline") entry$body,
     `aria-label` = paste0(entry$label, ". ", entry$body),
     tabindex = "0",
     commons_pill_icon(entry$icon, entry$label),
     htmltools::tags$span(entry$label),
-    commons_pill_tooltip(entry$body)
+    if (tooltip == "inline") commons_pill_tooltip(entry$body)
   )
+  if (tooltip == "bslib") {
+    return(bslib::tooltip(pill, entry$body))
+  }
+  pill
 }
 
 commons_pill_tooltip <- function(text) {
@@ -929,7 +938,7 @@ question_entry <- function(
       htmltools::div(
         class = "commons-viewer-entry-meta",
         flag_marker(flagged),
-        commons_answer_pill(record$tag)
+        commons_answer_pill(record$tag, tooltip = "bslib")
       )
     )
   )
