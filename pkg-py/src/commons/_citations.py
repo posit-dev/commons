@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 __all__ = [
     "CitationDecision",
@@ -36,6 +36,7 @@ _DOUBLE_QUOTES = re.compile("[\u201c\u201d]")
 _DASHES = re.compile("[\u2013\u2014]")
 
 CitationKind = Literal["prose", "definition", "schema"]
+CitationStatus = Literal["accepted", "rejected", "malformed"]
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,8 @@ class ParsedCitation:
     quote: str
 
 
-_DECISION_STATUSES = ("accepted", "rejected", "malformed")
+# Derived from the type so the runtime guard and the annotation cannot drift.
+_DECISION_STATUSES = get_args(CitationStatus)
 
 
 @dataclass(frozen=True)
@@ -75,7 +77,7 @@ class CitationDecision:
     """
 
     quote: str | None
-    status: Literal["accepted", "rejected", "malformed"]
+    status: CitationStatus
     label: str | None = None
     kind: str | None = None
 
