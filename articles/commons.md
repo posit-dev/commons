@@ -41,8 +41,10 @@ with a `Verified answer` provenance marker.
 > individuals during surveys, not necessarily a full census of every
 > animal present at the site.
 >
-> ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This
-> answer comes from a governed calculation defined by your data team.
+> ![Verified
+> answer](commons-chat-0.0.0.9000.1787788040/figs/trusted-icon.svg)Verified
+> answer This answer comes from a governed calculation defined by your
+> data team.
 
 Although the agent had to decide which trusted calculation to run, it
 did not have to decide *what code to write*, reducing degrees of freedom
@@ -103,7 +105,8 @@ High trust
 
 Relevant calculation  
 found → Run trusted  
-calculation → ![Verified answer](commons-icons/trusted-icon.svg)Verified
+calculation → ![Verified
+answer](commons-chat-0.0.0.9000.1787788040/figs/trusted-icon.svg)Verified
 answer This answer comes from a governed calculation defined by your
 data team.
 
@@ -113,9 +116,9 @@ No relevant
 calculation found → Search  
 context → Write  
 SQL/R → Cited answer¹ or
-![Untrusted](commons-icons/warning-icon.svg)Untrusted This answer was
-not produced by a governed calculation and has no verified supporting
-citation. AI can be wrong.
+![Untrusted](commons-chat-0.0.0.9000.1787788040/figs/warning-icon.svg)Untrusted
+This answer was not produced by a governed calculation and has no
+verified supporting citation. AI can be wrong.
 
 The lower-trust path has two possible provenance outcomes. When the
 agent writes custom SQL or R, it can also include supporting text quoted
@@ -130,11 +133,11 @@ occur:
 
 | How the answer is produced | Provenance outcome |
 |----|----|
-| A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-icons/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-icons/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
-| Custom R | Cited or  ![Untrusted](commons-icons/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
+| A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-chat-0.0.0.9000.1787788040/figs/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-chat-0.0.0.9000.1787788040/figs/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-chat-0.0.0.9000.1787788040/figs/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787788040/figs/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
+| Custom R | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787788040/figs/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
 The agent itself does not determine the provenance outcome. commons
@@ -375,13 +378,13 @@ commons_app(agent)
 Use
 [`commons_app()`](https://posit-dev.github.io/commons/reference/commons_app.md)
 to run the agent in a local or single-user Shiny app. For multi-user
-deployments, use
-[`commons_ui()`](https://posit-dev.github.io/commons/reference/commons_app.md)
-and
-[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
-and create a new agent for each Shiny session. This example assumes that
-`observations` and `site_area` are data frames loaded when the app
-starts.
+deployments, compose shinychat’s UI with
+[`commons_theme()`](https://posit-dev.github.io/commons/reference/commons_server.md)
+on the page and
+[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_server.md)
+in the server, and create a new agent for each Shiny session. This
+example assumes that `observations` and `site_area` are data frames
+loaded when the app starts.
 
 [^1]: In custom SQL, the agent refers to a definition using its
     `{{name}}` token. commons expands the token to SQL compiled for the

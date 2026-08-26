@@ -131,9 +131,10 @@ agent.
 Put a commons agent inside of an interactive chat app.
 
 - [`commons_app()`](https://posit-dev.github.io/commons/reference/commons_app.md)
-  [`commons_ui()`](https://posit-dev.github.io/commons/reference/commons_app.md)
-  [`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
-  : Shiny chat UI and server for commons agents
+  : Shiny chat app for a commons agent
+- [`commons_server()`](https://posit-dev.github.io/commons/reference/commons_server.md)
+  [`commons_theme()`](https://posit-dev.github.io/commons/reference/commons_server.md)
+  : Chat server and theme for custom commons apps
 
 ## Trajectories
 

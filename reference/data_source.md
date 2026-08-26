@@ -89,7 +89,7 @@ what you pass:
   construction (a single listing call), but each pin is downloaded only
   when its table is first used—by the `describe_table` tool, a SQL query
   that references it, or a measure that takes the source's connection.
-  [`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
+  [`commons_server()`](https://posit-dev.github.io/commons/reference/commons_server.md)
   starts a background process right after startup that downloads the
   remaining pins into the local pins cache, so a first use typically
   only reads an already-downloaded file. A table reflects the pin's

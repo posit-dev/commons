@@ -106,9 +106,9 @@ subclass.
 
 The provider and model come from `client`; commons sets its own system
 prompt and tools. Use `agent$chat()` to ask questions,
-[`commons_ui()`](https://posit-dev.github.io/commons/reference/commons_app.md)
+[`commons_theme()`](https://posit-dev.github.io/commons/reference/commons_server.md)
 and
-[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_app.md)
+[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_server.md)
 to embed the agent in Shiny, and
 [`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
 to use the agent as a vitals solver.
