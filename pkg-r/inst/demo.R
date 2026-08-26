@@ -94,8 +94,11 @@ welcome_message <- paste(
   "- <span class='suggestion'>How much canopy has Winberry Ridge gained since 2021?</span>\n"
 )
 
-ui <- page_fillable(
-  commons_ui("chat", greeting = welcome_message)
+ui <- shinychat::page_chat(
+  "Canopy cover explorer",
+  id = "chat",
+  greeting = welcome_message,
+  theme = commons_theme()
 )
 
 server <- function(input, output, session) {

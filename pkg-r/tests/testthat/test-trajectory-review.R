@@ -92,7 +92,7 @@ test_that("provenance markers describe trusted, cited, and uncited answers", {
   expect_match(trusted, "commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
-  expect_match(trusted, "commons-icons/trusted-icon.svg", fixed = TRUE)
+  expect_match(trusted, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
 
   expect_match(cited, "Cited")
   expect_match(cited, "verified against a trusted source")
@@ -140,7 +140,10 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
   expect_identical(attr(sanitized, "provenance"), attr(turns, "provenance"))
 
   messages <- trajectory_messages(sanitized)
-  html <- as.character(commons_ui("transcript", messages = messages))
+  html <- as.character(shinychat::chat_ui(
+    "transcript",
+    messages = messages
+  ))
   expect_match(html, "6 orders.", fixed = TRUE)
   expect_match(html, "commons-answer-pill-trusted", fixed = TRUE)
   expect_no_match(html, "commons-citation", fixed = TRUE)
@@ -516,7 +519,7 @@ test_that("trust_timeline renders a chart and its table view", {
   expect_match(html, "60% (3)", fixed = TRUE)
 })
 
-test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
+test_that("viewer_ui carries commons-chat via its page theme", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("bslib")
   skip_if_not_installed("shinychat")
@@ -527,8 +530,12 @@ test_that("viewer_ui pins shinychat's styles ahead of commons-chat's", {
     function(dep) dep$name,
     character(1)
   )
-  expect_lt(match("shinychat", deps), match("commons-chat", deps))
-  expect_lt(match("commons-chat", deps), match("commons-viewer", deps))
+  # commons-chat rides the page theme (commons_theme()) and so resolves
+  # before shinychat's component CSS; commons-chat.css overrides of
+  # shinychat classes use strictly higher specificity, so the relative
+  # order of the two stylesheets no longer matters.
+  expect_true(all(c("commons-chat", "shinychat", "commons-viewer") %in% deps))
+  expect_lt(match("shinychat", deps), match("commons-viewer", deps))
 })
 
 test_that("viewer_ui includes filters and resizable review controls", {

@@ -26,8 +26,8 @@ measures <- semantic_layer(
 )
 
 ui <- page_fillable(
-  theme = bs_theme(version = 5),
-  commons_ui(
+  theme = commons_theme(),
+  shinychat::chat_ui(
     "chat",
     greeting = "Try: <span class='suggestion'>Show the values by group.</span>"
   )

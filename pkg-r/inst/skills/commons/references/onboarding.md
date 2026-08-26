@@ -45,8 +45,8 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 1. **Orient to commons.** Before scaffolding, identify the installed commons version and locate the corresponding package source when available. Read the relevant commons documentation and skill references, then inspect the implementation, examples, and tests for the APIs the agent will use. At minimum, examine:
    - `commons()`, `data_source()`, `semantic_layer()`, and `context_layer()`;
-   - `commons_ui()` and `commons_server()`, including per-session construction;
-   - measure loading and data dictionary behavior; and
+   - `commons_theme()` and `commons_server()`, including per-session construction;
+   - measure loading and data-dictionary behavior; and
    - dependency and deployment expectations for a commons app.
 
 2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.

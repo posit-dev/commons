@@ -20,7 +20,8 @@ table <- commons:::project_citation_text(
 )$text
 
 ui <- bslib::page_fillable(
-  commons_ui(
+  theme = commons_theme(),
+  shinychat::chat_ui(
     "chat",
     messages = list(
       list(role = "assistant", content = code),

@@ -4,7 +4,7 @@
 #' layer, context search, table inspection, and SQL queries.
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
-#' and tools. Use `agent$chat()` to ask questions, [commons_ui()] and
+#' and tools. Use `agent$chat()` to ask questions, [commons_theme()] and
 #' [commons_server()] to embed the agent in Shiny, and [vitals::generate()]
 #' to use the agent as a vitals solver.
 #'

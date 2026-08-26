@@ -408,11 +408,11 @@ seed_transcript_decorations <- function(
 }
 
 viewer_ui <- function(summary) {
-  register_commons_icon_resources()
   dates <- viewer_date_range(summary)
   htmltools::attachDependencies(
     bslib::page_sidebar(
       title = "Trajectory reviewer",
+      theme = commons_theme(),
       sidebar = bslib::sidebar(
         width = 420,
         class = "commons-viewer-sidebar",
@@ -480,9 +480,10 @@ viewer_ui <- function(summary) {
       )
     ),
     c(
-      # Match the dependency order used by a live commons chat.
+      # The transcript chat renders via renderUI, so seed shinychat's
+      # dependencies up front; the commons assets arrive via the page theme.
       htmltools::findDependencies(shinychat::chat_ui("commons_viewer_probe")),
-      list(commons_chat_dependency(), commons_viewer_dependency())
+      list(commons_viewer_dependency())
     )
   )
 }
@@ -761,7 +762,7 @@ viewer_server <- function(
           "Select a conversation to view its transcript."
         ))
       }
-      commons_ui(
+      shinychat::chat_ui(
         transcript_id(conversation),
         messages = selected_messages(),
         height = "100%"
