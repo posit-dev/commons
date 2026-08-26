@@ -39,7 +39,11 @@ def test_shared_fixture_is_populated() -> None:
     assert len(NORMALIZE_CASES) >= 10
     assert {case["expected"] is None for case in MATCH_CASES} == {True, False}
     assert {case["expected"] is None for case in PARSE_CASES} == {True, False}
-    assert len(DECISION_CASES) >= 3
+    assert {case["decision"]["status"] for case in DECISION_CASES} == {
+        "accepted",
+        "rejected",
+        "malformed",
+    }
 
 
 @pytest.mark.parametrize("case", NORMALIZE_CASES, ids=lambda case: case["name"])
@@ -123,3 +127,35 @@ def test_decisions_record_the_shared_shape(case: dict[str, Any]) -> None:
     )
 
     assert decision.as_record() == expected
+
+
+def test_citation_decisions_are_immutable() -> None:
+    decision = CitationDecision(
+        quote="Canopy cover is acre-weighted.", status="rejected"
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        decision.status = "accepted"  # type: ignore[misc]
+
+
+def test_only_an_accepted_decision_names_a_source() -> None:
+    # The span record is read by the R reviewer, so a decision that claims a
+    # source it does not have must not be constructible.
+    with pytest.raises(ValueError, match="accepted"):
+        CitationDecision(quote="Canopy cover is acre-weighted.", status="accepted")
+
+    with pytest.raises(ValueError, match="accepted"):
+        CitationDecision(
+            quote="Canopy cover is acre-weighted.",
+            status="rejected",
+            label="documentation",
+            kind="prose",
+        )
+
+
+def test_only_a_malformed_decision_has_no_quote() -> None:
+    with pytest.raises(ValueError, match="malformed"):
+        CitationDecision(quote=None, status="rejected")
+
+    with pytest.raises(ValueError, match="malformed"):
+        CitationDecision(quote="Canopy cover is acre-weighted.", status="malformed")

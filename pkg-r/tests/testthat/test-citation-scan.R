@@ -20,7 +20,10 @@ test_that("citation decisions match the shared record shape", {
   # The shape is what the trajectory reviewer reads back out of the span, so
   # drive the real producers rather than asserting on a hand-built list.
   cases <- shared_fixture("citations")$citation_decision$cases
-  expect_gt(length(cases), 0)
+  expect_setequal(
+    vapply(cases, function(case) case$decision$status, character(1)),
+    c("accepted", "rejected", "malformed")
+  )
 
   for (case in cases) {
     want <- case$decision

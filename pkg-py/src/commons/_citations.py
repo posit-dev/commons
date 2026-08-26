@@ -62,7 +62,7 @@ class ParsedCitation:
     quote: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class CitationDecision:
     """One candidate and its verdict, recorded to ``commons.citation.candidates``.
 
@@ -75,6 +75,24 @@ class CitationDecision:
     status: Literal["accepted", "rejected", "malformed"]
     label: str | None = None
     kind: str | None = None
+
+    def __post_init__(self) -> None:
+        # The R reviewer reads this record back out of the span, so a decision
+        # that misreports its verdict must not be constructible.
+        if self.status == "accepted":
+            if self.label is None or self.kind is None:
+                raise ValueError(
+                    "An accepted decision records the label and kind of the "
+                    "source that verified the quote."
+                )
+        elif self.label is not None or self.kind is not None:
+            raise ValueError(
+                f"Only an accepted decision names a source; status is {self.status!r}."
+            )
+        if (self.quote is None) != (self.status == "malformed"):
+            raise ValueError(
+                f"Only a malformed decision has no quote; status is {self.status!r}."
+            )
 
     def as_record(self) -> dict[str, Any]:
         """Serialize to the JSON shape the R trajectory reviewer reads."""
