@@ -62,6 +62,9 @@ class ParsedCitation:
     quote: str
 
 
+_DECISION_STATUSES = ("accepted", "rejected", "malformed")
+
+
 @dataclass(frozen=True)
 class CitationDecision:
     """One candidate and its verdict, recorded to ``commons.citation.candidates``.
@@ -78,7 +81,13 @@ class CitationDecision:
 
     def __post_init__(self) -> None:
         # The R reviewer reads this record back out of the span, so a decision
-        # that misreports its verdict must not be constructible.
+        # that misreports its verdict must not be constructible. Literal is not
+        # enforced at runtime, so the vocabulary is checked here too.
+        if self.status not in _DECISION_STATUSES:
+            raise ValueError(
+                f"Unknown citation decision status {self.status!r}; expected "
+                f"one of {', '.join(_DECISION_STATUSES)}."
+            )
         if self.status == "accepted":
             if self.label is None or self.kind is None:
                 raise ValueError(

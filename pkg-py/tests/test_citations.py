@@ -147,6 +147,13 @@ def test_only_an_accepted_decision_names_a_source() -> None:
     with pytest.raises(ValueError, match="accepted"):
         CitationDecision(
             quote="Canopy cover is acre-weighted.",
+            status="accepted",
+            label="documentation",
+        )
+
+    with pytest.raises(ValueError, match="accepted"):
+        CitationDecision(
+            quote="Canopy cover is acre-weighted.",
             status="rejected",
             label="documentation",
             kind="prose",
@@ -159,3 +166,10 @@ def test_only_a_malformed_decision_has_no_quote() -> None:
 
     with pytest.raises(ValueError, match="malformed"):
         CitationDecision(quote="Canopy cover is acre-weighted.", status="malformed")
+
+
+def test_an_unknown_status_is_rejected() -> None:
+    # Literal is not enforced at runtime, so the class is the only place a
+    # status the R reviewer cannot interpret can be caught.
+    with pytest.raises(ValueError, match="status"):
+        CitationDecision(quote="Canopy cover is acre-weighted.", status="Accepted")  # type: ignore[arg-type]
