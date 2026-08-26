@@ -80,7 +80,7 @@ test_that("hit_rate counts exchange tags across conversations", {
   expect_equal(rate$counts, c(A = 1, B = 1, C = 1, none = 1))
 })
 
-test_that("answer pills describe trusted, cited, and uncited answers", {
+test_that("provenance markers describe trusted, cited, and uncited answers", {
   skip_if_not_installed("htmltools")
 
   trusted <- htmltools::renderTags(commons_answer_pill("A"))$html

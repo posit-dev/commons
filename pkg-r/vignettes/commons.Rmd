@@ -29,7 +29,7 @@ library(commons)
 
 ## Design philosophy
 
-AI agents for data analysis can range from overly cautious and narrowly correct to wildly untrustworthy. commons increases the likelihood of correct answers by providing agents with access to existing trusted code, while still allowing them enough flexibility to answer novel, realistic questions. commons also labels answers with trust tags based on the analysis path so that users can determine how much trust to put in a given answer.
+AI agents for data analysis can range from overly cautious and narrowly correct to wildly untrustworthy. commons increases the likelihood of correct answers by providing agents with access to existing trusted code, while still allowing them enough flexibility to answer novel, realistic questions. commons also derives provenance outcomes from the analysis path so that users can determine how much trust to put in a given answer.
 
 If you are a data analyst, data scientist, statistical programmer, or other data practitioner, you likely have a collection of "trusted" code. This is code that you depend on for your analyses and use to create apps, reports, and packages. The core idea behind commons is that we can improve an agent's correctness by giving it the right access and documentation to run this code.
 
@@ -37,7 +37,7 @@ The high-trust "happy path" occurs when the user asks a question that correspond
 
 > How many total animals were observed at Oak Bluff?
 
-The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result along with a "Verified answer" tag.
+The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result with a `Verified answer` provenance marker.
 
 > At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site.
 >
@@ -45,7 +45,7 @@ The agent then searches for a trusted calculation that can answer the question. 
 
 Although the agent had to decide which trusted calculation to run, it did not have to decide _what code to write_, reducing degrees of freedom and allowing it to take advantage of pre-vetted code.
 
-However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or R). Answers from this path either include a verified citation or are tagged as `Untrusted`.
+However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or R). Answers from this path either include a verified citation or display an `Untrusted` provenance marker.
 
 ## Working with the agent skill
 
@@ -69,9 +69,9 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 ## Trust flow
 
-commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer is tagged with a green verified answer pill.
+commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer displays a green provenance marker labeled `Verified answer`.
 
-If a relevant trusted calculation is not found, the agent proceeds down the lower trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or are tagged as `Untrusted`.
+If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or display an `Untrusted` provenance marker.
 
 <figure class="commons-flow commons-flow-trusted-calculations column-page">
 <div class="commons-branch-flow"
@@ -117,20 +117,20 @@ Cited answer<sup class="commons-citation-ref">1</sup>
 </div>
 </figure>
 
-There are two possible trust outcomes for the "lower trust" path. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. commons verifies that the quoted text appears in that source. Verified citations are displayed as footnotes. If the agent does not include a citation, or if commons can't verify any of its citations, the answer gets tagged as `Untrusted`.
+The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the verified citations are displayed as footnotes. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays a provenance marker.
 
-The following table details the various ways each trust outcome can occur:
+The following table details the various ways each provenance outcome can occur:
 
-| How the answer is produced | Outcome |
+| How the answer is produced | Provenance outcome |
 |---|---|
 | A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_pill("A")` |
-| A [data-dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
 | A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
-| Custom SQL, including SQL that uses [data-dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
 | Custom R | Cited or `r commons:::commons_answer_pill("C")` |
-| No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No label |
+| No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
-The agent itself does not tag the answer as verified, cited, or untrusted. This process is instead handled deterministically by the commons package based on the agent's behavior.
+The agent itself does not determine the provenance outcome. commons derives it deterministically from the agent's behavior.
 
 ## Information layers
 
@@ -153,7 +153,7 @@ The context layer draws from unstructured information in Markdown files and the 
 
 ### Examples
 
-Here are brief examples of a data dictionary, a measure file, and a context-layer Markdown file for the biodiversity example app:
+Here are brief examples of a data dictionary, a measure file, and a context layer Markdown file for the biodiversity example app:
 
 #### Data dictionary
 
@@ -198,7 +198,7 @@ Observed individuals reflect organisms recorded during surveys. They should not 
 
 ### Warehouse semantic layers
 
-If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics are marked as verified.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Verified answer` provenance outcome and display the corresponding provenance marker.
 
 ## Data sources
 
@@ -247,7 +247,7 @@ tables:
 
 There are three kinds of definitions. Definitions can participate in trusted metric calculations or be used in custom SQL:[^definition-sql]
 
-| Kind | Example | Use in `call_metrics()` |
+| Kind | Example | Use in `call_metrics` |
 |---|---|---|
 | Metric | `SUM(n)` | Computes the metric |
 | Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |
@@ -255,7 +255,7 @@ There are three kinds of definitions. Definitions can participate in trusted met
 
 commons infers the definition kind from its expression. Aggregate and constant expressions are categorized as metrics, row-level Boolean expressions as filters, and other row-level expressions as derived values.
 
-[^definition-sql]: In custom SQL, the agent refers to a definition using its `{{name}}` token. commons expands the token to SQL compiled for the data source. Because this is still custom SQL, the answer includes a verified citation or is tagged as `Untrusted`, rather than `Verified`.
+[^definition-sql]: In custom SQL, the agent refers to a definition using its `{{name}}` token. commons expands the token to SQL compiled for the data source. Because this is still custom SQL, the provenance outcome is `Cited` or `Untrusted`, rather than `Verified answer`.
 
 See the [DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 

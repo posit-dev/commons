@@ -108,9 +108,9 @@ indexed for the \code{search_context} tool.
 
 A table's entry can also declare \code{definitions}: named expressions in the
 \href{https://data-dict.tidyverse.org/expressions.html}{data-dict expression language}.
-Commons validates their inferred types and references, compiles them for
+commons validates their inferred types and references, compiles them for
 the source's SQL backend, and lets the model apply them as \code{{{name}}}
-tokens in \code{run_sql} or through \code{call_metrics()}. Definitions are delivered
+tokens in \code{run_sql} or through \code{call_metrics}. Definitions are delivered
 through all three channels above.
 }
 

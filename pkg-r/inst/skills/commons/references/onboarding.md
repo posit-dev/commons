@@ -11,7 +11,7 @@
 
 Use this reference to create a new commons agent from existing data, documentation, and trusted code. Start with a small working agent, use it to understand the pieces, and then expand it.
 
-Use the [extraction reference](extracting-from-artifacts.md) after the project scaffold exists and the user has confirmed the agent's scope and data-source mapping. Use the [trajectory reference](iterating-from-trajectories.md) to improve an agent from logged conversations.
+Use the [extraction reference](extracting-from-artifacts.md) after the project scaffold exists and the user has confirmed the agent's scope and data source mapping. Use the [trajectory reference](iterating-from-trajectories.md) to improve an agent from logged conversations.
 
 ## Purpose
 
@@ -26,7 +26,7 @@ Consider both what you need to implement the agent and what the user needs to un
 
 ## Work with the user
 
-Do routine investigation and implementation without interrupting the user. Pause when a decision affects scope, trust, business meaning, data-source selection, or the user's understanding of the data.
+Do routine investigation and implementation without interrupting the user. Pause when a decision affects scope, trust, business meaning, data source selection, or the user's understanding of the data.
 
 Explain a principle in plain language when it materially affects a user decision, especially the solid-but-not-perfect foundation and the fine-grained-versus-prepared data tradeoff. Do not present the full principles list as required reading. Do not begin onboarding with a general explanation of commons or its principles; introduce only the context needed for the current question.
 
@@ -46,7 +46,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 1. **Orient to commons.** Before scaffolding, identify the installed commons version and locate the corresponding package source when available. Read the relevant commons documentation and skill references, then inspect the implementation, examples, and tests for the APIs the agent will use. At minimum, examine:
    - `commons()`, `data_source()`, `semantic_layer()`, and `context_layer()`;
    - `commons_ui()` and `commons_server()`, including per-session construction;
-   - measure loading and data-dictionary behavior; and
+   - measure loading and data dictionary behavior; and
    - dependency and deployment expectations for a commons app.
 
 2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
@@ -102,11 +102,11 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Construct the `context_layer()` to confirm that every configured context file exists and can be read. Identify representative searches that should retrieve its most important guidance, and verify them after connecting the context layer to the agent in step 10.
 
-9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic-layer, and context-layer design now that the extracted artifacts are visible. Treat consequential changes as decision points, and update the agent instruction file only when they change its durable guidance.
+9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic layer, and context layer design now that the extracted artifacts are visible. Treat consequential changes as decision points, and update the agent instruction file only when they change its durable guidance.
 
 10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
 
-   Commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
+   commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
 
    Connect the selected data sources, dictionaries, semantic layer, remaining context, and any additional instructions.
 

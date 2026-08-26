@@ -12,7 +12,7 @@ Read the relevant reference below before starting the corresponding task.
 - [Use data dictionaries with commons](references/data-dictionaries.md) - read alongside onboarding or extraction when creating, reviewing, or editing a data dictionary.
 - [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, governed definitions, dictionary edits, and free-text context, each carrying provenance back to its source.
 - [Evaluating a commons agent](references/evaluation.md) - create an evaluation for a commons agent to determine whether it is working correctly.
-- [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent from reviewed conversations when available, or from raw logged trajectories otherwise, then propose semantic-layer or context-layer changes.
+- [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent from reviewed conversations when available, or from raw logged trajectories otherwise, then propose semantic layer or context layer changes.
 
 ## Working principles
 

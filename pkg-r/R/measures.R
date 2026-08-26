@@ -1,12 +1,29 @@
 #' Create a semantic layer
 #'
-#' A semantic layer is a collection of governed measures available to a
-#' [commons()] agent.
+#' `semantic_layer()` collects governed R measures for a [commons()] agent.
+#' Data dictionary definitions and warehouse semantic models contribute through
+#' [data_source()].
 #'
 #' @param ... [measure()] objects, lists of measures, or paths to R scripts or
-#'   directories. File and inline measures can be freely mixed.
+#'   directories containing R scripts. Directory searches are not recursive.
+#'   File and inline measures can be freely mixed.
 #'
-#' @details
+#' @section Measures from files:
+#' Character paths can name R scripts or directories containing them. Functions
+#' marked with `@measure` become measures; other functions in those files can be
+#' used as helpers.
+#'
+#' The roxygen title, description, and `@return` text describe the measure.
+#' Each `@param` marks a model-supplied argument and can declare its type:
+#' `string`, `integer`, `number`, `boolean`, `enum[value, ...]`, or an array
+#' such as `string[]`. Without a declaration, commons infers the type from the
+#' default, falling back to `string`.
+#'
+#' Measure and helper source is visible in `run_r`; evaluating a measure's name
+#' there prints its definition. Function environments, connections, and
+#' credentials are not shared with that session.
+#'
+#' @section Measure arguments:
 #' A measure function can take two kinds of arguments:
 #'
 #' * Arguments documented with `@param` (or listed in `arguments`, for inline
@@ -26,12 +43,6 @@
 #' `board = pins::board_connect()`. Write the default as a call rather than a
 #' reference to a variable defined elsewhere, so the measure doesn't depend on
 #' where the semantic layer is created.
-#'
-#' The source of each measure, and of any helper functions defined alongside
-#' it in the semantic layer's files, is readable in the agent's `run_r`
-#' session: evaluating a measure's name there prints its definition. Only
-#' source text is shared with that session; the functions' environments (and
-#' any connections or credentials in them) are not.
 #'
 #' @return A `commons_semantic_layer` object.
 #'
@@ -199,7 +210,11 @@ measure_injection_names <- function(td) {
 # Look up each measure's undocumented arguments among the agent's named
 # data_sources entries. An unmatched argument keeps its default; one with no
 # default is an error.
-resolve_injections <- function(registry, injectables, call = rlang::caller_env()) {
+resolve_injections <- function(
+  registry,
+  injectables,
+  call = rlang::caller_env()
+) {
   lapply(registry, function(td) {
     needed <- measure_injection_names(td)
     unmatched <- setdiff(needed, names(injectables))

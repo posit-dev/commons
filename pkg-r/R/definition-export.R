@@ -2,7 +2,7 @@
 # by `data-dict export-spec`, ported against tidyverse/data-dict at
 # d950c5ac90d0ab939d330600f3a5ee1bfde0f604. A definition's `expr` is written in
 # data-dict's typed expression language, not in the SQL dialect of the attached
-# source. Commons therefore cannot execute the source text directly: it must
+# source. commons therefore cannot execute the source text directly: it must
 # parse and type-check the expression against the authored dictionary, infer
 # its kind and value type, resolve its direct column and sibling-definition
 # references, and translate the checked expression through a target-specific
@@ -22,7 +22,7 @@
 # A data-dict R package wrapping the CLI's JSON interface can replace this
 # adapter for the targets that interface returns. Such a wrapper may not expose
 # typed IR, so commons-only SQL targets still need local lowering until
-# data-dict either exposes that IR or emits those targets itself. Commons will
+# data-dict either exposes that IR or emits those targets itself. commons will
 # continue to own source binding, sibling-translation composition, and
 # invocation tokens.
 # A replacement must also expose equivalent grain metadata for call_metrics'

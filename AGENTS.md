@@ -14,7 +14,9 @@ Anything both implementations must agree on belongs in `tests/shared/` as an exe
 
 This governs behavior a user can observe, not implementation detail. Each package should read idiomatically in its own language, and minor differences between them are fine. Weigh how often a difference would surface and what it costs when it does: a rare one that fails safely is cheaper to accept than to engineer away. See `tests/shared/README.md` for the worked example.
 
-`commons` supports the published table-level `definitions` field in `data-dict.yaml`. Definitions use data-dict's expression language and are compiled to the attached source's SQL dialect. Commons temporarily ports the definition-specific export logic until a data-dict R package is available; see [commons #115](https://github.com/posit-dev/commons/issues/115) for the integration design.
+When writing about provenance, use "provenance tag" for the internal A/B/C code, "provenance outcome" for the answer-level classification (`Verified answer`, `Cited`, or `Untrusted`), and "provenance marker" for the visible UI element.
+
+`commons` supports the published table-level `definitions` field in `data-dict.yaml`. Definitions use data-dict's expression language and are compiled to the attached source's SQL dialect. commons temporarily ports the definition-specific export logic until a data-dict R package is available; see [commons #115](https://github.com/posit-dev/commons/issues/115) for the integration design.
 
 When writing tests for either package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn't available. Broadly, refrain from `expect_match()` for text that is unconditionally included in a prompt or tool description, and `expect_no_match()` for text that has no feasible path to end up in the prompt or tool descriptions.
 

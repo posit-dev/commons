@@ -140,7 +140,7 @@ test_that("search_pool results are omitted from review documents", {
   )
 })
 
-test_that("unexpected trust tags remain visible", {
+test_that("unexpected provenance tags remain visible", {
   expect_equal(review_trust_label("D"), "Unknown (D)")
 })
 
