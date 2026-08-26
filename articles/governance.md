@@ -100,6 +100,8 @@ packages, and required operating-system directories. It can write only
 to temporary directories used by the subprocess and its communication
 with the main R process. The seccomp filters prevent it from inspecting
 another process’s memory or changing mount and namespace configuration.
+The Linux sandbox also caps the subprocess’s virtual address space at 8
+GiB; a lower limit inherited from Connect still applies.
 
 By default, the subprocess cannot create network sockets. An application
 author can opt in to unrestricted network access with
