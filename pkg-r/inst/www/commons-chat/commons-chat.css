@@ -4,31 +4,31 @@
 
 /* ---- Chat-level polish ---------------------------------------------- */
 
-/* These rules load before shinychat's own stylesheet (both arrive via the
- * page theme), so overrides of shinychat classes need strictly higher
- * specificity than shinychat's selectors to win regardless of order. */
-shiny-chat-container[id] {
+/* shinychat proxies its public --shiny-chat-* variables through private
+ * --_* variables with the default in the var() fallback, so :root
+ * declarations here always win without specificity tricks. */
+:root {
   --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
+
+  /* Send/stop keep shinychat's primary/danger hues, softened toward the
+   * background so they don't dominate the chat. */
+  --shiny-chat-btn-send-color-ready: color-mix(
+    in srgb,
+    var(--bs-primary, #007bc2) 60%,
+    var(--bs-body-bg, #fff)
+  );
+  --shiny-chat-btn-send-color-cancel: color-mix(
+    in srgb,
+    var(--bs-danger, #dc3545) 60%,
+    var(--bs-body-bg, #fff)
+  );
+  --shiny-chat-btn-send-color-empty: var(--bs-gray-400, #ced4da);
 }
 
 shiny-chat-container .shiny-chat-input .tiptap {
   border-color: var(--bs-border-color, #dee2e6);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-}
-
-/* Send/stop keep shinychat's primary/danger hues, softened toward the
- * background so they don't dominate the chat. */
-shiny-chat-container .shiny-chat-input .shiny-chat-btn-send {
-  color: color-mix(in srgb, var(--bs-primary, #007bc2) 60%, var(--bs-body-bg, #fff));
-}
-
-shiny-chat-container .shiny-chat-input .shiny-chat-btn-send.shiny-chat-btn-cancel {
-  color: color-mix(in srgb, var(--bs-danger, #dc3545) 60%, var(--bs-body-bg, #fff));
-}
-
-shiny-chat-container .shiny-chat-input .shiny-chat-btn-send:disabled {
-  color: var(--bs-gray-400, #ced4da);
 }
 
 /* ---- Answer provenance ----------------------------------------------- */
