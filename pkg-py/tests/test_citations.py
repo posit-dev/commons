@@ -173,3 +173,13 @@ def test_an_unknown_status_is_rejected() -> None:
     # status the R reviewer cannot interpret can be caught.
     with pytest.raises(ValueError, match="status"):
         CitationDecision(quote="Canopy cover is acre-weighted.", status="Accepted")  # type: ignore[arg-type]
+
+
+def test_an_unknown_kind_is_rejected() -> None:
+    with pytest.raises(ValueError, match="kind"):
+        CitationDecision(
+            quote="Canopy cover is acre-weighted.",
+            status="accepted",
+            label="documentation",
+            kind="Prose",  # type: ignore[arg-type]
+        )

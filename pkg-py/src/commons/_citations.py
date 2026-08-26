@@ -63,8 +63,9 @@ class ParsedCitation:
     quote: str
 
 
-# Derived from the type so the runtime guard and the annotation cannot drift.
+# Derived from the types so the runtime guards and the annotations cannot drift.
 _DECISION_STATUSES = get_args(CitationStatus)
+_CITATION_KINDS = get_args(CitationKind)
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ class CitationDecision:
     quote: str | None
     status: CitationStatus
     label: str | None = None
-    kind: str | None = None
+    kind: CitationKind | None = None
 
     def __post_init__(self) -> None:
         # The R reviewer reads this record back out of the span, so a decision
@@ -99,6 +100,11 @@ class CitationDecision:
         elif self.label is not None or self.kind is not None:
             raise ValueError(
                 f"Only an accepted decision names a source; status is {self.status!r}."
+            )
+        if self.kind is not None and self.kind not in _CITATION_KINDS:
+            raise ValueError(
+                f"Unknown citation kind {self.kind!r}; expected one of "
+                f"{', '.join(_CITATION_KINDS)}."
             )
         if (self.quote is None) != (self.status == "malformed"):
             raise ValueError(
