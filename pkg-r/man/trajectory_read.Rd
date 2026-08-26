@@ -41,9 +41,9 @@ which it was read.
 \description{
 \code{trajectory_read()} reads conversation trajectories captured by
 \code{\link[=commons]{commons()}} when \code{log = TRUE}. Trajectories are recorded as OpenTelemetry
-spans—see the \code{log} argument of \code{\link[=commons]{commons()}} for how capture is enabled—and
-read back from Posit Connect's content observability store or from local
-trace files.
+spans—see the \code{log} argument of \code{\link[=commons]{commons()}} for how capture is
+enabled—and read back from Posit Connect's content observability store or
+from local trace files.
 }
 \details{
 Reading traces from Connect requires the \code{CONNECT_API_KEY} environment

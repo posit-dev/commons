@@ -3,9 +3,9 @@
 #' @description
 #' `trajectory_read()` reads conversation trajectories captured by
 #' [commons()] when `log = TRUE`. Trajectories are recorded as OpenTelemetry
-#' spans—see the `log` argument of [commons()] for how capture is enabled—and
-#' read back from Posit Connect's content observability store or from local
-#' trace files.
+#' spans—see the `log` argument of [commons()] for how capture is
+#' enabled—and read back from Posit Connect's content observability store or
+#' from local trace files.
 #'
 #' @param source Where to read trajectories from:
 #'
