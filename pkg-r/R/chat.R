@@ -1,60 +1,33 @@
-#' Shiny chat app and server for commons agents
+#' Shiny chat app for a commons agent
 #'
-#' These functions compose [shinychat::page_chat()] and
-#' [shinychat::chat_server()] for commons agents. The server verifies each
-#' `<commons-citation>` the model writes against its own context, measure
-#' definitions, and data documentation as the answer streams, and rewrites
-#' verified citations inline as numbered, server-authored `<shiny-aside>`
-#' elements. Citation details name the trusted source.
-#' A provenance marker in a compact `<shiny-aside>` follows the answer when it
-#' was produced by a governed calculation, or when a fallback answer cites
-#' nothing verified.
+#' `commons_app()` composes [commons_server()] and [commons_theme()] into a
+#' complete app for local development. To customize and deploy the Shiny app, 
+#' assemble the UI and server yourself with [commons_theme()] and 
+#' [commons_server()].
 #'
-#' The UI side is ordinary shinychat UI: use [shinychat::page_chat()] for a
-#' full-window chat, or [shinychat::chat_ui()] embedded in any bslib page.
-#' Either way, pass `theme = commons_theme()` to the page so the commons chat
-#' CSS and JavaScript are on the page.
+#' @param client A [commons()] agent.
+#' @param ... Extra arguments passed to [shiny::shinyApp()].
 #'
-#' @param id The ID of the chat element; must match the `id` of the
-#'   [shinychat::page_chat()] or [shinychat::chat_ui()] on the page.
-#' @param ... In `commons_app()`, extra arguments passed to
-#'   [shiny::shinyApp()]. In `commons_server()`, arguments passed to
-#'   [shinychat::chat_server()].
-#' @param client A [commons()] agent. `commons_app()` uses one agent for the
-#'   lifetime of its local or single-user app. In a multi-user app, create an
-#'   agent inside the app's server function and pass it to `commons_server()`.
-#'   This gives each Shiny session its own agent state.
+#' @return A [shiny::shinyApp()] object.
 #'
-#' @return `commons_app()` returns a [shiny::shinyApp()] object.
-#'   `commons_server()` returns the [shinychat::chat_server()] result.
+#' @section Citations and provenance:
+#' The server verifies each `<commons-citation>` the model writes against its
+#' own context, measure definitions, and data documentation as the answer
+#' streams, and rewrites verified citations inline as numbered,
+#' server-authored `<shiny-aside>` elements. Citation details name the
+#' trusted source. A provenance marker in a compact `<shiny-aside>` follows
+#' the answer when it was produced by a governed calculation, or when a
+#' fallback answer cites nothing verified.
 #'
 #' @examples
 #' \dontrun{
-#' # Local or single-user app
 #' agent <- commons(
 #'   ellmer::chat_anthropic(),
 #'   data_sources = data_source(sales = sales)
 #' )
 #' commons_app(agent)
-#'
-#' # Multi-user Shiny app
-#' library(shiny)
-#' library(shinychat)
-#'
-#' ui <- page_chat("Assistant", id = "chat", theme = commons_theme())
-#'
-#' server <- function(input, output, session) {
-#'   session_agent <- commons(
-#'     ellmer::chat_anthropic(),
-#'     data_sources = data_source(sales = sales)
-#'   )
-#'   commons_server("chat", session_agent)
 #' }
 #'
-#' shinyApp(ui, server)
-#' }
-#'
-#' @name commons_app
 #' @export
 commons_app <- function(client, ...) {
   check_chat_packages()
@@ -87,7 +60,50 @@ commons_app <- function(client, ...) {
   shiny::shinyApp(ui, server, ..., enableBookmarking = "url")
 }
 
-#' @rdname commons_app
+#' Chat server and theme for custom commons apps
+#'
+#' These are the building blocks for deploying a commons chat as a Shiny
+#' app; for local development, use [commons_app()]. Pair `commons_server()`
+#' with [shinychat::page_chat()] or [shinychat::chat_ui()], passing
+#' `theme = commons_theme()` so the commons chat assets are on the page.
+#'
+#' `commons_theme()` bundles the commons chat CSS and JavaScript into an
+#' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
+#' works anywhere a bslib theme does.
+#'
+#' @param client A [commons()] agent. In a deployed app, create the agent
+#'   inside the server function and pass it to `commons_server()` so each
+#'   Shiny session gets its own agent state.
+#' @param id The ID of the chat element; must match the `id` of the
+#'   [shinychat::page_chat()] or [shinychat::chat_ui()] on the page.
+#' @param ... In `commons_server()`, arguments passed to
+#'   [shinychat::chat_server()]. In `commons_theme()`, named Sass variables
+#'   forwarded to [shinychat::page_chat_theme()].
+#' @param preset A bslib or Bootswatch preset name.
+#'
+#' @return `commons_server()` returns the [shinychat::chat_server()] result.
+#'   `commons_theme()` returns a [bslib::bs_theme()] object.
+#'
+#' @examples
+#' \dontrun{
+#' library(shiny)
+#' library(shinychat)
+#'
+#' ui <- page_chat("Assistant", id = "chat", theme = commons_theme())
+#'
+#' server <- function(input, output, session) {
+#'   # One agent per session, so each user gets their own agent state
+#'   agent <- commons(
+#'     ellmer::chat_anthropic(),
+#'     data_sources = data_source(sales = sales)
+#'   )
+#'   commons_server("chat", agent)
+#' }
+#'
+#' shinyApp(ui, server)
+#' }
+#'
+#' @name commons_server
 #' @export
 commons_server <- function(id, client, ...) {
   check_chat_packages()

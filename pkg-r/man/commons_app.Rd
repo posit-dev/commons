@@ -2,71 +2,42 @@
 % Please edit documentation in R/chat.R
 \name{commons_app}
 \alias{commons_app}
-\alias{commons_server}
-\title{Shiny chat app and server for commons agents}
+\title{Shiny chat app for a commons agent}
 \usage{
 commons_app(client, ...)
-
-commons_server(id, client, ...)
 }
 \arguments{
-\item{client}{A \code{\link[=commons]{commons()}} agent. \code{commons_app()} uses one agent for the
-lifetime of its local or single-user app. In a multi-user app, create an
-agent inside the app's server function and pass it to \code{commons_server()}.
-This gives each Shiny session its own agent state.}
+\item{client}{A \code{\link[=commons]{commons()}} agent.}
 
-\item{...}{In \code{commons_app()}, extra arguments passed to
-\code{\link[shiny:shinyApp]{shiny::shinyApp()}}. In \code{commons_server()}, arguments passed to
-\code{\link[shinychat:chat_server]{shinychat::chat_server()}}.}
-
-\item{id}{The ID of the chat element; must match the \code{id} of the
-\code{\link[shinychat:page_chat]{shinychat::page_chat()}} or \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} on the page.}
+\item{...}{Extra arguments passed to \code{\link[shiny:shinyApp]{shiny::shinyApp()}}.}
 }
 \value{
-\code{commons_app()} returns a \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
-\code{commons_server()} returns the \code{\link[shinychat:chat_server]{shinychat::chat_server()}} result.
+A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
 }
 \description{
-These functions compose \code{\link[shinychat:page_chat]{shinychat::page_chat()}} and
-\code{\link[shinychat:chat_server]{shinychat::chat_server()}} for commons agents. The server verifies each
-\verb{<commons-citation>} the model writes against its own context, measure
-definitions, and data documentation as the answer streams, and rewrites
-verified citations inline as numbered, server-authored \verb{<shiny-aside>}
-elements. Citation details name the trusted source.
-A provenance marker in a compact \verb{<shiny-aside>} follows the answer when it
-was produced by a governed calculation, or when a fallback answer cites
-nothing verified.
+\code{commons_app()} composes \code{\link[=commons_server]{commons_server()}} and \code{\link[=commons_theme]{commons_theme()}} into a
+complete app for local development. To customize and deploy the Shiny app,
+assemble the UI and server yourself with \code{\link[=commons_theme]{commons_theme()}} and
+\code{\link[=commons_server]{commons_server()}}.
 }
-\details{
-The UI side is ordinary shinychat UI: use \code{\link[shinychat:page_chat]{shinychat::page_chat()}} for a
-full-window chat, or \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} embedded in any bslib page.
-Either way, pass \code{theme = commons_theme()} to the page so the commons chat
-CSS and JavaScript are on the page.
+\section{Citations and provenance}{
+
+The server verifies each \verb{<commons-citation>} the model writes against its
+own context, measure definitions, and data documentation as the answer
+streams, and rewrites verified citations inline as numbered,
+server-authored \verb{<shiny-aside>} elements. Citation details name the
+trusted source. A provenance marker in a compact \verb{<shiny-aside>} follows
+the answer when it was produced by a governed calculation, or when a
+fallback answer cites nothing verified.
 }
+
 \examples{
 \dontrun{
-# Local or single-user app
 agent <- commons(
   ellmer::chat_anthropic(),
   data_sources = data_source(sales = sales)
 )
 commons_app(agent)
-
-# Multi-user Shiny app
-library(shiny)
-library(shinychat)
-
-ui <- page_chat("Assistant", id = "chat", theme = commons_theme())
-
-server <- function(input, output, session) {
-  session_agent <- commons(
-    ellmer::chat_anthropic(),
-    data_sources = data_source(sales = sales)
-  )
-  commons_server("chat", session_agent)
-}
-
-shinyApp(ui, server)
 }
 
 }
