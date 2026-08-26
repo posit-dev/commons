@@ -2,6 +2,7 @@
 #' @export
 commons_theme <- function(..., preset = "shiny") {
   theme <- shinychat::page_chat_theme(
+    "shiny-chat-page-title-font-weight" = 300,
     # User-message geometry, formerly a CSS override in commons-chat.css;
     # shinychat exposes these as public theme variables.
     "shiny-chat-user-message-border-radius" = "1.25rem",
