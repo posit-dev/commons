@@ -130,56 +130,106 @@ shiny-chat-container .shiny-chat-input .tiptap {
   transform: translateX(-50%) rotate(225deg);
 }
 
-/* Shinychat owns compact marker structure and placement through this public API. */
-shiny-chat-container [data-shinychat-aside-display="compact"] {
-  --shiny-chat-aside-marker-color: var(--bs-link-color);
-  --shiny-chat-aside-marker-hover-color: var(--bs-link-hover-color);
+/* Citations are labeled identity asides: shinychat accumulates those
+ * sharing a paragraph into one pill with a "+N" overflow and a carousel
+ * popover. They render icon-only like the provenance markers, in a quieter
+ * slate blue — verified support, short of a governed calculation. */
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"]) {
+  --shiny-chat-aside-marker-color: #41556e;
   --shiny-chat-aside-marker-bg: transparent;
-  --shiny-chat-aside-marker-hover-bg: transparent;
-  --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
+  --shiny-chat-aside-marker-hover-color: #2f4257;
+  --shiny-chat-aside-marker-hover-bg: #e9eff5;
 }
 
-/* Temporary bridge until Shinychat provides a public per-aside tone API. */
+/* TRIAL: the aside's icon attribute carries the per-kind icon (so the
+ * popover title row shows it); the pill hides that img and paints the
+ * uniform quote mark instead. Caveat: shinychat unmounts the img if it
+ * errors, which would silently drop these selectors' match — if shinychat
+ * gains a popover-icon attribute, delete this block. */
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"])
+  img {
+  display: none;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src*="/citation-"])::before {
+  background: url("figs/citation-mark.svg") center / contain no-repeat;
+  content: "";
+  flex: 0 0 auto;
+  height: 1.35em;
+  width: 1.35em;
+}
+
+/* Temporary bridge until shinychat forwards a per-aside tone hook to the
+ * pill: the icon src is the only per-aside signal that survives to the
+ * rendered button, so it selects the tone — but styling goes only through
+ * shinychat's public --shiny-chat-aside-marker-* variables, so its own
+ * hover, focus, expanded, and compact-number rules keep working. */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
-  background: #f2fbf5;
-  box-shadow: inset 0 0 0 1px #cfeedd;
-  color: #286144;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"])[aria-expanded="true"] {
-  background: #e4f6ea;
-  color: #204f38;
+  --shiny-chat-aside-marker-color: #286144;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #204f38;
+  --shiny-chat-aside-marker-hover-bg: #e4f6ea;
 }
 
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
-  background: #fff8ec;
-  box-shadow: inset 0 0 0 1px #f2ddbb;
-  color: #6b4b1b;
+  --shiny-chat-aside-marker-color: #6b4b1b;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #583b14;
+  --shiny-chat-aside-marker-hover-bg: #fcefd8;
 }
 
+/* Provenance and citation markers render as bare icons: the label stays in
+ * the DOM (the button's aria-label announces it) but doesn't render, and a
+ * grouped "+N" overflow count still shows. */
 shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"],
+    img[src*="/citation-"]
+  ) {
+  border-radius: 50%;
+  font-weight: 400;
+  gap: 0.15em;
+  padding: 0.2em;
+}
+
+/* A grouped marker carries a "+N more" count, which widens the pill: give
+ * it a stadium shape and roomier padding instead of the bare-icon circle. */
 shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"])[aria-expanded="true"] {
-  background: #fcefd8;
-  color: #583b14;
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"],
+    img[src*="/citation-"]
+  ):has(.shiny-aside-pill__overflow) {
+  border-radius: 999px;
+  gap: 0.3em;
+  padding: 0.2em 0.55em 0.2em 0.25em;
 }
 
 shiny-chat-container
   .shiny-aside-pill:has(
     img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
-  ) {
-  font-weight: 400;
+    img[src$="/warning-icon.svg"],
+    img[src*="/citation-"]
+  )
+  .shiny-aside-pill__label {
+  display: none;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    img[src$="/trusted-icon.svg"],
+    img[src$="/warning-icon.svg"],
+    img[src*="/citation-"]
+  )
+  img {
+  height: 1.35em;
+  width: 1.35em;
 }
 
 shiny-chat-container
@@ -188,7 +238,34 @@ shiny-chat-container
     img[src$="/warning-icon.svg"]
   )
   img {
+  animation: commons-provenance-marker-pulse 1.6s ease-in-out 1;
   opacity: 1;
+}
+
+@keyframes commons-provenance-marker-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.4);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  shiny-chat-container
+    .shiny-aside-pill:has(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"]
+    )
+    img {
+    animation: none;
+  }
 }
 
 /* ---- Measure display ------------------------------------------------- */

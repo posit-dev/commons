@@ -4,17 +4,21 @@
     <style>
       .cls-1 {
         fill: #e7b921;
+        stroke: #e7b921;
+        stroke-linejoin: round;
+        stroke-width: 1.8;
       }
 
       .cls-2 {
-        fill: #965b25;
+        fill: #fff;
       }
     </style>
   </defs>
   <g id="Layer_1" data-name="Layer 1">
-    <circle class="cls-1" cx="8" cy="8" r="7"/>
+    <path class="cls-1" d="M8 2.4 14.6 13.6H1.4Z"/>
   </g>
   <g id="Layer_2" data-name="Layer 2">
-    <path class="cls-2" d="M8.15,12.64c-.26,0-.47-.09-.65-.27-.18-.18-.27-.4-.27-.65s.09-.48.27-.66c.18-.18.4-.27.65-.27s.47.09.64.27.27.4.27.66-.09.47-.27.65-.39.27-.64.27ZM7.46,9.49l-.13-6.13h1.62l-.12,6.13h-1.38Z"/>
+    <path class="cls-2" d="M7.38,10l-.16-3.5h1.56l-.16,3.5z"/>
+    <circle class="cls-2" cx="8" cy="11.9" r="0.8"/>
   </g>
 </svg>

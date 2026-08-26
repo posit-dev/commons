@@ -95,7 +95,7 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   sprintf(
     paste0(
-      '<shiny-aside display="compact" label="%s"%s>',
+      '<shiny-aside label="%s"%s>',
       "%s%s</shiny-aside>"
     ),
     escape_attr(label),
@@ -227,7 +227,10 @@ non_citable_tool_output_text <- function(tools) {
   paste(items, collapse = "\n")
 }
 
-# These SVGs need a fixed stroke because images cannot inherit currentColor.
+# The aside's icon attribute carries the per-kind icon so the citation
+# popover's title row shows it; the pill marker is the uniform quote mark,
+# painted by commons-chat.css. These SVGs need a fixed stroke because
+# images cannot inherit currentColor.
 citation_icon_url <- function(kind) {
   file <- switch(
     kind,

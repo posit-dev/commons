@@ -393,7 +393,7 @@ test_that("user messages reset citation requests but tool results do not", {
   expect_true(tracker$requested)
 })
 
-test_that("render_citation_aside emits a numbered aside with source details", {
+test_that("render_citation_aside emits a labeled aside with source details", {
   corpus <- list(list(
     label = "sales table",
     kind = "schema",
@@ -407,7 +407,7 @@ test_that("render_citation_aside emits a numbered aside with source details", {
   expect_match(
     out$html,
     paste0(
-      '^<shiny-aside display="compact" label="sales table" ',
+      '^<shiny-aside label="sales table" ',
       'icon="',
       commons_icon_url("citation-schema.svg")
     )
