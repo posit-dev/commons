@@ -1,5 +1,9 @@
 library(bslib)
-library(commons)
+if (interactive()) {
+  devtools::load_all("./pkg-r")
+} else {
+  library(commons)
+}
 library(shiny)
 library(shinychat)
 

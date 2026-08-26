@@ -27,7 +27,7 @@ The answer uses SQL with little documentation and the agent had to inspect table
 
 Use review documents whenever they are available. They contain the conversations and exchanges a reviewer flagged or annotated, so treat them as the primary qualitative evidence rather than starting over from the raw log.
 
-- Read each `conversation-*.md` file. Parse its YAML frontmatter for the conversation id, active conversation and exchange flags, and reviewer notes. Read the Markdown body for the transcript, trust labels, tool calls, tool results, and notes in context.
+- Read each `conversation-*.md` file. Parse its YAML frontmatter for the conversation id, active conversation and exchange flags, and reviewer notes. Read the Markdown body for the transcript, provenance outcomes, tool calls, tool results, and notes in context.
 - Treat flags as requests for attention, not conclusions. Use review notes to understand what the reviewer wants investigated.
 - Treat tool results as excerpts because the Markdown renderer truncates long results.
 - Supplement the reviews with raw trajectories only when needed to quantify how common a theme is, inspect a truncated result, or analyze conversations that were not reviewed.
@@ -82,15 +82,15 @@ Files in a Posit Connect app's working directory are replaced on redeployment. U
 4. Propose changes.
    Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change.
 
-   Prefer semantic-layer edits when the question is a stable governed metric. Prefer context-layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
+   Prefer semantic layer edits when the question is a stable governed metric. Prefer context layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
 
    Classify each proposal the same way the extraction reference does, so the two skills reconcile against existing context identically:
    * **new** — add it.
-   * **duplicate** — same concept, same computation: add an `@provenance` tag to the existing measure instead of creating a new one.
-   * **extension** — same concept, superset behavior: edit the existing measure, adding the `@param` and the provenance tag. Never create `revenue2`.
+   * **duplicate** — same concept, same computation: add `@provenance` to the existing measure instead of creating a new one.
+   * **extension** — same concept, superset behavior: edit the existing measure, adding the relevant `@param` and `@provenance` entries. Never create `revenue2`.
    * **conflict** — same concept but a different computation, or a contradiction with an existing dictionary caveat: surface to the user with both sides; do not resolve silently.
 
 5. Wait before editing.
-   Do not make semantic-layer or context-layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.
+   Do not make semantic layer or context layer edits until the user chooses which proposed changes to apply. The data scientist should confirm any new business definition, canonical table, exclusion rule, or SQL pattern.
 
    When a proposal is accepted, new measures and context land in the agent project layout defined in `SKILL.md`: measures in `measures/`, free-text in `context/`. Because these changes are born from trajectory analysis rather than an artifact, they carry the self-referencing provenance `trajectory analysis (<yyyy-mm-dd>)` — a `#' @provenance` tag on measures, YAML frontmatter on context files.

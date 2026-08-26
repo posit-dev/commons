@@ -8,36 +8,6 @@
     if (window.commonsAnswerPillTooltipInitialized) return;
     window.commonsAnswerPillTooltipInitialized = true;
 
-    // Keep the viewport still when a tool card is expanded or collapsed;
-    // otherwise shinychat's stick-to-bottom scrolling chases the height
-    // change. A synthetic upward wheel tick is the library's own escape
-    // hatch: it unpins from the bottom without moving the viewport. The
-    // escape only registers once the content actually overflows, which the
-    // expansion may create at any point during its transition, so it is
-    // repeated every frame for a beat — alongside a scrollTop hold, since
-    // scroll events (but not wheel events) are ignored while a resize is
-    // in flight.
-    document.addEventListener("click", function(event) {
-      if (!event.target || !event.target.closest) return;
-      var header = event.target.closest(".shiny-tool-card > .card-header");
-      if (!header) return;
-      var scroller = header.closest(".shiny-chat-messages");
-      if (!scroller) return;
-
-      var top = scroller.scrollTop;
-      var until = performance.now() + 600;
-      var steady = function() {
-        scroller.dispatchEvent(new WheelEvent("wheel", { deltaY: -1 }));
-        if (scroller.scrollTop !== top) {
-          scroller.scrollTop = top;
-        }
-        if (performance.now() < until) {
-          window.requestAnimationFrame(steady);
-        }
-      };
-      steady();
-    }, true);
-
     // Provenance tooltips are centered above their marker, which leaves them
     // hanging outside the chat pane — and clipped by it — when the marker
     // sits near an edge. The box has no layout until the marker is hovered

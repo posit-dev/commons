@@ -3,18 +3,17 @@
 \docType{package}
 \name{commons-package}
 \alias{commons-package}
-\title{commons: Build Self-Service Data Science Agents}
+\title{commons: AI Agents for Data Analysis}
 \description{
 \if{html}{\figure{logo.png}{options: style='float: right' alt='logo' width='120'}}
 
-Build correct and easy-to-use self-service data science agents for your organization. Connect raw data sources and a searchable context layer that demonstrates how to interpret them, then deploy agents that answer data questions, log interactions, and can be evaluated and improved over time.
+Implements trustworthy large language model agents. Connect raw data sources, a pool of trusted calculations, and a searchable context layer that demonstrates how to interpret them. Then, deploy data agents that answer questions, log interactions, and can be evaluated and improved over time.
 }
 \seealso{
 Useful links:
 \itemize{
   \item \url{https://github.com/posit-dev/commons}
   \item \url{https://posit-dev.github.io/commons/}
-  \item \url{https://solid-adventure-ny1mpqy.pages.github.io/}
   \item Report bugs at \url{https://github.com/posit-dev/commons/issues}
 }
 

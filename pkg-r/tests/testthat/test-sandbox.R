@@ -208,6 +208,13 @@ sandboxed_worker_probes <- function(
           }
           status
         }),
+        address_space = if (identical(Sys.info()[["sysname"]], "Linux")) {
+          as.double(system2(
+            "/bin/sh",
+            c("-c", shQuote("ulimit -v")),
+            stdout = TRUE
+          ))
+        },
         compute = sum(1:10)
       )
     },
@@ -232,6 +239,7 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   expect_equal(probes$subprocess, "denied")
   if (identical(Sys.info()[["sysname"]], "Linux")) {
     expect_equal(probes$exec, "allowed")
+    expect_lte(probes$address_space, 8 * 1024^2)
   }
   expect_equal(probes$compute, 55)
 })

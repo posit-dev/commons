@@ -167,7 +167,7 @@ available_tool_names <- function(tools) {
 
 citable_tool_output_text <- function(tools) {
   items <- c(
-    "- Data-dictionary prose shown in this system prompt.",
+    "- Data dictionary prose shown in this system prompt.",
     if ("search_pool" %in% tools) {
       paste(
         "- From `search_pool`: measure definitions; descriptions, SQL",
@@ -179,13 +179,13 @@ citable_tool_output_text <- function(tools) {
     },
     if ("describe_table" %in% tools) {
       paste(
-        "- From `describe_table`: data-dictionary descriptions, details,",
+        "- From `describe_table`: data dictionary descriptions, details,",
         "documented columns, definitions, relationships, and terms."
       )
     },
     if ("run_sql" %in% tools) {
       paste(
-        "- From `run_sql`: data-dictionary entries appended after the query",
+        "- From `run_sql`: data dictionary entries appended after the query",
         "result."
       )
     }

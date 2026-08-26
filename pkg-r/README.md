@@ -22,7 +22,7 @@ Trusted calculations can come from R code (as *measures*), [data
 dictionary](https://data-dict.tidyverse.org/) definitions, Snowflake
 semantic views, or Databricks metric views.
 
-<img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, there's a provenance pill that marks the answer as verified. In the second case, the pill reads 'Untrusted.'" width="100%" />
+<img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, a provenance marker reads 'Verified answer', while in the second it reads 'Untrusted'." width="100%" />
 
 ## Installation
 
@@ -99,7 +99,7 @@ vs. 83.5%), took less time to answer questions (a median of 31.0
 vs. 60.5 seconds), and used fewer output tokens (243,403 vs. 439,188
 total).
 
-<img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. Commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
+<img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
 
 In the evaluation, both harnesses use Claude Sonnet 5 at medium effort.
 The evaluation runs each of 32 questions three times. Questions require

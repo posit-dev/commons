@@ -8,16 +8,36 @@ semantic_layer(...)
 }
 \arguments{
 \item{...}{\code{\link[=measure]{measure()}} objects, lists of measures, or paths to R scripts or
-directories. File and inline measures can be freely mixed.}
+directories containing R scripts. Directory searches are not recursive.
+File and inline measures can be freely mixed.}
 }
 \value{
 A \code{commons_semantic_layer} object.
 }
 \description{
-A semantic layer is a collection of governed measures available to a
-\code{\link[=commons]{commons()}} agent.
+\code{semantic_layer()} collects governed R measures for a \code{\link[=commons]{commons()}} agent.
+Data dictionary definitions and warehouse semantic models contribute through
+\code{\link[=data_source]{data_source()}}.
 }
-\details{
+\section{Measures from files}{
+
+Character paths can name R scripts or directories containing them. Functions
+marked with \verb{@measure} become measures; other functions in those files can be
+used as helpers.
+
+The roxygen title, description, and \verb{@return} text describe the measure.
+Each \verb{@param} marks a model-supplied argument and can declare its type:
+\code{string}, \code{integer}, \code{number}, \code{boolean}, \code{enum[value, ...]}, or an array
+such as \code{string[]}. Without a declaration, commons infers the type from the
+default, falling back to \code{string}.
+
+Measure and helper source is visible in \code{run_r}; evaluating a measure's name
+there prints its definition. Function environments, connections, and
+credentials are not shared with that session.
+}
+
+\section{Measure arguments}{
+
 A measure function can take two kinds of arguments:
 \itemize{
 \item Arguments documented with \verb{@param} (or listed in \code{arguments}, for inline
@@ -38,13 +58,8 @@ client, give the argument a default that builds the object, e.g.
 \code{board = pins::board_connect()}. Write the default as a call rather than a
 reference to a variable defined elsewhere, so the measure doesn't depend on
 where the semantic layer is created.
-
-The source of each measure, and of any helper functions defined alongside
-it in the semantic layer's files, is readable in the agent's \code{run_r}
-session: evaluating a measure's name there prints its definition. Only
-source text is shared with that session; the functions' environments (and
-any connections or credentials in them) are not.
 }
+
 \examples{
 semantic_layer(
   measure(

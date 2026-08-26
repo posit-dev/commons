@@ -41,7 +41,7 @@ Prefer the dictionary over `context_layer()` for information that belongs to a d
 
 ## How commons uses it
 
-Commons delivers dictionary content progressively:
+commons delivers dictionary content progressively:
 
 - Dataset-level descriptions and details are available in the system prompt, along with as many glossary terms as fit within its size cap. Remaining glossary terms are searchable and arrive on first touch when a table entry references them.
 - The first time a conversation uses a table, its description, details, documented columns, relationships, and governed definitions are delivered with the tool result. `describe_table` combines the dictionary entry with the live schema.
@@ -57,7 +57,7 @@ Reconcile every authored table with the selected relations during onboarding. Us
 
 ## Governed definitions
 
-Commons supports data-dict's table-level `definitions` field for named, governed expressions. Write each `expr` in the [data-dict expression language](https://data-dict.tidyverse.org/expressions.html), not in the attached source's SQL dialect:
+commons supports data-dict's table-level `definitions` field for named, governed expressions. Write each `expr` in the [data-dict expression language](https://data-dict.tidyverse.org/expressions.html), not in the attached source's SQL dialect:
 
 ```yaml
 tables:
@@ -71,7 +71,7 @@ tables:
         expr: status_cd = 90
 ```
 
-Each definition requires `name` and `expr`. `label`, `description`, and `details` are optional. Commons validates the expression's inferred type and references, determines whether it is a filter, metric, or derived row value, and compiles it for the source's SQL backend. Document every referenced column and its type so the expression can be checked. Definition names must not shadow columns. Definitions on the same table may refer to one another by name, but references must not form a cycle.
+Each definition requires `name` and `expr`. `label`, `description`, and `details` are optional. commons validates the expression's inferred type and references, determines whether it is a filter, metric, or derived row value, and compiles it for the source's SQL backend. Document every referenced column and its type so the expression can be checked. Definition names must not shadow columns. Definitions on the same table may refer to one another by name, but references must not form a cycle.
 
 The agent can apply definitions as `{{name}}` tokens in SQL. When the same name exists on multiple tables in a query, qualify it as `{{table::name}}`. Metrics can also be called through `call_metrics`. Add a definition only when its business meaning and computation come from trusted existing material and the user confirms any consequential choice. Do not invent a calculation merely to complete the dictionary.
 

@@ -10,7 +10,10 @@ commons_app(client, ...)
 commons_server(id, client, ...)
 }
 \arguments{
-\item{client}{A \code{\link[=commons]{commons()}} agent. Create a new agent for each Shiny session.}
+\item{client}{A \code{\link[=commons]{commons()}} agent. \code{commons_app()} uses one agent for the
+lifetime of its local or single-user app. In a multi-user app, create an
+agent inside the app's server function and pass it to \code{commons_server()}.
+This gives each Shiny session its own agent state.}
 
 \item{...}{In \code{commons_app()}, extra arguments passed to
 \code{\link[shiny:shinyApp]{shiny::shinyApp()}}. In \code{commons_server()}, arguments passed to
@@ -30,8 +33,9 @@ These functions compose \code{\link[shinychat:page_chat]{shinychat::page_chat()}
 definitions, and data documentation as the answer streams, and rewrites
 verified citations inline as numbered, server-authored \verb{<shiny-aside>}
 elements. Citation details name the trusted source.
-A compact provenance aside follows the answer when it was produced by a
-governed calculation, or when a fallback answer cites nothing verified.
+A provenance marker in a compact \verb{<shiny-aside>} follows the answer when it
+was produced by a governed calculation, or when a fallback answer cites
+nothing verified.
 }
 \details{
 The UI side is ordinary shinychat UI: use \code{\link[shinychat:page_chat]{shinychat::page_chat()}} for a
@@ -41,13 +45,14 @@ CSS and JavaScript are on the page.
 }
 \examples{
 \dontrun{
+# Local or single-user app
 agent <- commons(
   ellmer::chat_anthropic(),
   data_sources = data_source(sales = sales)
 )
 commons_app(agent)
 
-# Inside a custom Shiny app
+# Multi-user Shiny app
 library(shiny)
 library(shinychat)
 
