@@ -365,15 +365,10 @@ shiny-chat-container
 }
 
 .commons-run-r-details > summary {
-  color: var(--bs-secondary-color, #6c757d);
+  color: inherit;
   cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 400;
+  font: inherit;
   width: fit-content;
-}
-
-.commons-run-r-details > summary:hover {
-  color: var(--bs-body-color, #212529);
 }
 
 .commons-run-r-details > summary:focus-visible {
