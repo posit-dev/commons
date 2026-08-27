@@ -93,13 +93,25 @@ citation_aside_html <- function(quote, explanation, label, kind) {
   icon <- citation_icon_url(kind)
   reason <- if (nzchar(explanation)) paste0(explanation, "\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
+  # shinychat only renders the popover's title row for grouped asides, so
+  # the body carries its own title (icon + label) to keep the source named
+  # for singleton citations; commons-chat.css hides shinychat's row.
+  title <- sprintf(
+    paste0(
+      '<span class="commons-citation-title">',
+      '%s<span class="commons-citation-title-label">%s</span></span>\n\n'
+    ),
+    if (is.null(icon)) "" else sprintf('<img src="%s" alt="">', escape_attr(icon)),
+    htmltools::htmlEscape(label)
+  )
   sprintf(
     paste0(
       '<shiny-aside label="%s"%s>',
-      "%s%s</shiny-aside>"
+      "%s%s%s</shiny-aside>"
     ),
     escape_attr(label),
     if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
+    title,
     reason,
     blockquote
   )

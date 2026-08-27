@@ -268,6 +268,28 @@ shiny-chat-container
   }
 }
 
+/* The citation aside body carries its own title (icon + label) because
+ * shinychat only renders its popover title row for grouped asides; hide
+ * shinychat's row so grouped popovers don't name the source twice. The
+ * popover is portaled to <body>, so these rules must stay unscoped. */
+.commons-citation-title {
+  align-items: center;
+  display: flex;
+  font-weight: 600;
+  gap: 0.3em;
+  margin-bottom: 0.25rem;
+}
+
+.commons-citation-title img {
+  height: 1.1em;
+  width: 1.1em;
+}
+
+.shiny-aside-popover:has(.commons-citation-title)
+  .shiny-aside-popover__label {
+  display: none;
+}
+
 /* ---- Measure display ------------------------------------------------- */
 
 .commons-measure-display {
