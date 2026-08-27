@@ -26,6 +26,7 @@ Imports:
     ellmer (>= 0.4.1),
     evaluate,
     glue,
+    highr,
     htmltools,
     httr2 (>= 1.1.0),
     jsonlite,

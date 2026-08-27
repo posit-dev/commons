@@ -373,10 +373,53 @@ shiny-chat-container
   text-transform: uppercase;
 }
 
-.commons-run-r-code {
+.commons-run-r-display .commons-run-r-code {
   margin: 0;
   overflow-x: auto;
   white-space: pre;
+}
+
+.commons-run-r-code .hl.com {
+  color: #a0a1a7;
+  font-style: italic;
+}
+
+.commons-run-r-code .hl.kwa {
+  color: #a626a4;
+}
+
+.commons-run-r-code .hl.kwc,
+.commons-run-r-code .hl.num {
+  color: #986801;
+}
+
+.commons-run-r-code .hl.kwd {
+  color: #4078f2;
+}
+
+.commons-run-r-code .hl.sng {
+  color: #50a14f;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.com {
+  color: #5c6370;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwa {
+  color: #c678dd;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwc,
+[data-bs-theme="dark"] .commons-run-r-code .hl.num {
+  color: #d19a66;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwd {
+  color: #61aeee;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.sng {
+  color: #98c379;
 }
 
 .commons-run-r-details > .commons-run-r-code {
