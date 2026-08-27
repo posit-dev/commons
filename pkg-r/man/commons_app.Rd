@@ -22,13 +22,11 @@ assemble the UI and server yourself with \code{\link[=commons_theme]{commons_the
 }
 \section{Citations and provenance}{
 
-The server verifies each \verb{<commons-citation>} the model writes against its
-own context, measure definitions, and data documentation as the answer
-streams, and rewrites verified citations inline as numbered,
-server-authored \verb{<shiny-aside>} elements. Citation details name the
-trusted source. A provenance marker in a compact \verb{<shiny-aside>} follows
-the answer when it was produced by a governed calculation, or when a
-fallback answer cites nothing verified.
+The server verifies citations against trusted calculations, context, and data
+documentation as the answer streams. Verified citations appear inline, with
+details that name the trusted source. A provenance marker follows the answer
+when it was produced by a governed calculation, or when a fallback answer
+cites nothing verified.
 }
 
 \examples{

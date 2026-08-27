@@ -12,17 +12,13 @@
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
-#'   each pin is downloaded only when its table is first used---by table
-#'   inspection, a SQL query that references it, or a measure that
-#'   takes the source's connection. [commons_server()] starts a background
-#'   process right after startup that downloads the remaining pins into the
-#'   local pins cache, so a first use typically only reads an
-#'   already-downloaded file. A table reflects the pin's
+#'   each pin is downloaded only when its table is first used.
+#'   [commons_server()] starts a background process right after startup that
+#'   downloads the remaining pins into the local pins cache, so a first use
+#'   typically only reads an already-downloaded file. A table reflects the pin's
 #'   value at first use and is not refreshed for the lifetime of the data
-#'   source; if a pin can't be read (e.g. a network failure), the error
-#'   surfaces at that first use and the read is retried on the next one.
-#'
-#' The resulting object gives the agent a DBI connection plus a table registry.
+#'   source; if a pin can't be read (e.g. a network failure), the error surfaces
+#'   at that first use and the read is retried on the next one.
 #'
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
@@ -40,15 +36,13 @@
 #'   current schema. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
 #'   selections import metric views, as native trusted metrics and dimensions.
-#'   Namespace selections retain lightweight model metadata, then read a
-#'   model's definition when the agent describes or uses it. Explicitly
-#'   selected models are read and validated when the data source is created.
+#'   Namespace selections read model definitions lazily. Explicitly selected
+#'   models are read and validated when the data source is created.
 #'   Databricks wildcard members require concrete column metadata from the
 #'   warehouse.
 #'   An exact physical-table selection also imports associated models when
-#'   every physical dependency is selected. Public relationships, facts,
-#'   filters, and instructions become table-scoped first-touch and retrieval
-#'   context; private members remain hidden.
+#'   every physical dependency is selected. Only public relationships, facts,
+#'   filters, and instructions are exposed to the agent.
 #'
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
@@ -62,31 +56,20 @@
 #' @section Data dictionaries:
 #' A data dictionary describes a data source's tables and columns: what each
 #' table's rows represent, what its columns mean, allowed values and units,
-#' how tables join, and definitions of domain terms. Its content reaches the
-#' agent three ways:
+#' how tables join, and definitions of domain terms. commons uses it to provide
+#' business context and governed definitions to the agent. See
+#' `vignette("commons", package = "commons")` for guidance on writing one.
 #'
-#' * The dataset-level `description` and `details`, along with the glossary,
-#'   are included in the system prompt. These fields are the place for rules
-#'   that span tables and for guidance on which tables answer which kinds of
-#'   questions.
-#' * The first time a conversation touches a table---via table inspection or a
-#'   SQL query---the table's full dictionary entry rides along with
-#'   the tool result: its prose, documented columns, relationships, and
-#'   definitions of glossary terms it references. Table inspection merges
-#'   documented columns with the live schema.
-#' * For Snowflake and Databricks sources, a fully qualified dictionary table
-#'   name matches the same selected relation. A relative name is accepted when
-#'   it matches only one selected relation. Authored prose takes precedence,
-#'   while warehouse column types remain authoritative.
-#' * When the agent also has a [context_layer()], the dictionary's prose is
-#'   indexed for context retrieval.
+#' For Snowflake and Databricks sources, a fully qualified dictionary table
+#' name matches the same selected relation. A relative name is accepted when
+#' it matches only one selected relation. Authored prose takes precedence,
+#' while warehouse column types remain authoritative.
 #'
 #' A table's entry can also declare `definitions`: named expressions in the
 #' [data-dict expression language](https://data-dict.tidyverse.org/expressions.html).
 #' commons validates their inferred types and references, compiles them for
 #' the source's SQL backend, and makes them available to trusted metric
-#' calculations and custom SQL. Definitions are delivered through all three
-#' channels above.
+#' calculations and custom SQL.
 #'
 #' @section Trust:
 #' The agent runs only read-only `SELECT` queries; statements that
@@ -96,9 +79,9 @@
 #' access. These are safeguards, not a sandbox: when you supply your own
 #' connection, still open it in read-only mode where the backend supports it.
 #' Snowflake and Databricks sources snapshot the principal, active role, and
-#' namespace at creation, then reject catalog and governed execution after
-#' those values change. Authored and native semantic material is exposed only
-#' after a zero-row query succeeds for the current principal.
+#' namespace at creation, then reject catalog access and trusted calculations
+#' after those values change. Authored and native semantic material is exposed
+#' only after a zero-row query succeeds for the current principal.
 #'
 #' @return A `commons_data_source` object.
 #'

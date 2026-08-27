@@ -7,7 +7,7 @@
 context_layer(files = character())
 }
 \arguments{
-\item{files}{Character vector of paths to text/markdown files to index.}
+\item{files}{Character vector of paths to text or Markdown files.}
 }
 \value{
 A \code{commons_context_layer} object.
@@ -17,9 +17,8 @@ A context layer contains text that helps a \code{\link[=commons]{commons()}} age
 data source.
 }
 \details{
-Files are chunked and indexed with \pkg{ragnar} when the agent first
-searches its context. Facts that should be in every prompt belong in the
-\code{instructions} passed to \code{\link[=commons]{commons()}}, not here.
+Context is retrieved when relevant. Facts needed in every conversation
+belong in the \code{instructions} passed to \code{\link[=commons]{commons()}}, not here.
 }
 \examples{
 path <- tempfile(fileext = ".md")

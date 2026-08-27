@@ -31,16 +31,13 @@ supply.
 }
 \details{
 Two return types receive special display handling: ggplots and \code{\link[gt:gt]{gt::gt()}}
-tables are shown directly to the user in the opened measure result. The model
-is told that the plot or table has already been shown, so it can interpret the
-result without repeating it.
+tables are shown directly to the user in the opened measure result.
 
 For full control over a result, \code{fn} can return an
 \link[ellmer:ContentToolResult]{ellmer::ContentToolResult}. Its \code{value} is sent to the model and its
-\code{extra$display} controls the shinychat display. When the display includes
-HTML, Markdown, or text, the model is told that the result is already visible
-to the user. An optional \code{extra$data} value is made available in the agent's
-R session and removed from the result before it is returned to ellmer.
+\code{extra$display} controls the shinychat display. An optional \code{extra$data}
+value is made available in the agent's R session and removed from the result
+before it is returned to ellmer.
 }
 \examples{
 table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))
