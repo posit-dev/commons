@@ -263,7 +263,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   expect_no_match(verified, "Verified answer", fixed = TRUE)
   expect_match(
     verified,
-    "This answer comes from a governed calculation defined by your data team.",
+    "This answer comes from a trusted calculation defined by your data team.",
     fixed = TRUE
   )
 })

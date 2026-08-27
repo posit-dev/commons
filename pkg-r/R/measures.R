@@ -1,6 +1,6 @@
 #' Create a semantic layer
 #'
-#' `semantic_layer()` collects governed R measures for a [commons()] agent.
+#' `semantic_layer()` collects trusted calculations for a [commons()] agent.
 #' Data dictionary definitions and warehouse semantic models contribute through
 #' [data_source()].
 #'
@@ -125,7 +125,7 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 
 #' Create a measure
 #'
-#' A measure is a governed calculation inside a [semantic_layer()]. Its function
+#' A measure is a trusted calculation inside a [semantic_layer()]. Its function
 #' body is ordinary R; its `arguments` schema tells the model what inputs it can
 #' supply.
 #'

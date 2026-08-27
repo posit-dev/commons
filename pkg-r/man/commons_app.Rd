@@ -25,7 +25,7 @@ assemble the UI and server yourself with \code{\link[=commons_theme]{commons_the
 The server verifies citations against trusted calculations, context, and data
 documentation as the answer streams. Verified citations appear inline, with
 details that name the trusted source. A provenance marker follows the answer
-when it was produced by a governed calculation, or when a fallback answer
+when it was produced by a trusted calculation, or when a fallback answer
 cites nothing verified.
 }
 

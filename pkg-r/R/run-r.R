@@ -50,6 +50,8 @@ tool_run_r <- function(private) {
       },
       "\n\nRules:",
       "\n- Work incrementally: each call should do one small, well-defined task.",
+      "\n- Prefer tidyverse style: put separate expressions on separate lines",
+      "and wrap long calls for readability.",
       "\n- Create at most one figure per call and return it implicitly rather",
       "than saving it.",
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
@@ -234,7 +236,7 @@ run_r_html <- function(code, segments) {
   }
   code_html <- sprintf(
     "<pre class=\"commons-run-r-code\"><code class=\"language-r\">%s</code></pre>",
-    html_escape(paste(c(code, output), collapse = "\n"))
+    highlight_r_html(paste(c(code, output), collapse = "\n"))
   )
   if (length(plot_html)) {
     code_html <- paste0(
@@ -247,6 +249,17 @@ run_r_html <- function(code, segments) {
     "<div class=\"commons-run-r-display\">%s</div>",
     paste(c(code_html, plot_html), collapse = "\n")
   )
+}
+
+highlight_r_html <- function(code) {
+  fallback <- tryCatch(
+    {
+      parse(text = code)
+      FALSE
+    },
+    error = function(...) TRUE
+  )
+  paste(highr::hi_html(code, fallback = fallback), collapse = "\n")
 }
 
 # --- worker lifecycle --------------------------------------------------------

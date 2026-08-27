@@ -6,7 +6,7 @@ The task is to move recurring questions to the highest appropriate path, increas
 
 ```text
 Path A: semantic layer
-The answer comes from a governed `measure()`. Prefer this for stable, recurring business metrics.
+The answer comes from a trusted calculation such as a `measure()`. Prefer this for stable, recurring business metrics.
 
 Path B, documented
 The answer uses SQL, but the context layer identifies the right table, grain, filters, joins, caveats, or SQL shape. If there are recurring cases in this bucket, consider proposing changes to the semantic layer that would promote those cases into Path A.
@@ -82,7 +82,7 @@ Files in a Posit Connect app's working directory are replaced on redeployment. U
 4. Propose changes.
    Present the highest-value changes first. For each proposal, note the theme and current typical path, how many questions are described by that theme, and the recommended change.
 
-   Prefer semantic layer edits when the question is a stable governed metric. Prefer context layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
+   Prefer semantic layer edits when the question calls for a stable trusted calculation. Prefer context layer edits when the issue is table choice, grain, filters, joins, caveats, terminology, or reusable SQL shape.
 
    Classify each proposal the same way the extraction reference does, so the two skills reconcile against existing context identically:
    * **new** — add it.

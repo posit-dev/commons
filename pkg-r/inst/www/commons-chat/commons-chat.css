@@ -133,7 +133,7 @@ shiny-chat-container .shiny-chat-input .tiptap {
 /* Citations are labeled identity asides: shinychat accumulates those
  * sharing a paragraph into one pill with a "+N" overflow and a carousel
  * popover. They render icon-only like the provenance markers, in a quieter
- * mid navy — verified support, short of a governed calculation. */
+ * mid navy — verified support, short of a trusted calculation. */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/citation-mark.svg"]) {
   --shiny-chat-aside-marker-color: #2e4a6b;
@@ -365,18 +365,109 @@ shiny-chat-container
 }
 
 .commons-run-r-details > summary {
-  color: var(--bs-secondary-color, #6c757d);
+  align-items: center;
+  color: inherit;
   cursor: pointer;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  display: flex;
+  font: inherit;
+  gap: 0.45em;
+  list-style: none;
+  width: fit-content;
 }
 
-.commons-run-r-code {
+.commons-run-r-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commons-run-r-details > summary::before {
+  border-bottom: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.45em;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  transition: transform 0.3s ease-in-out;
+  width: 0.45em;
+}
+
+.commons-run-r-details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.commons-run-r-details > summary:focus-visible {
+  border-radius: var(--bs-border-radius-sm, 0.25rem);
+  outline: 2px solid var(--bs-primary, #007bc2);
+  outline-offset: 2px;
+}
+
+.commons-run-r-details[open] > .commons-run-r-code {
+  animation: commons-run-r-details-reveal 0.2s ease-out;
+}
+
+@keyframes commons-run-r-details-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commons-run-r-details > summary::before {
+    transition: none;
+  }
+
+  .commons-run-r-details[open] > .commons-run-r-code {
+    animation: none;
+  }
+}
+
+.commons-run-r-display .commons-run-r-code {
   margin: 0;
   overflow-x: auto;
   white-space: pre;
+}
+
+.commons-run-r-code .hl.com {
+  color: #a0a1a7;
+  font-style: italic;
+}
+
+.commons-run-r-code .hl.kwa {
+  color: #a626a4;
+}
+
+.commons-run-r-code .hl.kwc,
+.commons-run-r-code .hl.num {
+  color: #986801;
+}
+
+.commons-run-r-code .hl.kwd {
+  color: #4078f2;
+}
+
+.commons-run-r-code .hl.sng {
+  color: #50a14f;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.com {
+  color: #5c6370;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwa {
+  color: #c678dd;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwc,
+[data-bs-theme="dark"] .commons-run-r-code .hl.num {
+  color: #d19a66;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwd {
+  color: #61aeee;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.sng {
+  color: #98c379;
 }
 
 .commons-run-r-details > .commons-run-r-code {
