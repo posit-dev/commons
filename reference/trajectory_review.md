@@ -88,9 +88,9 @@ Provenance markers are reconstructed from recorded provenance tags, but
 inline citations are not recreated. Generated review documents list the
 recorded citation decisions separately.
 
-Search-pool results are omitted because later tool calls record any
-selected measure; other tool results are limited to 50 lines or 20,000
-characters.
+Trusted-calculation discovery results are omitted because later activity
+records any selected calculation; other tool results are limited to 50
+lines or 20,000 characters.
 
 Trust filters use each answer's provenance tag exactly as
 [`trajectory_read()`](https://posit-dev.github.io/commons/reference/trajectory_read.md)

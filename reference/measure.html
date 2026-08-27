@@ -86,15 +86,12 @@ connection or keep their defaults. See <code><a href="semantic_layer.html">seman
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Two return types receive special display handling: ggplots and <code><a href="https://gt.rstudio.com/reference/gt.html" class="external-link">gt::gt()</a></code>
-tables are shown directly to the user in the opened measure result. The model
-is told that the plot or table has already been shown, so it can interpret the
-result without repeating it.</p>
+tables are shown directly to the user in the opened measure result.</p>
 <p>For full control over a result, <code>fn</code> can return an
 <a href="https://ellmer.tidyverse.org/reference/Content.html" class="external-link">ellmer::ContentToolResult</a>. Its <code>value</code> is sent to the model and its
-<code>extra$display</code> controls the shinychat display. When the display includes
-HTML, Markdown, or text, the model is told that the result is already visible
-to the user. An optional <code>extra$data</code> value is made available to <code>run_r</code> and
-removed from the result before it is returned to ellmer.</p>
+<code>extra$display</code> controls the shinychat display. An optional <code>extra$data</code>
+value is made available in the agent's R session and removed from the result
+before it is returned to ellmer.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

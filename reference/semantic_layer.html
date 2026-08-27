@@ -77,9 +77,9 @@ Each <code>@param</code> marks a model-supplied argument and can declare its typ
 <code>string</code>, <code>integer</code>, <code>number</code>, <code>boolean</code>, <code>enum[value, ...]</code>, or an array
 such as <code>string[]</code>. Without a declaration, commons infers the type from the
 default, falling back to <code>string</code>.</p>
-<p>Measure and helper source is visible in <code>run_r</code>; evaluating a measure's name
-there prints its definition. Function environments, connections, and
-credentials are not shared with that session.</p>
+<p>Measure and helper source is visible in the agent's R session; evaluating a
+measure's name there prints its definition. Function environments,
+connections, and credentials are not shared with that session.</p>
     </div>
     <div class="section level2">
     <h2 id="measure-arguments">Measure arguments<a class="anchor" aria-label="anchor" href="#measure-arguments"></a></h2>
@@ -125,7 +125,7 @@ where the semantic layer is created.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> #</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> function () </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 10</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;environment: 0x56184d615cd8&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;environment: 0x564f5deaf668&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $fn_sources</span>

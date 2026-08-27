@@ -42,7 +42,7 @@ with a `Verified answer` provenance marker.
 > animal present at the site.
 >
 > ![Verified
-> answer](commons-chat-0.0.0.9000.1787873870/figs/trusted-icon.svg)Verified
+> answer](commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg)Verified
 > answer This answer comes from a trusted calculation defined by your
 > data team.
 
@@ -106,7 +106,7 @@ High trust
 Relevant calculation  
 found → Run trusted  
 calculation → ![Verified
-answer](commons-chat-0.0.0.9000.1787873870/figs/trusted-icon.svg)Verified
+answer](commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg)Verified
 answer This answer comes from a trusted calculation defined by your data
 team.
 
@@ -116,7 +116,7 @@ No relevant
 calculation found → Search  
 context → Write  
 SQL/R → Cited answer¹ or
-![Untrusted](commons-chat-0.0.0.9000.1787873870/figs/warning-icon.svg)Untrusted
+![Untrusted](commons-chat-0.0.0.9000.1787874295/figs/warning-icon.svg)Untrusted
 This answer was not produced by a trusted calculation and has no
 verified supporting citation. AI can be wrong.
 
@@ -133,11 +133,11 @@ occur:
 
 | How the answer is produced | Provenance outcome |
 |----|----|
-| A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-chat-0.0.0.9000.1787873870/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-chat-0.0.0.9000.1787873870/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-chat-0.0.0.9000.1787873870/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787873870/figs/warning-icon.svg)Untrusted This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong. |
-| Custom R | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787873870/figs/warning-icon.svg)Untrusted This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong. |
+| A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787874295/figs/warning-icon.svg)Untrusted This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong. |
+| Custom R | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787874295/figs/warning-icon.svg)Untrusted This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong. |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
 The agent itself does not determine the provenance outcome. commons
@@ -307,7 +307,7 @@ tables:
 There are three kinds of definitions. Definitions can participate in
 trusted metric calculations or be used in custom SQL:[^1]
 
-| Kind | Example | Use in `call_metrics` |
+| Kind | Example | Use in a trusted metric calculation |
 |----|----|----|
 | Metric | `SUM(n)` | Computes the metric |
 | Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |
@@ -386,7 +386,7 @@ in the server, and create a new agent for each Shiny session. This
 example assumes that `observations` and `site_area` are data frames
 loaded when the app starts.
 
-[^1]: In custom SQL, the agent refers to a definition using its
-    `{{name}}` token. commons expands the token to SQL compiled for the
-    data source. Because this is still custom SQL, the provenance
-    outcome is `Cited` or `Untrusted`, rather than `Verified answer`.
+[^1]: commons expands definitions used in custom SQL to expressions
+    compiled for the data source. Because this is still custom SQL, the
+    provenance outcome is `Cited` or `Untrusted`, rather than
+    `Verified answer`.

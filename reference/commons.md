@@ -2,8 +2,10 @@
 
 `commons()` creates an
 [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
-subclass with tools for a semantic layer, context search, table
-inspection, and SQL queries.
+subclass with tools and prompting that allow the agent to navigate its
+data sources, semantic layer, and context layer. Depending on the
+agent's choice of tools, responses can be deterministically classified
+as based on a trusted calculation, cited, or untrusted.
 
 ## Usage
 
@@ -38,8 +40,6 @@ commons(
   or a named list of them. Measures can take a source's connection as an
   argument named after the source; see
   [`semantic_layer()`](https://posit-dev.github.io/commons/reference/semantic_layer.md).
-  When there are several sources, the `run_sql` and `describe_table`
-  tools take a source's name as a `source` argument.
 
 - semantic_layer:
 
@@ -68,7 +68,7 @@ commons(
 
 - network:
 
-  Whether the `run_r` session has network access. One of `"none"` (the
+  Whether the agent's R session has network access. One of `"none"` (the
   default) or `"full"`. The session uses OS sandboxing on Linux and
   macOS. On unsupported hosts, local development can opt in to
   best-effort R guardrails with
@@ -112,6 +112,36 @@ and
 to embed the agent in Shiny, and
 [`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
 to use the agent as a vitals solver.
+
+## Agent tools
+
+Depending on its semantic layer, context layer, and data sources, a
+commons agent receives some combination of these tools:
+
+- `search_pool` searches trusted calculations and semantic models.
+
+- `search_catalog` searches a warehouse catalog.
+
+- `call_measure` invokes an R measure.
+
+- `call_metrics` invokes governed or warehouse-native metrics.
+
+- `call_calculation` invokes an exact trusted query.
+
+- `search_context` retrieves relevant business context.
+
+- `describe_table` inspects a table or semantic model.
+
+- `run_sql` executes a read-only SQL query.
+
+- `run_r` executes R code to analyze results and render plots in the
+  agent's R session.
+
+These model-facing tools should be considered private. Their
+constructors are intentionally not exported, and their names, arguments,
+availability, and behavior may change without notice. Application code
+should configure an agent through `commons()` and its layer constructors
+rather than depend on individual tools.
 
 ## Examples
 

@@ -37,9 +37,10 @@ Each `@param` marks a model-supplied argument and can declare its type:
 array such as `string[]`. Without a declaration, commons infers the type
 from the default, falling back to `string`.
 
-Measure and helper source is visible in `run_r`; evaluating a measure's
-name there prints its definition. Function environments, connections,
-and credentials are not shared with that session.
+Measure and helper source is visible in the agent's R session;
+evaluating a measure's name there prints its definition. Function
+environments, connections, and credentials are not shared with that
+session.
 
 ## Measure arguments
 
@@ -93,7 +94,7 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x56184d615cd8>
+#> <environment: 0x564f5deaf668>
 #> 
 #> 
 #> $fn_sources

@@ -53,7 +53,7 @@ data source.</p>
 
 
 <dl><dt id="arg-files">files<a class="anchor" aria-label="anchor" href="#arg-files"></a></dt>
-<dd><p>Character vector of paths to text/markdown files to index.</p></dd>
+<dd><p>Character vector of paths to text or Markdown files.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -62,9 +62,8 @@ data source.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>Files are chunked and indexed with <span class="pkg">ragnar</span> when the agent first
-searches its context. Facts that should be in every prompt belong in the
-<code>instructions</code> passed to <code><a href="commons.html">commons()</a></code>, not here.</p>
+    <p>Context is retrieved when relevant. Facts needed in every conversation
+belong in the <code>instructions</code> passed to <code><a href="commons.html">commons()</a></code>, not here.</p>
     </div>
 
     <div class="section level2">

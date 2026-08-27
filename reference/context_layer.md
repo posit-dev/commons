@@ -14,7 +14,7 @@ context_layer(files = character())
 
 - files:
 
-  Character vector of paths to text/markdown files to index.
+  Character vector of paths to text or Markdown files.
 
 ## Value
 
@@ -22,9 +22,8 @@ A `commons_context_layer` object.
 
 ## Details
 
-Files are chunked and indexed with ragnar when the agent first searches
-its context. Facts that should be in every prompt belong in the
-`instructions` passed to
+Context is retrieved when relevant. Facts needed in every conversation
+belong in the `instructions` passed to
 [`commons()`](https://posit-dev.github.io/commons/reference/commons.md),
 not here.
 
