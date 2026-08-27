@@ -393,9 +393,11 @@ commons_answer_pill <- function(tag) {
       "commons-answer-pill commons-answer-pill-",
       entry$pill_class
     ),
-    `aria-label` = paste0(entry$label, ". ", entry$body),
+    # No aria-label: the visible text already announces the label, and
+    # Bootstrap sets aria-describedby when the tooltip shows the body.
     tabindex = "0",
-    commons_pill_icon(entry$icon, entry$label),
+    # Decorative: the adjacent span already names the label
+    commons_pill_icon(entry$icon, ""),
     htmltools::tags$span(entry$label)
   )
   bslib::tooltip(pill, entry$body)
