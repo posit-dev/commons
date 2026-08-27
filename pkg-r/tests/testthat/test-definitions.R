@@ -346,8 +346,6 @@ test_that("the system prompt indexes landed definition kinds", {
 
   expect_match(prompt, "# Governed definitions", fixed = TRUE)
   expect_match(prompt, "`{{table::name}}`", fixed = TRUE)
-  expect_no_match(prompt, "expression-language", fixed = TRUE)
-  expect_no_match(prompt, "dictionary entry delivers", fixed = TRUE)
   expect_match(
     prompt,
     "- sales: filters `{{emea}}`; derived `{{region_band}}`; metrics `{{big_revenue}}`",

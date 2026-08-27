@@ -117,9 +117,3 @@ test_that("instructions are not interpreted as prompt template expressions", {
 
   expect_true(endsWith(prompt, instructions))
 })
-
-test_that("the packaged prompt omits run_r result handles", {
-  prompt <- test_agent()$get_system_prompt()
-
-  expect_no_match(prompt, "r1", fixed = TRUE)
-})

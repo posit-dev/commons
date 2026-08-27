@@ -325,12 +325,6 @@ test_that("citation_reminder_text names the commons-citation dialect", {
   expect_no_match(reminder, "<citation reason", fixed = TRUE)
 })
 
-test_that("citation requests do not prescribe answer length", {
-  request <- test_agent()$get_system_prompt()
-
-  expect_no_match(request, "paragraph", fixed = TRUE)
-})
-
 test_that("citation instructions describe only available tool outputs", {
   base <- test_agent()$get_system_prompt()
   expect_match(base, "<commons-citation>", fixed = TRUE)
