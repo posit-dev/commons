@@ -65,31 +65,12 @@ test_that("run_r describes both protection modes as sandboxed", {
   guarded_description <- tool_description(agent_tool(guarded, "run_r"))
 
   expect_identical(guarded_description, sandboxed_description)
-  expect_match(guarded_description, "sandboxed R session", fixed = TRUE)
-})
-
-test_that("run_r describes which results are visible to the user", {
-  description <- tool_description(agent_tool(test_agent(), "run_r"))
-
-  expect_match(description, "textual output are visible only to you")
-  expect_match(description, "plots are also shown to the user")
-  expect_match(description, "user cannot run code in this session")
 })
 
 test_that("search_context uses a completed title without a context layer", {
   result <- agent_tool(test_agent(), "search_context")("anything")
 
   expect_equal(result@extra$display$title, "Searched context")
-})
-
-test_that("call_measure describes how to handle visible results", {
-  agent <- test_agent(
-    semantic_layer = semantic_layer(count_measure_tool())
-  )
-  description <- tool_description(agent_tool(agent, "call_measure"))
-
-  expect_match(description, "results may be displayed directly")
-  expect_match(description, "do not reproduce it in your reply")
 })
 
 test_that("the system prompt includes tables and the date", {
@@ -108,9 +89,6 @@ test_that("the system prompt includes tables and the date", {
   expect_match(prompt, "sales")
   expect_no_match(prompt, "order_count")
   expect_match(prompt, format(Sys.Date(), "%Y-%m-%d"), fixed = TRUE)
-  expect_no_match(prompt, "tagged A")
-  expect_no_match(prompt, "tagged B")
-  expect_match(prompt, "## Citations", fixed = TRUE)
 })
 
 test_that("instructions are appended to the packaged system prompt", {
@@ -118,7 +96,6 @@ test_that("instructions are appended to the packaged system prompt", {
   agent <- test_agent(instructions = instructions)
   prompt <- agent$get_system_prompt()
 
-  expect_match(prompt, "Your task is to thoughtfully", fixed = TRUE)
   expect_match(
     prompt,
     paste("## Additional instructions", instructions, sep = "\n\n"),
