@@ -7,7 +7,7 @@ test_that("normal package checks can disable browser tests explicitly", {
   )
 })
 
-test_that("Shiny Chat renders native numbered streamed citations", {
+test_that("Shiny Chat renders streamed citations as icon markers", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -27,10 +27,8 @@ test_that("Shiny Chat renders native numbered streamed citations", {
     timeout = 30 * 1000
   )
   marker_selector <- paste0(
-    'button[data-shinychat-aside-display="compact"]',
-    '[aria-label="Aside 1: documentation"],',
-    'button[data-shinychat-aside-display="compact"]',
-    '[aria-label="Aside 2: sales table"]'
+    'button.shiny-aside-pill[aria-label="documentation"],',
+    'button.shiny-aside-pill[aria-label="sales table"]'
   )
   app$wait_for_js(
     paste0("document.querySelectorAll('", marker_selector, "').length === 2;"),
@@ -46,31 +44,19 @@ test_that("Shiny Chat renders native numbered streamed citations", {
         ".map((node) => node.textContent).join('|');"
       )
     ),
-    "[1]|[2]"
-  )
-  expect_identical(
-    app$get_js(
-      paste0(
-        "Array.from(document.querySelectorAll('",
-        marker_selector,
-        "'))",
-        ".map((node) => node.getAttribute('aria-label')).join('|');"
-      )
-    ),
-    "Aside 1: documentation|Aside 2: sales table"
+    "documentation|sales table"
   )
   expect_identical(
     app$get_js(
       paste0(
         "(() => {",
         "const style = getComputedStyle(document.querySelector(",
-        "'button[data-shinychat-aside-display=\"compact\"]'));",
+        "'button.shiny-aside-pill[aria-label=\"documentation\"]'));",
         "return [",
         "'--shiny-chat-aside-marker-color',",
         "'--shiny-chat-aside-marker-hover-color',",
         "'--shiny-chat-aside-marker-bg',",
-        "'--shiny-chat-aside-marker-hover-bg',",
-        "'--shiny-chat-aside-marker-font-family'",
+        "'--shiny-chat-aside-marker-hover-bg'",
         "].every((name) => style.getPropertyValue(name).trim() !== '');",
         "})()"
       )
@@ -88,16 +74,13 @@ test_that("Shiny Chat renders native numbered streamed citations", {
       )
     ),
     paste(
-      "Canopy weighting follows the documentation.\n[1]",
-      "Revenue timing follows the table definition.\n[2]",
+      "Canopy weighting follows the documentation.",
+      "Revenue timing follows the table definition.",
       sep = "|"
     )
   )
-  first_marker <- paste0(
-    'button[data-shinychat-aside-display="compact"]',
-    '[aria-label="Aside 1: documentation"]'
-  )
-  first_dialog <- '[role="dialog"][aria-label="Aside 1: documentation"]'
+  first_marker <- 'button.shiny-aside-pill[aria-label="documentation"]'
+  first_dialog <- '[role="dialog"][aria-label="documentation"]'
   app$get_js(
     paste0("document.querySelector('", first_marker, "').click();")
   )
@@ -143,11 +126,8 @@ test_that("Shiny Chat renders native numbered streamed citations", {
     timeout = 30 * 1000
   )
 
-  second_marker <- paste0(
-    'button[data-shinychat-aside-display="compact"]',
-    '[aria-label="Aside 2: sales table"]'
-  )
-  second_dialog <- '[role="dialog"][aria-label="Aside 2: sales table"]'
+  second_marker <- 'button.shiny-aside-pill[aria-label="sales table"]'
+  second_dialog <- '[role="dialog"][aria-label="sales table"]'
   app$get_js(
     paste0("document.querySelector('", second_marker, "').click();")
   )
@@ -215,8 +195,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     paste0(
       "document.querySelector('button[aria-label=\"Verified answer\"]') && ",
       "document.querySelector(",
-      "'button[data-shinychat-aside-display=\"compact\"]",
-      "[aria-label=\"Aside 1: documentation\"]') && ",
+      "'button.shiny-aside-pill[aria-label=\"documentation\"]') && ",
       "document.querySelector('button[aria-label=\"Untrusted\"]');"
     ),
     timeout = 30 * 1000
@@ -248,21 +227,8 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     app$get_js(
       paste0(
         "document.querySelector(",
-        "'button[data-shinychat-aside-display=\"compact\"]",
-        "[aria-label=\"Aside 1: documentation\"]'",
-        ").getAttribute('aria-label');"
-      )
-    ),
-    "Aside 1: documentation"
-  )
-
-  expect_identical(
-    app$get_js(
-      paste0(
-        "document.querySelector(",
-        "'button[data-shinychat-aside-display=\"compact\"]",
-        "[aria-label=\"Aside 1: documentation\"]'",
-        ").closest('p')?.innerText.includes('Supported claim.');"
+        "'button.shiny-aside-pill[aria-label=\"documentation\"]')",
+        ".closest('p')?.innerText.includes('Supported claim.');"
       )
     ),
     TRUE
@@ -319,9 +285,8 @@ test_that("Shiny Chat preserves Markdown blocks around citations", {
   app$wait_for_js(
     paste0(
       "document.querySelectorAll(",
-      "'button[data-shinychat-aside-display=\"compact\"]",
-      "[aria-label=\"Aside 1: documentation\"]'",
-      ").length === 2;"
+      "'button.shiny-aside-pill[aria-label=\"documentation\"]')",
+      ".length === 2;"
     ),
     timeout = 30 * 1000
   )
@@ -338,9 +303,8 @@ test_that("Shiny Chat preserves Markdown blocks around citations", {
     app$get_js(
       paste0(
         "document.querySelectorAll(",
-        "'button[data-shinychat-aside-display=\"compact\"]",
-        "[aria-label=\"Aside 1: documentation\"]'",
-        ").length;"
+        "'button.shiny-aside-pill[aria-label=\"documentation\"]')",
+        ".length;"
       )
     ),
     2L

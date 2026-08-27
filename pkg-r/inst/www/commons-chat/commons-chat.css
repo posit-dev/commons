@@ -130,65 +130,150 @@ shiny-chat-container .shiny-chat-input .tiptap {
   transform: translateX(-50%) rotate(225deg);
 }
 
-/* Shinychat owns compact marker structure and placement through this public API. */
-shiny-chat-container [data-shinychat-aside-display="compact"] {
-  --shiny-chat-aside-marker-color: var(--bs-link-color);
-  --shiny-chat-aside-marker-hover-color: var(--bs-link-hover-color);
+/* Citations are labeled identity asides: shinychat accumulates those
+ * sharing a paragraph into one pill with a "+N" overflow and a carousel
+ * popover. They render icon-only like the provenance markers, in a quieter
+ * mid navy — verified support, short of a governed calculation. */
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/citation-mark.svg"]) {
+  --shiny-chat-aside-marker-color: #2e4a6b;
   --shiny-chat-aside-marker-bg: transparent;
-  --shiny-chat-aside-marker-hover-bg: transparent;
-  --shiny-chat-aside-marker-font-family: var(--bs-font-monospace);
+  --shiny-chat-aside-marker-hover-color: #223851;
+  --shiny-chat-aside-marker-hover-bg: #e7edf4;
 }
 
-/* Temporary bridge until Shinychat provides a public per-aside tone API. */
+/* Temporary bridge until shinychat forwards a per-aside tone hook to the
+ * pill: the icon src is the only per-aside signal that survives to the
+ * rendered button, so it selects the tone — but styling goes only through
+ * shinychat's public --shiny-chat-aside-marker-* variables, so its own
+ * hover, focus, expanded, and compact-number rules keep working. */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
-  background: #f2fbf5;
-  box-shadow: inset 0 0 0 1px #cfeedd;
-  color: #286144;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):hover,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"])[aria-expanded="true"] {
-  background: #e4f6ea;
-  color: #204f38;
+  --shiny-chat-aside-marker-color: #286144;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #204f38;
+  --shiny-chat-aside-marker-hover-bg: #e4f6ea;
 }
 
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
-  background: #fff8ec;
-  box-shadow: inset 0 0 0 1px #f2ddbb;
-  color: #6b4b1b;
+  --shiny-chat-aside-marker-color: #6b4b1b;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #583b14;
+  --shiny-chat-aside-marker-hover-bg: #fcefd8;
 }
 
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):hover,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]):focus-visible,
-shiny-chat-container
-  .shiny-aside-pill:has(img[src$="/warning-icon.svg"])[aria-expanded="true"] {
-  background: #fcefd8;
-  color: #583b14;
-}
-
+/* Provenance and citation markers render as bare icons: the label stays in
+ * the DOM (the button's aria-label announces it) but doesn't render, and a
+ * grouped "+N" overflow count still shows. */
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
   ) {
+  border-radius: 50%;
   font-weight: 400;
+  gap: 0.15em;
+  padding: 0.2em;
+}
+
+/* A grouped marker carries a "+N more" count, which widens the pill: give
+ * it a stadium shape and roomier padding instead of the bare-icon circle. */
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
+  ):has(.shiny-aside-pill__overflow) {
+  border-radius: 999px;
+  gap: 0.3em;
+  padding: 0.2em 0.55em 0.2em 0.25em;
 }
 
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
+  )
+  .shiny-aside-pill__label {
+  display: none;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
   )
   img {
+  height: 1.5em;
+  width: 1.5em;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(img[src$="/trusted-icon.svg"], img[src$="/warning-icon.svg"])
+  )
+  img {
+  animation: commons-provenance-marker-pulse 1.6s ease-in-out 1;
   opacity: 1;
+}
+
+@keyframes commons-provenance-marker-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.4);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  shiny-chat-container
+    .shiny-aside-pill:has(
+      :is(img[src$="/trusted-icon.svg"], img[src$="/warning-icon.svg"])
+    )
+    img {
+    animation: none;
+  }
+}
+
+/* The citation aside body carries its own title (icon + label) because
+ * shinychat only renders its popover title row for grouped asides; hide
+ * shinychat's row so grouped popovers don't name the source twice. The
+ * popover is portaled to <body>, so these rules must stay unscoped. */
+.commons-citation-title {
+  align-items: center;
+  display: flex;
+  font-weight: 600;
+  gap: 0.3em;
+  margin-bottom: 0.25rem;
+}
+
+.commons-citation-title img {
+  height: 1.1em;
+  width: 1.1em;
+}
+
+.shiny-aside-popover:has(.commons-citation-title)
+  .shiny-aside-popover__label {
+  display: none;
 }
 
 /* ---- Measure display ------------------------------------------------- */
