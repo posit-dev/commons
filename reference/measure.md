@@ -1,6 +1,6 @@
 # Create a measure
 
-A measure is a governed calculation inside a
+A measure is a trusted calculation inside a
 [`semantic_layer()`](https://posit-dev.github.io/commons/reference/semantic_layer.md).
 Its function body is ordinary R; its `arguments` schema tells the model
 what inputs it can supply.

@@ -41,7 +41,7 @@ its own context, measure definitions, and data documentation as the
 answer streams, and rewrites verified citations inline as numbered,
 server-authored `<shiny-aside>` elements. Citation details name the
 trusted source. A provenance marker in a compact `<shiny-aside>` follows
-the answer when it was produced by a governed calculation, or when a
+the answer when it was produced by a trusted calculation, or when a
 fallback answer cites nothing verified.
 
 ## Examples

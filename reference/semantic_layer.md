@@ -1,6 +1,6 @@
 # Create a semantic layer
 
-`semantic_layer()` collects governed R measures for a
+`semantic_layer()` collects trusted calculations for a
 [`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
 agent. Data dictionary definitions and warehouse semantic models
 contribute through
@@ -93,7 +93,7 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x555bb94935b0>
+#> <environment: 0x55e55037d8e0>
 #> 
 #> 
 #> $fn_sources

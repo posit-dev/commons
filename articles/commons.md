@@ -42,8 +42,8 @@ with a `Verified answer` provenance marker.
 > animal present at the site.
 >
 > ![Verified
-> answer](commons-chat-0.0.0.9000.1787872282/figs/trusted-icon.svg)Verified
-> answer This answer comes from a governed calculation defined by your
+> answer](commons-chat-0.0.0.9000.1787872523/figs/trusted-icon.svg)Verified
+> answer This answer comes from a trusted calculation defined by your
 > data team.
 
 Although the agent had to decide which trusted calculation to run, it
@@ -106,9 +106,9 @@ High trust
 Relevant calculation  
 found → Run trusted  
 calculation → ![Verified
-answer](commons-chat-0.0.0.9000.1787872282/figs/trusted-icon.svg)Verified
-answer This answer comes from a governed calculation defined by your
-data team.
+answer](commons-chat-0.0.0.9000.1787872523/figs/trusted-icon.svg)Verified
+answer This answer comes from a trusted calculation defined by your data
+team.
 
 Lower trust
 
@@ -116,8 +116,8 @@ No relevant
 calculation found → Search  
 context → Write  
 SQL/R → Cited answer¹ or
-![Untrusted](commons-chat-0.0.0.9000.1787872282/figs/warning-icon.svg)Untrusted
-This answer was not produced by a governed calculation and has no
+![Untrusted](commons-chat-0.0.0.9000.1787872523/figs/warning-icon.svg)Untrusted
+This answer was not produced by a trusted calculation and has no
 verified supporting citation. AI can be wrong.
 
 The lower-trust path has two possible provenance outcomes. When the
@@ -133,11 +133,11 @@ occur:
 
 | How the answer is produced | Provenance outcome |
 |----|----|
-| A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-chat-0.0.0.9000.1787872282/figs/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-chat-0.0.0.9000.1787872282/figs/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-chat-0.0.0.9000.1787872282/figs/trusted-icon.svg)Verified answer This answer comes from a governed calculation defined by your data team. |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787872282/figs/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
-| Custom R | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787872282/figs/warning-icon.svg)Untrusted This answer was not produced by a governed calculation and has no verified supporting citation. AI can be wrong. |
+| A trusted R [measure](#semantic-layer) |  ![Verified answer](commons-chat-0.0.0.9000.1787872523/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) |  ![Verified answer](commons-chat-0.0.0.9000.1787872523/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) |  ![Verified answer](commons-chat-0.0.0.9000.1787872523/figs/trusted-icon.svg)Verified answer This answer comes from a trusted calculation defined by your data team. |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787872523/figs/warning-icon.svg)Untrusted This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong. |
+| Custom R | Cited or  ![Untrusted](commons-chat-0.0.0.9000.1787872523/figs/warning-icon.svg)Untrusted This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong. |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
 The agent itself does not determine the provenance outcome. commons
