@@ -373,7 +373,7 @@ shiny-chat-container
   text-transform: uppercase;
 }
 
-.commons-run-r-code {
+.commons-run-r-display .commons-run-r-code {
   margin: 0;
   overflow-x: auto;
   white-space: pre;
