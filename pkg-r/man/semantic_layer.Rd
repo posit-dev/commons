@@ -15,7 +15,7 @@ File and inline measures can be freely mixed.}
 A \code{commons_semantic_layer} object.
 }
 \description{
-\code{semantic_layer()} collects governed R measures for a \code{\link[=commons]{commons()}} agent.
+\code{semantic_layer()} collects trusted calculations for a \code{\link[=commons]{commons()}} agent.
 Data dictionary definitions and warehouse semantic models contribute through
 \code{\link[=data_source]{data_source()}}.
 }
