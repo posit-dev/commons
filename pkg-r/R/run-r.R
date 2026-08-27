@@ -53,10 +53,15 @@ tool_run_r <- function(private) {
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
       "\n- Return results implicitly (`x`, not `print(x)`) and prefer brief",
       "summaries (head(), summary()) over large outputs.",
+      "\n- The session can only write to its own temporary directory.",
       if (identical(private$worker$network, "none")) {
         "\n- The session has no network access."
-      },
-      "\n- The session can only write to its own temporary directory."
+      } else {
+        paste(
+          "\n- The temporary directory has been added to libPaths, so you",
+          "can use install.packages() normally."
+        )
+      }
     ),
     arguments = list(
       code = ellmer::type_string("The R code to run.")
@@ -856,6 +861,9 @@ worker_init <- function(
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
+  worker_lib <- file.path(work_dir, "library")
+  dir.create(worker_lib)
+  .libPaths(c(worker_lib, .libPaths()))
   if (!protection %in% c("sandbox", "guardrails")) {
     stop("unknown run_r protection mode: ", protection)
   }
