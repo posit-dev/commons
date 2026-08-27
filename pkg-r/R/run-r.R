@@ -50,6 +50,8 @@ tool_run_r <- function(private) {
       },
       "\n\nRules:",
       "\n- Work incrementally: each call should do one small, well-defined task.",
+      "\n- Prefer tidyverse style: put separate expressions on separate lines",
+      "and wrap long calls for readability.",
       "\n- Create at most one figure per call and return it implicitly rather",
       "than saving it.",
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
