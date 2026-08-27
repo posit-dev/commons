@@ -17,6 +17,22 @@ provenance_record <- function(tag, citation_decisions = list()) {
   list(provenance_tag = tag, citation_decisions = citation_decisions)
 }
 
+# The markdown-bearing parts of replayed message content. Rendered tool-card
+# tags are not included; the markup-safety assertions only exercise text.
+messages_text <- function(messages) {
+  parts <- lapply(messages, function(m) {
+    content <- m$content
+    if (is.character(content)) {
+      return(content)
+    }
+    if (is.list(content) && !is.object(content)) {
+      return(unlist(Filter(is.character, content)))
+    }
+    character()
+  })
+  paste(unlist(parts), collapse = "\n")
+}
+
 test_that("split_exchanges opens at plain user turns only", {
   turns <- c(
     list(
@@ -143,16 +159,20 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
   expect_identical(attr(sanitized, "provenance"), attr(turns, "provenance"))
 
   messages <- trajectory_messages(sanitized)
-  html <- as.character(shinychat::chat_ui(
-    "transcript",
-    messages = messages
-  ))
-  expect_match(html, "6 orders.", fixed = TRUE)
-  # The transcript replays the live chat's provenance marker (escaped
-  # inside the message content attribute; the client unescapes it).
-  expect_match(html, "shiny-aside label=&quot;Verified answer&quot;", fixed = TRUE)
-  expect_no_match(html, "commons-citation", fixed = TRUE)
-  expect_no_match(html, "Forged", fixed = TRUE)
+  text <- messages_text(messages)
+  expect_match(text, "6 orders.", fixed = TRUE)
+  expect_no_match(text, "commons-citation", fixed = TRUE)
+  expect_no_match(text, "Forged", fixed = TRUE)
+
+  # The transcript replays the live chat's provenance marker: a trailing
+  # markdown chunk on the exchange's last assistant message.
+  assistant <- Filter(
+    \(m) identical(m$role, "assistant") && identical(m$exchange, 1L),
+    messages
+  )
+  last <- assistant[[length(assistant)]]$content
+  trailing <- if (is.character(last)) last else last[[length(last)]]
+  expect_match(trailing, '<shiny-aside label="Verified answer"', fixed = TRUE)
 })
 
 test_that("review transcripts mark cited answers the live chat leaves bare", {
@@ -165,11 +185,8 @@ test_that("review transcripts mark cited answers the live chat leaves bare", {
   )
   attr(turns, "provenance") <- list(provenance_record("B"))
 
-  html <- as.character(shinychat::chat_ui(
-    "transcript",
-    messages = trajectory_messages(turns)
-  ))
-  expect_match(html, "shiny-aside label=&quot;Cited&quot;", fixed = TRUE)
+  text <- messages_text(trajectory_messages(turns))
+  expect_match(text, '<shiny-aside label="Cited"', fixed = TRUE)
 })
 
 test_that("side calls are excluded from the viewer", {

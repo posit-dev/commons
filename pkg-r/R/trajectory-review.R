@@ -241,38 +241,37 @@ trajectory_exchange_messages <- function(turns, exchange) {
   messages <- shinychat::contents_shinychat(chat)
   for (i in seq_along(messages)) {
     messages[[i]]$exchange <- as.integer(exchange)
-    messages[[i]]$content <- flatten_message_content(messages[[i]]$content)
   }
   messages
 }
 
-# shinychat's static chat_ui() serialization folds mixed content (tool cards
-# plus markdown text) into a single raw-HTML island, escaping the text and
-# hiding it from aside grouping. Flatten to one markdown string instead: tool
-# cards serialize to custom elements the markdown pipeline routes anyway.
-# If shinychat ever keeps strings as markdown in mixed content (as its
-# chat_ui() docs already promise), this workaround can be removed.
-# Caveats: htmlwidget deps in message content are not collected, and thinking
-# blocks lose their styling.
-flatten_message_content <- function(content) {
-  if (is.character(content)) {
-    return(paste(content, collapse = "\n"))
+# Replay the transcript the way shinychat itself restores a bookmarked chat
+# (client_set_ui()): yield each message's contents from a generator through
+# chat_append(), so every item is classified on its own (markdown vs HTML)
+# exactly as in the live stream. Static chat_ui(messages = ...) would fold
+# mixed content (tool cards plus markdown text) into a single raw-HTML
+# island, escaping the text and hiding it from aside grouping.
+replay_transcript <- function(id, messages, session) {
+  for (message in messages) {
+    replay_transcript_message(id, message, session)
   }
-  # Leave classed content (shiny tags, HTML) to shinychat's own serialization.
-  if (!is.list(content) || is.object(content)) {
-    return(content)
-  }
-  parts <- vapply(
-    content,
-    function(x) {
-      if (is.character(x)) {
-        return(x)
+  invisible(NULL)
+}
+
+# One function call per message so the generator closes over this message's
+# content; coro generators evaluate their body lazily.
+replay_transcript_message <- function(id, message, session) {
+  content <- message$content
+  if (is.list(content) && !is.object(content)) {
+    stream <- coro::generator(function() {
+      for (x in content) {
+        coro::yield(x)
       }
-      as.character(htmltools::renderTags(htmltools::as.tags(x))[["html"]])
-    },
-    character(1)
-  )
-  paste(parts, collapse = "\n\n")
+    })
+    shinychat::chat_append(id, stream(), role = message$role, session = session)
+  } else {
+    shinychat::chat_append(id, content, role = message$role, session = session)
+  }
 }
 
 sanitize_trajectory_turns <- function(turns) {
@@ -373,12 +372,18 @@ add_message_provenance <- function(messages, provenance) {
 }
 
 # The aside must stay markdown, not HTML: htmltools::HTML() would mark the
-# whole message as a raw-HTML island, which shinychat's aside grouping does
-# not reach into. Plain text joined with a blank line is also exactly how a
-# live-streamed aside lands in contents_shinychat(). Message content is
-# always a single markdown string here thanks to flatten_message_content().
+# chunk as raw HTML, which shinychat's aside grouping does not reach into.
+# A trailing markdown chunk is also exactly how a live-streamed aside lands:
+# replay_transcript() yields each content item on its own, and the client
+# folds consecutive markdown chunks into one block.
 append_provenance_aside <- function(content, aside) {
-  paste(content, aside, sep = "\n\n")
+  if (is.character(content)) {
+    return(paste(paste(content, collapse = "\n"), aside, sep = "\n\n"))
+  }
+  if (is.list(content) && !is.object(content)) {
+    return(c(content, list(aside)))
+  }
+  list(content, aside)
 }
 
 # The question list is ordinary server-rendered HTML outside shinychat's
@@ -797,23 +802,24 @@ viewer_server <- function(
           "Select a conversation to view its transcript."
         ))
       }
-      shinychat::chat_ui(
-        transcript_id(conversation),
-        messages = selected_messages(),
-        height = "100%"
-      )
+      # Messages are replayed from the server once the element is bound;
+      # see replay_transcript() for why they don't go through chat_ui().
+      shinychat::chat_ui(transcript_id(conversation), height = "100%")
     })
 
-    # Seed decorations only after the new chat element is bound in the browser.
+    # Replay and seed decorations only after the new chat element is bound in
+    # the browser. Replay first so the seed's message indices line up.
     shiny::observeEvent(selected_conversation(), {
       conversation <- selected_conversation()
       exchange <- selected_exchange()
       messages <- selected_messages()
       session$onFlushed(
         function() {
+          id <- transcript_id(conversation)
+          replay_transcript(id, messages, session)
           seed_transcript_decorations(
             session,
-            transcript_id(conversation),
+            id,
             messages,
             selected_exchange = exchange
           )
