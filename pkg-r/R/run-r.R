@@ -53,11 +53,10 @@ tool_run_r <- function(private) {
       "\n- Do not use this tool to talk to the user; explanations belong in your reply.",
       "\n- Return results implicitly (`x`, not `print(x)`) and prefer brief",
       "summaries (head(), summary()) over large outputs.",
+      "\n- The session can only write to its own temporary directory.",
       if (identical(private$worker$network, "none")) {
         "\n- The session has no network access."
-      },
-      "\n- The session can only write to its own temporary directory.",
-      if (identical(private$worker$network, "full")) {
+      } else {
         paste(
           "\n- The temporary directory has been added to libPaths, so you",
           "can use install.packages() normally."
