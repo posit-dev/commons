@@ -55,13 +55,14 @@ tool_run_r <- function(private) {
       "summaries (head(), summary()) over large outputs.",
       if (identical(private$worker$network, "none")) {
         "\n- The session has no network access."
-      } else {
+      },
+      "\n- The session can only write to its own temporary directory.",
+      if (identical(private$worker$network, "full")) {
         paste(
           "\n- The temporary directory has been added to libPaths, so you",
           "can use install.packages() normally."
         )
-      },
-      "\n- The session can only write to its own temporary directory."
+      }
     ),
     arguments = list(
       code = ellmer::type_string("The R code to run.")
