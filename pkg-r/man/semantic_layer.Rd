@@ -31,9 +31,9 @@ Each \verb{@param} marks a model-supplied argument and can declare its type:
 such as \code{string[]}. Without a declaration, commons infers the type from the
 default, falling back to \code{string}.
 
-Measure and helper source is visible in \code{run_r}; evaluating a measure's name
-there prints its definition. Function environments, connections, and
-credentials are not shared with that session.
+Measure and helper source is visible to model-authored R code; evaluating a
+measure's name there prints its definition. Function environments,
+connections, and credentials are not shared with that session.
 }
 
 \section{Measure arguments}{

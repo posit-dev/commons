@@ -12,8 +12,8 @@
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
-#'   each pin is downloaded only when its table is first used---by the
-#'   `describe_table` tool, a SQL query that references it, or a measure that
+#'   each pin is downloaded only when its table is first used---by table
+#'   inspection, a SQL query that references it, or a measure that
 #'   takes the source's connection. [commons_server()] starts a background
 #'   process right after startup that downloads the remaining pins into the
 #'   local pins cache, so a first use typically only reads an
@@ -44,14 +44,14 @@
 #'   model's definition when the agent describes or uses it. Explicitly
 #'   selected models are read and validated when the data source is created.
 #'   Snowflake semantic variables and Databricks metric-view parameters are
-#'   passed as typed JSON arguments to `call_metrics`. Databricks wildcard
-#'   members require concrete column metadata from the warehouse.
-#'   Native semantic models are available through `search_pool`,
-#'   `describe_table`, and `call_metrics`, but are not registered as physical
-#'   tables.
+#'   passed as typed JSON arguments when the agent invokes them. Databricks
+#'   wildcard members require concrete column metadata from the warehouse.
+#'   Native semantic models are available through trusted-calculation search,
+#'   table inspection, and metric invocation, but are not registered as
+#'   physical tables.
 #'   Snowflake verified queries are exposed separately as exact trusted
-#'   calculations through `search_pool` and `call_calculation`; their SQL is
-#'   executed as stored rather than parsed to infer dependencies.
+#'   calculations; their SQL is executed as stored rather than parsed to infer
+#'   dependencies.
 #'   An exact physical-table selection also imports associated models when
 #'   every physical dependency is selected. Public relationships, facts,
 #'   filters, and instructions become table-scoped first-touch and retrieval
@@ -76,27 +76,27 @@
 #'   are included in the system prompt. These fields are the place for rules
 #'   that span tables and for guidance on which tables answer which kinds of
 #'   questions.
-#' * The first time a conversation touches a table---via the `describe_table`
-#'   tool or a SQL query---the table's full dictionary entry rides along with
+#' * The first time a conversation touches a table---via table inspection or a
+#'   SQL query---the table's full dictionary entry rides along with
 #'   the tool result: its prose, documented columns, relationships, and
-#'   definitions of glossary terms it references. `describe_table` merges
-#'   documented columns with the table's live schema.
+#'   definitions of glossary terms it references. Table inspection merges
+#'   documented columns with the live schema.
 #' * For Snowflake and Databricks sources, a fully qualified dictionary table
 #'   name matches the same selected relation. A relative name is accepted when
 #'   it matches only one selected relation. Authored prose takes precedence,
 #'   while warehouse column types remain authoritative.
 #' * When the agent also has a [context_layer()], the dictionary's prose is
-#'   indexed for the `search_context` tool.
+#'   indexed for context retrieval.
 #'
 #' A table's entry can also declare `definitions`: named expressions in the
 #' [data-dict expression language](https://data-dict.tidyverse.org/expressions.html).
 #' commons validates their inferred types and references, compiles them for
-#' the source's SQL backend, and lets the model apply them as `{{name}}`
-#' tokens in `run_sql` or through `call_metrics`. Definitions are delivered
+#' the source's SQL backend, and lets the model use them as `{{name}}` tokens in
+#' custom SQL or, for metrics, invoke them directly. Definitions are delivered
 #' through all three channels above.
 #'
 #' @section Trust:
-#' The `run_sql` tool runs only read-only `SELECT` queries; statements that
+#' The SQL query tool runs only read-only `SELECT` queries; statements that
 #' would modify data or schema (`INSERT`, `UPDATE`, `DROP`, and similar) are
 #' rejected before reaching the database. For the in-process DuckDB built from
 #' data frames, commons additionally disables extension loading and filesystem

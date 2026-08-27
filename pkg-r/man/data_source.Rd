@@ -28,14 +28,14 @@ Namespace selections retain lightweight model metadata, then read a
 model's definition when the agent describes or uses it. Explicitly
 selected models are read and validated when the data source is created.
 Snowflake semantic variables and Databricks metric-view parameters are
-passed as typed JSON arguments to \code{call_metrics}. Databricks wildcard
-members require concrete column metadata from the warehouse.
-Native semantic models are available through \code{search_pool},
-\code{describe_table}, and \code{call_metrics}, but are not registered as physical
-tables.
+passed as typed JSON arguments when the agent invokes them. Databricks
+wildcard members require concrete column metadata from the warehouse.
+Native semantic models are available through trusted-calculation search,
+table inspection, and metric invocation, but are not registered as
+physical tables.
 Snowflake verified queries are exposed separately as exact trusted
-calculations through \code{search_pool} and \code{call_calculation}; their SQL is
-executed as stored rather than parsed to infer dependencies.
+calculations; their SQL is executed as stored rather than parsed to infer
+dependencies.
 An exact physical-table selection also imports associated models when
 every physical dependency is selected. Public relationships, facts,
 filters, and instructions become table-scoped first-touch and retrieval
@@ -69,8 +69,8 @@ when the data isn't already in a database.
 \item A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}, is read into the same
 in-process database: each pin in \code{tables} becomes a table. Pin names are
 validated against the board at construction (a single listing call), but
-each pin is downloaded only when its table is first used---by the
-\code{describe_table} tool, a SQL query that references it, or a measure that
+each pin is downloaded only when its table is first used---by table
+inspection, a SQL query that references it, or a measure that
 takes the source's connection. \code{\link[=commons_server]{commons_server()}} starts a background
 process right after startup that downloads the remaining pins into the
 local pins cache, so a first use typically only reads an
@@ -93,30 +93,30 @@ agent three ways:
 are included in the system prompt. These fields are the place for rules
 that span tables and for guidance on which tables answer which kinds of
 questions.
-\item The first time a conversation touches a table---via the \code{describe_table}
-tool or a SQL query---the table's full dictionary entry rides along with
+\item The first time a conversation touches a table---via table inspection or a
+SQL query---the table's full dictionary entry rides along with
 the tool result: its prose, documented columns, relationships, and
-definitions of glossary terms it references. \code{describe_table} merges
-documented columns with the table's live schema.
+definitions of glossary terms it references. Table inspection merges
+documented columns with the live schema.
 \item For Snowflake and Databricks sources, a fully qualified dictionary table
 name matches the same selected relation. A relative name is accepted when
 it matches only one selected relation. Authored prose takes precedence,
 while warehouse column types remain authoritative.
 \item When the agent also has a \code{\link[=context_layer]{context_layer()}}, the dictionary's prose is
-indexed for the \code{search_context} tool.
+indexed for context retrieval.
 }
 
 A table's entry can also declare \code{definitions}: named expressions in the
 \href{https://data-dict.tidyverse.org/expressions.html}{data-dict expression language}.
 commons validates their inferred types and references, compiles them for
-the source's SQL backend, and lets the model apply them as \code{{{name}}}
-tokens in \code{run_sql} or through \code{call_metrics}. Definitions are delivered
+the source's SQL backend, and lets the model use them as \code{{{name}}} tokens in
+custom SQL or, for metrics, invoke them directly. Definitions are delivered
 through all three channels above.
 }
 
 \section{Trust}{
 
-The \code{run_sql} tool runs only read-only \code{SELECT} queries; statements that
+The SQL query tool runs only read-only \code{SELECT} queries; statements that
 would modify data or schema (\code{INSERT}, \code{UPDATE}, \code{DROP}, and similar) are
 rejected before reaching the database. For the in-process DuckDB built from
 data frames, commons additionally disables extension loading and filesystem

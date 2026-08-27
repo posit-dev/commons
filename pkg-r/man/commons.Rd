@@ -23,8 +23,8 @@ ignored, with a warning; use \code{instructions} to add to commons' prompt.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
-\code{\link[=semantic_layer]{semantic_layer()}}. When there are several sources, the \code{run_sql} and
-\code{describe_table} tools take a source's name as a \code{source} argument.}
+\code{\link[=semantic_layer]{semantic_layer()}}. When there are several sources, the SQL query and
+table inspection tools take a source's name as a \code{source} argument.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
@@ -42,7 +42,8 @@ system prompt, as a single string or the path to a text or Markdown file.
 )
 }\if{html}{\out{</div>}}}
 
-\item{network}{Whether the \code{run_r} session has network access. One of
+\item{network}{Whether the model-authored R session has network access. One
+of
 \code{"none"} (the default) or \code{"full"}. The session uses OS sandboxing on
 Linux and macOS. On unsupported hosts, local development can opt in to
 best-effort R guardrails with
@@ -71,8 +72,8 @@ need at least a publisher account.}
 An \link[ellmer:Chat]{ellmer::Chat} subclass.
 }
 \description{
-\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools for a semantic
-layer, context search, table inspection, and SQL queries.
+\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools for trusted
+calculations, context search, table inspection, and code execution.
 }
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
@@ -80,6 +81,29 @@ and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_theme]
 \code{\link[=commons_server]{commons_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
 to use the agent as a vitals solver.
 }
+\section{Agent tools}{
+
+Depending on its semantic layer, context layer, and data sources, a commons
+agent receives some combination of these tools:
+\itemize{
+\item \code{search_pool} searches trusted calculations and semantic models.
+\item \code{search_catalog} searches a warehouse catalog.
+\item \code{call_measure} invokes an R measure.
+\item \code{call_metrics} invokes governed or warehouse-native metrics.
+\item \code{call_calculation} invokes an exact trusted query.
+\item \code{search_context} retrieves relevant business context.
+\item \code{describe_table} inspects a table or semantic model.
+\item \code{run_sql} executes a read-only SQL query.
+\item \code{run_r} analyzes results and renders plots with model-authored R code.
+}
+
+These model-facing tools are implementation details. Their constructors are
+intentionally not exported, and their names, arguments, availability, and
+behavior may change without notice. Application code should configure an
+agent through \code{commons()} and its layer constructors rather than depend on
+individual tools.
+}
+
 \examples{
 \dontrun{
 # A measure over local data computes directly in R.

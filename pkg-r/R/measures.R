@@ -19,9 +19,9 @@
 #' such as `string[]`. Without a declaration, commons infers the type from the
 #' default, falling back to `string`.
 #'
-#' Measure and helper source is visible in `run_r`; evaluating a measure's name
-#' there prints its definition. Function environments, connections, and
-#' credentials are not shared with that session.
+#' Measure and helper source is visible to model-authored R code; evaluating a
+#' measure's name there prints its definition. Function environments,
+#' connections, and credentials are not shared with that session.
 #'
 #' @section Measure arguments:
 #' A measure function can take two kinds of arguments:
@@ -138,8 +138,9 @@ expand_measures <- function(args, env = rlang::caller_env()) {
 #' [ellmer::ContentToolResult]. Its `value` is sent to the model and its
 #' `extra$display` controls the shinychat display. When the display includes
 #' HTML, Markdown, or text, the model is told that the result is already visible
-#' to the user. An optional `extra$data` value is made available to `run_r` and
-#' removed from the result before it is returned to ellmer.
+#' to the user. An optional `extra$data` value is made available for further
+#' model-authored R analysis and removed from the result before it is returned
+#' to ellmer.
 #'
 #' @param name Measure name.
 #' @param description What the measure computes.
