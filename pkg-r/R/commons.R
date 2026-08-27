@@ -1,7 +1,9 @@
 #' Create a commons agent
 #'
-#' `commons()` creates an [ellmer::Chat] subclass with tools for trusted
-#' calculations, context search, table inspection, and code execution.
+#' `commons()` creates an [ellmer::Chat] subclass with tools and prompting that
+#' allow the agent to navigate its data sources, semantic layer, and context
+#' layer. Depending on the agent's choice of tools, responses can be
+#' deterministically tagged as high-trust or low-trust.
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
 #' and tools. Use `agent$chat()` to ask questions, [commons_theme()] and

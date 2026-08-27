@@ -34,7 +34,7 @@
 #' @section Transcript contents:
 #' The transcript uses the same commons and shinychat renderer as live
 #' conversations, preserving recorded messages and tool activity. Provenance
-#' markers are reconstructed from recorded provenance outcomes, but inline
+#' markers are reconstructed from recorded provenance tags, but inline
 #' citations are not recreated. Generated review documents list the recorded
 #' citation decisions separately.
 #'
@@ -42,8 +42,8 @@
 #' records any selected calculation; other tool results are limited to 50 lines
 #' or 20,000 characters.
 #'
-#' Trust filters use each answer's recorded provenance outcome. Missing or
-#' conflicting records are omitted rather than inferred.
+#' Trust filters use each answer's provenance tag exactly as [trajectory_read()]
+#' recorded it. Missing or conflicting records are omitted rather than inferred.
 #'
 #' Logged calls that aren't part of the agent's question-and-answer record are
 #' excluded from the viewer. These include shinychat's conversation-title

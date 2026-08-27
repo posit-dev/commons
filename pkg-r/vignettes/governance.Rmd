@@ -24,8 +24,6 @@ This vignette explains the boundaries that commons provides and the responsibili
 
 A commons agent is an ellmer chat with a system prompt and a set of tools. The system prompt excerpts available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, run a SQL query, or execute R code.
 
-The exact set depends on the agent's layers and data sources. The current tool names and their lifecycle status are documented in [commons()].
-
 We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like "never reveal sensitive data." Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider, so the agent should not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
 
 ## SQL code execution

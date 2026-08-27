@@ -71,8 +71,10 @@ need at least a publisher account.}
 An \link[ellmer:Chat]{ellmer::Chat} subclass.
 }
 \description{
-\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools for trusted
-calculations, context search, table inspection, and code execution.
+\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools and prompting that
+allow the agent to navigate its data sources, semantic layer, and context
+layer. Depending on the agent's choice of tools, responses can be
+deterministically tagged as high-trust or low-trust.
 }
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
