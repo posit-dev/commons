@@ -236,7 +236,7 @@ run_r_html <- function(code, segments) {
   }
   code_html <- sprintf(
     "<pre class=\"commons-run-r-code\"><code class=\"language-r\">%s</code></pre>",
-    html_escape(paste(c(code, output), collapse = "\n"))
+    highlight_r_html(paste(c(code, output), collapse = "\n"))
   )
   if (length(plot_html)) {
     code_html <- paste0(
@@ -249,6 +249,17 @@ run_r_html <- function(code, segments) {
     "<div class=\"commons-run-r-display\">%s</div>",
     paste(c(code_html, plot_html), collapse = "\n")
   )
+}
+
+highlight_r_html <- function(code) {
+  fallback <- tryCatch(
+    {
+      parse(text = code)
+      FALSE
+    },
+    error = function(...) TRUE
+  )
+  paste(highr::hi_html(code, fallback = fallback), collapse = "\n")
 }
 
 # --- worker lifecycle --------------------------------------------------------

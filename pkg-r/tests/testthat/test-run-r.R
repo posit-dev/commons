@@ -33,6 +33,16 @@ test_that("run_r executes code against stored handles", {
     '<pre class="commons-run-r-code"><code class="language-r">',
     fixed = TRUE
   )
+  expect_match(
+    res@extra$display$html,
+    '<span class="hl kwd">sum</span>',
+    fixed = TRUE
+  )
+  expect_match(
+    res@extra$display$html,
+    '<span class="hl com">#&gt; [1] 5650</span>',
+    fixed = TRUE
+  )
   expect_match(res@extra$display$html, "#&gt; [1] 5650", fixed = TRUE)
   expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
   expect_no_match(
@@ -181,10 +191,28 @@ test_that("run_r displays code directly when it produces no output", {
 
   expect_match(res@value, "produced no output", fixed = TRUE)
   expect_false(res@extra$display$open)
-  expect_match(res@extra$display$html, "x &lt;- 1", fixed = TRUE)
+  expect_match(
+    res@extra$display$html,
+    '<span class="hl def">x</span>',
+    fixed = TRUE
+  )
+  expect_match(
+    res@extra$display$html,
+    '<span class="hl num">1</span>',
+    fixed = TRUE
+  )
   expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
   expect_no_match(res@extra$display$html, "#&gt;", fixed = TRUE)
   expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
+})
+
+test_that("run_r highlights malformed code without exposing HTML", {
+  expect_no_warning(
+    html <- run_r_html("x <- '<unsafe>' +", list())
+  )
+
+  expect_match(html, "'&lt;unsafe&gt;'", fixed = TRUE)
+  expect_no_match(html, "<unsafe>", fixed = TRUE)
 })
 
 test_that("run_r displays worker failures directly and escapes their HTML", {
@@ -193,7 +221,7 @@ test_that("run_r displays worker failures directly and escapes their HTML", {
   expect_match(res@value, "Error: worker <broke>", fixed = TRUE)
   expect_equal(res@extra$display$title, "Analyzed data")
   expect_false(res@extra$display$open)
-  expect_match(res@extra$display$html, "&#39;&lt;unsafe&gt;&#39;", fixed = TRUE)
+  expect_match(res@extra$display$html, "'&lt;unsafe&gt;'", fixed = TRUE)
   expect_match(res@extra$display$html, "#&gt; worker &lt;broke&gt;", fixed = TRUE)
   expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
   expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
