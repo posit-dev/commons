@@ -3,7 +3,8 @@
 #' `commons()` creates an [ellmer::Chat] subclass with tools and prompting that
 #' allow the agent to navigate its data sources, semantic layer, and context
 #' layer. Depending on the agent's choice of tools, responses can be
-#' deterministically tagged as high-trust or low-trust.
+#' deterministically classified as based on a trusted calculation, cited, or
+#' untrusted.
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
 #' and tools. Use `agent$chat()` to ask questions, [commons_theme()] and
@@ -65,7 +66,8 @@
 #' * `search_context` retrieves relevant business context.
 #' * `describe_table` inspects a table or semantic model.
 #' * `run_sql` executes a read-only SQL query.
-#' * `run_r` analyzes results and renders plots in the agent's R session.
+#' * `run_r` executes R code to analyze results and render plots in the agent's
+#'   R session.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,

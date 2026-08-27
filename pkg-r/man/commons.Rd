@@ -74,7 +74,8 @@ An \link[ellmer:Chat]{ellmer::Chat} subclass.
 \code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools and prompting that
 allow the agent to navigate its data sources, semantic layer, and context
 layer. Depending on the agent's choice of tools, responses can be
-deterministically tagged as high-trust or low-trust.
+deterministically classified as based on a trusted calculation, cited, or
+untrusted.
 }
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
@@ -95,7 +96,8 @@ agent receives some combination of these tools:
 \item \code{search_context} retrieves relevant business context.
 \item \code{describe_table} inspects a table or semantic model.
 \item \code{run_sql} executes a read-only SQL query.
-\item \code{run_r} analyzes results and renders plots in the agent's R session.
+\item \code{run_r} executes R code to analyze results and render plots in the agent's
+R session.
 }
 
 These model-facing tools should be considered private. Their constructors
