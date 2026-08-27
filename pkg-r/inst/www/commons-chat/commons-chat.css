@@ -365,12 +365,60 @@ shiny-chat-container
 }
 
 .commons-run-r-details > summary {
-  color: var(--bs-secondary-color, #6c757d);
+  align-items: center;
+  color: inherit;
   cursor: pointer;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  display: flex;
+  font: inherit;
+  gap: 0.45em;
+  list-style: none;
+  width: fit-content;
+}
+
+.commons-run-r-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commons-run-r-details > summary::before {
+  border-bottom: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.45em;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  transition: transform 0.3s ease-in-out;
+  width: 0.45em;
+}
+
+.commons-run-r-details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.commons-run-r-details > summary:focus-visible {
+  border-radius: var(--bs-border-radius-sm, 0.25rem);
+  outline: 2px solid var(--bs-primary, #007bc2);
+  outline-offset: 2px;
+}
+
+.commons-run-r-details[open] > .commons-run-r-code {
+  animation: commons-run-r-details-reveal 0.2s ease-out;
+}
+
+@keyframes commons-run-r-details-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commons-run-r-details > summary::before {
+    transition: none;
+  }
+
+  .commons-run-r-details[open] > .commons-run-r-code {
+    animation: none;
+  }
 }
 
 .commons-run-r-display .commons-run-r-code {
