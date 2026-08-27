@@ -365,10 +365,33 @@ shiny-chat-container
 }
 
 .commons-run-r-details > summary {
+  align-items: center;
   color: inherit;
   cursor: pointer;
+  display: flex;
   font: inherit;
+  gap: 0.45em;
+  list-style: none;
   width: fit-content;
+}
+
+.commons-run-r-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commons-run-r-details > summary::before {
+  border-bottom: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.45em;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  width: 0.45em;
+}
+
+.commons-run-r-details[open] > summary::before {
+  transform: rotate(45deg);
 }
 
 .commons-run-r-details > summary:focus-visible {
