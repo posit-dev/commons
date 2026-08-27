@@ -25,7 +25,7 @@ connection or keep their defaults. See \code{\link[=semantic_layer]{semantic_lay
 A measure object.
 }
 \description{
-A measure is a governed calculation inside a \code{\link[=semantic_layer]{semantic_layer()}}. Its function
+A measure is a trusted calculation inside a \code{\link[=semantic_layer]{semantic_layer()}}. Its function
 body is ordinary R; its \code{arguments} schema tells the model what inputs it can
 supply.
 }

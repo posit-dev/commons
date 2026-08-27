@@ -16,7 +16,7 @@
 #' streams, and rewrites verified citations inline as server-authored
 #' `<shiny-aside>` elements. Citation details name the
 #' trusted source. A provenance marker `<shiny-aside>` follows
-#' the answer when it was produced by a governed calculation, or when a
+#' the answer when it was produced by a trusted calculation, or when a
 #' fallback answer cites nothing verified.
 #'
 #' @examples

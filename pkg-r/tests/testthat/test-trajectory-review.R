@@ -88,7 +88,7 @@ test_that("provenance markers describe trusted, cited, and uncited answers", {
   uncited <- htmltools::renderTags(commons_answer_pill("C"))$html
 
   expect_match(trusted, "Verified answer")
-  expect_match(trusted, "governed calculation")
+  expect_match(trusted, "trusted calculation")
   expect_match(trusted, "commons-tooltip")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
@@ -101,7 +101,7 @@ test_that("provenance markers describe trusted, cited, and uncited answers", {
 
   expect_match(uncited, "Untrusted")
   expect_match(uncited, "AI can be wrong")
-  expect_match(uncited, "not produced by a governed calculation")
+  expect_match(uncited, "not produced by a trusted calculation")
   expect_match(uncited, "commons-tooltip")
   expect_match(uncited, "commons-answer-pill-icon")
   expect_match(uncited, "commons-answer-pill-caution")

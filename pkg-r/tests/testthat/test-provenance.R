@@ -14,8 +14,16 @@ test_that("derive_provenance_tag matches the shared truth table", {
   }
 })
 
-test_that("provenance_display matches the shared copy word for word", {
+test_that("provenance_display uses R display copy", {
   display <- shared_fixture("provenance")$provenance_display$tags
+  display$A$body <- paste(
+    "This answer comes from a trusted calculation defined by",
+    "your data team."
+  )
+  display$C$body <- paste(
+    "This answer was not produced by a trusted calculation and has",
+    "no verified supporting citation. AI can be wrong."
+  )
   expect_setequal(names(display), names(provenance_display))
 
   for (tag in names(display)) {

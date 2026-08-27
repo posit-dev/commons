@@ -3,7 +3,7 @@ provenance_display <- list(
     label = "Verified answer",
     icon = "trusted-icon.svg",
     body = paste(
-      "This answer comes from a governed calculation defined by",
+      "This answer comes from a trusted calculation defined by",
       "your data team."
     ),
     pill_class = "trusted"
@@ -18,7 +18,7 @@ provenance_display <- list(
     label = "Untrusted",
     icon = "warning-icon.svg",
     body = paste(
-      "This answer was not produced by a governed calculation and has",
+      "This answer was not produced by a trusted calculation and has",
       "no verified supporting citation. AI can be wrong."
     ),
     pill_class = "caution"
