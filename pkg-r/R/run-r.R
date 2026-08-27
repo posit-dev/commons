@@ -56,7 +56,10 @@ tool_run_r <- function(private) {
       if (identical(private$worker$network, "none")) {
         "\n- The session has no network access."
       } else {
-        "\n- You can install R packages with install.packages()."
+        paste(
+          "\n- The temporary directory has been added to libPaths, so you",
+          "can use install.packages() normally."
+        )
       },
       "\n- The session can only write to its own temporary directory."
     ),
