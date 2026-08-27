@@ -404,13 +404,24 @@ test_that("render_citation_aside emits a labeled aside with source details", {
     "The computation follows the documented recognition rule.",
     corpus
   )
+  # The pill renders the uniform quote mark; the per-kind icon and the
+  # source label appear in the body title instead.
   expect_match(
     out$html,
     paste0(
       '^<shiny-aside label="sales table" ',
       'icon="',
-      commons_icon_url("citation-schema.svg")
+      commons_icon_url("citation-mark.svg")
     )
+  )
+  expect_match(
+    out$html,
+    paste0(
+      '<span class="commons-citation-title"><img src="',
+      commons_icon_url("citation-schema.svg"),
+      '" alt="">'
+    ),
+    fixed = TRUE
   )
   expect_no_match(out$html, "data:image", fixed = TRUE)
   expect_match(

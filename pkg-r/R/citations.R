@@ -90,7 +90,11 @@ render_citation_aside <- function(quote, explanation, corpus) {
 }
 
 citation_aside_html <- function(quote, explanation, label, kind) {
-  icon <- citation_icon_url(kind)
+  # The pill renders the uniform quote mark; the per-kind icon goes in
+  # the body title (commons-chat.css hides shinychat's popover title row,
+  # so the aside's icon attribute is only a styling hook for the pill).
+  icon <- commons_icon_url("citation-mark.svg")
+  kind_icon <- citation_icon_url(kind)
   reason <- if (nzchar(explanation)) paste0(explanation, "\n\n") else ""
   blockquote <- paste0("> ", gsub("\n", "\n> ", trimws(quote), fixed = TRUE))
   # shinychat only renders the popover's title row for grouped asides, so
@@ -101,7 +105,11 @@ citation_aside_html <- function(quote, explanation, label, kind) {
       '<span class="commons-citation-title">',
       '%s<span class="commons-citation-title-label">%s</span></span>\n\n'
     ),
-    if (is.null(icon)) "" else sprintf('<img src="%s" alt="">', escape_attr(icon)),
+    if (is.null(kind_icon)) {
+      ""
+    } else {
+      sprintf('<img src="%s" alt="">', escape_attr(kind_icon))
+    },
     htmltools::htmlEscape(label)
   )
   sprintf(
@@ -239,10 +247,9 @@ non_citable_tool_output_text <- function(tools) {
   paste(items, collapse = "\n")
 }
 
-# The aside's icon attribute carries the per-kind icon so the citation
-# popover's title row shows it; the pill marker is the uniform quote mark,
-# painted by commons-chat.css. These SVGs need a fixed stroke because
-# images cannot inherit currentColor.
+# The per-kind icon appears in the aside body's title; the pill renders
+# the uniform citation-mark.svg quote mark instead. These SVGs need a
+# fixed stroke because images cannot inherit currentColor.
 citation_icon_url <- function(kind) {
   file <- switch(
     kind,

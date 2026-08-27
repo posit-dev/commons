@@ -135,31 +135,11 @@ shiny-chat-container .shiny-chat-input .tiptap {
  * popover. They render icon-only like the provenance markers, in a quieter
  * slate blue — verified support, short of a governed calculation. */
 shiny-chat-container
-  .shiny-aside-pill:has(img[src*="/citation-"]) {
+  .shiny-aside-pill:has(img[src$="/citation-mark.svg"]) {
   --shiny-chat-aside-marker-color: #41556e;
   --shiny-chat-aside-marker-bg: transparent;
   --shiny-chat-aside-marker-hover-color: #2f4257;
   --shiny-chat-aside-marker-hover-bg: #e9eff5;
-}
-
-/* TRIAL: the aside's icon attribute carries the per-kind icon (so the
- * popover title row shows it); the pill hides that img and paints the
- * uniform quote mark instead. Caveat: shinychat unmounts the img if it
- * errors, which would silently drop these selectors' match — if shinychat
- * gains a popover-icon attribute, delete this block. */
-shiny-chat-container
-  .shiny-aside-pill:has(img[src*="/citation-"])
-  img {
-  display: none;
-}
-
-shiny-chat-container
-  .shiny-aside-pill:has(img[src*="/citation-"])::before {
-  background: url("figs/citation-mark.svg") center / contain no-repeat;
-  content: "";
-  flex: 0 0 auto;
-  height: 1.35em;
-  width: 1.35em;
 }
 
 /* Temporary bridge until shinychat forwards a per-aside tone hook to the
@@ -188,9 +168,11 @@ shiny-chat-container
  * grouped "+N" overflow count still shows. */
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"],
-    img[src*="/citation-"]
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
   ) {
   border-radius: 50%;
   font-weight: 400;
@@ -202,9 +184,11 @@ shiny-chat-container
  * it a stadium shape and roomier padding instead of the bare-icon circle. */
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"],
-    img[src*="/citation-"]
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
   ):has(.shiny-aside-pill__overflow) {
   border-radius: 999px;
   gap: 0.3em;
@@ -213,9 +197,11 @@ shiny-chat-container
 
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"],
-    img[src*="/citation-"]
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
   )
   .shiny-aside-pill__label {
   display: none;
@@ -223,9 +209,11 @@ shiny-chat-container
 
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"],
-    img[src*="/citation-"]
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
   )
   img {
   height: 1.35em;
@@ -234,8 +222,7 @@ shiny-chat-container
 
 shiny-chat-container
   .shiny-aside-pill:has(
-    img[src$="/trusted-icon.svg"],
-    img[src$="/warning-icon.svg"]
+    :is(img[src$="/trusted-icon.svg"], img[src$="/warning-icon.svg"])
   )
   img {
   animation: commons-provenance-marker-pulse 1.6s ease-in-out 1;
@@ -260,8 +247,7 @@ shiny-chat-container
 @media (prefers-reduced-motion: reduce) {
   shiny-chat-container
     .shiny-aside-pill:has(
-      img[src$="/trusted-icon.svg"],
-      img[src$="/warning-icon.svg"]
+      :is(img[src$="/trusted-icon.svg"], img[src$="/warning-icon.svg"])
     )
     img {
     animation: none;
