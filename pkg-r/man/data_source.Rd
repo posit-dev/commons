@@ -27,15 +27,8 @@ selections import metric views, as native trusted metrics and dimensions.
 Namespace selections retain lightweight model metadata, then read a
 model's definition when the agent describes or uses it. Explicitly
 selected models are read and validated when the data source is created.
-Snowflake semantic variables and Databricks metric-view parameters are
-passed as typed JSON arguments when the agent invokes them. Databricks
-wildcard members require concrete column metadata from the warehouse.
-Native semantic models are available through trusted-calculation search,
-table inspection, and metric invocation, but are not registered as
-physical tables.
-Snowflake verified queries are exposed separately as exact trusted
-calculations; their SQL is executed as stored rather than parsed to infer
-dependencies.
+Databricks wildcard members require concrete column metadata from the
+warehouse.
 An exact physical-table selection also imports associated models when
 every physical dependency is selected. Public relationships, facts,
 filters, and instructions become table-scoped first-touch and retrieval
@@ -109,14 +102,14 @@ indexed for context retrieval.
 A table's entry can also declare \code{definitions}: named expressions in the
 \href{https://data-dict.tidyverse.org/expressions.html}{data-dict expression language}.
 commons validates their inferred types and references, compiles them for
-the source's SQL backend, and lets the model use them as \code{{{name}}} tokens in
-custom SQL or, for metrics, invoke them directly. Definitions are delivered
-through all three channels above.
+the source's SQL backend, and makes them available to trusted metric
+calculations and custom SQL. Definitions are delivered through all three
+channels above.
 }
 
 \section{Trust}{
 
-The SQL query tool runs only read-only \code{SELECT} queries; statements that
+The agent runs only read-only \code{SELECT} queries; statements that
 would modify data or schema (\code{INSERT}, \code{UPDATE}, \code{DROP}, and similar) are
 rejected before reaching the database. For the in-process DuckDB built from
 data frames, commons additionally disables extension loading and filesystem

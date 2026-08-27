@@ -23,8 +23,7 @@ ignored, with a warning; use \code{instructions} to add to commons' prompt.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
-\code{\link[=semantic_layer]{semantic_layer()}}. When there are several sources, the SQL query and
-table inspection tools take a source's name as a \code{source} argument.}
+\code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
@@ -42,7 +41,7 @@ system prompt, as a single string or the path to a text or Markdown file.
 )
 }\if{html}{\out{</div>}}}
 
-\item{network}{Whether the model-authored R session has network access. One
+\item{network}{Whether the agent's R session has network access. One
 of
 \code{"none"} (the default) or \code{"full"}. The session uses OS sandboxing on
 Linux and macOS. On unsupported hosts, local development can opt in to
@@ -94,14 +93,14 @@ agent receives some combination of these tools:
 \item \code{search_context} retrieves relevant business context.
 \item \code{describe_table} inspects a table or semantic model.
 \item \code{run_sql} executes a read-only SQL query.
-\item \code{run_r} analyzes results and renders plots with model-authored R code.
+\item \code{run_r} analyzes results and renders plots in the agent's R session.
 }
 
-These model-facing tools are implementation details. Their constructors are
-intentionally not exported, and their names, arguments, availability, and
-behavior may change without notice. Application code should configure an
-agent through \code{commons()} and its layer constructors rather than depend on
-individual tools.
+These model-facing tools should be considered private. Their constructors
+are intentionally not exported, and their names, arguments, availability,
+and behavior may change without notice. Application code should configure
+an agent through \code{commons()} and its layer constructors rather than depend
+on individual tools.
 }
 
 \examples{

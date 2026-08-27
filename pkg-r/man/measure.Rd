@@ -39,9 +39,8 @@ For full control over a result, \code{fn} can return an
 \link[ellmer:ContentToolResult]{ellmer::ContentToolResult}. Its \code{value} is sent to the model and its
 \code{extra$display} controls the shinychat display. When the display includes
 HTML, Markdown, or text, the model is told that the result is already visible
-to the user. An optional \code{extra$data} value is made available for further
-model-authored R analysis and removed from the result before it is returned
-to ellmer.
+to the user. An optional \code{extra$data} value is made available in the agent's
+R session and removed from the result before it is returned to ellmer.
 }
 \examples{
 table <- data.frame(term = c("Headache", "Nausea"), count = c(7, 5))

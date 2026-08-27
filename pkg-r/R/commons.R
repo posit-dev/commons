@@ -13,8 +13,7 @@
 #'   ignored, with a warning; use `instructions` to add to commons' prompt.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
-#'   [semantic_layer()]. When there are several sources, the SQL query and
-#'   table inspection tools take a source's name as a `source` argument.
+#'   [semantic_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param ... These dots are for future extensions and must be empty.
@@ -28,7 +27,7 @@
 #'     instructions = "Use the organization's fiscal-year conventions."
 #'   )
 #'   ```
-#' @param network Whether the model-authored R session has network access. One
+#' @param network Whether the agent's R session has network access. One
 #'   of
 #'   `"none"` (the default) or `"full"`. The session uses OS sandboxing on
 #'   Linux and macOS. On unsupported hosts, local development can opt in to
@@ -64,13 +63,13 @@
 #' * `search_context` retrieves relevant business context.
 #' * `describe_table` inspects a table or semantic model.
 #' * `run_sql` executes a read-only SQL query.
-#' * `run_r` analyzes results and renders plots with model-authored R code.
+#' * `run_r` analyzes results and renders plots in the agent's R session.
 #'
-#' These model-facing tools are implementation details. Their constructors are
-#' intentionally not exported, and their names, arguments, availability, and
-#' behavior may change without notice. Application code should configure an
-#' agent through `commons()` and its layer constructors rather than depend on
-#' individual tools.
+#' These model-facing tools should be considered private. Their constructors
+#' are intentionally not exported, and their names, arguments, availability,
+#' and behavior may change without notice. Application code should configure
+#' an agent through `commons()` and its layer constructors rather than depend
+#' on individual tools.
 #'
 #' @return An [ellmer::Chat] subclass.
 #'
