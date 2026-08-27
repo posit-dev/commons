@@ -53,6 +53,19 @@ test_that("run_r session state persists across calls, and handles sync lazily", 
   expect_match(res@value, "48")
 })
 
+test_that("run_r prepends a worker-local package library", {
+  worker <- local_guardrail_worker()
+  worker_ensure(worker)
+
+  paths <- worker$rs$run(function() {
+    list(libraries = .libPaths(), bit64 = find.package("bit64"))
+  })
+
+  expect_equal(basename(paths$libraries[[1]]), "library")
+  expect_true(dir.exists(paths$libraries[[1]]))
+  expect_false(startsWith(paths$bit64, paths$libraries[[1]]))
+})
+
 test_that("run_r loads integer64 methods for stored handles", {
   skip_if_not_installed("bit64")
   worker <- local_worker()
