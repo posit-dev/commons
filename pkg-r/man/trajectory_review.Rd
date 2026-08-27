@@ -77,12 +77,13 @@ human-readable transcript for joint human-agent review.
 
 The transcript uses the same commons and shinychat renderer as live
 conversations, preserving recorded messages and tool activity. Provenance
-markers are reconstructed from recorded provenance tags, but inline citations
-are not recreated. Generated review documents list the recorded citation
-decisions separately.
+markers are reconstructed from recorded provenance tags, but inline
+citations are not recreated. Generated review documents list the recorded
+citation decisions separately.
 
-Search-pool results are omitted because later tool calls record any selected
-measure; other tool results are limited to 50 lines or 20,000 characters.
+Trusted-calculation discovery results are omitted because later activity
+records any selected calculation; other tool results are limited to 50 lines
+or 20,000 characters.
 
 Trust filters use each answer's provenance tag exactly as \code{\link[=trajectory_read]{trajectory_read()}}
 recorded it. Missing or conflicting records are omitted rather than inferred.

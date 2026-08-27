@@ -247,7 +247,7 @@ tables:
 
 There are three kinds of definitions. Definitions can participate in trusted metric calculations or be used in custom SQL:[^definition-sql]
 
-| Kind | Example | Use in `call_metrics` |
+| Kind | Example | Use in a trusted metric calculation |
 |---|---|---|
 | Metric | `SUM(n)` | Computes the metric |
 | Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |
@@ -255,7 +255,7 @@ There are three kinds of definitions. Definitions can participate in trusted met
 
 commons infers the definition kind from its expression. Aggregate and constant expressions are categorized as metrics, row-level Boolean expressions as filters, and other row-level expressions as derived values.
 
-[^definition-sql]: In custom SQL, the agent refers to a definition using its `{{name}}` token. commons expands the token to SQL compiled for the data source. Because this is still custom SQL, the provenance outcome is `Cited` or `Untrusted`, rather than `Verified answer`.
+[^definition-sql]: commons expands definitions used in custom SQL to expressions compiled for the data source. Because this is still custom SQL, the provenance outcome is `Cited` or `Untrusted`, rather than `Verified answer`.
 
 See the [DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 

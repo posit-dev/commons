@@ -3,11 +3,10 @@
 #' A context layer contains text that helps a [commons()] agent interpret its
 #' data source.
 #'
-#' Files are chunked and indexed with \pkg{ragnar} when the agent first
-#' searches its context. Facts that should be in every prompt belong in the
-#' `instructions` passed to [commons()], not here.
+#' Context is retrieved when relevant. Facts needed in every conversation
+#' belong in the `instructions` passed to [commons()], not here.
 #'
-#' @param files Character vector of paths to text/markdown files to index.
+#' @param files Character vector of paths to text or Markdown files.
 #'
 #' @return A `commons_context_layer` object.
 #'
