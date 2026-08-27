@@ -1,3 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 2.5 12 8" fill="none">
-  <text x="6" y="15.4" fill="#41556e" font-family="Georgia, 'Times New Roman', serif" font-size="15" font-weight="400" text-anchor="middle">”</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Bootstrap Icons "quote" glyph (MIT) on the navy tile -->
+  <rect x="1.2" y="1.2" width="13.6" height="13.6" rx="3.4" fill="#2e4a6b"/>
+  <path fill="#fff" transform="translate(1.2 1.625) scale(0.85)" d="M12 12a1 1 0 0 0 1-1V8.558a1 1 0 0 0-1-1h-1.388q0-.527.062-1.054.093-.558.31-.992t.559-.683q.34-.279.868-.279V3q-.868 0-1.52.372a3.3 3.3 0 0 0-1.085.992 4.9 4.9 0 0 0-.62 1.458A7.7 7.7 0 0 0 9 7.558V11a1 1 0 0 0 1 1zm-6 0a1 1 0 0 0 1-1V8.558a1 1 0 0 0-1-1H4.612q0-.527.062-1.054.094-.558.31-.992.217-.434.559-.683.34-.279.868-.279V3q-.868 0-1.52.372a3.3 3.3 0 0 0-1.085.992 4.9 4.9 0 0 0-.62 1.458A7.7 7.7 0 0 0 3 7.558V11a1 1 0 0 0 1 1z"/>
 </svg>

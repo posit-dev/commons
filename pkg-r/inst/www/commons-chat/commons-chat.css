@@ -133,13 +133,13 @@ shiny-chat-container .shiny-chat-input .tiptap {
 /* Citations are labeled identity asides: shinychat accumulates those
  * sharing a paragraph into one pill with a "+N" overflow and a carousel
  * popover. They render icon-only like the provenance markers, in a quieter
- * slate blue — verified support, short of a governed calculation. */
+ * mid navy — verified support, short of a governed calculation. */
 shiny-chat-container
   .shiny-aside-pill:has(img[src$="/citation-mark.svg"]) {
-  --shiny-chat-aside-marker-color: #41556e;
+  --shiny-chat-aside-marker-color: #2e4a6b;
   --shiny-chat-aside-marker-bg: transparent;
-  --shiny-chat-aside-marker-hover-color: #2f4257;
-  --shiny-chat-aside-marker-hover-bg: #e9eff5;
+  --shiny-chat-aside-marker-hover-color: #223851;
+  --shiny-chat-aside-marker-hover-bg: #e7edf4;
 }
 
 /* Temporary bridge until shinychat forwards a per-aside tone hook to the
