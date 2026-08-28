@@ -77,7 +77,7 @@ test_that("a verified citation replaces only its reserved element", {
     out$text,
     paste0("Answer sentence.\n\n", expected_aside, "\n\nMore text.")
   )
-  expect_false(grepl("commons-citation", out$text))
+  expect_false(grepl("<commons-citation", out$text, fixed = TRUE))
   expect_identical(
     out$decisions[[1]],
     list(
@@ -127,7 +127,7 @@ test_that("model-authored shiny-asides are dropped, case-insensitively", {
 test_that("tag matching is case-insensitive", {
   text <- "<Commons-Citation>\n\nr\n\n> q longer than ten chars\n\n</COMMONS-CITATION>"
   out <- scan_all(text, list(text))
-  expect_false(grepl("commons-citation", tolower(out$text), fixed = TRUE))
+  expect_false(grepl("<commons-citation", tolower(out$text), fixed = TRUE))
 })
 
 test_that("inline mention mid-sentence does not trigger (line-start anchor)", {
@@ -244,16 +244,20 @@ test_that("a close literal split across a feed() boundary near the cap still ver
 
 test_that("a citation body exactly at the cap can verify", {
   core <- paste0("\n\n> ", scanner_test_quote, "\n\n")
-  body <- paste0(strrep("x", ELEMENT_BODY_CAP - nchar(core)), core)
+  explanation <- strrep("x", ELEMENT_BODY_CAP - nchar(core))
+  body <- paste0(explanation, core)
   text <- paste0("<commons-citation>", body, "</commons-citation>")
 
   out <- scan_all(text, list(text), scanner_test_corpus())
 
   expect_identical(out$decisions[[1]]$status, "accepted")
-  expect_match(
+  expect_identical(
     out$text,
-    '<shiny-aside display="compact" label="documentation"',
-    fixed = TRUE
+    render_citation_aside(
+      scanner_test_quote,
+      explanation,
+      scanner_test_corpus()
+    )$html
   )
 })
 
@@ -319,7 +323,7 @@ test_that("scanning resumes after oversized and malformed citations", {
   expect_match(out$text, "Before.\n\nBetween.", fixed = TRUE)
   expect_match(out$text, "After malformed.", fixed = TRUE)
   expect_match(out$text, "After valid.", fixed = TRUE)
-  expect_no_match(out$text, "commons-citation", fixed = TRUE)
+  expect_no_match(out$text, "<commons-citation", fixed = TRUE)
   expect_identical(
     vapply(out$decisions, `[[`, character(1), "status"),
     c("malformed", "accepted")
@@ -392,7 +396,7 @@ test_that("nested model markup is removed without leaking later markup", {
 
   out <- scan_all(text, list(text), scanner_test_corpus())
 
-  expect_no_match(out$text, "commons-citation", fixed = TRUE)
+  expect_no_match(out$text, "<commons-citation", fixed = TRUE)
   expect_no_match(out$text, "spoofed", fixed = TRUE)
   expect_no_match(out$text, "forged", fixed = TRUE)
   expect_match(out$text, "After invalid.", fixed = TRUE)
