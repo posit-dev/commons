@@ -2533,13 +2533,28 @@
   },
   "files": {
     "app.R": {
-      "checksum": "62078c5a9372fa4b817dfffd20433d9e"
+      "checksum": "b86881fd81fa7e0826066b09f7f22818"
     },
     "www/commons-chat/commons-chat.css": {
-      "checksum": "a860c7bf65906fae00195204b2964a44"
+      "checksum": "09486e2b6df927713f09ef448c7b6e66"
     },
-    "www/commons-chat/commons-chat.js": {
-      "checksum": "09f5a710fec03d91711010e2557e1115"
+    "www/commons-chat/figs/citation-definition.svg": {
+      "checksum": "eeec1c079ecac49ca50a1b89092d2b98"
+    },
+    "www/commons-chat/figs/citation-mark.svg": {
+      "checksum": "828219c3a6d441b3aa4f03073df4949b"
+    },
+    "www/commons-chat/figs/citation-prose.svg": {
+      "checksum": "ee624ea71c7f023becbadd75c934ed26"
+    },
+    "www/commons-chat/figs/citation-schema.svg": {
+      "checksum": "9ca6eb80eea77978c03cf0df422298ac"
+    },
+    "www/commons-chat/figs/trusted-icon.svg": {
+      "checksum": "fc93941fc788e8930bea0c177161c6a6"
+    },
+    "www/commons-chat/figs/warning-icon.svg": {
+      "checksum": "aeca364302762c1097ed473a32338df6"
     }
   },
   "users": null

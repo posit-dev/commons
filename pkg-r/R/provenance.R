@@ -37,9 +37,12 @@ derive_provenance_tag <- function(tags, verified) {
   }
 }
 
-provenance_aside <- function(tag) {
+# Live answers omit the "Cited" marker: their verified citation asides
+# already say as much. Review contexts set include_cited = TRUE so every
+# classified answer carries its outcome.
+provenance_aside <- function(tag, include_cited = FALSE) {
   entry <- provenance_display[[tag]]
-  if (is.null(entry) || identical(tag, "B")) {
+  if (is.null(entry) || (identical(tag, "B") && !include_cited)) {
     return("")
   }
   icon <- commons_icon_url(entry$icon)

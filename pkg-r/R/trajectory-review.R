@@ -245,6 +245,30 @@ trajectory_exchange_messages <- function(turns, exchange) {
   messages
 }
 
+# Replay through chat_append(): static chat_ui(messages = ...) would fold
+# mixed content (tool cards plus markdown text) into a single raw-HTML
+# island, escaping the text and hiding it from aside grouping.
+replay_transcript <- function(id, messages, session) {
+  for (message in messages) {
+    replay_transcript_message(id, message, session)
+  }
+  invisible(NULL)
+}
+
+replay_transcript_message <- function(id, message, session) {
+  content <- message$content
+  if (is.list(content) && !is.object(content)) {
+    stream <- coro::generator(function() {
+      for (x in content) {
+        coro::yield(x)
+      }
+    })
+    shinychat::chat_append(id, stream(), role = message$role, session = session)
+  } else {
+    shinychat::chat_append(id, content, role = message$role, session = session)
+  }
+}
+
 sanitize_trajectory_turns <- function(turns) {
   sanitized <- lapply(turns, function(turn) {
     if (turn@role %in% c("assistant", "user")) {
@@ -315,8 +339,9 @@ add_message_provenance <- function(messages, provenance) {
     } else {
       record$provenance_tag %||% NA_character_
     }
-    pill <- commons_answer_pill(tag)
-    if (is.null(pill)) {
+    # Reviewers also get a "Cited" marker the live chat omits.
+    aside <- provenance_aside(tag, include_cited = TRUE)
+    if (!nzchar(aside)) {
       next
     }
     candidates <- which(vapply(
@@ -331,42 +356,43 @@ add_message_provenance <- function(messages, provenance) {
       next
     }
     index <- candidates[[length(candidates)]]
-    messages[[index]]$content <- append_provenance_pill(
+    messages[[index]]$content <- append_provenance_aside(
       messages[[index]]$content,
-      pill
+      aside
     )
   }
   messages
 }
 
-append_provenance_pill <- function(content, pill) {
+# The aside must stay markdown, not HTML: htmltools::HTML() would mark the
+# chunk as raw HTML, which shinychat's aside grouping does not reach into.
+append_provenance_aside <- function(content, aside) {
   if (is.character(content)) {
-    return(list(content, pill))
+    return(list(content, aside))
   }
-  c(content, list(pill))
+  c(content, list(aside))
 }
 
+# The question list is ordinary server-rendered HTML outside shinychat's
+# React tree, so a bslib tooltip (Popper, container = body) owns positioning.
 commons_answer_pill <- function(tag) {
   entry <- provenance_display[[tag]]
   if (is.null(entry)) {
     return(NULL)
   }
-  htmltools::tags$span(
+  pill <- htmltools::tags$span(
     class = paste0(
       "commons-answer-pill commons-answer-pill-",
       entry$pill_class
     ),
-    title = entry$body,
-    `aria-label` = paste0(entry$label, ". ", entry$body),
+    # No aria-label: the visible text already announces the label, and
+    # Bootstrap sets aria-describedby when the tooltip shows the body.
     tabindex = "0",
-    commons_pill_icon(entry$icon, entry$label),
-    htmltools::tags$span(entry$label),
-    commons_pill_tooltip(entry$body)
+    # Decorative: the adjacent span already names the label
+    commons_pill_icon(entry$icon, ""),
+    htmltools::tags$span(entry$label)
   )
-}
-
-commons_pill_tooltip <- function(text) {
-  htmltools::tags$span(class = "commons-tooltip", role = "tooltip", text)
+  bslib::tooltip(pill, entry$body)
 }
 
 commons_pill_icon <- function(file, alt) {
@@ -763,23 +789,24 @@ viewer_server <- function(
           "Select a conversation to view its transcript."
         ))
       }
-      shinychat::chat_ui(
-        transcript_id(conversation),
-        messages = selected_messages(),
-        height = "100%"
-      )
+      # Messages are replayed from the server once the element is bound;
+      # see replay_transcript() for why they don't go through chat_ui().
+      shinychat::chat_ui(transcript_id(conversation), height = "100%")
     })
 
-    # Seed decorations only after the new chat element is bound in the browser.
+    # Replay and seed decorations only after the new chat element is bound in
+    # the browser. Replay first so the seed's message indices line up.
     shiny::observeEvent(selected_conversation(), {
       conversation <- selected_conversation()
       exchange <- selected_exchange()
       messages <- selected_messages()
       session$onFlushed(
         function() {
+          id <- transcript_id(conversation)
+          replay_transcript(id, messages, session)
           seed_transcript_decorations(
             session,
-            transcript_id(conversation),
+            id,
             messages,
             selected_exchange = exchange
           )

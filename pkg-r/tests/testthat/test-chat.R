@@ -113,7 +113,8 @@ test_that("commons_theme() bundles the commons chat assets", {
 
   commons_dep <- deps[[which(names == "commons-chat")]]
   expect_identical(commons_dep$stylesheet, "commons-chat.css")
-  expect_identical(commons_dep$script, "commons-chat.js")
+  # Tooltip positioning is owned by shinychat (asides) and bslib (pills).
+  expect_null(commons_dep$script)
 })
 
 test_that("icon URLs resolve inside the commons-chat dependency", {
