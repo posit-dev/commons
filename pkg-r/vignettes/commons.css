@@ -32,11 +32,6 @@
   border-color: #dfc28a;
 }
 
-.commons-trust-segment-high .commons-trust-label,
-.commons-trust-segment-lower .commons-trust-label {
-  color: #4a4a4a;
-}
-
 .commons-branch-flow {
   align-items: center;
   column-gap: 0.25rem;
@@ -82,10 +77,6 @@
   white-space: nowrap;
 }
 
-.commons-flow-answer {
-  font-size: 0.9rem;
-}
-
 .commons-flow-or {
   color: #666;
   font-size: 0.8rem;
@@ -109,6 +100,7 @@
 }
 
 .commons-trust-label {
+  color: #4a4a4a;
   font-size: 0.85rem;
   font-weight: 600;
   margin-bottom: 0.5rem;
