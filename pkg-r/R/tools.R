@@ -324,7 +324,8 @@ tool_call_measure <- function(private) {
         arguments,
         injections = private$injections,
         handles = private$handles,
-        sources = private$sources
+        sources = private$sources,
+        measure_provenance = private$measure_provenance
       )
     },
     paste(
@@ -495,7 +496,8 @@ call_measure_tool <- function(
   arguments,
   injections = list(),
   handles = NULL,
-  sources = list()
+  sources = list(),
+  measure_provenance = list()
 ) {
   td <- registry[[name]]
   if (is.null(td)) {
@@ -506,6 +508,9 @@ call_measure_tool <- function(
     }
     cli::cli_abort(c("No measure named {.val {name}}.", i = detail))
   }
+  footer <- measure_source_footer(
+    measure_provenance[[name]] %||% character()
+  )
   args <- validate_measure_args(td, parse_json_args(arguments))
   # A measure takes a source's connection by the source's name; a board source
   # must have its pins loaded before that connection can answer a query.
@@ -514,17 +519,24 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
-    return(measure_content_tool_result(td, value, handles))
+    return(measure_content_tool_result(td, value, handles, footer))
   }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
     advert <- register_handle(handles, value)
-    return(measure_plot_tool_result(td, args, value, advert))
+    return(measure_plot_tool_result(td, args, value, advert, footer))
   }
   if (is_gt_table(value)) {
     data <- recover_gt_table_data(value)
     advert <- register_handle(handles, data)
-    return(measure_gt_table_tool_result(td, args, value, data, advert))
+    return(measure_gt_table_tool_result(
+      td,
+      args,
+      value,
+      data,
+      advert,
+      footer
+    ))
   }
   advert <- register_handle(handles, value)
   tool_result(
@@ -532,13 +544,13 @@ call_measure_tool <- function(
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = measure_display_html(args, value, measure_metadata(td)),
-    footer = measure_source_footer(td),
+    footer = footer,
     tag = "A",
     show_tag = FALSE
   )
 }
 
-measure_content_tool_result <- function(td, result, handles) {
+measure_content_tool_result <- function(td, result, handles, footer) {
   data <- result@extra$data
   result@extra$data <- NULL
   display <- result@extra$display
@@ -557,7 +569,6 @@ measure_content_tool_result <- function(td, result, handles) {
 
   title <- "Ran a trusted calculation"
   icon <- maybe_icon("shield-check")
-  footer <- measure_source_footer(td)
   if (is.null(display)) {
     display <- shinychat::tool_result_display(
       title = title,
@@ -615,7 +626,7 @@ append_handle_advert <- function(value, advert) {
   paste(c(format_measure_value(value), advert), collapse = "\n\n")
 }
 
-measure_plot_tool_result <- function(td, args, value, advert) {
+measure_plot_tool_result <- function(td, args, value, advert, footer) {
   title <- tool_title(td)
   rendered <- tryCatch(
     render_plot_image(value, sprintf("Plot returned by %s", title)),
@@ -628,7 +639,8 @@ measure_plot_tool_result <- function(td, args, value, advert) {
       advert,
       conditionMessage(rendered),
       "a plot",
-      "commons-measure-plot-error"
+      "commons-measure-plot-error",
+      footer = footer
     ))
   }
 
@@ -648,7 +660,7 @@ measure_plot_tool_result <- function(td, args, value, advert) {
       measure_result_html(rendered$html),
       measure_metadata(td)
     ),
-    footer = measure_source_footer(td),
+    footer = footer,
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -662,6 +674,7 @@ measure_failure_result <- function(
   message,
   result_type,
   class,
+  footer,
   model_content = NULL
 ) {
   note <- sprintf(
@@ -678,14 +691,21 @@ measure_failure_result <- function(
       measure_result_html(html_escape(note), class),
       measure_metadata(td)
     ),
-    footer = measure_source_footer(td),
+    footer = footer,
     tag = "A",
     open = TRUE,
     show_tag = FALSE
   )
 }
 
-measure_gt_table_tool_result <- function(td, args, value, data, advert) {
+measure_gt_table_tool_result <- function(
+  td,
+  args,
+  value,
+  data,
+  advert,
+  footer
+) {
   rendered <- tryCatch(
     render_gt_table(value),
     error = function(error) error
@@ -699,6 +719,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
       conditionMessage(rendered),
       "a gt table",
       "commons-measure-gt-table-error",
+      footer = footer,
       model_content = model_content
     ))
   }
@@ -732,7 +753,7 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = display_html,
-    footer = measure_source_footer(td),
+    footer = footer,
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -1090,8 +1111,7 @@ measure_metadata_html <- function(metadata) {
   )
 }
 
-measure_source_footer <- function(td) {
-  provenance <- attr(td, "commons_provenance") %||% character()
+measure_source_footer <- function(provenance) {
   urls <- unique(provenance[grepl("^https?://", provenance, ignore.case = TRUE)])
   if (length(urls) == 0L) {
     return(NULL)

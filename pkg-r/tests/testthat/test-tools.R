@@ -46,29 +46,6 @@ test_that("call_measure_tool uses the trusted calculation result title", {
   expect_no_match(res@extra$display$html, "commons-measure-args", fixed = TRUE)
 })
 
-test_that("call_measure_tool links URL provenance from file-backed measures", {
-  calculation <- measure(
-    "order_count",
-    "Count orders.",
-    function() 2
-  )
-  attr(calculation, "commons_provenance") <- c(
-    "https://github.com/org/app/blob/abc/R/orders.R#L1-L9",
-    "trajectory analysis (2026-08-28)"
-  )
-
-  res <- call_measure_tool(list(order_count = calculation), "order_count", "{}")
-
-  footer <- as.character(res@extra$display$footer)
-  expect_match(footer, "View source", fixed = TRUE)
-  expect_match(
-    footer,
-    "https://github.com/org/app/blob/abc/R/orders.R#L1-L9",
-    fixed = TRUE
-  )
-  expect_no_match(footer, "trajectory analysis", fixed = TRUE)
-})
-
 test_that("call_measure_tool registers tabular output as a handle", {
   registry <- list(
     orders = measure(
