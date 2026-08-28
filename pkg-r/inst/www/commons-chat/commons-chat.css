@@ -75,6 +75,20 @@ shiny-chat-container .shiny-chat-pending-indicator::after {
   }
 }
 
+/* Debounce short reasoning bursts between response blocks. */
+shiny-chat-container .shiny-chat-thinking[data-streaming] {
+  animation: commons-chat-thinking-reveal 0s linear 200ms forwards;
+  opacity: 0;
+  visibility: hidden;
+}
+
+@keyframes commons-chat-thinking-reveal {
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   shiny-chat-container .shiny-chat-pending-indicator::after {
     animation: none;
