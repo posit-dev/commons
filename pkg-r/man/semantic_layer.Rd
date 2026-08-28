@@ -12,7 +12,8 @@ directories containing R scripts. Directory searches are not recursive.
 File and inline measures can be freely mixed.}
 }
 \value{
-A \code{commons_semantic_layer} object.
+A \code{commons_semantic_layer} R6 object. Its internals are private and
+may change without notice.
 }
 \description{
 \code{semantic_layer()} collects trusted calculations for a \code{\link[=commons]{commons()}} agent.

@@ -256,8 +256,14 @@ test_that("warehouse metadata supplements an authored dictionary", {
   )
   expect_match(entry, "external.order_id", fixed = TRUE)
   expect_no_match(entry, "unselected.order_id", fixed = TRUE)
+  source <- new_data_source(
+    DBI::ANSI(),
+    tables = names(merged$dictionary$tables),
+    owned = FALSE,
+    dictionary = merged$dictionary
+  )
   sql_entry <- dictionary_sql_entries(
-    list(dictionary = merged$dictionary),
+    source,
     "SELECT * FROM orders",
     NULL,
     NULL
