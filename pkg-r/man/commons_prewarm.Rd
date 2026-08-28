@@ -20,8 +20,12 @@ question:
 \details{
 \itemize{
 \item \code{agent$prewarm_context()} builds the context index (the store behind
-\code{search_context}). It is synchronous and in-process: the index is
-in-memory, so each Shiny session's agent builds its own.
+\code{search_context}). The index is a persistent, content-addressed file,
+so the build happens once per content version: later sessions open it
+in milliseconds, and it can be built offline ahead of deployment. The
+cache root resolves from the \code{commons.context_cache} option, the
+\code{COMMONS_CONTEXT_CACHE} or \code{CONNECT_CONTENT_DATA_DIR} environment
+variables, or the per-user cache directory, in that order.
 \item \code{agent$prewarm_sources()} starts a background process that downloads
 any uncached pins into the local pins cache (see \code{\link[=data_source]{data_source()}}).
 Because the pins cache is on disk, this can also run ahead of

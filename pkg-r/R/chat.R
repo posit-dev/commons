@@ -130,8 +130,12 @@ commons_server <- function(id, client, ...) {
 #' question:
 #'
 #' * `agent$prewarm_context()` builds the context index (the store behind
-#'   `search_context`). It is synchronous and in-process: the index is
-#'   in-memory, so each Shiny session's agent builds its own.
+#'   `search_context`). The index is a persistent, content-addressed file,
+#'   so the build happens once per content version: later sessions open it
+#'   in milliseconds, and it can be built offline ahead of deployment. The
+#'   cache root resolves from the `commons.context_cache` option, the
+#'   `COMMONS_CONTEXT_CACHE` or `CONNECT_CONTENT_DATA_DIR` environment
+#'   variables, or the per-user cache directory, in that order.
 #' * `agent$prewarm_sources()` starts a background process that downloads
 #'   any uncached pins into the local pins cache (see [data_source()]).
 #'   Because the pins cache is on disk, this can also run ahead of

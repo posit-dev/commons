@@ -27,6 +27,7 @@ Imports:
     duckdb (>= 1.5.4.2),
     ellmer (>= 0.4.1),
     evaluate,
+    filelock,
     glue,
     highr,
     htmltools,

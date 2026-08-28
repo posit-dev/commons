@@ -458,7 +458,7 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
   for (table in todo) {
     pin <- pending$pins[[table]]
     value <- tryCatch(
-      pins::pin_read(pending$board, pin),
+      with_pin_lock(pending$board, pin, pins::pin_read(pending$board, pin)),
       error = function(err) {
         cli::cli_abort(
           "Failed to read pin {.val {pin}} for table {.val {table}}.",
@@ -485,6 +485,25 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
 source_ensure_all <- function(source, call = rlang::caller_env()) {
   state <- data_source_state(source)
   source_ensure_tables(source, state$tables, call = call)
+}
+
+# pins has no cache locking, so a background prewarm downloading a pin can
+# race a first-use pin_read() of the same pin and leave a truncated cache
+# entry that poisons later reads. Both sides take an exclusive lock keyed by
+# the board's cache path and pin name, making the cache single-writer: the
+# reader waits out an in-flight download instead of duplicating it.
+with_pin_lock <- function(board, pin, expr) {
+  cache <- board$cache
+  # Boards without a download cache (e.g. board_folder) never download, so
+  # there is no race to guard against.
+  if (is.null(cache) || is.na(cache) || !nzchar(cache)) {
+    return(force(expr))
+  }
+  name <- gsub("[^A-Za-z0-9._-]", "_", pin)
+  dir.create(cache, recursive = TRUE, showWarnings = FALSE)
+  lock <- filelock::lock(file.path(cache, paste0("commons-", name, ".lock")))
+  on.exit(filelock::unlock(lock), add = TRUE)
+  force(expr)
 }
 
 # Warm the pins on-disk cache in a background process rather than loading into
@@ -531,7 +550,7 @@ prewarm_downloads <- function(board, pins) {
     function(pin) {
       tryCatch(
         {
-          pins::pin_download(board, pin)
+          with_pin_lock(board, pin, pins::pin_download(board, pin))
           TRUE
         },
         error = function(err) FALSE

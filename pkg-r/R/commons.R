@@ -409,7 +409,9 @@ Commons <- R6::R6Class(
           "commons_context_prewarm",
           attributes = list(
             "commons.context.n_docs" = length(layer_state$docs),
-            "commons.context.cache_hit" = !is.null(layer_state$store)
+            "commons.context.cache_hit" =
+              !is.null(layer_state$store) ||
+              file.exists(context_store_path(layer_state$docs))
           )
         )
         context_store(layer)

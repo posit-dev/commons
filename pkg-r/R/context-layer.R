@@ -106,25 +106,83 @@ strip_frontmatter <- function(md) {
   sub("(?s)^---\r?\n.*?\r?\n---(\r?\n|$)", "", md, perl = TRUE)
 }
 
-# Store setup (duckdb creation, chunk insertion, FTS indexing) is the most
-# expensive part of building an agent and many conversations never search, so
-# it's deferred to the first search. Aliases of one layer share its store;
-# augmenting its documents creates a layer with a fresh store.
+# The context store is a persistent, content-addressed DuckDB file: the key
+# hashes the layer's docs plus the ragnar/duckdb versions (whose file format
+# the store depends on), so a build happens once per content version per
+# cache root and every process afterwards opens it read-only. Store setup is
+# still deferred to the first search (or prewarm_context()) since many
+# conversations never search, but on a warm cache that first search only
+# pays for opening a file. Aliases of one layer share its store; augmenting
+# its documents creates a layer with a fresh store.
 context_store <- function(layer) {
   state <- context_layer_state(layer)
-  if (is.null(state$store)) {
-    local_commons_span(
-      "commons_context_store_build",
-      attributes = list("commons.context.n_docs" = length(state$docs))
-    )
-    store <- ragnar::ragnar_store_create(embed = NULL)
-    for (doc in state$docs) {
-      ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
-    }
-    ragnar::ragnar_store_build_index(store, type = "fts")
-    state$store <- store
+  if (!is.null(state$store)) {
+    return(state$store)
   }
-  state$store
+  path <- context_store_path(state$docs)
+  if (!file.exists(path)) {
+    build_context_store(state$docs, path)
+  }
+  store <- ragnar::ragnar_store_connect(path)
+  state$store <- store
+  store
+}
+
+# Build to a temp file in the same directory, then rename into place
+# atomically, so a concurrent reader or builder never observes a partial
+# store. If another builder wins the race, its store is equivalent content;
+# discard ours and open theirs.
+build_context_store <- function(docs, path) {
+  local_commons_span(
+    "commons_context_store_build",
+    attributes = list("commons.context.n_docs" = length(docs))
+  )
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  tmp <- tempfile(pattern = ".build-", tmpdir = dirname(path))
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+
+  store <- ragnar::ragnar_store_create(tmp, embed = NULL)
+  for (doc in docs) {
+    ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
+  }
+  ragnar::ragnar_store_build_index(store, type = "fts")
+  DBI::dbDisconnect(store@con, shutdown = TRUE)
+
+  if (!file.exists(path)) {
+    file.rename(tmp, path)
+  }
+  if (!file.exists(path)) {
+    cli::cli_abort("Failed to build the context store at {.path {path}}.")
+  }
+  invisible(path)
+}
+
+context_store_path <- function(docs) {
+  key <- rlang::hash(c(
+    docs,
+    paste0("ragnar:", utils::packageVersion("ragnar")),
+    paste0("duckdb:", utils::packageVersion("duckdb"))
+  ))
+  file.path(context_cache_dir(), "context", paste0(key, ".duckdb"))
+}
+
+# Cache root resolution: an explicit override, then Connect's persistent
+# data directory (survives deployments when the server enables it), then the
+# per-user cache dir. Wherever the root is ephemeral (e.g. Connect Cloud,
+# which resets disk to the deployed bundle), the store simply rebuilds once
+# per cache lifetime instead of once per process.
+context_cache_dir <- function() {
+  opt <- getOption("commons.context_cache")
+  if (!is.null(opt)) {
+    return(opt)
+  }
+  for (env in c("COMMONS_CONTEXT_CACHE", "CONNECT_CONTENT_DATA_DIR")) {
+    val <- Sys.getenv(env, unset = NA_character_)
+    if (!is.na(val) && nzchar(val)) {
+      return(val)
+    }
+  }
+  tools::R_user_dir("commons", "cache")
 }
 
 context_search <- function(layer, query, n = 3) {

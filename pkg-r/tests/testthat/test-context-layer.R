@@ -77,3 +77,24 @@ test_that("context_layer skips a frontmatter-only file", {
   layer <- context_layer(files = path)
   expect_length(context_search(layer, "provenance"), 0)
 })
+
+test_that("the context store persists on disk and is shared across layers", {
+  withr::local_options(commons.context_cache = withr::local_tempdir())
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+
+  layer1 <- context_layer(files = path)
+  store_path <- context_store_path(layer1$docs)
+  expect_false(file.exists(store_path))
+
+  expect_match(context_search(layer1, "revenue")[[1]], "booked")
+  expect_true(file.exists(store_path))
+
+  # A distinct layer with the same docs opens the same on-disk store
+  layer2 <- context_layer(files = path)
+  expect_identical(context_store_path(layer2$docs), store_path)
+  expect_match(context_search(layer2, "revenue")[[1]], "booked")
+
+  # Different docs key a different store
+  expect_false(identical(context_store_path("other docs"), store_path))
+})
