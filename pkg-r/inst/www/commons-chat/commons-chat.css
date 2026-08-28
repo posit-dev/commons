@@ -29,6 +29,68 @@ shiny-chat-container .shiny-chat-input .tiptap {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 
+/* Shinychat owns the pending lifecycle; Commons replaces only its visuals. */
+shiny-chat-container .shiny-chat-pending-indicator {
+  gap: 0.5rem;
+}
+
+shiny-chat-container .shiny-chat-pending-indicator > svg {
+  display: none;
+}
+
+shiny-chat-container .shiny-chat-pending-indicator::before {
+  background-color: var(--bs-secondary-color, #6c757d);
+  content: "";
+  flex: none;
+  height: 0.4em;
+  margin-inline: 0.25em;
+  transform: rotate(45deg);
+  width: 0.4em;
+}
+
+shiny-chat-container .shiny-chat-pending-indicator::after {
+  animation: commons-chat-working 1.6s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--bs-secondary-color, #6c757d) 25%,
+    var(--bs-body-color, #212529) 50%,
+    var(--bs-secondary-color, #6c757d) 75%
+  );
+  background-clip: text;
+  background-size: 200% 100%;
+  color: var(--bs-secondary-color, #6c757d);
+  content: "Working…";
+  font-size: 0.8em;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes commons-chat-working {
+  from {
+    background-position: 150% 0;
+  }
+
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  shiny-chat-container .shiny-chat-pending-indicator::after {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  shiny-chat-container .shiny-chat-pending-indicator::after {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
 /* ---- Answer provenance ----------------------------------------------- */
 
 .commons-answer-pill {
