@@ -6,22 +6,28 @@
 
 /* Set shinychat CSS variables */
 :root {
-  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
 
-  /* Send/stop keep shinychat's primary/danger hues, softened toward the
-   * background so they don't dominate the chat. */
-  --shiny-chat-btn-send-color-ready: color-mix(
-    in srgb,
-    var(--bs-primary, #007bc2) 60%,
-    var(--bs-body-bg, #fff)
-  );
-  --shiny-chat-btn-send-color-cancel: color-mix(
-    in srgb,
-    var(--bs-danger, #dc3545) 60%,
-    var(--bs-body-bg, #fff)
-  );
+  /* Keep the solid stop glyph quieter than the outlined send glyph. */
+  --shiny-chat-btn-send-color-ready: var(--bs-body-color, #212529);
+  --shiny-chat-btn-send-color-cancel: var(--bs-secondary-color, #6c757d);
   --shiny-chat-btn-send-color-empty: var(--bs-gray-400, #ced4da);
+}
+
+:root .shiny-chat-btn-send {
+  --shiny-chat-btn-send-bg: transparent;
+  --shiny-chat-btn-send-color: var(--_btn-send-state-color);
+  --shiny-chat-btn-send-border: var(--bs-border-width, 1px) solid
+    var(--bs-border-color, #dee2e6);
+  --shiny-chat-btn-send-bg-hover: var(--bs-tertiary-bg, #f8f9fa);
+  --shiny-chat-btn-send-color-hover: var(--_btn-send-state-color);
+  --shiny-chat-btn-send-border-color-hover: color-mix(
+    in srgb,
+    var(--bs-body-color, #212529) 24%,
+    transparent
+  );
+  --shiny-chat-btn-send-bg-active: var(--bs-secondary-bg, #e9ecef);
+  --shiny-chat-btn-send-color-active: var(--_btn-send-state-color);
 }
 
 shiny-chat-container .shiny-chat-input .tiptap {
