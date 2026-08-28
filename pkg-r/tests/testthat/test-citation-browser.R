@@ -274,9 +274,23 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
       " .commons-provenance-info-trigger').click();"
     )
   )
-  info_popover <- ".commons-provenance-info-popover"
+  info_modal <- ".commons-provenance-info-modal.show"
   app$wait_for_js(
-    paste0("document.querySelector('", info_popover, "') !== null;"),
+    paste0(
+      "document.querySelector('",
+      info_modal,
+      "') !== null && ",
+      "document.querySelector('",
+      ".commons-provenance-info-backdrop.show') !== null;"
+    ),
+    timeout = 30 * 1000
+  )
+  app$wait_for_js(
+    paste0(
+      "document.activeElement === document.querySelector('",
+      info_modal,
+      "');"
+    ),
     timeout = 30 * 1000
   )
   expect_false(
@@ -286,19 +300,31 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
         verified_dialog,
         "').contains(",
         "document.querySelector('",
-        info_popover,
+        info_modal,
         "'));"
       )
     )
   )
   info <- app$get_js(
-    paste0("document.querySelector('", info_popover, "').innerText;")
+    paste0("document.querySelector('", info_modal, "').innerText;")
   )
 
   expect_match(info, "Verified answer", fixed = TRUE)
   expect_match(info, "Cited", fixed = TRUE)
   expect_match(info, "Untrusted", fixed = TRUE)
   expect_match(info, "No marker", fixed = TRUE)
+
+  app$get_js(
+    paste0(
+      "document.querySelector('",
+      info_modal,
+      " button[aria-label=\"Close\"]').click();"
+    )
+  )
+  app$wait_for_js(
+    paste0("document.querySelector('", info_modal, "') === null;"),
+    timeout = 30 * 1000
+  )
 })
 
 test_that("Shiny Chat preserves Markdown blocks around citations", {

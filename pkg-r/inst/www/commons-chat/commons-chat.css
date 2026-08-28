@@ -146,8 +146,21 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
   outline-offset: 0.1rem;
 }
 
-.commons-provenance-info-popover {
-  max-width: min(28rem, calc(100vw - 1rem));
+.commons-provenance-info-modal {
+  --bs-modal-zindex: 1090;
+}
+
+.commons-provenance-info-modal .modal-dialog {
+  max-width: min(36rem, calc(100vw - 2rem));
+}
+
+.commons-provenance-info-modal .modal-title {
+  font-size: 1.1rem;
+}
+
+.commons-provenance-info-backdrop {
+  --bs-backdrop-opacity: 0.35;
+  --bs-backdrop-zindex: 1080;
 }
 
 .commons-provenance-info-body {

@@ -68,7 +68,42 @@ provenance_info_control <- function() {
     htmltools::tags$div(
       class = "commons-provenance-info-content",
       hidden = NA,
-      provenance_info_body()
+      provenance_info_modal()
+    )
+  )
+}
+
+provenance_info_modal <- function() {
+  htmltools::tags$div(
+    class = "commons-provenance-info-modal modal fade",
+    tabindex = "-1",
+    `aria-label` = "How answer trust is determined",
+    `aria-hidden` = "true",
+    htmltools::tags$div(
+      class = paste(
+        "modal-dialog modal-dialog-centered",
+        "modal-dialog-scrollable"
+      ),
+      htmltools::tags$div(
+        class = "modal-content",
+        htmltools::tags$div(
+          class = "modal-header",
+          htmltools::tags$h2(
+            class = "modal-title",
+            "How answer trust is determined"
+          ),
+          htmltools::tags$button(
+            type = "button",
+            class = "btn-close",
+            `data-bs-dismiss` = "modal",
+            `aria-label` = "Close"
+          )
+        ),
+        htmltools::tags$div(
+          class = "modal-body",
+          provenance_info_body()
+        )
+      )
     )
   )
 }

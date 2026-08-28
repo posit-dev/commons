@@ -3,6 +3,9 @@ test_that("provenance information explains every visible state", {
   query <- htmltools::tagQuery(htmltools::tags$div(info))
 
   expect_length(query$find(".commons-provenance-info")$selectedTags(), 1)
+  expect_length(query$find(".commons-provenance-info-modal")$selectedTags(), 1)
+  expect_length(query$find(".modal-dialog-centered")$selectedTags(), 1)
+  expect_length(query$find(".btn-close")$selectedTags(), 1)
   trigger <- query$find(".commons-provenance-info-trigger")$selectedTags()
   expect_length(trigger, 1)
   expect_identical(
