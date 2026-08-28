@@ -9,7 +9,7 @@
 
 ## When to use this reference
 
-Use this reference to create a new commons agent from existing data, documentation, and trusted code. Start with a small working agent, use it to understand the pieces, and then expand it.
+Use this reference to create a new commons agent from existing data, documentation, and trusted code. Unless the user has a clear plan for what they want to do, start with a small working scope, use it to understand the pieces, and then expand it.
 
 Use the [extraction reference](extracting-from-artifacts.md) after the project scaffold exists and the user has confirmed the agent's scope and data source mapping. Use the [trajectory reference](iterating-from-trajectories.md) to improve an agent from logged conversations.
 
@@ -29,6 +29,8 @@ Consider both what you need to implement the agent and what the user needs to un
 Do routine investigation and implementation without interrupting the user. Pause when a decision affects scope, trust, business meaning, data source selection, or the user's understanding of the data.
 
 Explain a principle in plain language when it materially affects a user decision, especially the solid-but-not-perfect foundation and the fine-grained-versus-prepared data tradeoff. Do not present the full principles list as required reading. Do not begin onboarding with a general explanation of commons or its principles; introduce only the context needed for the current question.
+
+Trusted code may be distributed across multiple repositories. When the user identifies those repositories as relevant sources, inspect them in place and consider the evidence from all of them. Recommend excluding a repository only when there is a concrete concern about its relevance, trustworthiness, or fit with the confirmed scope; explain that concern and let the user decide.
 
 At each decision point:
 
@@ -76,7 +78,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Ask for a link or file path when the relevant material is not already available. When requesting each source, tell the user to include only material they trust and that is relevant to the intended agent. Do not front-load this guidance before it affects a source-selection decision.
 
-   If the supplied materials are extensive, span several domains, or lack clear organization, recommend a narrower initial scope that can produce a useful working agent. Treat the scope as a decision point; do not exclude materials without the user's confirmation.
+   If supplied materials include domains or artifacts whose relevance to the intended scope is unclear, surface that uncertainty. When a smaller first scope would materially reduce implementation risk or help the user validate the design sooner, explain that benefit and recommend what to defer. Treat this as a decision point, not a prerequisite: if the user chooses to implement the full scope now, accept that decision and proceed without repeatedly pushing to narrow it. Do not treat distribution across multiple repositories as a reason by itself to reduce scope.
 
 4. **Investigate the data and artifacts.** Inspect the supplied data, documentation, schemas, source code, and data pipelines. Run scratch code to understand table grain, joins, transformations, update processes, and surprising behavior that may need to appear in a data dictionary.
 
@@ -112,4 +114,4 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions.
 
-   Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Expand sources and trusted calculations only after the agent works and the user confirms that they understand and accept its current behavior.
+   Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Follow the scope the user confirmed, whether incremental or comprehensive. Once the user chooses a comprehensive first version, do not defer confirmed material merely to produce a smaller agent.
