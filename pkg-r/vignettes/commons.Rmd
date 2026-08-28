@@ -89,7 +89,7 @@ If a relevant trusted calculation is not found, the agent proceeds down the lowe
 <figure class="commons-flow commons-flow-trusted-calculations column-page">
 <div class="commons-branch-flow"
      role="img"
-     aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
+     aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation to a verified answer marker, or the lower-trust path through context and custom SQL or R to a citation or untrusted marker">
 <div class="commons-branch-origin">
 <span class="commons-flow-node">Search trusted<br>calculations</span>
 </div>
@@ -118,9 +118,6 @@ If a relevant trusted calculation is not found, the agent proceeds down the lowe
 <span class="commons-flow-node">Write<br>SQL/R</span>
 <span class="commons-flow-arrow">&rarr;</span>
 <span class="commons-flow-results">
-<span class="commons-flow-answer">
-Cited answer
-</span>
 `r documentation_marker("B")`
 <span class="commons-flow-or">or</span>
 `r documentation_marker("C")`
