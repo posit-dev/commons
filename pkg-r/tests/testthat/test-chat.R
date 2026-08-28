@@ -116,6 +116,22 @@ test_that("commons_theme() bundles the commons chat assets", {
   expect_identical(commons_dep$script, "commons-chat.js")
 })
 
+test_that("commons_theme() configures shinychat geometry", {
+  variables <- bslib::bs_get_variables(
+    commons_theme(),
+    c(
+      "shiny-chat-suggestion-card-border-radius",
+      "shiny-chat-user-message-border-radius",
+      "shiny-chat-user-message-padding"
+    )
+  )
+
+  expect_identical(
+    unname(variables),
+    c("0.75rem", "0.75rem", "0.5rem 1.5rem")
+  )
+})
+
 test_that("icon URLs resolve inside the commons-chat dependency", {
   url <- commons_icon_url("trusted-icon.svg")
   expect_match(url, "^commons-chat-[^/]+/figs/trusted-icon\\.svg$")

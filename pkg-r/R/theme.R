@@ -3,8 +3,9 @@
 commons_theme <- function(..., preset = "shiny") {
   theme <- shinychat::page_chat_theme(
     "shiny-chat-page-title-font-weight" = 300,
-    "shiny-chat-user-message-border-radius" = "1.25rem",
-    "shiny-chat-user-message-padding" = "0.65rem 1.1rem",
+    "shiny-chat-suggestion-card-border-radius" = "0.75rem",
+    "shiny-chat-user-message-border-radius" = "0.75rem",
+    "shiny-chat-user-message-padding" = "0.5rem 1.5rem",
     ...,
     preset = preset
   )
