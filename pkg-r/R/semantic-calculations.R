@@ -97,7 +97,8 @@ calculations_registry <- function(sources) {
   registry <- list()
   source_names <- rlang::names2(sources)
   for (i in seq_along(sources)) {
-    calculations <- sources[[i]]$calculations %||% list()
+    source_state <- data_source_state(sources[[i]])
+    calculations <- source_state$calculations %||% list()
     for (calculation in calculations) {
       calculation$source <- source_names[[i]]
       calculation$key <- calculation_key(calculation)
@@ -164,17 +165,8 @@ call_calculation_impl <- function(
 ) {
   source <- resolve_sql_source(sources, source_name)
   source_label <- source_name %||% rlang::names2(sources)[[1]]
-  n_models <- length(source$semantic_models)
-  source <- source_hydrate_semantic_models(source, name)
-  if (length(source$semantic_models) > n_models) {
-    source_index <- if (length(sources) == 1L) {
-      1L
-    } else {
-      match(source_label, names(sources))
-    }
-    sources[[source_index]] <- source
-    calculations <- calculations_registry(sources)
-  }
+  source_hydrate_semantic_models(source, name)
+  calculations <- calculations_registry(sources)
   calculation <- resolve_calculation(
     calculations,
     name,
@@ -183,7 +175,7 @@ call_calculation_impl <- function(
   prepared <- prepare_calculation(
     calculation,
     parse_json_args(arguments),
-    source$con
+    data_source_state(source)$con
   )
   result <- source_query_bind(source, prepared$sql, prepared$bindings)
   advert <- register_handle(handles, result)

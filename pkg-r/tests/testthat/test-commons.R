@@ -426,10 +426,10 @@ test_that("prewarm() builds the context store ahead of the first search", {
   # test_source() has no dictionary, so the agent augments nothing and shares
   # `layer`'s cache environment.
   agent <- test_agent(context_layer = layer)
-  expect_null(layer$cache$store)
+  expect_null(context_layer_state(layer)$cache$store)
 
   agent$prewarm()
-  expect_false(is.null(layer$cache$store))
+  expect_false(is.null(context_layer_state(layer)$cache$store))
   expect_match(context_search(layer, "revenue")[[1]], "booked")
 })
 
@@ -485,19 +485,19 @@ test_that("prewarm() warms board pins in the background without loading them", {
   )
   agent <- test_agent(data_sources = list(sales_db = src))
 
-  expect_length(DBI::dbListTables(src$con), 0)
+  expect_length(DBI::dbListTables(data_source_state(src)$con), 0)
 
   agent$prewarm()
-  p <- src$pending$process
+  p <- data_source_state(src)$pending$process
   expect_s3_class(p, "r_process")
   withr::defer(p$kill())
   wait_for_prewarm(p)
 
   # Warming fills the pins cache only; tables still load at first use.
-  expect_length(DBI::dbListTables(src$con), 0)
-  expect_setequal(names(src$pending$pins), c("orders", "reps"))
+  expect_length(DBI::dbListTables(data_source_state(src)$con), 0)
+  expect_setequal(names(data_source_state(src)$pending$pins), c("orders", "reps"))
   source_describe(src, "orders")
-  expect_equal(DBI::dbListTables(src$con), "orders")
+  expect_equal(DBI::dbListTables(data_source_state(src)$con), "orders")
 })
 
 test_that("a measure injected a board source loads its pins when it runs", {
@@ -520,7 +520,7 @@ test_that("a measure injected a board source loads its pins when it runs", {
     semantic_layer = layer,
     data_sources = list(warehouse = src)
   )
-  expect_length(DBI::dbListTables(src$con), 0)
+  expect_length(DBI::dbListTables(data_source_state(src)$con), 0)
 
   private <- agent$.__enclos_env__$private
   res <- call_measure_tool(
@@ -531,7 +531,7 @@ test_that("a measure injected a board source loads its pins when it runs", {
     sources = private$sources
   )
   expect_match(res@value, "3")
-  expect_equal(DBI::dbListTables(src$con), "orders")
+  expect_equal(DBI::dbListTables(data_source_state(src)$con), "orders")
 })
 
 test_that("commons() records an agent-creation span", {

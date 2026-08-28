@@ -185,7 +185,8 @@ test_that("Snowflake semantic scope retains dependencies and public context", {
   expect_true(any(grepl("recent_only", model$context$retrieval)))
 
   source <- test_source()
-  source$semantic_models <- list(revenue = model)
+  state <- data_source_state(source)
+  state$semantic_models <- list(revenue = model)
   members <- registry_semantic_members(
     semantic_models_registry(list(snowflake = source))
   )
@@ -283,14 +284,14 @@ test_that("Snowflake association closes over every selected relation", {
 test_that("Snowflake semantic SQL uses model-owned references", {
   model <- test_semantic_model()
   registry <- semantic_models_registry(list(
-    sales_db = structure(
-      list(
-        semantic_models = stats::setNames(
-          list(model),
-          table_id_label(model$id)
-        )
-      ),
-      class = "commons_data_source"
+    sales_db = new_data_source(
+      DBI::ANSI(),
+      tables = character(),
+      owned = FALSE,
+      semantic_models = stats::setNames(
+        list(model),
+        table_id_label(model$id)
+      )
     )
   ))
   members <- registry_semantic_members(registry)
@@ -341,7 +342,8 @@ test_that("Snowflake semantic SQL applies named entity filters", {
     )))
   )
   source <- test_source()
-  source$semantic_models <- list(model = model)
+  state <- data_source_state(source)
+  state$semantic_models <- list(model = model)
   members <- registry_semantic_members(
     semantic_models_registry(list(snowflake = source))
   )
@@ -387,7 +389,8 @@ test_that("Snowflake imports and binds semantic variables", {
     )
   )
   source <- test_source()
-  source$semantic_models <- list(model = model)
+  state <- data_source_state(source)
+  state$semantic_models <- list(model = model)
   members <- registry_semantic_members(
     semantic_models_registry(list(snowflake = source))
   )

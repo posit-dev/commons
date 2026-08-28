@@ -1,14 +1,15 @@
 test_that("catalog manifests switch broad prompts to search", {
   local_mocked_bindings(catalog_prompt_limit = 1L)
   source <- test_source()
-  id <- source$table_ids$sales
-  source$relations <- list(sales = list(
+  state <- data_source_state(source)
+  id <- state$table_ids$sales
+  state$relations <- list(sales = list(
     id = id,
     kind = "table",
     description = "Booked sales activity.",
     columns = NULL
   ))
-  source$manifest <- new_catalog_manifest(source$relations, TRUE)
+  state$manifest <- new_catalog_manifest(state$relations, TRUE)
   agent <- test_agent(data_sources = list(warehouse = source))
 
   expect_match(
@@ -25,7 +26,8 @@ test_that("catalog manifests switch broad prompts to search", {
 
 test_that("catalog search finds relation names and descriptions", {
   source <- test_source()
-  source$manifest <- new_catalog_manifest(list(
+  state <- data_source_state(source)
+  state$manifest <- new_catalog_manifest(list(
     "main.finance.orders" = list(
       id = DBI::Id(catalog = "main", schema = "finance", table = "orders"),
       kind = "table",
@@ -37,7 +39,7 @@ test_that("catalog search finds relation names and descriptions", {
       description = "Returned purchases."
     )
   ), TRUE)
-  source$manifest$searchable <- TRUE
+  state$manifest$searchable <- TRUE
 
   expect_named(
     catalog_search(source, "commercial bookings"),
@@ -51,14 +53,15 @@ test_that("catalog search finds relation names and descriptions", {
 
 test_that("catalog search results are ready for describe_table", {
   source <- test_source()
-  source$relations <- list(sales = list(
-    id = source$table_ids$sales,
+  state <- data_source_state(source)
+  state$relations <- list(sales = list(
+    id = state$table_ids$sales,
     kind = "table",
     description = "Booked sales activity.",
     columns = NULL
   ))
-  source$manifest <- new_catalog_manifest(source$relations, TRUE)
-  source$manifest$searchable <- TRUE
+  state$manifest <- new_catalog_manifest(state$relations, TRUE)
+  state$manifest$searchable <- TRUE
   private <- list(
     sources = list(warehouse = source),
     first_touch = new.env(parent = emptyenv())
@@ -73,7 +76,8 @@ test_that("catalog search results are ready for describe_table", {
 
 test_that("catalog search hides relations without query access", {
   source <- test_source()
-  source$relations <- list(
+  state <- data_source_state(source)
+  state$relations <- list(
     denied = list(
       id = DBI::Id(table = "denied"),
       kind = "table",
@@ -85,9 +89,9 @@ test_that("catalog search hides relations without query access", {
       description = "Available booked activity."
     )
   )
-  source$table_ids <- lapply(source$relations, `[[`, "id")
-  source$manifest <- new_catalog_manifest(source$relations, TRUE)
-  source$session <- list(backend = "test")
+  state$table_ids <- lapply(state$relations, `[[`, "id")
+  state$manifest <- new_catalog_manifest(state$relations, TRUE)
+  state$session <- list(backend = "test")
   local_mocked_bindings(
     catalog_check_session = function(...) invisible(NULL),
     catalog_ensure_queryable = function(source, table, ...) {
@@ -109,17 +113,18 @@ test_that("catalog search hides relations without query access", {
 
 test_that("catalog search retains unverified semantic models", {
   source <- test_source()
+  state <- data_source_state(source)
   id <- DBI::Id(catalog = "DB", schema = "PUBLIC", table = "SALES_MODEL")
-  source$semantic_stubs <- list(SALES_MODEL = new_semantic_model_stub(
+  state$semantic_stubs <- list(SALES_MODEL = new_semantic_model_stub(
     list(id = id, description = "Governed sales semantics."),
     "snowflake_semantic_view"
   ))
-  source$manifest <- new_catalog_manifest(
+  state$manifest <- new_catalog_manifest(
     list(),
     TRUE,
-    source$semantic_stubs
+    state$semantic_stubs
   )
-  source$session <- list(backend = "test")
+  state$session <- list(backend = "test")
   local_mocked_bindings(
     catalog_check_session = function(...) invisible(NULL),
     catalog_ensure_queryable = function(...) {
@@ -135,13 +140,14 @@ test_that("catalog search retains unverified semantic models", {
 
 test_that("catalog search formats relations with unknown kinds", {
   source <- test_source()
-  source$relations <- list(sales = list(
-    id = source$table_ids$sales,
+  state <- data_source_state(source)
+  state$relations <- list(sales = list(
+    id = state$table_ids$sales,
     kind = NULL,
     description = NULL
   ))
-  source$manifest <- new_catalog_manifest(source$relations, TRUE)
-  source$manifest$searchable <- TRUE
+  state$manifest <- new_catalog_manifest(state$relations, TRUE)
+  state$manifest$searchable <- TRUE
   private <- list(sources = list(warehouse = source))
 
   result <- tool_search_catalog(private)("sales")
@@ -151,13 +157,14 @@ test_that("catalog search formats relations with unknown kinds", {
 
 test_that("catalog descriptions hydrate columns only once", {
   source <- test_source()
-  source$relations <- list(sales = list(
-    id = source$table_ids$sales,
+  state <- data_source_state(source)
+  state$relations <- list(sales = list(
+    id = state$table_ids$sales,
     kind = "table",
     description = "Booked sales activity.",
     columns = NULL
   ))
-  source$manifest <- new_catalog_manifest(source$relations, TRUE)
+  state$manifest <- new_catalog_manifest(state$relations, TRUE)
   described <- 0L
   schema <- data.frame(column = "order_id", type = "VARCHAR")
   local_mocked_bindings(
@@ -167,12 +174,12 @@ test_that("catalog descriptions hydrate columns only once", {
     }
   )
 
-  expect_null(source$manifest$relations$sales$columns)
+  expect_null(state$manifest$relations$sales$columns)
   source_describe(source, "sales")
   source_describe(source, "sales")
 
   expect_equal(described, 1L)
-  expect_identical(source$manifest$relations$sales$columns, schema)
+  expect_identical(state$manifest$relations$sales$columns, schema)
 })
 
 test_that("catalog selection supports exclusions and an object cap", {

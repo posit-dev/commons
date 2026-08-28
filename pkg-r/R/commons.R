@@ -211,8 +211,9 @@ Commons <- R6::R6Class(
       private$definitions <- definitions_registry(sources)
       private$semantic_models <- semantic_models_registry(sources)
       private$calculations <- calculations_registry(sources)
-      private$registry <- semantic_layer$measures
-      private$fn_sources <- semantic_layer$fn_sources
+      semantic_state <- semantic_layer_state(semantic_layer)
+      private$registry <- semantic_state$measures
+      private$fn_sources <- semantic_state$fn_sources
       private$injections <- resolve_injections(
         private$registry,
         measure_injectables(sources)
@@ -227,7 +228,7 @@ Commons <- R6::R6Class(
         attributes = list(
           "commons.agent.n_data_sources" = length(sources),
           "commons.agent.has_context_layer" = !is.null(context_layer),
-          "commons.agent.n_measures" = length(semantic_layer$measures),
+          "commons.agent.n_measures" = length(semantic_state$measures),
           "commons.agent.n_definitions" = nrow(private$definitions$defs),
           "commons.agent.n_semantic_members" = nrow(
             private$semantic_models$members
@@ -389,12 +390,13 @@ Commons <- R6::R6Class(
 
     prewarm = function() {
       layer <- private$context_layer
-      if (!is.null(layer) && length(layer$docs) > 0) {
+      layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
+      if (!is.null(layer_state) && length(layer_state$docs) > 0) {
         local_commons_span(
           "commons_context_prewarm",
           attributes = list(
-            "commons.context.n_docs" = length(layer$docs),
-            "commons.context.cache_hit" = !is.null(layer$cache$store)
+            "commons.context.n_docs" = length(layer_state$docs),
+            "commons.context.cache_hit" = !is.null(layer_state$cache$store)
           )
         )
         context_store(layer)
@@ -459,5 +461,5 @@ turn_has_user_message <- function(turn) {
 # Measures can take a named source's connection as an argument.
 measure_injectables <- function(sources) {
   named <- sources[rlang::have_name(sources)]
-  lapply(named, function(source) source$con)
+  lapply(named, function(source) data_source_state(source)$con)
 }

@@ -1,12 +1,13 @@
 catalog_security_test_source <- function() {
   source <- test_source()
-  source$relations <- list(sales = list(
-    id = source$table_ids$sales,
+  state <- data_source_state(source)
+  state$relations <- list(sales = list(
+    id = state$table_ids$sales,
     kind = "table",
     description = NULL,
     columns = NULL
   ))
-  source$manifest <- new_catalog_manifest(source$relations, TRUE)
+  state$manifest <- new_catalog_manifest(state$relations, TRUE)
   source
 }
 
@@ -40,7 +41,8 @@ test_that("session snapshots retain authority-bearing fields", {
 
 test_that("catalog operations reject changed sessions", {
   source <- test_source()
-  source$session <- list(
+  state <- data_source_state(source)
+  state$session <- list(
     backend = "snowflake",
     principal = "ANALYST",
     role = "REPORTER",
@@ -75,6 +77,7 @@ test_that("catalog operations reject changed sessions", {
 
 test_that("transient access failures remain retryable", {
   source <- catalog_security_test_source()
+  state <- data_source_state(source)
   calls <- 0L
   local_mocked_bindings(
     catalog_probe_relation = function(...) {
@@ -90,14 +93,15 @@ test_that("transient access failures remain retryable", {
     catalog_ensure_queryable(source, "sales"),
     class = "commons_catalog_transient_error"
   )
-  expect_equal(source$manifest$access[["sales"]], "unknown")
+  expect_equal(state$manifest$access[["sales"]], "unknown")
   expect_no_error(catalog_ensure_queryable(source, "sales"))
-  expect_equal(source$manifest$access[["sales"]], "queryable")
+  expect_equal(state$manifest$access[["sales"]], "queryable")
   expect_equal(calls, 2L)
 })
 
 test_that("authorization failures are cached per relation", {
   source <- catalog_security_test_source()
+  state <- data_source_state(source)
   calls <- 0L
   local_mocked_bindings(
     catalog_probe_relation = function(...) {
@@ -114,7 +118,7 @@ test_that("authorization failures are cached per relation", {
     catalog_ensure_queryable(source, "sales"),
     class = "commons_catalog_authorization_error"
   )
-  expect_equal(source$manifest$access[["sales"]], "authorization")
+  expect_equal(state$manifest$access[["sales"]], "authorization")
   expect_equal(calls, 1L)
 })
 
@@ -139,9 +143,10 @@ test_that("warehouse access errors are classified conservatively", {
 
 test_that("catalog SQL probes bind typed nulls", {
   source <- test_source()
+  state <- data_source_state(source)
 
   probe <- catalog_probe_sql(
-    source$con,
+    state$con,
     "SELECT ? AS probe_value",
     list(NA_real_)
   )

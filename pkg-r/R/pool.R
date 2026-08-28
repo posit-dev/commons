@@ -16,17 +16,8 @@ call_metrics_impl <- function(
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
-  n_models <- length(source$semantic_models)
-  source <- source_hydrate_semantic_models(source, metrics)
-  if (length(source$semantic_models) > n_models) {
-    source_index <- if (length(sources) == 1L) {
-      1L
-    } else {
-      match(label, names(sources))
-    }
-    sources[[source_index]] <- source
-    semantic_models <- semantic_models_registry(sources)
-  }
+  source_hydrate_semantic_models(source, metrics)
+  semantic_models <- semantic_models_registry(sources)
   defs <- registry_defs(registry, label)
   semantic_models <- semantic_models %||% semantic_models_registry(sources)
   semantic_members <- registry_semantic_members(semantic_models, label)
@@ -72,9 +63,10 @@ call_metrics_impl <- function(
     )
   }
   on_table <- defs[defs$table == tables, ]
-  columns <- names(source$dictionary$tables[[tables]]$columns)
-  con <- source$con
-  id <- DBI::dbQuoteIdentifier(con, source$table_ids[[tables]])
+  source_state <- data_source_state(source)
+  columns <- names(source_state$dictionary$tables[[tables]]$columns)
+  con <- source_state$con
+  id <- DBI::dbQuoteIdentifier(con, source_state$table_ids[[tables]])
 
   dim_names <- strip_token_braces(dimensions %||% character())
   dims <- vapply(
@@ -218,12 +210,13 @@ call_semantic_metrics <- function(
   source_name,
   arguments
 ) {
+  source_state <- data_source_state(source)
   metric_members <- resolve_semantic_members(metrics, members, "metric")
   models <- unique(metric_members$model)
   if (length(models) != 1L) {
     cli::cli_abort("Metrics in one call must belong to one native semantic model.")
   }
-  model <- source$semantic_models[[models[[1]]]]
+  model <- source_state$semantic_models[[models[[1]]]]
   model_members <- members[members$model == models[[1]], , drop = FALSE]
   dimension_members <- resolve_semantic_members(
     dimensions,
@@ -245,7 +238,7 @@ call_semantic_metrics <- function(
       filter_members,
       where,
       model_members,
-      source$con,
+      source_state$con,
       arguments = arguments
     ),
     databricks_metric_view = {
@@ -260,7 +253,7 @@ call_semantic_metrics <- function(
         dimension_members,
         where,
         model_members,
-        source$con,
+        source_state$con,
         arguments = arguments
       )
     },

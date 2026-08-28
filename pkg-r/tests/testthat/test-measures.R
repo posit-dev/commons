@@ -2,13 +2,13 @@ test_that("semantic_layer stores measures by name", {
   layer <- semantic_layer(count_measure_tool())
 
   expect_s3_class(layer, "commons_semantic_layer")
-  expect_named(layer$measures, "order_count")
+  expect_named(semantic_layer_state(layer)$measures, "order_count")
 })
 
 test_that("semantic_layer accepts a list of measures", {
   layer <- semantic_layer(list(count_measure_tool()))
 
-  expect_named(layer$measures, "order_count")
+  expect_named(semantic_layer_state(layer)$measures, "order_count")
 })
 
 test_that("semantic_layer validates its measures", {
@@ -30,7 +30,7 @@ test_that("semantic_layer reads measures from path inputs", {
 
   layer <- semantic_layer(path, count_measure_tool())
 
-  expect_named(layer$measures, c("counter", "order_count"))
+  expect_named(semantic_layer_state(layer)$measures, c("counter", "order_count"))
 })
 
 test_that("semantic_layer surfaces read_measures errors for bad paths", {
@@ -54,9 +54,9 @@ test_that("semantic_layer collects sources from files and inline measures", {
 
   layer <- semantic_layer(path, count_measure_tool())
 
-  expect_setequal(names(layer$fn_sources), c("double", "counter", "order_count"))
-  expect_match(layer$fn_sources[["double"]], "x * 2L", fixed = TRUE)
-  expect_match(layer$fn_sources[["order_count"]], "^function")
+  expect_setequal(names(semantic_layer_state(layer)$fn_sources), c("double", "counter", "order_count"))
+  expect_match(semantic_layer_state(layer)$fn_sources[["double"]], "x * 2L", fixed = TRUE)
+  expect_match(semantic_layer_state(layer)$fn_sources[["order_count"]], "^function")
 })
 
 test_that("validate_measure_args coerces valid arguments", {

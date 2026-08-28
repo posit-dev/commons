@@ -107,7 +107,7 @@ test_that("unknown fields and missing sections are tolerated", {
 test_that("data_source() accepts a dictionary path", {
   skip_if_not_installed("yaml")
   src <- data_source(sales = test_sales(), dictionary = local_dict_path())
-  expect_s3_class(src$dictionary, "commons_data_dictionary")
+  expect_s3_class(data_source_state(src)$dictionary, "commons_data_dictionary")
 })
 
 test_that("data_source() rejects other dictionary inputs", {
@@ -386,7 +386,7 @@ test_that("physical column names do not redefine the authored namespace", {
     definition_bindings = merged$definition_bindings
   )
   expect_equal(
-    source$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions$combined$sql,
+    data_source_state(source)$dictionary$tables[["ANALYTICS.PUBLIC.ORDERS"]]$definitions$combined$sql,
     '"ORDER_ID" + (1)'
   )
 })
@@ -474,8 +474,8 @@ test_that("augmenting keeps existing context docs", {
   layer <- context_layer(files = path)
   augmented <- augment_context_layer(layer, list(local_dict_source()))
 
-  expect_true("Booked revenue excludes tax." %in% augmented$docs)
-  expect_gt(length(augmented$docs), length(layer$docs))
+  expect_true("Booked revenue excludes tax." %in% context_layer_state(augmented)$docs)
+  expect_gt(length(context_layer_state(augmented)$docs), length(context_layer_state(layer)$docs))
 })
 
 test_that("augmenting without dictionaries is a no-op", {

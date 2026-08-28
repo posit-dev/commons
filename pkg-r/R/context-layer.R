@@ -8,7 +8,8 @@
 #'
 #' @param files Character vector of paths to text or Markdown files.
 #'
-#' @return A `commons_context_layer` object.
+#' @return A `commons_context_layer` R6 object. Its internals are private and
+#'   may change without notice.
 #'
 #' @examples
 #' path <- tempfile(fileext = ".md")
@@ -42,27 +43,31 @@ context_layer <- function(files = character()) {
 augment_context_layer <- function(context_layer, sources) {
   chunks <- unlist(lapply(
     sources,
-    function(source) c(
-      dictionary_context_chunks(source$dictionary),
-      unlist(lapply(
-        source$semantic_models,
-        function(model) model$context$retrieval
-      ), use.names = FALSE)
-    )
+    function(source) {
+      source_state <- data_source_state(source)
+      c(
+        dictionary_context_chunks(source_state$dictionary),
+        unlist(lapply(
+          source_state$semantic_models,
+          function(model) model$context$retrieval
+        ), use.names = FALSE)
+      )
+    }
   ))
   if (length(chunks) == 0) {
     return(context_layer)
   }
 
   layer <- context_layer %||% context_layer()
-  new_context_layer(c(layer$docs, chunks))
+  layer_state <- context_layer_state(layer)
+  new_context_layer(c(layer_state$docs, chunks))
 }
 
 new_context_layer <- function(docs) {
-  structure(
-    list(docs = docs, cache = new.env(parent = emptyenv())),
-    class = "commons_context_layer"
-  )
+  ContextLayer$new(new_object_state(
+    docs = docs,
+    cache = new.env(parent = emptyenv())
+  ))
 }
 
 dictionary_context_chunks <- function(dictionary) {
@@ -109,23 +114,25 @@ strip_frontmatter <- function(md) {
 # whenever a layer's docs change, so layers sharing docs share a store and
 # layers that differ never do.
 context_store <- function(layer) {
-  if (is.null(layer$cache$store)) {
+  state <- context_layer_state(layer)
+  if (is.null(state$cache$store)) {
     local_commons_span(
       "commons_context_store_build",
-      attributes = list("commons.context.n_docs" = length(layer$docs))
+      attributes = list("commons.context.n_docs" = length(state$docs))
     )
     store <- ragnar::ragnar_store_create(embed = NULL)
-    for (doc in layer$docs) {
+    for (doc in state$docs) {
       ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
     }
     ragnar::ragnar_store_build_index(store, type = "fts")
-    layer$cache$store <- store
+    state$cache$store <- store
   }
-  layer$cache$store
+  state$cache$store
 }
 
 context_search <- function(layer, query, n = 3) {
-  if (length(layer$docs) == 0) {
+  state <- context_layer_state(layer)
+  if (length(state$docs) == 0) {
     return(character(0))
   }
   res <- ragnar::ragnar_retrieve_bm25(context_store(layer), query, top_k = n)
@@ -136,7 +143,11 @@ context_search <- function(layer, query, n = 3) {
 }
 
 check_context_layer <- function(context_layer, call = rlang::caller_env()) {
-  if (!is.null(context_layer) && !inherits(context_layer, "commons_context_layer")) {
+  if (
+    !is.null(context_layer) &&
+      (!is.environment(context_layer) ||
+        !inherits(context_layer, "commons_context_layer"))
+  ) {
     cli::cli_abort(
       "{.arg context_layer} must be a {.fn context_layer} or {.code NULL}.",
       call = call

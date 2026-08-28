@@ -737,6 +737,7 @@ describe_table_tool <- function(
   source_name = NULL,
   tracker = NULL
 ) {
+  source_state <- data_source_state(source)
   d <- source_describe(source, table)
   if (inherits(d, "commons_semantic_model_description")) {
     body <- semantic_model_description_text(d)
@@ -747,7 +748,7 @@ describe_table_tool <- function(
       markdown = body
     ))
   }
-  entry <- source$dictionary$tables[[table]]
+  entry <- source_state$dictionary$tables[[table]]
   context <- if (!table_touched(tracker, source_name, table)) {
     semantic_model_first_touch(source, table)
   } else {
@@ -777,7 +778,7 @@ describe_table_tool <- function(
     )
     parts <- c(
       relation,
-      dictionary_entry_parts(source$dictionary, table, columns),
+      dictionary_entry_parts(source_state$dictionary, table, columns),
       context,
       sample
     )
@@ -823,8 +824,9 @@ run_sql_tool <- function(
 # text, which is reliable in a way column matching is not; a false positive
 # appends a harmless note.
 dictionary_sql_entries <- function(source, sql, source_name, tracker) {
-  dictionary <- source$dictionary
-  tables <- source$tables %||% names(dictionary$tables)
+  source_state <- data_source_state(source)
+  dictionary <- source_state$dictionary
+  tables <- source_state$tables %||% names(dictionary$tables)
   hits <- tables[vapply(
     tables,
     source_table_mentioned,
@@ -882,7 +884,8 @@ source_table_mentioned <- function(table, source, dictionary, text) {
   ) {
     return(TRUE)
   }
-  id <- source$table_ids[[table]]
+  source_state <- data_source_state(source)
+  id <- source_state$table_ids[[table]]
   candidates <- unique(c(table, id@name[["table"]]))
   any(vapply(
     candidates,

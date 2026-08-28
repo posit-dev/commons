@@ -1,5 +1,6 @@
 test_that("semantic model registries remain separate from definitions", {
   source <- test_semantic_source()
+  state <- data_source_state(source)
   registry <- semantic_models_registry(list(sales_db = source))
   members <- registry_semantic_members(registry)
 
@@ -9,13 +10,14 @@ test_that("semantic model registries remain separate from definitions", {
   expect_equal(members$model, rep("ANALYTICS.PUBLIC.revenue_model", 2))
   expect_equal(members$parent, c("orders", NA_character_))
   expect_true(semantic_registry_has_metrics(registry))
-  expect_length(source$dictionary$tables$sales$definitions, 0L)
+  expect_length(state$dictionary$tables$sales$definitions, 0L)
 })
 
 test_that("semantic members resolve by model and logical-table aliases", {
   source <- test_semantic_source()
+  state <- data_source_state(source)
   second <- test_semantic_model("finance_model", "total_revenue")
-  source$semantic_models[[table_id_label(second$id)]] <- second
+  state$semantic_models[[table_id_label(second$id)]] <- second
   members <- registry_semantic_members(
     semantic_models_registry(list(sales_db = source))
   )
@@ -88,21 +90,23 @@ test_that("semantic model context follows selected dependency tables", {
     )
   )
   source <- test_source()
-  source$relations <- list(orders = list(id = orders))
-  source$semantic_models <- list(revenue = model)
+  state <- data_source_state(source)
+  state$relations <- list(orders = list(id = orders))
+  state$semantic_models <- list(revenue = model)
 
   expect_equal(
     semantic_model_first_touch(source, "orders"),
     "Use booked revenue."
   )
   layer <- augment_context_layer(NULL, list(warehouse = source))
-  expect_contains(layer$docs, "Orders join customers by customer ID.")
+  expect_contains(context_layer_state(layer)$docs, "Orders join customers by customer ID.")
 })
 
 test_that("semantic first-touch context is delivered once across SQL tools", {
   source <- test_source()
-  id <- source$table_ids$sales
-  source$relations <- list(sales = list(
+  state <- data_source_state(source)
+  id <- state$table_ids$sales
+  state$relations <- list(sales = list(
     id = id,
     kind = "table",
     description = NULL,
@@ -111,7 +115,7 @@ test_that("semantic first-touch context is delivered once across SQL tools", {
       type = vapply(test_sales(), function(x) class(x)[[1]], character(1))
     )
   ))
-  source$semantic_models <- list(revenue = new_semantic_model(
+  state$semantic_models <- list(revenue = new_semantic_model(
     DBI::Id(table = "revenue_model"),
     "revenue_model",
     backend = "snowflake_semantic_view",
@@ -156,9 +160,10 @@ test_that("native semantic members appear in pool search", {
 
 test_that("unhydrated semantic models are searchable and describable", {
   source <- test_source()
+  state <- data_source_state(source)
   model <- test_semantic_model()
   label <- table_id_label(model$id)
-  source$semantic_stubs <- stats::setNames(list(
+  state$semantic_stubs <- stats::setNames(list(
     new_semantic_model_stub(
       list(id = model$id, description = model$description),
       "snowflake_semantic_view"
@@ -185,13 +190,14 @@ test_that("unhydrated semantic models are searchable and describable", {
   expect_match(search, label, fixed = TRUE)
   expect_match(search, "Inspect with `describe_table`", fixed = TRUE)
   expect_match(text, paste0(label, "::total_revenue"), fixed = TRUE)
-  expect_length(source$semantic_models, 0L)
+  expect_length(state$semantic_models, 0L)
   expect_equal(reads, 1L)
 })
 
 test_that("eager semantic models are describable without rereading metadata", {
   source <- test_semantic_source()
-  label <- names(source$semantic_models)[[1]]
+  state <- data_source_state(source)
+  label <- names(state$semantic_models)[[1]]
   local_mocked_bindings(
     snowflake_read_semantic_model = function(...) {
       cli::cli_abort("Semantic model metadata was read again.")
@@ -210,9 +216,10 @@ test_that("eager semantic models are describable without rereading metadata", {
 
 test_that("semantic model descriptions retain unreadable catalog entries", {
   source <- test_source()
+  state <- data_source_state(source)
   model <- test_semantic_model()
   label <- table_id_label(model$id)
-  source$semantic_stubs <- stats::setNames(list(
+  state$semantic_stubs <- stats::setNames(list(
     new_semantic_model_stub(
       list(id = model$id, description = model$description),
       "snowflake_semantic_view"
@@ -232,42 +239,59 @@ test_that("semantic model descriptions retain unreadable catalog entries", {
 
 test_that("lazy semantic metrics hydrate from qualified names", {
   source <- test_source()
+  state <- data_source_state(source)
   model <- test_semantic_model()
   label <- table_id_label(model$id)
-  source$semantic_stubs <- stats::setNames(list(
+  state$semantic_stubs <- stats::setNames(list(
     new_semantic_model_stub(
       list(id = model$id, description = model$description),
       "snowflake_semantic_view"
     )
   ), label)
   query <- NULL
+  reads <- 0L
   local_mocked_bindings(
-    snowflake_read_semantic_model = function(...) model,
+    snowflake_read_semantic_model = function(...) {
+      reads <<- reads + 1L
+      model
+    },
     source_query_bind = function(source, sql, bindings) {
       query <<- sql
       data.frame(total_revenue = 42)
     }
   )
   sources <- list(sales_db = source)
+  agent_one_registry <- semantic_models_registry(sources)
+  agent_two_registry <- semantic_models_registry(sources)
 
   result <- call_metrics_impl(
     empty_definitions(),
     sources,
     new_handle_store(),
     metrics = paste0(label, "::total_revenue"),
-    semantic_models = semantic_models_registry(sources)
+    semantic_models = agent_one_registry
+  )
+  shared_source_result <- call_metrics_impl(
+    empty_definitions(),
+    sources,
+    new_handle_store(),
+    metrics = paste0(label, "::total_revenue"),
+    semantic_models = agent_two_registry
   )
 
   expect_match(query, "FROM SEMANTIC_VIEW", fixed = TRUE)
   expect_equal(result@extra$commons_tag, "A")
   expect_equal(result@extra$display$title, "Ran a trusted calculation")
+  expect_equal(shared_source_result@extra$commons_tag, "A")
+  expect_equal(reads, 1L)
 })
 
 test_that("semantic stubs earn fixed execution tools", {
   source <- test_source()
+  state <- data_source_state(source)
   model <- test_semantic_model()
   label <- table_id_label(model$id)
-  source$semantic_stubs <- stats::setNames(list(
+  state$semantic_stubs <- stats::setNames(list(
     new_semantic_model_stub(
       list(id = model$id, description = model$description),
       "snowflake_semantic_view"
@@ -300,6 +324,7 @@ test_that("pool search identifies native members' data sources", {
 
 test_that("call_metrics dispatches native metrics through their model", {
   source <- test_semantic_source()
+  state <- data_source_state(source)
   sources <- list(sales_db = source)
   registry <- semantic_models_registry(sources)
   handles <- new_handle_store()
@@ -331,8 +356,9 @@ test_that("call_metrics dispatches native metrics through their model", {
 
 test_that("call_metrics does not mix native and data-dict metrics", {
   source <- definitions_source()
+  state <- data_source_state(source)
   model <- test_semantic_model()
-  source$semantic_models[[table_id_label(model$id)]] <- model
+  state$semantic_models[[table_id_label(model$id)]] <- model
   sources <- list(sales_db = source)
 
   expect_error(
@@ -349,12 +375,13 @@ test_that("call_metrics does not mix native and data-dict metrics", {
 
 test_that("call_metrics validates and binds native parameters", {
   source <- test_semantic_source()
-  model <- source$semantic_models[[1]]
+  state <- data_source_state(source)
+  model <- state$semantic_models[[1]]
   model$parameters <- list(threshold = new_typed_argument(
     "threshold",
     "number"
   ))
-  source$semantic_models[[1]] <- model
+  state$semantic_models[[1]] <- model
   sources <- list(sales_db = source)
   semantic_registry <- semantic_models_registry(sources)
   query <- NULL

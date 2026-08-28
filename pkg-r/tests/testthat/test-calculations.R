@@ -94,7 +94,8 @@ test_that("identifier arguments require explicit choices", {
 
 test_that("trusted calculation execution is tagged after DBI binding", {
   source <- test_source()
-  source$calculations <- list(test_calculation())
+  state <- data_source_state(source)
+  state$calculations <- list(test_calculation())
   sources <- list(sales_db = source)
   handles <- new_handle_store()
 
@@ -113,7 +114,8 @@ test_that("trusted calculation execution is tagged after DBI binding", {
 
 test_that("trusted calculations are searchable and earn their tools", {
   source <- test_source()
-  source$calculations <- list(test_calculation())
+  state <- data_source_state(source)
+  state$calculations <- list(test_calculation())
   registry <- calculations_registry(list(sales_db = source))
 
   result <- search_pool_text(
@@ -155,6 +157,7 @@ test_that("verified queries retain exact SQL separately from semantic models", {
 
 test_that("lazy verified queries hydrate from qualified names", {
   source <- test_source()
+  state <- data_source_state(source)
   model <- test_semantic_model()
   model$calculations <- list(new_trusted_calculation(
     "top_regions",
@@ -162,7 +165,7 @@ test_that("lazy verified queries hydrate from qualified names", {
     "SELECT region, SUM(revenue) FROM sales GROUP BY region"
   ))
   label <- table_id_label(model$id)
-  source$semantic_stubs <- stats::setNames(list(
+  state$semantic_stubs <- stats::setNames(list(
     new_semantic_model_stub(
       list(id = model$id, description = model$description),
       "snowflake_semantic_view"
@@ -170,8 +173,12 @@ test_that("lazy verified queries hydrate from qualified names", {
   ), label)
   sources <- list(sales_db = source)
   sql <- NULL
+  reads <- 0L
   local_mocked_bindings(
-    snowflake_read_semantic_model = function(...) model,
+    snowflake_read_semantic_model = function(...) {
+      reads <<- reads + 1L
+      model
+    },
     source_query_bind = function(source, query, bindings) {
       sql <<- query
       data.frame(region = "EMEA", revenue = 42)
@@ -184,7 +191,15 @@ test_that("lazy verified queries hydrate from qualified names", {
     new_handle_store(),
     paste0(label, "::top_regions")
   )
+  repeated <- call_calculation_impl(
+    list(),
+    sources,
+    new_handle_store(),
+    paste0(label, "::top_regions")
+  )
 
   expect_equal(sql, model$calculations[[1]]$sql)
   expect_equal(result@extra$commons_tag, "A")
+  expect_equal(repeated@extra$commons_tag, "A")
+  expect_equal(reads, 1L)
 })

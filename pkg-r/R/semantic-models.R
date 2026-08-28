@@ -191,7 +191,8 @@ semantic_models_registry <- function(sources) {
   parameters <- list()
   source_labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
-    models <- sources[[i]]$semantic_models
+    source_state <- data_source_state(sources[[i]])
+    models <- source_state$semantic_models
     for (model_label in names(models)) {
       model <- models[[model_label]]
       parameters[[semantic_registry_model_key(
@@ -213,7 +214,7 @@ semantic_models_registry <- function(sources) {
         source_labels[[i]]
       )
     }
-    source_stubs <- sources[[i]]$semantic_stubs %||% list()
+    source_stubs <- source_state$semantic_stubs %||% list()
     if (length(source_stubs)) {
       stubs[[length(stubs) + 1L]] <- semantic_stub_rows(
         source_stubs,
@@ -377,13 +378,14 @@ semantic_members_context <- function(members, heading) {
 }
 
 semantic_model_first_touch <- function(source, table) {
+  source_state <- data_source_state(source)
   relation <- source_relation(source, table)
   if (is.null(relation)) {
     return(character())
   }
   Filter(
     nzchar,
-    unique(unlist(lapply(source$semantic_models, function(model) {
+    unique(unlist(lapply(source_state$semantic_models, function(model) {
       if (semantic_model_depends_on(model, relation)) {
         model$context$first_touch
       } else {
@@ -424,7 +426,8 @@ registry_semantic_stubs <- function(registry, source = NULL) {
 }
 
 source_has_semantic_stubs <- function(source, backend = NULL) {
-  stubs <- source$semantic_stubs %||% list()
+  source_state <- data_source_state(source)
+  stubs <- source_state$semantic_stubs %||% list()
   if (is.null(backend)) {
     return(length(stubs) > 0L)
   }
@@ -443,14 +446,15 @@ sources_have_semantic_stubs <- function(sources, backend = NULL) {
 sources_have_semantic_models <- function(sources) {
   any(vapply(
     sources,
-    function(source) length(source$semantic_models) > 0L,
+    function(source) length(data_source_state(source)$semantic_models) > 0L,
     logical(1)
   ))
 }
 
 semantic_model_hydrate <- function(source, label, call = rlang::caller_env()) {
+  source_state <- data_source_state(source)
   catalog_check_session(source, call = call)
-  stub <- source$semantic_stubs[[label]]
+  stub <- source_state$semantic_stubs[[label]]
   if (is.null(stub)) {
     cli::cli_abort("No semantic model named {.val {label}}.", call = call)
   }
@@ -463,16 +467,17 @@ semantic_model_from_stub <- function(
   label,
   call = rlang::caller_env()
 ) {
+  source_state <- data_source_state(source)
   model <- switch(
     stub$backend,
     snowflake_semantic_view = snowflake_read_semantic_model(
       stub,
-      source$con,
+      source_state$con,
       call = call
     ),
     databricks_metric_view = databricks_read_semantic_model(
       stub,
-      source$con,
+      source_state$con,
       call = call
     ),
     cli::cli_abort(
@@ -566,20 +571,24 @@ source_hydrate_semantic_models <- function(
   member_names,
   call = rlang::caller_env()
 ) {
+  source_state <- data_source_state(source)
   # Before hydration, model qualification is the only member-to-model index.
   labels <- unique(vapply(
     member_names,
     semantic_model_qualifier,
     character(1)
   ))
-  labels <- intersect(labels[nzchar(labels)], names(source$semantic_stubs))
+  labels <- intersect(labels[nzchar(labels)], names(source_state$semantic_stubs))
+  labels <- setdiff(labels, names(source_state$semantic_models))
   if (length(labels) == 0L) {
     return(source)
   }
   models <- lapply(labels, semantic_model_hydrate, source = source, call = call)
   names(models) <- labels
-  source$semantic_models <- c(source$semantic_models, models)
-  source$calculations <- semantic_model_calculations(source$semantic_models)
+  source_state$semantic_models <- c(source_state$semantic_models, models)
+  source_state$calculations <- semantic_model_calculations(
+    source_state$semantic_models
+  )
   source
 }
 

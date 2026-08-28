@@ -27,7 +27,8 @@ build_citation_corpus <- function(context_layer, registry, sources) {
   }
   names_out <- rlang::names2(sources)
   for (i in seq_along(sources)) {
-    dictionary <- sources[[i]]$dictionary
+    source_state <- data_source_state(sources[[i]])
+    dictionary <- source_state$dictionary
     add(
       if (nzchar(names_out[[i]])) {
         sprintf("%s dictionary", names_out[[i]])
@@ -48,7 +49,8 @@ build_citation_corpus <- function(context_layer, registry, sources) {
       )
     }
   }
-  add("documentation", "prose", context_layer$docs %||% character())
+  context <- if (is.null(context_layer)) NULL else context_layer_state(context_layer)
+  add("documentation", "prose", context$docs %||% character())
   corpus
 }
 

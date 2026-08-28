@@ -37,9 +37,9 @@ and:
 
 That matches the code. In `R/measures.R`, `semantic_layer()` expands inputs into
 `measure()` objects, checks that every item inherits from `ellmer::ToolDef`, and stores
-them as `commons_semantic_layer$measures`. At runtime, `R/tools.R` exposes that layer
-through `search_measures` and `call_measure`; the system prompt requires every data
-question to start with `search_measures`.
+them in the private state of a `commons_semantic_layer` R6 object. At runtime,
+`R/tools.R` exposes that layer through `search_measures` and `call_measure`; the system
+prompt requires every data question to start with `search_measures`.
 
 So, in today's package, the semantic layer is effectively:
 
@@ -330,13 +330,13 @@ This alone resolves some terminology debt without forcing a package rewrite.
 Extend `commons_semantic_layer` from:
 
 ```r
-list(measures = measures)
+new_object_state(measures = measures)
 ```
 
 to something like:
 
 ```r
-list(
+new_object_state(
   measures = measures,
   models = models,
   dimensions = dimensions,

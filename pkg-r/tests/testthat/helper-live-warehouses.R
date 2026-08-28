@@ -136,7 +136,7 @@ warehouse_test_calculation <- function(source, table) {
     "Preview an allowed warehouse column with a bound value.",
     paste(
       "SELECT {{column}}, {{value}} AS bound_value FROM",
-      DBI::dbQuoteIdentifier(source$con, table),
+      DBI::dbQuoteIdentifier(data_source_state(source)$con, table),
       "LIMIT 1"
     ),
     arguments = list(
@@ -155,10 +155,11 @@ expect_warehouse_trusted_calculation <- function(backend) {
   table <- warehouse_test_table(backend)
   con <- local_warehouse_connection(backend)
   source <- data_source(con, tables = table)
-  source$calculations <- list(warehouse_test_calculation(source, table))
+  state <- data_source_state(source)
+  state$calculations <- list(warehouse_test_calculation(source, table))
   sources <- stats::setNames(list(source), backend)
   registry <- calculations_registry(sources)
-  calculation <- source$calculations[[1]]
+  calculation <- state$calculations[[1]]
   column <- names(calculation$arguments$column$choices)[[1]]
 
   result <- call_calculation_impl(

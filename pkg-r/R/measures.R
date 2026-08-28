@@ -44,7 +44,8 @@
 #' reference to a variable defined elsewhere, so the measure doesn't depend on
 #' where the semantic layer is created.
 #'
-#' @return A `commons_semantic_layer` object.
+#' @return A `commons_semantic_layer` R6 object. Its internals are private and
+#'   may change without notice.
 #'
 #' @seealso [measure()] to define a measure.
 #'
@@ -239,14 +240,17 @@ resolve_injections <- function(
 }
 
 new_semantic_layer <- function(measures = list(), fn_sources = character()) {
-  structure(
-    list(measures = measures, fn_sources = fn_sources),
-    class = "commons_semantic_layer"
-  )
+  SemanticLayer$new(new_object_state(
+    measures = measures,
+    fn_sources = fn_sources
+  ))
 }
 
 check_semantic_layer <- function(semantic_layer, call = rlang::caller_env()) {
-  if (!inherits(semantic_layer, "commons_semantic_layer")) {
+  if (
+    !is.environment(semantic_layer) ||
+      !inherits(semantic_layer, "commons_semantic_layer")
+  ) {
     cli::cli_abort(
       "{.arg semantic_layer} must be a {.fn semantic_layer}.",
       call = call
