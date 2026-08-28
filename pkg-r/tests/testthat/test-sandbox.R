@@ -69,11 +69,14 @@ test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
   skip_on_os(c("linux", "mac"))
   expect_error(
     callr::r(
-      worker_init,
+      worker_bootstrap,
       args = list(
-        parent_tmp = tempdir(),
-        work_dir = tempdir(),
-        dll_path = NA_character_
+        path = worker_script_path(),
+        args = list(
+          parent_tmp = tempdir(),
+          work_dir = tempdir(),
+          dll_path = NA_character_
+        )
       )
     ),
     "only Linux and macOS are supported"
@@ -84,11 +87,14 @@ test_that("worker_init errors without the compiled library", {
   skip_on_os(c("windows", "solaris"))
   expect_error(
     callr::r(
-      worker_init,
+      worker_bootstrap,
       args = list(
-        parent_tmp = tempdir(),
-        work_dir = tempdir(),
-        dll_path = NA_character_
+        path = worker_script_path(),
+        args = list(
+          parent_tmp = tempdir(),
+          work_dir = tempdir(),
+          dll_path = NA_character_
+        )
       )
     ),
     "compiled library"
@@ -97,12 +103,15 @@ test_that("worker_init errors without the compiled library", {
 
 test_that("worker_init permits the explicit guardrail mode", {
   expect_true(callr::r(
-    worker_init,
+    worker_bootstrap,
     args = list(
-      parent_tmp = tempdir(),
-      work_dir = tempdir(),
-      dll_path = NA_character_,
-      protection = "guardrails"
+      path = worker_script_path(),
+      args = list(
+        parent_tmp = tempdir(),
+        work_dir = tempdir(),
+        dll_path = NA_character_,
+        protection = "guardrails"
+      )
     )
   ))
 })
@@ -144,13 +153,16 @@ sandboxed_worker_probes <- function(
     args = list(outside = outside)
   )
   rs$run(
-    worker_init,
+    worker_bootstrap,
     args = list(
-      parent_tmp = tempdir(),
-      work_dir = work_dir,
-      dll_path = commons_dll_path(),
-      network = network,
-      sandbox_mode = sandbox_mode
+      path = worker_script_path(),
+      args = list(
+        parent_tmp = tempdir(),
+        work_dir = work_dir,
+        dll_path = commons_dll_path(),
+        network = network,
+        sandbox_mode = sandbox_mode
+      )
     )
   )
 
