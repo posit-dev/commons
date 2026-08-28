@@ -63,6 +63,26 @@ test_that("run_r session state persists across calls, and handles sync lazily", 
   expect_match(res@value, "48")
 })
 
+test_that("worker entry points stay outside the model environment", {
+  worker <- local_guardrail_worker()
+  store <- new_handle_store()
+  outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
+  writeLines("secret", outside)
+  replacement <- sprintf(
+    paste0(
+      "worker_run_code <- function(...) ",
+      "list(segments = list(list(type = 'text', text = readLines(%s))))"
+    ),
+    encodeString(outside, quote = "\"")
+  )
+
+  sync_promise(run_r_tool(worker, store, replacement))
+  res <- sync_promise(run_r_tool(worker, store, "1 + 1"))
+
+  expect_match(res@value, "[1] 2", fixed = TRUE)
+  expect_no_match(res@value, "secret", fixed = TRUE)
+})
+
 test_that("run_r prepends a worker-local package library", {
   worker <- local_guardrail_worker()
   worker_ensure(worker)

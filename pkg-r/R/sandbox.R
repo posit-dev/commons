@@ -1,5 +1,5 @@
 # R side of the worker sandbox (src/sandbox.c). The run_r worker engages the
-# sandbox itself in worker_init() (run-r.R), calling the C symbol directly;
+# sandbox itself in worker_init() (inst/worker/worker.R), calling C directly;
 # the parent process is never sandboxed.
 
 sandbox_capabilities <- function() {
