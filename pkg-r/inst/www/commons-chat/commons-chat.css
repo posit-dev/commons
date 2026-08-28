@@ -113,7 +113,7 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 
 /* ---- Provenance information ------------------------------------------ */
 
-.modal-body:has(> .commons-provenance-info-body) {
+#commons-provenance-info-modal .modal-body {
   padding-top: 0.5rem;
 }
 

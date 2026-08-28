@@ -31,8 +31,6 @@ ui <- bslib::page_fillable(
   )
 )
 
-server <- function(input, output, session) {
-  commons:::provenance_info_server(input, session)
-}
+server <- function(input, output, session) {}
 
 shiny::shinyApp(ui, server)

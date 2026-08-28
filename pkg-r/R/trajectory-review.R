@@ -537,7 +537,6 @@ viewer_server <- function(
   app_notes <- shiny::reactiveVal(review_state$notes)
 
   function(input, output, session) {
-    provenance_info_server(input, session)
     flags <- app_flags
     notes <- app_notes
     selected_conversation <- shiny::reactiveVal(NULL)

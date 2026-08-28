@@ -38,7 +38,6 @@ test_that("commons_server runs under shiny::testServer without error", {
     },
     {
       session$flushReact()
-      expect_true(session$userData$commons_provenance_info_registered)
     }
   )
   succeed()
