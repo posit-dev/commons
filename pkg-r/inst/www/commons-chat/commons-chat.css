@@ -134,6 +134,7 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
   justify-content: center;
   line-height: 1;
   padding: 0;
+  text-decoration: none;
   width: 1.125rem;
 }
 
@@ -145,23 +146,6 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 .commons-provenance-info-trigger:focus-visible {
   outline: 0.2rem solid var(--bs-focus-ring-color, rgba(13, 110, 253, 0.25));
   outline-offset: 0.1rem;
-}
-
-.commons-provenance-info-modal {
-  --bs-modal-zindex: 1090;
-}
-
-.commons-provenance-info-modal .modal-dialog {
-  max-width: min(36rem, calc(100vw - 2rem));
-}
-
-.commons-provenance-info-modal .modal-title {
-  font-size: 1.1rem;
-}
-
-.commons-provenance-info-backdrop {
-  --bs-backdrop-opacity: 0.35;
-  --bs-backdrop-zindex: 1080;
 }
 
 .commons-provenance-info-body {

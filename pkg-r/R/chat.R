@@ -106,6 +106,8 @@ commons_app <- function(client, ...) {
 commons_server <- function(id, client, ...) {
   check_chat_packages()
   check_commons_client(client)
+  session <- shiny::getDefaultReactiveDomain()
+  provenance_info_server(session$input, session)
   local_commons_span(
     "commons_server_start",
     attributes = list("commons.server.id" = id)

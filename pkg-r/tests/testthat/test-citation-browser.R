@@ -267,6 +267,15 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     "This answer comes from a trusted calculation defined by your data team.",
     fixed = TRUE
   )
+  app$wait_for_js(
+    paste0(
+      "document.querySelector('",
+      verified_dialog,
+      " .commons-provenance-info-trigger')",
+      ".classList.contains('shiny-bound-input');"
+    ),
+    timeout = 30 * 1000
+  )
   app$get_js(
     paste0(
       "document.querySelector('",
@@ -274,14 +283,13 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
       " .commons-provenance-info-trigger').click();"
     )
   )
-  info_modal <- ".commons-provenance-info-modal.show"
+  info_modal <- "#shiny-modal.show"
   app$wait_for_js(
     paste0(
       "document.querySelector('",
       info_modal,
       "') !== null && ",
-      "document.querySelector('",
-      ".commons-provenance-info-backdrop.show') !== null;"
+      "document.querySelector('.modal-backdrop.show') !== null;"
     ),
     timeout = 30 * 1000
   )
@@ -318,7 +326,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     paste0(
       "document.querySelector('",
       info_modal,
-      " button[aria-label=\"Close\"]').click();"
+      " [data-bs-dismiss=\"modal\"]').click();"
     )
   )
   app$wait_for_js(

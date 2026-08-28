@@ -3,17 +3,15 @@ test_that("provenance information explains every visible state", {
   query <- htmltools::tagQuery(htmltools::tags$div(info))
 
   expect_length(query$find(".commons-provenance-info")$selectedTags(), 1)
-  expect_length(query$find(".commons-provenance-info-modal")$selectedTags(), 1)
-  expect_length(query$find(".modal-dialog-centered")$selectedTags(), 1)
-  expect_length(query$find(".btn-close")$selectedTags(), 1)
   trigger <- query$find(".commons-provenance-info-trigger")$selectedTags()
   expect_length(trigger, 1)
+  expect_identical(trigger[[1]]$attribs[["id"]], provenance_info_input_id)
   expect_identical(
     trigger[[1]]$attribs[["aria-label"]],
     "How answer trust is determined"
   )
 
-  text <- as.character(info)
+  text <- as.character(provenance_info_modal())
   expect_match(text, "How answer trust is determined", fixed = TRUE)
   expect_match(text, "Verified answer", fixed = TRUE)
   expect_match(text, "Cited", fixed = TRUE)
@@ -29,6 +27,13 @@ test_that("provenance information explains every visible state", {
   expect_match(text, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
   expect_match(text, commons_icon_url("citation-mark.svg"), fixed = TRUE)
   expect_match(text, commons_icon_url("warning-icon.svg"), fixed = TRUE)
+
+  modal_query <- htmltools::tagQuery(
+    htmltools::tags$div(provenance_info_modal())
+  )
+  expect_length(modal_query$find(".modal")$selectedTags(), 1)
+  expect_length(modal_query$find(".modal-body")$selectedTags(), 1)
+  expect_length(modal_query$find(".modal-footer")$selectedTags(), 1)
 })
 
 test_that("derive_provenance_tag matches the shared truth table", {

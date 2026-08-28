@@ -55,58 +55,44 @@ provenance_aside <- function(tag, include_cited = FALSE) {
 }
 
 provenance_info_control <- function() {
-  trigger <- htmltools::tags$button(
-    type = "button",
+  trigger <- shiny::actionLink(
+    provenance_info_input_id,
+    label = htmltools::tags$span(`aria-hidden` = "true", "i"),
     class = "commons-provenance-info-trigger",
-    `aria-label` = "How answer trust is determined",
-    htmltools::tags$span(`aria-hidden` = "true", "i")
+    `aria-label` = "How answer trust is determined"
   )
 
   htmltools::tags$div(
     class = "commons-provenance-info",
-    trigger,
-    htmltools::tags$div(
-      class = "commons-provenance-info-content",
-      hidden = NA,
-      provenance_info_modal()
-    )
+    trigger
   )
 }
 
 provenance_info_modal <- function() {
-  htmltools::tags$div(
-    class = "commons-provenance-info-modal modal fade",
-    tabindex = "-1",
-    `aria-label` = "How answer trust is determined",
-    `aria-hidden` = "true",
-    htmltools::tags$div(
-      class = paste(
-        "modal-dialog modal-dialog-centered",
-        "modal-dialog-scrollable"
-      ),
-      htmltools::tags$div(
-        class = "modal-content",
-        htmltools::tags$div(
-          class = "modal-header",
-          htmltools::tags$h2(
-            class = "modal-title",
-            "How answer trust is determined"
-          ),
-          htmltools::tags$button(
-            type = "button",
-            class = "btn-close",
-            `data-bs-dismiss` = "modal",
-            `aria-label` = "Close"
-          )
-        ),
-        htmltools::tags$div(
-          class = "modal-body",
-          provenance_info_body()
-        )
-      )
-    )
+  shiny::modalDialog(
+    provenance_info_body(),
+    title = "How answer trust is determined",
+    footer = shiny::modalButton("Close"),
+    easyClose = TRUE
   )
 }
+
+provenance_info_server <- function(input, session) {
+  registered <- "commons_provenance_info_registered"
+  if (isTRUE(session$userData[[registered]])) {
+    return(invisible(NULL))
+  }
+  session$userData[[registered]] <- TRUE
+
+  shiny::observeEvent(
+    input[[provenance_info_input_id]],
+    shiny::showModal(provenance_info_modal(), session = session),
+    domain = session,
+    ignoreInit = TRUE
+  )
+}
+
+provenance_info_input_id <- "commons_provenance_info"
 
 provenance_info_body <- function() {
   htmltools::tags$div(
@@ -158,7 +144,7 @@ provenance_info_item <- function(
     htmltools::tags$span(
       class = "commons-provenance-info-no-marker",
       `aria-hidden` = "true",
-      "—"
+      "\u2014"
     )
   } else {
     htmltools::tags$img(

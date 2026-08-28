@@ -1,31 +1,31 @@
 (() => {
-  const triggerSelector = ".commons-provenance-info-trigger";
+  const selector = ".commons-provenance-info-trigger";
 
-  const openModal = (trigger) => {
-    const template = trigger.nextElementSibling.firstElementChild;
-    const modal = template.cloneNode(true);
-    document.body.append(modal);
-
-    const instance = new window.bootstrap.Modal(modal);
-    modal.addEventListener(
-      "hidden.bs.modal",
-      () => {
-        instance.dispose();
-        modal.remove();
-        if (trigger.isConnected) trigger.focus();
-      },
-      { once: true }
-    );
-
-    instance.show();
-    const backdrops = document.querySelectorAll(".modal-backdrop");
-    backdrops.item(backdrops.length - 1)?.classList.add(
-      "commons-provenance-info-backdrop"
-    );
+  // shinychat mounts aside HTML after Shiny's usual input-binding pass.
+  const scopeWithTrigger = (node) => {
+    if (node.matches?.(selector)) return node.parentNode;
+    if (node.querySelector?.(selector)) return node;
+    return null;
   };
 
-  document.addEventListener("click", (event) => {
-    const trigger = event.target.closest(triggerSelector);
-    if (trigger) openModal(trigger);
-  });
+  const start = () => {
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.removedNodes) {
+          const scope = scopeWithTrigger(node);
+          if (scope) window.Shiny.unbindAll(scope);
+        }
+        for (const node of record.addedNodes) {
+          const scope = scopeWithTrigger(node);
+          if (scope) void window.Shiny.bindAll(scope);
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
 })();
