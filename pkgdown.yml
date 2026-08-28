@@ -4,7 +4,7 @@ pkgdown_sha: ~
 articles:
   commons: commons.html
   governance: governance.html
-last_built: 2026-08-28T20:22Z
+last_built: 2026-08-28T20:24Z
 urls:
   reference: https://posit-dev.github.io/commons/reference
   article: https://posit-dev.github.io/commons/articles
