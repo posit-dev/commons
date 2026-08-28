@@ -107,8 +107,8 @@
 <h2 id="evaluation">Evaluation<a class="anchor" aria-label="anchor" href="#evaluation"></a>
 </h2>
 <p>The <a href="https://github.com/posit-dev/devrel-agent" class="external-link">DevRel agent</a> is an example commons agent that answers questions about adoption, engagement, and growth across Posit’s open-source projects. The DevRel agent repository contains an <a href="https://github.com/posit-dev/devrel-agent/tree/main/evals" class="external-link">evaluation</a> that compares performance between the commons agent and Claude Code. Both have access to the same underlying data.</p>
-<p>In this evaluation, the commons agent had higher mean accuracy (86.3% vs. 83.5%), took less time to answer questions (a median of 31.0 vs. 60.5 seconds), and used fewer output tokens (243,403 vs. 439,188 total).</p>
-<p><img src="reference/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%"></p>
+<p>In this evaluation, the commons agent had higher mean accuracy (86.3% vs. 83.5%), took less time to answer questions (a median of 31.0 vs. 60.5 seconds), and cost less ($5.64 vs. $13.76 total).</p>
+<p><img src="reference/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and lower total cost." width="100%"></p>
 <p>In the evaluation, both harnesses use Claude Sonnet 5 at medium effort. The evaluation runs each of 32 questions three times. Questions require either a numeric answer, a table, a nuanced response, or recognition that the available data cannot answer them.</p>
 </div>
 </div>

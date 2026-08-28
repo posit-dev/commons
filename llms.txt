@@ -98,12 +98,11 @@ Both have access to the same underlying data.
 
 In this evaluation, the commons agent had higher mean accuracy (86.3%
 vs. 83.5%), took less time to answer questions (a median of 31.0
-vs. 60.5 seconds), and used fewer output tokens (243,403 vs. 439,188
-total).
+vs. 60.5 seconds), and cost less (\$5.64 vs. \$13.76 total).
 
 ![Three bar charts compare commons with Claude Code. commons has higher
-mean accuracy, lower median solver time, and fewer total output
-tokens.](reference/figures/README-eval-plot-1.png)
+mean accuracy, lower median solver time, and lower total
+cost.](reference/figures/README-eval-plot-1.png)
 
 In the evaluation, both harnesses use Claude Sonnet 5 at medium effort.
 The evaluation runs each of 32 questions three times. Questions require
