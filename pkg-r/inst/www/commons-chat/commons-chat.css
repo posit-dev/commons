@@ -113,6 +113,10 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 
 /* ---- Provenance information ------------------------------------------ */
 
+.modal-body:has(> .commons-provenance-info-body) {
+  padding-top: 0.5rem;
+}
+
 .commons-provenance-info {
   display: flex;
   justify-content: flex-end;
@@ -149,6 +153,8 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 }
 
 .commons-provenance-info-body {
+  font-size: 0.875rem;
+  line-height: 1.4;
   text-align: left;
 }
 
@@ -161,7 +167,11 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
   gap: 0.75rem;
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 0 0 1rem;
+}
+
+.commons-provenance-info-list + p {
+  margin-top: 0.75rem;
 }
 
 .commons-provenance-info-label {
