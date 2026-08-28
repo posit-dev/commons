@@ -1,27 +1,24 @@
-test_that("provenance information explains every visible state", {
-  info <- provenance_info_control()
-  query <- htmltools::tagQuery(htmltools::tags$div(info))
-
-  expect_length(query$find(".commons-provenance-info")$selectedTags(), 1)
-  trigger <- query$find(".commons-provenance-info-trigger")$selectedTags()
-  expect_length(trigger, 1)
-  expect_identical(trigger[[1]]$attribs[["id"]], provenance_info_input_id)
+test_that("provenance information control is the web component", {
+  # The component's trigger, panel, and copy live in commons-chat.js; the
+  # browser test (test-citation-browser.R) covers what it renders. Here we
+  # only pin the contract between the aside markup and the component.
   expect_identical(
-    trigger[[1]]$attribs[["aria-label"]],
-    "How answer trust is determined"
+    provenance_info_control(),
+    paste0(
+      '<commons-provenance-info class="commons-provenance-info">',
+      "</commons-provenance-info>"
+    )
   )
 
-  text <- as.character(provenance_info_modal())
-  expect_match(text, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
-  expect_match(text, commons_icon_url("citation-mark.svg"), fixed = TRUE)
-  expect_match(text, commons_icon_url("warning-icon.svg"), fixed = TRUE)
-
-  modal_query <- htmltools::tagQuery(
-    htmltools::tags$div(provenance_info_modal())
-  )
-  expect_length(modal_query$find(".modal")$selectedTags(), 1)
-  expect_length(modal_query$find(".modal-body")$selectedTags(), 1)
-  expect_length(modal_query$find(".modal-footer")$selectedTags(), 1)
+  js <- readLines(system.file(
+    "www", "commons-chat", "commons-chat.js",
+    package = "commons"
+  ))
+  expect_true(any(grepl(
+    'customElements.define("commons-provenance-info"',
+    js,
+    fixed = TRUE
+  )))
 })
 
 test_that("derive_provenance_tag matches the shared truth table", {
@@ -73,8 +70,7 @@ test_that("provenance_aside renders A and C, nothing for B/NA", {
     fixed = TRUE
   )
   expect_no_match(trusted, "data:image", fixed = TRUE)
-  expect_match(trusted, "commons-provenance-info-trigger", fixed = TRUE)
-  expect_match(trusted, "How answer trust is determined", fixed = TRUE)
+  expect_match(trusted, "<commons-provenance-info", fixed = TRUE)
 
   expect_match(untrusted, '^<shiny-aside label="Untrusted"')
   expect_match(

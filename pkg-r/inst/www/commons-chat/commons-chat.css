@@ -171,7 +171,7 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
   margin-bottom: 0.15rem;
 }
 
-.commons-provenance-info-label img {
+.commons-provenance-info-label svg {
   height: 1.1em;
   width: 1.1em;
 }

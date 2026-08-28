@@ -270,11 +270,9 @@ commons_icon_url <- function(file) {
   if (is.null(commons_icon_path(file))) {
     return(NULL)
   }
-  dep <- commons_chat_dependency()
   paste0(
-    dep$name,
-    "-",
-    dep$version,
+    "commons-chat-",
+    commons_chat_dep_version(),
     "/figs/",
     utils::URLencode(file, reserved = TRUE)
   )

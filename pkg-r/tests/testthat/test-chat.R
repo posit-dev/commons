@@ -38,7 +38,6 @@ test_that("commons_server runs under shiny::testServer without error", {
     },
     {
       session$flushReact()
-      expect_true(session$userData$commons_provenance_info_registered)
     }
   )
   succeed()
@@ -114,6 +113,7 @@ test_that("commons_theme() bundles the commons chat assets", {
 
   commons_dep <- deps[[which(names == "commons-chat")]]
   expect_identical(commons_dep$stylesheet, "commons-chat.css")
+  # commons-chat.js defines the <commons-provenance-info> web component.
   expect_identical(commons_dep$script, "commons-chat.js")
 })
 

@@ -271,8 +271,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     paste0(
       "document.querySelector('",
       verified_dialog,
-      " .commons-provenance-info-trigger')",
-      ".classList.contains('shiny-bound-input');"
+      " .commons-provenance-info-trigger') !== null;"
     ),
     timeout = 30 * 1000
   )
@@ -283,21 +282,21 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
       " .commons-provenance-info-trigger').click();"
     )
   )
-  info_modal <- "#shiny-modal.show"
+  info_panel <- "#commons-provenance-info.show"
   app$wait_for_js(
     paste0(
       "document.querySelector('",
-      info_modal,
+      info_panel,
       "') !== null && ",
-      "document.querySelector('.modal-backdrop.show') !== null;"
+      "document.querySelector('.offcanvas-backdrop.show') !== null;"
     ),
     timeout = 30 * 1000
   )
   app$wait_for_js(
     paste0(
-      "document.activeElement === document.querySelector('",
-      info_modal,
-      "');"
+      "document.querySelector('",
+      info_panel,
+      "').contains(document.activeElement);"
     ),
     timeout = 30 * 1000
   )
@@ -308,16 +307,16 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
         verified_dialog,
         "').contains(",
         "document.querySelector('",
-        info_modal,
+        info_panel,
         "'));"
       )
     )
   )
   info <- app$get_js(
-    paste0("document.querySelector('", info_modal, "').innerText;")
+    paste0("document.querySelector('", info_panel, "').innerText;")
   )
 
-  expect_match(info, "Verified answer", fixed = TRUE)
+  expect_match(info, "Trusted", fixed = TRUE)
   expect_match(info, "Cited", fixed = TRUE)
   expect_match(info, "Untrusted", fixed = TRUE)
   expect_match(info, "No marker", fixed = TRUE)
@@ -325,12 +324,13 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   app$get_js(
     paste0(
       "document.querySelector('",
-      info_modal,
-      " [data-bs-dismiss=\"modal\"]').click();"
+      info_panel,
+      " [data-bs-dismiss=\"offcanvas\"]').click();"
     )
   )
+  # The static panel stays in the DOM; only its visible state goes away.
   app$wait_for_js(
-    paste0("document.querySelector('", info_modal, "') === null;"),
+    paste0("document.querySelector('", info_panel, "') === null;"),
     timeout = 30 * 1000
   )
 })

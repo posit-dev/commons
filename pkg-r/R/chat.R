@@ -106,8 +106,6 @@ commons_app <- function(client, ...) {
 commons_server <- function(id, client, ...) {
   check_chat_packages()
   check_commons_client(client)
-  session <- shiny::getDefaultReactiveDomain()
-  provenance_info_server(session$input, session)
   local_commons_span(
     "commons_server_start",
     attributes = list("commons.server.id" = id)
@@ -177,13 +175,20 @@ check_commons_client <- function(client, call = rlang::caller_env()) {
 # Asset mtimes ride in the version so the dependency URL changes whenever
 # the files do; browsers otherwise cache edited assets under the stable
 # version's URL indefinitely.
-commons_chat_dependency <- function() {
+# Factored out of commons_chat_dependency() so commons_icon_url() can
+# version icon URLs without building the whole dependency.
+commons_chat_dep_version <- function() {
   src <- system.file("www", "commons-chat", package = "commons")
   stamp <- max(file.mtime(list.files(src, full.names = TRUE, recursive = TRUE)))
+  paste0("0.0.0.9000.", as.integer(stamp))
+}
+
+commons_chat_dependency <- function() {
+  src <- system.file("www", "commons-chat", package = "commons")
 
   htmltools::htmlDependency(
     name = "commons-chat",
-    version = paste0("0.0.0.9000.", as.integer(stamp)),
+    version = commons_chat_dep_version(),
     src = c(file = src),
     script = "commons-chat.js",
     stylesheet = "commons-chat.css",
