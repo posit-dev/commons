@@ -43,12 +43,14 @@ turns_are_prefix <- function(value, current) {
     return(FALSE)
   }
   identical(
-    vapply(value, turn_signature, character(1)),
-    vapply(current[seq_along(value)], turn_signature, character(1))
+    vapply(value, turn_text_signature, character(1)),
+    vapply(current[seq_along(value)], turn_text_signature, character(1))
   )
 }
 
-turn_signature <- function(turn) {
+# Distinct from trajectory-read.R's turn_signature(), which produces a
+# structured signature for exchange matching.
+turn_text_signature <- function(turn) {
   texts <- vapply(
     turn@contents,
     function(content) {
