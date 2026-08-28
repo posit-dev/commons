@@ -390,6 +390,12 @@ Commons <- R6::R6Class(
     },
 
     prewarm = function() {
+      # Pre-warming is a pure optimization (everything it builds is rebuilt
+      # or downloaded lazily at first use), but a direct call is typically
+      # warming caches ahead of deployment, so failures propagate: a cold
+      # cache should fail the deploy. commons_prewarm() downgrades failures
+      # to warnings for the Shiny idle-time path, where an escaping error
+      # would stop the app.
       layer <- private$context_layer
       layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
       if (!is.null(layer_state) && length(layer_state$docs) > 0) {
