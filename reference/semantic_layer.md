@@ -94,12 +94,17 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x55eb7ee5db58>
+#> <environment: 0x5582940131b8>
 #> 
 #> 
 #> $fn_sources
 #>        order_count 
 #> "function () \n10" 
+#> 
+#> $measure_provenance
+#> $measure_provenance$order_count
+#> character(0)
+#> 
 #> 
 #> attr(,"class")
 #> [1] "commons_semantic_layer"
