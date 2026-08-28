@@ -211,7 +211,7 @@ local_conversation_turn_span <- function(
 # suggests) remains the manual path.
 refresh_ellmer_otel_cache <- function() {
   tryCatch(
-    ellmer:::otel_cache_tracer(),
+    utils::getFromNamespace("otel_cache_tracer", "ellmer")(),
     error = function(err) NULL
   )
   invisible(NULL)

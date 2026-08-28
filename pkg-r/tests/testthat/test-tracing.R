@@ -253,6 +253,7 @@ test_that("share_with grants wait for tracing to be live", {
 # degrade silently if those internals change; fail loudly here instead so an
 # upgrade can't quietly stop trajectory capture.
 test_that("the internals the tracing hacks rely on still exist", {
+  skip_on_cran()
   skip_if_not_installed("otel")
 
   expect_true(is.function(asNamespace("ellmer")[["otel_cache_tracer"]]))

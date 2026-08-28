@@ -450,9 +450,8 @@ worker_init <- function(
     callr_data[[".__stdout__"]],
     callr_data[[".__stderr__"]]
   )
-  sym <- getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons")
   .Call(
-    sym,
+    getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons"),
     read_roots,
     write_roots,
     # 8 GiB leaves ample headroom for light R; a lower Connect limit still applies.
