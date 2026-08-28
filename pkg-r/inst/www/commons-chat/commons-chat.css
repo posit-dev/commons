@@ -16,7 +16,6 @@
 }
 
 :root .shiny-chat-btn-send {
-  --shiny-chat-btn-send-size: 2rem;
   --shiny-chat-btn-send-bg: transparent;
   --shiny-chat-btn-send-color: var(--_btn-send-state-color);
   --shiny-chat-btn-send-border: var(--bs-border-width, 1px) solid
