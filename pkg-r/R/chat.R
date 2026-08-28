@@ -121,25 +121,13 @@ commons_server <- function(id, client, ...) {
   })
 
   chat <- shinychat::chat_server(id, client = client, ...)
-  persist_conversation_id(chat, client)
-  chat
-}
-
-# shinychat reuses one client across saved conversations, so persist each
-# conversation's trace identity with its history.
-persist_conversation_id <- function(chat, client) {
-  chat$history$on_save(function(values) {
-    values$commons_conversation_id <- client$get_conversation_id()
-    values
-  })
+  # shinychat owns the conversation identity (it sets the client's
+  # `conversation_id` binding, which ellmer stamps on its spans); commons
+  # only needs to know that a restore happened.
   chat$history$on_restore(function(values) {
-    id <- values$commons_conversation_id
-    if (rlang::is_string(id) && nzchar(id)) {
-      client$set_conversation_id(id)
-    }
     client$queue_restore_reminder()
   })
-  invisible(chat)
+  chat
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {

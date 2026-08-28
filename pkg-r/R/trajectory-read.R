@@ -151,8 +151,9 @@ parse_window_bound <- function(x) {
 
 # The `from`/`to` window and `n` limit are passed down to Connect so a
 # filtered read doesn't transfer the whole trace store. The server-side
-# `from` filter can still drop a parent span that carries a conversation id
-# (see connect_window_param()); when that happens, refetch without `from`.
+# `from` filter can still drop ancestor spans (see connect_window_param()),
+# severing turn-ancestor resolution; when that happens, refetch without
+# `from`.
 read_connect_spans <- function(
   client,
   guid,
@@ -203,8 +204,7 @@ enough_trace_lines <- function(n, from, to) {
     if (has_severed_ancestry(kept)) {
       return(FALSE)
     }
-    index <- span_index(kept)
-    latest <- latest_chat_spans(Filter(is_chat_span, kept), index)
+    latest <- latest_chat_spans(Filter(is_chat_span, kept))
     if (length(latest) < n) {
       return(FALSE)
     }
@@ -656,7 +656,7 @@ build_trajectories <- function(spans) {
   if (length(chat_spans) == 0) {
     return(list())
   }
-  latest <- latest_chat_spans(chat_spans, index)
+  latest <- latest_chat_spans(chat_spans)
   provenance_spans <- latest_provenance_spans(spans, index)
   calls <- latest_recorded_call_spans(chat_spans, index, provenance_spans)
   selected <- c(
@@ -690,14 +690,14 @@ nano_posixct <- function(time) {
 
 # The latest chat span per conversation, named by conversation id and
 # ordered oldest-first.
-latest_chat_spans <- function(chat_spans, index) {
+latest_chat_spans <- function(chat_spans) {
   if (length(chat_spans) == 0) {
     return(list())
   }
 
   latest <- list()
   for (span in chat_spans) {
-    id <- span_conversation_id(span, index)
+    id <- span_conversation_id(span)
     prev <- latest[[id]]
     if (is.null(prev) || span_time(span) > span_time(prev)) {
       latest[[id]] <- span
@@ -749,7 +749,7 @@ latest_recorded_call_spans <- function(
         span_time(span) > span_time(previous$chat_span)
     ) {
       latest[[key]] <- list(
-        conversation_id = span_conversation_id(span, index),
+        conversation_id = span_conversation_id(span),
         turn_span = turn_span,
         provenance_span = provenance_spans[[key]] %||% turn_span,
         chat_span = span
@@ -888,35 +888,35 @@ span_index <- function(spans) {
   )
 }
 
-# The conversation id lives on the commons wrapper span, which is not
-# necessarily the chat span's direct parent (ellmer's invoke_agent span sits
-# between, and instrumented hosts like Shiny may add ancestors above), so
-# walk the ancestor chain. Chat spans with no wrapper anywhere—e.g. emitted
-# outside commons—fall back to their trace id, which still groups per turn.
-span_conversation_id <- function(span, index) {
-  conversation_id_walk(span, index)$id %||% span$trace_id
+# ellmer stamps the conversation id on its own chat spans (from the client's
+# `conversation_id` binding, allocated by shinychat). Chat spans with no
+# id—e.g. emitted outside shinychat—fall back to their trace id, which
+# still groups per turn.
+span_conversation_id <- function(span) {
+  id <- span$attributes[["gen_ai.conversation.id"]]
+  if (is.null(id)) span$trace_id else as.character(id)
 }
 
-# `severed = TRUE` marks a walk that stopped at a parent absent from
-# `index` -- ancestry cut off by a partial fetch -- as opposed to a chain
-# that reaches its root without finding an id, which no wider fetch would
-# fix.
-conversation_id_walk <- function(span, index) {
+# A chain is severed when a parent is absent from `index` -- ancestry cut
+# off by a partial fetch -- as opposed to reaching its root, which no wider
+# fetch would fix. Turn-level data (provenance, recorded calls) resolves
+# through `conversation_turn_ancestor()`, which stops at the turn wrapper,
+# so ancestors above it (added by instrumented hosts) don't count.
+ancestry_severed <- function(span, index) {
   current <- span
   for (i in seq_len(length(index))) {
-    id <- current$attributes[["gen_ai.conversation.id"]]
-    if (!is.null(id)) {
-      return(list(id = as.character(id), severed = FALSE))
+    if (identical(current$name, "commons_conversation_turn")) {
+      return(FALSE)
     }
     if (!nzchar(current$parent_span_id)) {
-      return(list(id = NULL, severed = FALSE))
+      return(FALSE)
     }
     current <- index[[paste(span$trace_id, current$parent_span_id)]]
     if (is.null(current)) {
-      return(list(id = NULL, severed = TRUE))
+      return(TRUE)
     }
   }
-  list(id = NULL, severed = FALSE)
+  FALSE
 }
 
 has_severed_ancestry <- function(spans) {
@@ -924,7 +924,7 @@ has_severed_ancestry <- function(spans) {
   chat_spans <- Filter(is_chat_span, spans)
   any(vapply(
     chat_spans,
-    function(span) conversation_id_walk(span, index)$severed,
+    function(span) ancestry_severed(span, index),
     logical(1)
   ))
 }

@@ -34,6 +34,7 @@ chat_test_span <- function(
   trace_id,
   span_id,
   parent_span_id = NULL,
+  conversation_id = NULL,
   input_messages = NULL,
   output_messages = NULL,
   system_instructions = NULL,
@@ -41,6 +42,12 @@ chat_test_span <- function(
   end_time = "2"
 ) {
   attributes <- list(otlp_test_attr("gen_ai.operation.name", "chat"))
+  if (!is.null(conversation_id)) {
+    attributes <- c(
+      attributes,
+      list(otlp_test_attr("gen_ai.conversation.id", conversation_id))
+    )
+  }
   if (!is.null(system_instructions)) {
     attributes <- c(
       attributes,
@@ -70,12 +77,12 @@ chat_test_span <- function(
   )
 }
 
-conversation_test_span <- function(trace_id, span_id, conversation_id) {
+conversation_test_span <- function(trace_id, span_id, parent_span_id = NULL) {
   otlp_test_span(
     trace_id,
     span_id,
-    name = "commons_conversation_turn",
-    attributes = list(otlp_test_attr("gen_ai.conversation.id", conversation_id))
+    parent_span_id = parent_span_id,
+    name = "commons_conversation_turn"
   )
 }
 

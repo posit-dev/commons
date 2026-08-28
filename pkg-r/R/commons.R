@@ -217,7 +217,6 @@ Commons <- R6::R6Class(
         private$registry,
         measure_injectables(sources)
       )
-      private$conversation_id <- new_conversation_id()
       private$tracing <- new_trajectory_tracing(log, share_with)
 
       # Created after new_trajectory_tracing() so a fresh `log = TRUE` local
@@ -275,7 +274,7 @@ Commons <- R6::R6Class(
 
     chat = function(..., echo = NULL) {
       if (private$tracing) {
-        local_conversation_turn_span(private$conversation_id)
+        local_conversation_turn_span()
       }
       restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
@@ -290,7 +289,6 @@ Commons <- R6::R6Class(
       stream = c("text", "content"),
       controller = NULL
     ) {
-      private$refresh_conversation_id()
       from_index <- length(self$get_turns()) + 1L
       stream <- rlang::arg_match(stream)
       restore_reminder_pending <- private$restore_reminder_pending
@@ -308,7 +306,6 @@ Commons <- R6::R6Class(
       )
 
       tracing <- private$tracing
-      conversation_id <- private$conversation_id
       corpus <- private$corpus
       as_content <- identical(stream, "content")
 
@@ -316,7 +313,7 @@ Commons <- R6::R6Class(
       coro::async_generator(function() {
         span <- NULL
         if (tracing) {
-          span <- local_conversation_turn_span(conversation_id)
+          span <- local_conversation_turn_span()
         }
         scanner <- citation_scanner(corpus)
 
@@ -346,7 +343,6 @@ Commons <- R6::R6Class(
           logical(1)
         ))
         turns <- self$get_turns()
-        private$last_streamed_turns <- turns
         tag <- derive_provenance_tag(
           collect_appended_tags(turns, from_index),
           verified
@@ -369,7 +365,7 @@ Commons <- R6::R6Class(
             error = function(err) NULL
           )
           tryCatch(
-            record_provenance_span(conversation_id, tag, decisions),
+            record_provenance_span(tag, decisions),
             error = function(err) NULL
           )
         }
@@ -384,20 +380,6 @@ Commons <- R6::R6Class(
 
     citation_corpus = function() {
       private$corpus
-    },
-
-    get_conversation_id = function() {
-      private$conversation_id
-    },
-
-    # Reset the lineage baseline so restored history does not start a new trace.
-    set_conversation_id = function(id) {
-      if (!rlang::is_string(id) || !nzchar(id)) {
-        cli::cli_abort("{.arg id} must be a single non-empty string.")
-      }
-      private$conversation_id <- id
-      private$last_streamed_turns <- self$get_turns()
-      invisible(self)
     },
 
     queue_restore_reminder = function() {
@@ -432,8 +414,6 @@ Commons <- R6::R6Class(
     calculations = NULL,
     fn_sources = NULL,
     injections = NULL,
-    conversation_id = NULL,
-    last_streamed_turns = NULL,
     tracing = FALSE,
     first_touch = NULL,
     handles = NULL,
@@ -453,22 +433,6 @@ Commons <- R6::R6Class(
     consume_restore_reminder = function(was_pending) {
       if (was_pending) {
         private$restore_reminder_pending <- FALSE
-      }
-      invisible(NULL)
-    },
-
-    # Divergent histories need distinct trace identities.
-    refresh_conversation_id = function() {
-      baseline <- private$last_streamed_turns
-      if (is.null(baseline)) {
-        return(invisible(NULL))
-      }
-      current <- self$get_turns()
-      extends <- length(current) >= length(baseline) &&
-        identical(current[seq_along(baseline)], baseline)
-      if (!extends) {
-        private$conversation_id <- new_conversation_id()
-        private$last_streamed_turns <- current
       }
       invisible(NULL)
     }

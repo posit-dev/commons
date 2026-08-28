@@ -43,35 +43,7 @@ test_that("commons_server runs under shiny::testServer without error", {
   succeed()
 })
 
-test_that("persist_conversation_id round-trips the id through history hooks", {
-  agent <- test_agent()
-  hooks <- new.env(parent = emptyenv())
-  fake_chat <- list(
-    history = list(
-      on_save = function(fn) hooks$on_save <- fn,
-      on_restore = function(fn) hooks$on_restore <- fn
-    )
-  )
-
-  persist_conversation_id(fake_chat, agent)
-
-  values <- hooks$on_save(list(app_state = 1))
-  expect_identical(
-    values$commons_conversation_id,
-    agent$get_conversation_id()
-  )
-  expect_identical(values$app_state, 1)
-
-  hooks$on_restore(list(commons_conversation_id = "restored-id"))
-  expect_identical(agent$get_conversation_id(), "restored-id")
-  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
-
-  hooks$on_restore(list())
-  expect_identical(agent$get_conversation_id(), "restored-id")
-  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
-})
-
-test_that("commons_server wires conversation-id persistence into shinychat", {
+test_that("commons_server queues a restore reminder when history is restored", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
 
@@ -85,18 +57,13 @@ test_that("commons_server wires conversation-id persistence into shinychat", {
         session,
         "chat.history-controller"
       )
-      controller$restore_app_state(
-        list(commons_conversation_id = "restored-id")
-      )
-      expect_identical(agent$get_conversation_id(), "restored-id")
+      controller$restore_app_state(list())
       expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
 
       chat$clear()
       expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
 
-      controller$restore_app_state(
-        list(commons_conversation_id = "restored-id")
-      )
+      controller$restore_app_state(list())
       controller$new_chat()
       expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
     }

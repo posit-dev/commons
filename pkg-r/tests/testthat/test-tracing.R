@@ -138,15 +138,9 @@ test_that("traces directory can come from COMMONS_TRACES_DIR", {
   expect_equal(commons_traces_dir(), "/some/dir")
 })
 
-test_that("conversation ids are unique and span-attribute safe", {
-  ids <- replicate(20, new_conversation_id())
-  expect_equal(anyDuplicated(ids), 0)
-  expect_match(ids, "^[0-9]{8}t[0-9.]+-[a-z0-9]{10}$")
-})
-
 test_that("local_conversation_turn_span is a no-op without tracing", {
   skip_if_not_installed("otel")
-  expect_null(local_conversation_turn_span("conv-1"))
+  expect_null(local_conversation_turn_span())
 })
 
 test_that("share_trajectory_access warns off Connect", {
@@ -292,12 +286,12 @@ test_that("commons_span_set_attribute no-ops when span is NULL", {
   expect_null(commons_span_set_attribute(NULL, "commons.test.value", 1L))
 })
 
-test_that("conversation turn spans record the conversation id", {
+test_that("conversation turn spans are recorded", {
   skip_if_not_installed("otelsdk")
 
   recorded <- otelsdk::with_otel_record({
     turn <- function() {
-      local_conversation_turn_span("conv-1")
+      local_conversation_turn_span()
       invisible(NULL)
     }
     turn()
@@ -306,5 +300,4 @@ test_that("conversation turn spans record the conversation id", {
   spans <- recorded$traces
   expect_length(spans, 1)
   expect_equal(spans[[1]]$name, "commons_conversation_turn")
-  expect_equal(spans[[1]]$attributes[["gen_ai.conversation.id"]], "conv-1")
 })
