@@ -6,7 +6,6 @@
 
 /* Set shinychat CSS variables */
 :root {
-  --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
 
   /* Keep the solid stop glyph quieter than the outlined send glyph. */
