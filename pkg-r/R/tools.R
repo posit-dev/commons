@@ -144,11 +144,20 @@ tool_search_pool <- function(private) {
         semantic_models = private$semantic_models,
         calculations = private$calculations
       )
+      display_body <- search_pool_text(
+        private$registry,
+        private$definitions,
+        query,
+        source_names,
+        semantic_models = private$semantic_models,
+        calculations = private$calculations,
+        measure_titles = TRUE
+      )
       tool_result(
         body,
         title = "Searched for a trusted calculation",
         icon = maybe_icon("search"),
-        markdown = body
+        markdown = display_body
       )
     },
     sprintf(

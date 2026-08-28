@@ -491,7 +491,8 @@ search_pool_text <- function(
   query,
   source_names = character(),
   semantic_models = NULL,
-  calculations = list()
+  calculations = list(),
+  measure_titles = FALSE
 ) {
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
@@ -567,7 +568,12 @@ search_pool_text <- function(
     hits,
     function(hit) {
       if (hit <= length(measures)) {
-        measure_schema_text(measures[[hit]], source_names = source_names)
+        td <- measures[[hit]]
+        measure_schema_text(
+          td,
+          source_names = source_names,
+          heading = if (measure_titles) tool_title(td) else tool_name(td)
+        )
       } else if (hit <= length(measures) + nrow(defs)) {
         definition_pool_text(defs[hit - length(measures), ], defs)
       } else if (

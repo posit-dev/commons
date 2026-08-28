@@ -269,7 +269,11 @@ is_measure_list <- function(x) {
   is.list(x) && !inherits(x, "ellmer::ToolDef")
 }
 
-measure_schema_text <- function(td, source_names = character()) {
+measure_schema_text <- function(
+  td,
+  source_names = character(),
+  heading = tool_name(td)
+) {
   props <- tool_properties(td)
   args <- if (length(props) > 0) {
     paste0(
@@ -295,7 +299,7 @@ measure_schema_text <- function(td, source_names = character()) {
 
   sprintf(
     "### %s\n%s%s",
-    tool_name(td),
+    heading,
     tool_description(td),
     details
   )
