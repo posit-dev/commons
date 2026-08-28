@@ -111,7 +111,8 @@ server <- function(input, output, session) {
     context_layer = context_layer(files = notes)
   )
 
-  commons_server("chat", agent)
+  commons_prewarm(agent)
+  shinychat::chat_server("chat", client = agent)
 }
 
 shinyApp(ui, server)

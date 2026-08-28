@@ -23,18 +23,13 @@ test_that("commons_app builds a single-user app on page_chat", {
   })
 })
 
-test_that("commons_server registers no custom-message observers", {
-  body_text <- paste(deparse(body(commons_server)), collapse = "\n")
-  expect_false(grepl("sendCustomMessage", body_text, fixed = TRUE))
-})
-
-test_that("commons_server runs under shiny::testServer without error", {
+test_that("a commons agent runs under shinychat::chat_server()", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")
 
   shiny::testServer(
     function(input, output, session) {
-      commons_server("chat", client = test_agent())
+      shinychat::chat_server("chat", client = test_agent())
     },
     {
       session$flushReact()
@@ -73,9 +68,32 @@ test_that("commons_app requires a commons agent", {
   )
 })
 
-test_that("commons_server requires a commons agent", {
-  expect_snapshot(
-    commons_server("chat", client = test_client()),
-    error = TRUE
+test_that("commons_prewarm() downgrades prewarm failures to warnings", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  local_mocked_bindings(
+    context_store = function(...) stop("index build exploded"),
+    .package = "commons"
   )
+  commons_prewarm(agent)
+  expect_warning(later::run_now(), "index build exploded")
+})
+
+test_that("commons_app() prewarms the agent on idle", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  app <- commons_app(test_agent())
+  app_env <- environment(app$serverFuncSource)
+  prewarmed <- FALSE
+  testthat::local_mocked_bindings(
+    commons_prewarm = function(client) prewarmed <<- TRUE,
+    .package = "commons"
+  )
+  shiny::testServer(app_env$server, {
+    session$flushReact()
+  })
+  expect_true(prewarmed)
 })

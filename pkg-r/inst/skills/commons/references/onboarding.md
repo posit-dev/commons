@@ -45,7 +45,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 1. **Orient to commons.** Before scaffolding, identify the installed commons version and locate the corresponding package source when available. Read the relevant commons documentation and skill references, then inspect the implementation, examples, and tests for the APIs the agent will use. At minimum, examine:
    - `commons()`, `data_source()`, `semantic_layer()`, and `context_layer()`;
-   - `commons_theme()` and `commons_server()`, including per-session construction;
+   - `commons_theme()`, `commons_prewarm()`, and `shinychat::chat_server()`, including per-session construction and idle-time pre-warming;
    - measure loading and data-dictionary behavior; and
    - dependency and deployment expectations for a commons app.
 
@@ -104,7 +104,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic layer, and context layer design now that the extracted artifacts are visible. Treat consequential changes as decision points, and update the agent instruction file only when they change its durable guidance.
 
-10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
+10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required for per-session agent state. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
 
    commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
 

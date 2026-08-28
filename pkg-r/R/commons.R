@@ -8,8 +8,8 @@
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
 #' and tools. Use `agent$chat()` to ask questions, [commons_theme()] and
-#' [commons_server()] to embed the agent in Shiny, and [vitals::generate()]
-#' to use the agent as a vitals solver.
+#' [shinychat::chat_server()] to embed the agent in Shiny, and
+#' [vitals::generate()] to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
@@ -394,6 +394,12 @@ Commons <- R6::R6Class(
     },
 
     prewarm = function() {
+      # Pre-warming is a pure optimization (everything it builds is rebuilt
+      # or downloaded lazily at first use), but a direct call is typically
+      # warming caches ahead of deployment, so failures propagate: a cold
+      # cache should fail the deploy. commons_prewarm() downgrades failures
+      # to warnings for the Shiny idle-time path, where an escaping error
+      # would stop the app.
       layer <- private$context_layer
       if (!is.null(layer) && length(layer$docs) > 0) {
         local_commons_span(

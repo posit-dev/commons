@@ -318,4 +318,4 @@ agent <- commons(
 commons_app(agent)
 ```
 
-Use `commons_app()` to run the agent in a local or single-user Shiny app. For multi-user deployments, compose shinychat's UI with `commons_theme()` on the page and `commons_server()` in the server, and create a new agent for each Shiny session. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
+Use `commons_app()` to run the agent in a local or single-user Shiny app. For multi-user deployments, compose shinychat's UI with `commons_theme()` on the page and `shinychat::chat_server()` in the server, and create a new agent for each Shiny session. To move the context-index build off the first question, call `commons_prewarm(agent)` in the server to build the index during post-startup idle time. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.

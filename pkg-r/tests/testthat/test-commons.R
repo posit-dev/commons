@@ -437,6 +437,18 @@ test_that("prewarm() without a context layer is a no-op", {
   expect_no_error(test_agent()$prewarm())
 })
 
+test_that("prewarm() propagates failures", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  local_mocked_bindings(
+    context_store = function(...) stop("index build exploded"),
+    .package = "commons"
+  )
+  expect_error(agent$prewarm(), "index build exploded")
+})
+
 test_that("prewarm() records a cache-miss build and its own span", {
   skip_if_not_installed("otelsdk")
 

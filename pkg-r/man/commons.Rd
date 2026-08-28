@@ -80,8 +80,8 @@ untrusted.
 \details{
 The provider and model come from \code{client}; commons sets its own system prompt
 and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_theme]{commons_theme()}} and
-\code{\link[=commons_server]{commons_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
-to use the agent as a vitals solver.
+\code{\link[shinychat:chat_server]{shinychat::chat_server()}} to embed the agent in Shiny, and
+\code{\link[vitals:generate]{vitals::generate()}} to use the agent as a vitals solver.
 }
 \section{Agent tools}{
 
