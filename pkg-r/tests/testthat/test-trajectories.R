@@ -181,11 +181,11 @@ test_that("rebuilt turns can be set on an ellmer chat", {
   expect_no_error(chat$set_turns(turns))
 })
 
-test_that("chat spans group by the nearest ancestor conversation id", {
+test_that("chat spans group by their conversation id across traces", {
   json <- test_turn_json()
   lines <- c(
     otlp_test_line(list(
-      conversation_test_span("t1", "root1", "conv-a"),
+      conversation_test_span("t1", "root1"),
       otlp_test_span(
         "t1",
         "agent1",
@@ -196,12 +196,13 @@ test_that("chat spans group by the nearest ancestor conversation id", {
         "t1",
         "chat1",
         parent_span_id = "agent1",
+        conversation_id = "conv-a",
         input_messages = '[{"role":"user","parts":[{"type":"text","content":"One."}]}]',
         end_time = "10"
       )
     )),
     otlp_test_line(list(
-      conversation_test_span("t2", "root2", "conv-a"),
+      conversation_test_span("t2", "root2"),
       otlp_test_span(
         "t2",
         "agent2",
@@ -212,6 +213,7 @@ test_that("chat spans group by the nearest ancestor conversation id", {
         "t2",
         "chat2",
         parent_span_id = "agent2",
+        conversation_id = "conv-a",
         input_messages = json$input,
         end_time = "20"
       )
@@ -245,7 +247,6 @@ recorded_call_test_spans <- function(
   root_id <- paste0(trace_id, "-root")
   agent_id <- paste0(trace_id, "-agent")
   attributes <- list(
-    otlp_test_attr("gen_ai.conversation.id", conversation_id),
     otlp_test_attr("commons.provenance.tag", tag),
     otlp_test_attr(
       "commons.citation.candidates",
@@ -257,11 +258,7 @@ recorded_call_test_spans <- function(
       trace_id,
       root_id,
       name = "commons_conversation_turn",
-      attributes = if (dedicated_provenance_span) {
-        attributes[1]
-      } else {
-        attributes
-      },
+      attributes = if (dedicated_provenance_span) list() else attributes,
       end_time = end_time
     ),
     otlp_test_span(
@@ -275,6 +272,7 @@ recorded_call_test_spans <- function(
       trace_id,
       paste0(trace_id, "-chat"),
       parent_span_id = agent_id,
+      conversation_id = conversation_id,
       input_messages = semconv_messages_json(head(messages, -1L)),
       output_messages = semconv_messages_json(tail(messages, 1L)),
       end_time = end_time
@@ -431,17 +429,13 @@ test_that("the latest descendant tool-loop span contributes one call record", {
     "t1",
     "root1",
     name = "commons_conversation_turn",
-    attributes = list(
-      otlp_test_attr("gen_ai.conversation.id", "conv-a"),
-      otlp_test_attr("commons.provenance.tag", "A")
-    )
+    attributes = list(otlp_test_attr("commons.provenance.tag", "A"))
   )
   root2 <- otlp_test_span(
     "t2",
     "root2",
     name = "commons_conversation_turn",
     attributes = list(
-      otlp_test_attr("gen_ai.conversation.id", "conv-a"),
       otlp_test_attr("commons.provenance.tag", "B"),
       otlp_test_attr(
         "commons.citation.candidates",
@@ -484,6 +478,7 @@ test_that("the latest descendant tool-loop span contributes one call record", {
         "t1",
         "chat1",
         parent_span_id = "agent1",
+        conversation_id = "conv-a",
         input_messages = paste0("[", exchange1_turn, "]"),
         output_messages = paste0("[", exchange1_answer, "]"),
         end_time = "10"
@@ -501,6 +496,7 @@ test_that("the latest descendant tool-loop span contributes one call record", {
         "t2",
         "chat2a",
         parent_span_id = "agent2",
+        conversation_id = "conv-a",
         input_messages = paste0(
           "[",
           paste(
@@ -518,6 +514,7 @@ test_that("the latest descendant tool-loop span contributes one call record", {
         "t2",
         "chat2b",
         parent_span_id = "agent2",
+        conversation_id = "conv-a",
         input_messages = paste0(
           "[",
           paste(
@@ -621,7 +618,6 @@ trajectory_scaling_spans <- function(n) {
         root_id,
         name = "commons_conversation_turn",
         attributes = list(
-          otlp_test_attr("gen_ai.conversation.id", conversation_id),
           otlp_test_attr("commons.provenance.tag", "B"),
           otlp_test_attr(
             "commons.citation.candidates",
@@ -644,6 +640,7 @@ trajectory_scaling_spans <- function(n) {
         trace_id,
         sprintf("scale-chat-%03d-a", i),
         parent_span_id = agent_id,
+        conversation_id = conversation_id,
         input_messages = json$input,
         end_time = as.character(i * 10L)
       )
@@ -651,6 +648,7 @@ trajectory_scaling_spans <- function(n) {
         trace_id,
         sprintf("scale-chat-%03d-b", i),
         parent_span_id = agent_id,
+        conversation_id = conversation_id,
         input_messages = json$input,
         output_messages = json$output,
         end_time = as.character(i * 10L + 1L)
@@ -908,16 +906,17 @@ test_that("a conversation continuing past `to` returns history as of `to`", {
   expect_length(as_of[[1]], length(full[[1]]) - 1)
 })
 
-test_that("wrapper spans outside the window still group conversations", {
+test_that("grouping by chat-span id survives a filtered-out wrapper", {
   path <- withr::local_tempdir()
   withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
   json <- test_turn_json()
   line <- otlp_test_line(list(
-    conversation_test_span("t1", "root1", "conv-a"),
+    conversation_test_span("t1", "root1"),
     chat_test_span(
       "t1",
       "chat1",
       parent_span_id = "root1",
+      conversation_id = "conv-a",
       input_messages = json$input,
       start_time = "200000000000",
       end_time = "201000000000"
@@ -978,11 +977,12 @@ test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
     CONNECT_API_KEY = "key"
   )
   json <- test_turn_json()
-  wrapper <- conversation_test_span("t1", "root1", "conv-a")
+  wrapper <- conversation_test_span("t1", "root1")
   chat <- chat_test_span(
     "t1",
     "chat1",
     parent_span_id = "root1",
+    conversation_id = "conv-a",
     input_messages = json$input,
     start_time = "200000000000",
     end_time = "201000000000"
@@ -1022,11 +1022,12 @@ test_that("a windowed Connect read with intact ancestry fetches once", {
     connect_trace_lines = function(client, guid, from = NULL, to = NULL, ...) {
       state$fetches <- state$fetches + 1
       otlp_test_line(list(
-        conversation_test_span("t1", "root1", "conv-a"),
+        conversation_test_span("t1", "root1"),
         chat_test_span(
           "t1",
           "chat1",
           parent_span_id = "root1",
+          conversation_id = "conv-a",
           input_messages = json$input,
           start_time = "200000000000",
           end_time = "201000000000"
@@ -1069,7 +1070,7 @@ test_that("enough_trace_lines waits for a chat span's trailing wrapper", {
   ))
   with_wrapper <- c(
     chat_only,
-    otlp_test_line(list(conversation_test_span("t1", "root1", "conv-a")))
+    otlp_test_line(list(conversation_test_span("t1", "root1")))
   )
 
   enough <- enough_trace_lines(1, NULL, NULL)
