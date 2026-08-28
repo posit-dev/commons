@@ -19,7 +19,10 @@ knitr::opts_chunk$set(
   eval = FALSE
 )
 
-documentation_marker <- function(tag) {
+documentation_marker <- function(
+  tag,
+  alt = commons:::provenance_display[[tag]]$label
+) {
   icon <- c(
     A = "trusted-icon.svg",
     B = "citation-mark.svg",
@@ -31,7 +34,7 @@ documentation_marker <- function(tag) {
     src = knitr::image_uri(
       system.file("www", "commons-chat", "figs", icon, package = "commons")
     ),
-    alt = commons:::provenance_display[[tag]]$label
+    alt = alt
   )
 }
 ```
@@ -134,11 +137,11 @@ The following table details the various ways each provenance outcome can occur:
 
 | How the answer is produced | Provenance outcome |
 |---|---|
-| A trusted R [measure](#semantic-layer) | Verified answer `r documentation_marker("A")` |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | Verified answer `r documentation_marker("A")` |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | Verified answer `r documentation_marker("A")` |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited `r documentation_marker("B")` or Untrusted `r documentation_marker("C")` |
-| Custom R | Cited `r documentation_marker("B")` or Untrusted `r documentation_marker("C")` |
+| A trusted R [measure](#semantic-layer) | Verified answer `r documentation_marker("A", alt = "")` |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | Verified answer `r documentation_marker("A", alt = "")` |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | Verified answer `r documentation_marker("A", alt = "")` |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited `r documentation_marker("B", alt = "")` or Untrusted `r documentation_marker("C", alt = "")` |
+| Custom R | Cited `r documentation_marker("B", alt = "")` or Untrusted `r documentation_marker("C", alt = "")` |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
 The agent itself does not determine the provenance outcome. commons derives it deterministically from the agent's behavior.
