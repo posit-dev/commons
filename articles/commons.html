@@ -53,8 +53,8 @@
 
 
 
-<link href="commons_files/commons-chat-0.0.0.9000.1787874295/commons-chat.css" rel="stylesheet">
-<script src="commons_files/commons-chat-0.0.0.9000.1787874295/commons-chat.js"></script><div class="row">
+
+<div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
       <img src="../logo.png" class="logo" alt=""><h1>Introduction to commons</h1>
             
@@ -94,13 +94,14 @@ The user asks:</p>
 </blockquote>
 <p>The agent then searches for a trusted calculation that can answer the
 question. If it finds one, it runs that code and then reports the result
-with a <code>Verified answer</code> provenance marker.</p>
+with the green check-shield provenance marker for the
+<code>Verified answer</code> outcome.</p>
 <blockquote>
 <p>At Oak Bluff, 59 individual animals were observed across 5 species,
 based on 28 hours of survey effort. Note this reflects observed
 individuals during surveys, not necessarily a full census of every
-animal present at the site.</p>
-<p><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a trusted calculation defined by your data team." aria-label="Verified answer. This answer comes from a trusted calculation defined by your data team." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a trusted calculation defined by your data team.</span> </span></p>
+animal present at the site.
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAiY2hlY2siIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgaW4gd2hpdGUgb24gdGhlIGdyZWVuIHNoaWVsZDsKICAgICAgIHRoZSBtYXRjaGluZyBzdHJva2UgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPHBhdGggZmlsbD0iIzJmYTM3YiIgZD0iTTggMS4xYzEuNy45IDMuNyAxLjcgNS43IDIuMS40LjEuNy41LjcuOXY0LjdjMCAzLjItMi4xIDUuNy02LjQgNy4yLTQuMy0xLjUtNi40LTQtNi40LTcuMlY0LjFjMC0uNC4zLS44LjctLjkgMi0uNCA0LTEuMiA1LjctMi4xeiIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDggOC4zKSBzY2FsZSgwLjcyKSB0cmFuc2xhdGUoLTcuNSAtNy41KSIgZD0iTTEwLjYwMTUgMy45MDgxNUMxMC43OTAzIDMuNjE5NDEgMTEuMTc3OSAzLjUzNzkyIDExLjQ2NjcgMy43MjY1MUMxMS43NTU1IDMuOTE1MzMgMTEuODM3IDQuMzAyODggMTEuNjQ4NCA0LjU5MTc1TDcuMzk4MzcgMTEuMDkxN0M3LjI5ODIyIDExLjI0NDkgNy4xMzU1OCAxMS4zNDY5IDYuOTU0MDQgMTEuMzcwMUM2Ljc3MjUxIDExLjM5MzIgNi41ODk0NSAxMS4zMzU5IDYuNDU0MDQgMTEuMjEyOEwzLjcwNDA0IDguNzEyODRMMy42MjAwNSA4LjYxODExQzMuNDQ4NTcgOC4zODM0MiAzLjQ1ODkgOC4wNTI1MiAzLjY2MjA1IDcuODI5MDVDMy44NjUxMSA3LjYwNTc2IDQuMTkzNDQgNy41NjM3MSA0LjQ0MzMgNy43MTE4Nkw0LjU0NTg0IDcuNzg3MDZMNi43NTI4NyA5Ljc5MjkyTDEwLjYwMTUgMy45MDgxNVoiLz4KPC9zdmc+Cg==" alt="Verified answer"></p>
 </blockquote>
 <p>Although the agent had to decide which trusted calculation to run, it
 did not have to decide <em>what code to write</em>, reducing degrees of
@@ -108,8 +109,8 @@ freedom and allowing it to take advantage of pre-vetted code.</p>
 <p>However, we also expect users to ask questions that stray from the
 “happy path.” For those, the agent searches for additional context and
 writes custom code (either SQL or R). Answers from this path either
-include a verified citation or display an <code>Untrusted</code>
-provenance marker.</p>
+include a blue quote-mark citation marker or display the yellow
+exclamation provenance marker for an <code>Untrusted</code> outcome.</p>
 </div>
 <div class="section level2">
 <h2 id="working-with-the-agent-skill">Working with the agent skill<a class="anchor" aria-label="anchor" href="#working-with-the-agent-skill"></a>
@@ -138,15 +139,16 @@ to <code>.claude/skills</code>:</p>
 <p>commons agents will use trusted calculations whenever possible. When
 the user asks a question, the agent first searches the semantic layer
 for a trusted calculation. If it finds one, it then calls that
-calculation and the resulting answer displays a green provenance marker
-labeled <code>Verified answer</code>.</p>
+calculation and the resulting answer displays the green check-shield
+provenance marker for the <code>Verified answer</code> outcome.</p>
 <p>If a relevant trusted calculation is not found, the agent proceeds
 down the lower-trust path. It searches through the context for
 additional information, then uses that information to write custom SQL
-or R code to answer the user’s question. These answers either include a
-verified citation in a footnote or display an <code>Untrusted</code>
-provenance marker.</p>
-<figure class="commons-flow commons-flow-trusted-calculations column-page"><div class="commons-branch-flow" role="img" aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation or the lower-trust path through context and custom SQL or R">
+or R code to answer the user’s question. These answers either include
+blue quote-mark citation markers that open details about verified
+sources or display the yellow exclamation provenance marker for an
+<code>Untrusted</code> outcome.</p>
+<figure class="commons-flow commons-flow-trusted-calculations column-page"><div class="commons-branch-flow" role="img" aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation to a verified answer marker, or the lower-trust path through context and custom SQL or R to a citation or untrusted marker">
 <div class="commons-branch-origin">
 <p><span class="commons-flow-node">Search
 trusted<br>calculations</span></p>
@@ -162,7 +164,7 @@ High trust
 <div class="commons-trust-steps">
 <p><span class="commons-flow-node">Relevant calculation<br>found</span>
 <span class="commons-flow-arrow">→</span> <span class="commons-flow-node">Run trusted<br>calculation</span> <span class="commons-flow-arrow">→</span>
-<span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a trusted calculation defined by your data team." aria-label="Verified answer. This answer comes from a trusted calculation defined by your data team." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a trusted calculation defined by your data team.</span> </span></p>
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAiY2hlY2siIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgaW4gd2hpdGUgb24gdGhlIGdyZWVuIHNoaWVsZDsKICAgICAgIHRoZSBtYXRjaGluZyBzdHJva2UgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPHBhdGggZmlsbD0iIzJmYTM3YiIgZD0iTTggMS4xYzEuNy45IDMuNyAxLjcgNS43IDIuMS40LjEuNy41LjcuOXY0LjdjMCAzLjItMi4xIDUuNy02LjQgNy4yLTQuMy0xLjUtNi40LTQtNi40LTcuMlY0LjFjMC0uNC4zLS44LjctLjkgMi0uNCA0LTEuMiA1LjctMi4xeiIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDggOC4zKSBzY2FsZSgwLjcyKSB0cmFuc2xhdGUoLTcuNSAtNy41KSIgZD0iTTEwLjYwMTUgMy45MDgxNUMxMC43OTAzIDMuNjE5NDEgMTEuMTc3OSAzLjUzNzkyIDExLjQ2NjcgMy43MjY1MUMxMS43NTU1IDMuOTE1MzMgMTEuODM3IDQuMzAyODggMTEuNjQ4NCA0LjU5MTc1TDcuMzk4MzcgMTEuMDkxN0M3LjI5ODIyIDExLjI0NDkgNy4xMzU1OCAxMS4zNDY5IDYuOTU0MDQgMTEuMzcwMUM2Ljc3MjUxIDExLjM5MzIgNi41ODk0NSAxMS4zMzU5IDYuNDU0MDQgMTEuMjEyOEwzLjcwNDA0IDguNzEyODRMMy42MjAwNSA4LjYxODExQzMuNDQ4NTcgOC4zODM0MiAzLjQ1ODkgOC4wNTI1MiAzLjY2MjA1IDcuODI5MDVDMy44NjUxMSA3LjYwNTc2IDQuMTkzNDQgNy41NjM3MSA0LjQ0MzMgNy43MTE4Nkw0LjU0NTg0IDcuNzg3MDZMNi43NTI4NyA5Ljc5MjkyTDEwLjYwMTUgMy45MDgxNVoiLz4KPC9zdmc+Cg==" alt="Verified answer"></p>
 </div>
 </div>
 <div class="commons-trust-segment commons-trust-segment-lower">
@@ -172,10 +174,8 @@ Lower trust
 <div class="commons-trust-steps">
 <p><span class="commons-flow-node">No relevant<br>calculation
 found</span> <span class="commons-flow-arrow">→</span> <span class="commons-flow-node">Search<br>context</span> <span class="commons-flow-arrow">→</span> <span class="commons-flow-node">Write<br>SQL/R</span> <span class="commons-flow-arrow">→</span> <span class="commons-flow-results">
-<span class="commons-flow-answer"> Cited
-answer<sup class="commons-citation-ref">1</sup></span> <span class="commons-flow-or">or</span>
-<span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/warning-icon.svg" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong.</span> </span>
-</span></p>
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAicXVvdGUiIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgb24gdGhlIG5hdnkgdGlsZSAtLT4KICA8cmVjdCB4PSIxLjIiIHk9IjEuMiIgd2lkdGg9IjEzLjYiIGhlaWdodD0iMTMuNiIgcng9IjMuNCIgZmlsbD0iIzU1NzI5ZSIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4IDgpIHNjYWxlKDAuNzApIHRyYW5zbGF0ZSgtNy41IC03LjUpIiBkPSJNOS40MjUwMyAzLjQ0MTM2QzEwLjA1NjEgMy4yMzY1NCAxMC43ODM3IDMuMjQwMiAxMS4zNzkyIDMuNTQ2MjNDMTIuNzUzMiA0LjI1MjI0IDEzLjM0NzcgNi4wNzE5MSAxMi43OTQ2IDhDMTIuNTQ2NSA4Ljg2NDkgMTIuMTEwMiA5LjcwNDcyIDExLjE4NjEgMTAuNTUyNEMxMC4yNjIgMTEuNCA4Ljk4MDM0IDExLjkgOC4zODU3MSAxMS45QzguMTcyNjkgMTEuOSA4IDExLjczMjEgOCAxMS41MjVDOCAxMS4zMTc5IDguMTc2NDQgMTEuMTUgOC4zODU3MSAxMS4xNUM5LjA2NDk3IDExLjE1IDkuNjcxODkgMTAuNzgwNCAxMC4zOTA2IDEwLjIzNkMxMC45NDA2IDkuODE5MyAxMS4zNzAxIDkuMjg2MzMgMTEuNjA4IDguODIxOTFDMTIuMDYyOCA3LjkzMzY3IDEyLjA3ODIgNi42ODE3NCAxMS4zNDMzIDYuMzQ5MDFDMTAuOTkwNCA2LjczNDU1IDEwLjUyOTUgNi45NTk0NiA5Ljk3NzI1IDYuOTU5NDZDOC43NzczIDYuOTU5NDYgOC4wNzAxIDUuOTk0MTIgOC4xMDA1MSA1LjEyMDA5QzguMTI5NTcgNC4yODQ3NCA4LjY2MDMyIDMuNjg5NTQgOS40MjUwMyAzLjQ0MTM2Wk0zLjQyNTAzIDMuNDQxMzZDNC4wNTYxNCAzLjIzNjU0IDQuNzgzNjYgMy4yNDAyIDUuMzc5MjMgMy41NDYyM0M2Ljc1MzIgNC4yNTIyNCA3LjM0NzY2IDYuMDcxOTEgNi43OTQ2MiA4QzYuNTQ2NTQgOC44NjQ5IDYuMTEwMTkgOS43MDQ3MiA1LjE4NjEgMTAuNTUyNEM0LjI2MjAxIDExLjQgMi45ODAzNCAxMS45IDIuMzg1NzEgMTEuOUMyLjE3MjY5IDExLjkgMiAxMS43MzIxIDIgMTEuNTI1QzIgMTEuMzE3OSAyLjE3NjQ0IDExLjE1IDIuMzg1NzEgMTEuMTVDMy4wNjQ5NyAxMS4xNSAzLjY3MTg5IDEwLjc4MDQgNC4zOTA1OCAxMC4yMzZDNC45NDA2NSA5LjgxOTMgNS4zNzAxNCA5LjI4NjMzIDUuNjA3OTcgOC44MjE5MUM2LjA2MjgyIDcuOTMzNjcgNi4wNzgyMSA2LjY4MTc0IDUuMzQzMyA2LjM0OTAxQzQuOTkwMzcgNi43MzQ1NSA0LjUyOTQ4IDYuOTU5NDYgMy45NzcyNSA2Ljk1OTQ2QzIuNzc3MyA2Ljk1OTQ2IDIuMDcwMSA1Ljk5NDEyIDIuMTAwNTEgNS4xMjAwOUMyLjEyOTU3IDQuMjg0NzQgMi42NjAzMiAzLjY4OTU0IDMuNDI1MDMgMy40NDEzNloiLz4KPC9zdmc+Cg==" alt="Cited"><span class="commons-flow-or">or</span>
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBFeGNsYW1hdGlvbiBiYXIgYW5kIGRvdCBmcm9tIHRoZSBSYWRpeCBJY29ucyAiZXhjbGFtYXRpb24tdHJpYW5nbGUiIGdseXBoIChNSVQsCiAgICAgICBodHRwczovL3d3dy5yYWRpeC11aS5jb20vaWNvbnMpIGluIHdoaXRlIG9uIHRoZSB5ZWxsb3cgZGlzYzsgdGhlIG1hdGNoaW5nIHN0cm9rZQogICAgICAgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPGNpcmNsZSBjeD0iOCIgY3k9IjgiIHI9IjciIGZpbGw9IiNkOWI4NGEiLz4KICA8cGF0aCBmaWxsPSIjZmZmIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMC4zNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOCA4KSBzY2FsZSgxLjEpIHRyYW5zbGF0ZSgtNy41IC03LjUpIiBkPSJNNy40OTk0NiA5LjcyNjI0QzcuOTEzNjcgOS43MjYyNCA4LjI0OTQ2IDEwLjA2MiA4LjI0OTQ2IDEwLjQ3NjJDOC4yNDkzMyAxMC44OTAzIDcuOTEzNTkgMTEuMjI2MiA3LjQ5OTQ2IDExLjIyNjJDNy4wODU0OSAxMS4yMjYgNi43NDk1OCAxMC44OTAyIDYuNzQ5NDYgMTAuNDc2MkM2Ljc0OTQ2IDEwLjA2MjIgNy4wODU0MiA5LjcyNjQ1IDcuNDk5NDYgOS43MjYyNFpNNy40OTk0NiAzLjc4Njc5QzcuODgxNTggMy43ODY3OSA4LjE4NzkgNC4xMDQxOCA4LjE3MzI5IDQuNDg2MDFMOC4wMTg5OSA4LjQ4Njk4QzguMDA4MjYgOC43NjU5NyA3Ljc3ODY2IDguOTg2OTggNy40OTk0NiA4Ljk4Njk4QzcuMjIwNDggOC45ODY3MyA2Ljk5MTYzIDguNzY1ODEgNi45ODA5IDguNDg2OThMNi44MjY2MSA0LjQ4NjAxQzYuODEyIDQuMTA0MzQgNy4xMTc1NiAzLjc4NzA2IDcuNDk5NDYgMy43ODY3OVoiLz4KPC9zdmc+Cg==" alt="Untrusted"></span></p>
 </div>
 </div>
 </div>
@@ -184,9 +184,10 @@ answer<sup class="commons-citation-ref">1</sup></span> <span class="commons-flow
 agent writes custom SQL or R, it can also include supporting text quoted
 from a trusted source. If commons verifies that the quoted text appears
 in that source, the provenance outcome is <code>Cited</code> and the
-verified citations are displayed as footnotes. If no citation verifies,
-the provenance outcome is <code>Untrusted</code> and the answer displays
-a provenance marker.</p>
+answer displays blue quote-mark citation markers that open the source
+details. If no citation verifies, the provenance outcome is
+<code>Untrusted</code> and the answer displays the yellow exclamation
+provenance marker.</p>
 <p>The following table details the various ways each provenance outcome
 can occur:</p>
 <table class="table">
@@ -202,32 +203,42 @@ can occur:</p>
 <tr class="odd">
 <td>A trusted R <a href="#semantic-layer">measure</a>
 </td>
-<td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a trusted calculation defined by your data team." aria-label="Verified answer. This answer comes from a trusted calculation defined by your data team." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a trusted calculation defined by your data team.</span> </span></td>
+<td>Verified answer
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAiY2hlY2siIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgaW4gd2hpdGUgb24gdGhlIGdyZWVuIHNoaWVsZDsKICAgICAgIHRoZSBtYXRjaGluZyBzdHJva2UgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPHBhdGggZmlsbD0iIzJmYTM3YiIgZD0iTTggMS4xYzEuNy45IDMuNyAxLjcgNS43IDIuMS40LjEuNy41LjcuOXY0LjdjMCAzLjItMi4xIDUuNy02LjQgNy4yLTQuMy0xLjUtNi40LTQtNi40LTcuMlY0LjFjMC0uNC4zLS44LjctLjkgMi0uNCA0LTEuMiA1LjctMi4xeiIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDggOC4zKSBzY2FsZSgwLjcyKSB0cmFuc2xhdGUoLTcuNSAtNy41KSIgZD0iTTEwLjYwMTUgMy45MDgxNUMxMC43OTAzIDMuNjE5NDEgMTEuMTc3OSAzLjUzNzkyIDExLjQ2NjcgMy43MjY1MUMxMS43NTU1IDMuOTE1MzMgMTEuODM3IDQuMzAyODggMTEuNjQ4NCA0LjU5MTc1TDcuMzk4MzcgMTEuMDkxN0M3LjI5ODIyIDExLjI0NDkgNy4xMzU1OCAxMS4zNDY5IDYuOTU0MDQgMTEuMzcwMUM2Ljc3MjUxIDExLjM5MzIgNi41ODk0NSAxMS4zMzU5IDYuNDU0MDQgMTEuMjEyOEwzLjcwNDA0IDguNzEyODRMMy42MjAwNSA4LjYxODExQzMuNDQ4NTcgOC4zODM0MiAzLjQ1ODkgOC4wNTI1MiAzLjY2MjA1IDcuODI5MDVDMy44NjUxMSA3LjYwNTc2IDQuMTkzNDQgNy41NjM3MSA0LjQ0MzMgNy43MTE4Nkw0LjU0NTg0IDcuNzg3MDZMNi43NTI4NyA5Ljc5MjkyTDEwLjYwMTUgMy45MDgxNVoiLz4KPC9zdmc+Cg==" alt="">
+</td>
 </tr>
 <tr class="even">
 <td>A <a href="#definitions">data dictionary metric</a>, possibly
 grouped or filtered with <a href="#data-dictionaries">definitions</a>
 </td>
-<td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a trusted calculation defined by your data team." aria-label="Verified answer. This answer comes from a trusted calculation defined by your data team." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a trusted calculation defined by your data team.</span> </span></td>
+<td>Verified answer
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAiY2hlY2siIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgaW4gd2hpdGUgb24gdGhlIGdyZWVuIHNoaWVsZDsKICAgICAgIHRoZSBtYXRjaGluZyBzdHJva2UgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPHBhdGggZmlsbD0iIzJmYTM3YiIgZD0iTTggMS4xYzEuNy45IDMuNyAxLjcgNS43IDIuMS40LjEuNy41LjcuOXY0LjdjMCAzLjItMi4xIDUuNy02LjQgNy4yLTQuMy0xLjUtNi40LTQtNi40LTcuMlY0LjFjMC0uNC4zLS44LjctLjkgMi0uNCA0LTEuMiA1LjctMi4xeiIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDggOC4zKSBzY2FsZSgwLjcyKSB0cmFuc2xhdGUoLTcuNSAtNy41KSIgZD0iTTEwLjYwMTUgMy45MDgxNUMxMC43OTAzIDMuNjE5NDEgMTEuMTc3OSAzLjUzNzkyIDExLjQ2NjcgMy43MjY1MUMxMS43NTU1IDMuOTE1MzMgMTEuODM3IDQuMzAyODggMTEuNjQ4NCA0LjU5MTc1TDcuMzk4MzcgMTEuMDkxN0M3LjI5ODIyIDExLjI0NDkgNy4xMzU1OCAxMS4zNDY5IDYuOTU0MDQgMTEuMzcwMUM2Ljc3MjUxIDExLjM5MzIgNi41ODk0NSAxMS4zMzU5IDYuNDU0MDQgMTEuMjEyOEwzLjcwNDA0IDguNzEyODRMMy42MjAwNSA4LjYxODExQzMuNDQ4NTcgOC4zODM0MiAzLjQ1ODkgOC4wNTI1MiAzLjY2MjA1IDcuODI5MDVDMy44NjUxMSA3LjYwNTc2IDQuMTkzNDQgNy41NjM3MSA0LjQ0MzMgNy43MTE4Nkw0LjU0NTg0IDcuNzg3MDZMNi43NTI4NyA5Ljc5MjkyTDEwLjYwMTUgMy45MDgxNVoiLz4KPC9zdmc+Cg==" alt="">
+</td>
 </tr>
 <tr class="odd">
 <td>A <a href="#warehouse-semantic-layers">Snowflake semantic-view or
 Databricks metric-view metric</a>
 </td>
-<td><span class="commons-answer-pill commons-answer-pill-trusted" title="This answer comes from a trusted calculation defined by your data team." aria-label="Verified answer. This answer comes from a trusted calculation defined by your data team." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/trusted-icon.svg" alt="Verified answer" class="commons-answer-pill-icon"><span>Verified answer</span> <span class="commons-tooltip" role="tooltip">This answer comes from a trusted calculation defined by your data team.</span> </span></td>
+<td>Verified answer
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAiY2hlY2siIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgaW4gd2hpdGUgb24gdGhlIGdyZWVuIHNoaWVsZDsKICAgICAgIHRoZSBtYXRjaGluZyBzdHJva2UgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPHBhdGggZmlsbD0iIzJmYTM3YiIgZD0iTTggMS4xYzEuNy45IDMuNyAxLjcgNS43IDIuMS40LjEuNy41LjcuOXY0LjdjMCAzLjItMi4xIDUuNy02LjQgNy4yLTQuMy0xLjUtNi40LTQtNi40LTcuMlY0LjFjMC0uNC4zLS44LjctLjkgMi0uNCA0LTEuMiA1LjctMi4xeiIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIwLjkiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDggOC4zKSBzY2FsZSgwLjcyKSB0cmFuc2xhdGUoLTcuNSAtNy41KSIgZD0iTTEwLjYwMTUgMy45MDgxNUMxMC43OTAzIDMuNjE5NDEgMTEuMTc3OSAzLjUzNzkyIDExLjQ2NjcgMy43MjY1MUMxMS43NTU1IDMuOTE1MzMgMTEuODM3IDQuMzAyODggMTEuNjQ4NCA0LjU5MTc1TDcuMzk4MzcgMTEuMDkxN0M3LjI5ODIyIDExLjI0NDkgNy4xMzU1OCAxMS4zNDY5IDYuOTU0MDQgMTEuMzcwMUM2Ljc3MjUxIDExLjM5MzIgNi41ODk0NSAxMS4zMzU5IDYuNDU0MDQgMTEuMjEyOEwzLjcwNDA0IDguNzEyODRMMy42MjAwNSA4LjYxODExQzMuNDQ4NTcgOC4zODM0MiAzLjQ1ODkgOC4wNTI1MiAzLjY2MjA1IDcuODI5MDVDMy44NjUxMSA3LjYwNTc2IDQuMTkzNDQgNy41NjM3MSA0LjQ0MzMgNy43MTE4Nkw0LjU0NTg0IDcuNzg3MDZMNi43NTI4NyA5Ljc5MjkyTDEwLjYwMTUgMy45MDgxNVoiLz4KPC9zdmc+Cg==" alt="">
+</td>
 </tr>
 <tr class="even">
 <td>Custom SQL, including SQL that uses <a href="#definitions">data
 dictionary definitions</a>
 </td>
-<td>Cited or
-<span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/warning-icon.svg" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong.</span> </span>
+<td>Cited
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAicXVvdGUiIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgb24gdGhlIG5hdnkgdGlsZSAtLT4KICA8cmVjdCB4PSIxLjIiIHk9IjEuMiIgd2lkdGg9IjEzLjYiIGhlaWdodD0iMTMuNiIgcng9IjMuNCIgZmlsbD0iIzU1NzI5ZSIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4IDgpIHNjYWxlKDAuNzApIHRyYW5zbGF0ZSgtNy41IC03LjUpIiBkPSJNOS40MjUwMyAzLjQ0MTM2QzEwLjA1NjEgMy4yMzY1NCAxMC43ODM3IDMuMjQwMiAxMS4zNzkyIDMuNTQ2MjNDMTIuNzUzMiA0LjI1MjI0IDEzLjM0NzcgNi4wNzE5MSAxMi43OTQ2IDhDMTIuNTQ2NSA4Ljg2NDkgMTIuMTEwMiA5LjcwNDcyIDExLjE4NjEgMTAuNTUyNEMxMC4yNjIgMTEuNCA4Ljk4MDM0IDExLjkgOC4zODU3MSAxMS45QzguMTcyNjkgMTEuOSA4IDExLjczMjEgOCAxMS41MjVDOCAxMS4zMTc5IDguMTc2NDQgMTEuMTUgOC4zODU3MSAxMS4xNUM5LjA2NDk3IDExLjE1IDkuNjcxODkgMTAuNzgwNCAxMC4zOTA2IDEwLjIzNkMxMC45NDA2IDkuODE5MyAxMS4zNzAxIDkuMjg2MzMgMTEuNjA4IDguODIxOTFDMTIuMDYyOCA3LjkzMzY3IDEyLjA3ODIgNi42ODE3NCAxMS4zNDMzIDYuMzQ5MDFDMTAuOTkwNCA2LjczNDU1IDEwLjUyOTUgNi45NTk0NiA5Ljk3NzI1IDYuOTU5NDZDOC43NzczIDYuOTU5NDYgOC4wNzAxIDUuOTk0MTIgOC4xMDA1MSA1LjEyMDA5QzguMTI5NTcgNC4yODQ3NCA4LjY2MDMyIDMuNjg5NTQgOS40MjUwMyAzLjQ0MTM2Wk0zLjQyNTAzIDMuNDQxMzZDNC4wNTYxNCAzLjIzNjU0IDQuNzgzNjYgMy4yNDAyIDUuMzc5MjMgMy41NDYyM0M2Ljc1MzIgNC4yNTIyNCA3LjM0NzY2IDYuMDcxOTEgNi43OTQ2MiA4QzYuNTQ2NTQgOC44NjQ5IDYuMTEwMTkgOS43MDQ3MiA1LjE4NjEgMTAuNTUyNEM0LjI2MjAxIDExLjQgMi45ODAzNCAxMS45IDIuMzg1NzEgMTEuOUMyLjE3MjY5IDExLjkgMiAxMS43MzIxIDIgMTEuNTI1QzIgMTEuMzE3OSAyLjE3NjQ0IDExLjE1IDIuMzg1NzEgMTEuMTVDMy4wNjQ5NyAxMS4xNSAzLjY3MTg5IDEwLjc4MDQgNC4zOTA1OCAxMC4yMzZDNC45NDA2NSA5LjgxOTMgNS4zNzAxNCA5LjI4NjMzIDUuNjA3OTcgOC44MjE5MUM2LjA2MjgyIDcuOTMzNjcgNi4wNzgyMSA2LjY4MTc0IDUuMzQzMyA2LjM0OTAxQzQuOTkwMzcgNi43MzQ1NSA0LjUyOTQ4IDYuOTU5NDYgMy45NzcyNSA2Ljk1OTQ2QzIuNzc3MyA2Ljk1OTQ2IDIuMDcwMSA1Ljk5NDEyIDIuMTAwNTEgNS4xMjAwOUMyLjEyOTU3IDQuMjg0NzQgMi42NjAzMiAzLjY4OTU0IDMuNDI1MDMgMy40NDEzNloiLz4KPC9zdmc+Cg==" alt="">
+or Untrusted
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBFeGNsYW1hdGlvbiBiYXIgYW5kIGRvdCBmcm9tIHRoZSBSYWRpeCBJY29ucyAiZXhjbGFtYXRpb24tdHJpYW5nbGUiIGdseXBoIChNSVQsCiAgICAgICBodHRwczovL3d3dy5yYWRpeC11aS5jb20vaWNvbnMpIGluIHdoaXRlIG9uIHRoZSB5ZWxsb3cgZGlzYzsgdGhlIG1hdGNoaW5nIHN0cm9rZQogICAgICAgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPGNpcmNsZSBjeD0iOCIgY3k9IjgiIHI9IjciIGZpbGw9IiNkOWI4NGEiLz4KICA8cGF0aCBmaWxsPSIjZmZmIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMC4zNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOCA4KSBzY2FsZSgxLjEpIHRyYW5zbGF0ZSgtNy41IC03LjUpIiBkPSJNNy40OTk0NiA5LjcyNjI0QzcuOTEzNjcgOS43MjYyNCA4LjI0OTQ2IDEwLjA2MiA4LjI0OTQ2IDEwLjQ3NjJDOC4yNDkzMyAxMC44OTAzIDcuOTEzNTkgMTEuMjI2MiA3LjQ5OTQ2IDExLjIyNjJDNy4wODU0OSAxMS4yMjYgNi43NDk1OCAxMC44OTAyIDYuNzQ5NDYgMTAuNDc2MkM2Ljc0OTQ2IDEwLjA2MjIgNy4wODU0MiA5LjcyNjQ1IDcuNDk5NDYgOS43MjYyNFpNNy40OTk0NiAzLjc4Njc5QzcuODgxNTggMy43ODY3OSA4LjE4NzkgNC4xMDQxOCA4LjE3MzI5IDQuNDg2MDFMOC4wMTg5OSA4LjQ4Njk4QzguMDA4MjYgOC43NjU5NyA3Ljc3ODY2IDguOTg2OTggNy40OTk0NiA4Ljk4Njk4QzcuMjIwNDggOC45ODY3MyA2Ljk5MTYzIDguNzY1ODEgNi45ODA5IDguNDg2OThMNi44MjY2MSA0LjQ4NjAxQzYuODEyIDQuMTA0MzQgNy4xMTc1NiAzLjc4NzA2IDcuNDk5NDYgMy43ODY3OVoiLz4KPC9zdmc+Cg==" alt="">
 </td>
 </tr>
 <tr class="odd">
 <td>Custom R</td>
-<td>Cited or
-<span class="commons-answer-pill commons-answer-pill-caution" title="This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong." aria-label="Untrusted. This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong." tabindex="0"> <img src="commons-chat-0.0.0.9000.1787874295/figs/warning-icon.svg" alt="Untrusted" class="commons-answer-pill-icon"><span>Untrusted</span> <span class="commons-tooltip" role="tooltip">This answer was not produced by a trusted calculation and has no verified supporting citation. AI can be wrong.</span> </span>
+<td>Cited
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBSYWRpeCBJY29ucyAicXVvdGUiIGdseXBoIChNSVQsIGh0dHBzOi8vd3d3LnJhZGl4LXVpLmNvbS9pY29ucykgb24gdGhlIG5hdnkgdGlsZSAtLT4KICA8cmVjdCB4PSIxLjIiIHk9IjEuMiIgd2lkdGg9IjEzLjYiIGhlaWdodD0iMTMuNiIgcng9IjMuNCIgZmlsbD0iIzU1NzI5ZSIvPgogIDxwYXRoIGZpbGw9IiNmZmYiIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg4IDgpIHNjYWxlKDAuNzApIHRyYW5zbGF0ZSgtNy41IC03LjUpIiBkPSJNOS40MjUwMyAzLjQ0MTM2QzEwLjA1NjEgMy4yMzY1NCAxMC43ODM3IDMuMjQwMiAxMS4zNzkyIDMuNTQ2MjNDMTIuNzUzMiA0LjI1MjI0IDEzLjM0NzcgNi4wNzE5MSAxMi43OTQ2IDhDMTIuNTQ2NSA4Ljg2NDkgMTIuMTEwMiA5LjcwNDcyIDExLjE4NjEgMTAuNTUyNEMxMC4yNjIgMTEuNCA4Ljk4MDM0IDExLjkgOC4zODU3MSAxMS45QzguMTcyNjkgMTEuOSA4IDExLjczMjEgOCAxMS41MjVDOCAxMS4zMTc5IDguMTc2NDQgMTEuMTUgOC4zODU3MSAxMS4xNUM5LjA2NDk3IDExLjE1IDkuNjcxODkgMTAuNzgwNCAxMC4zOTA2IDEwLjIzNkMxMC45NDA2IDkuODE5MyAxMS4zNzAxIDkuMjg2MzMgMTEuNjA4IDguODIxOTFDMTIuMDYyOCA3LjkzMzY3IDEyLjA3ODIgNi42ODE3NCAxMS4zNDMzIDYuMzQ5MDFDMTAuOTkwNCA2LjczNDU1IDEwLjUyOTUgNi45NTk0NiA5Ljk3NzI1IDYuOTU5NDZDOC43NzczIDYuOTU5NDYgOC4wNzAxIDUuOTk0MTIgOC4xMDA1MSA1LjEyMDA5QzguMTI5NTcgNC4yODQ3NCA4LjY2MDMyIDMuNjg5NTQgOS40MjUwMyAzLjQ0MTM2Wk0zLjQyNTAzIDMuNDQxMzZDNC4wNTYxNCAzLjIzNjU0IDQuNzgzNjYgMy4yNDAyIDUuMzc5MjMgMy41NDYyM0M2Ljc1MzIgNC4yNTIyNCA3LjM0NzY2IDYuMDcxOTEgNi43OTQ2MiA4QzYuNTQ2NTQgOC44NjQ5IDYuMTEwMTkgOS43MDQ3MiA1LjE4NjEgMTAuNTUyNEM0LjI2MjAxIDExLjQgMi45ODAzNCAxMS45IDIuMzg1NzEgMTEuOUMyLjE3MjY5IDExLjkgMiAxMS43MzIxIDIgMTEuNTI1QzIgMTEuMzE3OSAyLjE3NjQ0IDExLjE1IDIuMzg1NzEgMTEuMTVDMy4wNjQ5NyAxMS4xNSAzLjY3MTg5IDEwLjc4MDQgNC4zOTA1OCAxMC4yMzZDNC45NDA2NSA5LjgxOTMgNS4zNzAxNCA5LjI4NjMzIDUuNjA3OTcgOC44MjE5MUM2LjA2MjgyIDcuOTMzNjcgNi4wNzgyMSA2LjY4MTc0IDUuMzQzMyA2LjM0OTAxQzQuOTkwMzcgNi43MzQ1NSA0LjUyOTQ4IDYuOTU5NDYgMy45NzcyNSA2Ljk1OTQ2QzIuNzc3MyA2Ljk1OTQ2IDIuMDcwMSA1Ljk5NDEyIDIuMTAwNTEgNS4xMjAwOUMyLjEyOTU3IDQuMjg0NzQgMi42NjAzMiAzLjY4OTU0IDMuNDI1MDMgMy40NDEzNloiLz4KPC9zdmc+Cg==" alt="">
+or Untrusted
+<img class="commons-documentation-marker" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+CiAgPCEtLSBFeGNsYW1hdGlvbiBiYXIgYW5kIGRvdCBmcm9tIHRoZSBSYWRpeCBJY29ucyAiZXhjbGFtYXRpb24tdHJpYW5nbGUiIGdseXBoIChNSVQsCiAgICAgICBodHRwczovL3d3dy5yYWRpeC11aS5jb20vaWNvbnMpIGluIHdoaXRlIG9uIHRoZSB5ZWxsb3cgZGlzYzsgdGhlIG1hdGNoaW5nIHN0cm9rZQogICAgICAgZmF0dGVucyB0aGUgZ2x5cGggdG8gcmVhZCBhdCBwaWxsIHNpemUgLS0+CiAgPGNpcmNsZSBjeD0iOCIgY3k9IjgiIHI9IjciIGZpbGw9IiNkOWI4NGEiLz4KICA8cGF0aCBmaWxsPSIjZmZmIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMC4zNSIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoOCA4KSBzY2FsZSgxLjEpIHRyYW5zbGF0ZSgtNy41IC03LjUpIiBkPSJNNy40OTk0NiA5LjcyNjI0QzcuOTEzNjcgOS43MjYyNCA4LjI0OTQ2IDEwLjA2MiA4LjI0OTQ2IDEwLjQ3NjJDOC4yNDkzMyAxMC44OTAzIDcuOTEzNTkgMTEuMjI2MiA3LjQ5OTQ2IDExLjIyNjJDNy4wODU0OSAxMS4yMjYgNi43NDk1OCAxMC44OTAyIDYuNzQ5NDYgMTAuNDc2MkM2Ljc0OTQ2IDEwLjA2MjIgNy4wODU0MiA5LjcyNjQ1IDcuNDk5NDYgOS43MjYyNFpNNy40OTk0NiAzLjc4Njc5QzcuODgxNTggMy43ODY3OSA4LjE4NzkgNC4xMDQxOCA4LjE3MzI5IDQuNDg2MDFMOC4wMTg5OSA4LjQ4Njk4QzguMDA4MjYgOC43NjU5NyA3Ljc3ODY2IDguOTg2OTggNy40OTk0NiA4Ljk4Njk4QzcuMjIwNDggOC45ODY3MyA2Ljk5MTYzIDguNzY1ODEgNi45ODA5IDguNDg2OThMNi44MjY2MSA0LjQ4NjAxQzYuODEyIDQuMTA0MzQgNy4xMTc1NiAzLjc4NzA2IDcuNDk5NDYgMy43ODY3OVoiLz4KPC9zdmc+Cg==" alt="">
 </td>
 </tr>
 <tr class="even">
@@ -350,8 +361,8 @@ semantic views</a> or <a href="https://docs.databricks.com/aws/en/uc-semantics/m
 metric views</a>, you can use those calculations directly with commons.
 It can also group or filter metrics by approved fields from the
 warehouse. Answers based on these warehouse-defined metrics have the
-<code>Verified answer</code> provenance outcome and display the
-corresponding provenance marker.</p>
+<code>Verified answer</code> provenance outcome and display the green
+check-shield provenance marker.</p>
 </div>
 </div>
 <div class="section level2">
