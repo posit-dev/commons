@@ -245,15 +245,9 @@ trajectory_exchange_messages <- function(turns, exchange) {
   messages
 }
 
-# Replay through chat_append(), the way shinychat's own client_set_ui()
-# restores a bookmarked chat: static chat_ui(messages = ...) would fold
+# Replay through chat_append(): static chat_ui(messages = ...) would fold
 # mixed content (tool cards plus markdown text) into a single raw-HTML
 # island, escaping the text and hiding it from aside grouping.
-#
-# shinychat::chat_restore() is close but not a fit: it renders a client's
-# turns only as a side effect of bookmark registration, while we replay
-# pre-computed messages (with provenance asides attached) into a freshly
-# rendered element, sequenced before seed_transcript_decorations().
 replay_transcript <- function(id, messages, session) {
   for (message in messages) {
     replay_transcript_message(id, message, session)
@@ -261,8 +255,6 @@ replay_transcript <- function(id, messages, session) {
   invisible(NULL)
 }
 
-# One function call per message so the generator closes over this message's
-# content; coro generators evaluate their body lazily.
 replay_transcript_message <- function(id, message, session) {
   content <- message$content
   if (is.list(content) && !is.object(content)) {
@@ -374,7 +366,6 @@ add_message_provenance <- function(messages, provenance) {
 
 # The aside must stay markdown, not HTML: htmltools::HTML() would mark the
 # chunk as raw HTML, which shinychat's aside grouping does not reach into.
-# A trailing markdown chunk is also how the live stream delivers it.
 append_provenance_aside <- function(content, aside) {
   if (is.character(content)) {
     return(list(content, aside))
