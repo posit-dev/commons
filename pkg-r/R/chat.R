@@ -120,14 +120,7 @@ commons_server <- function(id, client, ...) {
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
 
-  chat <- shinychat::chat_server(id, client = client, ...)
-  # shinychat owns the conversation identity (it sets the client's
-  # `conversation_id` binding, which ellmer stamps on its spans); commons
-  # only needs to know that a restore happened.
-  chat$history$on_restore(function(values) {
-    client$queue_restore_reminder()
-  })
-  chat
+  shinychat::chat_server(id, client = client, ...)
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {

@@ -268,7 +268,18 @@ Commons <- R6::R6Class(
     },
 
     set_turns = function(value) {
-      private$restore_reminder_pending <- FALSE
+      # shinychat funnels every history restore/switch through set_turns()
+      # (replaying stored turns), so detect foreign history here rather than
+      # via a shinychat hook: a non-empty history that isn't a truncation of
+      # the current one arrived from outside this session, and the R state
+      # its earlier tool calls reference no longer exists. A pending reminder
+      # survives redundant restores of the same history; only a turn (or a
+      # cleared history) consumes it.
+      if (length(value) == 0) {
+        private$restore_reminder_pending <- FALSE
+      } else if (!turns_are_prefix(value, self$get_turns())) {
+        private$restore_reminder_pending <- TRUE
+      }
       super$set_turns(value)
     },
 
@@ -380,11 +391,6 @@ Commons <- R6::R6Class(
 
     citation_corpus = function() {
       private$corpus
-    },
-
-    queue_restore_reminder = function() {
-      private$restore_reminder_pending <- TRUE
-      invisible(self)
     },
 
     prewarm = function() {

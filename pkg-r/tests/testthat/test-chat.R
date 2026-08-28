@@ -43,33 +43,6 @@ test_that("commons_server runs under shiny::testServer without error", {
   succeed()
 })
 
-test_that("commons_server queues a restore reminder when history is restored", {
-  skip_if_not_installed("shiny")
-  skip_if_not_installed("shinychat")
-
-  shiny::testServer(
-    function(input, output, session) {
-      agent <- test_agent()
-      chat <- commons_server("chat", client = agent)
-    },
-    {
-      controller <- shinychat:::get_session_chat_bookmark_info(
-        session,
-        "chat.history-controller"
-      )
-      controller$restore_app_state(list())
-      expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
-
-      chat$clear()
-      expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
-
-      controller$restore_app_state(list())
-      controller$new_chat()
-      expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
-    }
-  )
-})
-
 test_that("commons_theme() bundles the commons chat assets", {
   theme <- commons_theme()
 

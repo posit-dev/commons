@@ -659,9 +659,21 @@ test_that("Claude 5 user turns contain one hidden reminder", {
   )
 })
 
+# A history that didn't happen in this session, as a restore would deliver.
+foreign_turns <- function() {
+  list(
+    ellmer::UserTurn("An earlier question."),
+    ellmer::AssistantTurn(
+      list(ellmer::ContentText("An earlier answer.")),
+      tokens = c(0, 0, 0),
+      cost = 0
+    )
+  )
+}
+
 test_that("restored conversations add one hidden reminder to the next turn", {
   agent <- test_agent()
-  agent$queue_restore_reminder()
+  agent$set_turns(foreign_turns())
 
   unused_stream <- agent$stream_async("Do not consume this stream.")
   expect_s3_class(unused_stream, "coro_generator_instance")
@@ -697,10 +709,36 @@ test_that("restored conversations add one hidden reminder to the next turn", {
 
 test_that("replacing restored history clears its queued reminder", {
   agent <- test_agent()
-  agent$queue_restore_reminder()
+  agent$set_turns(foreign_turns())
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
 
   agent$set_turns(list())
 
+  expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
+})
+
+test_that("set_turns queues the restore reminder for foreign history only", {
+  agent <- test_agent()
+  stream_citations_fixture(agent, "First answer.", split_at = 5)
+  turns <- agent$get_turns()
+
+  # Truncation (shinychat edit/branch nav to a prefix) is same-session work
+  agent$set_turns(turns[1])
+  expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  # Re-setting the same history (e.g. a redundant restore) is not foreign
+  agent$set_turns(turns[1])
+  expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  # History from elsewhere means this session's R state doesn't apply
+  agent$set_turns(foreign_turns())
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  # The reminder is consumed by the next turn, not by further restores
+  agent$set_turns(foreign_turns())
+  expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
+
+  agent$set_turns(list())
   expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
 })
 
