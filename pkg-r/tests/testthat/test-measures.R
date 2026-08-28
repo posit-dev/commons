@@ -103,6 +103,21 @@ test_that("search_pool_text surfaces matches with their schema", {
   expect_match(out, "EMEA")
 })
 
+test_that("search_pool_text omits arguments for measures without them", {
+  registry <- list(
+    biodiversity_by_site = measure(
+      "biodiversity_by_site",
+      "Species richness for every site.",
+      function() NULL
+    )
+  )
+
+  out <- search_pool_text(registry, empty_definitions(), "biodiversity by site")
+
+  expect_no_match(out, "arguments:", fixed = TRUE)
+  expect_no_match(out, "no arguments", fixed = TRUE)
+})
+
 test_that("search_pool_text notes measure sources when given source names", {
   registry <- list(
     region_revenue = measure(

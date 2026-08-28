@@ -142,7 +142,8 @@ call_metrics_impl <- function(
     filters,
     note = note,
     advert = advert,
-    args = args
+    args = args,
+    metadata = metric_definition_metadata(metric_defs)
   )
 }
 
@@ -275,7 +276,8 @@ call_semantic_metrics <- function(
     handles,
     metrics,
     dimensions,
-    filters
+    filters,
+    metadata = semantic_metric_metadata(metric_members)
   )
 }
 
@@ -292,17 +294,47 @@ metric_tool_result <- function(
     metrics = metrics,
     dimensions = dimensions,
     filters = filters
-  ))
+  )),
+  metadata = NULL
 ) {
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     markdown = sprintf("```sql\n%s\n```\n\n%s", sql, df_to_markdown(result)),
-    html = measure_display_html(args, result),
+    html = measure_display_html(args, result, metadata),
     tag = "A",
     show_tag = FALSE
   )
+}
+
+metric_definition_metadata <- function(definitions) {
+  data.frame(
+    title = metric_metadata_title(definitions$name, definitions$label),
+    description = vapply(
+      seq_len(nrow(definitions)),
+      function(i) prose_detail(
+        definitions$description[[i]],
+        definitions$details[[i]]
+      ),
+      character(1)
+    ),
+    stringsAsFactors = FALSE
+  )
+}
+
+semantic_metric_metadata <- function(metrics) {
+  data.frame(
+    title = metric_metadata_title(metrics$name, metrics$label),
+    description = ifelse(is.na(metrics$description), "", metrics$description),
+    stringsAsFactors = FALSE
+  )
+}
+
+metric_metadata_title <- function(name, label) {
+  fallback <- is.na(label) | !nzchar(label)
+  label[fallback] <- humanize_name(name[fallback])
+  label
 }
 
 registry_has_metrics <- function(registry) {
@@ -459,7 +491,8 @@ search_pool_text <- function(
   query,
   source_names = character(),
   semantic_models = NULL,
-  calculations = list()
+  calculations = list(),
+  measure_titles = FALSE
 ) {
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
@@ -535,7 +568,12 @@ search_pool_text <- function(
     hits,
     function(hit) {
       if (hit <= length(measures)) {
-        measure_schema_text(measures[[hit]], source_names = source_names)
+        td <- measures[[hit]]
+        measure_schema_text(
+          td,
+          source_names = source_names,
+          heading = if (measure_titles) tool_title(td) else tool_name(td)
+        )
       } else if (hit <= length(measures) + nrow(defs)) {
         definition_pool_text(defs[hit - length(measures), ], defs)
       } else if (

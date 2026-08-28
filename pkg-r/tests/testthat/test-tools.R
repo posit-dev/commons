@@ -13,12 +13,19 @@ test_that("call_measure_tool runs a measure and tags the result", {
   expect_equal(res@value, "2")
   expect_equal(res@extra$commons_tag, "A")
   expect_equal(res@extra$display$title, "Ran a trusted calculation")
+  expect_null(res@extra$display$label)
+  expect_null(res@extra$display$value_preview)
   expect_false(res@extra$display$show_request)
+  expect_match(
+    res@extra$display$html,
+    "Count orders, optionally filtered by region and a revenue ceiling.",
+    fixed = TRUE
+  )
   expect_match(res@extra$display$html, "Region:")
   expect_match(res@extra$display$html, "EMEA")
   expect_match(res@extra$display$html, "Revenue under:")
   expect_match(res@extra$display$html, "1,000")
-  expect_match(res@extra$display$html, "Tool result")
+  expect_match(res@extra$display$html, "Result")
   expect_match(res@extra$display$html, "2")
 })
 
@@ -35,7 +42,8 @@ test_that("call_measure_tool uses the trusted calculation result title", {
   res <- call_measure_tool(registry, "order_count", "{}")
 
   expect_equal(res@extra$display$title, "Ran a trusted calculation")
-  expect_match(res@extra$display$html, "No arguments")
+  expect_match(res@extra$display$html, "Count orders.", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "commons-measure-args", fixed = TRUE)
 })
 
 test_that("call_measure_tool registers tabular output as a handle", {
