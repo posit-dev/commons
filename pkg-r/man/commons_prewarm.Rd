@@ -25,7 +25,11 @@ so the build happens once per content version: later sessions open it
 in milliseconds, and it can be built offline ahead of deployment. The
 cache root resolves from the \code{commons.context_cache} option, the
 \code{COMMONS_CONTEXT_CACHE} or \code{CONNECT_CONTENT_DATA_DIR} environment
-variables, or the per-user cache directory, in that order.
+variables, an \code{app_cache/commons} directory beside a Shiny app, or the
+per-user cache directory, in that order. Stores unused for 30 days are
+pruned (option \code{commons.context_cache_max_age}, in seconds); set
+\code{options(commons.context_cache = FALSE)} to disable persistence
+entirely.
 \item \code{agent$prewarm_sources()} starts a background process that downloads
 any uncached pins into the local pins cache (see \code{\link[=data_source]{data_source()}}).
 Because the pins cache is on disk, this can also run ahead of

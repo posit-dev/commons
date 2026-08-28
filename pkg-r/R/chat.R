@@ -135,7 +135,11 @@ commons_server <- function(id, client, ...) {
 #'   in milliseconds, and it can be built offline ahead of deployment. The
 #'   cache root resolves from the `commons.context_cache` option, the
 #'   `COMMONS_CONTEXT_CACHE` or `CONNECT_CONTENT_DATA_DIR` environment
-#'   variables, or the per-user cache directory, in that order.
+#'   variables, an `app_cache/commons` directory beside a Shiny app, or the
+#'   per-user cache directory, in that order. Stores unused for 30 days are
+#'   pruned (option `commons.context_cache_max_age`, in seconds); set
+#'   `options(commons.context_cache = FALSE)` to disable persistence
+#'   entirely.
 #' * `agent$prewarm_sources()` starts a background process that downloads
 #'   any uncached pins into the local pins cache (see [data_source()]).
 #'   Because the pins cache is on disk, this can also run ahead of

@@ -114,17 +114,53 @@ strip_frontmatter <- function(md) {
 # conversations never search, but on a warm cache that first search only
 # pays for opening a file. Aliases of one layer share its store; augmenting
 # its documents creates a layer with a fresh store.
+# Housekeeping state for the persistent context cache: prune throttling, the
+# fallback tempdir, and the one-time warning about an unusable cache dir.
+context_cache_state <- new.env(parent = emptyenv())
+
 context_store <- function(layer) {
   state <- context_layer_state(layer)
   if (!is.null(state$store)) {
     return(state$store)
   }
+  if (!context_cache_enabled()) {
+    store <- build_context_store_memory(state$docs)
+    state$store <- store
+    return(store)
+  }
   path <- context_store_path(state$docs)
   if (!file.exists(path)) {
     build_context_store(state$docs, path)
+  } else {
+    # Touch the mtime so age-based pruning approximates LRU: stores in active
+    # use stay young. Best-effort -- a read-only cache dir still opens fine.
+    tryCatch(Sys.setFileTime(path, Sys.time()), error = function(err) NULL)
   }
   store <- ragnar::ragnar_store_connect(path)
   state$store <- store
+  store
+}
+
+# options(commons.context_cache = FALSE) disables the persistent store (the
+# index is built in memory per layer instead) -- an escape hatch for
+# development loops over context files.
+context_cache_enabled <- function() {
+  !identical(getOption("commons.context_cache"), FALSE)
+}
+
+build_context_store_memory <- function(docs) {
+  local_commons_span(
+    "commons_context_store_build",
+    attributes = list(
+      "commons.context.n_docs" = length(docs),
+      "commons.context.persistent" = FALSE
+    )
+  )
+  store <- ragnar::ragnar_store_create(embed = NULL)
+  for (doc in docs) {
+    ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
+  }
+  ragnar::ragnar_store_build_index(store, type = "fts")
   store
 }
 
@@ -135,7 +171,10 @@ context_store <- function(layer) {
 build_context_store <- function(docs, path) {
   local_commons_span(
     "commons_context_store_build",
-    attributes = list("commons.context.n_docs" = length(docs))
+    attributes = list(
+      "commons.context.n_docs" = length(docs),
+      "commons.context.persistent" = TRUE
+    )
   )
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   tmp <- tempfile(pattern = ".build-", tmpdir = dirname(path))
@@ -154,7 +193,34 @@ build_context_store <- function(docs, path) {
   if (!file.exists(path)) {
     cli::cli_abort("Failed to build the context store at {.path {path}}.")
   }
+  prune_context_cache(dirname(path))
   invisible(path)
+}
+
+# Content-addressed stores accumulate one file per content version, so prune
+# by age. The mtime touch on open makes age approximate LRU. Throttled like
+# cachem (at most once per 20 builds or per 5 seconds) since stat-ing the
+# directory on every build is needlessly slow; concurrent pruners may
+# double-delete, which unlink tolerates with a warning.
+prune_context_cache <- function(
+  dir,
+  max_age = getOption("commons.context_cache_max_age", 30 * 24 * 60 * 60)
+) {
+  now <- Sys.time()
+  context_cache_state$n_builds <- (context_cache_state$n_builds %||% 0) + 1
+  last <- context_cache_state$last_prune
+  throttled <- context_cache_state$n_builds %% 20 != 0 &&
+    !is.null(last) &&
+    difftime(now, last, units = "secs") < 5
+  if (throttled) {
+    return(invisible())
+  }
+  context_cache_state$last_prune <- now
+
+  stores <- list.files(dir, pattern = "[.]duckdb$", full.names = TRUE)
+  old <- stores[file.mtime(stores) < now - max_age]
+  suppressWarnings(unlink(old))
+  invisible()
 }
 
 context_store_path <- function(docs) {
@@ -163,17 +229,20 @@ context_store_path <- function(docs) {
     paste0("ragnar:", utils::packageVersion("ragnar")),
     paste0("duckdb:", utils::packageVersion("duckdb"))
   ))
-  file.path(context_cache_dir(), "context", paste0(key, ".duckdb"))
+  file.path(context_cache_dir_safe(), "context", paste0(key, ".duckdb"))
 }
 
 # Cache root resolution: an explicit override, then Connect's persistent
-# data directory (survives deployments when the server enables it), then the
-# per-user cache dir. Wherever the root is ephemeral (e.g. Connect Cloud,
-# which resets disk to the deployed bundle), the store simply rebuilds once
-# per cache lifetime instead of once per process.
+# data directory (survives deployments when the server enables it), then --
+# for Shiny apps -- an app_cache/ directory beside the app (sass's
+# convention: per-app scoping on hosted platforms, used locally only if it
+# already exists), then the per-user cache dir. Wherever the root is
+# ephemeral (e.g. Connect Cloud, which resets disk to the deployed bundle),
+# the store simply rebuilds once per cache lifetime instead of once per
+# process.
 context_cache_dir <- function() {
   opt <- getOption("commons.context_cache")
-  if (!is.null(opt)) {
+  if (!is.null(opt) && !identical(opt, FALSE)) {
     return(opt)
   }
   for (env in c("COMMONS_CONTEXT_CACHE", "CONNECT_CONTENT_DATA_DIR")) {
@@ -182,7 +251,58 @@ context_cache_dir <- function() {
       return(val)
     }
   }
+  if (is_shiny_app()) {
+    app_dir <- shiny::getShinyOption("appDir")
+    if (!is.null(app_dir)) {
+      app_cache <- file.path(app_dir, "app_cache", "commons")
+      if (
+        is_hosted_shiny_app() ||
+          dir.exists(app_cache) ||
+          dir.exists(dirname(app_cache))
+      ) {
+        return(app_cache)
+      }
+    }
+  }
   tools::R_user_dir("commons", "cache")
+}
+
+is_shiny_app <- function() {
+  isNamespaceLoaded("shiny") && shiny::isRunning()
+}
+
+# Connect and Shiny Server both set SHINY_SERVER_VERSION for content.
+is_hosted_shiny_app <- function() {
+  nzchar(Sys.getenv("SHINY_SERVER_VERSION")) && is_shiny_app()
+}
+
+# Caching must never take down the app: if the resolved cache dir can't be
+# created or written, warn once and fall back to a per-session tempdir (the
+# store becomes per-process, as if persistence were disabled).
+context_cache_dir_safe <- function() {
+  dir <- context_cache_dir()
+  ok <- tryCatch(
+    {
+      dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+      dir.exists(dir) && file.access(dir, 2) == 0
+    },
+    error = function(err) FALSE
+  )
+  if (ok) {
+    return(dir)
+  }
+  if (is.null(context_cache_state$warned)) {
+    context_cache_state$warned <- TRUE
+    cli::cli_warn(c(
+      "Cannot write to the context cache directory {.path {dir}}.",
+      i = "Falling back to a per-session temporary directory; the context index will be rebuilt in each process."
+    ))
+  }
+  if (is.null(context_cache_state$fallback_dir)) {
+    context_cache_state$fallback_dir <- tempfile("commons-context-cache-")
+    dir.create(context_cache_state$fallback_dir, recursive = TRUE)
+  }
+  context_cache_state$fallback_dir
 }
 
 context_search <- function(layer, query, n = 3) {
