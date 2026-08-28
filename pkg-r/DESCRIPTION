@@ -16,6 +16,8 @@ Description: Implements trustworthy large language model agents.
 License: MIT + file LICENSE
 URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
 BugReports: https://github.com/posit-dev/commons/issues
+Depends:
+    R (>= 4.1.0)
 Imports:
     bslib (>= 0.11.0),
     callr,
