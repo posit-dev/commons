@@ -285,7 +285,7 @@ test_that("commons_span_set_attribute no-ops when span is NULL", {
   expect_null(commons_span_set_attribute(NULL, "commons.test.value", 1L))
 })
 
-test_that("conversation turn spans start and end with the calling frame", {
+test_that("conversation turn spans are recorded", {
   skip_if_not_installed("otelsdk")
 
   recorded <- otelsdk::with_otel_record({

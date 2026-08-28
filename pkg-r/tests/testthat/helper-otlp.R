@@ -77,8 +77,13 @@ chat_test_span <- function(
   )
 }
 
-conversation_test_span <- function(trace_id, span_id) {
-  otlp_test_span(trace_id, span_id, name = "commons_conversation_turn")
+conversation_test_span <- function(trace_id, span_id, parent_span_id = NULL) {
+  otlp_test_span(
+    trace_id,
+    span_id,
+    parent_span_id = parent_span_id,
+    name = "commons_conversation_turn"
+  )
 }
 
 # Three single-span conversations starting at 100s, 200s, and 300s past the

@@ -1019,6 +1019,32 @@ test_that("enough_trace_lines is satisfied once n conversations have content", {
   expect_true(enough(lines))
 })
 
+test_that("only ancestry below the turn wrapper counts as severed", {
+  json <- test_turn_json()
+  spans <- parse_otlp_lines(otlp_test_line(list(
+    # The wrapper's own parent (added by an instrumented host) is missing,
+    # but turn-ancestor resolution stops at the wrapper.
+    conversation_test_span("t1", "root1", parent_span_id = "host1"),
+    chat_test_span(
+      "t1",
+      "chat1",
+      parent_span_id = "root1",
+      input_messages = json$input
+    )
+  )))
+  expect_false(has_severed_ancestry(spans))
+
+  severed <- parse_otlp_lines(otlp_test_line(list(
+    chat_test_span(
+      "t1",
+      "chat1",
+      parent_span_id = "root1",
+      input_messages = json$input
+    )
+  )))
+  expect_true(has_severed_ancestry(severed))
+})
+
 test_that("enough_trace_lines waits for a chat span's trailing wrapper", {
   json <- test_turn_json()
   chat_only <- otlp_test_line(list(

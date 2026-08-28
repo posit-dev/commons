@@ -900,11 +900,14 @@ span_conversation_id <- function(span) {
 # A chain is severed when a parent is absent from `index` -- ancestry cut
 # off by a partial fetch -- as opposed to reaching its root, which no wider
 # fetch would fix. Turn-level data (provenance, recorded calls) resolves
-# through `conversation_turn_ancestor()`, so a severed chain can silently
-# drop it.
+# through `conversation_turn_ancestor()`, which stops at the turn wrapper,
+# so ancestors above it (added by instrumented hosts) don't count.
 ancestry_severed <- function(span, index) {
   current <- span
   for (i in seq_len(length(index))) {
+    if (identical(current$name, "commons_conversation_turn")) {
+      return(FALSE)
+    }
     if (!nzchar(current$parent_span_id)) {
       return(FALSE)
     }
