@@ -13,12 +13,13 @@
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
 #'   each pin is downloaded only when its table is first used. Calling the
-#'   agent's `prewarm()` method (see [commons_theme()]) starts a background
+#'   agent's `prewarm()` method (see [commons_prewarm()]) starts a background
 #'   process that downloads the remaining pins into the local pins cache, so
-#'   a first use typically only reads an already-downloaded file. A table reflects the pin's
-#'   value at first use and is not refreshed for the lifetime of the data
-#'   source; if a pin can't be read (e.g. a network failure), the error surfaces
-#'   at that first use and the read is retried on the next one.
+#'   a first use typically only reads an already-downloaded file. A table
+#'   reflects the pin's value at first use and is not refreshed for the
+#'   lifetime of the data source; if a pin can't be read (e.g. a network
+#'   failure), the error surfaces at that first use and the read is retried
+#'   on the next one.
 #'
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes

@@ -51,7 +51,7 @@ commons_app <- function(client, ...) {
         shiny::stopApp()
       })
     }
-    prewarm_on_idle(client)
+    commons_prewarm(client)
     shinychat::chat_server("chat", client = client)
   }
 
@@ -69,21 +69,6 @@ commons_app <- function(client, ...) {
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
 #' works anywhere a bslib theme does.
-#'
-#' @section Pre-warming:
-#' A [commons()] agent builds its context index on first use. To move that
-#' cost off the first question, call the agent's `prewarm()` method during
-#' startup. `prewarm()` is synchronous and independent of the Shiny runtime,
-#' so it can also warm the on-disk cache ahead of deployment; in a Shiny
-#' server function, defer it to post-startup idle time so the index builds
-#' while the user reads the welcome message:
-#'
-#' ```r
-#' later::later(function() agent$prewarm())
-#' ```
-#'
-#' `prewarm()` also starts a background process that downloads any uncached
-#' pins into the local pins cache (see [data_source()]).
 #'
 #' @param ... Named Sass variables forwarded to
 #'   [shinychat::page_chat_theme()].
@@ -105,7 +90,7 @@ commons_app <- function(client, ...) {
 #'     data_sources = data_source(sales = sales)
 #'   )
 #'   # Build the context index during post-startup idle time
-#'   later::later(function() agent$prewarm())
+#'   commons_prewarm(agent)
 #'   chat_server("chat", client = agent)
 #' }
 #'
@@ -130,15 +115,53 @@ commons_theme <- function(..., preset = "shiny") {
   )
 }
 
-# Build the context index and start the background pin-cache download
-# during post-startup idle time (while the user reads the welcome message).
-# Errors are swallowed: the first search retries the index build and
-# surfaces the failure to the model, and an unwarmed pin is simply
-# downloaded at its first use.
-prewarm_on_idle <- function(client) {
+#' Pre-warm a commons agent during post-startup idle time
+#'
+#' A [commons()] agent builds its context index on first use. To move that
+#' cost off the first question, call `commons_prewarm()` in a Shiny server
+#' function: it defers the agent's `prewarm()` method to post-startup idle
+#' time, so the index builds while the user reads the welcome message.
+#'
+#' `prewarm()` is synchronous and independent of the Shiny runtime, so it can
+#' also be called directly to warm the on-disk cache ahead of deployment. It
+#' also starts a background process that downloads any uncached pins into the
+#' local pins cache (see [data_source()]).
+#'
+#' `prewarm()` lets failures propagate, since a direct call is typically
+#' warming caches ahead of deployment and a mere warning would sail through
+#' a deploy script. `commons_prewarm()` downgrades such failures to
+#' warnings: pre-warming is a pure optimization — everything it builds is
+#' rebuilt lazily at first use — and an error escaping the [later::later()]
+#' callback would stop the app.
+#'
+#' @param client A [commons()] agent.
+#'
+#' @return `NULL`, invisibly.
+#'
+#' @examples
+#' \dontrun{
+#' server <- function(input, output, session) {
+#'   agent <- commons(
+#'     ellmer::chat_anthropic(),
+#'     data_sources = data_source(sales = sales)
+#'   )
+#'   commons_prewarm(agent)
+#'   shinychat::chat_server("chat", client = agent)
+#' }
+#' }
+#'
+#' @export
+commons_prewarm <- function(client) {
+  check_commons_client(client)
+  # An error escaping a later::later() callback stops the Shiny app, and
+  # pre-warming is a pure optimization, so downgrade failures to warnings.
   later::later(function() {
-    tryCatch(client$prewarm(), error = function(err) NULL)
+    tryCatch(
+      client$prewarm(),
+      error = function(err) cli::cli_warn(conditionMessage(err))
+    )
   })
+  invisible(NULL)
 }
 
 check_commons_client <- function(client, call = rlang::caller_env()) {

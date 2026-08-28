@@ -27,22 +27,6 @@ commons chat assets are on the page.
 ordinary \code{\link[bslib:bs_theme]{bslib::bs_theme()}} (via \code{\link[shinychat:page_chat_theme]{shinychat::page_chat_theme()}}), so it
 works anywhere a bslib theme does.
 }
-\section{Pre-warming}{
-
-A \code{\link[=commons]{commons()}} agent builds its context index on first use. To move that
-cost off the first question, call the agent's \code{prewarm()} method during
-startup. \code{prewarm()} is synchronous and independent of the Shiny runtime,
-so it can also warm the on-disk cache ahead of deployment; in a Shiny
-server function, defer it to post-startup idle time so the index builds
-while the user reads the welcome message:
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{later::later(function() agent$prewarm())
-}\if{html}{\out{</div>}}
-
-\code{prewarm()} also starts a background process that downloads any uncached
-pins into the local pins cache (see \code{\link[=data_source]{data_source()}}).
-}
-
 \examples{
 \dontrun{
 library(shiny)
@@ -57,7 +41,7 @@ server <- function(input, output, session) {
     data_sources = data_source(sales = sales)
   )
   # Build the context index during post-startup idle time
-  later::later(function() agent$prewarm())
+  commons_prewarm(agent)
   chat_server("chat", client = agent)
 }
 
