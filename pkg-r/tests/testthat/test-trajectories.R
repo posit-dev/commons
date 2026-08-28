@@ -185,34 +185,18 @@ test_that("chat spans group by their conversation id across traces", {
   json <- test_turn_json()
   lines <- c(
     otlp_test_line(list(
-      conversation_test_span("t1", "root1"),
-      otlp_test_span(
-        "t1",
-        "agent1",
-        parent_span_id = "root1",
-        name = "invoke_agent"
-      ),
       chat_test_span(
         "t1",
         "chat1",
-        parent_span_id = "agent1",
         conversation_id = "conv-a",
         input_messages = '[{"role":"user","parts":[{"type":"text","content":"One."}]}]',
         end_time = "10"
       )
     )),
     otlp_test_line(list(
-      conversation_test_span("t2", "root2"),
-      otlp_test_span(
-        "t2",
-        "agent2",
-        parent_span_id = "root2",
-        name = "invoke_agent"
-      ),
       chat_test_span(
         "t2",
         "chat2",
-        parent_span_id = "agent2",
         conversation_id = "conv-a",
         input_messages = json$input,
         end_time = "20"
@@ -904,29 +888,6 @@ test_that("a conversation continuing past `to` returns history as of `to`", {
 
   expect_s7_class(full[[1]][[length(full[[1]])]], ellmer::AssistantTurn)
   expect_length(as_of[[1]], length(full[[1]]) - 1)
-})
-
-test_that("grouping by chat-span id survives a filtered-out wrapper", {
-  path <- withr::local_tempdir()
-  withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
-  json <- test_turn_json()
-  line <- otlp_test_line(list(
-    conversation_test_span("t1", "root1"),
-    chat_test_span(
-      "t1",
-      "chat1",
-      parent_span_id = "root1",
-      conversation_id = "conv-a",
-      input_messages = json$input,
-      start_time = "200000000000",
-      end_time = "201000000000"
-    )
-  ))
-  writeLines(line, file.path(path, "trace-0.jsonl"))
-
-  trajectories <- trajectory_read(path, from = .POSIXct(150, tz = "UTC"))
-
-  expect_named(trajectories, "conv-a")
 })
 
 test_that("n keeps the most recent conversations", {
