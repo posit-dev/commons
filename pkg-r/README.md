@@ -22,7 +22,7 @@ Trusted calculations can come from R code (as *measures*), [data
 dictionary](https://data-dict.tidyverse.org/) definitions, Snowflake
 semantic views, or Databricks metric views.
 
-<img src="https://github.com/user-attachments/assets/67dcf1f2-1496-406a-96cb-50a2e7050eeb" alt="A screencast demonstrating a commons data agent answering questions with a trusted calculation and then a direct data query. In the first case, a provenance marker reads 'Verified answer', while in the second it reads 'Untrusted'." width="100%" />
+<img src="https://github.com/user-attachments/assets/3a22c3cd-ae73-4177-a9c2-241f497b430d" alt="A screencast of a commons biodiversity agent. It identifies the site with the greatest biodiversity using a trusted calculation and shows the green marker for the Verified answer outcome. It then lists the species observed there using a direct data query and shows the yellow marker for the Untrusted outcome." width="100%" />
 
 ## Installation
 
