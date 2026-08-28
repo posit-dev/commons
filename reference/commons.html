@@ -201,7 +201,7 @@ on individual tools.</p>
 <span class="r-in"><span>    <span class="kw">function</span><span class="op">(</span><span class="va">region</span>, <span class="va">warehouse</span><span class="op">)</span> <span class="op">{</span></span></span>
 <span class="r-in"><span>      <span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>        <span class="va">warehouse</span>,</span></span>
-<span class="r-in"><span>        <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/glue/man/glue_sql.html" class="external-link">glue_sql</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>        <span class="fu">glue</span><span class="fu">::</span><span class="fu"><a href="https://glue.tidyverse.org/reference/glue_sql.html" class="external-link">glue_sql</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>          <span class="st">"SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}"</span>,</span></span>
 <span class="r-in"><span>          .con <span class="op">=</span> <span class="va">warehouse</span></span></span>
 <span class="r-in"><span>        <span class="op">)</span></span></span>
