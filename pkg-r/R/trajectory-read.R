@@ -151,9 +151,9 @@ parse_window_bound <- function(x) {
 
 # The `from`/`to` window and `n` limit are passed down to Connect so a
 # filtered read doesn't transfer the whole trace store. The server-side
-# `from` filter can still drop ancestor spans (see
-# connect_window_param()), severing turn-ancestor resolution; when that
-# happens, refetch without `from`.
+# `from` filter can still drop ancestor spans (see connect_window_param()),
+# severing turn-ancestor resolution; when that happens, refetch without
+# `from`.
 read_connect_spans <- function(
   client,
   guid,
@@ -902,16 +902,6 @@ span_conversation_id <- function(span) {
 # fetch would fix. Turn-level data (provenance, recorded calls) resolves
 # through `conversation_turn_ancestor()`, so a severed chain can silently
 # drop it.
-has_severed_ancestry <- function(spans) {
-  index <- span_index(spans)
-  chat_spans <- Filter(is_chat_span, spans)
-  any(vapply(
-    chat_spans,
-    function(span) ancestry_severed(span, index),
-    logical(1)
-  ))
-}
-
 ancestry_severed <- function(span, index) {
   current <- span
   for (i in seq_len(length(index))) {
@@ -924,6 +914,16 @@ ancestry_severed <- function(span, index) {
     }
   }
   FALSE
+}
+
+has_severed_ancestry <- function(spans) {
+  index <- span_index(spans)
+  chat_spans <- Filter(is_chat_span, spans)
+  any(vapply(
+    chat_spans,
+    function(span) ancestry_severed(span, index),
+    logical(1)
+  ))
 }
 
 span_time <- function(span) {

@@ -5,8 +5,8 @@
 # spans carrying the full message history, stamped with
 # `gen_ai.conversation.id` from the client's `conversation_id` binding
 # (allocated by shinychat at first submission), and commons adds a per-turn
-# wrapper span so each turn's spans parent together. On Posit Connect, spans
-# land in the content observability
+# wrapper span so each turn's spans parent together.
+# On Posit Connect, spans land in the content observability
 # store (enable Content Observability in the content's Advanced settings);
 # locally, they land in NDJSON files via otelsdk's file exporter.
 
