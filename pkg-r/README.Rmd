@@ -93,34 +93,39 @@ knitr::include_graphics("man/figures/README-trust-flow.png")
 ```{r eval-data}
 #| include: false
 
-# Placeholder data until the devrel agent data is more easily accessible
-eval_questions <- 32
-eval_results <- data.frame(
-  system = factor(
-    c("Claude Code", "commons"),
-    levels = c("Claude Code", "commons")
-  ),
-  `Mean accuracy (%)` = c(83.5, 86.3),
-  `Median solver time (seconds)` = c(60.5, 31.0),
-  `Total output tokens` = c(439188, 243403),
-  row.names = c("Claude Code", "commons"),
-  check.names = FALSE
+eval_samples <- read.csv(
+  "https://raw.githubusercontent.com/posit-dev/devrel-agent/refs/heads/main/evals/results.csv"
+)
+eval_questions <- length(unique(eval_samples$id))
+eval_results <- eval_samples |>
+  dplyr::group_by(system) |>
+  dplyr::summarise(
+    `Mean accuracy (%)` = mean(score) * 100,
+    `Median solver time (seconds)` = median(latency_sec),
+    `Total cost (USD)` = sum(cost_usd),
+    .groups = "drop"
+  ) |>
+  as.data.frame()
+row.names(eval_results) <- eval_results$system
+eval_results$system <- factor(
+  eval_results$system,
+  levels = c("Claude Code", "commons")
 )
 ```
 
 The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an example commons agent that answers questions about adoption, engagement, and growth across Posit's open-source projects. The DevRel agent repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) that compares performance between the commons agent and Claude Code. Both have access to the same underlying data.
 
-In this evaluation, the commons agent had higher mean accuracy (`r sprintf("%.1f%%", eval_results["commons", "Mean accuracy (%)"])` vs. `r sprintf("%.1f%%", eval_results["Claude Code", "Mean accuracy (%)"])`), took less time to answer questions (a median of `r sprintf("%.1f", eval_results["commons", "Median solver time (seconds)"])` vs. `r sprintf("%.1f", eval_results["Claude Code", "Median solver time (seconds)"])` seconds), and used fewer output tokens (`r format(eval_results["commons", "Total output tokens"], big.mark = ",", scientific = FALSE, trim = TRUE)` vs. `r format(eval_results["Claude Code", "Total output tokens"], big.mark = ",", scientific = FALSE, trim = TRUE)` total).
+In this evaluation, the commons agent had higher mean accuracy (`r sprintf("%.1f%%", eval_results["commons", "Mean accuracy (%)"])` vs. `r sprintf("%.1f%%", eval_results["Claude Code", "Mean accuracy (%)"])`), took less time to answer questions (a median of `r sprintf("%.1f", eval_results["commons", "Median solver time (seconds)"])` vs. `r sprintf("%.1f", eval_results["Claude Code", "Median solver time (seconds)"])` seconds), and cost less (`r sprintf("$%.2f", eval_results["commons", "Total cost (USD)"])` vs. `r sprintf("$%.2f", eval_results["Claude Code", "Total cost (USD)"])` total).
 
 ```{r eval-plot}
 #| echo: false
 #| fig-width: 10
 #| fig-height: 4
-#| fig-alt: "Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and fewer total output tokens."
+#| fig-alt: "Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and lower total cost."
 metric_columns <- c(
   "Mean accuracy (%)",
   "Median solver time (seconds)",
-  "Total output tokens"
+  "Total cost (USD)"
 )
 eval_plot <- stack(eval_results[metric_columns])
 names(eval_plot) <- c("value", "metric")
@@ -153,9 +158,9 @@ eval_plot |>
     y = NULL,
     caption = paste(
       eval_questions,
-      "questions across three epochs. Higher accuracy is better. Lower time and tokens are better."
+      "questions across three epochs. Higher accuracy is better. Lower time and cost are better."
     ),
-    title = "commons was more accurate, faster, and used fewer tokens than Claude Code",
+    title = "commons was more accurate, faster, and cheaper than Claude Code",
     subtitle = "Results from the DevRel agent evaluation"
   ) +
   theme_minimal()
