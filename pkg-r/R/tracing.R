@@ -2,9 +2,11 @@
 #   is_installed
 
 # Trajectory capture rides on OpenTelemetry: ellmer emits GenAI-semconv chat
-# spans carrying the full message history, and commons adds a per-turn wrapper
-# span carrying `gen_ai.conversation.id` so spans can be grouped back into
-# conversations. On Posit Connect, spans land in the content observability
+# spans carrying the full message history, stamped with
+# `gen_ai.conversation.id` from the client's `conversation_id` binding
+# (allocated by shinychat at first submission), and commons adds a per-turn
+# wrapper span so each turn's spans parent together. On Posit Connect, spans
+# land in the content observability
 # store (enable Content Observability in the content's Advanced settings);
 # locally, they land in NDJSON files via otelsdk's file exporter.
 
@@ -137,9 +139,8 @@ commons_span_set_attribute <- function(span, name, value) {
 }
 
 # Connect can snapshot attributes when a span starts, before late mutations.
-record_provenance_span <- function(conversation_id, tag, decisions) {
+record_provenance_span <- function(tag, decisions) {
   attributes <- list(
-    "gen_ai.conversation.id" = conversation_id,
     "commons.citation.candidates" = jsonlite::toJSON(
       decisions,
       auto_unbox = TRUE
@@ -167,29 +168,19 @@ check_share_with <- function(share_with, call = rlang::caller_env()) {
   invisible(NULL)
 }
 
-#' @noRd
-new_conversation_id <- function() {
-  suffix <- paste(sample(c(letters, 0:9), 10, replace = TRUE), collapse = "")
-  paste0(format(Sys.time(), "%Y%m%dt%H%M%OS3"), "-", suffix)
-}
-
 # Start a conversation-turn span, activate it for `envir`'s lifetime, and end
 # it when `envir` exits. ellmer creates its `invoke_agent` span synchronously
 # on the first pull of a chat/stream, while this span is active, so it becomes
 # the parent; everything below it uses explicit parents. The promise domain
 # swaps the active span in and out around promise callbacks so concurrent
 # conversations (e.g. multiple Shiny sessions) don't cross-parent.
-local_conversation_turn_span <- function(
-  conversation_id,
-  envir = parent.frame()
-) {
+local_conversation_turn_span <- function(envir = parent.frame()) {
   if (!is_installed("otel") || !otel::is_tracing_enabled()) {
     return(invisible(NULL))
   }
 
   span <- otel::start_span(
     "commons_conversation_turn",
-    attributes = list("gen_ai.conversation.id" = conversation_id),
     tracer = otel::get_tracer("co.posit.r-package.commons")
   )
   if (is_installed("promises", version = "1.5.0")) {

@@ -23,7 +23,7 @@ Imports:
     coro,
     DBI,
     duckdb (>= 1.5.4.2),
-    ellmer (>= 0.4.1),
+    ellmer (> 0.4.2),
     evaluate,
     glue,
     highr,
@@ -67,7 +67,8 @@ Suggests:
     yaml
 VignetteBuilder: knitr
 Remotes:
-    posit-dev/shinychat/pkg-r
+    tidyverse/ellmer,
+    posit-dev/shinychat/pkg-r@feat/stable-conversation-id
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

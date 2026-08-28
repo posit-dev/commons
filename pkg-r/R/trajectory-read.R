@@ -888,11 +888,13 @@ span_index <- function(spans) {
   )
 }
 
-# The conversation id lives on the commons wrapper span, which is not
-# necessarily the chat span's direct parent (ellmer's invoke_agent span sits
-# between, and instrumented hosts like Shiny may add ancestors above), so
-# walk the ancestor chain. Chat spans with no wrapper anywhere—e.g. emitted
-# outside commons—fall back to their trace id, which still groups per turn.
+# ellmer stamps the conversation id on its own chat spans (from the client's
+# `conversation_id` binding, allocated by shinychat), but older traces only
+# have it on commons' wrapper span -- which is not necessarily the chat
+# span's direct parent (ellmer's invoke_agent span sits between, and
+# instrumented hosts like Shiny may add ancestors above) -- so walk the
+# ancestor chain. Chat spans with no id anywhere—e.g. emitted outside
+# shinychat—fall back to their trace id, which still groups per turn.
 span_conversation_id <- function(span, index) {
   conversation_id_walk(span, index)$id %||% span$trace_id
 }
