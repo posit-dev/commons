@@ -101,14 +101,14 @@ provenance_info_body <- function() {
       paste(
         "This application asks an AI agent to use trusted calculations",
         "whenever possible. When no relevant calculation is available, the",
-        "agent may write code itself. commons determines the provenance",
-        "outcome from the path the agent took."
+        "agent may write code itself."
       )
     ),
     htmltools::tags$ul(
       class = "commons-provenance-info-list",
       provenance_info_item(
         "A",
+        label = "Trusted",
         "trusted-icon.svg",
         body = paste(
           "For the given answer, the agent only searched for",
@@ -138,6 +138,13 @@ provenance_info_body <- function() {
           htmltools::tags$strong("not"),
           " able to cite vetted context that supported its approach."
         )
+      )
+    ),
+    htmltools::tags$p(
+      paste(
+        "The agent itself does not choose the badge.",
+        "The badge is chosen by the application based on",
+        "the agent's response."
       )
     )
   )
