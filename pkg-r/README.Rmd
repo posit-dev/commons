@@ -92,18 +92,23 @@ knitr::include_graphics("man/figures/README-trust-flow.png")
 ```{r eval-data}
 #| include: false
 
-# Placeholder data until the devrel agent data is more easily accessible
-eval_questions <- 32
-eval_results <- data.frame(
-  system = factor(
-    c("Claude Code", "commons"),
-    levels = c("Claude Code", "commons")
-  ),
-  `Mean accuracy (%)` = c(83.5, 86.3),
-  `Median solver time (seconds)` = c(60.5, 31.0),
-  `Total output tokens` = c(439188, 243403),
-  row.names = c("Claude Code", "commons"),
-  check.names = FALSE
+eval_samples <- read.csv(
+  "https://raw.githubusercontent.com/posit-dev/devrel-agent/refs/heads/main/evals/results.csv"
+)
+eval_questions <- length(unique(eval_samples$id))
+eval_results <- eval_samples |>
+  dplyr::group_by(system) |>
+  dplyr::summarise(
+    `Mean accuracy (%)` = mean(score) * 100,
+    `Median solver time (seconds)` = median(latency_sec),
+    `Total output tokens` = sum(output_tokens),
+    .groups = "drop"
+  ) |>
+  as.data.frame()
+row.names(eval_results) <- eval_results$system
+eval_results$system <- factor(
+  eval_results$system,
+  levels = c("Claude Code", "commons")
 )
 ```
 
