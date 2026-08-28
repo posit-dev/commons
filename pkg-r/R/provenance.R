@@ -107,21 +107,36 @@ provenance_info_body <- function() {
     ),
     htmltools::tags$ul(
       class = "commons-provenance-info-list",
-      provenance_info_item("A", "trusted-icon.svg"),
       provenance_info_item(
-        "B",
-        "citation-mark.svg",
-        paste(
-          provenance_display$B$body,
-          "The custom calculation itself was not vetted."
+        "A",
+        "trusted-icon.svg",
+        body = paste(
+          "For the given answer, the agent only searched for",
+          "and invoked a human-vetted calculation."
         )
       ),
-      provenance_info_item("C", "warning-icon.svg"),
       provenance_info_item(
         label = "No marker",
         body = paste(
           "No data tool was used for this answer, so commons assigns no",
-          "provenance outcome. This is not equivalent to a Verified answer."
+          "provenance outcome."
+        )
+      ),
+      provenance_info_item(
+        "B",
+        "citation-mark.svg",
+        paste(
+          "The agent did ad-hoc analysis and was able to",
+          "cite vetted context that supported its approach."
+        )
+      ),
+      provenance_info_item(
+        "C",
+        "warning-icon.svg",
+        htmltools::tagList(
+          "The agent did ad-hoc analysis and was ",
+          htmltools::tags$strong("not"),
+          " able to cite vetted context that supported its approach."
         )
       )
     )

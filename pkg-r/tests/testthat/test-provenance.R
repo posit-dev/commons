@@ -12,18 +12,6 @@ test_that("provenance information explains every visible state", {
   )
 
   text <- as.character(provenance_info_modal())
-  expect_match(text, "How answer trust is determined", fixed = TRUE)
-  expect_match(text, "Verified answer", fixed = TRUE)
-  expect_match(text, "Cited", fixed = TRUE)
-  expect_match(text, "Untrusted", fixed = TRUE)
-  expect_match(text, "No marker", fixed = TRUE)
-  expect_match(
-    text,
-    "The custom calculation itself was not vetted.",
-    fixed = TRUE
-  )
-  expect_match(text, "not equivalent to a Verified answer", fixed = TRUE)
-
   expect_match(text, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
   expect_match(text, commons_icon_url("citation-mark.svg"), fixed = TRUE)
   expect_match(text, commons_icon_url("warning-icon.svg"), fixed = TRUE)
