@@ -50,6 +50,95 @@ provenance_aside <- function(tag, include_cited = FALSE) {
     '<shiny-aside label="%s"%s>%s</shiny-aside>',
     escape_attr(entry$label),
     if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
-    entry$body
+    paste(entry$body, as.character(provenance_info_control()), sep = "\n\n")
+  )
+}
+
+provenance_info_control <- function() {
+  trigger <- htmltools::tags$button(
+    type = "button",
+    class = "commons-provenance-info-trigger",
+    `aria-label` = "How answer trust is determined",
+    htmltools::tags$span(`aria-hidden` = "true", "i")
+  )
+
+  htmltools::tags$div(
+    class = "commons-provenance-info",
+    trigger,
+    htmltools::tags$div(
+      class = "commons-provenance-info-content",
+      hidden = NA,
+      provenance_info_body()
+    )
+  )
+}
+
+provenance_info_body <- function() {
+  htmltools::tags$div(
+    class = "commons-provenance-info-body",
+    htmltools::tags$p(
+      paste(
+        "This application asks an AI agent to use trusted calculations",
+        "whenever possible. When no relevant calculation is available, the",
+        "agent may write code itself. commons determines the provenance",
+        "outcome from the path the agent took."
+      )
+    ),
+    htmltools::tags$ul(
+      class = "commons-provenance-info-list",
+      provenance_info_item("A", "trusted-icon.svg"),
+      provenance_info_item(
+        "B",
+        "citation-mark.svg",
+        paste(
+          provenance_display$B$body,
+          "The custom calculation itself was not vetted."
+        )
+      ),
+      provenance_info_item("C", "warning-icon.svg"),
+      provenance_info_item(
+        label = "No marker",
+        body = paste(
+          "No data tool was used for this answer, so commons assigns no",
+          "provenance outcome. This is not equivalent to a Verified answer."
+        )
+      )
+    )
+  )
+}
+
+provenance_info_item <- function(
+  tag = NULL,
+  icon = NULL,
+  body = NULL,
+  label = NULL
+) {
+  if (!is.null(tag)) {
+    entry <- provenance_display[[tag]]
+    label <- label %||% entry$label
+    body <- body %||% entry$body
+  }
+
+  marker <- if (is.null(icon)) {
+    htmltools::tags$span(
+      class = "commons-provenance-info-no-marker",
+      `aria-hidden` = "true",
+      "—"
+    )
+  } else {
+    htmltools::tags$img(
+      src = commons_icon_url(icon),
+      alt = "",
+      `aria-hidden` = "true"
+    )
+  }
+
+  htmltools::tags$li(
+    htmltools::tags$div(
+      class = "commons-provenance-info-label",
+      marker,
+      htmltools::tags$strong(label)
+    ),
+    htmltools::tags$p(body)
   )
 }

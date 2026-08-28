@@ -261,11 +261,44 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     paste0("document.querySelector('", verified_dialog, "').innerText;")
   )
   expect_no_match(verified, "Verified answer", fixed = TRUE)
+  expect_no_match(verified, "How answer trust is determined", fixed = TRUE)
   expect_match(
     verified,
     "This answer comes from a trusted calculation defined by your data team.",
     fixed = TRUE
   )
+  app$get_js(
+    paste0(
+      "document.querySelector('",
+      verified_dialog,
+      " .commons-provenance-info-trigger').click();"
+    )
+  )
+  info_popover <- ".commons-provenance-info-popover"
+  app$wait_for_js(
+    paste0("document.querySelector('", info_popover, "') !== null;"),
+    timeout = 30 * 1000
+  )
+  expect_false(
+    app$get_js(
+      paste0(
+        "document.querySelector('",
+        verified_dialog,
+        "').contains(",
+        "document.querySelector('",
+        info_popover,
+        "'));"
+      )
+    )
+  )
+  info <- app$get_js(
+    paste0("document.querySelector('", info_popover, "').innerText;")
+  )
+
+  expect_match(info, "Verified answer", fixed = TRUE)
+  expect_match(info, "Cited", fixed = TRUE)
+  expect_match(info, "Untrusted", fixed = TRUE)
+  expect_match(info, "No marker", fixed = TRUE)
 })
 
 test_that("Shiny Chat preserves Markdown blocks around citations", {
