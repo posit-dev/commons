@@ -93,7 +93,7 @@ vignette.
 
 <!-- Diagram source: Introduction to commons vignette. Update it there, then save the image. https://github.com/posit-dev/commons/blob/a29ac09c39c8edb99f2a9ea0ecc1836e6538bb25/vignettes/commons.Rmd#L76 -->
 
-<img src="pkg-r/man/figures/README-trust-flow.png" alt="A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer." width="100%" />
+<img src="pkg-r/man/figures/README-trust-flow.png" alt="A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker. The lower-trust path searches context and writes custom SQL or R, ending with either a blue quote-mark citation marker or a yellow exclamation marker." width="100%" />
 
 ## Evaluation
 

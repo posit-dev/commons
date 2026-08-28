@@ -18,7 +18,22 @@ knitr::opts_chunk$set(
   comment = "#>",
   eval = FALSE
 )
-knitr::knit_meta_add(list(commons:::commons_chat_dependency()))
+
+documentation_marker <- function(tag) {
+  icon <- c(
+    A = "trusted-icon.svg",
+    B = "citation-mark.svg",
+    C = "warning-icon.svg"
+  )[[tag]]
+
+  htmltools::tags$img(
+    class = "commons-documentation-marker",
+    src = knitr::image_uri(
+      system.file("www", "commons-chat", "figs", icon, package = "commons")
+    ),
+    alt = commons:::provenance_display[[tag]]$label
+  )
+}
 ```
 
 This document explains the structure of a commons project and how to start building a commons agent.
@@ -37,15 +52,13 @@ The high-trust "happy path" occurs when the user asks a question that correspond
 
 > How many total animals were observed at Oak Bluff?
 
-The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result with a `Verified answer` provenance marker.
+The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result with the green check-shield provenance marker for the `Verified answer` outcome.
 
-> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site.
->
-> `r commons:::commons_answer_pill("A")`
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. `r documentation_marker("A")`
 
 Although the agent had to decide which trusted calculation to run, it did not have to decide _what code to write_, reducing degrees of freedom and allowing it to take advantage of pre-vetted code.
 
-However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or R). Answers from this path either include a verified citation or display an `Untrusted` provenance marker.
+However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or R). Answers from this path either include a blue quote-mark citation marker or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 ## Working with the agent skill
 
@@ -69,9 +82,9 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 ## Trust flow
 
-commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer displays a green provenance marker labeled `Verified answer`.
+commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer displays the green check-shield provenance marker for the `Verified answer` outcome.
 
-If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include a verified citation in a footnote or display an `Untrusted` provenance marker.
+If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 <figure class="commons-flow commons-flow-trusted-calculations column-page">
 <div class="commons-branch-flow"
@@ -92,7 +105,7 @@ If a relevant trusted calculation is not found, the agent proceeds down the lowe
 <span class="commons-flow-arrow">&rarr;</span>
 <span class="commons-flow-node">Run trusted<br>calculation</span>
 <span class="commons-flow-arrow">&rarr;</span>
-`r commons:::commons_answer_pill("A")`
+`r documentation_marker("A")`
 </div>
 </div>
 <div class="commons-trust-segment commons-trust-segment-lower">
@@ -106,10 +119,11 @@ If a relevant trusted calculation is not found, the agent proceeds down the lowe
 <span class="commons-flow-arrow">&rarr;</span>
 <span class="commons-flow-results">
 <span class="commons-flow-answer">
-Cited answer<sup class="commons-citation-ref">1</sup>
+Cited answer
 </span>
+`r documentation_marker("B")`
 <span class="commons-flow-or">or</span>
-`r commons:::commons_answer_pill("C")`
+`r documentation_marker("C")`
 </span>
 </div>
 </div>
@@ -117,17 +131,17 @@ Cited answer<sup class="commons-citation-ref">1</sup>
 </div>
 </figure>
 
-The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the verified citations are displayed as footnotes. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays a provenance marker.
+The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker.
 
 The following table details the various ways each provenance outcome can occur:
 
 | How the answer is produced | Provenance outcome |
 |---|---|
-| A trusted R [measure](#semantic-layer) | `r commons:::commons_answer_pill("A")` |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | `r commons:::commons_answer_pill("A")` |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | `r commons:::commons_answer_pill("A")` |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited or `r commons:::commons_answer_pill("C")` |
-| Custom R | Cited or `r commons:::commons_answer_pill("C")` |
+| A trusted R [measure](#semantic-layer) | Verified answer `r documentation_marker("A")` |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | Verified answer `r documentation_marker("A")` |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | Verified answer `r documentation_marker("A")` |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited `r documentation_marker("B")` or Untrusted `r documentation_marker("C")` |
+| Custom R | Cited `r documentation_marker("B")` or Untrusted `r documentation_marker("C")` |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
 
 The agent itself does not determine the provenance outcome. commons derives it deterministically from the agent's behavior.
@@ -198,7 +212,7 @@ Observed individuals reflect organisms recorded during surveys. They should not 
 
 ### Warehouse semantic layers
 
-If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Verified answer` provenance outcome and display the corresponding provenance marker.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Verified answer` provenance outcome and display the green check-shield provenance marker.
 
 ## Data sources
 

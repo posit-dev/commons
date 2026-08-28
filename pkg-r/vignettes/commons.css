@@ -1,9 +1,12 @@
-.commons-answer-pill-icon {
+.commons-documentation-marker {
   background: transparent;
   border: 0;
   border-radius: 0;
+  height: 1.5em;
   margin: 0;
   padding: 0;
+  vertical-align: text-bottom;
+  width: 1.5em;
 }
 
 .commons-flow {
@@ -21,20 +24,17 @@
 
 .commons-trust-segment-high {
   background: #f8fcf9;
-  border-color: #cfeedd;
+  border-color: #a9d9bf;
 }
 
 .commons-trust-segment-lower {
   background: #fffcf7;
-  border-color: #f2ddbb;
+  border-color: #dfc28a;
 }
 
-.commons-trust-segment-high .commons-trust-label {
-  color: #397957;
-}
-
+.commons-trust-segment-high .commons-trust-label,
 .commons-trust-segment-lower .commons-trust-label {
-  color: #7b5c27;
+  color: #4a4a4a;
 }
 
 .commons-branch-flow {
@@ -89,12 +89,6 @@
 .commons-flow-or {
   color: #666;
   font-size: 0.8rem;
-}
-
-.commons-citation-ref {
-  color: #397f91;
-  font-size: 0.7em;
-  font-weight: 700;
 }
 
 .commons-flow-arrow {
