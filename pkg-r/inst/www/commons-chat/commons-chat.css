@@ -122,23 +122,24 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 .commons-provenance-info-trigger {
   align-items: center;
   background: transparent;
-  border: 1px solid currentcolor;
+  border: 1.5px solid currentcolor;
   border-radius: 50%;
-  color: inherit;
+  color: var(--bs-secondary-color, #6c757d);
   display: inline-flex;
-  font: inherit;
-  font-style: italic;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-style: normal;
   font-weight: 600;
-  height: 1.5rem;
+  height: 1.125rem;
   justify-content: center;
   line-height: 1;
   padding: 0;
-  width: 1.5rem;
+  width: 1.125rem;
 }
 
 .commons-provenance-info-trigger:hover {
   background: var(--bs-tertiary-bg, #f8f9fa);
-  color: var(--bs-body-color, #212529);
+  color: var(--bs-secondary-color, #6c757d);
 }
 
 .commons-provenance-info-trigger:focus-visible {
