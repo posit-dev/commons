@@ -94,7 +94,7 @@ semantic_layer(
 #> #
 #> function () 
 #> 10
-#> <environment: 0x55acf1d967f8>
+#> <environment: 0x55e534929448>
 #> 
 #> 
 #> $fn_sources
