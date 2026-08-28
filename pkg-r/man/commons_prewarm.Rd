@@ -26,7 +26,12 @@ in milliseconds, and it can be built offline ahead of deployment. The
 cache root resolves from the \code{commons.context_cache} option, the
 \code{COMMONS_CONTEXT_CACHE} or \code{CONNECT_CONTENT_DATA_DIR} environment
 variables, an \code{app_cache/commons} directory beside a Shiny app, or the
-per-user cache directory, in that order. Stores unused for 30 days are
+per-user cache directory, in that order. Note that \verb{app_cache/} is
+excluded from deployed bundles (rsconnect treats it as server-side
+scratch), so it is shared across the sessions of one deployment but
+rebuilt after a redeploy; to ship a pre-built store with the app,
+point \code{commons.context_cache} at a directory inside the app and run
+\code{prewarm_context()} before deploying. Stores unused for 30 days are
 pruned (option \code{commons.context_cache_max_age}, in seconds); set
 \code{options(commons.context_cache = FALSE)} to disable persistence
 entirely.

@@ -136,7 +136,12 @@ commons_server <- function(id, client, ...) {
 #'   cache root resolves from the `commons.context_cache` option, the
 #'   `COMMONS_CONTEXT_CACHE` or `CONNECT_CONTENT_DATA_DIR` environment
 #'   variables, an `app_cache/commons` directory beside a Shiny app, or the
-#'   per-user cache directory, in that order. Stores unused for 30 days are
+#'   per-user cache directory, in that order. Note that `app_cache/` is
+#'   excluded from deployed bundles (rsconnect treats it as server-side
+#'   scratch), so it is shared across the sessions of one deployment but
+#'   rebuilt after a redeploy; to ship a pre-built store with the app,
+#'   point `commons.context_cache` at a directory inside the app and run
+#'   `prewarm_context()` before deploying. Stores unused for 30 days are
 #'   pruned (option `commons.context_cache_max_age`, in seconds); set
 #'   `options(commons.context_cache = FALSE)` to disable persistence
 #'   entirely.
