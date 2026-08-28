@@ -118,8 +118,7 @@ provenance_info_body <- function() {
       provenance_info_item(
         label = "No marker",
         body = paste(
-          "No data tool was used for this answer, so commons assigns no",
-          "provenance outcome."
+          "For answers that don't do any new calculations, the application shows no badge."
         )
       ),
       provenance_info_item(
