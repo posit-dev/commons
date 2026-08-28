@@ -297,15 +297,12 @@ metric_tool_result <- function(
   )),
   metadata = NULL
 ) {
-  label <- metric_metadata_label(metadata)
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     markdown = sprintf("```sql\n%s\n```\n\n%s", sql, df_to_markdown(result)),
     html = measure_display_html(args, result, metadata),
-    label = label,
-    value_preview = result_value_preview(result),
     tag = "A",
     show_tag = FALSE
   )
@@ -338,13 +335,6 @@ metric_metadata_title <- function(name, label) {
   fallback <- is.na(label) | !nzchar(label)
   label[fallback] <- humanize_name(name[fallback])
   label
-}
-
-metric_metadata_label <- function(metadata) {
-  if (is.null(metadata) || nrow(metadata) == 0L) {
-    return(NULL)
-  }
-  paste(metadata$title, collapse = ", ")
 }
 
 registry_has_metrics <- function(registry) {

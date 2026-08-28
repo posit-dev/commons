@@ -148,8 +148,7 @@ tool_search_pool <- function(private) {
         body,
         title = "Searched for a trusted calculation",
         icon = maybe_icon("search"),
-        markdown = body,
-        label = query
+        markdown = body
       )
     },
     sprintf(
@@ -525,8 +524,6 @@ call_measure_tool <- function(
     icon = maybe_icon("shield-check"),
     html = measure_display_html(args, value, measure_metadata(td)),
     footer = measure_source_footer(td),
-    label = tool_title(td),
-    value_preview = result_value_preview(value),
     tag = "A",
     show_tag = FALSE
   )
@@ -551,23 +548,17 @@ measure_content_tool_result <- function(td, result, handles) {
 
   title <- "Ran a trusted calculation"
   icon <- maybe_icon("shield-check")
-  label <- tool_title(td)
   footer <- measure_source_footer(td)
   if (is.null(display)) {
     display <- shinychat::tool_result_display(
       title = title,
       icon = icon,
-      footer = footer,
-      label = label,
-      value_preview = result_value_preview(data %||% result@value)
+      footer = footer
     )
   } else if (is.list(display)) {
     display$title <- display$title %||% title
     display$icon <- display$icon %||% icon
     display$footer <- display$footer %||% footer
-    display$label <- display$label %||% label
-    display$value_preview <- display$value_preview %||%
-      result_value_preview(data %||% result@value)
   }
   result@extra$display <- display
   result@extra$commons_tag <- "A"
@@ -649,8 +640,6 @@ measure_plot_tool_result <- function(td, args, value, advert) {
       measure_metadata(td)
     ),
     footer = measure_source_footer(td),
-    label = tool_title(td),
-    value_preview = "Plot",
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -681,7 +670,6 @@ measure_failure_result <- function(
       measure_metadata(td)
     ),
     footer = measure_source_footer(td),
-    label = tool_title(td),
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -736,8 +724,6 @@ measure_gt_table_tool_result <- function(td, args, value, data, advert) {
     icon = maybe_icon("shield-check"),
     html = display_html,
     footer = measure_source_footer(td),
-    label = tool_title(td),
-    value_preview = result_value_preview(data),
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -947,8 +933,6 @@ tool_result <- function(
   html = NULL,
   markdown = NULL,
   footer = NULL,
-  label = NULL,
-  value_preview = NULL,
   tag = NULL,
   open = FALSE,
   show_request = FALSE,
@@ -964,9 +948,7 @@ tool_result <- function(
     markdown = markdown,
     show_request = show_request,
     open = open,
-    footer = footer,
-    label = label,
-    value_preview = value_preview
+    footer = footer
   )
 
   ellmer::ContentToolResult(
@@ -1114,25 +1096,6 @@ measure_source_footer <- function(td) {
       if (length(urls) == 1L) "View source" else sprintf("Source %d", i)
     )
   }))
-}
-
-result_value_preview <- function(value) {
-  if (is.data.frame(value)) {
-    if (nrow(value) == 1L && ncol(value) == 1L) {
-      return(result_value_preview(value[[1]][[1]]))
-    }
-    return(sprintf(
-      "%s %s \u00d7 %s %s",
-      nrow(value),
-      if (nrow(value) == 1L) "row" else "rows",
-      ncol(value),
-      if (ncol(value) == 1L) "column" else "columns"
-    ))
-  }
-  if (is.atomic(value) && length(value) == 1L && !is.na(value)) {
-    return(format_arg_scalar(value))
-  }
-  NULL
 }
 
 measure_result_html <- function(content, class = NULL) {

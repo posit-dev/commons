@@ -16,8 +16,6 @@ test_that("call_metrics compiles metrics x dimensions x filters x where", {
   expect_equal(value$region_band, "east")
   expect_equal(value$big_revenue, 1950)
   expect_match(res@extra$display$markdown, "GROUP BY", fixed = TRUE)
-  expect_identical(res@extra$display$label, "big revenue")
-  expect_identical(res@extra$display$value_preview, "1 row × 2 columns")
   expect_match(
     res@extra$display$html,
     "Revenue over big EMEA orders.",
@@ -285,7 +283,8 @@ test_that("search_pool renders its results as Markdown", {
   result <- agent_tool(agent, "search_pool")("count orders")
 
   expect_identical(result@extra$display$markdown, result@value)
-  expect_identical(result@extra$display$label, "count orders")
+  expect_null(result@extra$display$label)
+  expect_null(result@extra$display$value_preview)
 })
 
 test_that("search_pool spans measures and definitions", {

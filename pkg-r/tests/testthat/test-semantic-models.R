@@ -327,8 +327,8 @@ test_that("call_metrics dispatches native metrics through their model", {
   expect_match(query, "WHERE (orders.region = 'EMEA')", fixed = TRUE)
   expect_equal(get_handle(handles, "r1")$total_revenue, 1250)
   expect_equal(result@extra$commons_tag, "A")
-  expect_identical(result@extra$display$label, "total revenue")
-  expect_identical(result@extra$display$value_preview, "1,250")
+  expect_null(result@extra$display$label)
+  expect_null(result@extra$display$value_preview)
   expect_match(
     result@extra$display$html,
     "Total realized revenue.",
