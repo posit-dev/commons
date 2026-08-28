@@ -251,6 +251,12 @@ trajectory_exchange_messages <- function(turns, exchange) {
 # exactly as in the live stream. Static chat_ui(messages = ...) would fold
 # mixed content (tool cards plus markdown text) into a single raw-HTML
 # island, escaping the text and hiding it from aside grouping.
+#
+# shinychat::chat_restore() is close to what we want but not quite: it only
+# renders a client's turns as a side effect of bookmark registration (an
+# observer fired whenever the scheduler runs it), while we need to replay
+# pre-computed messages -- with provenance asides attached -- into a freshly
+# rendered element, sequenced before seed_transcript_decorations().
 replay_transcript <- function(id, messages, session) {
   for (message in messages) {
     replay_transcript_message(id, message, session)
@@ -378,12 +384,9 @@ add_message_provenance <- function(messages, provenance) {
 # folds consecutive markdown chunks into one block.
 append_provenance_aside <- function(content, aside) {
   if (is.character(content)) {
-    return(paste(paste(content, collapse = "\n"), aside, sep = "\n\n"))
+    return(list(content, aside))
   }
-  if (is.list(content) && !is.object(content)) {
-    return(c(content, list(aside)))
-  }
-  list(content, aside)
+  c(content, list(aside))
 }
 
 # The question list is ordinary server-rendered HTML outside shinychat's
