@@ -319,6 +319,13 @@ test_that("read_measures parses @provenance tags without changing the measure", 
     names(tool_properties(tagged_measure)),
     names(tool_properties(base_measure))
   )
+  expect_identical(
+    attr(tagged_measure, "commons_provenance"),
+    c(
+      "https://github.com/org/app/blob/abc1234/R/server.R#L1-L9",
+      "trajectory analysis (2026-07-09)"
+    )
+  )
 })
 
 test_that("read_measures validates its inputs", {

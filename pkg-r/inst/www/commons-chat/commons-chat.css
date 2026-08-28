@@ -303,6 +303,25 @@ shiny-chat-container
   gap: 1rem;
 }
 
+.commons-measure-metadata,
+.commons-measure-metadata-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.commons-measure-metadata {
+  gap: 0.75rem;
+}
+
+.commons-measure-description {
+  color: var(--bs-secondary-color, #6c757d);
+  white-space: pre-wrap;
+}
+
+.commons-measure-source-link + .commons-measure-source-link {
+  margin-left: 0.75rem;
+}
+
 .commons-measure-args {
   display: grid;
   gap: 0.38rem;
@@ -320,10 +339,6 @@ shiny-chat-container
 
 .commons-measure-arg-value {
   color: var(--bs-body-color, #212529);
-}
-
-.commons-measure-arg-empty {
-  color: var(--bs-secondary-color, #6c757d);
 }
 
 .commons-measure-result {

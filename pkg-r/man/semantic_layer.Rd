@@ -30,6 +30,7 @@ Each \verb{@param} marks a model-supplied argument and can declare its type:
 \code{string}, \code{integer}, \code{number}, \code{boolean}, \code{enum[value, ...]}, or an array
 such as \code{string[]}. Without a declaration, commons infers the type from the
 default, falling back to \code{string}.
+URL-valued \verb{@provenance} tags appear as source links in the measure result.
 
 Measure and helper source is visible in the agent's R session; evaluating a
 measure's name there prints its definition. Function environments,

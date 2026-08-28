@@ -307,7 +307,7 @@ test_that("call_metrics dispatches native metrics through their model", {
   local_mocked_bindings(
     source_query = function(source, sql) {
       query <<- sql
-      data.frame(total_revenue = 42)
+      data.frame(total_revenue = 1250)
     }
   )
 
@@ -325,8 +325,15 @@ test_that("call_metrics dispatches native metrics through their model", {
   expect_match(query, "DIMENSIONS orders.region", fixed = TRUE)
   expect_match(query, "METRICS total_revenue", fixed = TRUE)
   expect_match(query, "WHERE (orders.region = 'EMEA')", fixed = TRUE)
-  expect_equal(get_handle(handles, "r1")$total_revenue, 42)
+  expect_equal(get_handle(handles, "r1")$total_revenue, 1250)
   expect_equal(result@extra$commons_tag, "A")
+  expect_identical(result@extra$display$label, "total revenue")
+  expect_identical(result@extra$display$value_preview, "1,250")
+  expect_match(
+    result@extra$display$html,
+    "Total realized revenue.",
+    fixed = TRUE
+  )
 })
 
 test_that("call_metrics does not mix native and data-dict metrics", {

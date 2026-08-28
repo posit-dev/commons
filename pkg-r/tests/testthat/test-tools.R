@@ -13,12 +13,19 @@ test_that("call_measure_tool runs a measure and tags the result", {
   expect_equal(res@value, "2")
   expect_equal(res@extra$commons_tag, "A")
   expect_equal(res@extra$display$title, "Ran a trusted calculation")
+  expect_equal(res@extra$display$label, "order count")
+  expect_equal(res@extra$display$value_preview, "2")
   expect_false(res@extra$display$show_request)
+  expect_match(
+    res@extra$display$html,
+    "Count orders, optionally filtered by region and a revenue ceiling.",
+    fixed = TRUE
+  )
   expect_match(res@extra$display$html, "Region:")
   expect_match(res@extra$display$html, "EMEA")
   expect_match(res@extra$display$html, "Revenue under:")
   expect_match(res@extra$display$html, "1,000")
-  expect_match(res@extra$display$html, "Tool result")
+  expect_match(res@extra$display$html, "Result")
   expect_match(res@extra$display$html, "2")
 })
 
@@ -35,7 +42,32 @@ test_that("call_measure_tool uses the trusted calculation result title", {
   res <- call_measure_tool(registry, "order_count", "{}")
 
   expect_equal(res@extra$display$title, "Ran a trusted calculation")
-  expect_match(res@extra$display$html, "No arguments")
+  expect_equal(res@extra$display$label, "Order count")
+  expect_match(res@extra$display$html, "Count orders.", fixed = TRUE)
+  expect_no_match(res@extra$display$html, "commons-measure-args", fixed = TRUE)
+})
+
+test_that("call_measure_tool links URL provenance from file-backed measures", {
+  calculation <- measure(
+    "order_count",
+    "Count orders.",
+    function() 2
+  )
+  attr(calculation, "commons_provenance") <- c(
+    "https://github.com/org/app/blob/abc/R/orders.R#L1-L9",
+    "trajectory analysis (2026-08-28)"
+  )
+
+  res <- call_measure_tool(list(order_count = calculation), "order_count", "{}")
+
+  footer <- as.character(res@extra$display$footer)
+  expect_match(footer, "View source", fixed = TRUE)
+  expect_match(
+    footer,
+    "https://github.com/org/app/blob/abc/R/orders.R#L1-L9",
+    fixed = TRUE
+  )
+  expect_no_match(footer, "trajectory analysis", fixed = TRUE)
 })
 
 test_that("call_measure_tool registers tabular output as a handle", {
@@ -118,6 +150,8 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
     res@extra$display$title,
     "Ran a trusted calculation"
   )
+  expect_identical(res@extra$display$label, "Adverse events & outcomes")
+  expect_identical(res@extra$display$value_preview, "1 row × 2 columns")
   expect_equal(res@extra$commons_tag, "A")
 })
 
@@ -210,6 +244,8 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
     'alt="Plot returned by A &amp; &quot;B&quot;"',
     fixed = TRUE
   )
+  expect_identical(res@extra$display$label, 'A & "B"')
+  expect_identical(res@extra$display$value_preview, "Plot")
   expect_s3_class(get_handle(store, "r1"), "ggplot")
   expect_identical(res@extra$display$open, TRUE)
 })
@@ -242,6 +278,8 @@ test_that("call_measure_tool shows gt tables to the model and user", {
   expect_match(res@value, "Headache", fixed = TRUE)
   expect_no_match(res@value, "<table>", fixed = TRUE)
   expect_match(res@extra$display$html, "Headache", fixed = TRUE)
+  expect_identical(res@extra$display$label, "table")
+  expect_identical(res@extra$display$value_preview, "1 row × 2 columns")
   expect_gt(length(htmltools::findDependencies(res@extra$display$html)), 0)
   expect_identical(get_handle(store, "r1"), table_data)
   expect_identical(res@extra$display$open, TRUE)

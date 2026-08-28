@@ -142,7 +142,8 @@ call_metrics_impl <- function(
     filters,
     note = note,
     advert = advert,
-    args = args
+    args = args,
+    metadata = metric_definition_metadata(metric_defs)
   )
 }
 
@@ -275,7 +276,8 @@ call_semantic_metrics <- function(
     handles,
     metrics,
     dimensions,
-    filters
+    filters,
+    metadata = semantic_metric_metadata(metric_members)
   )
 }
 
@@ -292,17 +294,57 @@ metric_tool_result <- function(
     metrics = metrics,
     dimensions = dimensions,
     filters = filters
-  ))
+  )),
+  metadata = NULL
 ) {
+  label <- metric_metadata_label(metadata)
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     markdown = sprintf("```sql\n%s\n```\n\n%s", sql, df_to_markdown(result)),
-    html = measure_display_html(args, result),
+    html = measure_display_html(args, result, metadata),
+    label = label,
+    value_preview = result_value_preview(result),
     tag = "A",
     show_tag = FALSE
   )
+}
+
+metric_definition_metadata <- function(definitions) {
+  data.frame(
+    title = metric_metadata_title(definitions$name, definitions$label),
+    description = vapply(
+      seq_len(nrow(definitions)),
+      function(i) prose_detail(
+        definitions$description[[i]],
+        definitions$details[[i]]
+      ),
+      character(1)
+    ),
+    stringsAsFactors = FALSE
+  )
+}
+
+semantic_metric_metadata <- function(metrics) {
+  data.frame(
+    title = metric_metadata_title(metrics$name, metrics$label),
+    description = ifelse(is.na(metrics$description), "", metrics$description),
+    stringsAsFactors = FALSE
+  )
+}
+
+metric_metadata_title <- function(name, label) {
+  fallback <- is.na(label) | !nzchar(label)
+  label[fallback] <- humanize_name(name[fallback])
+  label
+}
+
+metric_metadata_label <- function(metadata) {
+  if (is.null(metadata) || nrow(metadata) == 0L) {
+    return(NULL)
+  }
+  paste(metadata$title, collapse = ", ")
 }
 
 registry_has_metrics <- function(registry) {

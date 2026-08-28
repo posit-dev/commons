@@ -16,6 +16,13 @@ test_that("call_metrics compiles metrics x dimensions x filters x where", {
   expect_equal(value$region_band, "east")
   expect_equal(value$big_revenue, 1950)
   expect_match(res@extra$display$markdown, "GROUP BY", fixed = TRUE)
+  expect_identical(res@extra$display$label, "big revenue")
+  expect_identical(res@extra$display$value_preview, "1 row × 2 columns")
+  expect_match(
+    res@extra$display$html,
+    "Revenue over big EMEA orders.",
+    fixed = TRUE
+  )
   expect_match(res@value, "Applied governed definitions", fixed = TRUE)
   expect_match(res@value, "Translation notes", fixed = TRUE)
 })
@@ -268,6 +275,17 @@ test_that("the pool tools follow the agent's composition", {
     c("search_pool", "call_measure", "call_metrics") %in%
       tool_names(test_agent())
   ))
+})
+
+test_that("search_pool renders its results as Markdown", {
+  agent <- test_agent(
+    semantic_layer = semantic_layer(count_measure_tool())
+  )
+
+  result <- agent_tool(agent, "search_pool")("count orders")
+
+  expect_identical(result@extra$display$markdown, result@value)
+  expect_identical(result@extra$display$label, "count orders")
 })
 
 test_that("search_pool spans measures and definitions", {

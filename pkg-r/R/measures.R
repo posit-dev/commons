@@ -18,6 +18,7 @@
 #' `string`, `integer`, `number`, `boolean`, `enum[value, ...]`, or an array
 #' such as `string[]`. Without a declaration, commons infers the type from the
 #' default, falling back to `string`.
+#' URL-valued `@provenance` tags appear as source links in the measure result.
 #'
 #' Measure and helper source is visible in the agent's R session; evaluating a
 #' measure's name there prints its definition. Function environments,

@@ -99,7 +99,9 @@ block_to_measure <- function(block, env) {
   description <- block_description(block)
   arguments <- block_arguments(block, fn)
 
-  measure(name, description, fn, arguments = arguments)
+  out <- measure(name, description, fn, arguments = arguments)
+  attr(out, "commons_provenance") <- block_provenance(block)
+  out
 }
 
 block_description <- function(block) {
@@ -112,6 +114,11 @@ block_description <- function(block) {
     }
   )
   paste(parts, collapse = "\n\n")
+}
+
+block_provenance <- function(block) {
+  tags <- roxygen2::block_get_tags(block, "provenance")
+  vapply(tags, function(tag) tag$val, character(1))
 }
 
 block_arguments <- function(block, fn) {
