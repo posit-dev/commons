@@ -69,9 +69,10 @@ test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
   skip_on_os(c("linux", "mac"))
   expect_error(
     callr::r(
-      worker_bootstrap,
+      worker_call,
       args = list(
-        path = worker_script_path(),
+        runtime = worker_runtime(),
+        name = "worker_init",
         args = list(
           parent_tmp = tempdir(),
           work_dir = tempdir(),
@@ -87,9 +88,10 @@ test_that("worker_init errors without the compiled library", {
   skip_on_os(c("windows", "solaris"))
   expect_error(
     callr::r(
-      worker_bootstrap,
+      worker_call,
       args = list(
-        path = worker_script_path(),
+        runtime = worker_runtime(),
+        name = "worker_init",
         args = list(
           parent_tmp = tempdir(),
           work_dir = tempdir(),
@@ -103,9 +105,10 @@ test_that("worker_init errors without the compiled library", {
 
 test_that("worker_init permits the explicit guardrail mode", {
   expect_true(callr::r(
-    worker_bootstrap,
+    worker_call,
     args = list(
-      path = worker_script_path(),
+      runtime = worker_runtime(),
+      name = "worker_init",
       args = list(
         parent_tmp = tempdir(),
         work_dir = tempdir(),
@@ -153,9 +156,10 @@ sandboxed_worker_probes <- function(
     args = list(outside = outside)
   )
   rs$run(
-    worker_bootstrap,
+    worker_call,
     args = list(
-      path = worker_script_path(),
+      runtime = worker_runtime(),
+      name = "worker_init",
       args = list(
         parent_tmp = tempdir(),
         work_dir = work_dir,

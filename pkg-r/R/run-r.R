@@ -95,10 +95,12 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
           function(id) get_handle(handles, id)
         )
         dims <- plot_dimensions()
-        # Dispatch by name to an entry point sourced into the child process.
+        # Recreate entry points outside the model's global environment for
+        # each call.
         worker$rs$call(
           worker_call,
           args = list(
+            runtime = worker$runtime,
             name = "worker_run_code",
             args = list(
               code = code,
@@ -278,6 +280,7 @@ new_r_worker <- function(network = "none", protection = "sandbox") {
   worker$tail <- NULL
   worker$pending <- 0L
   worker$last_used <- Sys.time()
+  worker$runtime <- worker_runtime()
   # Close the child process when the agent is garbage-collected, so a session
   # that ends without idling out doesn't leak an R process.
   reg.finalizer(worker, worker_close, onexit = TRUE)
@@ -300,13 +303,13 @@ worker_ensure <- function(worker, fn_sources = character()) {
     ),
     wait = TRUE
   )
-  # Source the worker runtime before engaging the sandbox so load_all() paths
-  # outside the worker's read roots work. No user-provided code runs until the
-  # sandbox is active.
+  # Load the worker runtime before engaging the sandbox. No user-provided code
+  # runs until the sandbox is active.
   rs$run(
-    worker_bootstrap,
+    worker_call,
     args = list(
-      path = worker_script_path(),
+      runtime = worker$runtime,
+      name = "worker_init",
       args = list(
         parent_tmp = tempdir(),
         work_dir = work_dir,
@@ -321,6 +324,7 @@ worker_ensure <- function(worker, fn_sources = character()) {
     rs$run(
       worker_call,
       args = list(
+        runtime = worker$runtime,
         name = "worker_guardrails",
         args = list(work_dir = work_dir, network = worker$network)
       )
@@ -332,6 +336,7 @@ worker_ensure <- function(worker, fn_sources = character()) {
     rs$run(
       worker_call,
       args = list(
+        runtime = worker$runtime,
         name = "worker_define_functions",
         args = list(fn_sources = fn_sources)
       )
@@ -407,13 +412,15 @@ worker_script_path <- function() {
   system.file("worker", "worker.R", package = "commons", mustWork = TRUE)
 }
 
-worker_bootstrap <- function(path, args) {
-  sys.source(path, envir = globalenv())
-  do.call("worker_init", args, envir = globalenv())
+worker_runtime <- function() {
+  parse(worker_script_path(), keep.source = FALSE)
 }
 
-worker_call <- function(name, args) {
-  do.call(name, args, envir = globalenv())
+worker_call <- function(runtime, name, args) {
+  runtime_env <- base::new.env(parent = base::baseenv())
+  base::eval(runtime, envir = runtime_env)
+  entry_point <- base::get(name, envir = runtime_env, inherits = FALSE)
+  base::do.call(entry_point, args)
 }
 
 # Close the worker after a quiet stretch; it respawns lazily on the next

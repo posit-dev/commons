@@ -1,4 +1,4 @@
-# This file is sourced only inside the isolated callr worker. Its functions may
+# This file is loaded only inside the isolated callr worker. Its functions may
 # mutate that process's global environment and temporarily replace bindings.
 
 worker_guardrails <- function(work_dir, network = "none") {
