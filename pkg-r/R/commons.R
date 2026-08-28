@@ -396,6 +396,12 @@ Commons <- R6::R6Class(
       # cache should fail the deploy. commons_prewarm() downgrades failures
       # to warnings for the Shiny idle-time path, where an escaping error
       # would stop the app.
+      self$prewarm_context()
+      self$prewarm_sources()
+      invisible(self)
+    },
+
+    prewarm_context = function() {
       layer <- private$context_layer
       layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
       if (!is.null(layer_state) && length(layer_state$docs) > 0) {
@@ -408,6 +414,10 @@ Commons <- R6::R6Class(
         )
         context_store(layer)
       }
+      invisible(self)
+    },
+
+    prewarm_sources = function() {
       for (source in private$sources) {
         source_prewarm(source)
       }

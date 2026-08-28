@@ -13,16 +13,25 @@ commons_prewarm(client)
 \code{NULL}, invisibly.
 }
 \description{
-A \code{\link[=commons]{commons()}} agent builds its context index on first use. To move that
-cost off the first question, call \code{commons_prewarm()} in a Shiny server
-function: it defers the agent's \code{prewarm()} method to post-startup idle
-time, so the index builds while the user reads the welcome message.
+A \code{\link[=commons]{commons()}} agent defers two kinds of setup to first use, and exposes a
+\code{prewarm()} method for each so you can move the cost off the first
+question:
 }
 \details{
-\code{prewarm()} is synchronous and independent of the Shiny runtime, so it can
-also be called directly to warm the on-disk cache ahead of deployment. It
-also starts a background process that downloads any uncached pins into the
-local pins cache (see \code{\link[=data_source]{data_source()}}).
+\itemize{
+\item \code{agent$prewarm_context()} builds the context index (the store behind
+\code{search_context}). It is synchronous and in-process: the index is
+in-memory, so each Shiny session's agent builds its own.
+\item \code{agent$prewarm_sources()} starts a background process that downloads
+any uncached pins into the local pins cache (see \code{\link[=data_source]{data_source()}}).
+Because the pins cache is on disk, this can also run ahead of
+deployment — outside the Shiny runtime entirely — and the deployed
+app reads the warmed cache.
+}
+
+\code{agent$prewarm()} calls both. Call \code{commons_prewarm()} in a Shiny server
+function to defer warming to post-startup idle time, so it happens while
+the user reads the welcome message.
 
 \code{prewarm()} lets failures propagate, since a direct call is typically
 warming caches ahead of deployment and a mere warning would sail through

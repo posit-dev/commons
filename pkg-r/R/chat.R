@@ -125,15 +125,22 @@ commons_server <- function(id, client, ...) {
 
 #' Pre-warm a commons agent during post-startup idle time
 #'
-#' A [commons()] agent builds its context index on first use. To move that
-#' cost off the first question, call `commons_prewarm()` in a Shiny server
-#' function: it defers the agent's `prewarm()` method to post-startup idle
-#' time, so the index builds while the user reads the welcome message.
+#' A [commons()] agent defers two kinds of setup to first use, and exposes a
+#' `prewarm()` method for each so you can move the cost off the first
+#' question:
 #'
-#' `prewarm()` is synchronous and independent of the Shiny runtime, so it can
-#' also be called directly to warm the on-disk cache ahead of deployment. It
-#' also starts a background process that downloads any uncached pins into the
-#' local pins cache (see [data_source()]).
+#' * `agent$prewarm_context()` builds the context index (the store behind
+#'   `search_context`). It is synchronous and in-process: the index is
+#'   in-memory, so each Shiny session's agent builds its own.
+#' * `agent$prewarm_sources()` starts a background process that downloads
+#'   any uncached pins into the local pins cache (see [data_source()]).
+#'   Because the pins cache is on disk, this can also run ahead of
+#'   deployment — outside the Shiny runtime entirely — and the deployed
+#'   app reads the warmed cache.
+#'
+#' `agent$prewarm()` calls both. Call `commons_prewarm()` in a Shiny server
+#' function to defer warming to post-startup idle time, so it happens while
+#' the user reads the welcome message.
 #'
 #' `prewarm()` lets failures propagate, since a direct call is typically
 #' warming caches ahead of deployment and a mere warning would sail through

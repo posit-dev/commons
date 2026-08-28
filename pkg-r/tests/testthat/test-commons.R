@@ -418,7 +418,7 @@ test_that("commons() errors on injection parameters matching no name", {
 })
 
 
-test_that("prewarm() builds the context store ahead of the first search", {
+test_that("prewarm_context() builds the context store ahead of the first search", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
   layer <- context_layer(files = path)
@@ -428,13 +428,25 @@ test_that("prewarm() builds the context store ahead of the first search", {
   agent <- test_agent(context_layer = layer)
   expect_null(context_layer_state(layer)$store)
 
-  agent$prewarm()
+  agent$prewarm_context()
   expect_false(is.null(context_layer_state(layer)$store))
   expect_match(context_search(layer, "revenue")[[1]], "booked")
 })
 
+test_that("prewarm() warms both context and sources", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  layer <- context_layer(files = path)
+  agent <- test_agent(context_layer = layer)
+
+  agent$prewarm()
+  expect_false(is.null(context_layer_state(layer)$store))
+})
+
 test_that("prewarm() without a context layer is a no-op", {
   expect_no_error(test_agent()$prewarm())
+  expect_no_error(test_agent()$prewarm_context())
+  expect_no_error(test_agent()$prewarm_sources())
 })
 
 test_that("prewarm() propagates failures", {
@@ -447,16 +459,17 @@ test_that("prewarm() propagates failures", {
     .package = "commons"
   )
   expect_error(agent$prewarm(), "index build exploded")
+  expect_error(agent$prewarm_context(), "index build exploded")
 })
 
-test_that("prewarm() records a cache-miss build and its own span", {
+test_that("prewarm_context() records a cache-miss build and its own span", {
   skip_if_not_installed("otelsdk")
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
   agent <- test_agent(context_layer = context_layer(files = path))
 
-  recorded <- otelsdk::with_otel_record(agent$prewarm())
+  recorded <- otelsdk::with_otel_record(agent$prewarm_context())
   names <- vapply(recorded$traces, `[[`, character(1), "name")
   expect_true("commons_context_store_build" %in% names)
 
@@ -468,15 +481,15 @@ test_that("prewarm() records a cache-miss build and its own span", {
   expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], FALSE)
 })
 
-test_that("prewarm() records a cache hit without a build span", {
+test_that("prewarm_context() records a cache hit without a build span", {
   skip_if_not_installed("otelsdk")
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
   agent <- test_agent(context_layer = context_layer(files = path))
-  agent$prewarm()
+  agent$prewarm_context()
 
-  recorded <- otelsdk::with_otel_record(agent$prewarm())
+  recorded <- otelsdk::with_otel_record(agent$prewarm_context())
   names <- vapply(recorded$traces, `[[`, character(1), "name")
   expect_false("commons_context_store_build" %in% names)
 
@@ -484,7 +497,7 @@ test_that("prewarm() records a cache hit without a build span", {
   expect_equal(prewarm_span$attributes[["commons.context.cache_hit"]], TRUE)
 })
 
-test_that("prewarm() warms board pins in the background without loading them", {
+test_that("prewarm_sources() warms board pins in the background without loading them", {
   skip_if_not_installed("pins")
 
   board <- board_with_pins(
@@ -499,7 +512,7 @@ test_that("prewarm() warms board pins in the background without loading them", {
 
   expect_length(DBI::dbListTables(data_source_state(src)$con), 0)
 
-  agent$prewarm()
+  agent$prewarm_sources()
   p <- data_source_state(src)$pending$process
   expect_s3_class(p, "r_process")
   withr::defer(p$kill())
