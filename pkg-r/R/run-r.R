@@ -95,8 +95,7 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
           function(id) get_handle(handles, id)
         )
         dims <- plot_dimensions()
-        # callr rebinds a transferred function's environment to the worker's
-        # global env, so the entry point must be namespace-qualified.
+        # Dispatch by name to an entry point sourced into the child process.
         worker$rs$call(
           worker_call,
           args = list(
@@ -403,6 +402,7 @@ worker_scrubbed_env <- function(work_dir, single_thread = FALSE) {
   env
 }
 
+# The runtime lives outside R/ because it deliberately mutates only the child.
 worker_script_path <- function() {
   system.file("worker", "worker.R", package = "commons", mustWork = TRUE)
 }
