@@ -82,7 +82,7 @@ vignette.
 
 <!-- Diagram source: Introduction to commons vignette. Update it there, then save the image. https://github.com/posit-dev/commons/blob/a29ac09c39c8edb99f2a9ea0ecc1836e6538bb25/vignettes/commons.Rmd#L76 -->
 
-<img src="man/figures/README-trust-flow.png" alt="A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and produces a verified answer. The lower-trust path searches context and writes custom SQL or R, producing either a cited or untrusted answer." width="100%" />
+<img src="man/figures/README-trust-flow.png" alt="Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Verified answer outcome. The lower-trust path searches context and writes custom SQL or R, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome." width="684" />
 
 ## Evaluation
 
@@ -96,10 +96,9 @@ Both have access to the same underlying data.
 
 In this evaluation, the commons agent had higher mean accuracy (86.3%
 vs. 83.5%), took less time to answer questions (a median of 31.0
-vs. 60.5 seconds), and used fewer output tokens (243,403 vs. 439,188
-total).
+vs. 60.5 seconds), and cost less (\$5.64 vs. \$13.76 total).
 
-<img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and fewer total output tokens." width="100%" />
+<img src="man/figures/README-eval-plot-1.png" alt="Three bar charts compare commons with Claude Code. commons has higher mean accuracy, lower median solver time, and lower total cost." width="100%" />
 
 In the evaluation, both harnesses use Claude Sonnet 5 at medium effort.
 The evaluation runs each of 32 questions three times. Questions require
