@@ -8,6 +8,8 @@
 :root {
   --shiny-chat-user-message-bg: var(--bs-tertiary-bg, #f4f5f7);
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
+  --shiny-chat-pending-indicator-content: "Working…";
+  --shiny-chat-pending-indicator-icon-display: none;
 
   /* Send/stop keep shinychat's primary/danger hues, softened toward the
    * background so they don't dominate the chat. */
@@ -27,6 +29,71 @@
 shiny-chat-container .shiny-chat-input .tiptap {
   border-color: var(--bs-border-color, #dee2e6);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.shiny-chat-pending-indicator {
+  gap: 0.5rem;
+}
+
+.shiny-chat-pending-indicator::before {
+  background-color: var(--bs-secondary-color, #6c757d);
+  content: "";
+  flex: none;
+  height: 0.4em;
+  margin-inline: 0.25em;
+  opacity: var(--shiny-chat-activity-opacity, 0.7);
+  transform: rotate(45deg);
+  width: 0.4em;
+}
+
+.shiny-chat-pending-indicator::after {
+  animation: commons-chat-working 1.6s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--bs-secondary-color, #6c757d) 25%,
+    var(--bs-body-color, #212529) 50%,
+    var(--bs-secondary-color, #6c757d) 75%
+  );
+  background-clip: text;
+  background-size: 200% 100%;
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.8em;
+  opacity: var(--shiny-chat-activity-opacity, 0.7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes commons-chat-working {
+  from {
+    background-position: 150% 0;
+  }
+
+  to {
+    background-position: -50% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shiny-chat-pending-indicator::after {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
+@media (prefers-contrast: more),
+  (prefers-reduced-transparency: reduce),
+  (forced-colors: active) {
+  .shiny-chat-pending-indicator::before,
+  .shiny-chat-pending-indicator::after {
+    opacity: 1;
+  }
+
+  .shiny-chat-pending-indicator::after {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
 }
 
 /* ---- Answer provenance ----------------------------------------------- */
