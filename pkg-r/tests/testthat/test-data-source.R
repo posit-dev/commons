@@ -498,3 +498,69 @@ test_that("as_data_sources validates its input", {
     error = TRUE
   )
 })
+
+test_that("parquet/csv pins register as zero-copy views over the pins cache", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_temp()
+  suppressMessages({
+    pins::pin_write(board, data.frame(id = 1:3, v = letters[1:3]), "p-parquet", type = "parquet")
+    pins::pin_write(board, data.frame(id = 4:6, v = letters[4:6]), "p-csv", type = "csv")
+  })
+  src <- data_source(
+    board,
+    tables = c(parquet_t = "p-parquet", csv_t = "p-csv")
+  )
+
+  for (table in c("parquet_t", "csv_t")) {
+    res <- source_query(src, sprintf("SELECT * FROM %s", table))
+    expect_equal(nrow(res), 3)
+    # Registered as a view over the cache file, not a copied table
+    catalog <- DBI::dbGetQuery(
+      src$con,
+      "SELECT table_type FROM information_schema.tables WHERE table_name = $1",
+      params = list(table)
+    )
+    expect_equal(catalog$table_type, "VIEW")
+    # The view reads the pin's versioned file directly
+    expect_true(file.exists(src$pending$views[[table]]$path))
+  }
+})
+
+test_that("rds pins still load eagerly as tables", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  res <- source_query(src, "SELECT * FROM orders")
+  expect_equal(nrow(res), 3)
+  catalog <- DBI::dbGetQuery(
+    src$con,
+    "SELECT table_type FROM information_schema.tables WHERE table_name = 'orders'"
+  )
+  expect_equal(catalog$table_type, "BASE TABLE")
+})
+
+test_that("a dangling pin view is re-resolved and retried transparently", {
+  skip_if_not_installed("pins")
+
+  board <- pins::board_folder(withr::local_tempdir(), versioned = FALSE)
+  suppressMessages(
+    pins::pin_write(board, data.frame(id = 1L), "orders", type = "parquet")
+  )
+  src <- data_source(board, tables = c(orders = "orders"))
+
+  expect_equal(source_query(src, "SELECT * FROM orders")$id, 1L)
+  view_path <- src$pending$views$orders$path
+
+  # A rewrite on a non-versioned board deletes the old version's directory
+  suppressMessages(
+    pins::pin_write(board, data.frame(id = 1:2), "orders", type = "parquet")
+  )
+  expect_false(file.exists(view_path))
+
+  # The next query re-resolves the latest version and succeeds
+  expect_equal(source_query(src, "SELECT * FROM orders")$id, 1:2)
+  expect_true(file.exists(src$pending$views$orders$path))
+})
