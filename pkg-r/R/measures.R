@@ -271,24 +271,33 @@ is_measure_list <- function(x) {
 
 measure_schema_text <- function(td, source_names = character()) {
   props <- tool_properties(td)
-  args <- if (length(props) == 0) {
-    "  (no arguments)"
-  } else {
-    paste(
-      vapply(
-        names(props),
-        function(nm) arg_schema_line(nm, props[[nm]]),
-        character(1)
-      ),
-      collapse = "\n"
+  args <- if (length(props) > 0) {
+    paste0(
+      "arguments:\n",
+      paste(
+        vapply(
+          names(props),
+          function(nm) arg_schema_line(nm, props[[nm]]),
+          character(1)
+        ),
+        collapse = "\n"
+      )
     )
+  } else {
+    ""
   }
+
+  details <- paste0(measure_sources_line(td, source_names), args)
+  details <- sub("\n$", "", details)
+  if (nzchar(details)) {
+    details <- paste0("\n\n", details)
+  }
+
   sprintf(
-    "### %s\n%s\n\n%sarguments:\n%s",
+    "### %s\n%s%s",
     tool_name(td),
     tool_description(td),
-    measure_sources_line(td, source_names),
-    args
+    details
   )
 }
 
