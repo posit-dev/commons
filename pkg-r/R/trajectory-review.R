@@ -245,17 +245,14 @@ trajectory_exchange_messages <- function(turns, exchange) {
   messages
 }
 
-# Replay the transcript the way shinychat itself restores a bookmarked chat
-# (client_set_ui()): yield each message's contents from a generator through
-# chat_append(), so every item is classified on its own (markdown vs HTML)
-# exactly as in the live stream. Static chat_ui(messages = ...) would fold
+# Replay through chat_append(), the way shinychat's own client_set_ui()
+# restores a bookmarked chat: static chat_ui(messages = ...) would fold
 # mixed content (tool cards plus markdown text) into a single raw-HTML
 # island, escaping the text and hiding it from aside grouping.
 #
-# shinychat::chat_restore() is close to what we want but not quite: it only
-# renders a client's turns as a side effect of bookmark registration (an
-# observer fired whenever the scheduler runs it), while we need to replay
-# pre-computed messages -- with provenance asides attached -- into a freshly
+# shinychat::chat_restore() is close but not a fit: it renders a client's
+# turns only as a side effect of bookmark registration, while we replay
+# pre-computed messages (with provenance asides attached) into a freshly
 # rendered element, sequenced before seed_transcript_decorations().
 replay_transcript <- function(id, messages, session) {
   for (message in messages) {
@@ -350,8 +347,6 @@ add_message_provenance <- function(messages, provenance) {
     } else {
       record$provenance_tag %||% NA_character_
     }
-    # The transcript replays what the live chat streamed: the same
-    # <shiny-aside> marker, grouped and positioned by shinychat itself.
     # Reviewers also get a "Cited" marker the live chat omits.
     aside <- provenance_aside(tag, include_cited = TRUE)
     if (!nzchar(aside)) {
@@ -379,9 +374,7 @@ add_message_provenance <- function(messages, provenance) {
 
 # The aside must stay markdown, not HTML: htmltools::HTML() would mark the
 # chunk as raw HTML, which shinychat's aside grouping does not reach into.
-# A trailing markdown chunk is also exactly how a live-streamed aside lands:
-# replay_transcript() yields each content item on its own, and the client
-# folds consecutive markdown chunks into one block.
+# A trailing markdown chunk is also how the live stream delivers it.
 append_provenance_aside <- function(content, aside) {
   if (is.character(content)) {
     return(list(content, aside))
