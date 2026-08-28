@@ -94,7 +94,7 @@ ui <- bslib::page_fillable(
 )
 
 server <- function(input, output, session) {
-  chat <- commons_server("chat", agent, history = FALSE)
+  chat <- shinychat::chat_server("chat", client = agent, history = FALSE)
   session$onFlushed(
     function() {
       chat$update_user_input("Show the citation fixture.", submit = TRUE)

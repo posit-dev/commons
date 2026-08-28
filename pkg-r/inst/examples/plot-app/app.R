@@ -40,7 +40,8 @@ server <- function(input, output, session) {
     semantic_layer = measures
   )
 
-  commons_server("chat", agent)
+  later::later(function() agent$prewarm())
+  shinychat::chat_server("chat", client = agent)
 }
 
 shinyApp(ui, server)

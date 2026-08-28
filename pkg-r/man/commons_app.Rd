@@ -15,18 +15,18 @@ commons_app(client, ...)
 A \code{\link[shiny:shinyApp]{shiny::shinyApp()}} object.
 }
 \description{
-\code{commons_app()} composes \code{\link[=commons_server]{commons_server()}} and \code{\link[=commons_theme]{commons_theme()}} into a
-complete app for local development. To customize and deploy the Shiny app,
-assemble the UI and server yourself with \code{\link[=commons_theme]{commons_theme()}} and
-\code{\link[=commons_server]{commons_server()}}.
+\code{commons_app()} composes \code{\link[shinychat:page_chat]{shinychat::page_chat()}}, \code{\link[=commons_theme]{commons_theme()}}, and
+\code{\link[shinychat:chat_server]{shinychat::chat_server()}} into a complete app for local development. To
+customize and deploy the Shiny app, assemble the UI and server yourself
+with \code{\link[=commons_theme]{commons_theme()}} and \code{\link[shinychat:chat_server]{shinychat::chat_server()}}.
 }
 \section{Citations and provenance}{
 
-The server verifies citations against trusted calculations, context, and data
-documentation as the answer streams. Verified citations appear inline, with
-details that name the trusted source. A provenance marker follows the answer
-when it was produced by a trusted calculation, or when a fallback answer
-cites nothing verified.
+The server verifies citations against trusted calculations, context, and
+data documentation as the answer streams. Verified citations appear inline,
+with details that name the trusted source. A provenance marker follows the
+answer when it was produced by a trusted calculation, or when a fallback
+answer cites nothing verified.
 }
 
 \examples{

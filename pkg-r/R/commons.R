@@ -8,8 +8,8 @@
 #'
 #' The provider and model come from `client`; commons sets its own system prompt
 #' and tools. Use `agent$chat()` to ask questions, [commons_theme()] and
-#' [commons_server()] to embed the agent in Shiny, and [vitals::generate()]
-#' to use the agent as a vitals solver.
+#' [shinychat::chat_server()] to embed the agent in Shiny, and
+#' [vitals::generate()] to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()]. A system prompt already set on the client is

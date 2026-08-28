@@ -51,7 +51,8 @@ server <- function(input, output, session) {
     data_sources = list(snowflake = source)
   )
 
-  commons_server("chat", agent)
+  later::later(function() agent$prewarm())
+  shinychat::chat_server("chat", client = agent)
 }
 
 shinyApp(ui, server)

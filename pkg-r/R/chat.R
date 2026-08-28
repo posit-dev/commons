@@ -1,9 +1,9 @@
 #' Shiny chat app for a commons agent
 #'
-#' `commons_app()` composes [commons_server()] and [commons_theme()] into a
-#' complete app for local development. To customize and deploy the Shiny app, 
-#' assemble the UI and server yourself with [commons_theme()] and 
-#' [commons_server()].
+#' `commons_app()` composes [shinychat::page_chat()], [commons_theme()], and
+#' [shinychat::chat_server()] into a complete app for local development. To
+#' customize and deploy the Shiny app, assemble the UI and server yourself
+#' with [commons_theme()] and [shinychat::chat_server()].
 #'
 #' @param client A [commons()] agent.
 #' @param ... Extra arguments passed to [shiny::shinyApp()].
@@ -11,11 +11,11 @@
 #' @return A [shiny::shinyApp()] object.
 #'
 #' @section Citations and provenance:
-#' The server verifies citations against trusted calculations, context, and data
-#' documentation as the answer streams. Verified citations appear inline, with
-#' details that name the trusted source. A provenance marker follows the answer
-#' when it was produced by a trusted calculation, or when a fallback answer
-#' cites nothing verified.
+#' The server verifies citations against trusted calculations, context, and
+#' data documentation as the answer streams. Verified citations appear inline,
+#' with details that name the trusted source. A provenance marker follows the
+#' answer when it was produced by a trusted calculation, or when a fallback
+#' answer cites nothing verified.
 #'
 #' @examples
 #' \dontrun{
@@ -28,7 +28,6 @@
 #'
 #' @export
 commons_app <- function(client, ...) {
-  check_chat_packages()
   check_commons_client(client)
 
   ui <- function(req) {
@@ -52,35 +51,45 @@ commons_app <- function(client, ...) {
         shiny::stopApp()
       })
     }
-    commons_server("chat", client)
+    prewarm_on_idle(client)
+    shinychat::chat_server("chat", client = client)
   }
 
   shiny::shinyApp(ui, server, ..., enableBookmarking = "url")
 }
 
-#' Chat server and theme for custom commons apps
+#' Theme for custom commons chat apps
 #'
-#' These are the building blocks for deploying a commons chat as a Shiny
-#' app; for local development, use [commons_app()]. Pair `commons_server()`
-#' with [shinychat::page_chat()] or [shinychat::chat_ui()], passing
-#' `theme = commons_theme()` so the commons chat assets are on the page.
+#' `commons_theme()` is the building block for deploying a commons chat as a
+#' Shiny app; for local development, use [commons_app()]. Pair
+#' [shinychat::page_chat()] or [shinychat::chat_ui()] with
+#' [shinychat::chat_server()], passing `theme = commons_theme()` so the
+#' commons chat assets are on the page.
 #'
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
 #' works anywhere a bslib theme does.
 #'
-#' @param client A [commons()] agent. In a deployed app, create the agent
-#'   inside the server function and pass it to `commons_server()` so each
-#'   Shiny session gets its own agent state.
-#' @param id The ID of the chat element; must match the `id` of the
-#'   [shinychat::page_chat()] or [shinychat::chat_ui()] on the page.
-#' @param ... In `commons_server()`, arguments passed to
-#'   [shinychat::chat_server()]. In `commons_theme()`, named Sass variables
-#'   forwarded to [shinychat::page_chat_theme()].
+#' @section Pre-warming:
+#' A [commons()] agent builds its context index on first use. To move that
+#' cost off the first question, call the agent's `prewarm()` method during
+#' startup. `prewarm()` is synchronous and independent of the Shiny runtime,
+#' so it can also warm the on-disk cache ahead of deployment; in a Shiny
+#' server function, defer it to post-startup idle time so the index builds
+#' while the user reads the welcome message:
+#'
+#' ```r
+#' later::later(function() agent$prewarm())
+#' ```
+#'
+#' `prewarm()` also starts a background process that downloads any uncached
+#' pins into the local pins cache (see [data_source()]).
+#'
+#' @param ... Named Sass variables forwarded to
+#'   [shinychat::page_chat_theme()].
 #' @param preset A bslib or Bootswatch preset name.
 #'
-#' @return `commons_server()` returns the [shinychat::chat_server()] result.
-#'   `commons_theme()` returns a [bslib::bs_theme()] object.
+#' @return A [bslib::bs_theme()] object.
 #'
 #' @examples
 #' \dontrun{
@@ -95,53 +104,41 @@ commons_app <- function(client, ...) {
 #'     ellmer::chat_anthropic(),
 #'     data_sources = data_source(sales = sales)
 #'   )
-#'   commons_server("chat", agent)
+#'   # Build the context index during post-startup idle time
+#'   later::later(function() agent$prewarm())
+#'   chat_server("chat", client = agent)
 #' }
 #'
 #' shinyApp(ui, server)
 #' }
 #'
-#' @name commons_server
+#' @name commons_theme
 #' @export
-commons_server <- function(id, client, ...) {
-  check_chat_packages()
-  check_commons_client(client)
-  local_commons_span(
-    "commons_server_start",
-    attributes = list("commons.server.id" = id)
+commons_theme <- function(..., preset = "shiny") {
+  theme <- shinychat::page_chat_theme(
+    "border-radius" = "1rem",
+    "border-radius-sm" = "1rem",
+    "shiny-chat-page-title-font-weight" = 300,
+    "shiny-chat-user-message-border-radius" = "0.75rem",
+    "shiny-chat-user-message-padding" = "0.5rem 1.5rem",
+    ...,
+    preset = preset
   )
+  bslib::bs_bundle(
+    theme,
+    sass::sass_layer(html_deps = list(commons_chat_dependency()))
+  )
+}
 
-  # Build the context index and start the background pin-cache download
-  # during post-startup idle time (while the user reads the welcome message).
-  # Errors are swallowed: the first search retries the index build and
-  # surfaces the failure to the model, and an unwarmed pin is simply
-  # downloaded at its first use.
+# Build the context index and start the background pin-cache download
+# during post-startup idle time (while the user reads the welcome message).
+# Errors are swallowed: the first search retries the index build and
+# surfaces the failure to the model, and an unwarmed pin is simply
+# downloaded at its first use.
+prewarm_on_idle <- function(client) {
   later::later(function() {
     tryCatch(client$prewarm(), error = function(err) NULL)
   })
-
-  shinychat::chat_server(id, client = client, ...)
-}
-
-check_chat_packages <- function(call = rlang::caller_env()) {
-  missing <- c("htmltools", "shiny", "shinychat")[
-    !vapply(
-      c("htmltools", "shiny", "shinychat"),
-      requireNamespace,
-      logical(1),
-      quietly = TRUE
-    )
-  ]
-
-  if (length(missing)) {
-    cli::cli_abort(
-      c(
-        "The {.pkg commons} chat module requires missing package{?s}: {.pkg {missing}}.",
-        i = "Install {.pkg {missing}} to use the {.pkg commons} chat functions."
-      ),
-      call = call
-    )
-  }
 }
 
 check_commons_client <- function(client, call = rlang::caller_env()) {
