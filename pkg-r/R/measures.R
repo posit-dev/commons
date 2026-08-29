@@ -240,10 +240,10 @@ resolve_injections <- function(
 }
 
 new_semantic_layer <- function(measures = list(), fn_sources = character()) {
-  SemanticLayer$new(new_object_state(
+  SemanticLayer$new(
     measures = measures,
     fn_sources = fn_sources
-  ))
+  )
 }
 
 check_semantic_layer <- function(semantic_layer, call = rlang::caller_env()) {

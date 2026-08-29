@@ -64,10 +64,10 @@ augment_context_layer <- function(context_layer, sources) {
 }
 
 new_context_layer <- function(docs) {
-  ContextLayer$new(new_object_state(
+  ContextLayer$new(
     docs = docs,
     cache = new.env(parent = emptyenv())
-  ))
+  )
 }
 
 dictionary_context_chunks <- function(dictionary) {

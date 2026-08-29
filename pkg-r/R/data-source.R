@@ -388,7 +388,7 @@ new_data_source <- function(
     )
   }
 
-  source <- DataSource$new(new_object_state(
+  source <- DataSource$new(
     con = con,
     tables = tables,
     table_ids = table_ids,
@@ -406,7 +406,7 @@ new_data_source <- function(
     semantic_models = semantic_models,
     semantic_stubs = semantic_stubs,
     calculations = semantic_model_calculations(semantic_models)
-  ))
+  )
   definition_compile_data_source(source)
 }
 
