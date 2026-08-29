@@ -375,24 +375,10 @@ new_data_source <- function(
   namespace_selected = FALSE,
   session = NULL
 ) {
-  # Disconnect only the DuckDB connection we created; a user-supplied connection
-  # has its own owner and lifetime.
-  handle <- NULL
-  if (owned) {
-    handle <- new.env(parent = emptyenv())
-    handle$con <- con
-    reg.finalizer(
-      handle,
-      function(h) DBI::dbDisconnect(h$con, shutdown = TRUE),
-      onexit = TRUE
-    )
-  }
-
   source <- DataSource$new(
     con = con,
     tables = tables,
     table_ids = table_ids,
-    handle = handle,
     dictionary = dictionary,
     pending = pending,
     relations = relations,
@@ -407,6 +393,14 @@ new_data_source <- function(
     semantic_stubs = semantic_stubs,
     calculations = semantic_model_calculations(semantic_models)
   )
+  if (owned) {
+    # Retained private state must keep its owned connection alive too.
+    reg.finalizer(
+      data_source_state(source),
+      function(state) DBI::dbDisconnect(state$con, shutdown = TRUE),
+      onexit = TRUE
+    )
+  }
   definition_compile_data_source(source)
 }
 

@@ -12,6 +12,7 @@ semantic_layer_state <- function(x) object_private(x)
 
 context_layer_state <- function(x) object_private(x)
 
+# Layer connections, processes, and caches need explicit ownership before cloning.
 DataSource <- R6::R6Class(
   "commons_data_source",
   public = list(
@@ -19,7 +20,6 @@ DataSource <- R6::R6Class(
       con,
       tables,
       table_ids,
-      handle,
       dictionary,
       pending,
       relations,
@@ -33,7 +33,6 @@ DataSource <- R6::R6Class(
       private$con <- con
       private$tables <- tables
       private$table_ids <- table_ids
-      private$handle <- handle
       private$dictionary <- dictionary
       private$pending <- pending
       private$relations <- relations
@@ -54,7 +53,6 @@ DataSource <- R6::R6Class(
     con = NULL,
     tables = NULL,
     table_ids = NULL,
-    handle = NULL,
     dictionary = NULL,
     pending = NULL,
     relations = NULL,
