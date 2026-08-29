@@ -36,7 +36,7 @@
                 ${item(
                   icon("trusted-icon.svg"),
                   "Trusted",
-                  "For the given answer, the agent only searched for and invoked a human-vetted calculation."
+                  "For the given answer, the agent only searched for and invoked a trusted calculation developed and maintained by the agent authors."
                 )}
                 ${item(
                   '<span class="commons-provenance-info-no-marker" aria-hidden="true">—</span>',
