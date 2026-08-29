@@ -424,12 +424,12 @@ test_that("prewarm() builds the context store ahead of the first search", {
   layer <- context_layer(files = path)
 
   # test_source() has no dictionary, so the agent augments nothing and shares
-  # `layer`'s cache environment.
+  # `layer`'s store.
   agent <- test_agent(context_layer = layer)
-  expect_null(context_layer_state(layer)$cache$store)
+  expect_null(context_layer_state(layer)$store)
 
   agent$prewarm()
-  expect_false(is.null(context_layer_state(layer)$cache$store))
+  expect_false(is.null(context_layer_state(layer)$store))
   expect_match(context_search(layer, "revenue")[[1]], "booked")
 })
 

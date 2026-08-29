@@ -60,14 +60,12 @@ augment_context_layer <- function(context_layer, sources) {
 
   layer <- context_layer %||% context_layer()
   layer_state <- context_layer_state(layer)
+  # Source enrichment belongs to this agent, not the caller's layer.
   new_context_layer(c(layer_state$docs, chunks))
 }
 
 new_context_layer <- function(docs) {
-  ContextLayer$new(
-    docs = docs,
-    cache = new.env(parent = emptyenv())
-  )
+  ContextLayer$new(docs = docs)
 }
 
 dictionary_context_chunks <- function(dictionary) {
@@ -110,11 +108,11 @@ strip_frontmatter <- function(md) {
 
 # Store setup (duckdb creation, chunk insertion, FTS indexing) is the most
 # expensive part of building an agent and many conversations never search, so
-# it's deferred to the first search. Aliases of one layer share its cache;
-# augmenting its documents creates a layer with a fresh cache.
+# it's deferred to the first search. Aliases of one layer share its store;
+# augmenting its documents creates a layer with a fresh store.
 context_store <- function(layer) {
   state <- context_layer_state(layer)
-  if (is.null(state$cache$store)) {
+  if (is.null(state$store)) {
     local_commons_span(
       "commons_context_store_build",
       attributes = list("commons.context.n_docs" = length(state$docs))
@@ -124,9 +122,9 @@ context_store <- function(layer) {
       ragnar::ragnar_store_insert(store, ragnar::markdown_chunk(doc))
     }
     ragnar::ragnar_store_build_index(store, type = "fts")
-    state$cache$store <- store
+    state$store <- store
   }
-  state$cache$store
+  state$store
 }
 
 context_search <- function(layer, query, n = 3) {

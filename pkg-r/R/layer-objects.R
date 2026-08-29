@@ -95,9 +95,8 @@ SemanticLayer <- R6::R6Class(
 ContextLayer <- R6::R6Class(
   "commons_context_layer",
   public = list(
-    initialize = function(docs, cache) {
+    initialize = function(docs) {
       private$docs <- docs
-      private$cache <- cache
     },
     print = function(...) {
       n <- length(private$docs)
@@ -107,7 +106,7 @@ ContextLayer <- R6::R6Class(
   ),
   private = list(
     docs = NULL,
-    cache = NULL
+    store = NULL
   ),
   lock_objects = TRUE,
   lock_class = TRUE,
