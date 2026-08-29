@@ -249,6 +249,7 @@ new_semantic_layer <- function(measures = list(), fn_sources = character()) {
 check_semantic_layer <- function(semantic_layer, call = rlang::caller_env()) {
   if (
     !is.environment(semantic_layer) ||
+      !inherits(semantic_layer, "R6") ||
       !inherits(semantic_layer, "commons_semantic_layer")
   ) {
     cli::cli_abort(

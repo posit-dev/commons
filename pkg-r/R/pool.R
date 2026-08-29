@@ -19,7 +19,6 @@ call_metrics_impl <- function(
   source_hydrate_semantic_models(source, metrics)
   semantic_models <- semantic_models_registry(sources)
   defs <- registry_defs(registry, label)
-  semantic_models <- semantic_models %||% semantic_models_registry(sources)
   semantic_members <- registry_semantic_members(semantic_models, label)
   origins <- resolve_metric_origins(metrics, defs, semantic_members)
   if (length(unique(origins)) > 1L) {

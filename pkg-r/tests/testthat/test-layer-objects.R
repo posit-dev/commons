@@ -50,6 +50,18 @@ test_that("layer checks reject forged classed lists", {
     check_context_layer(structure(list(), class = "commons_context_layer")),
     "context_layer"
   )
+  expect_error(
+    check_data_source(structure(new.env(), class = "commons_data_source")),
+    "data_source"
+  )
+  expect_error(
+    check_semantic_layer(structure(new.env(), class = "commons_semantic_layer")),
+    "semantic_layer"
+  )
+  expect_error(
+    check_context_layer(structure(new.env(), class = "commons_context_layer")),
+    "context_layer"
+  )
 })
 
 test_that("layer print methods report their contents and return invisibly", {

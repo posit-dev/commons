@@ -110,9 +110,8 @@ strip_frontmatter <- function(md) {
 
 # Store setup (duckdb creation, chunk insertion, FTS indexing) is the most
 # expensive part of building an agent and many conversations never search, so
-# it's deferred to the first search. The cache environment is created fresh
-# whenever a layer's docs change, so layers sharing docs share a store and
-# layers that differ never do.
+# it's deferred to the first search. Aliases of one layer share its cache;
+# augmenting its documents creates a layer with a fresh cache.
 context_store <- function(layer) {
   state <- context_layer_state(layer)
   if (is.null(state$cache$store)) {
@@ -146,6 +145,7 @@ check_context_layer <- function(context_layer, call = rlang::caller_env()) {
   if (
     !is.null(context_layer) &&
       (!is.environment(context_layer) ||
+        !inherits(context_layer, "R6") ||
         !inherits(context_layer, "commons_context_layer"))
   ) {
     cli::cli_abort(

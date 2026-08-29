@@ -345,10 +345,10 @@ data_source_board <- function(
 }
 
 # The deferred-read state a board source carries: the board plus the pins not
-# yet loaded (named character: table label -> pin name). Shared by every copy
-# of the source, so a read through one copy is seen by all. source_prewarm()
-# also stores its background downloader's handle here ($process), so every
-# copy sees at most one live warmer.
+# yet loaded (named character: table label -> pin name). Shared by every alias
+# of the source, so a read through one is seen by all. source_prewarm() also
+# stores its background downloader's handle here ($process), so all aliases see
+# at most one live warmer.
 new_pending_pins <- function(board, tables) {
   pending <- new.env(parent = emptyenv())
   pending$board <- board
@@ -1089,6 +1089,7 @@ check_named_frames <- function(frames, call = rlang::caller_env()) {
 check_data_source <- function(data_source, call = rlang::caller_env()) {
   if (
     !is.environment(data_source) ||
+      !inherits(data_source, "R6") ||
       !inherits(data_source, "commons_data_source")
   ) {
     cli::cli_abort(
@@ -1102,7 +1103,11 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
 # so measures can't take its connection as an argument. commons() calls this
 # before constructing the agent, so it must accept its own output.
 as_data_sources <- function(x, call = rlang::caller_env()) {
-  if (is.environment(x) && inherits(x, "commons_data_source")) {
+  if (
+    is.environment(x) &&
+      inherits(x, "R6") &&
+      inherits(x, "commons_data_source")
+  ) {
     return(list(x))
   }
 
@@ -1111,7 +1116,9 @@ as_data_sources <- function(x, call = rlang::caller_env()) {
     all(vapply(
       x,
       function(source) {
-        is.environment(source) && inherits(source, "commons_data_source")
+        is.environment(source) &&
+          inherits(source, "R6") &&
+          inherits(source, "commons_data_source")
       },
       logical(1)
     ))
