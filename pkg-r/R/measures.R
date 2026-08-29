@@ -247,7 +247,10 @@ new_semantic_layer <- function(measures = list(), fn_sources = character()) {
 }
 
 check_semantic_layer <- function(semantic_layer, call = rlang::caller_env()) {
-  if (!is_layer_object(semantic_layer, "commons_semantic_layer")) {
+  if (
+    !is.environment(semantic_layer) ||
+      !inherits(semantic_layer, "commons_semantic_layer")
+  ) {
     cli::cli_abort(
       "{.arg semantic_layer} must be a {.fn semantic_layer}.",
       call = call

@@ -1087,7 +1087,10 @@ check_named_frames <- function(frames, call = rlang::caller_env()) {
 }
 
 check_data_source <- function(data_source, call = rlang::caller_env()) {
-  if (!is_layer_object(data_source, "commons_data_source")) {
+  if (
+    !is.environment(data_source) ||
+      !inherits(data_source, "commons_data_source")
+  ) {
     cli::cli_abort(
       "{.arg data_source} must be a {.fn data_source}.",
       call = call
@@ -1099,7 +1102,7 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
 # so measures can't take its connection as an argument. commons() calls this
 # before constructing the agent, so it must accept its own output.
 as_data_sources <- function(x, call = rlang::caller_env()) {
-  if (is_layer_object(x, "commons_data_source")) {
+  if (is.environment(x) && inherits(x, "commons_data_source")) {
     return(list(x))
   }
 
@@ -1107,9 +1110,10 @@ as_data_sources <- function(x, call = rlang::caller_env()) {
     length(x) > 0 &&
     all(vapply(
       x,
-      is_layer_object,
-      logical(1),
-      class = "commons_data_source"
+      function(source) {
+        is.environment(source) && inherits(source, "commons_data_source")
+      },
+      logical(1)
     ))
   if (!all_sources) {
     cli::cli_abort(

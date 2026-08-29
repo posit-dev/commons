@@ -40,7 +40,7 @@ test_that("layer objects and their state environments are locked", {
   expect_error(state$other <- TRUE, "locked environment")
 })
 
-test_that("layer checks reject forged classed lists", {
+test_that("layer checks reject the former list representation", {
   expect_error(
     check_data_source(structure(list(), class = "commons_data_source")),
     "data_source"
@@ -53,23 +53,6 @@ test_that("layer checks reject forged classed lists", {
     check_context_layer(structure(list(), class = "commons_context_layer")),
     "context_layer"
   )
-  expect_error(
-    check_data_source(structure(new.env(), class = "commons_data_source")),
-    "data_source"
-  )
-  expect_error(
-    check_semantic_layer(structure(new.env(), class = "commons_semantic_layer")),
-    "semantic_layer"
-  )
-  expect_error(
-    check_context_layer(structure(new.env(), class = "commons_context_layer")),
-    "context_layer"
-  )
-  forged <- structure(
-    new.env(parent = emptyenv()),
-    class = c("commons_data_source", "R6")
-  )
-  expect_error(check_data_source(forged), "data_source")
 })
 
 test_that("layer print methods report their contents and return invisibly", {

@@ -144,7 +144,8 @@ context_search <- function(layer, query, n = 3) {
 check_context_layer <- function(context_layer, call = rlang::caller_env()) {
   if (
     !is.null(context_layer) &&
-      !is_layer_object(context_layer, "commons_context_layer")
+      (!is.environment(context_layer) ||
+        !inherits(context_layer, "commons_context_layer"))
   ) {
     cli::cli_abort(
       "{.arg context_layer} must be a {.fn context_layer} or {.code NULL}.",

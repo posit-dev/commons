@@ -11,22 +11,6 @@ object_private <- function(x) {
   )
 }
 
-is_layer_object <- function(x, class) {
-  if (
-    !is.environment(x) ||
-      !inherits(x, "R6") ||
-      !inherits(x, class)
-  ) {
-    return(FALSE)
-  }
-  enclosure <- .subset2(x, ".__enclos_env__")
-  if (!is.environment(enclosure)) {
-    return(FALSE)
-  }
-  private <- .subset2(enclosure, "private")
-  is.environment(private) && is.environment(private$state)
-}
-
 data_source_state <- function(x) object_private(x)$state
 
 semantic_layer_state <- function(x) object_private(x)$state

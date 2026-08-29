@@ -330,7 +330,10 @@ This alone resolves some terminology debt without forcing a package rewrite.
 Extend `commons_semantic_layer` from:
 
 ```r
-new_object_state(measures = measures)
+new_object_state(
+  measures = measures,
+  fn_sources = fn_sources
+)
 ```
 
 to something like:
@@ -338,6 +341,7 @@ to something like:
 ```r
 new_object_state(
   measures = measures,
+  fn_sources = fn_sources,
   models = models,
   dimensions = dimensions,
   entities = entities,
