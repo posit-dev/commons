@@ -10,6 +10,9 @@ test_that("layer constructors return private R6 objects", {
   expect_true(inherits(semantic, "R6"))
   expect_true(inherits(context, "R6"))
 
+  expect_setequal(ls(source), c("initialize", "print"))
+  expect_setequal(ls(semantic), c("initialize", "print"))
+  expect_setequal(ls(context), c("initialize", "print"))
   expect_setequal(ls(DataSource$public_methods), c("initialize", "print"))
   expect_setequal(ls(SemanticLayer$public_methods), c("initialize", "print"))
   expect_setequal(ls(ContextLayer$public_methods), c("initialize", "print"))
@@ -62,6 +65,11 @@ test_that("layer checks reject forged classed lists", {
     check_context_layer(structure(new.env(), class = "commons_context_layer")),
     "context_layer"
   )
+  forged <- structure(
+    new.env(parent = emptyenv()),
+    class = c("commons_data_source", "R6")
+  )
+  expect_error(check_data_source(forged), "data_source")
 })
 
 test_that("layer print methods report their contents and return invisibly", {
@@ -90,9 +98,11 @@ test_that("layer print methods report their contents and return invisibly", {
     print(context_one)
     print(context_two)
   })
-  expect_invisible(print(source_one))
-  expect_invisible(print(semantic_one))
-  expect_invisible(print(context_one))
+  for (object in list(source_one, semantic_one, context_one)) {
+    printed <- withVisible(suppressMessages(print(object)))
+    expect_false(printed$visible)
+    expect_identical(printed$value, object)
+  }
 })
 
 test_that("private state controls owned connection lifetime", {
