@@ -579,6 +579,7 @@ source_hydrate_semantic_models <- function(
     character(1)
   ))
   labels <- intersect(labels[nzchar(labels)], names(source_state$semantic_stubs))
+  # Hydration persists on shared sources; another agent may have loaded one.
   labels <- setdiff(labels, names(source_state$semantic_models))
   if (length(labels) == 0L) {
     return(source)

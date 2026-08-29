@@ -196,7 +196,6 @@ tool_call_metrics <- function(private) {
         filters = filters,
         where = where,
         source_name = source,
-        semantic_models = private$semantic_models,
         arguments = arguments
       )
     },
@@ -271,7 +270,6 @@ tool_call_calculation <- function(private) {
   ellmer::tool(
     function(name, arguments = "{}", source = NULL) {
       call_calculation_impl(
-        private$calculations,
         private$sources,
         private$handles,
         name,

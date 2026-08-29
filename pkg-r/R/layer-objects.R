@@ -1,3 +1,4 @@
+# Operational functions stay outside the R6 classes; centralize private access.
 object_private <- function(x) {
   .subset2(
     .subset2(x, ".__enclos_env__"),

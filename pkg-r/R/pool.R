@@ -11,12 +11,12 @@ call_metrics_impl <- function(
   filters = NULL,
   where = NULL,
   source_name = NULL,
-  semantic_models = NULL,
   arguments = "{}"
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
   source_hydrate_semantic_models(source, metrics)
+  # Another agent may have hydrated the shared source since construction.
   semantic_models <- semantic_models_registry(sources)
   defs <- registry_defs(registry, label)
   semantic_members <- registry_semantic_members(semantic_models, label)

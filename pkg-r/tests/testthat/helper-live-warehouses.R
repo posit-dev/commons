@@ -158,12 +158,10 @@ expect_warehouse_trusted_calculation <- function(backend) {
   state <- data_source_state(source)
   state$calculations <- list(warehouse_test_calculation(source, table))
   sources <- stats::setNames(list(source), backend)
-  registry <- calculations_registry(sources)
   calculation <- state$calculations[[1]]
   column <- names(calculation$arguments$column$choices)[[1]]
 
   result <- call_calculation_impl(
-    registry,
     sources,
     new_handle_store(),
     "bound_preview",
@@ -173,7 +171,6 @@ expect_warehouse_trusted_calculation <- function(backend) {
   expect_equal(result@extra$commons_tag, "A")
   expect_error(
     call_calculation_impl(
-      registry,
       sources,
       new_handle_store(),
       "bound_preview",
@@ -183,7 +180,6 @@ expect_warehouse_trusted_calculation <- function(backend) {
   )
   expect_error(
     call_calculation_impl(
-      registry,
       sources,
       new_handle_store(),
       "bound_preview",

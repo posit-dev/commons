@@ -100,7 +100,6 @@ test_that("trusted calculation execution is tagged after DBI binding", {
   handles <- new_handle_store()
 
   result <- call_calculation_impl(
-    calculations_registry(sources),
     sources,
     handles,
     "preview_value",
@@ -186,13 +185,11 @@ test_that("lazy verified queries hydrate from qualified names", {
   )
 
   result <- call_calculation_impl(
-    list(),
     sources,
     new_handle_store(),
     paste0(label, "::top_regions")
   )
   repeated <- call_calculation_impl(
-    list(),
     sources,
     new_handle_store(),
     paste0(label, "::top_regions")

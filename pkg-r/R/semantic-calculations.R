@@ -156,7 +156,6 @@ resolve_calculation <- function(
 }
 
 call_calculation_impl <- function(
-  calculations,
   sources,
   handles,
   name,
@@ -166,6 +165,7 @@ call_calculation_impl <- function(
   source <- resolve_sql_source(sources, source_name)
   source_label <- source_name %||% rlang::names2(sources)[[1]]
   source_hydrate_semantic_models(source, name)
+  # Another agent may have hydrated the shared source since construction.
   calculations <- calculations_registry(sources)
   calculation <- resolve_calculation(
     calculations,

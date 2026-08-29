@@ -260,23 +260,20 @@ test_that("lazy semantic metrics hydrate from qualified names", {
       data.frame(total_revenue = 42)
     }
   )
-  sources <- list(sales_db = source)
-  agent_one_registry <- semantic_models_registry(sources)
-  agent_two_registry <- semantic_models_registry(sources)
+  agent_one_sources <- list(sales_db = source)
+  agent_two_sources <- list(sales_db = source)
 
   result <- call_metrics_impl(
     empty_definitions(),
-    sources,
+    agent_one_sources,
     new_handle_store(),
-    metrics = paste0(label, "::total_revenue"),
-    semantic_models = agent_one_registry
+    metrics = paste0(label, "::total_revenue")
   )
   shared_source_result <- call_metrics_impl(
     empty_definitions(),
-    sources,
+    agent_two_sources,
     new_handle_store(),
-    metrics = paste0(label, "::total_revenue"),
-    semantic_models = agent_two_registry
+    metrics = paste0(label, "::total_revenue")
   )
 
   expect_match(query, "FROM SEMANTIC_VIEW", fixed = TRUE)
@@ -324,9 +321,7 @@ test_that("pool search identifies native members' data sources", {
 
 test_that("call_metrics dispatches native metrics through their model", {
   source <- test_semantic_source()
-  state <- data_source_state(source)
   sources <- list(sales_db = source)
-  registry <- semantic_models_registry(sources)
   handles <- new_handle_store()
   query <- NULL
   local_mocked_bindings(
@@ -342,8 +337,7 @@ test_that("call_metrics dispatches native metrics through their model", {
     handles,
     metrics = "total_revenue",
     dimensions = "region",
-    where = list(list(column = "region", op = "=", value = "EMEA")),
-    semantic_models = registry
+    where = list(list(column = "region", op = "=", value = "EMEA"))
   )
 
   expect_match(query, "FROM SEMANTIC_VIEW", fixed = TRUE)
@@ -366,8 +360,7 @@ test_that("call_metrics does not mix native and data-dict metrics", {
       definitions_registry(sources),
       sources,
       new_handle_store(),
-      metrics = c("big_revenue", "total_revenue"),
-      semantic_models = semantic_models_registry(sources)
+      metrics = c("big_revenue", "total_revenue")
     ),
     "either data-dict definitions or one native semantic model"
   )
@@ -399,7 +392,6 @@ test_that("call_metrics validates and binds native parameters", {
     sources,
     new_handle_store(),
     metrics = "total_revenue",
-    semantic_models = semantic_registry,
     arguments = '{"threshold":100}'
   )
 
@@ -419,7 +411,6 @@ test_that("call_metrics validates and binds native parameters", {
       sources,
       new_handle_store(),
       metrics = "total_revenue",
-      semantic_models = semantic_registry,
       arguments = '{"threshold":"high"}'
     ),
     "must be a number"

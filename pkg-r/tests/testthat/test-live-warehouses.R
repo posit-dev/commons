@@ -306,8 +306,7 @@ test_that("live Snowflake discovers and executes a semantic view", {
     empty_definitions(),
     list(snowflake = source),
     handles,
-    metrics = metric,
-    semantic_models = registry
+    metrics = metric
   )
 
   expect_length(list_tables(source), 0L)
@@ -330,7 +329,6 @@ test_that("live Snowflake binds native semantic variables", {
     list(snowflake = source),
     new_handle_store(),
     metrics = model$metrics[[1]]$name,
-    semantic_models = semantic_models_registry(list(snowflake = source)),
     arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
   )
 
@@ -346,7 +344,6 @@ test_that("live Snowflake executes an imported verified query", {
   expect_true(length(registry) > 0L)
 
   result <- call_calculation_impl(
-    registry,
     sources,
     new_handle_store(),
     registry[[1]]$key
@@ -382,13 +379,11 @@ test_that("live Snowflake scopes models associated with physical tables", {
 
   source <- data_source(con, tables = model$dependencies)
   label <- table_id_label(model$id)
-  registry <- semantic_models_registry(list(snowflake = source))
   result <- call_metrics_impl(
     empty_definitions(),
     list(snowflake = source),
     new_handle_store(),
-    metrics = model$metrics[[1]]$name,
-    semantic_models = registry
+    metrics = model$metrics[[1]]$name
   )
 
   expect_contains(names(data_source_state(source)$semantic_models), label)
@@ -591,13 +586,11 @@ test_that("live Databricks scopes models associated with physical tables", {
 
   source <- data_source(con, tables = model$dependencies)
   label <- table_id_label(model$id)
-  registry <- semantic_models_registry(list(databricks = source))
   result <- call_metrics_impl(
     empty_definitions(),
     list(databricks = source),
     new_handle_store(),
-    metrics = model$metrics[[1]]$name,
-    semantic_models = registry
+    metrics = model$metrics[[1]]$name
   )
 
   expect_contains(names(data_source_state(source)$semantic_models), label)
@@ -629,7 +622,6 @@ test_that("live Databricks binds native metric-view parameters", {
     list(databricks = source),
     new_handle_store(),
     metrics = model$metrics[[1]]$name,
-    semantic_models = semantic_models_registry(list(databricks = source)),
     arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
   )
 
