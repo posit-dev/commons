@@ -50,6 +50,11 @@ provenance_aside <- function(tag, include_cited = FALSE) {
     '<shiny-aside label="%s"%s>%s</shiny-aside>',
     escape_attr(entry$label),
     if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
-    entry$body
+    paste(entry$body, as.character(provenance_info_control()), sep = "\n\n")
   )
+}
+
+# Custom elements upgrade when shinychat mounts the aside after page load.
+provenance_info_control <- function() {
+  '<commons-provenance-info class="commons-provenance-info"></commons-provenance-info>'
 }
