@@ -28,6 +28,14 @@ MATCH_CASES: list[dict[str, Any]] = MATCH["cases"]
 PARSE_CASES: list[dict[str, Any]] = SPEC["parse_commons_citation"]["cases"]
 DECISION_CASES: list[dict[str, Any]] = SPEC["citation_decision"]["cases"]
 
+# One sample passage for the tests that need a quote but do not pin its content.
+# The shared cases carry their own inputs; these do not belong in the fixture,
+# because the behavior they exercise has no counterpart in the R package.
+SAMPLE_QUOTE = "Canopy cover is acre-weighted."
+SAMPLE_LABEL = "documentation"
+SAMPLE_KIND = "prose"
+SAMPLE_ENTRY = CorpusEntry(label=SAMPLE_LABEL, kind=SAMPLE_KIND, text=SAMPLE_QUOTE)
+
 
 def _corpus(case: dict[str, Any]) -> list[CorpusEntry]:
     return [CorpusEntry(**entry) for entry in case["corpus"]]
@@ -67,7 +75,7 @@ def test_the_length_guard_sits_where_the_fixture_says() -> None:
     minimum = MATCH["min_normalized_length"]
     # Size the corpus from the minimum, so raising it cannot make the acceptance
     # fail for absence rather than for disagreeing with the fixture.
-    entry = CorpusEntry(label="documentation", kind="prose", text="x" * minimum)
+    entry = CorpusEntry(label=SAMPLE_LABEL, kind=SAMPLE_KIND, text="x" * minimum)
 
     assert match_citation("x" * (minimum - 1), [entry]) is None
     assert match_citation("x" * minimum, [entry]) is entry
@@ -75,24 +83,14 @@ def test_the_length_guard_sits_where_the_fixture_says() -> None:
 
 def test_matching_returns_the_entry_that_verified() -> None:
     # The caller needs the label and kind to render the aside, and returning
-    # the entry keeps the quote the only thing ever verified.
-    first = CorpusEntry(
-        label="orders table", kind="schema", text="Revenue excludes tax."
-    )
-    second = CorpusEntry(
-        label="documentation", kind="prose", text="Revenue excludes tax."
-    )
-
-    assert match_citation("Revenue excludes tax.", [first, second]) is first
+    # the entry itself keeps the quote the only thing ever verified. Which
+    # entry wins is the fixture's business, not this test's.
+    assert match_citation(SAMPLE_QUOTE, [SAMPLE_ENTRY]) is SAMPLE_ENTRY
 
 
 def test_corpus_entries_are_immutable() -> None:
-    entry = CorpusEntry(
-        label="documentation", kind="prose", text="Revenue excludes tax."
-    )
-
     with pytest.raises(FrozenInstanceError):
-        entry.label = "something else"  # type: ignore[misc]
+        SAMPLE_ENTRY.label = "something else"  # type: ignore[misc]
 
 
 @pytest.mark.parametrize("case", PARSE_CASES, ids=lambda case: case["name"])
@@ -106,7 +104,7 @@ def test_parsing_matches_the_shared_cases(case: dict[str, Any]) -> None:
 
 
 def test_parsed_citations_are_immutable() -> None:
-    parsed = parse_commons_citation("reason\n\n> Canopy cover is acre-weighted.")
+    parsed = parse_commons_citation(f"reason\n\n> {SAMPLE_QUOTE}")
     assert parsed is not None
 
     with pytest.raises(FrozenInstanceError):
@@ -130,9 +128,7 @@ def test_decisions_record_the_shared_shape(case: dict[str, Any]) -> None:
 
 
 def test_citation_decisions_are_immutable() -> None:
-    decision = CitationDecision(
-        quote="Canopy cover is acre-weighted.", status="rejected"
-    )
+    decision = CitationDecision(quote=SAMPLE_QUOTE, status="rejected")
 
     with pytest.raises(FrozenInstanceError):
         decision.status = "accepted"  # type: ignore[misc]
@@ -142,21 +138,21 @@ def test_only_an_accepted_decision_names_a_source() -> None:
     # The span record is read by the R reviewer, so a decision that claims a
     # source it does not have must not be constructible.
     with pytest.raises(ValueError, match="accepted"):
-        CitationDecision(quote="Canopy cover is acre-weighted.", status="accepted")
+        CitationDecision(quote=SAMPLE_QUOTE, status="accepted")
 
     with pytest.raises(ValueError, match="accepted"):
         CitationDecision(
-            quote="Canopy cover is acre-weighted.",
+            quote=SAMPLE_QUOTE,
             status="accepted",
-            label="documentation",
+            label=SAMPLE_LABEL,
         )
 
     with pytest.raises(ValueError, match="accepted"):
         CitationDecision(
-            quote="Canopy cover is acre-weighted.",
+            quote=SAMPLE_QUOTE,
             status="rejected",
-            label="documentation",
-            kind="prose",
+            label=SAMPLE_LABEL,
+            kind=SAMPLE_KIND,
         )
 
 
@@ -165,21 +161,21 @@ def test_only_a_malformed_decision_has_no_quote() -> None:
         CitationDecision(quote=None, status="rejected")
 
     with pytest.raises(ValueError, match="malformed"):
-        CitationDecision(quote="Canopy cover is acre-weighted.", status="malformed")
+        CitationDecision(quote=SAMPLE_QUOTE, status="malformed")
 
 
 def test_an_unknown_status_is_rejected() -> None:
     # Literal is not enforced at runtime, so the class is the only place a
     # status the R reviewer cannot interpret can be caught.
     with pytest.raises(ValueError, match="status"):
-        CitationDecision(quote="Canopy cover is acre-weighted.", status="Accepted")  # type: ignore[arg-type]
+        CitationDecision(quote=SAMPLE_QUOTE, status="Accepted")  # type: ignore[arg-type]
 
 
 def test_an_unknown_kind_is_rejected() -> None:
     with pytest.raises(ValueError, match="kind"):
         CitationDecision(
-            quote="Canopy cover is acre-weighted.",
+            quote=SAMPLE_QUOTE,
             status="accepted",
-            label="documentation",
+            label=SAMPLE_LABEL,
             kind="Prose",  # type: ignore[arg-type]
         )
