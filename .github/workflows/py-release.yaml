@@ -1,7 +1,7 @@
 name: py-release
 
 # Publishes pkg-py to PyPI via trusted publishing (OIDC); no API token is stored.
-# PyPI's publisher config for posit-commons names this file, so renaming it
+# PyPI's publisher config for commons names this file, so renaming it
 # breaks releases with an OIDC error until PyPI is updated to match.
 on:
   push:

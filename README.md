@@ -35,7 +35,7 @@ To learn more, see `vignette("commons", package = "commons")`.
 To install the Python package from PyPI, run:
 
 ``` sh
-pip install posit-commons
+pip install commons
 ```
 
 Then, import with:
