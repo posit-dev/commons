@@ -32,10 +32,13 @@ pak::pak("posit-dev/commons/pkg-r")
 
 To learn more, see `vignette("commons", package = "commons")`.
 
-To install the Python package from PyPI, run:
+To install the [Python package from PyPI](https://pypi.org/project/commons/), run:
 
 ``` sh
-pip install posit-commons
+pip install commons
+
+# or, using uv (https://docs.astral.sh/uv/):
+uv pip install commons
 ```
 
 Then, import with:

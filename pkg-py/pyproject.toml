@@ -1,10 +1,8 @@
 [project]
-name = "posit-commons"
-version = "0.1.0.dev0"
+name = "commons"
+version = "0.1.0.dev1"
 description = "AI Agents for Data Analysis"
 readme = "README.md"
-# The PyPI name `commons` is taken, so the distribution is `posit-commons` and
-# the import name is `commons`.
 # Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
 requires-python = ">=3.11,<3.14"
 license = "MIT"
@@ -38,12 +36,6 @@ dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-# Hatchling derives the package directory from the *distribution* name, so
-# this packages line is required to have a package import name that differs
-# from the PyPI distribution name
-[tool.hatch.build.targets.wheel]
-packages = ["src/commons"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
