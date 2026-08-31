@@ -409,10 +409,15 @@ Commons <- R6::R6Class(
           "commons_context_prewarm",
           attributes = list(
             "commons.context.n_docs" = length(layer_state$docs),
+            # tryCatch: telemetry must not abort prewarming (resolving the
+            # cache dir can fail or warn on an unwritable root).
             "commons.context.cache_hit" =
               !is.null(layer_state$store) ||
-              (context_cache_enabled() &&
-                file.exists(context_store_path(layer_state$docs)))
+              isTRUE(tryCatch(
+                context_cache_enabled() &&
+                  file.exists(context_store_path(layer_state$docs)),
+                error = function(err) FALSE
+              ))
           )
         )
         context_store(layer)

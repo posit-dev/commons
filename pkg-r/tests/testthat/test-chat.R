@@ -115,8 +115,8 @@ test_that("commons_prewarm() downgrades prewarm failures to warnings", {
     context_store = function(...) stop("index build exploded"),
     .package = "commons"
   )
-  commons_prewarm(agent)
-  expect_warning(later::run_now(), "index build exploded")
+  # Outside a running Shiny app, commons_prewarm() warms synchronously.
+  expect_warning(commons_prewarm(agent), "index build exploded")
 })
 
 test_that("commons_app() prewarms the agent on idle", {

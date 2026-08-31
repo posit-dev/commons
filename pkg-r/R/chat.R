@@ -136,15 +136,21 @@ commons_server <- function(id, client, ...) {
 #'   cache root resolves from the `commons.context_cache` option, the
 #'   `COMMONS_CONTEXT_CACHE` or `CONNECT_CONTENT_DATA_DIR` environment
 #'   variables, an `app_cache/commons` directory beside a Shiny app, or the
-#'   per-user cache directory, in that order. Note that `app_cache/` is
+#'   per-user cache directory, in that order. This resolution ladder (and
+#'   the content-addressed, age-pruned cache design generally) follows the
+#'   file cache in the sass package, which has run in production Shiny
+#'   deployments for years. Note that `app_cache/` is
 #'   excluded from deployed bundles (rsconnect treats it as server-side
 #'   scratch), so it is shared across the sessions of one deployment but
 #'   rebuilt after a redeploy; to ship a pre-built store with the app,
 #'   point `commons.context_cache` at a directory inside the app and run
-#'   `prewarm_context()` before deploying. Stores unused for 30 days are
-#'   pruned (option `commons.context_cache_max_age`, in seconds); set
-#'   `options(commons.context_cache = FALSE)` to disable persistence
-#'   entirely.
+#'   `prewarm_context()` before deploying. The cache is capped at 256 MB
+#'   with least-recently-used eviction (option
+#'   `commons.context_cache_max_size`, in bytes; a single store larger than
+#'   the cap is kept, with a warning). Set
+#'   `options(commons.context_cache = FALSE)` (or the
+#'   `COMMONS_CONTEXT_CACHE` environment variable to `false`) to disable
+#'   persistence entirely.
 #' * `agent$prewarm_sources()` starts a background process that downloads
 #'   any uncached pins into the local pins cache (see [data_source()]).
 #'   Because the pins cache is on disk, this can also run ahead of
@@ -153,7 +159,9 @@ commons_server <- function(id, client, ...) {
 #'
 #' `agent$prewarm()` calls both. Call `commons_prewarm()` in a Shiny server
 #' function to defer warming to post-startup idle time, so it happens while
-#' the user reads the welcome message.
+#' the user reads the welcome message. Outside a running Shiny app (e.g. a
+#' pre-deploy warm-up script) there is no [later::later()] event loop, so
+#' `commons_prewarm()` warms synchronously instead.
 #'
 #' `prewarm()` lets failures propagate, since a direct call is typically
 #' warming caches ahead of deployment and a mere warning would sail through
@@ -183,12 +191,19 @@ commons_prewarm <- function(client) {
   check_commons_client(client)
   # An error escaping a later::later() callback stops the Shiny app, and
   # pre-warming is a pure optimization, so downgrade failures to warnings.
-  later::later(function() {
+  warm <- function() {
     tryCatch(
       client$prewarm(),
       error = function(err) cli::cli_warn(conditionMessage(err))
     )
-  })
+  }
+  # later::later() only fires while an event loop is running; outside Shiny
+  # (e.g. a pre-deploy warm-up script) the callback would never run.
+  if (is_shiny_app()) {
+    later::later(warm)
+  } else {
+    warm()
+  }
   invisible(NULL)
 }
 

@@ -26,15 +26,21 @@ in milliseconds, and it can be built offline ahead of deployment. The
 cache root resolves from the \code{commons.context_cache} option, the
 \code{COMMONS_CONTEXT_CACHE} or \code{CONNECT_CONTENT_DATA_DIR} environment
 variables, an \code{app_cache/commons} directory beside a Shiny app, or the
-per-user cache directory, in that order. Note that \verb{app_cache/} is
+per-user cache directory, in that order. This resolution ladder (and
+the content-addressed, age-pruned cache design generally) follows the
+file cache in the sass package, which has run in production Shiny
+deployments for years. Note that \verb{app_cache/} is
 excluded from deployed bundles (rsconnect treats it as server-side
 scratch), so it is shared across the sessions of one deployment but
 rebuilt after a redeploy; to ship a pre-built store with the app,
 point \code{commons.context_cache} at a directory inside the app and run
-\code{prewarm_context()} before deploying. Stores unused for 30 days are
-pruned (option \code{commons.context_cache_max_age}, in seconds); set
-\code{options(commons.context_cache = FALSE)} to disable persistence
-entirely.
+\code{prewarm_context()} before deploying. The cache is capped at 256 MB
+with least-recently-used eviction (option
+\code{commons.context_cache_max_size}, in bytes; a single store larger than
+the cap is kept, with a warning). Set
+\code{options(commons.context_cache = FALSE)} (or the
+\code{COMMONS_CONTEXT_CACHE} environment variable to \code{false}) to disable
+persistence entirely.
 \item \code{agent$prewarm_sources()} starts a background process that downloads
 any uncached pins into the local pins cache (see \code{\link[=data_source]{data_source()}}).
 Because the pins cache is on disk, this can also run ahead of
@@ -44,7 +50,9 @@ app reads the warmed cache.
 
 \code{agent$prewarm()} calls both. Call \code{commons_prewarm()} in a Shiny server
 function to defer warming to post-startup idle time, so it happens while
-the user reads the welcome message.
+the user reads the welcome message. Outside a running Shiny app (e.g. a
+pre-deploy warm-up script) there is no \code{\link[later:later]{later::later()}} event loop, so
+\code{commons_prewarm()} warms synchronously instead.
 
 \code{prewarm()} lets failures propagate, since a direct call is typically
 warming caches ahead of deployment and a mere warning would sail through

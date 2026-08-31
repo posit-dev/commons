@@ -84,7 +84,7 @@ test_that("the context store persists on disk and is shared across layers", {
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
 
   layer1 <- context_layer(files = path)
-  store_path <- context_store_path(layer1$docs)
+  store_path <- context_store_path(context_layer_state(layer1)$docs)
   expect_false(file.exists(store_path))
 
   expect_match(context_search(layer1, "revenue")[[1]], "booked")
@@ -92,7 +92,10 @@ test_that("the context store persists on disk and is shared across layers", {
 
   # A distinct layer with the same docs opens the same on-disk store
   layer2 <- context_layer(files = path)
-  expect_identical(context_store_path(layer2$docs), store_path)
+  expect_identical(
+    context_store_path(context_layer_state(layer2)$docs),
+    store_path
+  )
   expect_match(context_search(layer2, "revenue")[[1]], "booked")
 
   # Different docs key a different store
@@ -134,37 +137,69 @@ test_that("an unwritable cache dir warns once and falls back to a tempdir", {
   expect_identical(context_cache_dir_safe(), context_cache_state$fallback_dir)
 })
 
-test_that("prune_context_cache() removes old stores and keeps young ones", {
-  dir <- withr::local_tempdir()
-  old <- file.path(dir, "old.duckdb")
-  young <- file.path(dir, "young.duckdb")
-  file.create(old, young)
-  Sys.setFileTime(old, Sys.time() - 40 * 24 * 60 * 60)
-
-  context_cache_state$n_builds <- 0
-  context_cache_state$last_prune <- NULL
-  prune_context_cache(dir)
-
-  expect_false(file.exists(old))
-  expect_true(file.exists(young))
-})
-
 test_that("prune_context_cache() is throttled across builds", {
   dir <- withr::local_tempdir()
   stale <- file.path(dir, "stale.duckdb")
-  file.create(stale)
-  Sys.setFileTime(stale, Sys.time() - 40 * 24 * 60 * 60)
+  writeLines(strrep("x", 1000), stale)
 
   # A prune just happened, and the build count isn't at a multiple of 20
   context_cache_state$n_builds <- 1
   context_cache_state$last_prune <- Sys.time()
-  prune_context_cache(dir)
+  prune_context_cache(dir, max_size = 1)
   expect_true(file.exists(stale))
 
   # Twenty builds since the throttle reset forces a prune
   context_cache_state$n_builds <- 19
-  prune_context_cache(dir)
+  prune_context_cache(dir, max_size = 1)
   expect_false(file.exists(stale))
+})
+
+test_that("prune_context_cache() evicts least-recently-used stores over the size cap", {
+  dir <- withr::local_tempdir()
+  oldest <- file.path(dir, "oldest.duckdb")
+  middle <- file.path(dir, "middle.duckdb")
+  newest <- file.path(dir, "newest.duckdb")
+  for (f in c(oldest, middle, newest)) {
+    writeLines(strrep("x", 1000), f)
+  }
+  now <- Sys.time()
+  Sys.setFileTime(oldest, now - 300)
+  Sys.setFileTime(middle, now - 200)
+  Sys.setFileTime(newest, now - 100)
+
+  context_cache_state$n_builds <- 0
+  context_cache_state$last_prune <- NULL
+  # Cap fits two stores; the oldest is evicted
+  cap <- 2 * file.size(newest)
+  prune_context_cache(dir, max_size = cap)
+
+  expect_false(file.exists(oldest))
+  expect_true(file.exists(middle))
+  expect_true(file.exists(newest))
+})
+
+test_that("prune_context_cache() keeps a single store larger than the cap", {
+  dir <- withr::local_tempdir()
+  big <- file.path(dir, "big.duckdb")
+  writeLines(strrep("x", 10000), big)
+
+  context_cache_state$n_builds <- 0
+  context_cache_state$last_prune <- NULL
+  context_cache_state$warned_size <- NULL
+
+  expect_warning(
+    prune_context_cache(dir, max_size = 1, protect = big),
+    "exceeds its size cap"
+  )
+  expect_true(file.exists(big))
+
+  # Warns only once per session
+  context_cache_state$n_builds <- 0
+  context_cache_state$last_prune <- NULL
+  expect_no_warning(
+    prune_context_cache(dir, max_size = 1, protect = big)
+  )
+  expect_true(file.exists(big))
 })
 
 test_that("cache root prefers the option, then env vars", {
@@ -187,4 +222,18 @@ test_that("cache root prefers the option, then env vars", {
 
   withr::local_options(commons.context_cache = "/option/cache")
   expect_identical(context_cache_dir(), "/option/cache")
+})
+
+test_that("the context_cache option must be a path or FALSE", {
+  withr::local_options(commons.context_cache = TRUE)
+  expect_error(context_cache_dir(), "must be a path")
+})
+
+test_that("COMMONS_CONTEXT_CACHE can disable the cache", {
+  withr::local_options(commons.context_cache = NULL)
+  withr::local_envvar(COMMONS_CONTEXT_CACHE = "FALSE")
+  expect_false(context_cache_enabled())
+  # A false-like value is never mistaken for a path
+  withr::local_envvar(CONNECT_CONTENT_DATA_DIR = "/connect/data")
+  expect_identical(context_cache_dir(), "/connect/data")
 })

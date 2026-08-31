@@ -132,8 +132,8 @@ context_store <- function(layer) {
   if (!file.exists(path)) {
     build_context_store(state$docs, path)
   } else {
-    # Touch the mtime so age-based pruning approximates LRU: stores in active
-    # use stay young. Best-effort -- a read-only cache dir still opens fine.
+    # Touch the mtime so size-cap eviction is LRU: stores in active use
+    # stay young. Best-effort -- a read-only cache dir still opens fine.
     tryCatch(Sys.setFileTime(path, Sys.time()), error = function(err) NULL)
   }
   store <- ragnar::ragnar_store_connect(path)
@@ -145,7 +145,15 @@ context_store <- function(layer) {
 # index is built in memory per layer instead) -- an escape hatch for
 # development loops over context files.
 context_cache_enabled <- function() {
-  !identical(getOption("commons.context_cache"), FALSE)
+  if (identical(getOption("commons.context_cache"), FALSE)) {
+    return(FALSE)
+  }
+  # Env vars can't express FALSE; accept the usual spellings.
+  val <- Sys.getenv("COMMONS_CONTEXT_CACHE", unset = NA_character_)
+  if (!is.na(val) && tolower(val) %in% c("false", "0", "no")) {
+    return(FALSE)
+  }
+  TRUE
 }
 
 build_context_store_memory <- function(docs) {
@@ -193,18 +201,24 @@ build_context_store <- function(docs, path) {
   if (!file.exists(path)) {
     cli::cli_abort("Failed to build the context store at {.path {path}}.")
   }
-  prune_context_cache(dirname(path))
+  prune_context_cache(dirname(path), protect = path)
   invisible(path)
 }
 
-# Content-addressed stores accumulate one file per content version, so prune
-# by age. The mtime touch on open makes age approximate LRU. Throttled like
-# cachem (at most once per 20 builds or per 5 seconds) since stat-ing the
-# directory on every build is needlessly slow; concurrent pruners may
-# double-delete, which unlink tolerates with a warning.
+# Content-addressed stores accumulate one file per content version, so the
+# cache is capped by total size and pruned LRU: the mtime touch on open
+# keeps actively used stores young, so eviction deletes least-recently-used
+# stores first. The store just built is protected explicitly (not just by
+# its young mtime) so a store larger than the cap survives: like cachem, a
+# single oversized store is kept, with a one-time warning, rather than
+# evicted into a rebuild loop. Throttled like cachem (at most once per 20
+# builds or per 5 seconds) since stat-ing the directory on every build is
+# needlessly slow; concurrent pruners may double-delete, which unlink
+# tolerates with a warning.
 prune_context_cache <- function(
   dir,
-  max_age = getOption("commons.context_cache_max_age", 30 * 24 * 60 * 60)
+  max_size = getOption("commons.context_cache_max_size", 256 * 1024^2),
+  protect = NULL
 ) {
   now <- Sys.time()
   context_cache_state$n_builds <- (context_cache_state$n_builds %||% 0) + 1
@@ -217,10 +231,36 @@ prune_context_cache <- function(
   }
   context_cache_state$last_prune <- now
 
+  # Evict least-recently-used stores until the cache fits under max_size.
   stores <- list.files(dir, pattern = "[.]duckdb$", full.names = TRUE)
-  old <- stores[file.mtime(stores) < now - max_age]
-  suppressWarnings(unlink(old))
+  total <- sum(file.size(stores))
+  if (total > max_size) {
+    evictable <- setdiff(stores, protect)
+    evictable <- evictable[order(file.mtime(evictable))]
+    for (victim in evictable) {
+      if (total <= max_size) {
+        break
+      }
+      total <- total - file.size(victim)
+      suppressWarnings(unlink(victim))
+    }
+    if (total > max_size && is.null(context_cache_state$warned_size)) {
+      context_cache_state$warned_size <- TRUE
+      cli::cli_warn(c(
+        "The context cache exceeds its size cap ({format_size(max_size)}) with only protected or in-use stores remaining.",
+        i = "A single store larger than the cap is kept; raise {.code options(commons.context_cache_max_size)} if this is expected."
+      ))
+    }
+  }
   invisible()
+}
+
+format_size <- function(bytes) {
+  if (bytes >= 1024^2) {
+    sprintf("%.0f MB", bytes / 1024^2)
+  } else {
+    sprintf("%.0f KB", bytes / 1024)
+  }
 }
 
 context_store_path <- function(docs) {
@@ -243,11 +283,17 @@ context_store_path <- function(docs) {
 context_cache_dir <- function() {
   opt <- getOption("commons.context_cache")
   if (!is.null(opt) && !identical(opt, FALSE)) {
+    if (!rlang::is_string(opt)) {
+      cli::cli_abort(
+        "{.code options(commons.context_cache)} must be a path to a cache directory or {.code FALSE}."
+      )
+    }
     return(opt)
   }
   for (env in c("COMMONS_CONTEXT_CACHE", "CONNECT_CONTENT_DATA_DIR")) {
     val <- Sys.getenv(env, unset = NA_character_)
-    if (!is.na(val) && nzchar(val)) {
+    false_like <- !is.na(val) && tolower(val) %in% c("false", "0", "no")
+    if (!is.na(val) && nzchar(val) && !false_like) {
       return(val)
     }
   }
