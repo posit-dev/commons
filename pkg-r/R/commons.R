@@ -214,6 +214,7 @@ Commons <- R6::R6Class(
       semantic_state <- semantic_layer_state(semantic_layer)
       private$registry <- semantic_state$measures
       private$fn_sources <- semantic_state$fn_sources
+      private$measure_provenance <- semantic_state$measure_provenance
       private$injections <- resolve_injections(
         private$registry,
         measure_injectables(sources)
@@ -415,6 +416,7 @@ Commons <- R6::R6Class(
     semantic_models = NULL,
     calculations = NULL,
     fn_sources = NULL,
+    measure_provenance = NULL,
     injections = NULL,
     tracing = FALSE,
     first_touch = NULL,

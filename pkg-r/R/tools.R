@@ -144,10 +144,20 @@ tool_search_pool <- function(private) {
         semantic_models = private$semantic_models,
         calculations = private$calculations
       )
+      display_body <- search_pool_text(
+        private$registry,
+        private$definitions,
+        query,
+        source_names,
+        semantic_models = private$semantic_models,
+        calculations = private$calculations,
+        measure_titles = TRUE
+      )
       tool_result(
         body,
         title = "Searched for a trusted calculation",
-        icon = maybe_icon("search")
+        icon = maybe_icon("search"),
+        markdown = display_body
       )
     },
     sprintf(
@@ -312,7 +322,8 @@ tool_call_measure <- function(private) {
         arguments,
         injections = private$injections,
         handles = private$handles,
-        sources = private$sources
+        sources = private$sources,
+        measure_provenance = private$measure_provenance
       )
     },
     paste(
@@ -483,7 +494,8 @@ call_measure_tool <- function(
   arguments,
   injections = list(),
   handles = NULL,
-  sources = list()
+  sources = list(),
+  measure_provenance = list()
 ) {
   td <- registry[[name]]
   if (is.null(td)) {
@@ -494,6 +506,9 @@ call_measure_tool <- function(
     }
     cli::cli_abort(c("No measure named {.val {name}}.", i = detail))
   }
+  footer <- measure_source_footer(
+    measure_provenance[[name]] %||% character()
+  )
   args <- validate_measure_args(td, parse_json_args(arguments))
   # A measure takes a source's connection by the source's name; a board source
   # must have its pins loaded before that connection can answer a query.
@@ -502,30 +517,38 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
-    return(measure_content_tool_result(value, handles))
+    return(measure_content_tool_result(td, value, handles, footer))
   }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
     advert <- register_handle(handles, value)
-    return(measure_plot_tool_result(td, args, value, advert))
+    return(measure_plot_tool_result(td, args, value, advert, footer))
   }
   if (is_gt_table(value)) {
     data <- recover_gt_table_data(value)
     advert <- register_handle(handles, data)
-    return(measure_gt_table_tool_result(args, value, data, advert))
+    return(measure_gt_table_tool_result(
+      td,
+      args,
+      value,
+      data,
+      advert,
+      footer
+    ))
   }
   advert <- register_handle(handles, value)
   tool_result(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
-    html = measure_display_html(args, value),
+    html = measure_display_html(args, value, measure_metadata(td)),
+    footer = footer,
     tag = "A",
     show_tag = FALSE
   )
 }
 
-measure_content_tool_result <- function(result, handles) {
+measure_content_tool_result <- function(td, result, handles, footer) {
   data <- result@extra$data
   result@extra$data <- NULL
   display <- result@extra$display
@@ -545,10 +568,15 @@ measure_content_tool_result <- function(result, handles) {
   title <- "Ran a trusted calculation"
   icon <- maybe_icon("shield-check")
   if (is.null(display)) {
-    display <- shinychat::tool_result_display(title = title, icon = icon)
+    display <- shinychat::tool_result_display(
+      title = title,
+      icon = icon,
+      footer = footer
+    )
   } else if (is.list(display)) {
     display$title <- display$title %||% title
     display$icon <- display$icon %||% icon
+    display$footer <- display$footer %||% footer
   }
   result@extra$display <- display
   result@extra$commons_tag <- "A"
@@ -596,7 +624,7 @@ append_handle_advert <- function(value, advert) {
   paste(c(format_measure_value(value), advert), collapse = "\n\n")
 }
 
-measure_plot_tool_result <- function(td, args, value, advert) {
+measure_plot_tool_result <- function(td, args, value, advert, footer) {
   title <- tool_title(td)
   rendered <- tryCatch(
     render_plot_image(value, sprintf("Plot returned by %s", title)),
@@ -604,11 +632,13 @@ measure_plot_tool_result <- function(td, args, value, advert) {
   )
   if (inherits(rendered, "error")) {
     return(measure_failure_result(
+      td,
       args,
       advert,
       conditionMessage(rendered),
       "a plot",
-      "commons-measure-plot-error"
+      "commons-measure-plot-error",
+      footer = footer
     ))
   }
 
@@ -625,8 +655,10 @@ measure_plot_tool_result <- function(td, args, value, advert) {
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_result_html(rendered$html)
+      measure_result_html(rendered$html),
+      measure_metadata(td)
     ),
+    footer = footer,
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -634,11 +666,13 @@ measure_plot_tool_result <- function(td, args, value, advert) {
 }
 
 measure_failure_result <- function(
+  td,
   args,
   advert,
   message,
   result_type,
   class,
+  footer,
   model_content = NULL
 ) {
   note <- sprintf(
@@ -652,15 +686,24 @@ measure_failure_result <- function(
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_result_html(html_escape(note), class)
+      measure_result_html(html_escape(note), class),
+      measure_metadata(td)
     ),
+    footer = footer,
     tag = "A",
     open = TRUE,
     show_tag = FALSE
   )
 }
 
-measure_gt_table_tool_result <- function(args, value, data, advert) {
+measure_gt_table_tool_result <- function(
+  td,
+  args,
+  value,
+  data,
+  advert,
+  footer
+) {
   rendered <- tryCatch(
     render_gt_table(value),
     error = function(error) error
@@ -668,11 +711,13 @@ measure_gt_table_tool_result <- function(args, value, data, advert) {
   model_content <- df_to_markdown(data)
   if (inherits(rendered, "error")) {
     return(measure_failure_result(
+      td,
       args,
       advert,
       conditionMessage(rendered),
       "a gt table",
       "commons-measure-gt-table-error",
+      footer = footer,
       model_content = model_content
     ))
   }
@@ -688,7 +733,8 @@ measure_gt_table_tool_result <- function(args, value, data, advert) {
   model_note <- paste(model_note, collapse = " ")
   display_html <- measure_display_with_result_html(
     args,
-    measure_result_html(rendered$html, "commons-measure-gt-table")
+    measure_result_html(rendered$html, "commons-measure-gt-table"),
+    measure_metadata(td)
   )
   if (length(rendered$dependencies) > 0) {
     display_html <- htmltools::attachDependencies(
@@ -705,6 +751,7 @@ measure_gt_table_tool_result <- function(args, value, data, advert) {
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     html = display_html,
+    footer = footer,
     tag = "A",
     open = TRUE,
     show_tag = FALSE
@@ -916,6 +963,7 @@ tool_result <- function(
   icon = NULL,
   html = NULL,
   markdown = NULL,
+  footer = NULL,
   tag = NULL,
   open = FALSE,
   show_request = FALSE,
@@ -924,16 +972,15 @@ tool_result <- function(
   if (!is.null(tag) && isTRUE(show_tag)) {
     title <- sprintf("%s \u00b7 %s", title, tag_label(tag))
   }
-  display <- list(title = title, open = open, show_request = show_request)
-  if (!is.null(icon)) {
-    display$icon <- icon
-  }
-  if (!is.null(html)) {
-    display$html <- html
-  }
-  if (!is.null(markdown)) {
-    display$markdown <- markdown
-  }
+  display <- shinychat::tool_result_display(
+    title = title,
+    icon = icon,
+    html = html,
+    markdown = markdown,
+    show_request = show_request,
+    open = open,
+    footer = footer
+  )
 
   ellmer::ContentToolResult(
     value = value,
@@ -983,47 +1030,109 @@ format_measure_value <- function(value) {
 
 measure_args_html <- function(args) {
   if (length(args) == 0) {
-    rows <- "<div class=\"commons-measure-arg commons-measure-arg-empty\">No arguments</div>"
-  } else {
-    rows <- paste(
-      vapply(
-        names(args),
-        function(nm) {
-          sprintf(
-            "<div class=\"commons-measure-arg\"><span class=\"commons-measure-arg-name\">%s:</span> <span class=\"commons-measure-arg-value\">%s</span></div>",
-            html_escape(label_name(nm)),
-            html_escape(format_arg_value(args[[nm]]))
-          )
-        },
-        character(1)
-      ),
-      collapse = "\n"
-    )
+    return("")
   }
+  rows <- paste(
+    vapply(
+      names(args),
+      function(nm) {
+        sprintf(
+          "<div class=\"commons-measure-arg\"><span class=\"commons-measure-arg-name\">%s:</span> <span class=\"commons-measure-arg-value\">%s</span></div>",
+          html_escape(label_name(nm)),
+          html_escape(format_arg_value(args[[nm]]))
+        )
+      },
+      character(1)
+    ),
+    collapse = "\n"
+  )
 
   sprintf("<div class=\"commons-measure-args\">%s</div>", rows)
 }
 
-measure_display_html <- function(args, value) {
+measure_display_html <- function(args, value, metadata = NULL) {
   measure_display_with_result_html(
     args,
-    measure_result_html(format_measure_html(value))
+    measure_result_html(format_measure_html(value)),
+    metadata
   )
 }
 
-measure_display_with_result_html <- function(args, result_html) {
+measure_display_with_result_html <- function(
+  args,
+  result_html,
+  metadata = NULL
+) {
   sprintf(
-    "<div class=\"commons-measure-display\">%s%s</div>",
+    "<div class=\"commons-measure-display\">%s%s%s</div>",
+    measure_metadata_html(metadata),
     measure_args_html(args),
     result_html
   )
+}
+
+measure_metadata <- function(td) {
+  data.frame(
+    title = tool_title(td),
+    description = tool_description(td),
+    stringsAsFactors = FALSE
+  )
+}
+
+measure_metadata_html <- function(metadata) {
+  if (is.null(metadata) || nrow(metadata) == 0L) {
+    return("")
+  }
+  items <- vapply(
+    seq_len(nrow(metadata)),
+    function(i) {
+      description <- metadata$description[[i]]
+      description <- if (is.na(description) || !nzchar(description)) {
+        ""
+      } else {
+        sprintf(
+          "<div class=\"commons-measure-description\">%s</div>",
+          html_escape(description)
+        )
+      }
+      sprintf(
+        paste0(
+          "<div class=\"commons-measure-metadata-item\">",
+          "<strong class=\"commons-measure-title\">%s</strong>%s</div>"
+        ),
+        html_escape(metadata$title[[i]]),
+        description
+      )
+    },
+    character(1)
+  )
+  sprintf(
+    "<div class=\"commons-measure-metadata\">%s</div>",
+    paste(items, collapse = "\n")
+  )
+}
+
+measure_source_footer <- function(provenance) {
+  urls <- unique(provenance[grepl("^https?://", provenance, ignore.case = TRUE)])
+  if (length(urls) == 0L) {
+    return(NULL)
+  }
+  htmltools::tagList(lapply(seq_along(urls), function(i) {
+    htmltools::tags$a(
+      class = "commons-measure-source-link",
+      href = urls[[i]],
+      target = "_blank",
+      rel = "noopener noreferrer",
+      if (length(urls) == 1L) "View source" else sprintf("Source %d", i)
+    )
+  }))
 }
 
 measure_result_html <- function(content, class = NULL) {
   class <- if (is.null(class)) "" else paste0(" ", class)
   sprintf(
     paste0(
-      "<div class=\"commons-measure-result\"><strong>Tool result</strong>",
+      "<div class=\"commons-measure-result\"><strong>Result</strong>",
       "<div class=\"commons-measure-result-value%s\">%s</div></div>"
     ),
     class,

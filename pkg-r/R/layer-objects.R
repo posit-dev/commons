@@ -71,9 +71,10 @@ DataSource <- R6::R6Class(
 SemanticLayer <- R6::R6Class(
   "commons_semantic_layer",
   public = list(
-    initialize = function(measures, fn_sources) {
+    initialize = function(measures, fn_sources, measure_provenance) {
       private$measures <- measures
       private$fn_sources <- fn_sources
+      private$measure_provenance <- measure_provenance
     },
     print = function(...) {
       n <- length(private$measures)
@@ -83,7 +84,8 @@ SemanticLayer <- R6::R6Class(
   ),
   private = list(
     measures = NULL,
-    fn_sources = NULL
+    fn_sources = NULL,
+    measure_provenance = NULL
   ),
   lock_objects = TRUE,
   lock_class = TRUE,

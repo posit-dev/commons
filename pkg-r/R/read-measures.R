@@ -29,13 +29,31 @@ read_measures <- function(paths, env = globalenv()) {
     sys.source(file, envir = measure_env, keep.source = TRUE)
   }
 
-  measures <- unlist(
+  records <- unlist(
     lapply(files, function(file) read_measures_file(file, measure_env)),
     recursive = FALSE
   )
-  measures <- measures %||% list()
-  attr(measures, "fn_sources") <- env_fn_sources(measure_env)
-  measures
+  records <- records %||% list()
+  new_measure_files(
+    measures = lapply(records, `[[`, "measure"),
+    fn_sources = env_fn_sources(measure_env),
+    provenance = lapply(records, `[[`, "provenance")
+  )
+}
+
+new_measure_files <- function(
+  measures = list(),
+  fn_sources = character(),
+  provenance = rep(list(character()), length(measures))
+) {
+  structure(
+    list(
+      measures = measures,
+      fn_sources = fn_sources,
+      provenance = provenance
+    ),
+    class = "commons_measure_files"
+  )
 }
 
 # Source text for every function defined by the semantic layer files —
@@ -99,7 +117,10 @@ block_to_measure <- function(block, env) {
   description <- block_description(block)
   arguments <- block_arguments(block, fn)
 
-  measure(name, description, fn, arguments = arguments)
+  list(
+    measure = measure(name, description, fn, arguments = arguments),
+    provenance = block_provenance(block)
+  )
 }
 
 block_description <- function(block) {
@@ -112,6 +133,11 @@ block_description <- function(block) {
     }
   )
   paste(parts, collapse = "\n\n")
+}
+
+block_provenance <- function(block) {
+  tags <- roxygen2::block_get_tags(block, "provenance")
+  vapply(tags, function(tag) tag$val, character(1))
 }
 
 block_arguments <- function(block, fn) {

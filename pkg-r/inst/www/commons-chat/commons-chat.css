@@ -111,6 +111,92 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
   }
 }
 
+/* ---- Provenance information ------------------------------------------ */
+
+#commons-provenance-info-modal .modal-body {
+  padding-top: 0.5rem;
+}
+
+.commons-provenance-info {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.commons-provenance-info-trigger {
+  align-items: center;
+  background: transparent;
+  border: 1.5px solid currentcolor;
+  border-radius: 50%;
+  color: var(--bs-secondary-color, #6c757d);
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-style: normal;
+  font-weight: 600;
+  height: 1.125rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  text-decoration: none;
+  width: 1.125rem;
+}
+
+.commons-provenance-info-trigger:hover {
+  background: var(--bs-tertiary-bg, #f8f9fa);
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.commons-provenance-info-trigger:focus-visible {
+  outline: 0.2rem solid var(--bs-focus-ring-color, rgba(13, 110, 253, 0.25));
+  outline-offset: 0.1rem;
+}
+
+.commons-provenance-info-body {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.commons-provenance-info-body > p {
+  margin-bottom: 0.75rem;
+}
+
+.commons-provenance-info-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1rem;
+}
+
+.commons-provenance-info-list + p {
+  margin-top: 0.75rem;
+}
+
+.commons-provenance-info-label {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.15rem;
+}
+
+.commons-provenance-info-label img {
+  height: 1.1em;
+  width: 1.1em;
+}
+
+.commons-provenance-info-label + p {
+  margin: 0;
+}
+
+.commons-provenance-info-no-marker {
+  color: var(--bs-secondary-color, #6c757d);
+  font-weight: 400;
+  text-align: center;
+  width: 1.1em;
+}
+
 /* ---- Answer provenance ----------------------------------------------- */
 
 .commons-answer-pill {
@@ -303,6 +389,25 @@ shiny-chat-container
   gap: 1rem;
 }
 
+.commons-measure-metadata,
+.commons-measure-metadata-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.commons-measure-metadata {
+  gap: 0.75rem;
+}
+
+.commons-measure-description {
+  color: var(--bs-secondary-color, #6c757d);
+  white-space: pre-wrap;
+}
+
+.commons-measure-source-link + .commons-measure-source-link {
+  margin-left: 0.75rem;
+}
+
 .commons-measure-args {
   display: grid;
   gap: 0.38rem;
@@ -320,10 +425,6 @@ shiny-chat-container
 
 .commons-measure-arg-value {
   color: var(--bs-body-color, #212529);
-}
-
-.commons-measure-arg-empty {
-  color: var(--bs-secondary-color, #6c757d);
 }
 
 .commons-measure-result {

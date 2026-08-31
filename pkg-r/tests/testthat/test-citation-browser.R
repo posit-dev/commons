@@ -261,10 +261,67 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     paste0("document.querySelector('", verified_dialog, "').innerText;")
   )
   expect_no_match(verified, "Verified answer", fixed = TRUE)
+  expect_no_match(verified, "How answer trust is determined", fixed = TRUE)
   expect_match(
     verified,
     "This answer comes from a trusted calculation defined by your data team.",
     fixed = TRUE
+  )
+  app$wait_for_js(
+    paste0(
+      "document.querySelector('",
+      verified_dialog,
+      " .commons-provenance-info-trigger') !== null;"
+    ),
+    timeout = 30 * 1000
+  )
+  app$get_js(
+    paste0(
+      "document.querySelector('",
+      verified_dialog,
+      " .commons-provenance-info-trigger').click();"
+    )
+  )
+  info_modal <- "#commons-provenance-info-modal.show"
+  app$wait_for_js(
+    paste0(
+      "document.querySelector('",
+      info_modal,
+      "') !== null && ",
+      "document.querySelector('.modal-backdrop.show') !== null;"
+    ),
+    timeout = 30 * 1000
+  )
+  app$wait_for_js(
+    paste0(
+      "document.activeElement === document.querySelector('",
+      info_modal,
+      "');"
+    ),
+    timeout = 30 * 1000
+  )
+  expect_false(
+    app$get_js(
+      paste0(
+        "document.querySelector('",
+        verified_dialog,
+        "').contains(",
+        "document.querySelector('",
+        info_modal,
+        "'));"
+      )
+    )
+  )
+  app$get_js(
+    paste0(
+      "document.querySelector('",
+      info_modal,
+      " [data-bs-dismiss=\"modal\"]').click();"
+    )
+  )
+  app$wait_for_js(
+    paste0("document.querySelector('", info_modal, "') === null;"),
+    timeout = 30 * 1000
   )
 })
 
