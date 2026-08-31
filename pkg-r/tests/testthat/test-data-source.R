@@ -512,18 +512,19 @@ test_that("parquet/csv pins register as zero-copy views over the pins cache", {
     tables = c(parquet_t = "p-parquet", csv_t = "p-csv")
   )
 
+  state <- data_source_state(src)
   for (table in c("parquet_t", "csv_t")) {
     res <- source_query(src, sprintf("SELECT * FROM %s", table))
     expect_equal(nrow(res), 3)
     # Registered as a view over the cache file, not a copied table
     catalog <- DBI::dbGetQuery(
-      src$con,
+      state$con,
       "SELECT table_type FROM information_schema.tables WHERE table_name = $1",
       params = list(table)
     )
     expect_equal(catalog$table_type, "VIEW")
     # The view reads the pin's versioned file directly
-    expect_true(file.exists(src$pending$views[[table]]$path))
+    expect_true(file.exists(state$pending$views[[table]]$path))
   }
 })
 
@@ -536,7 +537,7 @@ test_that("rds pins still load eagerly as tables", {
   res <- source_query(src, "SELECT * FROM orders")
   expect_equal(nrow(res), 3)
   catalog <- DBI::dbGetQuery(
-    src$con,
+    data_source_state(src)$con,
     "SELECT table_type FROM information_schema.tables WHERE table_name = 'orders'"
   )
   expect_equal(catalog$table_type, "BASE TABLE")
@@ -552,7 +553,7 @@ test_that("a dangling pin view is re-resolved and retried transparently", {
   src <- data_source(board, tables = c(orders = "orders"))
 
   expect_equal(source_query(src, "SELECT * FROM orders")$id, 1L)
-  view_path <- src$pending$views$orders$path
+  view_path <- data_source_state(src)$pending$views$orders$path
 
   # A rewrite on a non-versioned board deletes the old version's directory
   suppressMessages(
@@ -562,5 +563,5 @@ test_that("a dangling pin view is re-resolved and retried transparently", {
 
   # The next query re-resolves the latest version and succeeds
   expect_equal(source_query(src, "SELECT * FROM orders")$id, 1:2)
-  expect_true(file.exists(src$pending$views$orders$path))
+  expect_true(file.exists(data_source_state(src)$pending$views$orders$path))
 })

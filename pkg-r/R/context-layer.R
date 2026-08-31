@@ -321,13 +321,16 @@ format_size <- function(bytes) {
   }
 }
 
-context_store_path <- function(docs) {
+# `cache_dir` is injectable so read-only probes (e.g. the cache_hit span
+# attribute in prewarm_context()) can pass context_cache_dir() and avoid the
+# fallback tempdir's side effects (directory creation, one-time warning).
+context_store_path <- function(docs, cache_dir = context_cache_dir_safe()) {
   key <- rlang::hash(c(
     docs,
     paste0("ragnar:", utils::packageVersion("ragnar")),
     paste0("duckdb:", utils::packageVersion("duckdb"))
   ))
-  file.path(context_cache_dir_safe(), "context", paste0(key, ".duckdb"))
+  file.path(cache_dir, "context", paste0(key, ".duckdb"))
 }
 
 # Cache root resolution: an explicit override, then Connect's persistent

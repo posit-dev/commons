@@ -358,7 +358,9 @@ data_source_board <- function(
 # The directory pin files for this board live under: the local cache for
 # remote boards (connect, s3, ...), the board's own directory for folder
 # boards. NULL when the board's layout is unknown, which disables the
-# zero-copy view path (pins load eagerly instead).
+# zero-copy view path (pins load eagerly instead). The field order matters:
+# `cache` wins because remote boards keep downloaded files there, while
+# folder boards have no cache and only set `path`.
 board_pin_root <- function(board) {
   for (field in c("cache", "path")) {
     val <- board[[field]]
@@ -611,7 +613,10 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
 # race a first-use pin_read() of the same pin and leave a truncated cache
 # entry that poisons later reads. Both sides take an exclusive lock keyed by
 # the board's cache path and pin name, making the cache single-writer: the
-# reader waits out an in-flight download instead of duplicating it.
+# reader waits out an in-flight download instead of duplicating it. Lock
+# files are left in the cache after unlock: unlinking one while another
+# process waits on it would break the mutual exclusion, and they cost one
+# tiny file per pin.
 with_pin_lock <- function(board, pin, expr) {
   # `cache` is a pins implementation detail (verified against pins 1.4.x);
   # the guards below fail open to an unlocked read if it ever goes away.
