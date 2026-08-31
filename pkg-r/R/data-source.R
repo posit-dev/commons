@@ -501,6 +501,9 @@ with_pin_lock <- function(board, pin, expr) {
   if (is.null(cache) || is.na(cache) || !nzchar(cache)) {
     return(force(expr))
   }
+  # Sanitized names can collide ("a/b" vs "a_b"), which merely serializes
+  # two pins on one lock. Lock files are never removed, but they're empty
+  # and there is at most one per pin.
   name <- gsub("[^A-Za-z0-9._-]", "_", pin)
   dir.create(cache, recursive = TRUE, showWarnings = FALSE)
   lock <- filelock::lock(file.path(cache, paste0("commons-", name, ".lock")))

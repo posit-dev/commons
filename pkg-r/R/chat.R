@@ -197,7 +197,13 @@ commons_prewarm <- function(client) {
   warm <- function() {
     tryCatch(
       client$prewarm(),
-      error = function(err) cli::cli_warn(conditionMessage(err))
+      error = function(err) {
+        # Assign first: the raw message can contain braces (DuckDB errors
+        # embed JSON), which cli would try to interpolate -- and an error
+        # escaping this handler would stop the app.
+        msg <- conditionMessage(err)
+        cli::cli_warn("{msg}")
+      }
     )
   }
   # later::later() only fires while an event loop is running; outside Shiny

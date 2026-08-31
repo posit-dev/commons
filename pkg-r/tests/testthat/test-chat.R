@@ -119,6 +119,19 @@ test_that("commons_prewarm() downgrades prewarm failures to warnings", {
   expect_warning(commons_prewarm(agent), "index build exploded")
 })
 
+test_that("commons_prewarm() warns on failures with braces in the message", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  # DuckDB errors embed JSON; cli must not interpolate the raw message
+  local_mocked_bindings(
+    context_store = function(...) stop('bad store: {"code": 1}'),
+    .package = "commons"
+  )
+  expect_warning(commons_prewarm(agent), "bad store", fixed = TRUE)
+})
+
 test_that("commons_app() prewarms the agent on idle", {
   skip_if_not_installed("shiny")
   skip_if_not_installed("shinychat")

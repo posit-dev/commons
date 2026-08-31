@@ -306,7 +306,9 @@ reap_stale_build_files <- function(dir, now, max_age = 24 * 60 * 60) {
     all.files = TRUE,
     full.names = TRUE
   )
-  old <- stale[difftime(now, file.mtime(stale), units = "secs") > max_age]
+  age <- difftime(now, file.mtime(stale), units = "secs")
+  # file.mtime() is NA for a file a concurrent process just deleted
+  old <- stale[!is.na(age) & age > max_age]
   suppressWarnings(unlink(old, recursive = TRUE))
   invisible()
 }
@@ -383,10 +385,16 @@ is_hosted_shiny_app <- function() {
 # store becomes per-process, as if persistence were disabled).
 context_cache_dir_safe <- function() {
   dir <- context_cache_dir()
+  # Probe with an actual write: file.access() checks DOS attributes rather
+  # than ACLs on Windows, so it can report an unwritable dir as writable.
   ok <- tryCatch(
     {
       dir.create(dir, recursive = TRUE, showWarnings = FALSE)
-      dir.exists(dir) && file.access(dir, 2) == 0
+      # tempfile() warns (not errors) when dir isn't a directory
+      dir.exists(dir) && {
+        probe <- tempfile(tmpdir = dir)
+        file.create(probe) && unlink(probe) == 0
+      }
     },
     error = function(err) FALSE
   )
