@@ -115,12 +115,26 @@ test_that("commons.context_cache = FALSE builds the store in memory", {
   )
 })
 
+# Reset the package-level cache housekeeping state on test exit, so tests
+# that poke it don't leak order-dependence into later tests.
+local_context_cache_state <- function(env = parent.frame()) {
+  old <- as.list(context_cache_state)
+  withr::defer(
+    {
+      rm(list = ls(context_cache_state), envir = context_cache_state)
+      list2env(old, envir = context_cache_state)
+    },
+    env
+  )
+}
+
 test_that("an unwritable cache dir warns once and falls back to a tempdir", {
   # A file where the cache dir should be makes dir.create() fail.
   blocker <- withr::local_tempfile()
   writeLines("occupied", blocker)
   withr::local_options(commons.context_cache = file.path(blocker, "cache"))
 
+  local_context_cache_state()
   context_cache_state$warned <- NULL
   context_cache_state$fallback_dir <- NULL
 
@@ -143,6 +157,7 @@ test_that("prune_context_cache() is throttled across builds", {
   writeLines(strrep("x", 1000), stale)
 
   # A prune just happened, and the build count isn't at a multiple of 20
+  local_context_cache_state()
   context_cache_state$n_builds <- 1
   context_cache_state$last_prune <- Sys.time()
   prune_context_cache(dir, max_size = 1)
@@ -167,6 +182,7 @@ test_that("prune_context_cache() evicts least-recently-used stores over the size
   Sys.setFileTime(middle, now - 200)
   Sys.setFileTime(newest, now - 100)
 
+  local_context_cache_state()
   context_cache_state$n_builds <- 0
   context_cache_state$last_prune <- NULL
   # Cap fits two stores; the oldest is evicted
@@ -183,6 +199,7 @@ test_that("prune_context_cache() keeps a single store larger than the cap", {
   big <- file.path(dir, "big.duckdb")
   writeLines(strrep("x", 10000), big)
 
+  local_context_cache_state()
   context_cache_state$n_builds <- 0
   context_cache_state$last_prune <- NULL
   context_cache_state$warned_size <- NULL
@@ -212,6 +229,7 @@ test_that("prune_context_cache() reaps stale .build-* temp files only", {
   }
   Sys.setFileTime(old, Sys.time() - 25 * 60 * 60)
 
+  local_context_cache_state()
   context_cache_state$n_builds <- 0
   context_cache_state$last_prune <- NULL
   prune_context_cache(dir)

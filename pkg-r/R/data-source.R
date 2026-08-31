@@ -12,16 +12,21 @@
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
-#'   each pin is downloaded only when its table is first used. Calling the
-#'   agent's `prewarm_sources()` method (see [commons_prewarm()]) starts a
-#'   background process that downloads the remaining pins into the local
-#'   pins cache, so a first use typically only reads an already-downloaded
-#'   file. Since the pins cache is on disk, `prewarm_sources()` can also run
-#'   ahead of deployment to warm the cache the deployed app will read. A
-#'   table reflects the pin's value at first use and is not refreshed for
-#'   the lifetime of the data source; if a pin can't be read (e.g. a network
-#'   failure), the error surfaces at that first use and the read is retried
-#'   on the next one.
+#'   each pin is downloaded only when its table is first used. Parquet and
+#'   CSV pins are then queried in place -- a DuckDB view over the downloaded
+#'   file, with no copy into the database -- while other formats (e.g. RDS)
+#'   are read and loaded at first use. Calling the agent's
+#'   `prewarm_sources()` method (see [commons_prewarm()]) starts a background
+#'   process that downloads the remaining pins into the local pins cache, so
+#'   a first use typically only reads an already-downloaded file. Since the
+#'   pins cache is on disk, `prewarm_sources()` can also run ahead of
+#'   deployment to warm the cache the deployed app will read. A table
+#'   reflects the pin version resolved at first use and is not refreshed for
+#'   the lifetime of the data source; if the board deletes that version
+#'   (e.g. a rewrite on a non-versioned board), the next query re-resolves
+#'   the latest version. If a pin can't be read (e.g. a network failure),
+#'   the error surfaces at that first use and the read is retried on the
+#'   next one.
 #'
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
@@ -333,9 +338,12 @@ data_source_board <- function(
 
   # Lock the connection down before any writes; lock_configuration() only
   # freezes SET statements, so later dbWriteTable() from a deferred read still
-  # works.
+  # works. Views over pin files read straight from the board's directory
+  # (folder boards) or local cache (remote boards), so allowlist exactly that
+  # root: the connection can read pin files and nothing else.
+  root <- board_pin_root(board)
   con <- duckdb_connect()
-  duckdb_lock_down(con)
+  duckdb_lock_down(con, allow_dirs = root)
   check_labels_free(con, names(tables), call = call)
 
   new_data_source(
@@ -343,8 +351,24 @@ data_source_board <- function(
     names(tables),
     owned = TRUE,
     dictionary = dictionary,
-    pending = new_pending_pins(board, tables)
+    pending = new_pending_pins(board, tables, root)
   )
+}
+
+# The directory pin files for this board live under: the local cache for
+# remote boards (connect, s3, ...), the board's own directory for folder
+# boards. NULL when the board's layout is unknown, which disables the
+# zero-copy view path (pins load eagerly instead). The field order matters:
+# `cache` wins because remote boards keep downloaded files there, while
+# folder boards have no cache and only set `path`.
+board_pin_root <- function(board) {
+  for (field in c("cache", "path")) {
+    val <- board[[field]]
+    if (!is.null(val) && !is.na(val) && nzchar(val)) {
+      return(val)
+    }
+  }
+  NULL
 }
 
 # The deferred-read state a board source carries: the board plus the pins not
@@ -352,10 +376,13 @@ data_source_board <- function(
 # of the source, so a read through one is seen by all. source_prewarm() also
 # stores its background downloader's handle here ($process), so all aliases see
 # at most one live warmer.
-new_pending_pins <- function(board, tables) {
+new_pending_pins <- function(board, tables, root = NULL) {
   pending <- new.env(parent = emptyenv())
   pending$board <- board
   pending$pins <- tables
+  pending$root <- root
+  # Tables registered as views over pin files: table label -> list(pin, path).
+  pending$views <- list()
   pending
 }
 
@@ -457,9 +484,16 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
   )
   for (table in todo) {
     pin <- pending$pins[[table]]
-    value <- tryCatch(
-      with_pin_lock(pending$board, pin, pins::pin_read(pending$board, pin)),
+    tryCatch(
+      with_pin_lock(
+        pending$board,
+        pin,
+        source_load_pin(source, table, pin, call = call)
+      ),
       error = function(err) {
+        if (inherits(err, "commons_pin_not_data_frame")) {
+          stop(err)
+        }
         cli::cli_abort(
           "Failed to read pin {.val {pin}} for table {.val {table}}.",
           parent = err,
@@ -467,19 +501,107 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
         )
       }
     )
-    if (!is.data.frame(value)) {
-      cli::cli_abort(
-        c(
-          "Pin {.val {pin}} for table {.val {table}} is not a data frame.",
-          i = "It is {.obj_type_friendly {value}}."
-        ),
-        call = call
-      )
-    }
-    DBI::dbWriteTable(state$con, table, as.data.frame(value), overwrite = TRUE)
     pending$pins <- pending$pins[setdiff(names(pending$pins), table)]
   }
   invisible(source)
+}
+
+# Register a pinned table in DuckDB. When the pin is a single file DuckDB
+# reads natively (parquet/csv/json), register a view over the downloaded
+# file instead of copying the data in: the load is free, the data stays in
+# the pins cache, and queries get DuckDB's column and predicate pushdown.
+# The view references the resolved version's file, so it is as stable as
+# that version; refresh_dangling_views() covers boards that delete old
+# versions. Other formats (rds, qs2, arrow, uploads) take the eager path.
+source_load_pin <- function(source, table, pin, call = rlang::caller_env()) {
+  state <- data_source_state(source)
+  board <- state$pending$board
+  meta <- pins::pin_meta(board, pin)
+  version <- meta$local$version
+  path <- pins::pin_download(board, pin, version = version)
+
+  reader <- if (length(path) == 1 && !is.null(state$pending$root)) {
+    pin_view_reader(meta$type)
+  }
+  if (!is.null(reader)) {
+    create_pin_view(state$con, table, path, reader)
+    state$pending$views[[table]] <- list(pin = pin, path = path)
+    return(invisible(source))
+  }
+
+  value <- pins::pin_read(board, pin, version = version)
+  if (!is.data.frame(value)) {
+    cli::cli_abort(
+      c(
+        "Pin {.val {pin}} for table {.val {table}} is not a data frame.",
+        i = "It is {.obj_type_friendly {value}}."
+      ),
+      class = "commons_pin_not_data_frame",
+      call = call
+    )
+  }
+  # A previous registration may have been a view (e.g. the pin's format
+  # changed across versions); dbWriteTable can't overwrite a view.
+  DBI::dbExecute(
+    state$con,
+    sprintf("DROP VIEW IF EXISTS %s", DBI::dbQuoteIdentifier(state$con, table))
+  )
+  DBI::dbWriteTable(state$con, table, as.data.frame(value), overwrite = TRUE)
+  invisible(source)
+}
+
+# Only formats DuckDB reads with built-in (non-extension) table functions:
+# the connection is locked down with extension autoload disabled, so
+# extension-backed readers (e.g. read_json_auto) are unavailable.
+pin_view_reader <- function(type) {
+  switch(
+    type,
+    parquet = "read_parquet",
+    csv = "read_csv_auto"
+  )
+}
+
+create_pin_view <- function(con, table, path, reader) {
+  DBI::dbExecute(
+    con,
+    sprintf(
+      "CREATE OR REPLACE VIEW %s AS SELECT * FROM %s(%s)",
+      DBI::dbQuoteIdentifier(con, table),
+      reader,
+      DBI::dbQuoteString(con, path)
+    )
+  )
+}
+
+# A view over a pin file dangles when the file disappears after registration:
+# a rewrite on a non-versioned board deletes the old version's directory, and
+# cache pruning can remove files too. Re-resolve the pin's latest version and
+# register it afresh (a view again, or an eager load if the format changed).
+# Returns TRUE only when a view was actually refreshed, so callers can retry
+# the failed query once without risking an unbounded loop.
+refresh_dangling_views <- function(source) {
+  pending <- data_source_state(source)$pending
+  if (is.null(pending) || length(pending$views) == 0) {
+    return(FALSE)
+  }
+  refreshed <- FALSE
+  for (table in names(pending$views)) {
+    view <- pending$views[[table]]
+    if (file.exists(view$path)) {
+      next
+    }
+    tryCatch(
+      {
+        with_pin_lock(pending$board, view$pin, {
+          pending$views[[table]] <- NULL
+          source_load_pin(source, table, view$pin)
+        })
+        refreshed <- TRUE
+      },
+      error = function(err) NULL
+    )
+  }
+  refreshed
 }
 
 source_ensure_all <- function(source, call = rlang::caller_env()) {
@@ -491,7 +613,10 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
 # race a first-use pin_read() of the same pin and leave a truncated cache
 # entry that poisons later reads. Both sides take an exclusive lock keyed by
 # the board's cache path and pin name, making the cache single-writer: the
-# reader waits out an in-flight download instead of duplicating it.
+# reader waits out an in-flight download instead of duplicating it. Lock
+# files are left in the cache after unlock: unlinking one while another
+# process waits on it would break the mutual exclusion, and they cost one
+# tiny file per pin.
 with_pin_lock <- function(board, pin, expr) {
   # `cache` is a pins implementation detail (verified against pins 1.4.x);
   # the guards below fail open to an unlocked read if it ever goes away.
@@ -617,13 +742,20 @@ source_describe <- function(
   catalog_ensure_queryable(source, table, call = call)
   source_ensure_tables(source, table)
 
-  sample <- DBI::dbGetQuery(
-    state$con,
-    sprintf(
-      "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(state$con, id),
-      n_sample
-    )
+  sample_sql <- sprintf(
+    "SELECT * FROM %s LIMIT %d",
+    DBI::dbQuoteIdentifier(state$con, id),
+    n_sample
+  )
+  sample <- tryCatch(
+    DBI::dbGetQuery(state$con, sample_sql),
+    error = function(err) {
+      if (refresh_dangling_views(source)) {
+        DBI::dbGetQuery(state$con, sample_sql)
+      } else {
+        stop(err)
+      }
+    }
   )
   relation <- source_relation(source, table)
   if (is.null(state$relations)) {
@@ -721,10 +853,14 @@ source_query <- function(source, sql) {
       return(result)
     }
     todo <- pending_tables_in_error(source, result)
-    if (length(todo) == 0) {
-      stop(result)
+    if (length(todo) > 0) {
+      source_ensure_tables(source, todo)
+      next
     }
-    source_ensure_tables(source, todo)
+    if (refresh_dangling_views(source)) {
+      next
+    }
+    stop(result)
   }
 }
 
@@ -803,18 +939,37 @@ check_query <- function(sql, call = rlang::caller_env()) {
 
 # DuckDB-specific hardening for the connection we own: no extension loading,
 # no filesystem or external access, and the configuration locked thereafter.
-duckdb_lock_down <- function(con) {
+duckdb_lock_down <- function(con, allow_dirs = character(0)) {
+  # allowed_directories must be set while external access is still enabled,
+  # and is incompatible with disabling LocalFileSystem (the filesystem-level
+  # block wins over the path allowlist). With an allowlist, external access
+  # stays disabled and only the listed directories remain readable.
+  if (length(allow_dirs) > 0) {
+    DBI::dbExecute(
+      con,
+      sprintf(
+        "SET allowed_directories = [%s]",
+        paste(DBI::dbQuoteString(con, allow_dirs), collapse = ", ")
+      )
+    )
+  }
   DBI::dbExecute(
     con,
-    "
+    sprintf(
+      "
 SET allow_community_extensions = false;
 SET allow_unsigned_extensions = false;
 SET autoinstall_known_extensions = false;
 SET autoload_known_extensions = false;
 SET enable_external_access = false;
-SET disabled_filesystems = 'LocalFileSystem';
-SET lock_configuration = true;
-"
+%sSET lock_configuration = true;
+",
+      if (length(allow_dirs) == 0) {
+        "SET disabled_filesystems = 'LocalFileSystem';\n"
+      } else {
+        ""
+      }
+    )
   )
   invisible(con)
 }
