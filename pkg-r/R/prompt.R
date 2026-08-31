@@ -115,7 +115,8 @@ looks_like_instructions_path <- function(instructions) {
 dictionary_context_text <- function(sources) {
   blocks <- character()
   for (i in seq_along(sources)) {
-    dictionary <- sources[[i]]$dictionary
+    source_state <- data_source_state(sources[[i]])
+    dictionary <- source_state$dictionary
     if (is.null(dictionary)) {
       next
     }
@@ -138,7 +139,8 @@ dictionary_context_text <- function(sources) {
 glossary_context_text <- function(sources) {
   blocks <- character()
   for (i in seq_along(sources)) {
-    dictionary <- sources[[i]]$dictionary
+    source_state <- data_source_state(sources[[i]])
+    dictionary <- source_state$dictionary
     if (is.null(dictionary)) {
       next
     }
@@ -167,7 +169,7 @@ dictionary_prompt_label <- function(sources, i) {
   if (length(sources) > 1) {
     return(rlang::names2(sources)[[i]])
   }
-  sources[[i]]$dictionary$name %||% ""
+  data_source_state(sources[[i]])$dictionary$name %||% ""
 }
 
 tables_text <- function(sources) {
@@ -192,9 +194,10 @@ tables_text <- function(sources) {
 
 table_bullets <- function(source) {
   if (catalog_searchable(source)) {
+    source_state <- data_source_state(source)
     return(sprintf(
       "%d selected catalog objects. Use `search_catalog` to find objects before calling `describe_table`.",
-      length(source$manifest$objects)
+      length(source_state$manifest$objects)
     ))
   }
   paste(sprintf("- %s", list_tables(source)), collapse = "\n")

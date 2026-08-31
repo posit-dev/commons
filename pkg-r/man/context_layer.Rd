@@ -10,7 +10,8 @@ context_layer(files = character())
 \item{files}{Character vector of paths to text or Markdown files.}
 }
 \value{
-A \code{commons_context_layer} object.
+A \code{commons_context_layer} R6 object. Its internals are private and
+may change without notice.
 }
 \description{
 A context layer contains text that helps a \code{\link[=commons]{commons()}} agent interpret its

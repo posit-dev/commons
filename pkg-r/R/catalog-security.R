@@ -92,12 +92,13 @@ catalog_session_value <- function(value) {
 }
 
 catalog_check_session <- function(source, call = rlang::caller_env()) {
-  if (is.null(source$session)) {
+  source_state <- data_source_state(source)
+  if (is.null(source_state$session)) {
     return(invisible(source))
   }
   catalog_check_session_snapshot(
-    source$con,
-    source$session,
+    source_state$con,
+    source_state$session,
     call = call
   )
   invisible(source)
@@ -263,7 +264,8 @@ catalog_relation_exists <- function(con, id) {
 }
 
 catalog_ensure_queryable <- function(source, table, call = rlang::caller_env()) {
-  manifest <- source$manifest
+  source_state <- data_source_state(source)
+  manifest <- source_state$manifest
   if (is.null(manifest)) {
     return(invisible(source))
   }
@@ -278,7 +280,10 @@ catalog_ensure_queryable <- function(source, table, call = rlang::caller_env()) 
       call = call
     )
   }
-  probe <- catalog_probe_relation(source$con, source$table_ids[[table]])
+  probe <- catalog_probe_relation(
+    source_state$con,
+    source_state$table_ids[[table]]
+  )
   if (identical(probe$state, "queryable")) {
     manifest$access[[table]] <- "queryable"
     return(invisible(source))

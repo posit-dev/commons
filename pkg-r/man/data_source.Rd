@@ -44,7 +44,8 @@ source's tables and columns, in the
 \verb{Data dictionaries} section.}
 }
 \value{
-A \code{commons_data_source} object.
+A \code{commons_data_source} R6 object. Its internals are private and may
+change without notice.
 }
 \description{
 A data source is the set of tables available to a \code{\link[=commons]{commons()}} agent.

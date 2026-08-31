@@ -41,12 +41,13 @@ definitions_registry <- function(sources, call = rlang::caller_env()) {
   labels <- rlang::names2(sources)
   for (i in seq_along(sources)) {
     source <- sources[[i]]
-    for (table in names(source$dictionary$tables)) {
-      definitions <- source$dictionary$tables[[table]]$definitions
+    source_state <- data_source_state(source)
+    for (table in names(source_state$dictionary$tables)) {
+      definitions <- source_state$dictionary$tables[[table]]$definitions
       if (length(definitions) == 0) {
         next
       }
-      if (!table %in% source$tables) {
+      if (!table %in% source_state$tables) {
         cli::cli_abort(
           "The data dictionary declares definitions on table {.val {table}},
            which the data source does not expose.",

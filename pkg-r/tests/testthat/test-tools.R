@@ -352,7 +352,7 @@ test_that("format_measure_value collects a lazy dbplyr table", {
   skip_if_not_installed("dplyr")
 
   src <- test_source()
-  lazy <- dplyr::tbl(src$con, "sales")
+  lazy <- dplyr::tbl(data_source_state(src)$con, "sales")
   expect_s3_class(lazy, "tbl_sql")
 
   out <- format_measure_value(dplyr::filter(lazy, region == "EMEA"))

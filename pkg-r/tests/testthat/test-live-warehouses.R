@@ -62,7 +62,7 @@ test_that("live Snowflake discovers and describes catalog relations", {
   expect_s3_class(rows, "data.frame")
   expect_true(nrow(rows) <= 1)
   expect_equal(list_tables(exact), label)
-  expect_identical(exact$table_ids[[label]], table)
+  expect_identical(data_source_state(exact)$table_ids[[label]], table)
   expect_named(
     described$schema,
     c("column", "type", "nullable", "description")
@@ -70,23 +70,23 @@ test_that("live Snowflake discovers and describes catalog relations", {
   expect_true(nrow(described$sample) <= 5)
   expect_equal(names(described$sample), described$schema$column)
   expect_equal(
-    exact$dictionary$tables[[label]]$description,
+    data_source_state(exact)$dictionary$tables[[label]]$description,
     "Authored live table description."
   )
   expect_equal(
-    exact$dictionary$tables[[label]]$columns[[column]]$type,
+    data_source_state(exact)$dictionary$tables[[label]]$columns[[column]]$type,
     described$schema$type[match(column, described$schema$column)]
   )
   expect_equal(
-    exact$dictionary$tables[[label]]$columns[[column]]$description,
+    data_source_state(exact)$dictionary$tables[[label]]$columns[[column]]$description,
     "Authored live column description."
   )
-  expect_true(exact$relations[[label]]$kind %in% c("table", "view"))
+  expect_true(data_source_state(exact)$relations[[label]]$kind %in% c("table", "view"))
   expect_true(label %in% list_tables(schema_source))
   expect_true(label %in% list_tables(catalog_source))
   expect_true(label %in% list_tables(current_source))
   expect_true(all(vapply(
-    schema_source$relations,
+    data_source_state(schema_source)$relations,
     function(x) x$kind %in% c("table", "view"),
     logical(1)
   )))
@@ -100,7 +100,7 @@ test_that("live Snowflake rejects changed session namespaces", {
   table <- warehouse_test_table("snowflake")
   con <- local_warehouse_connection("snowflake")
   source <- data_source(con, tables = table)
-  current <- source$session$namespace
+  current <- data_source_state(source)$session$namespace
   alternate <- DBI::Id(
     catalog = table@name[["catalog"]],
     schema = table@name[["schema"]]
@@ -124,7 +124,7 @@ test_that("live Snowflake rejects changed active roles", {
   alternate_role <- warehouse_test_alternate_role()
   con <- local_warehouse_connection("snowflake")
   source <- data_source(con, tables = table)
-  current_role <- source$session$role
+  current_role <- data_source_state(source)$session$role
   skip_if(identical(current_role, alternate_role), "The alternate role is active")
   withr::defer(DBI::dbExecute(
     con,
@@ -201,7 +201,7 @@ test_that("live Snowflake executes compiled definition mappings", {
   label <- table_id_label(table)
   dictionary <- new_data_dictionary(warehouse_definition_spec(label))
   source <- data_source(con, tables = table, dictionary = dictionary)
-  definitions <- source$dictionary$tables[[label]]$definitions
+  definitions <- data_source_state(source)$dictionary$tables[[label]]$definitions
   expect_equal(
     unname(vapply(definitions, `[[`, character(1), "target")),
     rep("SQL(snowflake)", length(definitions))
@@ -287,7 +287,7 @@ test_that("live Snowflake discovers and executes a semantic view", {
   con <- local_warehouse_connection("snowflake", require_table = FALSE)
   source <- data_source(con, tables = view)
   label <- table_id_label(view)
-  model <- source$semantic_models[[label]]
+  model <- data_source_state(source)$semantic_models[[label]]
   skip_if(
     length(model$metrics) == 0L,
     "The selected Snowflake semantic view has no public metrics"
@@ -306,8 +306,7 @@ test_that("live Snowflake discovers and executes a semantic view", {
     empty_definitions(),
     list(snowflake = source),
     handles,
-    metrics = metric,
-    semantic_models = registry
+    metrics = metric
   )
 
   expect_length(list_tables(source), 0L)
@@ -321,7 +320,7 @@ test_that("live Snowflake binds native semantic variables", {
   configured <- warehouse_test_parameterized_model("snowflake")
   con <- local_warehouse_connection("snowflake", require_table = FALSE)
   source <- data_source(con, tables = configured$id)
-  model <- source$semantic_models[[table_id_label(configured$id)]]
+  model <- data_source_state(source)$semantic_models[[table_id_label(configured$id)]]
   expect_true(length(model$parameters) > 0L)
   expect_true(length(model$metrics) > 0L)
 
@@ -330,7 +329,6 @@ test_that("live Snowflake binds native semantic variables", {
     list(snowflake = source),
     new_handle_store(),
     metrics = model$metrics[[1]]$name,
-    semantic_models = semantic_models_registry(list(snowflake = source)),
     arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
   )
 
@@ -346,7 +344,6 @@ test_that("live Snowflake executes an imported verified query", {
   expect_true(length(registry) > 0L)
 
   result <- call_calculation_impl(
-    registry,
     sources,
     new_handle_store(),
     registry[[1]]$key
@@ -382,16 +379,14 @@ test_that("live Snowflake scopes models associated with physical tables", {
 
   source <- data_source(con, tables = model$dependencies)
   label <- table_id_label(model$id)
-  registry <- semantic_models_registry(list(snowflake = source))
   result <- call_metrics_impl(
     empty_definitions(),
     list(snowflake = source),
     new_handle_store(),
-    metrics = model$metrics[[1]]$name,
-    semantic_models = registry
+    metrics = model$metrics[[1]]$name
   )
 
-  expect_contains(names(source$semantic_models), label)
+  expect_contains(names(data_source_state(source)$semantic_models), label)
   expect_equal(result@extra$commons_tag, "A")
 
   selected_key <- semantic_id_key(table, model$backend)
@@ -403,7 +398,7 @@ test_that("live Snowflake scopes models associated with physical tables", {
   )
   if (!selected_key %in% dependency_keys) {
     outside <- data_source(con, tables = table)
-    expect_false(label %in% names(outside$semantic_models))
+    expect_false(label %in% names(data_source_state(outside)$semantic_models))
   }
 })
 
@@ -453,7 +448,7 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_s3_class(rows, "data.frame")
   expect_true(nrow(rows) <= 1)
   expect_equal(list_tables(exact), label)
-  expect_identical(exact$table_ids[[label]], table)
+  expect_identical(data_source_state(exact)$table_ids[[label]], table)
   expect_named(
     described$schema,
     c("column", "type", "nullable", "description")
@@ -462,23 +457,23 @@ test_that("live Databricks discovers and describes catalog relations", {
   expect_true(nrow(described$sample) <= 5)
   expect_equal(names(described$sample), described$schema$column)
   expect_equal(
-    exact$dictionary$tables[[label]]$description,
+    data_source_state(exact)$dictionary$tables[[label]]$description,
     "Authored live table description."
   )
   expect_equal(
-    exact$dictionary$tables[[label]]$columns[[column]]$type,
+    data_source_state(exact)$dictionary$tables[[label]]$columns[[column]]$type,
     described$schema$type[match(column, described$schema$column)]
   )
   expect_equal(
-    exact$dictionary$tables[[label]]$columns[[column]]$description,
+    data_source_state(exact)$dictionary$tables[[label]]$columns[[column]]$description,
     "Authored live column description."
   )
-  expect_true(exact$relations[[label]]$kind %in% c("table", "view"))
+  expect_true(data_source_state(exact)$relations[[label]]$kind %in% c("table", "view"))
   expect_true(label %in% list_tables(schema_source))
   expect_true(label %in% list_tables(catalog_source))
   expect_s3_class(current_source, "commons_data_source")
   expect_true(all(vapply(
-    schema_source$relations,
+    data_source_state(schema_source)$relations,
     function(x) x$kind %in% c("table", "view"),
     logical(1)
   )))
@@ -493,7 +488,7 @@ test_that("live Databricks rejects changed session namespaces", {
   table <- warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
   source <- data_source(con, tables = table)
-  current <- source$session$namespace
+  current <- data_source_state(source)$session$namespace
   alternate_catalog <- table@name[["catalog"]]
   if (identical(current$catalog, alternate_catalog)) {
     skip("The configured Databricks catalog is already active")
@@ -531,7 +526,7 @@ test_that("live Databricks searches a broad manifest before hydration", {
     function(relation) {
       !is.null(relation$description) && nzchar(relation$description)
     },
-    source$manifest$relations
+    data_source_state(source)$manifest$relations
   )
   skip_if(length(described) == 0L, "No described catalog relation is available")
   target <- names(described)[[1]]
@@ -549,13 +544,13 @@ test_that("live Databricks searches a broad manifest before hydration", {
 
   expect_true(catalog_searchable(source))
   expect_contains(names(catalog_search(source, query)), target)
-  expect_null(source$manifest$relations[[target]]$columns)
+  expect_null(data_source_state(source)$manifest$relations[[target]]$columns)
 
   described <- source_describe(source, target, n_sample = 1L)
 
   expect_gt(nrow(described$schema), 0L)
   expect_identical(
-    source$manifest$relations[[target]]$columns,
+    data_source_state(source)$manifest$relations[[target]]$columns,
     described$schema
   )
 })
@@ -591,16 +586,14 @@ test_that("live Databricks scopes models associated with physical tables", {
 
   source <- data_source(con, tables = model$dependencies)
   label <- table_id_label(model$id)
-  registry <- semantic_models_registry(list(databricks = source))
   result <- call_metrics_impl(
     empty_definitions(),
     list(databricks = source),
     new_handle_store(),
-    metrics = model$metrics[[1]]$name,
-    semantic_models = registry
+    metrics = model$metrics[[1]]$name
   )
 
-  expect_contains(names(source$semantic_models), label)
+  expect_contains(names(data_source_state(source)$semantic_models), label)
   expect_equal(result@extra$commons_tag, "A")
 
   selected_key <- semantic_id_key(table, model$backend)
@@ -612,7 +605,7 @@ test_that("live Databricks scopes models associated with physical tables", {
   )
   if (!selected_key %in% dependency_keys) {
     outside <- data_source(con, tables = table)
-    expect_false(label %in% names(outside$semantic_models))
+    expect_false(label %in% names(data_source_state(outside)$semantic_models))
   }
 })
 
@@ -620,7 +613,7 @@ test_that("live Databricks binds native metric-view parameters", {
   configured <- warehouse_test_parameterized_model("databricks")
   con <- local_warehouse_connection("databricks", require_table = FALSE)
   source <- data_source(con, tables = configured$id)
-  model <- source$semantic_models[[table_id_label(configured$id)]]
+  model <- data_source_state(source)$semantic_models[[table_id_label(configured$id)]]
   expect_true(length(model$parameters) > 0L)
   expect_true(length(model$metrics) > 0L)
 
@@ -629,7 +622,6 @@ test_that("live Databricks binds native metric-view parameters", {
     list(databricks = source),
     new_handle_store(),
     metrics = model$metrics[[1]]$name,
-    semantic_models = semantic_models_registry(list(databricks = source)),
     arguments = jsonlite::toJSON(configured$arguments, auto_unbox = TRUE)
   )
 
@@ -659,7 +651,7 @@ test_that("live Databricks handles quoted relation and column names", {
   source <- data_source(con, tables = table)
   described <- source_describe(source, "commons quoted.table")
 
-  expect_identical(source$table_ids[["commons quoted.table"]], table)
+  expect_identical(data_source_state(source)$table_ids[["commons quoted.table"]], table)
   expect_equal(described$schema$column, "quoted column")
   expect_equal(described$sample[["quoted column"]], 1L)
 })
@@ -670,7 +662,7 @@ test_that("live Databricks executes compiled definition mappings", {
   label <- table_id_label(table)
   dictionary <- new_data_dictionary(warehouse_definition_spec(label))
   source <- data_source(con, tables = table, dictionary = dictionary)
-  definitions <- source$dictionary$tables[[label]]$definitions
+  definitions <- data_source_state(source)$dictionary$tables[[label]]$definitions
   expect_equal(
     unname(vapply(definitions, `[[`, character(1), "target")),
     rep("SQL(databricks)", length(definitions))

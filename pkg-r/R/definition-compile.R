@@ -17,19 +17,20 @@ definition_compile_data_source <- function(
   source,
   call = rlang::caller_env()
 ) {
+  source_state <- data_source_state(source)
   # The export retains authored names after a warehouse catalog relabels tables.
-  export <- attr(source$dictionary, "definition_export", exact = TRUE)
+  export <- attr(source_state$dictionary, "definition_export", exact = TRUE)
   if (is.null(export)) {
     return(source)
   }
   compiled <- definition_bind_export(export, source, call = call)
-  dictionary <- source$dictionary
+  dictionary <- source_state$dictionary
   for (table in compiled$tables) {
     definitions <- table$definitions
     names(definitions) <- vapply(definitions, `[[`, character(1), "name")
     dictionary$tables[[table$name]]$definitions <- definitions
   }
-  source$dictionary <- dictionary
+  source_state$dictionary <- dictionary
   source
 }
 
@@ -243,7 +244,8 @@ definition_source_target <- function(
   if (length(definitions) == 0L) {
     return(NULL)
   }
-  con <- source$con
+  source_state <- data_source_state(source)
+  con <- source_state$con
   if (inherits(con, "duckdb_connection")) {
     return("SQL(duckdb)")
   }
@@ -261,9 +263,10 @@ definition_source_target <- function(
 }
 
 definition_source_binding <- function(source, table, call) {
-  bindings <- source$definition_bindings
+  source_state <- data_source_state(source)
+  bindings <- source_state$definition_bindings
   if (is.null(bindings)) {
-    if (!table %in% source$tables) {
+    if (!table %in% source_state$tables) {
       cli::cli_abort(
         "The data dictionary declares definitions on table {.val {table}}, which the data source does not expose.",
         call = call

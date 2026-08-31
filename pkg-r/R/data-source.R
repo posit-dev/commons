@@ -83,7 +83,8 @@
 #' after those values change. Authored and native semantic material is exposed
 #' only after a zero-row query succeeds for the current principal.
 #'
-#' @return A `commons_data_source` object.
+#' @return A `commons_data_source` R6 object. Its internals are private and may
+#'   change without notice.
 #'
 #' @examples
 #' src <- data_source(
@@ -344,10 +345,10 @@ data_source_board <- function(
 }
 
 # The deferred-read state a board source carries: the board plus the pins not
-# yet loaded (named character: table label -> pin name). Shared by every copy
-# of the source, so a read through one copy is seen by all. source_prewarm()
-# also stores its background downloader's handle here ($process), so every
-# copy sees at most one live warmer.
+# yet loaded (named character: table label -> pin name). Shared by every alias
+# of the source, so a read through one is seen by all. source_prewarm() also
+# stores its background downloader's handle here ($process), so all aliases see
+# at most one live warmer.
 new_pending_pins <- function(board, tables) {
   pending <- new.env(parent = emptyenv())
   pending$board <- board
@@ -357,7 +358,7 @@ new_pending_pins <- function(board, tables) {
 
 list_tables <- function(data_source) {
   check_data_source(data_source)
-  data_source$tables
+  data_source_state(data_source)$tables
 }
 
 new_data_source <- function(
@@ -374,41 +375,32 @@ new_data_source <- function(
   namespace_selected = FALSE,
   session = NULL
 ) {
-  # Disconnect only the DuckDB connection we created; a user-supplied connection
-  # has its own owner and lifetime.
-  handle <- NULL
+  source <- DataSource$new(
+    con = con,
+    tables = tables,
+    table_ids = table_ids,
+    dictionary = dictionary,
+    pending = pending,
+    relations = relations,
+    manifest = new_catalog_manifest(
+      relations,
+      namespace_selected,
+      semantic_stubs
+    ),
+    session = session,
+    definition_bindings = definition_bindings,
+    semantic_models = semantic_models,
+    semantic_stubs = semantic_stubs,
+    calculations = semantic_model_calculations(semantic_models)
+  )
   if (owned) {
-    handle <- new.env(parent = emptyenv())
-    handle$con <- con
+    # Retained private state must keep its owned connection alive too.
     reg.finalizer(
-      handle,
-      function(h) DBI::dbDisconnect(h$con, shutdown = TRUE),
+      data_source_state(source),
+      function(state) DBI::dbDisconnect(state$con, shutdown = TRUE),
       onexit = TRUE
     )
   }
-
-  source <- structure(
-    list(
-      con = con,
-      tables = tables,
-      table_ids = table_ids,
-      handle = handle,
-      dictionary = dictionary,
-      pending = pending,
-      relations = relations,
-      manifest = new_catalog_manifest(
-        relations,
-        namespace_selected,
-        semantic_stubs
-      ),
-      session = session,
-      definition_bindings = definition_bindings,
-      semantic_models = semantic_models,
-      semantic_stubs = semantic_stubs,
-      calculations = semantic_model_calculations(semantic_models)
-    ),
-    class = "commons_data_source"
-  )
   definition_compile_data_source(source)
 }
 
@@ -438,14 +430,16 @@ resolve_sql_source <- function(sources, name, call = rlang::caller_env()) {
 # Best-effort dialect hint for the system prompt. odbc and several other
 # backends report a dbms name; fall back to the connection class.
 source_dialect <- function(source) {
-  info <- tryCatch(DBI::dbGetInfo(source$con), error = function(e) NULL)
-  info$dbms.name %||% sub("_connection$", "", class(source$con)[[1]])
+  state <- data_source_state(source)
+  info <- tryCatch(DBI::dbGetInfo(state$con), error = function(e) NULL)
+  info$dbms.name %||% sub("_connection$", "", class(state$con)[[1]])
 }
 
 # A pin leaves `pending` only after a successful read, so a failure surfaces
 # to the caller and the read is retried on the next touch.
 source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
-  pending <- source$pending
+  state <- data_source_state(source)
+  pending <- state$pending
   if (is.null(pending)) {
     return(invisible(source))
   }
@@ -479,14 +473,15 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
         call = call
       )
     }
-    DBI::dbWriteTable(source$con, table, as.data.frame(value), overwrite = TRUE)
+    DBI::dbWriteTable(state$con, table, as.data.frame(value), overwrite = TRUE)
     pending$pins <- pending$pins[setdiff(names(pending$pins), table)]
   }
   invisible(source)
 }
 
 source_ensure_all <- function(source, call = rlang::caller_env()) {
-  source_ensure_tables(source, source$tables, call = call)
+  state <- data_source_state(source)
+  source_ensure_tables(source, state$tables, call = call)
 }
 
 # Warm the pins on-disk cache in a background process rather than loading into
@@ -503,7 +498,8 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
 # can leave a truncated cache file pins won't re-download---the same hazard as
 # interrupting pin_read() itself.
 source_prewarm <- function(source) {
-  pending <- source$pending
+  state <- data_source_state(source)
+  pending <- state$pending
   if (is.null(pending) || length(pending$pins) == 0) {
     return(invisible(source))
   }
@@ -550,7 +546,8 @@ prewarm_downloads <- function(board, pins) {
 # read. The phrase itself does the bounding, so a label that begins or ends in
 # punctuation (which \b can't wrap) still matches.
 pending_tables_in_error <- function(source, err) {
-  pending <- source$pending
+  state <- data_source_state(source)
+  pending <- state$pending
   if (is.null(pending)) {
     return(character())
   }
@@ -575,33 +572,34 @@ source_describe <- function(
   n_sample = 5,
   call = rlang::caller_env()
 ) {
+  state <- data_source_state(source)
   catalog_check_session(source, call = call)
   if (
-    !is.null(source$semantic_models[[table]]) ||
-      !is.null(source$semantic_stubs[[table]])
+    !is.null(state$semantic_models[[table]]) ||
+      !is.null(state$semantic_stubs[[table]])
   ) {
     return(source_describe_semantic_model(source, table, call = call))
   }
-  id <- source$table_ids[[table]]
+  id <- state$table_ids[[table]]
   if (is.null(id)) {
     cli::cli_abort(c(
       "No table named {.val {table}}.",
-      i = "Available tables: {.val {source$tables}}."
+      i = "Available tables: {.val {state$tables}}."
     ))
   }
   catalog_ensure_queryable(source, table, call = call)
   source_ensure_tables(source, table)
 
   sample <- DBI::dbGetQuery(
-    source$con,
+    state$con,
     sprintf(
       "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(source$con, id),
+      DBI::dbQuoteIdentifier(state$con, id),
       n_sample
     )
   )
   relation <- source_relation(source, table)
-  if (is.null(source$relations)) {
+  if (is.null(state$relations)) {
     schema <- data.frame(
       column = names(sample),
       type = vapply(sample, function(x) class(x)[[1]], character(1)),
@@ -609,14 +607,14 @@ source_describe <- function(
     )
   } else if (!is.null(relation$columns)) {
     schema <- relation$columns
-  } else if (is_snowflake_connection(source$con)) {
-    schema <- snowflake_describe_relation(source$con, id, call = call)
+  } else if (is_snowflake_connection(state$con)) {
+    schema <- snowflake_describe_relation(state$con, id, call = call)
   } else {
-    schema <- databricks_describe_relation(source$con, id, call = call)
+    schema <- databricks_describe_relation(state$con, id, call = call)
   }
-  if (!is.null(source$manifest) && is.null(relation$columns)) {
+  if (!is.null(state$manifest) && is.null(relation$columns)) {
     relation$columns <- schema
-    source$manifest$relations[[table]] <- relation
+    state$manifest$relations[[table]] <- relation
   }
   list(
     schema = schema,
@@ -631,7 +629,8 @@ source_describe_semantic_model <- function(
   model,
   call = rlang::caller_env()
 ) {
-  loaded <- source$semantic_models[[model]]
+  state <- data_source_state(source)
+  loaded <- state$semantic_models[[model]]
   if (!is.null(loaded)) {
     return(structure(
       list(
@@ -644,7 +643,7 @@ source_describe_semantic_model <- function(
       class = "commons_semantic_model_description"
     ))
   }
-  stub <- source$semantic_stubs[[model]]
+  stub <- state$semantic_stubs[[model]]
   hydrated <- tryCatch(
     semantic_model_from_stub(source, stub, model, call = call),
     error = function(err) err
@@ -666,17 +665,19 @@ source_describe_semantic_model <- function(
 }
 
 source_relation <- function(source, table) {
-  if (!is.null(source$manifest)) {
-    return(source$manifest$relations[[table]])
+  state <- data_source_state(source)
+  if (!is.null(state$manifest)) {
+    return(state$manifest$relations[[table]])
   }
-  source$relations[[table]]
+  state$relations[[table]]
 }
 
 source_query <- function(source, sql) {
+  state <- data_source_state(source)
   catalog_check_session(source)
   check_query(sql)
-  if (is.null(source$pending)) {
-    return(DBI::dbGetQuery(source$con, sql))
+  if (is.null(state$pending)) {
+    return(DBI::dbGetQuery(state$con, sql))
   }
 
   # Let DuckDB resolve the query's table references and drive loading off the
@@ -686,7 +687,7 @@ source_query <- function(source, sql) {
   # loop is bounded.
   repeat {
     result <- tryCatch(
-      DBI::dbGetQuery(source$con, sql),
+      DBI::dbGetQuery(state$con, sql),
       error = function(err) err
     )
     if (!inherits(result, "condition")) {
@@ -701,12 +702,13 @@ source_query <- function(source, sql) {
 }
 
 source_query_bind <- function(source, sql, bindings = list()) {
+  state <- data_source_state(source)
   catalog_check_session(source)
   check_query(sql)
   if (length(bindings) == 0L) {
     return(source_query(source, sql))
   }
-  result <- DBI::dbSendQuery(source$con, sql)
+  result <- DBI::dbSendQuery(state$con, sql)
   on.exit(DBI::dbClearResult(result), add = TRUE)
   DBI::dbBind(result, unname(bindings))
   DBI::dbFetch(result)
@@ -1079,7 +1081,10 @@ check_named_frames <- function(frames, call = rlang::caller_env()) {
 }
 
 check_data_source <- function(data_source, call = rlang::caller_env()) {
-  if (!inherits(data_source, "commons_data_source")) {
+  if (
+    !is.environment(data_source) ||
+      !inherits(data_source, "commons_data_source")
+  ) {
     cli::cli_abort(
       "{.arg data_source} must be a {.fn data_source}.",
       call = call
@@ -1091,13 +1096,19 @@ check_data_source <- function(data_source, call = rlang::caller_env()) {
 # so measures can't take its connection as an argument. commons() calls this
 # before constructing the agent, so it must accept its own output.
 as_data_sources <- function(x, call = rlang::caller_env()) {
-  if (inherits(x, "commons_data_source")) {
+  if (is.environment(x) && inherits(x, "commons_data_source")) {
     return(list(x))
   }
 
   all_sources <- is.list(x) &&
     length(x) > 0 &&
-    all(vapply(x, inherits, logical(1), "commons_data_source"))
+    all(vapply(
+      x,
+      function(source) {
+        is.environment(source) && inherits(source, "commons_data_source")
+      },
+      logical(1)
+    ))
   if (!all_sources) {
     cli::cli_abort(
       "{.arg data_sources} must be a {.fn data_source} or a named list of them.",

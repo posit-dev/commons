@@ -225,8 +225,8 @@ test_that("semantic_layer isolates measures read from separate path args", {
 
   layer <- semantic_layer(a, b)
 
-  expect_named(layer$measures, "uses_helper")
-  expect_error(do.call(layer$measures$uses_helper, list()))
+  expect_named(semantic_layer_state(layer)$measures, "uses_helper")
+  expect_error(do.call(semantic_layer_state(layer)$measures$uses_helper, list()))
 })
 
 test_that("read_measures reads multiple files and directories", {
@@ -264,7 +264,7 @@ test_that("read_measures produces measures usable in a semantic_layer", {
   layer <- semantic_layer(read_measures(path))
 
   expect_s3_class(layer, "commons_semantic_layer")
-  expect_named(layer$measures, "order_count")
+  expect_named(semantic_layer_state(layer)$measures, "order_count")
 })
 
 test_that("read_measures harvests measure and helper sources, comments included", {
@@ -333,7 +333,7 @@ test_that("read_measures keeps @provenance separate from the measure", {
   )
   layer <- semantic_layer(tagged_files)
   expect_identical(
-    layer$measure_provenance$revenue,
+    semantic_layer_state(layer)$measure_provenance$revenue,
     tagged_files$provenance[[1]]
   )
 
