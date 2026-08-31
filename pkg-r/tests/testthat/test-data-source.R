@@ -501,6 +501,7 @@ test_that("as_data_sources validates its input", {
 
 test_that("parquet/csv pins register as zero-copy views over the pins cache", {
   skip_if_not_installed("pins")
+  skip_if_not_installed("nanoparquet")
 
   board <- pins::board_temp()
   suppressMessages({
@@ -545,6 +546,7 @@ test_that("rds pins still load eagerly as tables", {
 
 test_that("a dangling pin view is re-resolved and retried transparently", {
   skip_if_not_installed("pins")
+  skip_if_not_installed("nanoparquet")
 
   board <- pins::board_folder(withr::local_tempdir(), versioned = FALSE)
   suppressMessages(
