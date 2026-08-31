@@ -25,29 +25,20 @@ test_that("citation decisions match the shared record shape", {
     c("accepted", "rejected", "malformed")
   )
 
+  malformed <- "<commons-citation>\n\nno blockquote\n\n</commons-citation>"
+
   for (case in cases) {
     want <- case$decision
-    got <- switch(
-      want$status,
-      accepted = render_citation_aside(
-        want$quote,
-        "why it supports the answer",
+    got <- if (identical(want$status, "malformed")) {
+      project_citation_text(malformed, list())$decisions[[1]]
+    } else {
+      corpus <- if (identical(want$status, "accepted")) {
         list(list(label = want$label, kind = want$kind, text = want$quote))
-      )$decision,
-      rejected = render_citation_aside(
-        want$quote,
-        "why it supports the answer",
-        list(list(
-          label = "documentation",
-          kind = "prose",
-          text = "Nothing in this corpus supports that."
-        ))
-      )$decision,
-      malformed = project_citation_text(
-        "<commons-citation>\n\nno blockquote\n\n</commons-citation>",
-        list()
-      )$decisions[[1]]
-    )
+      } else {
+        list(list(label = "documentation", kind = "prose", text = "No support."))
+      }
+      render_citation_aside(want$quote, "why", corpus)$decision
+    }
     expect_identical(
       jsonlite::fromJSON(
         jsonlite::toJSON(got, auto_unbox = TRUE),
