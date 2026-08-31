@@ -161,7 +161,10 @@ commons_server <- function(id, client, ...) {
 #' function to defer warming to post-startup idle time, so it happens while
 #' the user reads the welcome message. Outside a running Shiny app (e.g. a
 #' pre-deploy warm-up script) there is no [later::later()] event loop, so
-#' `commons_prewarm()` warms synchronously instead.
+#' `commons_prewarm()` warms synchronously instead. Note that
+#' `commons_prewarm()` always downgrades failures to warnings (see below),
+#' even on this synchronous path — a pre-deploy script that should fail the
+#' deploy on a cold cache must call `agent$prewarm()` directly.
 #'
 #' `prewarm()` lets failures propagate, since a direct call is typically
 #' warming caches ahead of deployment and a mere warning would sail through

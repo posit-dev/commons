@@ -52,7 +52,10 @@ app reads the warmed cache.
 function to defer warming to post-startup idle time, so it happens while
 the user reads the welcome message. Outside a running Shiny app (e.g. a
 pre-deploy warm-up script) there is no \code{\link[later:later]{later::later()}} event loop, so
-\code{commons_prewarm()} warms synchronously instead.
+\code{commons_prewarm()} warms synchronously instead. Note that
+\code{commons_prewarm()} always downgrades failures to warnings (see below),
+even on this synchronous path — a pre-deploy script that should fail the
+deploy on a cold cache must call \code{agent$prewarm()} directly.
 
 \code{prewarm()} lets failures propagate, since a direct call is typically
 warming caches ahead of deployment and a mere warning would sail through

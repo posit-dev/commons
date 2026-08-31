@@ -493,6 +493,8 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
 # the board's cache path and pin name, making the cache single-writer: the
 # reader waits out an in-flight download instead of duplicating it.
 with_pin_lock <- function(board, pin, expr) {
+  # `cache` is a pins implementation detail (verified against pins 1.4.x);
+  # the guards below fail open to an unlocked read if it ever goes away.
   cache <- board$cache
   # Boards without a download cache (e.g. board_folder) never download, so
   # there is no race to guard against.

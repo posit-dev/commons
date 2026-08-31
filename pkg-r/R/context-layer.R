@@ -136,9 +136,43 @@ context_store <- function(layer) {
     # stay young. Best-effort -- a read-only cache dir still opens fine.
     tryCatch(Sys.setFileTime(path, Sys.time()), error = function(err) NULL)
   }
-  store <- ragnar::ragnar_store_connect(path)
+  store <- tryCatch(
+    ragnar::ragnar_store_connect(path),
+    error = function(err) err
+  )
+  if (inherits(store, "error")) {
+    # Typically a concurrent pruner unlinked the store between our
+    # file.exists() and the connect; a corrupt store file is also possible.
+    # Warn (and notify in Shiny, where a warning is easy to miss), then
+    # rebuild once. A second failure propagates, so persistent corruption
+    # still surfaces rather than being silently rebuilt every session.
+    context_store_connect_warning(path, store)
+    unlink(path)
+    build_context_store(state$docs, path)
+    store <- ragnar::ragnar_store_connect(path)
+  }
   state$store <- store
   store
+}
+
+context_store_connect_warning <- function(path, err) {
+  # Assign first: the raw message can contain braces (DuckDB errors embed
+  # JSON), which cli would try to interpolate.
+  detail <- conditionMessage(err)
+  cli::cli_warn(c(
+    "Failed to open the cached context store at {.path {path}}; rebuilding it.",
+    i = "{detail}"
+  ))
+  if (is_shiny_app()) {
+    tryCatch(
+      shiny::showNotification(
+        "The context index is being rebuilt; the first search may be slow.",
+        type = "warning",
+        duration = 8
+      ),
+      error = function(err) NULL
+    )
+  }
 }
 
 # options(commons.context_cache = FALSE) disables the persistent store (the
@@ -231,7 +265,8 @@ prune_context_cache <- function(
   }
   context_cache_state$last_prune <- now
 
-  # Evict least-recently-used stores until the cache fits under max_size.
+  reap_stale_build_files(dir, now)
+
   stores <- list.files(dir, pattern = "[.]duckdb$", full.names = TRUE)
   total <- sum(file.size(stores))
   if (total > max_size) {
@@ -241,8 +276,12 @@ prune_context_cache <- function(
       if (total <= max_size) {
         break
       }
-      total <- total - file.size(victim)
-      suppressWarnings(unlink(victim))
+      size <- file.size(victim)
+      # Only count the eviction when the unlink actually happened -- on
+      # Windows, deleting a store another process holds open fails.
+      if (suppressWarnings(unlink(victim)) == 0) {
+        total <- total - size
+      }
     }
     if (total > max_size && is.null(context_cache_state$warned_size)) {
       context_cache_state$warned_size <- TRUE
@@ -252,6 +291,23 @@ prune_context_cache <- function(
       ))
     }
   }
+  invisible()
+}
+
+# build_context_store() builds at a `.build-*` temp file that the size-cap
+# pruner never sees (it lists `*.duckdb`), so a crashed or killed build would
+# otherwise leak its partial store forever. Reap temp files older than a day:
+# young enough to clear debris promptly, old enough to never delete a build
+# that is still in flight.
+reap_stale_build_files <- function(dir, now, max_age = 24 * 60 * 60) {
+  stale <- list.files(
+    dir,
+    pattern = "^[.]build-",
+    all.files = TRUE,
+    full.names = TRUE
+  )
+  old <- stale[difftime(now, file.mtime(stale), units = "secs") > max_age]
+  suppressWarnings(unlink(old, recursive = TRUE))
   invisible()
 }
 

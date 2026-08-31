@@ -202,6 +202,44 @@ test_that("prune_context_cache() keeps a single store larger than the cap", {
   expect_true(file.exists(big))
 })
 
+test_that("prune_context_cache() reaps stale .build-* temp files only", {
+  dir <- withr::local_tempdir()
+  old <- file.path(dir, ".build-old")
+  fresh <- file.path(dir, ".build-fresh")
+  store <- file.path(dir, "store.duckdb")
+  for (f in c(old, fresh, store)) {
+    writeLines("x", f)
+  }
+  Sys.setFileTime(old, Sys.time() - 25 * 60 * 60)
+
+  context_cache_state$n_builds <- 0
+  context_cache_state$last_prune <- NULL
+  prune_context_cache(dir)
+
+  expect_false(file.exists(old))
+  expect_true(file.exists(fresh))
+  expect_true(file.exists(store))
+})
+
+test_that("context_store() warns and rebuilds when the cached store won't open", {
+  layer <- new_context_layer(c("Some context about widgets."))
+  path <- context_store_path(context_layer_state(layer)$docs)
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  # Stand in for a store unlinked or corrupted between file.exists() and
+  # connect (e.g. by a concurrent pruner)
+  writeLines("not a duckdb file", path)
+
+  expect_warning(
+    store <- context_store(layer),
+    "rebuilding"
+  )
+  expect_identical(store, context_layer_state(layer)$store)
+  expect_equal(
+    context_search(layer, "widgets"),
+    "Some context about widgets."
+  )
+})
+
 test_that("cache root prefers the option, then env vars", {
   withr::local_options(commons.context_cache = NULL)
   withr::local_envvar(
