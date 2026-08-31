@@ -18,7 +18,8 @@ context_layer(files = character())
 
 ## Value
 
-A `commons_context_layer` object.
+A `commons_context_layer` R6 object. Its internals are private and may
+change without notice.
 
 ## Details
 

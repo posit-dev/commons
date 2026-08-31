@@ -23,7 +23,8 @@ semantic_layer(...)
 
 ## Value
 
-A `commons_semantic_layer` object.
+A `commons_semantic_layer` R6 object. Its internals are private and may
+change without notice.
 
 ## Measures from files
 
@@ -85,29 +86,7 @@ semantic_layer(
     arguments = list()
   )
 )
-#> $measures
-#> $measures$order_count
-#> # <ellmer::ToolDef> order_count()
-#> # @name: order_count
-#> # @description: Count of orders.
-#> # @convert: TRUE
-#> #
-#> function () 
-#> 10
-#> <environment: 0x557c36246da8>
-#> 
-#> 
-#> $fn_sources
-#>        order_count 
-#> "function () \n10" 
-#> 
-#> $measure_provenance
-#> $measure_provenance$order_count
-#> character(0)
-#> 
-#> 
-#> attr(,"class")
-#> [1] "commons_semantic_layer"
+#> A commons semantic layer with 1 measure.
 
 if (FALSE) { # \dontrun{
 # In R/semantic_layer.R, `warehouse` has no @param, so commons supplies it:

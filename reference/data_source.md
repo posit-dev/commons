@@ -60,7 +60,8 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
 
 ## Value
 
-A `commons_data_source` object.
+A `commons_data_source` R6 object. Its internals are private and may
+change without notice.
 
 ## Details
 
