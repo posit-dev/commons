@@ -1,6 +1,6 @@
 [project]
 name = "commons"
-version = "0.1.0.dev0"
+version = "0.1.0.dev1"
 description = "AI Agents for Data Analysis"
 readme = "README.md"
 # Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
