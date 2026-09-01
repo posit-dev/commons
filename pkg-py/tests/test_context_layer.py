@@ -151,3 +151,34 @@ def test_search_respects_top_k(tmp_path):
     layer = context_layer(files=sorted(tmp_path.glob("*.md")))
 
     assert len(layer.search("revenue", top_k=2)) == 2
+
+
+def test_prewarm_builds_the_store_ahead_of_search(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+
+    assert layer._store_cache is None
+    layer.prewarm()
+
+    assert layer._store_cache is not None
+    assert layer._store_cache.size() == 1
+
+
+def test_prewarm_on_an_empty_layer_builds_nothing():
+    layer = context_layer()
+    layer.prewarm()
+
+    assert layer._store_cache is None
+
+
+def test_prewarm_is_idempotent(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+
+    layer.prewarm()
+    first = layer._store_cache
+    layer.prewarm()
+
+    assert layer._store_cache is first
