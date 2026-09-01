@@ -161,6 +161,18 @@
         "source_names": [],
         "heading": "order_count (measure)",
         "expected": "### order_count (measure)\nCount of orders."
+      },
+      {
+        "name": "an explicit empty heading is rendered verbatim, not treated as absent",
+        "measure": {
+          "name": "order_count",
+          "description": "Count of orders.",
+          "arguments": [],
+          "injected": []
+        },
+        "source_names": [],
+        "heading": "",
+        "expected": "### \nCount of orders."
       }
     ]
   }
