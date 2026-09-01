@@ -65,8 +65,10 @@ citation_scan_padding <- function(case, text) {
   if (is.null(case$pad)) {
     return("")
   }
-  after_open <- sub(".*?<commons-citation>", "", text)
-  body <- sub("</commons-citation>.*", "", after_open)
+  open_at <- regexpr("<commons-citation>", text, fixed = TRUE)
+  after_open <- substring(text, open_at + nchar("<commons-citation>"))
+  close_at <- regexpr("</commons-citation>", after_open, fixed = TRUE)
+  body <- substr(after_open, 1, close_at - 1L)
   strrep(
     case$pad$char,
     case$pad$citation_body_length - nchar(body) + nchar("{{pad}}")

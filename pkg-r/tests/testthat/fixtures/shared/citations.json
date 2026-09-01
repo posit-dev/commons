@@ -649,9 +649,9 @@
       },
       {
         "name": "a body one character over the cap is removed",
-        "why": "Past the cap the element is abandoned without a verdict, so an unbounded body cannot be buffered while waiting for a close tag.",
+        "why": "Past the cap the element is abandoned without a verdict, so an unbounded body cannot be buffered while waiting for a close tag. The boundary before the close tag is where the body crosses the cap with no part of a close tag buffered to discount.",
         "corpus": "documentation",
-        "text": "Before.\n<commons-cit{{split}}ation>{{pad}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-cita{{split}}tion>\nAfter.",
+        "text": "Before.\n<commons-cit{{split}}ation>{{pad}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n{{split}}</commons-cita{{split}}tion>\nAfter.",
         "pad": {
           "char": "x",
           "citation_body_length": 16385

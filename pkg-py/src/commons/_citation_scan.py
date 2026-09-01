@@ -56,10 +56,10 @@ _PREFIXES = {
 }
 # The opening tag only counts at the start of a line, so prose that mentions it
 # mid-sentence survives.
-_CITATION_OPEN_ANCHORED = re.compile(
+_CITATION_OPEN_AFTER_NEWLINE = re.compile(
     r"(?<=\n)" + re.escape(CITATION_OPEN), re.IGNORECASE
 )
-_CITATION_OPEN_AT_START = re.compile(
+_CITATION_OPEN_AT_LINE_START = re.compile(
     r"(?:^|(?<=\n))" + re.escape(CITATION_OPEN), re.IGNORECASE
 )
 
@@ -216,7 +216,9 @@ class CitationScanner:
 
     def _find_text_event(self) -> _Event | None:
         pattern = (
-            _CITATION_OPEN_AT_START if self._at_line_start else _CITATION_OPEN_ANCHORED
+            _CITATION_OPEN_AT_LINE_START
+            if self._at_line_start
+            else _CITATION_OPEN_AFTER_NEWLINE
         )
         found: list[tuple[re.Match[str] | None, int, _Action]] = [
             (pattern.search(self._buffer), len(CITATION_OPEN), "citation"),
