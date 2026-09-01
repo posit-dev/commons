@@ -92,14 +92,19 @@ def _split_parameters(
             injected.append(name)
             continue
 
-        if _described_field(annotation) is None:
+        field_meta = _described_field(annotation)
+        if field_meta is None:
             raise TypeError(_undeclared_message(func, name))
 
-        default = (
-            param.default
-            if param.default is not inspect.Parameter.empty
-            else PydanticUndefined
-        )
+        if param.default is inspect.Parameter.empty:
+            if field_meta.default is not PydanticUndefined or (
+                field_meta.default_factory is not None
+            ):
+                raise TypeError(_annotation_default_message(func, name))
+            default = PydanticUndefined
+        else:
+            default = param.default
+
         field = FieldInfo.from_annotated_attribute(annotation, default)
         fields[name] = (get_args(annotation)[0], field)
 
@@ -127,6 +132,16 @@ def _undeclared_message(func: Callable[..., Any], name: str) -> str:
         f"nor injected.\n"
         f"Annotate it Annotated[T, Field(description=...)] for the model to "
         f"supply it, or Injected[T] for commons to supply it."
+    )
+
+
+def _annotation_default_message(func: Callable[..., Any], name: str) -> str:
+    return (
+        f"Parameter {name!r} of measure {func.__name__!r} declares a default "
+        f"inside Field(...), but the signature has no default.\n"
+        f"Python never applies the Field default, so a call that omits "
+        f"{name!r} would fail. Put the default in the signature instead: "
+        f"{name}: Annotated[T, Field(description=...)] = <default>."
     )
 
 

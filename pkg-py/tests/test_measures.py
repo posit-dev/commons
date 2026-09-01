@@ -56,6 +56,27 @@ def test_split_parameters_carries_defaults_into_the_field() -> None:
     assert fields["limit"][1].default == 10
 
 
+def test_field_default_without_signature_default_is_an_error() -> None:
+    def m(limit: Annotated[int, Field(default=10, description="Cap.")]) -> None: ...
+
+    with pytest.raises(TypeError) as excinfo:
+        _split_parameters(m)
+
+    message = str(excinfo.value)
+    assert "limit" in message
+    assert "m" in message
+    assert "= <default>" in message
+
+
+def test_field_default_factory_without_signature_default_is_an_error() -> None:
+    def m(
+        tags: Annotated[list[str], Field(default_factory=list, description="Tags.")],
+    ) -> None: ...
+
+    with pytest.raises(TypeError, match="tags"):
+        _split_parameters(m)
+
+
 def test_unannotated_parameter_is_an_error() -> None:
     def m(region) -> None: ...
 
