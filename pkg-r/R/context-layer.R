@@ -109,13 +109,9 @@ strip_frontmatter <- function(md) {
 # The context store is a persistent, content-addressed DuckDB file: the key
 # hashes the layer's docs plus the ragnar/duckdb versions (whose file format
 # the store depends on), so a build happens once per content version per
-# cache root and every process afterwards opens it read-only. Store setup is
-# still deferred to the first search (or prewarm_context()) since many
-# conversations never search, but on a warm cache that first search only
-# pays for opening a file. Aliases of one layer share its store; augmenting
-# its documents creates a layer with a fresh store.
-# Housekeeping state for the persistent context cache: prune throttling, the
-# fallback tempdir, and the one-time warning about an unusable cache dir.
+# cache root and later processes just open the file. Aliases of one layer
+# share its store; augmenting its documents creates a layer with a fresh
+# store.
 context_cache_state <- new.env(parent = emptyenv())
 
 context_store <- function(layer) {
@@ -132,8 +128,8 @@ context_store <- function(layer) {
   if (!file.exists(path)) {
     build_context_store(state$docs, path)
   } else {
-    # Touch the mtime so size-cap eviction is LRU: stores in active use
-    # stay young. Best-effort -- a read-only cache dir still opens fine.
+    # Touch the mtime so size-cap eviction is LRU. Best-effort -- a
+    # read-only cache dir still opens fine.
     tryCatch(Sys.setFileTime(path, Sys.time()), error = function(err) NULL)
   }
   store <- tryCatch(
@@ -144,8 +140,8 @@ context_store <- function(layer) {
     # Typically a concurrent pruner unlinked the store between our
     # file.exists() and the connect; a corrupt store file is also possible.
     # Warn (and notify in Shiny, where a warning is easy to miss), then
-    # rebuild once. A second failure propagates, so persistent corruption
-    # still surfaces rather than being silently rebuilt every session.
+    # rebuild once -- a second failure propagates, so persistent corruption
+    # still surfaces.
     context_store_connect_warning(path, store)
     unlink(path)
     build_context_store(state$docs, path)
@@ -175,9 +171,8 @@ context_store_connect_warning <- function(path, err) {
   }
 }
 
-# options(commons.context_cache = FALSE) disables the persistent store (the
-# index is built in memory per layer instead) -- an escape hatch for
-# development loops over context files.
+# options(commons.context_cache = FALSE) builds the index in memory per
+# layer instead -- an escape hatch for development loops over context files.
 context_cache_enabled <- function() {
   if (identical(getOption("commons.context_cache"), FALSE)) {
     return(FALSE)
@@ -240,15 +235,12 @@ build_context_store <- function(docs, path) {
 }
 
 # Content-addressed stores accumulate one file per content version, so the
-# cache is capped by total size and pruned LRU: the mtime touch on open
-# keeps actively used stores young, so eviction deletes least-recently-used
-# stores first. The store just built is protected explicitly (not just by
-# its young mtime) so a store larger than the cap survives: like cachem, a
-# single oversized store is kept, with a one-time warning, rather than
-# evicted into a rebuild loop. Throttled like cachem (at most once per 20
-# builds or per 5 seconds) since stat-ing the directory on every build is
-# needlessly slow; concurrent pruners may double-delete, which unlink
-# tolerates with a warning.
+# cache is capped by total size and pruned LRU (the mtime touch on open
+# keeps active stores young). Like cachem, a single store larger than the
+# cap is kept, with a one-time warning, rather than evicted into a rebuild
+# loop. Throttled (at most once per 20 builds or per 5 seconds) since
+# stat-ing the directory on every build is needlessly slow; concurrent
+# pruners may double-delete, which unlink tolerates with a warning.
 prune_context_cache <- function(
   dir,
   max_size = getOption("commons.context_cache_max_size", 256 * 1024^2),
@@ -268,15 +260,21 @@ prune_context_cache <- function(
   reap_stale_build_files(dir, now)
 
   stores <- list.files(dir, pattern = "[.]duckdb$", full.names = TRUE)
-  total <- sum(file.size(stores))
+  # A store deleted by a concurrent pruner since list.files() stats as NA
+  sizes <- file.size(stores)
+  stores <- stores[!is.na(sizes)]
+  total <- sum(sizes, na.rm = TRUE)
   if (total > max_size) {
     evictable <- setdiff(stores, protect)
-    evictable <- evictable[order(file.mtime(evictable))]
+    evictable <- evictable[order(file.mtime(evictable), na.last = TRUE)]
     for (victim in evictable) {
       if (total <= max_size) {
         break
       }
       size <- file.size(victim)
+      if (is.na(size)) {
+        next
+      }
       # Only count the eviction when the unlink actually happened -- on
       # Windows, deleting a store another process holds open fails.
       if (suppressWarnings(unlink(victim)) == 0) {
@@ -294,11 +292,9 @@ prune_context_cache <- function(
   invisible()
 }
 
-# build_context_store() builds at a `.build-*` temp file that the size-cap
-# pruner never sees (it lists `*.duckdb`), so a crashed or killed build would
-# otherwise leak its partial store forever. Reap temp files older than a day:
-# young enough to clear debris promptly, old enough to never delete a build
-# that is still in flight.
+# A crashed or killed build would leak its `.build-*` temp file (the pruner
+# only lists `*.duckdb`). Reap temp files older than a day: young enough to
+# clear debris promptly, old enough to never delete a build in flight.
 reap_stale_build_files <- function(dir, now, max_age = 24 * 60 * 60) {
   stale <- list.files(
     dir,
@@ -327,17 +323,17 @@ context_store_path <- function(docs) {
     paste0("ragnar:", utils::packageVersion("ragnar")),
     paste0("duckdb:", utils::packageVersion("duckdb"))
   ))
-  file.path(context_cache_dir_safe(), "context", paste0(key, ".duckdb"))
+  file.path(context_store_dir(), paste0(key, ".duckdb"))
+}
+
+context_store_dir <- function(cache_dir = context_cache_dir_safe()) {
+  file.path(cache_dir, "context")
 }
 
 # Cache root resolution: an explicit override, then Connect's persistent
-# data directory (survives deployments when the server enables it), then --
-# for Shiny apps -- an app_cache/ directory beside the app (sass's
-# convention: per-app scoping on hosted platforms, used locally only if it
-# already exists), then the per-user cache dir. Wherever the root is
-# ephemeral (e.g. Connect Cloud, which resets disk to the deployed bundle),
-# the store simply rebuilds once per cache lifetime instead of once per
-# process.
+# data directory, then -- for Shiny apps -- an app_cache/ directory beside
+# the app (sass's convention: per-app scoping on hosted platforms, used
+# locally only if it already exists), then the per-user cache dir.
 context_cache_dir <- function() {
   opt <- getOption("commons.context_cache")
   if (!is.null(opt) && !identical(opt, FALSE)) {
@@ -393,7 +389,8 @@ context_cache_dir_safe <- function() {
       # tempfile() warns (not errors) when dir isn't a directory
       dir.exists(dir) && {
         probe <- tempfile(tmpdir = dir)
-        file.create(probe) && unlink(probe) == 0
+        # file.create() warns rather than errors on failure
+        suppressWarnings(file.create(probe)) && unlink(probe) == 0
       }
     },
     error = function(err) FALSE
