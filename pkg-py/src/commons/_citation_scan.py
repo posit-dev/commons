@@ -41,9 +41,9 @@ ELEMENT_BODY_CAP = 16384
 _Mode = Literal["text", "citation", "discard"]
 _Action = Literal["citation", "aside", "drop", "close"]
 
-# Matched as patterns rather than by lowercasing the buffer (like in R), because
-# casefolding unicode can change a string's length and would shift every position
-# that follows.
+# Matched as patterns rather than by lowercasing the buffer, as R does: Python's
+# str.lower() can change a string's length, which would shift every position that
+# follows, while R's tolower() preserves it.
 _LITERALS = {
     literal: re.compile(re.escape(literal), re.IGNORECASE)
     for literal in (CITATION_OPEN, CITATION_CLOSE, ASIDE_OPEN, ASIDE_CLOSE)
