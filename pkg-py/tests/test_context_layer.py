@@ -69,3 +69,85 @@ def test_context_layer_repr_counts_documents(tmp_path):
 
     assert repr(context_layer()) == "<ContextLayer: 0 documents>"
     assert repr(context_layer(files=[path])) == "<ContextLayer: 1 document>"
+
+
+def test_search_finds_a_relevant_chunk(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text(
+        "# Revenue\nRevenue excludes tax unless stated otherwise.\n\n"
+        "# Discounts\nDiscounts are applied before tax."
+    )
+
+    hits = context_layer(files=[path]).search("what does revenue mean")
+
+    assert len(hits) >= 1
+    assert "tax" in hits[0]
+
+
+def test_search_returns_nothing_when_the_layer_is_empty():
+    assert context_layer().search("anything") == []
+
+
+def test_search_returns_nothing_when_no_chunk_matches(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# A\napples")
+
+    assert context_layer(files=[path]).search("zzzzz") == []
+
+
+def test_search_does_not_surface_stripped_frontmatter(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text(
+        "---\nprovenance: abc1234\n---\n"
+        "# Revenue\nRevenue excludes tax unless stated otherwise."
+    )
+
+    layer = context_layer(files=[path])
+
+    assert "tax" in layer.search("revenue")[0]
+    assert layer.search("abc1234") == []
+
+
+def test_search_reuses_the_store_across_calls(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+
+    layer.search("revenue")
+    first = layer._store_cache
+    layer.search("revenue")
+
+    assert first is not None
+    assert layer._store_cache is first
+
+
+def test_search_indexes_every_document(tmp_path):
+    first = tmp_path / "a.md"
+    first.write_text("# Revenue\nRevenue excludes tax.")
+    second = tmp_path / "b.md"
+    second.write_text("# Discounts\nDiscounts are applied before tax.")
+
+    layer = context_layer(files=[first, second])
+
+    assert "Discounts" in layer.search("discounts")[0]
+    assert "Revenue" in layer.search("revenue")[0]
+
+
+def test_search_indexes_identical_documents_separately(tmp_path):
+    first = tmp_path / "a.md"
+    first.write_text("# Revenue\nRevenue excludes tax.")
+    second = tmp_path / "b.md"
+    second.write_text("# Revenue\nRevenue excludes tax.")
+
+    layer = context_layer(files=[first, second])
+
+    assert len(layer.search("revenue", top_k=5)) == 2
+
+
+def test_search_respects_top_k(tmp_path):
+    for i in range(5):
+        (tmp_path / f"{i}.md").write_text(f"# Revenue {i}\nRevenue excludes tax.")
+
+    layer = context_layer(files=sorted(tmp_path.glob("*.md")))
+
+    assert len(layer.search("revenue", top_k=2)) == 2
