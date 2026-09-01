@@ -181,8 +181,7 @@ def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> 
 
     ``kind`` selects the icon the UI layer draws beside the label. No icon is
     emitted yet: the URL comes from the served asset bundle, which arrives with
-    the Python UI (see decision D10 in the port plan), and a URL nothing serves
-    would be worse than none.
+    the Python UI (see decision D10 in the port plan).
     """
     reason = f"{explanation}\n\n" if explanation else ""
     blockquote = "> " + quote.strip().replace("\n", "\n> ")
