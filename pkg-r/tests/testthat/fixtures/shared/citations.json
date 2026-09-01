@@ -626,7 +626,7 @@
         "name": "a body exactly at the cap verifies",
         "why": "The cap is inclusive, so the largest allowed body is still scanned.",
         "corpus": "documentation",
-        "text": "<commons-citation>{{pad}}{{split}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>",
+        "text": "<commons-cita{{split}}tion>{{pad}}{{split}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-cit{{split}}ation>",
         "pad": {
           "char": "x",
           "citation_body_length": 16384
@@ -651,7 +651,7 @@
         "name": "a body one character over the cap is removed",
         "why": "Past the cap the element is abandoned without a verdict, so an unbounded body cannot be buffered while waiting for a close tag.",
         "corpus": "documentation",
-        "text": "Before.\n<commons-citation>{{pad}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter.",
+        "text": "Before.\n<commons-cit{{split}}ation>{{pad}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-cita{{split}}tion>\nAfter.",
         "pad": {
           "char": "x",
           "citation_body_length": 16385
@@ -688,7 +688,7 @@
         "name": "scanning resumes after an oversized element",
         "why": "An element dropped for size must not swallow the elements after it.",
         "corpus": "documentation",
-        "text": "Before.\n<commons-citation>{{pad}}</commons-citation>\nBetween.\n<commons-citation>\n\nno blockquote\n\n</commons-citation>\nAfter malformed.\n<commons-citation>\n\nFollows the weighting rule.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter valid.",
+        "text": "Before.\n<commo{{split}}ns-citation>{{pad}}{{split}}</commons-cit{{split}}ation>\nBetween.\n<commons-cit{{split}}ation>\n\nno blockquote\n\n</commons-citation>\nAfter malformed.\n<commons-citation>\n\nFollows the weighting rule.\n\n> Canopy cover is always acre-weighted for reporting.{{split}}\n\n</commons-c{{split}}itation>\nAfter valid.",
         "pad": {
           "char": "x",
           "citation_body_length": 16385
