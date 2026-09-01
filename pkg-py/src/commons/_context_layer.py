@@ -12,6 +12,10 @@ import os
 import re
 from collections.abc import Iterable
 
+from raghilda.chunker import MarkdownChunker
+from raghilda.document import MarkdownDocument
+from raghilda.store import DuckDBStore
+
 __all__ = ["ContextLayer", "context_layer"]
 
 # Frontmatter carries file metadata (e.g. provenance) meant for maintainers,
@@ -34,6 +38,7 @@ class ContextLayer:
 
     def __init__(self, docs: Iterable[str] = ()) -> None:
         self._docs = tuple(docs)
+        self._store_cache: DuckDBStore | None = None
 
     @property
     def docs(self) -> tuple[str, ...]:
@@ -43,6 +48,41 @@ class ContextLayer:
     def __repr__(self) -> str:
         n = len(self._docs)
         return f"<ContextLayer: {n} document{'' if n == 1 else 's'}>"
+
+    # Store setup (duckdb creation, chunk insertion, BM25 indexing) is the
+    # most expensive part of building an agent and many conversations never
+    # search, so it is deferred to the first search.
+    def _store(self) -> DuckDBStore:
+        if self._store_cache is None:
+            store = DuckDBStore.create(location=":memory:", embed=None)
+            chunker = MarkdownChunker()
+            # ingest() upserts on origin and rejects an empty one, so each
+            # document gets a distinct synthetic origin. Two files with
+            # identical text would otherwise collapse into one chunk.
+            store.ingest(
+                [
+                    MarkdownDocument(content=doc, origin=f"commons-context-{i}")
+                    for i, doc in enumerate(self._docs)
+                ],
+                prepare=chunker.chunk,
+            )
+            store.build_index(type="bm25")
+            self._store_cache = store
+        return self._store_cache
+
+    def search(self, query: str, top_k: int = 3) -> list[str]:
+        """Retrieve the chunks most relevant to ``query``."""
+        if not self._docs:
+            return []
+        hits = self._store().retrieve_bm25(query, top_k=top_k)
+        # retrieve_bm25 pads its result up to top_k with unscored rows, so a
+        # query that matches nothing still comes back full. Only scored rows
+        # are hits.
+        return [
+            hit.text.strip()
+            for hit in hits
+            if any(m.name == "bm25" and m.value is not None for m in hit.metrics)
+        ]
 
 
 def context_layer(
