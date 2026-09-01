@@ -15,8 +15,8 @@ import inspect
 from collections.abc import Callable
 from typing import Annotated, Any, Final, TypeVar, get_args, get_origin, get_type_hints
 
-from pydantic import Field
 from pydantic.fields import FieldInfo
+from pydantic_core import PydanticUndefined
 
 
 class _InjectedMarker:
@@ -53,12 +53,15 @@ def _split_parameters(
             injected.append(name)
             continue
 
-        field = _described_field(annotation)
-        if field is None:
+        if _described_field(annotation) is None:
             raise TypeError(_undeclared_message(func, name))
 
-        if param.default is not inspect.Parameter.empty:
-            field = FieldInfo.merge_field_infos(field, Field(default=param.default))
+        default = (
+            param.default
+            if param.default is not inspect.Parameter.empty
+            else PydanticUndefined
+        )
+        field = FieldInfo.from_annotated_attribute(annotation, default)
         fields[name] = (get_args(annotation)[0], field)
 
     return fields, tuple(injected)

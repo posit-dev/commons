@@ -93,3 +93,17 @@ def test_var_kwargs_are_an_error() -> None:
 
     with pytest.raises(TypeError, match=r"\*\*kwargs"):
         _split_parameters(m)
+
+
+def test_split_parameters_merges_field_constraints() -> None:
+    def m(
+        value: Annotated[int, Field(gt=0), Field(description="Positive.")],
+    ) -> None: ...
+
+    fields, _ = _split_parameters(m)
+
+    field_info = fields["value"][1]
+    assert field_info.description == "Positive."
+    # Verify that the gt=0 constraint is in the metadata
+    assert len(field_info.metadata) > 0
+    assert any(str(m).startswith("Gt") for m in field_info.metadata)
