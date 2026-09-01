@@ -136,7 +136,7 @@ wheels = [
 
 [[package]]
 name = "chatlas"
-version = "0.21.2"
+version = "0.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -151,9 +151,9 @@ dependencies = [
     { name = "rich" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/49/7b/aa1cb2e5d4355ef18ca289930007496567f72c8ba86cf3f7db9c7e532cd3/chatlas-0.21.2.tar.gz", hash = "sha256:65efcd3cbef63835f29091d54a8168c0bc563045ac80846a9eb498c8de45342d", size = 13443922, upload-time = "2026-08-20T18:19:08.366Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/46/9297f03af5f4ea579bb49341bc5d3bbb9f1213d2c6181d0163eabdfd7fd9/chatlas-0.22.0.tar.gz", hash = "sha256:11ae0f5e74f5ac6925cb663744bcf233b3db92e39285a771322dda0943e39100", size = 13445689, upload-time = "2026-08-25T20:10:46.405Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/1e/ebdd9dc3d9dadea381b69a1e9736bf1db12784e009ba459288d247fd9c7c/chatlas-0.21.2-py3-none-any.whl", hash = "sha256:830a3fb3525a747901dd01503b6df1f8ae292910ee7d1d2cab070278bafcdfe2", size = 252341, upload-time = "2026-08-20T18:19:06.607Z" },
+    { url = "https://files.pythonhosted.org/packages/87/ec/806cfd356206e52171c965c58c63d4c355e5d4a5f45dd068a77ce791a5b2/chatlas-0.22.0-py3-none-any.whl", hash = "sha256:318a13d2d14ff6a8407b829118a4f3a9a24d47c209a2c52a4c92b30441527b10", size = 254072, upload-time = "2026-08-25T20:10:44.673Z" },
 ]
 
 [[package]]
@@ -230,7 +230,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chatlas", specifier = ">=0.21.2" },
+    { name = "chatlas", specifier = ">=0.22.0" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "httpx", marker = "extra == 'tracing'", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3" },
