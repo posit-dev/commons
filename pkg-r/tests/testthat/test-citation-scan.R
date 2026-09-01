@@ -1,18 +1,53 @@
-test_that("parse_commons_citation splits explanation and blockquote", {
-  body <- "\nHow the quote supports the answer.\n\n> line one\n> line two\n"
-  out <- parse_commons_citation(body)
-  expect_identical(out$explanation, "How the quote supports the answer.")
-  expect_identical(out$quote, "line one\nline two")
+test_that("parse_commons_citation matches the shared cases", {
+  cases <- shared_fixture("citations")$parse_commons_citation$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    out <- parse_commons_citation(case$body)
+    if (is.null(case$expected)) {
+      expect_null(out, info = case$name)
+    } else {
+      expect_identical(
+        out,
+        list(explanation = case$expected$explanation, quote = case$expected$quote),
+        info = case$name
+      )
+    }
+  }
 })
 
-test_that("parse_commons_citation is NULL without exactly one blockquote", {
-  expect_null(parse_commons_citation("no quote here"))
-  expect_null(parse_commons_citation("> a\n\ntext\n\n> b"))
-})
+test_that("citation decisions match the shared record shape", {
+  # The shape is what the trajectory reviewer reads back out of the span, so
+  # drive the real producers rather than asserting on a hand-built list.
+  cases <- shared_fixture("citations")$citation_decision$cases
+  expect_setequal(
+    vapply(cases, function(case) case$decision$status, character(1)),
+    c("accepted", "rejected", "malformed")
+  )
 
-test_that("a bare '>' line continues the quote run", {
-  out <- parse_commons_citation("reason\n\n> a\n>\n> b")
-  expect_identical(out$quote, "a\n\nb")
+  malformed <- "<commons-citation>\n\nno blockquote\n\n</commons-citation>"
+
+  for (case in cases) {
+    want <- case$decision
+    got <- if (identical(want$status, "malformed")) {
+      project_citation_text(malformed, list())$decisions[[1]]
+    } else {
+      corpus <- if (identical(want$status, "accepted")) {
+        list(list(label = want$label, kind = want$kind, text = want$quote))
+      } else {
+        list(list(label = "documentation", kind = "prose", text = "No support."))
+      }
+      render_citation_aside(want$quote, "why", corpus)$decision
+    }
+    expect_identical(
+      jsonlite::fromJSON(
+        jsonlite::toJSON(got, auto_unbox = TRUE),
+        simplifyVector = FALSE
+      ),
+      want,
+      info = case$name
+    )
+  }
 })
 
 scan_all <- function(text, chunks, corpus = list()) {
