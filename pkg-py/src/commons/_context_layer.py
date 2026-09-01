@@ -70,6 +70,11 @@ class ContextLayer:
             self._store_cache = store
         return self._store_cache
 
+    def prewarm(self) -> None:
+        """Build the index now so the first search does not pay for it."""
+        if self._docs:
+            self._store()
+
     def search(self, query: str, top_k: int = 3) -> list[str]:
         """Retrieve the chunks most relevant to ``query``."""
         if not self._docs:
