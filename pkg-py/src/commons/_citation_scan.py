@@ -1,6 +1,6 @@
 """Project a model's streamed text for display, holding reserved markup back.
 
-The projection is a cross-language contract pinned by the ``citation_scan``
+The projection is shared cross-language and enforced by the ``citation_scan``
 cases in ``tests/shared/citations.json``; change that fixture, not just this
 file. ``pkg-r/R/citation-scan.R`` implements the same contract for R.
 
@@ -41,8 +41,9 @@ ELEMENT_BODY_CAP = 16384
 _Mode = Literal["text", "citation", "discard"]
 _Action = Literal["citation", "aside", "drop", "close"]
 
-# Matched as patterns rather than by lowercasing the buffer, because casefolding
-# can change a string's length and would shift every position that follows.
+# Matched as patterns rather than by lowercasing the buffer (like in R), because
+# casefolding unicode can change a string's length and would shift every position
+# that follows.
 _LITERALS = {
     literal: re.compile(re.escape(literal), re.IGNORECASE)
     for literal in (CITATION_OPEN, CITATION_CLOSE, ASIDE_OPEN, ASIDE_CLOSE)
@@ -101,6 +102,10 @@ class CitationScanner:
     Feed the model's chunks in and emit what is safe to display now. The
     scanner projects text for display and never rewrites what the caller
     stores, so the turn keeps the model's own words.
+
+    ``citation_scanner()`` in ``pkg-r/R/citation-scan.R`` is the R side of the
+    same contract, and the ``citation_scan`` and ``citation_holdback`` cases in
+    ``tests/shared/citations.json`` hold the two to the same output.
     """
 
     def __init__(
