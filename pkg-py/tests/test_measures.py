@@ -5,7 +5,7 @@ from dataclasses import FrozenInstanceError
 from typing import Annotated, Any, Literal, get_args, get_origin
 
 import pytest
-from pydantic import Field, ValidationError
+from pydantic import ConfigDict, Field, ValidationError, create_model
 
 from commons._measures import (
     INJECTED,
@@ -14,7 +14,10 @@ from commons._measures import (
     _split_parameters,
     as_measure,
     measure,
+    measure_schema_text,
 )
+
+from ._shared import load_shared_fixture
 
 
 def test_injected_alias_carries_the_marker() -> None:
@@ -368,3 +371,64 @@ def test_measure_is_frozen() -> None:
     m = _count_measure()
     with pytest.raises(FrozenInstanceError):
         m.name = "other"  # type: ignore[misc]
+
+
+SCHEMA_CASES: list[dict[str, Any]] = load_shared_fixture("measure-schema")[
+    "measure_schema_text"
+]["cases"]
+
+_SCALARS: dict[str, Any] = {
+    "string": str,
+    "integer": int,
+    "number": float,
+    "boolean": bool,
+}
+
+
+def _fixture_annotation(spec: dict[str, Any]) -> Any:
+    kind = spec["type"]
+    if kind == "enum":
+        return Literal[tuple(spec["values"])]
+    if kind == "array":
+        return list[_fixture_annotation(spec["items"])]
+    return _SCALARS[kind]
+
+
+def _fixture_measure(spec: dict[str, Any]) -> Measure:
+    """Build a measure from a fixture spec, mirroring the R runner's helper."""
+    fields: dict[str, Any] = {}
+    for argument in spec["arguments"]:
+        annotation = Annotated[
+            _fixture_annotation(argument),
+            Field(description=argument["description"]),
+        ]
+        default = ... if argument["required"] else argument["default"]
+        fields[argument["name"]] = (annotation, default)
+
+    def unused() -> None: ...  # pragma: no cover - the renderer never calls it
+
+    return Measure(
+        name=spec["name"],
+        title=spec["name"].replace("_", " "),
+        description=spec["description"],
+        func=unused,
+        params=create_model(
+            spec["name"], __config__=ConfigDict(extra="forbid"), **fields
+        ),
+        injected=tuple(spec["injected"]),
+    )
+
+
+def test_schema_fixture_is_not_empty() -> None:
+    assert SCHEMA_CASES
+
+
+@pytest.mark.parametrize("case", SCHEMA_CASES, ids=lambda case: case["name"])
+def test_measure_schema_text_matches_the_shared_fixture(case: dict[str, Any]) -> None:
+    rendered = measure_schema_text(
+        _fixture_measure(case["measure"]),
+        source_names=case["source_names"],
+        heading=case.get("heading"),
+    )
+
+    assert rendered == case["expected"]

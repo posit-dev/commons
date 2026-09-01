@@ -248,6 +248,60 @@ def measure(
     return decorate
 
 
+def measure_schema_text(
+    measure: Measure,
+    source_names: Sequence[str] = (),
+    heading: str | None = None,
+) -> str:
+    """Render the block search_pool shows the model for one measure.
+
+    The exact text is a cross-language contract pinned by
+    ``tests/shared/measure-schema.json``; change that fixture, not just this
+    function.
+    """
+    schema = measure.params.model_json_schema()
+    properties: dict[str, Any] = schema.get("properties", {})
+    required = set(schema.get("required", ()))
+
+    details = ""
+    # Naming the source a measure queries points the SQL fallback at the right
+    # one. `source_names` is empty for single-source agents, so the line never
+    # appears there.
+    named = [name for name in measure.injected if name in set(source_names)]
+    if named:
+        details += f"sources: {', '.join(named)}\n"
+    if properties:
+        lines = [
+            f"  - {name} ({_argument_detail(prop)}, "
+            f"{'required' if name in required else 'optional'}) "
+            f"{prop.get('description', '')}"
+            for name, prop in properties.items()
+        ]
+        details += "arguments:\n" + "\n".join(lines)
+    details = details.removesuffix("\n")
+    if details:
+        details = f"\n\n{details}"
+
+    return f"### {heading or measure.name}\n{measure.description}{details}"
+
+
+def _argument_detail(prop: dict[str, Any]) -> str:
+    if "enum" in prop:
+        return f"one of {{{', '.join(str(value) for value in prop['enum'])}}}"
+    if prop.get("type") == "array":
+        return f"array of {{{_items_label(prop.get('items', {}))}}}"
+    return str(prop.get("type", "string"))
+
+
+def _items_label(items: dict[str, Any]) -> str:
+    # An array's items can be an enum, whose vocabulary is worth listing, or a
+    # basic type, which is named. Not `_argument_detail`: that would nest the
+    # enum branch's "one of" inside "array of".
+    if "enum" in items:
+        return ", ".join(str(value) for value in items["enum"])
+    return str(items.get("type", "string"))
+
+
 def as_measure(obj: Any) -> Measure | None:
     """Recognize a measure, whether decorated function or bare record."""
     if isinstance(obj, Measure):
