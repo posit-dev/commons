@@ -111,7 +111,7 @@ commons_server <- function(id, client, ...) {
     attributes = list("commons.server.id" = id)
   )
 
-  commons_prewarm(client)
+  prewarm_on_idle(client)
 
   chat <- shinychat::chat_server(id, client = client, ...)
   # shinychat owns the conversation identity (it sets the client's
@@ -123,97 +123,137 @@ commons_server <- function(id, client, ...) {
   chat
 }
 
-#' Pre-warm a commons agent during post-startup idle time
+#' Pre-warm a commons agent's caches ahead of deployment
 #'
-#' A [commons()] agent defers two kinds of setup to first use, and exposes a
-#' `prewarm()` method for each so you can move the cost off the first
-#' question:
+#' A [commons()] agent does some expensive setup the first time it needs to:
+#' building the search index over the context layer and downloading any
+#' uncached pins (see [data_source()]). When you serve the agent with
+#' [commons_server()] or [commons_app()], this warming already happens
+#' automatically during post-startup idle time, so the first question is
+#' (hopefully) fast — you (hopefully) don't need to call 
+#' `commons_prewarm()` yourself.
 #'
-#' * `agent$prewarm_context()` builds the context index (the store behind
-#'   `search_context`). The index is a persistent, content-addressed file,
-#'   so the build happens once per content version: later sessions open it
-#'   in milliseconds, and it can be built offline ahead of deployment. The
-#'   cache root resolves from the `commons.context_cache` option, the
-#'   `COMMONS_CONTEXT_CACHE` or `CONNECT_CONTENT_DATA_DIR` environment
-#'   variables, an `app_cache/commons` directory beside a Shiny app, or the
-#'   per-user cache directory, in that order. This resolution ladder (and
-#'   the content-addressed, age-pruned cache design generally) follows the
-#'   file cache in the sass package, which has run in production Shiny
-#'   deployments for years. Note that `app_cache/` is
-#'   excluded from deployed bundles (rsconnect treats it as server-side
-#'   scratch), so it is shared across the sessions of one deployment but
-#'   rebuilt after a redeploy; to ship a pre-built store with the app,
-#'   point `commons.context_cache` at a directory inside the app and run
-#'   `prewarm_context()` before deploying. The cache is capped at 256 MB
-#'   with least-recently-used eviction (option
-#'   `commons.context_cache_max_size`, in bytes; a single store larger than
-#'   the cap is kept, with a warning). Set
-#'   `options(commons.context_cache = FALSE)` (or the
-#'   `COMMONS_CONTEXT_CACHE` environment variable to `false`) to disable
-#'   persistence entirely.
-#' * `agent$prewarm_sources()` starts a background process that downloads
-#'   any uncached pins into the local pins cache (see [data_source()]).
-#'   Because the pins cache is on disk, this can also run ahead of
-#'   deployment — outside the Shiny runtime entirely — and the deployed
-#'   app reads the warmed cache.
+#' The reason to call it directly is to warm the caches *without* running
+#' the app. Both kinds of setup are cached on disk — the context index is
+#' built once per version of your context documents, and pins are
+#' downloaded once into the local pins cache — so running
+#' `commons_prewarm(agent, cache_dir)` in a script before deploying lets
+#' the deployed app start warm.
 #'
-#' `agent$prewarm()` calls both. Call `commons_prewarm()` in a Shiny server
-#' function to defer warming to post-startup idle time, so it happens while
-#' the user reads the welcome message. Outside a running Shiny app (e.g. a
-#' pre-deploy warm-up script) there is no [later::later()] event loop, so
-#' `commons_prewarm()` warms synchronously instead. Note that
-#' `commons_prewarm()` always downgrades failures to warnings (see below),
-#' even on this synchronous path — a pre-deploy script that should fail the
-#' deploy on a cold cache must call `agent$prewarm()` directly.
+#' Pre-warming is a pure optimization — anything it builds is rebuilt on
+#' demand if it's missing — so failures are reported as warnings rather
+#' than errors. If a pre-deploy script should fail the deploy when warming
+#' fails, call the agent's `prewarm()` method directly instead; it lets
+#' errors propagate.
 #'
-#' `prewarm()` lets failures propagate, since a direct call is typically
-#' warming caches ahead of deployment and a mere warning would sail through
-#' a deploy script. `commons_prewarm()` downgrades such failures to
-#' warnings: pre-warming is a pure optimization — everything it builds is
-#' rebuilt lazily at first use — and an error escaping the [later::later()]
-#' callback would stop the app.
+#' @section Cache configuration:
+#' You can usually ignore this section: by default the context index cache
+#' lives in a per-user directory that does the right thing locally and on
+#' most hosted platforms. The reasons to configure it are:
+#'
+#' * **Persistence across deployments on ephemeral hosts.** This is
+#'   already handled on Connect and Shiny Server: the cache automatically
+#'   lands in Connect's persistent data directory when the server provides
+#'   one (currently an early-access feature the administrator enables), or
+#'   in an `app_cache/` directory beside the app, which survives
+#'   redeploys. But on hosts where no local disk persists (e.g. Connect
+#'   Cloud, which resets disk to the deployed bundle and never sets a data
+#'   directory), the cache is rebuilt after every redeploy unless you
+#'   point it at persistent storage yourself.
+#' * **Shipping a warm cache with the app.** Run
+#'   `commons_prewarm(agent, cache_dir = "path/inside/the/app")` before
+#'   deploying, and the deployed bundle includes the pre-built index.
+#'   `cache_dir` is required for this reason — anything resolved
+#'   implicitly (a per-user cache directory) would not ship with the
+#'   deployment.
+#' * **Development loops.** If you're editing context documents and want
+#'   each change re-indexed from scratch, disable persistence with
+#'   `options(commons.context_cache = FALSE)`.
+#'
+#' Set the directory with `options(commons.context_cache = "path/to/dir")`
+#' or the `COMMONS_CONTEXT_CACHE` environment variable. The cache is
+#' capped at 256 MB with least-recently-used eviction; raise
+#' `options(commons.context_cache_max_size)` (in bytes) if you index very
+#' large context.
 #'
 #' @param client A [commons()] agent.
+#' @param cache_dir A directory for the context index cache, used for this
+#'   call only (equivalent to setting
+#'   `options(commons.context_cache = cache_dir)` around it). Point it at
+#'   a directory inside the app so the warmed index ships with the
+#'   deployment. Note that rsconnect excludes `app_cache/` from deployed
+#'   bundles, so pick another name.
 #'
 #' @return `NULL`, invisibly.
 #'
 #' @examples
 #' \dontrun{
-#' server <- function(input, output, session) {
-#'   agent <- commons(
-#'     ellmer::chat_anthropic(),
-#'     data_sources = data_source(sales = sales)
-#'   )
-#'   commons_prewarm(agent)
-#'   shinychat::chat_server("chat", client = agent)
-#' }
+#' # In a pre-deploy script: warm the caches into a directory inside the
+#' # app, so the deployed bundle includes the pre-built context index
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_sources = data_source(sales = sales)
+#' )
+#' # (not app_cache/, which rsconnect excludes from the bundle)
+#' commons_prewarm(agent, cache_dir = "commons-cache")
 #' }
 #'
 #' @export
-commons_prewarm <- function(client) {
+commons_prewarm <- function(client, cache_dir) {
   check_commons_client(client)
-  # An error escaping a later::later() callback stops the Shiny app, and
-  # pre-warming is a pure optimization, so downgrade failures to warnings.
-  warm <- function() {
+  if (missing(cache_dir)) {
+    cli::cli_abort(c(
+      "{.arg cache_dir} is required.",
+      i = "Point it at a directory inside the app (e.g. {.code \"commons-cache\"}) so the warmed cache ships with the deployment."
+    ))
+  }
+  if (!rlang::is_string(cache_dir)) {
+    cli::cli_abort("{.arg cache_dir} must be a path to a cache directory.")
+  }
+  tryCatch(
+    {
+      withr::with_options(list(commons.context_cache = cache_dir), {
+        client$prewarm()
+        prewarm_cache_hint(cache_dir)
+      })
+    },
+    error = function(err) {
+      msg <- conditionMessage(err)
+      cli::cli_warn("{msg}")
+    }
+  )
+  invisible(NULL)
+}
+
+# An error escaping a later::later() callback would stop the app, so
+# downgrade failures to warnings.
+prewarm_on_idle <- function(client) {
+  later::later(function() {
     tryCatch(
       client$prewarm(),
       error = function(err) {
-        # Assign first: the raw message can contain braces (DuckDB errors
-        # embed JSON), which cli would try to interpolate -- and an error
-        # escaping this handler would stop the app.
         msg <- conditionMessage(err)
         cli::cli_warn("{msg}")
       }
     )
-  }
-  # later::later() only fires while an event loop is running; outside Shiny
-  # (e.g. a pre-deploy warm-up script) the callback would never run.
-  if (is_shiny_app()) {
-    later::later(warm)
-  } else {
-    warm()
-  }
+  })
   invisible(NULL)
+}
+
+prewarm_cache_hint <- function(cache_dir) {
+  store_dir <- context_store_dir(cache_dir)
+  if (!dir.exists(store_dir)) {
+    cli::cli_warn(c(
+      "No context index was cached at {.path {cache_dir}}.",
+      i = "The agent has no context layer to index, so the deployed app has nothing to reuse."
+    ))
+    return(invisible())
+  }
+  cli::cli_inform(c(
+    "Warmed the context index cache at {.path {store_dir}}.",
+    i = "To reuse it, deploy the directory with the app and set {.code options(commons.context_cache = \"{cache_dir}\")} in the app, or the {.envvar COMMONS_CONTEXT_CACHE} environment variable on the server."
+  ))
+  invisible()
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {

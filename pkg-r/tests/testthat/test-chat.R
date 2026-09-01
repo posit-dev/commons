@@ -115,8 +115,10 @@ test_that("commons_prewarm() downgrades prewarm failures to warnings", {
     context_store = function(...) stop("index build exploded"),
     .package = "commons"
   )
-  # Outside a running Shiny app, commons_prewarm() warms synchronously.
-  expect_warning(commons_prewarm(agent), "index build exploded")
+  expect_warning(
+    commons_prewarm(agent, cache_dir = withr::local_tempdir()),
+    "index build exploded"
+  )
 })
 
 test_that("commons_prewarm() warns on failures with braces in the message", {
@@ -129,8 +131,44 @@ test_that("commons_prewarm() warns on failures with braces in the message", {
     context_store = function(...) stop('bad store: {"code": 1}'),
     .package = "commons"
   )
-  expect_warning(commons_prewarm(agent), "bad store", fixed = TRUE)
+  expect_warning(
+    commons_prewarm(agent, cache_dir = withr::local_tempdir()),
+    "bad store",
+    fixed = TRUE
+  )
 })
+
+test_that("commons_prewarm(cache_dir =) builds the store in that directory", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  cache_dir <- withr::local_tempdir()
+  expect_message(
+    commons_prewarm(agent, cache_dir = cache_dir),
+    "Warmed the context index cache"
+  )
+  expect_length(list.files(file.path(cache_dir, "context")), 1)
+})
+
+test_that("commons_prewarm() warns when there is nothing to cache", {
+  expect_warning(
+    commons_prewarm(test_agent(), cache_dir = withr::local_tempdir()),
+    "No context index was cached"
+  )
+})
+
+test_that("commons_prewarm() validates cache_dir", {
+  expect_error(
+    commons_prewarm(test_agent(), cache_dir = TRUE),
+    "must be a path"
+  )
+  expect_error(
+    commons_prewarm(test_agent()),
+    "cache_dir.* is required"
+  )
+})
+
 
 test_that("commons_app() prewarms the agent on idle", {
   skip_if_not_installed("shiny")
@@ -140,7 +178,7 @@ test_that("commons_app() prewarms the agent on idle", {
   app_env <- environment(app$serverFuncSource)
   prewarmed <- FALSE
   testthat::local_mocked_bindings(
-    commons_prewarm = function(client) prewarmed <<- TRUE,
+    prewarm_on_idle = function(client) prewarmed <<- TRUE,
     .package = "commons"
   )
   shiny::testServer(app_env$server, {
