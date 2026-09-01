@@ -1,11 +1,19 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
-from typing import Annotated, Any, get_args, get_origin
+from dataclasses import FrozenInstanceError
+from typing import Annotated, Any, Literal, get_args, get_origin
 
 import pytest
-from pydantic import Field
+from pydantic import Field, ValidationError
 
-from commons._measures import INJECTED, Injected, _split_parameters
+from commons._measures import (
+    INJECTED,
+    Injected,
+    Measure,
+    _split_parameters,
+    as_measure,
+    measure,
+)
 
 
 def test_injected_alias_carries_the_marker() -> None:
@@ -107,3 +115,148 @@ def test_split_parameters_merges_field_constraints() -> None:
     # Verify that the gt=0 constraint is in the metadata
     assert len(field_info.metadata) > 0
     assert any(str(m).startswith("Gt") for m in field_info.metadata)
+
+
+def _count_measure() -> Measure:
+    """The running example, matching count_measure_tool() in the R suite."""
+
+    @measure(description="Count of orders.")
+    def order_count(
+        region: Annotated[
+            Literal["EMEA", "AMER"], Field(description="The sales region.")
+        ],
+        revenue_under: Annotated[float, Field(description="Cap.")] = 0.0,
+    ) -> int:
+        return 1
+
+    return as_measure(order_count)
+
+
+def test_measure_defaults_name_and_title_from_the_function() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    m = as_measure(order_count)
+    assert m is not None
+    assert m.name == "order_count"
+    assert m.title == "order count"
+    assert m.description == "Count of orders."
+
+
+def test_measure_leaves_the_function_callable() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 7
+
+    assert order_count() == 7
+
+
+def test_measure_takes_its_description_from_the_docstring() -> None:
+    @measure()
+    def order_count() -> int:
+        """Count of orders."""
+        return 1
+
+    assert as_measure(order_count).description == "Count of orders."
+
+
+def test_measure_prefers_an_explicit_description_over_the_docstring() -> None:
+    @measure(description="Explicit.")
+    def order_count() -> int:
+        """Docstring."""
+        return 1
+
+    assert as_measure(order_count).description == "Explicit."
+
+
+def test_measure_without_any_description_is_an_error() -> None:
+    with pytest.raises(ValueError, match="order_count"):
+
+        @measure()
+        def order_count() -> int:
+            return 1
+
+
+def test_measure_accepts_an_explicit_name_and_title() -> None:
+    @measure(description="d", name="orders", title="Orders placed")
+    def order_count() -> int:
+        return 1
+
+    m = as_measure(order_count)
+    assert m.name == "orders"
+    assert m.title == "Orders placed"
+
+
+def test_measure_records_provenance_links() -> None:
+    @measure(description="d", provenance=["https://example.com/spec"])
+    def order_count() -> int:
+        return 1
+
+    assert as_measure(order_count).provenance == ("https://example.com/spec",)
+
+
+def test_measure_hides_injected_parameters_from_the_schema() -> None:
+    @measure(description="Revenue for a region.")
+    def region_revenue(
+        region: Annotated[str, Field(description="The sales region.")],
+        warehouse: Injected[Any],
+    ) -> int:
+        return 0
+
+    m = as_measure(region_revenue)
+    assert list(m.params.model_fields) == ["region"]
+    assert m.injected == ("warehouse",)
+
+
+def test_as_measure_returns_none_for_a_plain_function() -> None:
+    def helper() -> int:
+        return 1
+
+    assert as_measure(helper) is None
+
+
+def test_as_measure_passes_a_measure_through() -> None:
+    m = _count_measure()
+    assert as_measure(m) is m
+
+
+def test_validate_args_coerces_valid_arguments() -> None:
+    args = _count_measure().validate_args({"region": "EMEA", "revenue_under": "1000"})
+
+    assert args == {"region": "EMEA", "revenue_under": 1000.0}
+
+
+def test_validate_args_rejects_out_of_vocabulary_enum_values() -> None:
+    with pytest.raises(ValidationError, match="LATAM"):
+        _count_measure().validate_args({"region": "LATAM"})
+
+
+def test_validate_args_rejects_unknown_arguments() -> None:
+    with pytest.raises(ValidationError, match="nope"):
+        _count_measure().validate_args({"region": "EMEA", "nope": 1})
+
+
+def test_validate_args_enforces_required_arguments() -> None:
+    with pytest.raises(ValidationError, match="region"):
+        _count_measure().validate_args({})
+
+
+def test_validate_args_omits_arguments_the_model_did_not_send() -> None:
+    args = _count_measure().validate_args({"region": "EMEA"})
+
+    assert args == {"region": "EMEA"}
+
+
+def test_validate_args_treats_none_as_no_arguments() -> None:
+    @measure(description="d")
+    def no_args() -> int:
+        return 1
+
+    assert as_measure(no_args).validate_args(None) == {}
+
+
+def test_measure_is_frozen() -> None:
+    m = _count_measure()
+    with pytest.raises(FrozenInstanceError):
+        m.name = "other"  # type: ignore[misc]

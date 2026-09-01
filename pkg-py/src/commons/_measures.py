@@ -12,9 +12,20 @@ hidden from the model by forgetting to describe it.
 from __future__ import annotations
 
 import inspect
-from collections.abc import Callable
-from typing import Annotated, Any, Final, TypeVar, get_args, get_origin, get_type_hints
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import (
+    Annotated,
+    Any,
+    Final,
+    TypeVar,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
+from pydantic import BaseModel, ConfigDict, create_model
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
@@ -33,6 +44,34 @@ _T = TypeVar("_T")
 # `Injected[Engine]` expands to `Annotated[Engine, INJECTED]`, so the marker
 # survives `get_type_hints(include_extras=True)` and stays out of the schema.
 Injected = Annotated[_T, INJECTED]
+
+MEASURE_ATTRIBUTE: Final = "__commons_measure__"
+
+
+@dataclass(frozen=True)
+class Measure:
+    """A trusted calculation the agent can run.
+
+    ``params`` describes only the arguments the model supplies; ``injected``
+    names the arguments commons supplies, which the model never sees.
+    """
+
+    name: str
+    title: str
+    description: str
+    func: Callable[..., Any]
+    params: type[BaseModel]
+    injected: tuple[str, ...] = ()
+    provenance: tuple[str, ...] = ()
+
+    def validate_args(self, args: Mapping[str, Any] | None) -> dict[str, Any]:
+        """Check and coerce the model's arguments against the schema.
+
+        The provider only ever sees ``call_measure``, so a measure's own
+        arguments arrive unchecked and are validated here.
+        """
+        validated = self.params.model_validate(dict(args or {}))
+        return validated.model_dump(exclude_unset=True)
 
 
 def _split_parameters(
@@ -96,3 +135,56 @@ def _unsupported_message(func: Callable[..., Any], name: str) -> str:
         f"Measure {func.__name__!r} takes {name}, which has no schema.\n"
         f"Declare each argument explicitly."
     )
+
+
+def measure(
+    *,
+    description: str | None = None,
+    name: str | None = None,
+    title: str | None = None,
+    provenance: Sequence[str] = (),
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Mark a function as a measure.
+
+    The decorated function is returned unchanged, so measures and the helpers
+    they call stay ordinary callables.
+    """
+
+    def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
+        text = description or inspect.getdoc(func) or ""
+        if not text.strip():
+            raise ValueError(
+                f"Measure {func.__name__!r} has no description.\n"
+                f"Pass description= to @measure, or give the function a docstring."
+            )
+        fields, injected = _split_parameters(func)
+        resolved_name = name or func.__name__
+        record = Measure(
+            name=resolved_name,
+            title=title or _humanize(resolved_name),
+            description=text.strip(),
+            func=func,
+            params=create_model(
+                resolved_name,
+                __config__=ConfigDict(extra="forbid"),
+                **cast(dict[str, Any], fields),
+            ),
+            injected=injected,
+            provenance=tuple(provenance),
+        )
+        setattr(func, MEASURE_ATTRIBUTE, record)
+        return func
+
+    return decorate
+
+
+def as_measure(obj: Any) -> Measure | None:
+    """Recognize a measure, whether decorated function or bare record."""
+    if isinstance(obj, Measure):
+        return obj
+    record = getattr(obj, MEASURE_ATTRIBUTE, None)
+    return record if isinstance(record, Measure) else None
+
+
+def _humanize(name: str) -> str:
+    return name.replace("_", " ")
