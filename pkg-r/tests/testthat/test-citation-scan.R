@@ -59,8 +59,10 @@ scan_chunks <- function(chunks, corpus) {
   )
 }
 
-# {{pad}} keeps the cap cases small on disk: the fixture states the body length
-# it wants and the runner builds the filler.
+# Length cap cases need citation bodies thousands of characters long. Rather than
+# store that filler in the fixture, the case gives a target body length and a
+# {{pad}} placeholder, which this expands into enough repeated characters to
+# reach it.
 citation_scan_padding <- function(case, text) {
   if (is.null(case$pad)) {
     return("")
@@ -96,9 +98,9 @@ citation_scan_expected <- function(case, corpus, padding) {
   expected
 }
 
-# Chunk invariance is a property of every case, not a case of its own, so each
-# one is fed whole, at the fixture's own boundaries, and at every boundary a
-# short text has.
+# Output must not depend on where chunks are split, so every case runs several
+# ways: as one piece, split at the fixture's own chunk boundaries, and — for
+# texts short enough — one character at a time and split at every position.
 citation_scan_chunkings <- function(text, chunks, exhaustive_max) {
   chunkings <- list("the whole text" = text)
   if (length(chunks) > 1) {
