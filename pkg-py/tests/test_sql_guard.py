@@ -225,3 +225,19 @@ def test_a_locking_read_is_rejected(dialect: str, sql: str) -> None:
 
 def test_a_plain_read_of_the_same_table_is_still_accepted() -> None:
     check_query("SELECT * FROM sales", dialect="postgres")
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT 'unterminated",
+        'SELECT "unterminated',
+        "SELECT /* unterminated",
+        "SELECT $$ unterminated",
+    ],
+)
+def test_input_the_tokenizer_chokes_on_raises_value_error(sql: str) -> None:
+    # Tokenizing fails before parsing does, and it raises a different sqlglot
+    # exception. Callers catch ValueError, so neither may escape.
+    with pytest.raises(ValueError):
+        check_query(sql, dialect="duckdb")

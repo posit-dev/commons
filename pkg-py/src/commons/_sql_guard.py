@@ -17,6 +17,7 @@ commons cannot open someone else's connection for them.
 from __future__ import annotations
 
 import sqlglot
+import sqlglot.errors
 from sqlglot import expressions as exp
 
 __all__ = ["check_query"]
@@ -66,7 +67,7 @@ def check_query(sql: str, dialect: str | None = None) -> None:
     """Raise `ValueError` unless `sql` is one read-only statement."""
     try:
         parsed = sqlglot.parse(sql, dialect=_sqlglot_dialect(dialect))
-    except sqlglot.ParseError as error:
+    except sqlglot.errors.SqlglotError as error:
         raise ValueError(
             f"The query could not be parsed as {dialect or 'SQL'}: {error}. "
             "Only read-only SELECT queries are allowed."
