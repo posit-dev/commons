@@ -16,6 +16,7 @@ from commons._measures import (
     as_measure,
     measure,
     measure_schema_text,
+    semantic_layer,
 )
 
 from ._shared import load_shared_fixture
@@ -547,3 +548,78 @@ def test_measure_schema_text_names_a_nullable_enum_arrays_vocabulary() -> None:
     rendered = measure_schema_text(_as_measure(regional_orders))
 
     assert "regions (array of {EMEA, AMER}, optional) Enum array, nullable." in rendered
+def test_semantic_layer_keys_measures_by_name() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    layer = semantic_layer(order_count)
+
+    assert list(layer.measures) == ["order_count"]
+    assert layer.measures["order_count"].description == "Count of orders."
+
+
+def test_semantic_layer_accepts_a_list_of_measures() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    @measure(description="Total revenue.")
+    def total_revenue() -> int:
+        return 2
+
+    layer = semantic_layer([order_count, total_revenue])
+
+    assert list(layer.measures) == ["order_count", "total_revenue"]
+
+
+def test_semantic_layer_accepts_a_bare_measure_record() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_is_empty_with_no_arguments() -> None:
+    layer = semantic_layer()
+
+    assert len(layer) == 0
+    assert layer.measures == {}
+
+
+def test_semantic_layer_rejects_a_non_measure() -> None:
+    with pytest.raises(TypeError, match="2026"):
+        semantic_layer(2026)
+
+
+def test_semantic_layer_rejects_an_undecorated_function() -> None:
+    def helper() -> int:
+        return 1
+
+    with pytest.raises(TypeError, match="helper"):
+        semantic_layer(helper)
+
+
+def test_semantic_layer_rejects_duplicate_names() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    with pytest.raises(ValueError, match="order_count"):
+        semantic_layer(order_count, order_count)
+
+
+def test_semantic_layer_harvests_inline_measure_source() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    layer = semantic_layer(order_count)
+
+    assert "def order_count()" in layer.source_text["order_count"]
+
+
+def test_semantic_layer_reports_its_size() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert len(layer) == 1
+    assert "1 measure" in repr(layer)

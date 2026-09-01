@@ -14,6 +14,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import (
     Annotated,
     Any,
@@ -349,3 +350,84 @@ def as_measure(obj: Any) -> Measure | None:
 
 def _humanize(name: str) -> str:
     return name.replace("_", " ")
+
+
+@dataclass(frozen=True)
+class SemanticLayer:
+    """The trusted calculations an agent can run.
+
+    ``source_text`` holds the source of the measures and the module-level
+    helpers they call, keyed by Python name. Only text is kept: the agent's
+    worker session reads measure definitions but never receives a callable.
+    """
+
+    measures: Mapping[str, Measure]
+    source_text: Mapping[str, str]
+
+    def __len__(self) -> int:
+        return len(self.measures)
+
+    def __repr__(self) -> str:
+        count = len(self.measures)
+        plural = "" if count == 1 else "s"
+        return f"A commons semantic layer with {count} measure{plural}."
+
+
+def semantic_layer(*items: Any) -> SemanticLayer:
+    """Collect measures into a semantic layer.
+
+    Each item is a measure, a list of measures, a module, or a path to a
+    Python file or a directory of them. Directory searches are not recursive.
+    """
+    measures: dict[str, Measure] = {}
+    source_text: dict[str, str] = {}
+    duplicates: list[str] = []
+
+    for item in items:
+        found, sources = _collect(item)
+        for record in found:
+            if record.name in measures:
+                duplicates.append(record.name)
+            measures[record.name] = record
+        for name, text in sources.items():
+            # First definition wins, matching R's de-duplication of harvested
+            # sources across files.
+            source_text.setdefault(name, text)
+
+    if duplicates:
+        raise ValueError(
+            f"Measure names must be unique; duplicated: "
+            f"{', '.join(sorted(set(duplicates)))}."
+        )
+
+    return SemanticLayer(
+        measures=MappingProxyType(measures),
+        source_text=MappingProxyType(source_text),
+    )
+
+
+def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
+    if isinstance(item, (list, tuple)):
+        measures: list[Measure] = []
+        sources: dict[str, str] = {}
+        for entry in item:
+            found, text = _collect(entry)
+            measures.extend(found)
+            sources.update(text)
+        return measures, sources
+
+    record = as_measure(item)
+    if record is None:
+        raise TypeError(
+            f"Every item in semantic_layer() must be a measure, a list of "
+            f"measures, a module, or a path; got {item!r}.\n"
+            f"Decorate the function with @measure to make it one."
+        )
+    return [record], {record.func.__name__: _source_text(record.func)}
+
+
+def _source_text(func: Callable[..., Any]) -> str:
+    try:
+        return inspect.getsource(func)
+    except (OSError, TypeError):
+        return f"# source unavailable for {func.__name__}"
