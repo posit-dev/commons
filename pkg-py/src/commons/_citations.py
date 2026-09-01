@@ -7,6 +7,7 @@ file. ``pkg-r/R/citations.R`` implements the same contract for R.
 
 from __future__ import annotations
 
+import html
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ __all__ = [
     "CitationDecision",
     "CorpusEntry",
     "ParsedCitation",
+    "citation_aside_html",
     "match_citation",
     "normalize_citation",
     "parse_commons_citation",
@@ -172,3 +174,31 @@ def match_citation(quote: str, corpus: Sequence[CorpusEntry]) -> CorpusEntry | N
         (entry for entry in corpus if needle in normalize_citation(entry.text)),
         None,
     )
+
+
+def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> str:
+    """Render a verified citation as the aside shinychat displays.
+
+    ``kind`` selects the icon the UI layer draws beside the label. No icon is
+    emitted yet: the URL comes from the served asset bundle, which arrives with
+    the Python UI (see decision D10 in the port plan), and a URL nothing serves
+    would be worse than none.
+    """
+    reason = f"{explanation}\n\n" if explanation else ""
+    blockquote = "> " + quote.strip().replace("\n", "\n> ")
+    # shinychat only renders the popover's title row for grouped asides, so the
+    # body carries its own title to keep the source named for a lone citation.
+    title = (
+        '<span class="commons-citation-title">'
+        '<span class="commons-citation-title-label">'
+        f"{html.escape(label, quote=False)}</span></span>\n\n"
+    )
+    return (
+        f'<shiny-aside label="{_escape_attr(label)}">'
+        f"{title}{reason}{blockquote}</shiny-aside>"
+    )
+
+
+# Ampersands first, so the entities this generates are not escaped again.
+def _escape_attr(text: str) -> str:
+    return text.replace("&", "&amp;").replace('"', "&quot;")

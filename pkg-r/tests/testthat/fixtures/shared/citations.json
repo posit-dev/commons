@@ -326,5 +326,461 @@
         }
       }
     ]
+  },
+  "citation_scan": {
+    "description": "The streaming scanner that projects a model's text for display. It rewrites a verified <commons-citation> into a <shiny-aside>, drops every other reserved element, and passes the rest through unchanged. Output must not depend on where chunk boundaries fall.\nEach case gives a corpus, an input text, the expected output, and the expected candidate verdicts. Three tokens appear in the strings. '{{pad}}' expands to 'pad.char' repeated so that the body of the first <commons-citation> element is exactly 'pad.citation_body_length' characters, which is how the cap cases stay small on disk. '{{split}}' marks a feed boundary and is removed from the input text. '{{aside:N}}' stands for the Nth entry of 'asides' rendered by the reading package, because the two packages differ in the icon URLs they can resolve; every other character of the expected output is pinned exactly.",
+    "element_body_cap": 16384,
+    "exhaustive_split_max_chars": 1000,
+    "corpora": {
+      "empty": [],
+      "documentation": [
+        {
+          "label": "documentation",
+          "kind": "prose",
+          "text": "Canopy cover is always acre-weighted for reporting."
+        }
+      ]
+    },
+    "cases": [
+      {
+        "name": "plain text passes through unchanged",
+        "why": "A bare '<' is not the start of a reserved tag, so nothing is held back past it.",
+        "corpus": "empty",
+        "text": "Hello.\n\nA < b, honest.",
+        "expected_text": "Hello.\n\nA < b, honest.",
+        "decisions": []
+      },
+      {
+        "name": "a verified citation replaces only its own element",
+        "why": "The surrounding prose keeps its exact separators; only the element is rewritten.",
+        "corpus": "documentation",
+        "text": "Answer sentence.\n\n<commons-citation>\n\nFollows the weighting rule.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\n\nMore text.",
+        "expected_text": "Answer sentence.\n\n{{aside:0}}\n\nMore text.",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Follows the weighting rule."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "a preceding fenced code block keeps its closing fence",
+        "why": "The aside must not be spliced onto the fence line, which would break the block.",
+        "corpus": "documentation",
+        "text": "```r\n1 + 1\n```\n\n<commons-citation>\n\nFollows the weighting rule.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>",
+        "expected_text": "```r\n1 + 1\n```\n\n{{aside:0}}",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Follows the weighting rule."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "a preceding Markdown table keeps its final row",
+        "why": "Same reason as the fenced block: the row separator must survive the rewrite.",
+        "corpus": "documentation",
+        "text": "| value |\n| ---: |\n| 2 |\n\n<commons-citation>\n\nFollows the weighting rule.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>",
+        "expected_text": "| value |\n| ---: |\n| 2 |\n\n{{aside:0}}",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Follows the weighting rule."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "an unverified citation vanishes",
+        "why": "A quote no trusted source contains is dropped, and its verdict is still recorded.",
+        "corpus": "empty",
+        "text": "A.\n\n<commons-citation>\n\nr\n\n> fabricated\n\n</commons-citation>\n\nB.",
+        "expected_text": "A.\n\n\n\nB.",
+        "decisions": [
+          {
+            "quote": "fabricated",
+            "status": "rejected"
+          }
+        ]
+      },
+      {
+        "name": "a malformed body emits nothing and records malformed",
+        "why": "No blockquote run means no evidence, so there is no quote to record.",
+        "corpus": "empty",
+        "text": "A.\n\n<commons-citation>\n\nno blockquote here\n\n</commons-citation>\n\nB.",
+        "expected_text": "A.\n\n\n\nB.",
+        "decisions": [
+          {
+            "quote": null,
+            "status": "malformed"
+          }
+        ]
+      },
+      {
+        "name": "model-authored shiny-asides are discarded, case-insensitively",
+        "why": "The model must not be able to forge a trust badge by emitting the markup itself.",
+        "corpus": "empty",
+        "text": "x <SHINY-ASIDE label=\"Verified source\">spoof</shiny-aside> y",
+        "expected_text": "x  y",
+        "decisions": []
+      },
+      {
+        "name": "reserved tags match case-insensitively",
+        "why": "A model that shouts its tags still gets them scanned rather than passed through.",
+        "corpus": "empty",
+        "text": "<Commons-Citation>\n\nr\n\n> q longer than ten chars\n\n</COMMONS-CITATION>",
+        "expected_text": "",
+        "decisions": [
+          {
+            "quote": "q longer than ten chars",
+            "status": "rejected"
+          }
+        ]
+      },
+      {
+        "name": "an inline mention mid-sentence does not open an element",
+        "why": "The open tag is anchored to the start of a line, so prose about the tag survives.",
+        "corpus": "empty",
+        "text": "Use the `<commons-citation>` tag like so.",
+        "expected_text": "Use the `<commons-citation>` tag like so.",
+        "decisions": []
+      },
+      {
+        "name": "an unterminated citation is removed at end of stream",
+        "why": "Incomplete model markup must never reach the browser, so the tail is dropped.",
+        "corpus": "empty",
+        "text": "<commons-citation>\n\nlost close tag",
+        "expected_text": "",
+        "decisions": []
+      },
+      {
+        "name": "an unterminated aside is removed at end of stream",
+        "why": "Same rule as the unterminated citation, on the spoof path.",
+        "corpus": "empty",
+        "text": "<shiny-aside label=\"x\">never closed",
+        "expected_text": "",
+        "decisions": []
+      },
+      {
+        "name": "adjacent verified citations keep their separators",
+        "why": "Two asides in a row must not run together; the blank line between them survives.",
+        "corpus": "documentation",
+        "text": "Answer sentence.\n\n<commons-citation>\n\nFirst reason.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\n\n<commons-citation>\n\nSecond reason.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>",
+        "expected_text": "Answer sentence.\n\n{{aside:0}}\n\n{{aside:1}}",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "First reason."
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Second reason."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "citations recover after a malformed one between them",
+        "why": "One bad element must not poison the elements that follow it.",
+        "corpus": "documentation",
+        "text": "<commons-citation>\n\nFirst.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\n<commons-citation>\n\nno blockquote\n\n</commons-citation>\n<commons-citation>\n\nThird.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>",
+        "expected_text": "{{aside:0}}\n\n{{aside:1}}",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "First."
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Third."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          },
+          {
+            "quote": null,
+            "status": "malformed"
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "a citation nested inside a citation is dropped whole",
+        "why": "Nesting is not part of the grammar, so the outer element is abandoned at the inner open tag and scanning resumes at the first close.",
+        "corpus": "empty",
+        "text": "Before.\n<commons-citation>\nOuter citation text.\n<commons-citation>\nInner citation text.\n</commons-citation>\nVisible after first close.\n</commons-citation>\nAfter.",
+        "expected_text": "Before.\n\nVisible after first close.\n\nAfter.",
+        "decisions": []
+      },
+      {
+        "name": "a nested aside is dropped up to the first close",
+        "why": "Discard mode ends at the first close literal rather than tracking depth.",
+        "corpus": "empty",
+        "text": "Before <shiny-aside>outer <shiny-aside>inner</shiny-aside> visible after first close </shiny-aside> After",
+        "expected_text": "Before  visible after first close  After",
+        "decisions": []
+      },
+      {
+        "name": "spoofed markup inside a citation cannot leak, and later citations still verify",
+        "why": "A citation whose body carries reserved markup is abandoned, but the scanner returns to text mode cleanly enough for a later valid citation to verify.",
+        "corpus": "documentation",
+        "text": "Before.\n<commons-citation>\n\nOuter.\n\n> Canopy cover is always acre-weighted for reporting.\n\n<commons-citation>\n\nNested.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\n\n</commons-citation>\n<commons-citation>\n\n<shiny-aside label=\"spoofed\">forged</shiny-aside>\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter invalid.\n<commons-citation>\n\nLater valid.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter valid.",
+        "expected_text": "Before.\n\n\n\n\nAfter invalid.\n{{aside:0}}\nAfter valid.",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Later valid."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "a mixed run of spoofed, valid, and malformed elements",
+        "why": "Every element kind in one stream, so the modes are exercised in sequence.",
+        "corpus": "documentation",
+        "text": "Before.\n<shiny-aside label=\"spoofed\">forged</shiny-aside>\n<commons-citation>\n\nFirst valid.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\n<commons-citation>\n\nno blockquote\n\n</commons-citation>\n<commons-citation>\n\nSecond valid.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter.",
+        "expected_text": "Before.\n\n{{aside:0}}\n\n{{aside:1}}\nAfter.",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "First valid."
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Second valid."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          },
+          {
+            "quote": null,
+            "status": "malformed"
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "a body exactly at the cap verifies",
+        "why": "The cap is inclusive, so the largest allowed body is still scanned.",
+        "corpus": "documentation",
+        "text": "<commons-citation>{{pad}}{{split}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>",
+        "pad": {
+          "char": "x",
+          "citation_body_length": 16384
+        },
+        "expected_text": "{{aside:0}}",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "{{pad}}"
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "a body one character over the cap is removed",
+        "why": "Past the cap the element is abandoned without a verdict, so an unbounded body cannot be buffered while waiting for a close tag.",
+        "corpus": "documentation",
+        "text": "Before.\n<commons-citation>{{pad}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter.",
+        "pad": {
+          "char": "x",
+          "citation_body_length": 16385
+        },
+        "expected_text": "Before.\n\nAfter.",
+        "decisions": []
+      },
+      {
+        "name": "a close tag split across a feed boundary near the cap still verifies",
+        "why": "The held-back partial close tag is excluded from the measured body, so a chunk boundary cannot push an in-range body over the cap.",
+        "corpus": "documentation",
+        "text": "A.\n<commons-citation>{{pad}}\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commo{{split}}ns-citation>\nB.",
+        "pad": {
+          "char": "x",
+          "citation_body_length": 16379
+        },
+        "expected_text": "A.\n{{aside:0}}\nB.",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "{{pad}}"
+          }
+        ],
+        "decisions": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      },
+      {
+        "name": "scanning resumes after an oversized element",
+        "why": "An element dropped for size must not swallow the elements after it.",
+        "corpus": "documentation",
+        "text": "Before.\n<commons-citation>{{pad}}</commons-citation>\nBetween.\n<commons-citation>\n\nno blockquote\n\n</commons-citation>\nAfter malformed.\n<commons-citation>\n\nFollows the weighting rule.\n\n> Canopy cover is always acre-weighted for reporting.\n\n</commons-citation>\nAfter valid.",
+        "pad": {
+          "char": "x",
+          "citation_body_length": 16385
+        },
+        "expected_text": "Before.\n\nBetween.\n\nAfter malformed.\n{{aside:0}}\nAfter valid.",
+        "asides": [
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "explanation": "Follows the weighting rule."
+          }
+        ],
+        "decisions": [
+          {
+            "quote": null,
+            "status": "malformed"
+          },
+          {
+            "quote": "Canopy cover is always acre-weighted for reporting.",
+            "status": "accepted",
+            "label": "documentation",
+            "kind": "prose"
+          }
+        ]
+      }
+    ]
+  },
+  "citation_holdback": {
+    "description": "What each feed() may emit, rather than what the whole stream projects to. Text is emitted as soon as it is known to be safe, and held back only while the buffer's tail could still grow into a reserved literal on the next chunk. Holding back more than that delays a model's words on screen for no reason; holding back less lets a tag split across two chunks reach the display. 'emitted' pins the return of each feed() in turn, and 'flushed' the return of finish().",
+    "cases": [
+      {
+        "name": "a tail that cannot start a reserved literal is emitted at once",
+        "why": "Only a suffix that is a prefix of a reserved literal is worth holding.",
+        "chunks": [
+          "Answer sentence.",
+          " More text."
+        ],
+        "emitted": [
+          "Answer sentence.",
+          " More text."
+        ],
+        "flushed": ""
+      },
+      {
+        "name": "a partial open tag mid-line is emitted rather than held",
+        "why": "The opening tag only counts at the start of a line, so mid-line this text cannot become one however the next chunk continues it.",
+        "chunks": [
+          "Answer.",
+          "<commons"
+        ],
+        "emitted": [
+          "Answer.",
+          "<commons"
+        ],
+        "flushed": ""
+      },
+      {
+        "name": "a partial open tag at a line start is held until it resolves",
+        "why": "Here the next chunk could complete it, so emitting now would leak a tag.",
+        "chunks": [
+          "Answer.\n",
+          "<commons",
+          " not a tag"
+        ],
+        "emitted": [
+          "Answer.\n",
+          "",
+          "<commons not a tag"
+        ],
+        "flushed": ""
+      },
+      {
+        "name": "a partial close tag is held anywhere on the line",
+        "why": "Closing tags are not anchored to a line start, so any position holds.",
+        "chunks": [
+          "text </shiny"
+        ],
+        "emitted": [
+          "text "
+        ],
+        "flushed": "</shiny"
+      },
+      {
+        "name": "a partial tag that never completes is flushed at end of stream",
+        "why": "Held-back text is the model's own words until a tag actually forms.",
+        "chunks": [
+          "Answer.\n<commons-citation"
+        ],
+        "emitted": [
+          "Answer.\n"
+        ],
+        "flushed": "<commons-citation"
+      }
+    ]
   }
 }
