@@ -29,6 +29,16 @@
         "expected": ""
       },
       {
+        "name": "an empty fence is removed rather than kept as text",
+        "input": "---\n---\n# Revenue",
+        "expected": "# Revenue"
+      },
+      {
+        "name": "an empty fence with no body becomes empty",
+        "input": "---\n---\n",
+        "expected": ""
+      },
+      {
         "name": "CRLF line endings are handled",
         "input": "---\r\nprovenance: abc1234\r\n---\r\n# Revenue",
         "expected": "# Revenue"

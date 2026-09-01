@@ -16,8 +16,9 @@ __all__ = ["ContextLayer", "context_layer"]
 
 # Frontmatter carries file metadata (e.g. provenance) meant for maintainers,
 # not the model; drop it so retrieval can't surface it. Anchored to the start
-# so a '---' thematic break in the body survives.
-_FRONTMATTER = re.compile(r"\A---\r?\n.*?\r?\n---(\r?\n|\Z)", re.DOTALL)
+# so a '---' thematic break in the body survives. The metadata block is
+# optional so an emptied-out fence is removed rather than indexed as text.
+_FRONTMATTER = re.compile(r"\A---\r?\n(.*?\r?\n)?---(\r?\n|\Z)", re.DOTALL)
 
 
 def strip_frontmatter(md: str) -> str:
