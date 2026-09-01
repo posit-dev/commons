@@ -282,7 +282,8 @@ def measure_schema_text(
     if details:
         details = f"\n\n{details}"
 
-    return f"### {heading or measure.name}\n{measure.description}{details}"
+    resolved_heading = measure.name if heading is None else heading
+    return f"### {resolved_heading}\n{measure.description}{details}"
 
 
 def _argument_detail(prop: dict[str, Any]) -> str:
