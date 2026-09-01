@@ -397,7 +397,9 @@ def semantic_layer(*items: Any) -> SemanticLayer:
     if duplicates:
         raise ValueError(
             f"Measure names must be unique; duplicated: "
-            f"{', '.join(sorted(set(duplicates)))}."
+            f"{', '.join(sorted(set(duplicates)))}.\n"
+            f"Give one of the colliding measures a distinct name with "
+            f"@measure(name=...)."
         )
 
     return SemanticLayer(
