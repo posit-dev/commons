@@ -262,6 +262,7 @@ def measure_schema_text(
     schema = measure.params.model_json_schema()
     properties: dict[str, Any] = schema.get("properties", {})
     required = set(schema.get("required", ()))
+    defs: dict[str, Any] = schema.get("$defs", {})
 
     details = ""
     # Naming the source a measure queries points the SQL fallback at the right
@@ -272,7 +273,7 @@ def measure_schema_text(
         details += f"sources: {', '.join(named)}\n"
     if properties:
         lines = [
-            f"  - {name} ({_argument_detail(prop)}, "
+            f"  - {name} ({_argument_detail(prop, defs)}, "
             f"{'required' if name in required else 'optional'}) "
             f"{prop.get('description', '')}"
             for name, prop in properties.items()
@@ -286,21 +287,32 @@ def measure_schema_text(
     return f"### {resolved_heading}\n{measure.description}{details}"
 
 
-def _argument_detail(prop: dict[str, Any]) -> str:
-    if "enum" in prop:
-        return f"one of {{{', '.join(str(value) for value in prop['enum'])}}}"
-    if prop.get("type") == "array":
-        return f"array of {{{_items_label(prop.get('items', {}))}}}"
-    return str(prop.get("type", "string"))
+def _argument_detail(prop: dict[str, Any], defs: dict[str, Any]) -> str:
+    resolved = _resolve_ref(prop, defs)
+    if "enum" in resolved:
+        return f"one of {{{', '.join(str(value) for value in resolved['enum'])}}}"
+    if resolved.get("type") == "array":
+        return f"array of {{{_items_label(resolved.get('items', {}), defs)}}}"
+    return str(resolved.get("type", "string"))
 
 
-def _items_label(items: dict[str, Any]) -> str:
+def _items_label(items: dict[str, Any], defs: dict[str, Any]) -> str:
     # An array's items can be an enum, whose vocabulary is worth listing, or a
     # basic type, which is named. Not `_argument_detail`: that would nest the
     # enum branch's "one of" inside "array of".
-    if "enum" in items:
-        return ", ".join(str(value) for value in items["enum"])
-    return str(items.get("type", "string"))
+    resolved = _resolve_ref(items, defs)
+    if "enum" in resolved:
+        return ", ".join(str(value) for value in resolved["enum"])
+    return str(resolved.get("type", "string"))
+
+
+def _resolve_ref(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
+    # A bare enum.Enum argument schema is a `$ref` into `$defs`, unlike a
+    # Literal, which pydantic inlines. Resolve it before reading the type.
+    ref = node.get("$ref")
+    if ref is None:
+        return node
+    return defs[ref.removeprefix("#/$defs/")]
 
 
 def as_measure(obj: Any) -> Measure | None:

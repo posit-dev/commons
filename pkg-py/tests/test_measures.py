@@ -1,5 +1,6 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
+import enum
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from typing import Annotated, Any, Literal, get_args, get_origin
@@ -388,14 +389,16 @@ _SCALARS: dict[str, Any] = {
 def _fixture_annotation(spec: dict[str, Any]) -> Any:
     kind = spec["type"]
     if kind == "enum":
-        return Literal[tuple(spec["values"])]
+        return Literal[tuple(spec["values"])]  # type: ignore[misc]
     if kind == "array":
         return list[_fixture_annotation(spec["items"])]
     return _SCALARS[kind]
 
 
 def _fixture_measure(spec: dict[str, Any]) -> Measure:
-    """Build a measure from a fixture spec, mirroring the R runner's helper."""
+    """Build a measure from a fixture spec; see test-measures.R for the sibling
+    runner.
+    """
     fields: dict[str, Any] = {}
     for argument in spec["arguments"]:
         annotation = Annotated[
@@ -432,3 +435,37 @@ def test_measure_schema_text_matches_the_shared_fixture(case: dict[str, Any]) ->
     )
 
     assert rendered == case["expected"]
+
+
+def test_measure_schema_text_names_a_bare_enum_arguments_vocabulary() -> None:
+    """pydantic schemas a bare enum.Enum as a `$ref` into `$defs`, not inline."""
+
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        region: Annotated[Region, Field(description="The sales region.")],
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "region (one of {EMEA, AMER}, required) The sales region." in rendered
+
+
+def test_measure_schema_text_names_a_bare_enum_arrays_vocabulary() -> None:
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        regions: Annotated[list[Region], Field(description="Regions to include.")],
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "regions (array of {EMEA, AMER}, required) Regions to include." in rendered
