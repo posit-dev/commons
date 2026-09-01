@@ -75,6 +75,7 @@ class _Event:
 
 
 def _find(literal: str, buffer: str) -> re.Match[str] | None:
+    """Locate the first occurrence of a reserved literal in the buffer."""
     return _LITERALS[literal].search(buffer)
 
 
@@ -161,6 +162,7 @@ class CitationScanner:
         return self._step_discard()
 
     def _step_text(self) -> bool:
+        """Emit plain text up to the next reserved literal, or up to the holdback."""
         event = self._find_text_event()
         if event is not None:
             prefix = self._buffer[: event.pos]
@@ -185,6 +187,7 @@ class CitationScanner:
         return False
 
     def _step_citation(self) -> bool:
+        """Close, abandon, or keep buffering the citation body being collected."""
         event = self._find_reserved_event()
         if event is not None and event.action == "close" and event.pos <= self._cap:
             body = self._buffer[: event.pos]
@@ -204,6 +207,7 @@ class CitationScanner:
         return False
 
     def _step_discard(self) -> bool:
+        """Drop buffered text through the close tag of the element being discarded."""
         assert self._discard_close is not None
         match = _find(self._discard_close, self._buffer)
         if match is not None:
@@ -220,6 +224,7 @@ class CitationScanner:
         return False
 
     def _find_text_event(self) -> _Event | None:
+        """Find the earliest reserved literal that matters while in text mode."""
         pattern = (
             _CITATION_OPEN_AT_LINE_START
             if self._at_line_start
@@ -241,6 +246,7 @@ class CitationScanner:
         return min(events, key=lambda event: event.pos, default=None)
 
     def _find_reserved_event(self) -> _Event | None:
+        """Find the earliest reserved literal inside a citation body."""
         found: list[tuple[re.Match[str] | None, int, _Action]] = [
             (_find(CITATION_OPEN, self._buffer), len(CITATION_OPEN), "drop"),
             (_find(CITATION_CLOSE, self._buffer), len(CITATION_CLOSE), "close"),
@@ -263,6 +269,7 @@ class CitationScanner:
         return len(self._buffer) - _held_back(self._buffer, CITATION_CLOSE)
 
     def _holdback_length(self) -> int:
+        """Longest buffer tail that could still grow into any reserved literal."""
         return max(
             _held_back(self._buffer, CITATION_OPEN, self._at_line_start),
             _held_back(self._buffer, ASIDE_OPEN),
@@ -271,6 +278,7 @@ class CitationScanner:
         )
 
     def _close_citation(self, body: str) -> None:
+        """Parse a completed citation body, record its verdict, and emit if verified."""
         parsed = parse_commons_citation(body)
         if parsed is None:
             self._candidates.append(CitationDecision(quote=None, status="malformed"))
@@ -296,14 +304,17 @@ class CitationScanner:
         )
 
     def _begin_discard(self, close_literal: str) -> None:
+        """Enter discard mode, dropping everything through ``close_literal``."""
         self._mode = "discard"
         self._discard_close = close_literal
 
     def _emit(self, text: str) -> None:
+        """Queue text for the current chunk's output."""
         if text:
             self._out.append(text)
 
     def _note_line_start(self, original: str) -> None:
+        """Update whether the next text sits at a line start, per the model's text."""
         # Tag anchoring follows the model's own text, not the projected output.
         if original:
             self._at_line_start = original.endswith("\n")
