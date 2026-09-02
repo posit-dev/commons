@@ -18,12 +18,13 @@ Most Posit R/Python pairs (ellmer/chatlas, ragnar/raghilda, shiny/py-shiny) shar
 
 ## How each suite consumes these
 
-The Python suite reads this directory directly. The R suite cannot. `testthat` needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite reads a copy synced into `pkg-r/tests/testthat/fixtures/shared/`. That copy is committed, `scripts/sync-shared-fixtures.sh` generates it, and a CI job re-runs the script and fails when the copy is stale.
+The Python suite reads this directory directly. The R suite cannot. `testthat` needs its fixtures inside the package, and an installed R package cannot reach files outside its own directory. The R suite reads a copy synced into `pkg-r/tests/testthat/fixtures/shared/`. That copy is committed, `scripts/sync-shared.sh` generates it, and a CI job re-runs the script and fails when the copy is stale.
 
 ## What sort of fixtures are here
 
 - **Span names and attributes.** `commons_conversation_turn`, `commons_agent_create`, `commons_data_source_create`, and friends. Also `gen_ai.conversation.id`, `commons.provenance.tag`, and the exact JSON shape of `commons.citation.candidates`. This contract lets the R trajectory reviewer read Python traces. Write it so that it survives the conversation-id ownership moving upstream to shinychat.
 - **The provenance and citation behavior.** The `derive_provenance_tag()` truth table, `normalize_citation()` input/output pairs, `match_citation()` verdicts including both guards (10-character minimum, only-the-quote-verifies), `parse_commons_citation()` well-formed and malformed bodies. Also the chunk-invariance cases of the streaming scanner. The scanner is a pure chunks-in/string-out function, so it is ideal fixture material.
+- **System prompt rendering.** The template lives in `prompts/`, not here, but what each renderer makes of it does: `prompt-render.json` holds the data a renderer receives and the prompt it must produce. A shared template pins the words, not the rendering.
 - **The citation dialect and display copy.** The `<commons-citation>` grammar and the `PROVENANCE_DISPLAY` strings, so that both UIs say the same words.
 - **The definitions interface.** `definition-export/` holds the shared fixtures: 14 data dictionaries in data-dict's YAML format, each declaring table-level `definitions` whose expressions use data-dict's expression language — 3 valid files (42 definitions) and 11 invalid ones — read by both commons implementations. `definitions.json` pins what both packages agree to produce from them, in three sections:
   - `export_records` — the expected export for each valid definition: its SQL translation, its inferred kind and type, and the columns and definitions it references. Generated from the data-dict binary at the pinned commit by `scripts/generate-definitions-fixture.sh`, which refuses to run against a binary built from anything else. Never hand-edit.
