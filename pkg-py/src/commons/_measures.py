@@ -288,7 +288,7 @@ def measure_schema_text(
 
 
 def _argument_detail(prop: dict[str, Any], defs: dict[str, Any]) -> str:
-    resolved = _resolve_ref(prop, defs)
+    resolved = _resolve_node(prop, defs)
     if "enum" in resolved:
         return f"one of {{{', '.join(str(value) for value in resolved['enum'])}}}"
     if resolved.get("type") == "array":
@@ -300,15 +300,36 @@ def _items_label(items: dict[str, Any], defs: dict[str, Any]) -> str:
     # An array's items can be an enum, whose vocabulary is worth listing, or a
     # basic type, which is named. Not `_argument_detail`: that would nest the
     # enum branch's "one of" inside "array of".
-    resolved = _resolve_ref(items, defs)
+    resolved = _resolve_node(items, defs)
     if "enum" in resolved:
         return ", ".join(str(value) for value in resolved["enum"])
     return str(resolved.get("type", "string"))
 
 
+def _resolve_node(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a JSON Schema node to the single shape it actually describes.
+
+    pydantic emits two shapes ``_argument_detail`` and ``_items_label`` must
+    see through, in this order: a nullable field or item is an `anyOf` union
+    with a `{"type": "null"}` branch, and a bare `enum.Enum` (unlike a
+    `Literal`, which is inlined) is a `$ref` into `$defs`. Unwrapping the
+    union before resolving the reference means a nullable bare enum, and a
+    nullable array of them, both resolve the same as a required one.
+    """
+    return _resolve_ref(_unwrap_any_of(node), defs)
+
+
+def _unwrap_any_of(node: dict[str, Any]) -> dict[str, Any]:
+    branches = node.get("anyOf")
+    if branches is None:
+        return node
+    non_null = [branch for branch in branches if branch.get("type") != "null"]
+    # A union of more than one real type has no single detail to derive; leave
+    # it as is; it falls through to `string` below, same as before this fix.
+    return non_null[0] if len(non_null) == 1 else node
+
+
 def _resolve_ref(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
-    # A bare enum.Enum argument schema is a `$ref` into `$defs`, unlike a
-    # Literal, which pydantic inlines. Resolve it before reading the type.
     ref = node.get("$ref")
     if ref is None:
         return node

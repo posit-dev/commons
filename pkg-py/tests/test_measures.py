@@ -469,3 +469,55 @@ def test_measure_schema_text_names_a_bare_enum_arrays_vocabulary() -> None:
     rendered = measure_schema_text(_as_measure(regional_orders))
 
     assert "regions (array of {EMEA, AMER}, required) Regions to include." in rendered
+
+
+def test_measure_schema_text_names_a_nullable_bare_enum_arguments_vocabulary() -> None:
+    """pydantic wraps a nullable field in `anyOf` with a null branch."""
+
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        region: Annotated[
+            Region | None, Field(description="Bare enum, nullable.")
+        ] = None,
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "region (one of {EMEA, AMER}, optional) Bare enum, nullable." in rendered
+
+
+def test_measure_schema_text_names_a_nullable_literal_arguments_vocabulary() -> None:
+    @measure(description="Orders by region.")
+    def regional_orders(
+        region: Annotated[
+            Literal["EMEA", "AMER"] | None, Field(description="Literal, nullable.")
+        ] = None,
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "region (one of {EMEA, AMER}, optional) Literal, nullable." in rendered
+
+
+def test_measure_schema_text_names_a_nullable_enum_arrays_vocabulary() -> None:
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        regions: Annotated[
+            list[Region] | None, Field(description="Enum array, nullable.")
+        ] = None,
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "regions (array of {EMEA, AMER}, optional) Enum array, nullable." in rendered
