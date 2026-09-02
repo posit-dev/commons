@@ -8,6 +8,7 @@ the constructor functions, which is where a bad argument can still be named.
 from __future__ import annotations
 
 import re
+import string
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -24,6 +25,15 @@ __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 # and a string literal there could otherwise pose as a second missing table.
 # The name runs to the fixed trailer, since a quoted label may contain spaces.
 _MISSING_RELATION = re.compile(r"Catalog Error: Table with name (.+?) does not exist")
+
+# DuckDB folds identifiers over ASCII only, so "Ä" and "ä" are two tables
+# while "sales" and "SALES" are one. Python's casefold() is broader (it maps
+# "ß" to "ss") and would merge names DuckDB keeps apart.
+_ASCII_FOLD = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
+
+
+def _fold(name: str) -> str:
+    return name.translate(_ASCII_FOLD)
 
 
 @dataclass(frozen=True)
@@ -178,8 +188,8 @@ class DataSource:
         found = _MISSING_RELATION.match(message.lstrip())
         if found is None:
             return []
-        named = found.group(1).casefold()
-        return [label for label in self.pending.pins if label.casefold() == named]
+        named = _fold(found.group(1))
+        return [label for label in self.pending.pins if _fold(label) == named]
 
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None
@@ -367,7 +377,7 @@ def _check_labels_distinct(labels: list[str]) -> None:
     """
     seen: dict[str, str] = {}
     for label in labels:
-        first = seen.setdefault(label.casefold(), label)
+        first = seen.setdefault(_fold(label), label)
         if first != label:
             raise ValueError(
                 f"Table names {first!r} and {label!r} differ only by case, and "
