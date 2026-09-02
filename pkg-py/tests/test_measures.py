@@ -548,6 +548,8 @@ def test_measure_schema_text_names_a_nullable_enum_arrays_vocabulary() -> None:
     rendered = measure_schema_text(_as_measure(regional_orders))
 
     assert "regions (array of {EMEA, AMER}, optional) Enum array, nullable." in rendered
+
+
 def test_semantic_layer_keys_measures_by_name() -> None:
     @measure(description="Count of orders.")
     def order_count() -> int:
