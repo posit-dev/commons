@@ -205,3 +205,21 @@ def test_a_query_cannot_smuggle_a_missing_table_phrase(
     )
 
     assert reads == ["sales-pin"]
+
+
+def test_pin_matching_folds_over_ascii_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # DuckDB keeps "straße" and "STRASSE" apart, so a query for the latter
+    # must not read the former's pin. Only the ASCII case variant matches.
+    board = pins.board_folder(str(tmp_path))
+    board.pin_write(pd.DataFrame({"revenue": [1.0]}), "strasse-pin", type="csv")
+    source = data_source(board, tables={"straße": "strasse-pin"})
+    reads = record_reads(board, monkeypatch)
+
+    with pytest.raises(Exception, match="STRASSE"):
+        source.query('SELECT count(*) AS n FROM "STRASSE"')
+    assert reads == []
+
+    assert source.query('SELECT count(*) AS n FROM "STRAßE"') == [{"n": 1}]
+    assert reads == ["strasse-pin"]
