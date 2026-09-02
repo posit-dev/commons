@@ -761,3 +761,46 @@ def test_failed_import_that_deletes_its_own_module_entry_still_raises() -> None:
 
     with pytest.raises(RuntimeError, match="boom"):
         semantic_layer(path)
+
+
+def test_measure_file_imports_a_sibling_file_directly() -> None:
+    layer = semantic_layer(MEASURE_FILES / "sibling_imports" / "uses_helper.py")
+
+    assert list(layer.measures) == ["doubled_count"]
+    assert layer.measures["doubled_count"].func() == 42
+
+
+def test_sys_path_is_restored_after_a_successful_load() -> None:
+    directory = str(MEASURE_FILES / "sibling_imports")
+
+    semantic_layer(MEASURE_FILES / "sibling_imports" / "uses_helper.py")
+
+    assert directory not in sys.path
+
+
+def test_sys_path_is_restored_after_a_failing_load() -> None:
+    directory = str(MEASURE_FILES / "broken")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_layer(MEASURE_FILES / "broken" / "broken_import.py")
+
+    assert directory not in sys.path
+
+
+def test_stdlib_name_collision_is_a_construction_error() -> None:
+    path = MEASURE_FILES / "stdlib_collision" / "json.py"
+
+    with pytest.raises(ValueError, match="json.py") as excinfo:
+        semantic_layer(path)
+
+    assert "standard library" in str(excinfo.value)
+
+
+def test_same_named_helper_in_two_directories_is_a_construction_error() -> None:
+    try:
+        semantic_layer(MEASURE_FILES / "collision_a" / "uses_shared.py")
+
+        with pytest.raises(ValueError, match="shared_lib"):
+            semantic_layer(MEASURE_FILES / "collision_b" / "shared_lib.py")
+    finally:
+        sys.modules.pop("shared_lib", None)

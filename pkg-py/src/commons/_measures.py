@@ -384,8 +384,10 @@ def semantic_layer(*items: Any) -> SemanticLayer:
     Each item is a measure, a list of measures, a module, or a path to a
     Python file or a directory of them. Directory searches are not recursive.
 
-    A measure that calls a helper defined in another file imports it, the way
-    any Python module does.
+    A sibling file is imported by plain absolute import; its directory is on
+    sys.path only while the file loads. A file whose name collides with the
+    standard library, or with a module already imported from elsewhere, is a
+    construction error.
     """
     measures: dict[str, Measure] = {}
     source_text: dict[str, str] = {}
@@ -510,14 +512,60 @@ def _load_module_from_path(path: Path) -> ModuleType:
             f"Cannot read measures from {path}: not a Python file.\n"
             f"Pass a .py file, a directory of them, or a module object."
         )
+
+    _check_directory_importable(path.parent)
+
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
+
+    # Appended, not inserted at the front: a sibling file can then import
+    # another sibling by plain absolute import, but a sibling named like a
+    # stdlib module must not shadow it for the rest of the process.
+    directory = str(path.parent)
+    added_to_path = directory not in sys.path
+    if added_to_path:
+        sys.path.append(directory)
     try:
         spec.loader.exec_module(module)
     except BaseException:
-        sys.modules.pop(name, None)
+        if sys.modules.get(name) is module:
+            sys.modules.pop(name, None)
         raise
+    finally:
+        if added_to_path and directory in sys.path:
+            sys.path.remove(directory)
     return module
+
+
+def _check_directory_importable(directory: Path) -> None:
+    """Fail before a directory goes on sys.path if a file in it would shadow
+    the standard library or collide with a module already imported from
+    elsewhere.
+
+    Every .py file in the directory is checked, not only the one being
+    loaded: the sys.path entry makes all of them importable, so an unloaded
+    file with a colliding name is exactly as dangerous.
+    """
+    for entry in sorted(directory.glob("*.py")):
+        if entry.name == "__init__.py":
+            continue
+        stem = entry.stem
+        if stem in sys.stdlib_module_names:
+            raise ValueError(
+                f"{entry} would shadow the standard library module {stem!r} "
+                f"once its directory is importable.\n"
+                f"Rename the file."
+            )
+        existing = sys.modules.get(stem)
+        existing_file = getattr(existing, "__file__", None) if existing else None
+        if existing is not None and (
+            existing_file is None or Path(existing_file).resolve() != entry.resolve()
+        ):
+            raise ValueError(
+                f"{entry} would collide with {stem!r}, already imported "
+                f"from {existing_file or 'a module with no file'}.\n"
+                f"Rename the file."
+            )
 
 
 def _source_text(func: Callable[..., Any]) -> str:
