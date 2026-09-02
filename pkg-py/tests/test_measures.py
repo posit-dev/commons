@@ -138,6 +138,13 @@ def test_split_parameters_merges_field_constraints() -> None:
     assert any(str(m).startswith("Gt") for m in field_info.metadata)
 
 
+def _as_measure(obj: Any) -> Measure:
+    """Narrow as_measure()'s result for tests that require it to succeed."""
+    record = as_measure(obj)
+    assert record is not None
+    return record
+
+
 def _count_measure() -> Measure:
     """The running example, matching count_measure_tool() in the R suite."""
 
@@ -150,7 +157,7 @@ def _count_measure() -> Measure:
     ) -> int:
         return 1
 
-    return as_measure(order_count)
+    return _as_measure(order_count)
 
 
 def test_measure_defaults_name_and_title_from_the_function() -> None:
@@ -179,7 +186,7 @@ def test_measure_takes_its_description_from_the_docstring() -> None:
         """Count of orders."""
         return 1
 
-    assert as_measure(order_count).description == "Count of orders."
+    assert _as_measure(order_count).description == "Count of orders."
 
 
 def test_measure_prefers_an_explicit_description_over_the_docstring() -> None:
@@ -188,7 +195,7 @@ def test_measure_prefers_an_explicit_description_over_the_docstring() -> None:
         """Docstring."""
         return 1
 
-    assert as_measure(order_count).description == "Explicit."
+    assert _as_measure(order_count).description == "Explicit."
 
 
 def test_measure_without_any_description_is_an_error() -> None:
@@ -204,7 +211,7 @@ def test_measure_accepts_an_explicit_name_and_title() -> None:
     def order_count() -> int:
         return 1
 
-    m = as_measure(order_count)
+    m = _as_measure(order_count)
     assert m.name == "orders"
     assert m.title == "Orders placed"
 
@@ -214,7 +221,7 @@ def test_measure_records_provenance_links() -> None:
     def order_count() -> int:
         return 1
 
-    assert as_measure(order_count).provenance == ("https://example.com/spec",)
+    assert _as_measure(order_count).provenance == ("https://example.com/spec",)
 
 
 def test_measure_hides_injected_parameters_from_the_schema() -> None:
@@ -225,7 +232,7 @@ def test_measure_hides_injected_parameters_from_the_schema() -> None:
     ) -> int:
         return 0
 
-    m = as_measure(region_revenue)
+    m = _as_measure(region_revenue)
     assert list(m.params.model_fields) == ["region"]
     assert m.injected == ("warehouse",)
 
@@ -274,7 +281,7 @@ def test_validate_args_treats_none_as_no_arguments() -> None:
     def no_args() -> int:
         return 1
 
-    assert as_measure(no_args).validate_args(None) == {}
+    assert _as_measure(no_args).validate_args(None) == {}
 
 
 def test_measure_is_frozen() -> None:
