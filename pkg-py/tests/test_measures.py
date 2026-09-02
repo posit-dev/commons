@@ -2,6 +2,7 @@
 
 import enum
 import importlib
+import inspect
 import os
 import py_compile
 import sys
@@ -26,6 +27,7 @@ from commons._measures import (
     as_measure,
     measure,
     measure_schema_text,
+    resolve_injections,
     semantic_layer,
 )
 
@@ -975,6 +977,87 @@ def test_a_same_named_module_without_a_spec_is_a_construction_error(
             semantic_layer(tmp_path / "planted.py")
     finally:
         sys.modules.pop("planted", None)
+
+
+def _region_revenue(default: Any = inspect.Parameter.empty) -> Measure:
+    if default is inspect.Parameter.empty:
+
+        @measure(description="Revenue for a region.")
+        def region_revenue(warehouse: Injected[Any]) -> int:
+            return 0
+    else:
+
+        @measure(description="Revenue for a region.")
+        def region_revenue(warehouse: Injected[Any] = default) -> int:
+            return 0
+
+    return _as_measure(region_revenue)
+
+
+def test_resolve_injections_binds_a_matching_source() -> None:
+    connection = object()
+    layer = semantic_layer(_region_revenue())
+
+    resolved = resolve_injections(layer.measures, {"warehouse": connection})
+
+    assert resolved == {"region_revenue": {"warehouse": connection}}
+
+
+def test_resolve_injections_prefers_a_source_over_a_default() -> None:
+    connection = object()
+    layer = semantic_layer(_region_revenue(default="fallback"))
+
+    resolved = resolve_injections(layer.measures, {"warehouse": connection})
+
+    assert resolved["region_revenue"]["warehouse"] is connection
+
+
+def test_resolve_injections_leaves_an_unmatched_default_alone() -> None:
+    layer = semantic_layer(_region_revenue(default="fallback"))
+
+    resolved = resolve_injections(layer.measures, {"finance": object()})
+
+    assert resolved == {"region_revenue": {}}
+
+
+def test_resolve_injections_errors_on_an_unmatched_argument() -> None:
+    layer = semantic_layer(_region_revenue())
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_injections(layer.measures, {"finance": object()})
+
+    message = str(excinfo.value)
+    assert "region_revenue" in message
+    assert "warehouse" in message
+    assert "finance" in message
+
+
+def test_resolve_injections_says_when_there_are_no_named_sources() -> None:
+    layer = semantic_layer(_region_revenue())
+
+    with pytest.raises(ValueError, match="no named data sources"):
+        resolve_injections(layer.measures, {})
+
+
+def test_resolve_injections_lists_every_unmatched_argument_at_once() -> None:
+    @measure(description="Joins two warehouses.")
+    def joined(left: Injected[Any], right: Injected[Any]) -> int:
+        return 0
+
+    layer = semantic_layer(joined)
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_injections(layer.measures, {})
+
+    message = str(excinfo.value)
+    assert "left" in message
+    assert "right" in message
+
+
+def test_resolve_injections_returns_an_entry_for_every_measure() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert resolve_injections(layer.measures, {}) == {"order_count": {}}
 
 
 def test_semantic_layer_reenters_during_a_measure_files_import() -> None:
