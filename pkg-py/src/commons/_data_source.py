@@ -7,7 +7,6 @@ the constructor functions, which is where a bad argument can still be named.
 
 from __future__ import annotations
 
-import re
 import string
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,11 +19,12 @@ from ._sql_guard import check_query
 
 __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 
-# DuckDB's catalog error names the relation it could not find. Anchored to the
-# head of the message, because DuckDB echoes the failing statement afterwards
-# and a string literal there could otherwise pose as a second missing table.
-# The name runs to the fixed trailer, since a quoted label may contain spaces.
-_MISSING_RELATION = re.compile(r"Catalog Error: Table with name (.+?) does not exist")
+# DuckDB's catalog error names the relation it could not find. Each pending
+# label is tested against the whole phrase rather than the name being parsed
+# out of it, because a label may itself contain the trailer and there would be
+# no way to tell where the name ended.
+_MISSING_PREFIX = "Catalog Error: Table with name "
+_MISSING_SUFFIX = " does not exist"
 
 # DuckDB folds identifiers over ASCII only, so "Ä" and "ä" are two tables
 # while "sales" and "SALES" are one. Python's casefold() is broader (it maps
@@ -185,11 +185,16 @@ class DataSource:
         error repeats whatever case the query used.
         """
         assert self.pending is not None
-        found = _MISSING_RELATION.match(message.lstrip())
-        if found is None:
+        head = _fold(message.lstrip())
+        if not head.startswith(_fold(_MISSING_PREFIX)):
             return []
-        named = _fold(found.group(1))
-        return [label for label in self.pending.pins if _fold(label) == named]
+        # DuckDB reports one missing relation at a time, so at most one label
+        # matches and the caller loads exactly what the error named.
+        return [
+            label
+            for label in self.pending.pins
+            if head.startswith(_fold(f"{_MISSING_PREFIX}{label}{_MISSING_SUFFIX}"))
+        ]
 
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None

@@ -223,3 +223,18 @@ def test_pin_matching_folds_over_ascii_only(
 
     assert source.query('SELECT count(*) AS n FROM "STRAßE"') == [{"n": 1}]
     assert reads == ["strasse-pin"]
+
+
+def test_a_label_containing_the_error_wording_still_loads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # DuckDB's message is "Table with name <label> does not exist", so a label
+    # that itself contains that phrase makes the delimiter ambiguous.
+    label = "sales does not exist archive"
+    board = pins.board_folder(str(tmp_path))
+    board.pin_write(pd.DataFrame({"revenue": [1.0]}), "odd-pin", type="csv")
+    source = data_source(board, tables={label: "odd-pin"})
+    reads = record_reads(board, monkeypatch)
+
+    assert source.query(f'SELECT count(*) AS n FROM "{label}"') == [{"n": 1}]
+    assert reads == ["odd-pin"]
