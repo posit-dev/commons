@@ -190,26 +190,100 @@ test_that("share_trajectory_access warns off Connect", {
   expect_snapshot(share_trajectory_access("jdoe"))
 })
 
-test_that("share_trajectory_access grants only missing collaborators", {
+# Who gets a grant, and what the grant says, are shared with pkg-py; see
+# tests/shared/connect.json.
+test_that("share_trajectory_access grants who the shared fixture says", {
+  spec <- shared_fixture("connect")$sharing
+  expect_setequal(
+    vapply(spec$cases, function(case) length(case$expected) > 0, logical(1)),
+    c(TRUE, FALSE)
+  )
+
+  for (case in spec$cases) {
+    withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
+    clear_granted_access()
+    state <- new.env()
+    state$added <- character()
+    permitted <- vapply(
+      Filter(function(perm) perm$role == "owner", case$permitted),
+      function(perm) perm$principal_guid,
+      character(1)
+    )
+    local_mocked_bindings(
+      connect_client = function(...) list(server = "s", api_key = "k"),
+      connect_collaborator_principals = function(client, guid) permitted,
+      connect_user_guid = function(client, username, ...) {
+        paste0("guid-", tolower(username))
+      },
+      connect_add_collaborator = function(client, guid, principal_guid) {
+        state$added <- c(state$added, principal_guid)
+        invisible(NULL)
+      }
+    )
+
+    share_trajectory_access(unlist(case$usernames))
+
+    expect_equal(
+      state$added,
+      unlist(case$expected) %||% character(),
+      info = case$name
+    )
+  }
+})
+
+test_that("connect_add_collaborator sends the shared grant body", {
+  spec <- shared_fixture("connect")$collaborator_grant
+  sent <- NULL
+  httr2::local_mocked_responses(function(req) {
+    sent <<- req
+    httr2::new_response("POST", req$url, 200L, list(), raw(), request = req)
+  })
+
+  connect_add_collaborator(
+    list(server = "https://connect.example.com", api_key = "k"),
+    "content-guid",
+    "guid-jdoe"
+  )
+
+  # httr2 infers POST from the presence of a body rather than recording it.
+  expect_equal(sent$method %||% "POST", spec$method)
+  expect_equal(
+    sent$url,
+    paste(
+      c(
+        "https://connect.example.com/__api__/v1",
+        vapply(spec$endpoint, function(part) {
+          sub("{guid}", "content-guid", part, fixed = TRUE)
+        }, character(1))
+      ),
+      collapse = "/"
+    )
+  )
+  body <- sent$body$data
+  expect_equal(body[names(spec$body)], spec$body)
+  expect_equal(body$principal_guid, "guid-jdoe")
+})
+
+test_that("share_trajectory_access looks a repeated username up once", {
   withr::local_envvar(CONNECT_CONTENT_GUID = "content-guid")
   clear_granted_access()
   state <- new.env()
-  state$added <- character()
+  state$lookups <- 0
   local_mocked_bindings(
     connect_client = function(...) list(server = "s", api_key = "k"),
-    connect_permission_principals = function(client, guid) "guid-jdoe",
+    connect_collaborator_principals = function(client, guid) character(),
     connect_user_guid = function(client, username, ...) {
-      paste0("guid-", username)
+      state$lookups <- state$lookups + 1
+      paste0("guid-", tolower(username))
     },
     connect_add_collaborator = function(client, guid, principal_guid) {
-      state$added <- c(state$added, principal_guid)
       invisible(NULL)
     }
   )
 
-  share_trajectory_access(c("jdoe", "asmith"))
+  share_trajectory_access(c("jdoe", "JDOE"))
 
-  expect_equal(state$added, "guid-asmith")
+  expect_equal(state$lookups, 1)
 })
 
 test_that("share_trajectory_access skips usernames already handled", {
@@ -219,7 +293,7 @@ test_that("share_trajectory_access skips usernames already handled", {
   state$lookups <- 0
   local_mocked_bindings(
     connect_client = function(...) list(server = "s", api_key = "k"),
-    connect_permission_principals = function(client, guid) character(),
+    connect_collaborator_principals = function(client, guid) character(),
     connect_user_guid = function(client, username, ...) {
       state$lookups <- state$lookups + 1
       paste0("guid-", username)
