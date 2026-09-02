@@ -1,10 +1,10 @@
 """What a data source needs from whatever holds its tables.
 
-The protocol exists so the in-process DuckDB commons builds from frames can
-hold a raw connection while a caller-supplied connection stays a SQLAlchemy
-engine (D2 makes the engine the connection currency). The raw path is not
-routed through SQLAlchemy because the lockdown and the deferred pin writes are
-DuckDB-specific and gain nothing from it.
+Two implementations: a SQLAlchemy `Engine` for connections a caller supplies
+(D2 makes the engine the connection currency), and a raw DuckDB connection for
+the in-process database commons builds from frames and pins. The raw path is
+not routed through SQLAlchemy because the lockdown and the deferred pin writes
+are DuckDB-specific and gain nothing from it.
 """
 
 from __future__ import annotations
@@ -12,13 +12,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 import duckdb
+import sqlalchemy
 
 from ._duckdb import quote_identifier
 
 if TYPE_CHECKING:
     from ._data_source import TableId
 
-__all__ = ["Backend", "DuckDBBackend"]
+__all__ = ["Backend", "DuckDBBackend", "EngineBackend"]
 
 
 class Backend(Protocol):
@@ -59,3 +60,30 @@ class DuckDBBackend:
 
     def dialect(self) -> str:
         return "duckdb"
+
+
+class EngineBackend:
+    def __init__(self, engine: sqlalchemy.Engine) -> None:
+        self._engine = engine
+
+    @property
+    def engine(self) -> sqlalchemy.Engine:
+        return self._engine
+
+    def query(self, sql: str) -> list[dict[str, Any]]:
+        with self._engine.connect() as connection:
+            result = connection.execute(sqlalchemy.text(sql))
+            return [dict(row) for row in result.mappings()]
+
+    def list_tables(self) -> list[str]:
+        return list(sqlalchemy.inspect(self._engine).get_table_names())
+
+    def quote(self, table_id: TableId) -> str:
+        preparer = self._engine.dialect.identifier_preparer
+        quoted = preparer.quote(table_id.table)
+        if table_id.schema:
+            return f"{preparer.quote_schema(table_id.schema)}.{quoted}"
+        return quoted
+
+    def dialect(self) -> str:
+        return self._engine.dialect.name
