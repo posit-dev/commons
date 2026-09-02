@@ -179,3 +179,39 @@ test_that("invalid fixtures also fail an installed data-dict", {
     expect_contains(codes, definition_fixture_error_code(path))
   }
 })
+
+test_that("the export matches the shared definitions contract", {
+  skip_if_not_installed("yaml")
+  spec <- shared_fixture("definitions")
+  paths <- definition_fixture_paths("valid")
+  expect_gt(length(paths), 0)
+
+  for (path in paths) {
+    export <- definition_export_spec(yaml::read_yaml(path))
+    # Keyed contract, not a sequence: the generated file sorts its keys for
+    # stable diffs while the export keeps authored order.
+    local <- definition_export_contract(export)
+    fixture <- definition_fixture_contract(spec$export_records[[basename(path)]])
+    expect_equal(
+      local[order(names(local))],
+      fixture[order(names(fixture))],
+      info = basename(path)
+    )
+  }
+})
+
+test_that("grain metadata matches the shared definitions contract", {
+  skip_if_not_installed("yaml")
+  spec <- shared_fixture("definitions")
+
+  for (path in definition_fixture_paths("valid")) {
+    export <- definition_export_spec(yaml::read_yaml(path))
+    local <- definition_export_grain(export)
+    fixture <- spec$mixed_grain[[basename(path)]]
+    expect_equal(
+      local[order(names(local))],
+      fixture[order(names(fixture))],
+      info = basename(path)
+    )
+  }
+})

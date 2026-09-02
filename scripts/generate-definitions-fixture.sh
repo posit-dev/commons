@@ -16,33 +16,38 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 corpus="$root/tests/shared/definition-export/valid"
 out="$root/tests/shared/definitions.json"
 
-if ! command -v data-dict >/dev/null; then
-  echo "data-dict is not on PATH. Install it at the pinned commit:" >&2
+# Invoke the cargo-installed binary by path rather than whatever PATH
+# resolves. Checking the cargo installation and then running `data-dict`
+# would let a different binary earlier on PATH generate the fixture while
+# the check still passed.
+data_dict="${CARGO_HOME:-$HOME/.cargo}/bin/data-dict"
+if [ ! -x "$data_dict" ]; then
+  echo "No cargo-installed data-dict at $data_dict. Install it at the pinned commit:" >&2
   echo "  cargo install --git https://github.com/tidyverse/data-dict --rev $commit data-dict-cli" >&2
   exit 1
 fi
 
-installed="$(cargo install --list 2>/dev/null | grep -c "data-dict?rev=$commit" || true)"
-if [ "$installed" -eq 0 ]; then
-  echo "The data-dict on PATH was not built from $commit." >&2
+if ! cargo install --list 2>/dev/null | grep -q "data-dict?rev=$commit"; then
+  echo "$data_dict was not built from $commit." >&2
   echo "A fixture generated from another revision is not authoritative." >&2
   exit 1
 fi
 
-python3 - "$commit" "$corpus" "$out" <<'PY'
+python3 - "$commit" "$corpus" "$out" "$data_dict" <<'PY'
 import json
 import pathlib
 import subprocess
 import sys
 
 commit, corpus, out = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+data_dict = sys.argv[4]
 existing = json.loads(out.read_text()) if out.exists() else {}
 
 records = {}
 for path in sorted(corpus.glob("*.yaml")):
     export = json.loads(
         subprocess.run(
-            ["data-dict", "export-spec", str(path)],
+            [data_dict, "export-spec", str(path)],
             check=True,
             capture_output=True,
             text=True,
