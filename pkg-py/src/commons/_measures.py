@@ -515,7 +515,7 @@ def _load_module_from_path(path: Path) -> ModuleType:
     try:
         spec.loader.exec_module(module)
     except BaseException:
-        del sys.modules[name]
+        sys.modules.pop(name, None)
         raise
     return module
 

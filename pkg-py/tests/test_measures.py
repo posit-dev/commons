@@ -752,3 +752,12 @@ def test_failed_import_does_not_dirty_sys_modules() -> None:
         semantic_layer(path)
 
     assert not any("broken_import" in name for name in sys.modules)
+
+
+def test_failed_import_that_deletes_its_own_module_entry_still_raises() -> None:
+    # If the module removes its sys.modules entry before raising, cleanup
+    # must not turn the real error into a KeyError.
+    path = MEASURE_FILES / "broken" / "self_removing_import.py"
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_layer(path)
