@@ -347,3 +347,62 @@ def test_a_frame_named_dictionary_fails_loudly_rather_than_silently() -> None:
 
     with pytest.raises(TypeError, match="DataFrame"):
         data_source(dictionary=pd.DataFrame({"revenue": [1.0]}))
+
+
+def test_a_tables_entry_lists_its_governed_definitions(retail: DataDictionary) -> None:
+    from commons._definitions import ExportRecord
+
+    retail.tables["sales"].compiled_definitions = [
+        ExportRecord(
+            name="net_revenue",
+            table="sales",
+            source="",
+            kind="metric",
+            type="number",
+            expression="SUM(revenue)",
+            label=None,
+            description=None,
+            details=None,
+            columns=["revenue"],
+            definitions=[],
+            sql="sum(revenue)",
+            target="SQL(duckdb)",
+            notes=[],
+            mixed_grain=False,
+        )
+    ]
+
+    text = retail.entry_text("sales")
+
+    assert text is not None
+    assert "Governed definitions" in text
+    assert text.index("Documented columns:") < text.index("Governed definitions")
+    assert text.index("Governed definitions") < text.index("Relationships:")
+
+
+def test_context_chunks_include_governed_definitions(retail: DataDictionary) -> None:
+    from commons._definitions import ExportRecord
+
+    retail.tables["sales"].compiled_definitions = [
+        ExportRecord(
+            name="net_revenue",
+            table="sales",
+            source="",
+            kind="metric",
+            type="number",
+            expression="SUM(revenue)",
+            label=None,
+            description=None,
+            details=None,
+            columns=["revenue"],
+            definitions=[],
+            sql="sum(revenue)",
+            target="SQL(duckdb)",
+            notes=[],
+            mixed_grain=False,
+        )
+    ]
+
+    chunks = retail.context_chunks()
+
+    assert any(chunk.startswith("Governed definition `{{net_revenue}}`") for chunk in chunks)

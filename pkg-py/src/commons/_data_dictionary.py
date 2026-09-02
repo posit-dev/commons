@@ -99,6 +99,9 @@ class Table(_Permissive):
     details: str | None = None
     columns: dict[str, Column] = {}
     definitions: dict[str, Definition] = {}
+    # Attached by _definitions at data-source construction; empty until then,
+    # so the registry can be exercised without the compiler.
+    compiled_definitions: list[Any] = []
 
     @model_validator(mode="before")
     @classmethod
@@ -202,16 +205,17 @@ class DataDictionary(_Permissive):
         entry = self.tables.get(table)
         if entry is None:
             return []
-        # Governed definitions belong between the columns and the
-        # relationships, and are added once the compiler can supply them.
-        # They render as compiled SQL, never as the authored expression, so
-        # there is nothing correct to show before compilation happens.
+        # Imported here because _definitions does not import this module and
+        # this keeps it that way.
+        from ._definitions import entry_text as definitions_entry_text
+
         parts = [
             part
             for part in (
                 entry.description,
                 entry.details,
                 columns_text,
+                definitions_entry_text(entry.compiled_definitions),
                 self._relationships_text(table),
             )
             if part
@@ -288,8 +292,10 @@ class DataDictionary(_Permissive):
             if prose:
                 chunks.append(f"Table `{name}`: {prose}")
         chunks.extend(f"{term}: {body}" for term, body in self.glossary.items())
-        # One chunk per governed definition joins these once the compiler can
-        # supply them, for the same reason as the first-touch entry.
+        from ._definitions import context_chunks as definitions_context_chunks
+
+        for entry in self.tables.values():
+            chunks.extend(definitions_context_chunks(entry.compiled_definitions))
         return [chunk for chunk in chunks if chunk]
 
 
