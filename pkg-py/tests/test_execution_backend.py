@@ -218,3 +218,23 @@ def test_the_local_backend_satisfies_the_backend_interface() -> None:
     backend: ExecBackend = LocalBackend()
 
     assert isinstance(backend, ExecBackend)
+
+
+async def test_the_timeout_still_applies_after_the_output_streams_close(
+    tmp_path,
+) -> None:
+    # Reaching end-of-output is not the same as being finished. Code that
+    # closes its streams and keeps running must still hit the deadline.
+    sentinel = tmp_path / "survived"
+    code = (
+        "import os, time\n"
+        "os.close(1); os.close(2)\n"
+        f"time.sleep(0.6); open({str(sentinel)!r}, 'w').close()\n"
+    )
+    backend = LocalBackend()
+
+    with pytest.raises(ExecTimeoutError):
+        await backend.exec([sys.executable, "-c", code], timeout=0.15)
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()
