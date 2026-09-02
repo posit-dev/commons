@@ -19,9 +19,11 @@ from ._sql_guard import check_query
 
 __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 
-# DuckDB's catalog error names the relation it could not find. The name runs
-# to the fixed trailer, because a quoted label may contain spaces.
-_MISSING_RELATION = re.compile(r"Table with name (.+?) does not exist")
+# DuckDB's catalog error names the relation it could not find. Anchored to the
+# head of the message, because DuckDB echoes the failing statement afterwards
+# and a string literal there could otherwise pose as a second missing table.
+# The name runs to the fixed trailer, since a quoted label may contain spaces.
+_MISSING_RELATION = re.compile(r"Catalog Error: Table with name (.+?) does not exist")
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,7 @@ class DataSource:
     def from_frames(cls, **frames: Any) -> DataSource:
         """Load named data frames into a locked-down in-process DuckDB."""
         _check_named_frames(frames)
+        _check_labels_distinct(list(frames))
         con = _duckdb.connect()
         for position, (name, frame) in enumerate(frames.items()):
             # The registered relation gets a generated name rather than one
@@ -131,6 +134,7 @@ class DataSource:
         _duckdb.lock_down(con)
 
         labels = list(tables)
+        _check_labels_distinct(labels)
         _check_labels_free(con, labels)
         return cls(
             backend=DuckDBBackend(con),
@@ -171,8 +175,11 @@ class DataSource:
         error repeats whatever case the query used.
         """
         assert self.pending is not None
-        named = {name.casefold() for name in _MISSING_RELATION.findall(message)}
-        return [label for label in self.pending.pins if label.casefold() in named]
+        found = _MISSING_RELATION.match(message.lstrip())
+        if found is None:
+            return []
+        named = found.group(1).casefold()
+        return [label for label in self.pending.pins if label.casefold() == named]
 
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None
@@ -340,14 +347,32 @@ def _missing_tables(backend: Backend, registry: dict[str, TableId]) -> list[str]
     Absence is asked of the backend rather than inferred from a failed query,
     so a permissions or connectivity failure is not reported as a typo.
     """
-    inspector = backend.inspector()
-    if inspector is None:
+    try:
+        inspector = backend.inspector()
+        if inspector is None:
+            return []
+        return [
+            label for label, table_id in registry.items() if not inspector(table_id)
+        ]
+    except Exception:  # noqa: BLE001 - inconclusive; the caller re-raises
         return []
-    return [
-        label
-        for label, table_id in registry.items()
-        if not inspector(table_id)
-    ]
+
+
+def _check_labels_distinct(labels: list[str]) -> None:
+    """Reject labels that DuckDB would resolve to the same relation.
+
+    DuckDB matches identifiers case-insensitively even when quoted, so
+    `sales` and `SALES` are one table. Left unchecked, the second write
+    fails with a raw DuckDB catalog error instead of naming the problem.
+    """
+    seen: dict[str, str] = {}
+    for label in labels:
+        first = seen.setdefault(label.casefold(), label)
+        if first != label:
+            raise ValueError(
+                f"Table names {first!r} and {label!r} differ only by case, and "
+                "DuckDB treats them as one table. Choose distinct names."
+            )
 
 
 def _check_labels_free(con: Any, labels: list[str]) -> None:

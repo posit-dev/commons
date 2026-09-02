@@ -132,3 +132,23 @@ def test_a_probe_failure_that_is_not_absence_is_not_blamed_on_the_tables(
 
     with pytest.raises(RuntimeError, match="connection reset"):
         data_source(engine, tables=["sales"])
+
+
+def test_an_inspection_failure_does_not_mask_the_probe_error(
+    engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # If the connection is down, asking whether a table exists fails too. That
+    # answer is inconclusive, so the original probe error is what surfaces.
+    import commons._backends as backends
+
+    def broken_query(self: object, sql: str) -> list[dict[str, object]]:
+        raise RuntimeError("connection reset by peer")
+
+    def broken_inspector(self: object) -> object:
+        raise RuntimeError("inspection also failed")
+
+    monkeypatch.setattr(backends.EngineBackend, "query", broken_query)
+    monkeypatch.setattr(backends.EngineBackend, "inspector", broken_inspector)
+
+    with pytest.raises(RuntimeError, match="connection reset"):
+        data_source(engine, tables=["sales"])

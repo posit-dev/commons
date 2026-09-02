@@ -181,3 +181,27 @@ def test_a_label_colliding_with_a_built_in_relation_is_rejected(board: Any) -> N
     # never load and the agent would silently query the wrong thing.
     with pytest.raises(ValueError, match="duckdb_tables"):
         data_source(board, tables={"duckdb_tables": "sales-pin"})
+
+
+def test_board_labels_colliding_only_by_case_are_rejected(board: Any) -> None:
+    with pytest.raises(ValueError, match="differ only by case"):
+        data_source(board, tables={"sales": "sales-pin", "SALES": "regions-pin"})
+
+
+def test_a_query_cannot_smuggle_a_missing_table_phrase(
+    board: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # DuckDB echoes the failing statement, so a literal repeating its own
+    # error wording must not be read as naming a second missing relation.
+    source = data_source(
+        board, tables={"sales": "sales-pin", "regions": "regions-pin"}
+    )
+    reads = record_reads(board, monkeypatch)
+
+    source.query(
+        "SELECT count(*) AS n, "
+        "'Catalog Error: Table with name regions does not exist' AS tag "
+        "FROM sales"
+    )
+
+    assert reads == ["sales-pin"]

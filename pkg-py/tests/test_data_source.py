@@ -118,3 +118,10 @@ def test_a_frame_named_tables_alongside_others_is_not_dropped() -> None:
     source = data_source(sales=sales_frame(), tables=sales_frame())
 
     assert sorted(list_tables(source)) == ["sales", "tables"]
+
+
+def test_frame_names_colliding_only_by_case_are_rejected() -> None:
+    # DuckDB resolves quoted identifiers case-insensitively, so these are one
+    # table. Without a check the second write raises a raw DuckDB error.
+    with pytest.raises(ValueError, match="differ only by case"):
+        data_source(sales=sales_frame(), SALES=sales_frame())
