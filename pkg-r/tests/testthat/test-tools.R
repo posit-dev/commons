@@ -204,6 +204,7 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
   )
 
   expect_length(images, 1)
+  expect_false(grepl("\n", images[[1]]@data, fixed = TRUE))
   expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
   expect_identical(
     html_image_dimensions(res@extra$display$html),

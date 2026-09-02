@@ -30,11 +30,15 @@ model_plot_image <- function(path, width, height) {
   image <- magick::image_read(path, strip = TRUE)
   image <- magick::image_resize(image, sprintf("%dx%d>", width, height))
   data <- magick::image_write(image, format = "png")
-  ellmer::ContentImageInline("image/png", jsonlite::base64_enc(data))
+  ellmer::ContentImageInline("image/png", plot_base64_data(data))
 }
 
 plot_image_data <- function(path) {
-  jsonlite::base64_enc(readBin(path, "raw", file.size(path)))
+  plot_base64_data(readBin(path, "raw", file.size(path)))
+}
+
+plot_base64_data <- function(data) {
+  gsub("\n", "", jsonlite::base64_enc(data), fixed = TRUE)
 }
 
 render_plot_png <- function(
