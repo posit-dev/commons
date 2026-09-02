@@ -8,6 +8,7 @@ than as an edit to the driver.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -94,6 +95,9 @@ class LocalBackend:
     ) -> None:
         self._output_limit = output_limit
         self._terminate_grace = terminate_grace
+        # Shutdowns outlive the call that started them, so they need an owner
+        # that keeps them from being garbage-collected mid-escalation.
+        self._shutdowns: set[asyncio.Task[None]] = set()
 
     async def _collect(
         self, process: asyncio.subprocess.Process
@@ -143,7 +147,16 @@ class LocalBackend:
             # Whoever started the process ends it. A cancelled call that left
             # the worker running would keep holding the parent's file
             # descriptors and go on burning CPU with nobody waiting on it.
-            await _terminate(process, self._terminate_grace)
+            #
+            # Shutdown runs in its own task so that a second cancellation
+            # stops us waiting on it without stopping the escalation itself;
+            # a caller cancelling twice must not be able to leave a
+            # SIGTERM-ignoring child alive.
+            shutdown = asyncio.ensure_future(_terminate(process, self._terminate_grace))
+            self._shutdowns.add(shutdown)
+            shutdown.add_done_callback(self._shutdowns.discard)
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.shield(shutdown)
             raise
         return ExecResult(
             returncode=process.returncode or 0,
