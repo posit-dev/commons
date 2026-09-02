@@ -77,7 +77,14 @@ class Measure:
 def _split_parameters(
     func: Callable[..., Any],
 ) -> tuple[dict[str, tuple[Any, FieldInfo]], tuple[str, ...]]:
-    hints = get_type_hints(func, include_extras=True)
+    if inspect.iscoroutinefunction(func):
+        raise TypeError(_async_message(func))
+
+    try:
+        hints = get_type_hints(func, include_extras=True)
+    except NameError as error:
+        raise TypeError(_unresolvable_hint_message(func, error)) from error
+
     fields: dict[str, tuple[Any, FieldInfo]] = {}
     injected: list[str] = []
 
@@ -86,13 +93,19 @@ def _split_parameters(
             raise TypeError(_unsupported_message(func, f"*{name}"))
         if param.kind is inspect.Parameter.VAR_KEYWORD:
             raise TypeError(_unsupported_message(func, f"**{name}"))
+        if param.kind is inspect.Parameter.POSITIONAL_ONLY:
+            raise TypeError(
+                _unsupported_message(func, f"positional-only parameter {name!r}")
+            )
 
         annotation = hints.get(name, inspect.Parameter.empty)
+        field_meta = _described_field(annotation)
         if _is_injected(annotation):
+            if field_meta is not None:
+                raise TypeError(_dual_marker_message(func, name))
             injected.append(name)
             continue
 
-        field_meta = _described_field(annotation)
         if field_meta is None:
             raise TypeError(_undeclared_message(func, name))
 
@@ -145,6 +158,35 @@ def _undeclared_message(func: Callable[..., Any], name: str) -> str:
         f"nor injected.\n"
         f"Annotate it Annotated[T, Field(description=...)] for the model to "
         f"supply it, or Injected[T] for commons to supply it."
+    )
+
+
+def _dual_marker_message(func: Callable[..., Any], name: str) -> str:
+    return (
+        f"Parameter {name!r} of measure {func.__name__!r} is marked both "
+        f"Injected and Field(description=...), so commons cannot tell "
+        f"whether the model or commons supplies it.\n"
+        f"Remove one of the two markers: Injected[T] if commons supplies "
+        f"it, or Annotated[T, Field(description=...)] if the model does."
+    )
+
+
+def _unresolvable_hint_message(func: Callable[..., Any], error: NameError) -> str:
+    name = error.name or str(error)
+    return (
+        f"Measure {func.__name__!r} has an annotation that could not be "
+        f"resolved: {name!r} is not defined.\n"
+        f"This usually means {name!r} is only imported under "
+        f"`if TYPE_CHECKING:`. Import it unconditionally, or annotate the "
+        f"parameter Injected[Any] instead."
+    )
+
+
+def _async_message(func: Callable[..., Any]) -> str:
+    return (
+        f"Measure {func.__name__!r} is defined with async def, but a "
+        f"measure must be a synchronous function.\n"
+        f"Define it with def instead of async def."
     )
 
 

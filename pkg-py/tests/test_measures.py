@@ -148,6 +148,49 @@ def test_var_kwargs_are_an_error() -> None:
         _split_parameters(m)
 
 
+def test_positional_only_parameter_is_an_error() -> None:
+    def m(region: Annotated[str, Field(description="The region.")], /) -> None: ...
+
+    with pytest.raises(TypeError, match="region"):
+        _split_parameters(m)
+
+
+def test_async_def_measure_is_an_error() -> None:
+    async def m(x: Annotated[str, Field(description="d")]) -> None: ...
+
+    with pytest.raises(TypeError, match="async") as excinfo:
+        _split_parameters(m)
+
+    assert "m" in str(excinfo.value)
+
+
+def test_unresolvable_annotation_names_the_measure_and_the_missing_name() -> None:
+    # Mimics a TYPE_CHECKING-only import: the annotation is a forward
+    # reference get_type_hints() cannot resolve at runtime. Built via exec so
+    # the missing name is never visible to static analysis of this file.
+    namespace: dict[str, Any] = {"Injected": Injected}
+    exec("def m(conn: 'Injected[NoSuchConnection]') -> None: ...", namespace)  # noqa: S102
+    m = namespace["m"]
+
+    with pytest.raises(TypeError) as excinfo:
+        _split_parameters(m)
+
+    message = str(excinfo.value)
+    assert "m" in message
+    assert "NoSuchConnection" in message
+    assert "TYPE_CHECKING" in message
+    assert "Injected[Any]" in message
+
+
+def test_parameter_marked_both_injected_and_described_is_an_error() -> None:
+    def m(x: Injected[Annotated[str, Field(description="d")]]) -> None: ...
+
+    with pytest.raises(TypeError, match="x") as excinfo:
+        _split_parameters(m)
+
+    assert "Injected" in str(excinfo.value)
+
+
 def test_split_parameters_merges_field_constraints() -> None:
     def m(
         value: Annotated[int, Field(gt=0), Field(description="Positive.")],
