@@ -749,6 +749,22 @@ test_that("generic parts and empty messages are dropped", {
   expect_equal(turns[[1]]@text, "Kept.")
 })
 
+# Which files a reader picks up is shared with pkg-py, which writes them; see
+# tests/shared/traces.json.
+test_that("local_traces_pattern matches the shared file-naming cases", {
+  spec <- shared_fixture("traces")$file_naming
+  withr::local_envvar(OTEL_EXPORTER_OTLP_TRACES_FILE = NA)
+  pattern <- local_traces_pattern()
+
+  expect_setequal(
+    vapply(spec$cases, function(case) case$read, logical(1)),
+    c(TRUE, FALSE)
+  )
+  for (case in spec$cases) {
+    expect_equal(grepl(pattern, case$file), case$read, info = case$name)
+  }
+})
+
 test_that("trajectory_read reads OTLP files from a directory", {
   path <- withr::local_tempdir()
   json <- test_turn_json()
