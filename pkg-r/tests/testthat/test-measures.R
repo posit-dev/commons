@@ -206,11 +206,14 @@ test_that("measure_schema_text matches the shared fixture", {
   expect_gt(length(cases), 0)
 
   for (case in cases) {
-    rendered <- measure_schema_text(
+    args <- list(
       fixture_measure(case$measure),
-      source_names = unlist(case$source_names) %||% character(),
-      heading = case$heading %||% case$measure$name
+      source_names = unlist(case$source_names) %||% character()
     )
+    if (!is.null(case$heading)) {
+      args$heading <- case$heading
+    }
+    rendered <- do.call(measure_schema_text, args)
     expect_identical(rendered, case$expected, info = case$name)
   }
 })

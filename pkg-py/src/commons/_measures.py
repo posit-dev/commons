@@ -217,7 +217,8 @@ def measure(
     """Mark a function as a measure.
 
     The decorated function is returned unchanged, so measures and the helpers
-    they call stay ordinary callables.
+    they call stay ordinary callables. Model-supplied arguments are limited to
+    scalars, enums, and arrays of those.
     """
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -249,7 +250,7 @@ def measure(
 
 
 def measure_schema_text(
-    measure: Measure,
+    record: Measure,
     source_names: Sequence[str] = (),
     heading: str | None = None,
 ) -> str:
@@ -259,7 +260,7 @@ def measure_schema_text(
     ``tests/shared/measure-schema.json``; change that fixture, not just this
     function.
     """
-    schema = measure.params.model_json_schema()
+    schema = record.params.model_json_schema()
     properties: dict[str, Any] = schema.get("properties", {})
     required = set(schema.get("required", ()))
     defs: dict[str, Any] = schema.get("$defs", {})
@@ -268,7 +269,8 @@ def measure_schema_text(
     # Naming the source a measure queries points the SQL fallback at the right
     # one. `source_names` is empty for single-source agents, so the line never
     # appears there.
-    named = [name for name in measure.injected if name in set(source_names)]
+    named_sources = set(source_names)
+    named = [name for name in record.injected if name in named_sources]
     if named:
         details += f"sources: {', '.join(named)}\n"
     if properties:
@@ -283,8 +285,8 @@ def measure_schema_text(
     if details:
         details = f"\n\n{details}"
 
-    resolved_heading = measure.name if heading is None else heading
-    return f"### {resolved_heading}\n{measure.description}{details}"
+    resolved_heading = record.name if heading is None else heading
+    return f"### {resolved_heading}\n{record.description}{details}"
 
 
 def _argument_detail(prop: dict[str, Any], defs: dict[str, Any]) -> str:

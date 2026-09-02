@@ -6,7 +6,7 @@ from dataclasses import FrozenInstanceError
 from typing import Annotated, Any, Literal, get_args, get_origin
 
 import pytest
-from pydantic import ConfigDict, Field, ValidationError, create_model
+from pydantic import Field, ValidationError
 
 from commons._measures import (
     INJECTED,
@@ -396,30 +396,45 @@ def _fixture_annotation(spec: dict[str, Any]) -> Any:
 
 
 def _fixture_measure(spec: dict[str, Any]) -> Measure:
-    """Build a measure from a fixture spec; see test-measures.R for the sibling
-    runner.
+    """Build a measure from a fixture spec and decorate it with the production
+    @measure, so this runner enters through the same front door as
+    test-measures.R's runner enters measure().
+
+    A real function is generated because @measure inspects a signature, not a
+    spec; each described argument keeps its position, required arguments and
+    injected arguments come first (Python requires that), and defaulted
+    arguments follow. No existing fixture case mixes required-after-optional
+    or optional-before-injected, so this ordering renders identically to
+    declaration order for every case in measure-schema.json.
     """
-    fields: dict[str, Any] = {}
+    namespace: dict[str, Any] = {}
+    required_params: list[str] = []
+    optional_params: list[str] = []
+
     for argument in spec["arguments"]:
-        annotation = Annotated[
-            _fixture_annotation(argument),
-            Field(description=argument["description"]),
+        type_name = f"_{argument['name']}_type"
+        namespace[type_name] = Annotated[
+            _fixture_annotation(argument), Field(description=argument["description"])
         ]
-        default = ... if argument["required"] else argument["default"]
-        fields[argument["name"]] = (annotation, default)
+        if argument["required"]:
+            required_params.append(f"{argument['name']}: {type_name}")
+        else:
+            default_name = f"_{argument['name']}_default"
+            namespace[default_name] = argument["default"]
+            optional_params.append(f"{argument['name']}: {type_name} = {default_name}")
 
-    def unused() -> None: ...  # pragma: no cover - the renderer never calls it
+    injected_params: list[str] = []
+    for injected_name in spec["injected"]:
+        type_name = f"_{injected_name}_type"
+        namespace[type_name] = Injected[Any]
+        injected_params.append(f"{injected_name}: {type_name}")
 
-    return Measure(
-        name=spec["name"],
-        title=spec["name"].replace("_", " "),
-        description=spec["description"],
-        func=unused,
-        params=create_model(
-            spec["name"], __config__=ConfigDict(extra="forbid"), **fields
-        ),
-        injected=tuple(spec["injected"]),
-    )
+    params = ", ".join(required_params + injected_params + optional_params)
+    exec(f"def {spec['name']}({params}) -> None: ...", namespace)  # noqa: S102
+    func = namespace[spec["name"]]
+
+    decorated = measure(description=spec["description"], name=spec["name"])(func)
+    return _as_measure(decorated)
 
 
 def test_schema_fixture_is_not_empty() -> None:
