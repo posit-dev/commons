@@ -16,6 +16,7 @@ import importlib.util
 import inspect
 import os
 import sys
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -499,6 +500,12 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
     return measures, sources
 
 
+# The import machinery (sys.path, sys.modules) is process-global state, not
+# owned by any one SemanticLayer, so concurrent construction must serialize
+# around it rather than around the layer itself.
+_IMPORT_LOCK = threading.Lock()
+
+
 def _load_module_from_path(path: Path) -> ModuleType:
     # The digest keeps two files with the same stem from overwriting each
     # other in sys.modules; registering before exec_module() is what lets
@@ -513,34 +520,35 @@ def _load_module_from_path(path: Path) -> ModuleType:
             f"Pass a .py file, a directory of them, or a module object."
         )
 
-    _check_directory_importable(path.parent)
+    with _IMPORT_LOCK:
+        _check_directory_importable(path.parent)
 
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
 
-    # Appended, not inserted at the front: a sibling file can then import
-    # another sibling by plain absolute import, but a sibling named like a
-    # stdlib module must not shadow it for the rest of the process.
-    directory = str(path.parent)
-    added_to_path = directory not in sys.path
-    if added_to_path:
-        sys.path.append(directory)
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:
-        if sys.modules.get(name) is module:
-            sys.modules.pop(name, None)
-        raise
-    finally:
-        if added_to_path and directory in sys.path:
-            sys.path.remove(directory)
-    return module
+        # Appended, not inserted at the front: a sibling file can then
+        # import another sibling by plain absolute import, but a sibling
+        # named like a stdlib module must not shadow it for the rest of the
+        # process.
+        directory = str(path.parent)
+        added_to_path = directory not in sys.path
+        if added_to_path:
+            sys.path.append(directory)
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            if sys.modules.get(name) is module:
+                sys.modules.pop(name, None)
+            raise
+        finally:
+            if added_to_path and directory in sys.path:
+                sys.path.remove(directory)
+        return module
 
 
 def _check_directory_importable(directory: Path) -> None:
     """Fail before a directory goes on sys.path if a file in it would shadow
-    the standard library or collide with a module already imported from
-    elsewhere.
+    an importable module or collide with one already loaded from elsewhere.
 
     Every .py file in the directory is checked, not only the one being
     loaded: the sys.path entry makes all of them importable, so an unloaded
@@ -550,12 +558,35 @@ def _check_directory_importable(directory: Path) -> None:
         if entry.name == "__init__.py":
             continue
         stem = entry.stem
+
         if stem in sys.stdlib_module_names:
             raise ValueError(
                 f"{entry} would shadow the standard library module {stem!r} "
                 f"once its directory is importable.\n"
                 f"Rename the file."
             )
+
+        # Must run before the directory joins sys.path: added first, the
+        # file would resolve to itself and every directory would look
+        # shadowed. find_spec() also catches a module already cached in
+        # sys.modules under this name (e.g. by an earlier measure
+        # directory's sibling import), except when that cached entry has no
+        # discoverable spec, which find_spec() reports by raising instead of
+        # returning one; the sys.modules check below catches that case.
+        try:
+            spec = importlib.util.find_spec(stem)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is not None and (
+            spec.origin is None or Path(spec.origin).resolve() != entry.resolve()
+        ):
+            origin_note = f" ({spec.origin})" if spec.origin else ""
+            raise ValueError(
+                f"{entry} would be shadowed by the already-importable "
+                f"module {stem!r}{origin_note}.\n"
+                f"Rename the file."
+            )
+
         existing = sys.modules.get(stem)
         existing_file = getattr(existing, "__file__", None) if existing else None
         if existing is not None and (

@@ -804,3 +804,32 @@ def test_same_named_helper_in_two_directories_is_a_construction_error() -> None:
             semantic_layer(MEASURE_FILES / "collision_b" / "shared_lib.py")
     finally:
         sys.modules.pop("shared_lib", None)
+
+
+def test_installed_but_unimported_module_is_a_construction_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A directory on sys.path stands in for an installed package: find_spec()
+    # can resolve it without anything having imported it yet.
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir()
+    (site_packages / "certainly_not_a_measure.py").write_text("VALUE = 1\n")
+    monkeypatch.syspath_prepend(str(site_packages))
+    sys.modules.pop("certainly_not_a_measure", None)
+
+    measures_dir = tmp_path / "measures"
+    measures_dir.mkdir()
+    colliding = measures_dir / "certainly_not_a_measure.py"
+    colliding.write_text(
+        "from commons._measures import measure\n\n\n"
+        "@measure(description='d')\n"
+        "def m() -> int:\n"
+        "    return 1\n"
+    )
+
+    with pytest.raises(ValueError, match="certainly_not_a_measure.py") as excinfo:
+        semantic_layer(colliding)
+
+    message = str(excinfo.value)
+    assert "certainly_not_a_measure" in message
+    assert "already-importable" in message
