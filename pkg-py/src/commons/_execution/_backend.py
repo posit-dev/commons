@@ -95,6 +95,22 @@ class LocalBackend:
         self._output_limit = output_limit
         self._terminate_grace = terminate_grace
 
+    async def _collect(
+        self, process: asyncio.subprocess.Process
+    ) -> tuple[tuple[bytes, bool], tuple[bytes, bool]]:
+        """Drain both streams, then wait for the process to actually exit.
+
+        Reaching end-of-output is not the same as being finished: code can
+        close its streams and keep running. Both halves sit inside the
+        caller's deadline so that neither can outlast it.
+        """
+        streams = await asyncio.gather(
+            _read_tail(process.stdout, self._output_limit),
+            _read_tail(process.stderr, self._output_limit),
+        )
+        await process.wait()
+        return streams[0], streams[1]
+
     async def exec(
         self,
         cmd: Sequence[str],
@@ -116,18 +132,13 @@ class LocalBackend:
             if input is not None:
                 process.stdin.write(input.encode())
             process.stdin.close()
-        reading = asyncio.gather(
-            _read_tail(process.stdout, self._output_limit),
-            _read_tail(process.stderr, self._output_limit),
-        )
         try:
-            stdout, stderr = await asyncio.wait_for(reading, timeout)
+            stdout, stderr = await asyncio.wait_for(self._collect(process), timeout)
         except TimeoutError:
             await _terminate(process, self._terminate_grace)
             raise ExecTimeoutError(
                 f"the command exceeded its {timeout}-second time limit"
             ) from None
-        await process.wait()
         return ExecResult(
             returncode=process.returncode or 0,
             stdout=stdout[0].decode(errors="replace"),
