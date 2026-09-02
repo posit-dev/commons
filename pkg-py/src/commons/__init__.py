@@ -6,5 +6,15 @@ classification as to how much it can be trusted.
 """
 
 from ._data_source import DataSource, data_source, list_tables
+from ._measures import Injected, Measure, SemanticLayer, measure, semantic_layer
 
-__all__: list[str] = ["DataSource", "data_source", "list_tables"]
+__all__: list[str] = [
+    "DataSource",
+    "Injected",
+    "Measure",
+    "SemanticLayer",
+    "data_source",
+    "list_tables",
+    "measure",
+    "semantic_layer",
+]

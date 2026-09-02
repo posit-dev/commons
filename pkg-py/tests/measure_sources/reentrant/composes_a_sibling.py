@@ -7,7 +7,7 @@ acquire it again on the same thread.
 
 from pathlib import Path
 
-from commons._measures import measure, semantic_layer
+from commons import measure, semantic_layer
 
 NESTED_LAYER = semantic_layer(Path(__file__).parent.parent / "nested" / "orders.py")
 

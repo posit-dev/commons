@@ -1060,6 +1060,20 @@ def test_resolve_injections_returns_an_entry_for_every_measure() -> None:
     assert resolve_injections(layer.measures, {}) == {"order_count": {}}
 
 
+def test_public_api_exposes_the_semantic_layer() -> None:
+    import commons
+
+    assert set(commons.__all__) >= {
+        "Injected",
+        "Measure",
+        "SemanticLayer",
+        "measure",
+        "semantic_layer",
+    }
+    assert commons.measure is measure
+    assert commons.semantic_layer is semantic_layer
+
+
 def test_semantic_layer_reenters_during_a_measure_files_import() -> None:
     # A non-reentrant lock deadlocks here rather than raising, so this runs
     # on a daemon thread with a timeout: a regression fails the test instead

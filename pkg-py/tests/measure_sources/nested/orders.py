@@ -4,7 +4,7 @@ Directory loading must not reach it, and loading it explicitly must not
 collide with the other orders.py in sys.modules.
 """
 
-from commons._measures import measure
+from commons import measure
 
 
 @measure(description="Count of nested orders.")
