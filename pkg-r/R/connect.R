@@ -347,22 +347,36 @@ connect_user_guid <- function(client, username, call = rlang::caller_env()) {
   )
 }
 
-connect_permission_principals <- function(client, guid) {
+# Who already holds the role that can read this content's traces. A lesser
+# permission does not count: someone the app was shared with holds the viewer
+# role, which carries no trace access, and skipping them because they appear
+# in the permissions list would leave them unable to read anything while
+# `share_with` reported nothing amiss.
+connect_collaborator_principals <- function(client, guid) {
   perms <- connect_req(client, "content", guid, "permissions") |>
     httr2::req_perform() |>
     httr2::resp_body_json()
+  # A JSON object, empty or not, is not a permission list. Filtering one
+  # yields nothing, which reads as "nobody has access" and grants on the
+  # strength of a response we could not read. An array parses with NULL names.
+  if (!is.null(names(perms))) {
+    cli::cli_abort("Posit Connect returned an unexpected permissions response.")
+  }
+  perms <- Filter(function(perm) identical(perm$role, TRACE_ACCESS_ROLE), perms)
   vapply(perms, function(perm) perm$principal_guid, character(1))
 }
 
 # Reading a content item's traces requires editor-level access, which
 # Connect's permissions API grants via the "owner" (collaborator) role;
 # "editor" is not an accepted role string there.
+TRACE_ACCESS_ROLE <- "owner"
+
 connect_add_collaborator <- function(client, guid, principal_guid) {
   connect_req(client, "content", guid, "permissions") |>
     httr2::req_body_json(list(
       principal_guid = principal_guid,
       principal_type = "user",
-      role = "owner",
+      role = TRACE_ACCESS_ROLE,
       send_email = FALSE
     )) |>
     httr2::req_perform()
