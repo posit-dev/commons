@@ -122,6 +122,11 @@ test_that("run_r returns plots as images and opens the display", {
     res@value
   )
   expect_length(images, 1)
+  expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
+  expect_identical(
+    html_image_dimensions(res@extra$display$html),
+    c(1536L, 1024L)
+  )
   notes <- Filter(
     \(x) S7::S7_inherits(x, ellmer::ContentText),
     res@value

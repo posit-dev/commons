@@ -484,6 +484,7 @@ worker_run_code <- function(
   new_handles,
   plot_width,
   plot_height,
+  plot_pixel_ratio,
   evaluate,
   new_output_handler
 ) {
@@ -511,9 +512,19 @@ worker_run_code <- function(
     }
     path <- tempfile("plot-", fileext = ".png")
     if (requireNamespace("ragg", quietly = TRUE)) {
-      ragg::agg_png(path, width = plot_width, height = plot_height, scaling = 1.5)
+      ragg::agg_png(
+        path,
+        width = plot_width * plot_pixel_ratio,
+        height = plot_height * plot_pixel_ratio,
+        scaling = 1.5 * plot_pixel_ratio
+      )
     } else {
-      grDevices::png(path, width = plot_width, height = plot_height)
+      grDevices::png(
+        path,
+        width = plot_width * plot_pixel_ratio,
+        height = plot_height * plot_pixel_ratio,
+        res = 72 * plot_pixel_ratio
+      )
     }
     tryCatch(
       grDevices::replayPlot(last_plot),
