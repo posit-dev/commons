@@ -13,7 +13,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-__all__ = ["interpreter_warning", "worker_command", "worker_env"]
+__all__ = ["in_container", "interpreter_warning", "worker_command", "worker_env"]
 
 # Enough to find an interpreter and produce readable text, and nothing else.
 _KEEP = ("PATH", "LANG", "LD_LIBRARY_PATH")
@@ -71,19 +71,27 @@ def _venv_includes_system_site(executable: str) -> bool | None:
     return False
 
 
-def interpreter_warning(executable: str = sys.executable) -> str | None:
+def in_container() -> bool:
+    """Whether this process looks like it is running inside an image."""
+    return any(os.path.exists(marker) for marker in _CONTAINER_MARKERS)
+
+
+def interpreter_warning(
+    executable: str = sys.executable, *, containerised: bool | None = None
+) -> str | None:
     """Say why this interpreter's startup hooks are not known, or ``None``.
 
     Isolated mode drops the user site directory but not the global one, so a
     ``.pth`` file in a shared installation's site-packages still runs before
     the worker does. Whoever can write there can therefore run code inside it.
     That is fine when the only person who can write there is the image author,
-    and not fine on a machine shared with other people.
+    and not fine on a machine shared with other people. Pass ``containerised``
+    to state which case this is rather than let it be inferred.
     """
     includes_system_site = _venv_includes_system_site(executable)
     if includes_system_site is False:
         return None
-    if any(os.path.exists(marker) for marker in _CONTAINER_MARKERS):
+    if in_container() if containerised is None else containerised:
         return None
     reason = (
         "is a virtual environment built with --system-site-packages"

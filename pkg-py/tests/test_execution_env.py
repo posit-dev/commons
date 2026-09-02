@@ -146,7 +146,7 @@ def test_a_virtual_environment_that_includes_system_packages_is_flagged(
         capture_output=True,
     )
 
-    warning = interpreter_warning(str(venv / "bin" / "python"))
+    warning = interpreter_warning(str(venv / "bin" / "python"), containerised=False)
 
     assert warning is not None
     assert "system" in warning
@@ -159,7 +159,7 @@ def test_an_interpreter_outside_any_virtual_environment_is_flagged() -> None:
     if executable is None:
         pytest.skip("no non-virtual-environment interpreter to test against")
 
-    warning = interpreter_warning(executable)
+    warning = interpreter_warning(executable, containerised=False)
 
     assert warning is not None
     assert executable in warning
@@ -174,3 +174,12 @@ def test_the_worker_keeps_what_it_needs_to_run(tmp_path, monkeypatch) -> None:
 
     assert env["PATH"] == os.environ["PATH"]
     assert env["LC_ALL"] == "en_US.UTF-8"
+
+
+def test_a_container_image_is_accepted_even_outside_a_virtual_environment() -> None:
+    # In an image, the only person who can write to site-packages is whoever
+    # built it, so a bare system interpreter is the expected arrangement
+    # rather than a shared machine's.
+    executable = getattr(sys, "_base_executable", None) or sys.executable
+
+    assert interpreter_warning(executable, containerised=True) is None
