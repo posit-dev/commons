@@ -3,8 +3,7 @@ name = "commons"
 version = "0.1.0.dev1"
 description = "AI Agents for Data Analysis"
 readme = "README.md"
-# Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE.md"]
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
@@ -12,7 +11,7 @@ dependencies = [
     "chatlas>=0.22.0",
     "pydantic>=2",
     "duckdb>=1.0",
-    "raghilda>=0.2",
+    "raghilda>=0.2.1",
     "sqlalchemy>=2.0",
     "pyyaml>=6",
     "jinja2>=3",
