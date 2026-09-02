@@ -27,7 +27,11 @@ if [ ! -x "$data_dict" ]; then
   exit 1
 fi
 
-if ! cargo install --list 2>/dev/null | grep -q "data-dict?rev=$commit"; then
+# grep -c rather than -q: with pipefail, -q closes the pipe on its first
+# match and cargo can die of SIGPIPE, failing the pipeline and rejecting a
+# correctly pinned install.
+pinned="$(cargo install --list 2>/dev/null | grep -F -c "data-dict?rev=$commit" || true)"
+if [ "$pinned" -eq 0 ]; then
   echo "$data_dict was not built from $commit." >&2
   echo "A fixture generated from another revision is not authoritative." >&2
   exit 1
