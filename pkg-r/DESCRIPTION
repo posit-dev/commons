@@ -44,6 +44,7 @@ Imports:
     S7,
     sass,
     shinychat (> 0.4.0),
+    svglite,
     utils
 Suggests:
     bit64,
@@ -59,7 +60,6 @@ Suggests:
     pins,
     plotly,
     pkgload,
-    ragg,
     readr,
     rmarkdown,
     shiny (>= 1.11.1),

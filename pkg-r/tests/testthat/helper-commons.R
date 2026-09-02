@@ -23,10 +23,9 @@ inline_image_dimensions <- function(image) {
   unname(as.integer(info[1, c("width", "height")]))
 }
 
-html_image_dimensions <- function(html) {
-  data <- sub('.*data:image/png;base64,([^\"]+)\".*', "\\1", html)
-  info <- magick::image_info(magick::image_read(jsonlite::base64_dec(data)))
-  unname(as.integer(info[1, c("width", "height")]))
+html_svg_source <- function(html) {
+  data <- sub('.*data:image/svg\\+xml;base64,([^"]+)".*', "\\1", html)
+  rawToChar(jsonlite::base64_dec(data))
 }
 
 test_source <- function() {
