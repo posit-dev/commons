@@ -238,3 +238,39 @@ async def test_the_timeout_still_applies_after_the_output_streams_close(
 
     await asyncio.sleep(0.8)
     assert not sentinel.exists()
+
+
+async def test_cancelling_a_call_does_not_leave_the_process_running(tmp_path) -> None:
+    # The driver cancels calls when a conversation goes away or the agent
+    # shuts down. Whoever started the process has to be the one to end it.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.1)
+    call = asyncio.create_task(backend.exec([sys.executable, "-c", _sleeper(sentinel)]))
+    await asyncio.sleep(0.1)
+
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()
+
+
+async def test_cancellation_still_escalates_for_a_process_ignoring_sigterm(
+    tmp_path,
+) -> None:
+    # The cancellation path does its waiting inside an except block, where an
+    # await can be cut short. SIGKILL still has to land.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.1)
+    call = asyncio.create_task(
+        backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
+    )
+    await asyncio.sleep(0.1)
+
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()

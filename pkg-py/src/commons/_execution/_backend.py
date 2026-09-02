@@ -139,6 +139,12 @@ class LocalBackend:
             raise ExecTimeoutError(
                 f"the command exceeded its {timeout}-second time limit"
             ) from None
+        except asyncio.CancelledError:
+            # Whoever started the process ends it. A cancelled call that left
+            # the worker running would keep holding the parent's file
+            # descriptors and go on burning CPU with nobody waiting on it.
+            await _terminate(process, self._terminate_grace)
+            raise
         return ExecResult(
             returncode=process.returncode or 0,
             stdout=stdout[0].decode(errors="replace"),
