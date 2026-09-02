@@ -188,13 +188,17 @@ class DataSource:
         head = _fold(message.lstrip())
         if not head.startswith(_fold(_MISSING_PREFIX)):
             return []
-        # DuckDB reports one missing relation at a time, so at most one label
-        # matches and the caller loads exactly what the error named.
-        return [
+        matches = [
             label
             for label in self.pending.pins
             if head.startswith(_fold(f"{_MISSING_PREFIX}{label}{_MISSING_SUFFIX}"))
         ]
+        if not matches:
+            return []
+        # One label can be a prefix of another up to the trailer, so `sales`
+        # also matches the error for `sales does not exist archive`. DuckDB
+        # names one relation, and the longest match is the one it named.
+        return [max(matches, key=len)]
 
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None

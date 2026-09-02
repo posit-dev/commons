@@ -238,3 +238,21 @@ def test_a_label_containing_the_error_wording_still_loads(
 
     assert source.query(f'SELECT count(*) AS n FROM "{label}"') == [{"n": 1}]
     assert reads == ["odd-pin"]
+
+
+def test_overlapping_labels_load_only_the_one_the_error_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # "sales" is a prefix of the longer label up to the error's trailer, so a
+    # naive phrase match selects both. Only the relation DuckDB named loads.
+    long_label = "sales does not exist archive"
+    board = pins.board_folder(str(tmp_path))
+    board.pin_write(pd.DataFrame({"revenue": [1.0]}), "short-pin", type="csv")
+    board.pin_write(pd.DataFrame({"revenue": [2.0, 3.0]}), "long-pin", type="csv")
+    source = data_source(
+        board, tables={"sales": "short-pin", long_label: "long-pin"}
+    )
+    reads = record_reads(board, monkeypatch)
+
+    assert source.query(f'SELECT count(*) AS n FROM "{long_label}"') == [{"n": 2}]
+    assert reads == ["long-pin"]
