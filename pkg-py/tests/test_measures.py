@@ -2,6 +2,7 @@
 
 import enum
 import importlib
+import sys
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -732,3 +733,22 @@ def test_missing_path_is_an_error() -> None:
 def test_missing_path_error_names_the_path() -> None:
     with pytest.raises(ValueError, match="nowhere.py"):
         semantic_layer(MEASURE_FILES / "nowhere.py")
+
+
+def test_directory_scan_keeps_the_first_files_helper_source() -> None:
+    # a_file.py sorts before b_file.py; both define a `helper` function, and
+    # the first one scanned must win.
+    layer = semantic_layer(MEASURE_FILES / "duplicate_helpers")
+
+    assert list(layer.measures) == ["measure_a", "measure_b"]
+    assert "return 1" in layer.source_text["helper"]
+    assert "return 2" not in layer.source_text["helper"]
+
+
+def test_failed_import_does_not_dirty_sys_modules() -> None:
+    path = MEASURE_FILES / "broken" / "broken_import.py"
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_layer(path)
+
+    assert not any("broken_import" in name for name in sys.modules)

@@ -397,10 +397,7 @@ def semantic_layer(*items: Any) -> SemanticLayer:
             if record.name in measures:
                 duplicates.append(record.name)
             measures[record.name] = record
-        for name, text in sources.items():
-            # First definition wins, matching R's de-duplication of harvested
-            # sources across files.
-            source_text.setdefault(name, text)
+        _merge_sources(source_text, sources)
 
     if duplicates:
         raise ValueError(
@@ -423,9 +420,7 @@ def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
         for entry in item:
             found, text = _collect(entry)
             measures.extend(found)
-            for name, name_text in text.items():
-                # First definition wins, matching semantic_layer()'s rule.
-                sources.setdefault(name, name_text)
+            _merge_sources(sources, text)
         return measures, sources
 
     if isinstance(item, ModuleType):
@@ -469,8 +464,18 @@ def _from_path(path: Path) -> tuple[list[Measure], dict[str, str]]:
     for file in files:
         found, text = _from_module(_load_module_from_path(file))
         measures.extend(found)
-        sources.update(text)
+        _merge_sources(sources, text)
     return measures, sources
+
+
+def _merge_sources(target: dict[str, str], found: Mapping[str, str]) -> None:
+    """Merge harvested source text; the first definition of a name wins.
+
+    Every place source text is combined across items uses this, so a new
+    merge point cannot quietly pick the wrong precedence.
+    """
+    for name, text in found.items():
+        target.setdefault(name, text)
 
 
 def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
@@ -501,10 +506,17 @@ def _load_module_from_path(path: Path) -> ModuleType:
     name = f"commons._measure_sources.{path.stem}_{digest}"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
-        raise ValueError(f"Cannot read measures from {path}: not a Python file.")
+        raise ValueError(
+            f"Cannot read measures from {path}: not a Python file.\n"
+            f"Pass a .py file, a directory of them, or a module object."
+        )
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        del sys.modules[name]
+        raise
     return module
 
 
