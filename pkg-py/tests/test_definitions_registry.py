@@ -238,9 +238,27 @@ def test_first_touch_is_none_without_definitions() -> None:
 
 
 def test_definitions_are_indexed_as_context_chunks() -> None:
-    assert context_chunks([record("net_revenue")]) == [
+    # A retrieved chunk has to say what the token expands to, or retrieval
+    # surfaces a name the model cannot use.
+    chunks = context_chunks([record("net_revenue", sql="sum(revenue)")])
+
+    assert len(chunks) == 1
+    assert chunks[0].startswith(
         "Governed definition `{{net_revenue}}` on table `sales` (metric, number)"
-    ]
+    )
+    assert "Selected SQL(duckdb): `(sum(revenue))`." in chunks[0]
+
+
+def test_a_context_chunk_shows_compiled_sql_and_not_the_expression() -> None:
+    chunks = context_chunks([record("net_revenue", sql="sum(revenue)")])
+
+    assert "SUM(revenue)" not in chunks[0]
+
+
+def test_a_context_chunk_carries_translation_notes() -> None:
+    chunks = context_chunks([record("remainder", notes=["modulus by zero differs"])])
+
+    assert "Translation notes: modulus by zero differs" in chunks[0]
 
 
 def test_applied_text_reports_the_sql_each_token_became() -> None:
@@ -385,22 +403,18 @@ def test_first_touch_renders_every_fixture_definition() -> None:
         assert f"`{{{{{item.name}}}}}`" in text, item.name
 
 
-def test_a_typeless_definition_renders_its_missing_type_as_a_placeholder() -> None:
-    # data-dict omits `type` when no single one is inferred, so the record
-    # carries None and it reaches the prompt as the string "None". pkg-r puts
-    # "NA" in the same slot from its own missing value. Pinned as it stands
-    # rather than improved here, because this text is a shared contract and
-    # changing one implementation alone is the drift the fixtures exist to
-    # prevent.
+def test_a_typeless_definition_omits_the_type_rather_than_naming_it() -> None:
+    # data-dict omits `type` when no single one is inferred. Printing the
+    # language's null spelling would put "None" in the prompt, so the type is
+    # left out and the rest of the gist still reaches the model.
     typeless = [item for item in fixture_records() if item.type is None]
     assert len(typeless) == 1
 
-    assert context_chunks(typeless) == [
-        (
-            "Governed definition `{{mixed temporal case}}` on table `survey` "
-            "(derived, None)"
-        )
-    ]
+    chunk = context_chunks(typeless)[0]
+
+    assert "None" not in chunk
+    assert "(derived)" in chunk
+    assert "Selected SQL(duckdb)" in chunk
 
 
 def test_grain_metadata_reaches_the_records() -> None:
@@ -408,3 +422,24 @@ def test_grain_metadata_reaches_the_records() -> None:
 
     assert mixed
     assert not all(item.mixed_grain for item in fixture_records())
+
+
+def test_an_expansion_cannot_widen_scope_for_a_later_token() -> None:
+    # Compiled SQL can name a table the query does not. Resolving later tokens
+    # against already-expanded text would let that count as the table being
+    # present, which is the check that keeps a token bound to its own table.
+    records = [
+        record("total", table="sales", sql="sum(returns.x)"),
+        record("other", table="returns", sql="count(*)"),
+    ]
+
+    with pytest.raises(ValueError, match="does not appear in this query"):
+        expand_tokens("SELECT {{sales::total}}, {{other}} FROM sales", records)
+
+
+def test_the_index_cap_counts_the_lines_it_joins() -> None:
+    registry = Registry(
+        [record(f"d{i}", table=f"t{i}", kind="metric") for i in range(30)]
+    )
+
+    assert len(index_text(registry, cap_chars=300)) <= 300

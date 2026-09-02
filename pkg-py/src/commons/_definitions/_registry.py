@@ -117,9 +117,14 @@ def expand_tokens(
         if token not in tokens:
             tokens.append(token)
 
+    # Every token resolves against the query as written. Compiled SQL can
+    # name a table the query does not, and resolving against already-expanded
+    # text would let that count as the table being present, which is the check
+    # that keeps a token bound to its own table.
+    resolved = [(token, _resolve_token(token, sql, records)) for token in tokens]
+
     applied: list[ExportRecord] = []
-    for token in tokens:
-        record = _resolve_token(token, sql, records)
+    for token, record in resolved:
         pattern = re.compile(r"\{\{\s*" + re.escape(token) + r"\s*\}\}")
         # A lambda, not a replacement string: the SQL is literal and a
         # backslash in it would otherwise be read as an escape.
@@ -229,10 +234,10 @@ def _index_lines(registry: Registry) -> list[str]:
 def index_text(registry: Registry, cap_chars: int = INDEX_CAP_CHARS) -> str:
     """The kind index for the system prompt, truncated to the cap."""
     kept: list[str] = []
-    used = 0
     for line in _index_lines(registry):
-        used += len(line)
-        if used > cap_chars:
+        # Measured as joined, so the newlines between lines count against the
+        # cap rather than pushing the result past it.
+        if len("\n".join([*kept, line])) > cap_chars:
             break
         kept.append(line)
     return "\n".join(kept)
@@ -240,14 +245,18 @@ def index_text(registry: Registry, cap_chars: int = INDEX_CAP_CHARS) -> str:
 
 def index_overflows(registry: Registry, cap_chars: int = INDEX_CAP_CHARS) -> bool:
     """Whether the index did not fit, so the model is told to search instead."""
-    return sum(len(line) for line in _index_lines(registry)) > cap_chars
+    return len("\n".join(_index_lines(registry))) > cap_chars
 
 
 def _gist(record: ExportRecord) -> str:
     detail = _flatten_inline(
         " ".join(part for part in (record.description, record.details) if part)
     )
-    parts = [f"({record.kind}, {record.type})"]
+    # An absent type is left out rather than printed: data-dict omits it when
+    # no single type is inferred, and the language's null spelling would
+    # otherwise reach the model as a word.
+    scope = f"{record.kind}, {record.type}" if record.type else record.kind
+    parts = [f"({scope})"]
     if detail:
         parts.append(detail)
     parts.append(f"Selected {record.target}: `({_flatten_inline(record.sql)})`.")
@@ -276,7 +285,7 @@ def context_chunks(records: list[ExportRecord]) -> list[str]:
     """One retrievable chunk per definition."""
     return [
         f"Governed definition `{{{{{record.name}}}}}` on table `{record.table}` "
-        f"({record.kind}, {record.type})"
+        f"{_gist(record)}"
         for record in records
     ]
 
