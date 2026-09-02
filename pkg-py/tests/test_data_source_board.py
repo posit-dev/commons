@@ -143,3 +143,41 @@ def test_a_genuine_query_error_is_not_masked_by_pin_loading(board: Any) -> None:
 
     with pytest.raises(Exception, match="nosuchcolumn"):
         source.query("SELECT nosuchcolumn FROM sales")
+
+
+def test_a_pin_named_only_in_a_string_literal_is_not_loaded(
+    board: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # DuckDB echoes the failing statement in its error text, so scanning the
+    # whole message would load a pin whose label merely appears in a literal.
+    source = data_source(
+        board, tables={"sales": "sales-pin", "regions": "regions-pin"}
+    )
+    reads = record_reads(board, monkeypatch)
+
+    source.query("SELECT count(*) AS n, 'regions' AS tag FROM sales")
+
+    assert reads == ["sales-pin"]
+
+
+def test_a_table_referenced_in_another_case_still_loads(board: Any) -> None:
+    # DuckDB identifiers are case-insensitive, and its error repeats the case
+    # the query used.
+    source = data_source(board, tables={"sales": "sales-pin"})
+
+    assert source.query("SELECT count(*) AS n FROM SALES") == [{"n": 2}]
+
+
+def test_a_label_that_is_not_a_bare_identifier_still_loads(tmp_path: Path) -> None:
+    board = pins.board_folder(str(tmp_path))
+    board.pin_write(pd.DataFrame({"revenue": [1.0]}), "odd-pin", type="csv")
+    source = data_source(board, tables={"my sales": "odd-pin"})
+
+    assert source.query('SELECT count(*) AS n FROM "my sales"') == [{"n": 1}]
+
+
+def test_a_label_colliding_with_a_built_in_relation_is_rejected(board: Any) -> None:
+    # Such a label would resolve to DuckDB's own relation, so the pin would
+    # never load and the agent would silently query the wrong thing.
+    with pytest.raises(ValueError, match="duckdb_tables"):
+        data_source(board, tables={"duckdb_tables": "sales-pin"})

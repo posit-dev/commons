@@ -19,6 +19,10 @@ from ._sql_guard import check_query
 
 __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 
+# DuckDB's catalog error names the relation it could not find. The name runs
+# to the fixed trailer, because a quoted label may contain spaces.
+_MISSING_RELATION = re.compile(r"Table with name (.+?) does not exist")
+
 
 @dataclass(frozen=True)
 class TableId:
@@ -127,6 +131,7 @@ class DataSource:
         _duckdb.lock_down(con)
 
         labels = list(tables)
+        _check_labels_free(con, labels)
         return cls(
             backend=DuckDBBackend(con),
             tables=labels,
@@ -157,12 +162,17 @@ class DataSource:
                 self._load_pins(todo)
 
     def _pending_tables_named_in(self, message: str) -> list[str]:
+        """Pending labels DuckDB reported as missing relations.
+
+        Only the catalog error's own relation name is used. DuckDB echoes the
+        failing statement in its message, so scanning the whole text would
+        load a pin whose label merely appears in a string literal. Names are
+        compared case-insensitively, because DuckDB identifiers are, and its
+        error repeats whatever case the query used.
+        """
         assert self.pending is not None
-        return [
-            label
-            for label in self.pending.pins
-            if re.search(rf"\b{re.escape(label)}\b", message)
-        ]
+        named = {name.casefold() for name in _MISSING_RELATION.findall(message)}
+        return [label for label in self.pending.pins if label.casefold() in named]
 
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None
@@ -191,23 +201,27 @@ class DataSource:
         return self.backend.dialect()
 
 
-def data_source(*args: Any, tables: Any = None, **frames: Any) -> DataSource:
+def data_source(*args: Any, **kwargs: Any) -> DataSource:
     """Create a data source from an engine, a pins board, or named frames.
 
     A thin dispatcher over the constructors, which are the documented way in.
+    `tables` is an option for the engine and board forms; with no positional
+    source it is an ordinary frame name, so a frame may be called `tables`.
     """
-    if args and frames:
-        raise TypeError(
-            "Pass either a connection or named data frames, not both. "
-            f"Got a positional argument and the frames {sorted(frames)}."
-        )
     if len(args) > 1:
         raise TypeError(
             f"data_source() accepts one positional argument, got {len(args)}."
         )
-    if args:
-        return _from_positional(args[0], tables)
-    return DataSource.from_frames(**frames)
+    if not args:
+        return DataSource.from_frames(**kwargs)
+
+    tables = kwargs.pop("tables", None)
+    if kwargs:
+        raise TypeError(
+            "Pass either a connection or named data frames, not both. "
+            f"Got a positional argument and the frames {sorted(kwargs)}."
+        )
+    return _from_positional(args[0], tables)
 
 
 def _from_positional(value: Any, tables: Any) -> DataSource:
@@ -299,8 +313,8 @@ def _table_entry_id(entry: Any) -> TableId:
 def _check_tables_exist(backend: Backend, registry: dict[str, TableId]) -> None:
     """Fail construction naming every table the connection does not have."""
     # One zero-row probe per table costs a round trip each, which dominates
-    # startup against a remote warehouse. Probe them all in one statement and
-    # fall back to per-table probes only to name the ones that are missing.
+    # startup against a remote warehouse, so probe them all in one statement
+    # and only work out what is missing when that fails.
     probe = " UNION ALL ".join(
         f"SELECT 1 FROM {backend.quote(table_id)} WHERE 1 = 0"
         for table_id in registry.values()
@@ -310,8 +324,8 @@ def _check_tables_exist(backend: Backend, registry: dict[str, TableId]) -> None:
     except Exception as error:
         missing = _missing_tables(backend, registry)
         if not missing:
-            # The probe failed for some other reason, and that error is more
-            # informative than anything this function could say.
+            # Permissions, connectivity, a dialect quirk in the probe: the
+            # original error says more than a missing-table message could.
             raise
         available = ", ".join(sorted(backend.list_tables()))
         raise ValueError(
@@ -321,10 +335,41 @@ def _check_tables_exist(backend: Backend, registry: dict[str, TableId]) -> None:
 
 
 def _missing_tables(backend: Backend, registry: dict[str, TableId]) -> list[str]:
-    missing = []
-    for label, table_id in registry.items():
-        try:
-            backend.query(f"SELECT 1 FROM {backend.quote(table_id)} WHERE 1 = 0")
-        except Exception:  # noqa: BLE001 - absence is the answer, not the error
-            missing.append(label)
-    return missing
+    """Which requested tables the backend says it does not have.
+
+    Absence is asked of the backend rather than inferred from a failed query,
+    so a permissions or connectivity failure is not reported as a typo.
+    """
+    inspector = backend.inspector()
+    if inspector is None:
+        return []
+    return [
+        label
+        for label, table_id in registry.items()
+        if not inspector(table_id)
+    ]
+
+
+def _check_labels_free(con: Any, labels: list[str]) -> None:
+    """Reject a table label that DuckDB already resolves.
+
+    A board label such as `duckdb_tables` would resolve to DuckDB's own
+    relation, so the pin would never load and the agent would silently query
+    something else.
+    """
+    taken = [label for label in labels if _relation_resolves(con, label)]
+    if taken:
+        raise ValueError(
+            f"These table names are already built-in DuckDB relations: "
+            f"{', '.join(taken)}. Choose a different name for each."
+        )
+
+
+def _relation_resolves(con: Any, label: str) -> bool:
+    try:
+        con.execute(
+            f"SELECT 1 FROM {_duckdb.quote_identifier(label)} WHERE 1 = 0"
+        ).fetchall()
+    except Exception:  # noqa: BLE001 - failing to resolve is the answer
+        return False
+    return True

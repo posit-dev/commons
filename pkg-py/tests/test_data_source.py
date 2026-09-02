@@ -103,3 +103,18 @@ def test_the_guard_is_given_the_sources_dialect() -> None:
     assert source.query("SELECT * EXCLUDE (order_id, region) FROM sales")[0] == {
         "revenue": 100.0
     }
+
+
+def test_a_frame_may_be_named_tables() -> None:
+    # `tables` is an option for engine and board sources only. Consuming it
+    # when no positional source was given would silently drop a frame.
+    source = data_source(tables=sales_frame())
+
+    assert list_tables(source) == ["tables"]
+    assert source.query("SELECT count(*) AS n FROM tables") == [{"n": 3}]
+
+
+def test_a_frame_named_tables_alongside_others_is_not_dropped() -> None:
+    source = data_source(sales=sales_frame(), tables=sales_frame())
+
+    assert sorted(list_tables(source)) == ["sales", "tables"]

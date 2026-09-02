@@ -116,3 +116,19 @@ def test_two_positional_arguments_are_rejected(engine: sqlalchemy.Engine) -> Non
 def test_an_unsupported_positional_argument_is_named(engine: sqlalchemy.Engine) -> None:
     with pytest.raises(TypeError, match="int"):
         data_source(42)
+
+
+def test_a_probe_failure_that_is_not_absence_is_not_blamed_on_the_tables(
+    engine: sqlalchemy.Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Every table exists, so a failing probe means something else is wrong and
+    # that error is more informative than a missing-table message.
+    import commons._backends as backends
+
+    def broken(self: object, sql: str) -> list[dict[str, object]]:
+        raise RuntimeError("connection reset by peer")
+
+    monkeypatch.setattr(backends.EngineBackend, "query", broken)
+
+    with pytest.raises(RuntimeError, match="connection reset"):
+        data_source(engine, tables=["sales"])

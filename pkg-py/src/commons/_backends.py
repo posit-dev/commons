@@ -9,6 +9,7 @@ are DuckDB-specific and gain nothing from it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
 import duckdb
@@ -30,6 +31,15 @@ class Backend(Protocol):
     def quote(self, table_id: TableId) -> str: ...
 
     def dialect(self) -> str: ...
+
+    def inspector(self) -> Callable[[TableId], bool] | None:
+        """A predicate answering whether a table exists, if the backend can.
+
+        Used to tell a table that is genuinely absent from one that a failing
+        query only made look absent. A backend that cannot answer returns
+        None, and the caller re-raises the original error rather than guessing.
+        """
+        ...
 
 
 class DuckDBBackend:
@@ -61,6 +71,11 @@ class DuckDBBackend:
     def dialect(self) -> str:
         return "duckdb"
 
+    def inspector(self) -> Callable[[TableId], bool] | None:
+        # Frame and pin sources build their own tables, so nothing reaches
+        # the existence check by this route.
+        return None
+
 
 class EngineBackend:
     def __init__(self, engine: sqlalchemy.Engine) -> None:
@@ -87,3 +102,11 @@ class EngineBackend:
 
     def dialect(self) -> str:
         return self._engine.dialect.name
+
+    def inspector(self) -> Callable[[TableId], bool] | None:
+        inspector = sqlalchemy.inspect(self._engine)
+
+        def exists(table_id: TableId) -> bool:
+            return inspector.has_table(table_id.table, schema=table_id.schema)
+
+        return exists
