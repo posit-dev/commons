@@ -1,8 +1,10 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
 import enum
+import importlib
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 from typing import Annotated, Any, Literal, get_args, get_origin
 
 import pytest
@@ -652,3 +654,81 @@ def test_semantic_layer_reports_its_size() -> None:
 
     assert len(layer) == 1
     assert "1 measure" in repr(layer)
+
+
+MEASURE_FILES = Path(__file__).parent / "measure_sources"
+
+
+def test_semantic_layer_reads_a_file_path() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_accepts_a_string_path() -> None:
+    layer = semantic_layer(str(MEASURE_FILES / "orders.py"))
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_reads_a_directory_without_recursing() -> None:
+    layer = semantic_layer(MEASURE_FILES)
+
+    assert list(layer.measures) == ["order_count", "total_revenue"]
+
+
+def test_semantic_layer_reads_a_module_object() -> None:
+    module = importlib.import_module("commons._measures")
+
+    layer = semantic_layer(module)
+
+    assert layer.measures == {}
+
+
+def test_semantic_layer_mixes_files_and_inline_measures() -> None:
+    @measure(description="Inline.")
+    def inline_measure() -> int:
+        return 1
+
+    layer = semantic_layer(MEASURE_FILES / "orders.py", inline_measure)
+
+    assert list(layer.measures) == ["order_count", "inline_measure"]
+
+
+def test_semantic_layer_harvests_helper_source_alongside_measures() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert set(layer.source_text) >= {"double", "order_count"}
+    assert "x * 2" in layer.source_text["double"]
+    assert "@measure(" in layer.source_text["order_count"]
+
+
+def test_harvested_source_excludes_imported_names() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert "measure" not in layer.source_text
+    assert "Field" not in layer.source_text
+
+
+def test_only_text_leaves_the_semantic_layer() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert all(isinstance(text, str) for text in layer.source_text.values())
+
+
+def test_same_file_name_in_two_directories_both_load() -> None:
+    layer = semantic_layer(
+        MEASURE_FILES / "orders.py", MEASURE_FILES / "nested" / "orders.py"
+    )
+
+    assert list(layer.measures) == ["order_count", "nested_order_count"]
+
+
+def test_missing_path_is_an_error() -> None:
+    with pytest.raises(ValueError, match="not a measure"):
+        semantic_layer("not a measure")
+
+
+def test_missing_path_error_names_the_path() -> None:
+    with pytest.raises(ValueError, match="nowhere.py"):
+        semantic_layer(MEASURE_FILES / "nowhere.py")

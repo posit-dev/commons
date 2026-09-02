@@ -11,10 +11,15 @@ hidden from the model by forgetting to describe it.
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import inspect
+import os
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from types import MappingProxyType
+from pathlib import Path
+from types import MappingProxyType, ModuleType
 from typing import (
     Annotated,
     Any,
@@ -378,6 +383,9 @@ def semantic_layer(*items: Any) -> SemanticLayer:
 
     Each item is a measure, a list of measures, a module, or a path to a
     Python file or a directory of them. Directory searches are not recursive.
+
+    A measure that calls a helper defined in another file imports it, the way
+    any Python module does.
     """
     measures: dict[str, Measure] = {}
     source_text: dict[str, str] = {}
@@ -420,6 +428,12 @@ def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
                 sources.setdefault(name, name_text)
         return measures, sources
 
+    if isinstance(item, ModuleType):
+        return _from_module(item)
+
+    if isinstance(item, (str, os.PathLike)):
+        return _from_path(Path(item))
+
     record = as_measure(item)
     if record is None:
         raise TypeError(
@@ -428,6 +442,70 @@ def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
             f"Decorate the function with @measure to make it one."
         )
     return [record], {record.func.__name__: _source_text(record.func)}
+
+
+def _from_path(path: Path) -> tuple[list[Measure], dict[str, str]]:
+    if not path.exists():
+        raise ValueError(
+            f"Path does not exist: {path}.\n"
+            f"semantic_layer() takes measures, modules, Python files, or "
+            f"directories of them."
+        )
+
+    # Not recursive, and __init__.py is skipped: a directory of measure files
+    # is a directory, not a package.
+    files = (
+        sorted(
+            entry
+            for entry in path.iterdir()
+            if entry.suffix == ".py" and entry.name != "__init__.py"
+        )
+        if path.is_dir()
+        else [path]
+    )
+
+    measures: list[Measure] = []
+    sources: dict[str, str] = {}
+    for file in files:
+        found, text = _from_module(_load_module_from_path(file))
+        measures.extend(found)
+        sources.update(text)
+    return measures, sources
+
+
+def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
+    """Harvest a module's measures and the source of every function it defines.
+
+    Helpers are harvested too, so the worker session can show the reasoning a
+    measure delegates to. Imported names are skipped: they belong to the
+    module they were defined in.
+    """
+    measures: list[Measure] = []
+    sources: dict[str, str] = {}
+    for name, value in vars(module).items():
+        if not inspect.isfunction(value) or value.__module__ != module.__name__:
+            continue
+        sources[name] = _source_text(value)
+        record = as_measure(value)
+        if record is not None:
+            measures.append(record)
+    return measures, sources
+
+
+def _load_module_from_path(path: Path) -> ModuleType:
+    # The digest keeps two files with the same stem from overwriting each
+    # other in sys.modules; registering before exec_module() is what lets
+    # dataclasses and typing resolve names back to the module while it is
+    # still executing.
+    digest = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:8]
+    name = f"commons._measure_sources.{path.stem}_{digest}"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Cannot read measures from {path}: not a Python file.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _source_text(func: Callable[..., Any]) -> str:
