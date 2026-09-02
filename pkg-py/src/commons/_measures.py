@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import inspect
+import itertools
 import os
 import sys
 import threading
@@ -257,6 +258,18 @@ def measure(
     return decorate
 
 
+def as_measure(obj: Any) -> Measure | None:
+    """Recognize a measure, whether decorated function or bare record."""
+    if isinstance(obj, Measure):
+        return obj
+    record = getattr(obj, MEASURE_ATTRIBUTE, None)
+    return record if isinstance(record, Measure) else None
+
+
+def _humanize(name: str) -> str:
+    return name.replace("_", " ")
+
+
 def measure_schema_text(
     record: Measure,
     source_names: Sequence[str] = (),
@@ -344,18 +357,6 @@ def _resolve_ref(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
     if ref is None:
         return node
     return defs[ref.removeprefix("#/$defs/")]
-
-
-def as_measure(obj: Any) -> Measure | None:
-    """Recognize a measure, whether decorated function or bare record."""
-    if isinstance(obj, Measure):
-        return obj
-    record = getattr(obj, MEASURE_ATTRIBUTE, None)
-    return record if isinstance(record, Measure) else None
-
-
-def _humanize(name: str) -> str:
-    return name.replace("_", " ")
 
 
 @dataclass(frozen=True)
@@ -508,14 +509,21 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
 # path, re-entering this same function on the same thread.
 _IMPORT_LOCK = threading.RLock()
 
+# Every load of a path gets its own sys.modules key, even a repeat load of
+# the same path: semantic_layer() re-executes a file each time it is passed
+# (matching the R behaviour), and each execution needs a key nothing else
+# will ever overwrite.
+_load_count = itertools.count()
+
 
 def _load_module_from_path(path: Path) -> ModuleType:
-    # The digest keeps two files with the same stem from overwriting each
-    # other in sys.modules; registering before exec_module() is what lets
-    # dataclasses and typing resolve names back to the module while it is
-    # still executing.
+    # A single path segment, not `commons._measure_sources.<stem>`: a dotted
+    # name makes `commons._measure_sources` the loaded file's __package__,
+    # so a relative import in the user's own file would resolve into
+    # commons' internals instead of failing with Python's own "no known
+    # parent package" error.
     digest = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:8]
-    name = f"commons._measure_sources.{path.stem}_{digest}"
+    name = f"_commons_measure_source_{path.stem}_{digest}_{next(_load_count)}"
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise ValueError(
@@ -524,7 +532,7 @@ def _load_module_from_path(path: Path) -> ModuleType:
         )
 
     with _IMPORT_LOCK:
-        _check_directory_importable(path.parent)
+        _check_directory_importable(path.parent, requested=path)
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
@@ -549,30 +557,27 @@ def _load_module_from_path(path: Path) -> ModuleType:
         return module
 
 
-def _check_directory_importable(directory: Path) -> None:
+def _check_directory_importable(directory: Path, requested: Path) -> None:
     """Fail before a directory goes on sys.path if a file in it would shadow
     an importable module or collide with one already loaded from elsewhere.
 
-    Every .py file in the directory is checked, not only the one being
-    loaded: the sys.path entry makes all of them importable, so an unloaded
-    file with a colliding name is exactly as dangerous.
+    Every .py file in the directory is checked, not only ``requested``: the
+    sys.path entry makes all of them importable, so an unloaded file with a
+    colliding name is exactly as dangerous. ``requested`` is named in every
+    message so a sibling file's collision is not reported with nothing
+    connecting it to the file the caller actually asked to load.
     """
     for entry in sorted(directory.glob("*.py")):
         if entry.name == "__init__.py":
             continue
         stem = entry.stem
 
-        if stem in sys.stdlib_module_names:
-            raise ValueError(
-                f"{entry} would shadow the standard library module {stem!r} "
-                f"once its directory is importable.\n"
-                f"Rename the file."
-            )
-
         # Must run before the directory joins sys.path: added first, the
         # file would resolve to itself and every directory would look
-        # shadowed. find_spec() also catches a module already cached in
-        # sys.modules under this name (e.g. by an earlier measure
+        # shadowed. A stdlib name is always findable, so it is folded into
+        # this check rather than tested separately, keeping exactly one
+        # raise per entry. find_spec() also catches a module already cached
+        # in sys.modules under this name (e.g. by an earlier measure
         # directory's sibling import), except when that cached entry has no
         # discoverable spec, which find_spec() reports by raising instead of
         # returning one; the sys.modules check below catches that case.
@@ -583,11 +588,18 @@ def _check_directory_importable(directory: Path) -> None:
         if spec is not None and (
             spec.origin is None or Path(spec.origin).resolve() != entry.resolve()
         ):
+            if stem in sys.stdlib_module_names:
+                raise ValueError(
+                    f"While loading {requested}, {entry} collides with the "
+                    f"standard library module {stem!r}; one of the two will "
+                    f"be unreachable.\n"
+                    f"Rename {entry}."
+                )
             origin_note = f" ({spec.origin})" if spec.origin else ""
             raise ValueError(
-                f"{entry} would be shadowed by the already-importable "
-                f"module {stem!r}{origin_note}.\n"
-                f"Rename the file."
+                f"While loading {requested}, {entry} would be shadowed by "
+                f"the already-importable module {stem!r}{origin_note}.\n"
+                f"Rename {entry}."
             )
 
         existing = sys.modules.get(stem)
@@ -596,9 +608,10 @@ def _check_directory_importable(directory: Path) -> None:
             existing_file is None or Path(existing_file).resolve() != entry.resolve()
         ):
             raise ValueError(
-                f"{entry} would collide with {stem!r}, already imported "
-                f"from {existing_file or 'a module with no file'}.\n"
-                f"Rename the file."
+                f"While loading {requested}, {entry} collides with {stem!r}, "
+                f"already imported from "
+                f"{existing_file or 'a module with no file'}.\n"
+                f"Rename {entry}."
             )
 
 
