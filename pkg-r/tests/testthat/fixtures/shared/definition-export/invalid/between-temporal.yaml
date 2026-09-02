@@ -1,0 +1,14 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: events
+    columns:
+      - name: created
+        type: date
+        range: [2020-01-01, 2030-01-01]
+      - name: observed
+        type: datetime
+        range: [2020-01-01T00:00:00Z, 2030-01-01T00:00:00Z]
+    definitions:
+      - name: broken
+        expr: "'2024-01-01' BETWEEN created AND observed"

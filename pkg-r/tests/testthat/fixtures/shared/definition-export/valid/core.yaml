@@ -1,0 +1,25 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: orders
+    columns:
+      - name: status_cd
+        type: number(id)
+        examples: [10, 90]
+      - name: order_total
+        type: number(quantity)
+        range: [0, 1000]
+      - name: tile_size
+        type: string
+        examples: [Consumer, Mid-Market-3, Enterprise-1]
+    definitions:
+      - name: net_revenue
+        description: Realized revenue excluding returned orders.
+        expr: SUM(CASE WHEN status_cd = 90 THEN 0 ELSE order_total END)
+      - name: is_enterprise
+        label: Enterprise segment
+        expr: tile_size IN ('Mid-Market-3', 'Enterprise-1')
+      - name: enterprise_revenue
+        expr: SUM(CASE WHEN is_enterprise THEN order_total ELSE 0 END)
+      - name: list_price
+        expr: order_total * 1.2

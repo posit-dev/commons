@@ -31,30 +31,26 @@ data_dict_cli_context <- function(result) {
   )
 }
 
+# The conformance corpus is a cross-language fixture: both suites read the
+# same YAML files. These read the synced copy, as every shared fixture does.
+definition_fixture_path <- function(name, kind = "valid") {
+  test_path("fixtures", "shared", "definition-export", kind, name)
+}
+
 definition_fixture_paths <- function(kind) {
   sort(Sys.glob(test_path(
     "fixtures",
+    "shared",
     "definition-export",
     kind,
     "*.yaml"
   )))
 }
 
+# Which data-dict problem code each invalid fixture must produce. Shared, so
+# both suites hold one copy of the mapping.
 definition_fixture_error_code <- function(path) {
-  codes <- c(
-    "between-temporal.yaml" = "S21",
-    "columns-non-filter.yaml" = "S21",
-    "columns-transitive.yaml" = "S21",
-    "cycle.yaml" = "S34",
-    "duplicate.yaml" = "S10",
-    "nested-aggregate.yaml" = "S30",
-    "parse.yaml" = "S19",
-    "regex-engine.yaml" = "S21",
-    "shadow.yaml" = "S33",
-    "type.yaml" = "S21",
-    "unknown.yaml" = "S20"
-  )
-  unname(codes[[basename(path)]])
+  shared_fixture("definitions")$invalid[[basename(path)]]
 }
 
 definition_export_contract <- function(export) {

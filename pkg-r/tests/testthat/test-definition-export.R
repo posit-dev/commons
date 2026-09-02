@@ -1,6 +1,6 @@
 test_that("landed definition envelopes export inferred records", {
   skip_if_not_installed("yaml")
-  path <- test_path("fixtures", "definition-export", "valid", "core.yaml")
+  path <- definition_fixture_path("core.yaml")
   export <- definition_export_spec(yaml::read_yaml(path))
   definitions <- export$tables$orders$definitions
 
@@ -36,7 +36,7 @@ test_that("the expression parser preserves data-dict precedence", {
 
 test_that("quoted definition names and struct fields resolve separately", {
   skip_if_not_installed("yaml")
-  path <- test_path("fixtures", "definition-export", "valid", "language.yaml")
+  path <- definition_fixture_path("language.yaml")
   definitions <- definition_export_spec(yaml::read_yaml(
     path
   ))$tables$survey$definitions
@@ -53,7 +53,7 @@ test_that("quoted definition names and struct fields resolve separately", {
 
 test_that("COLUMNS selections expand in DuckDB translations", {
   skip_if_not_installed("yaml")
-  path <- test_path("fixtures", "definition-export", "valid", "language.yaml")
+  path <- definition_fixture_path("language.yaml")
   definitions <- definition_export_spec(yaml::read_yaml(
     path
   ))$tables$survey$definitions
@@ -72,7 +72,7 @@ test_that("COLUMNS selections expand in DuckDB translations", {
 
 test_that("DuckDB mappings carry data-dict fidelity notes", {
   skip_if_not_installed("yaml")
-  path <- test_path("fixtures", "definition-export", "valid", "functions.yaml")
+  path <- definition_fixture_path("functions.yaml")
   definitions <- definition_export_spec(yaml::read_yaml(
     path
   ))$tables$values$definitions
@@ -98,7 +98,7 @@ test_that("DuckDB mappings carry data-dict fidelity notes", {
 
 test_that("DuckDB literals use data-dict's canonical forms", {
   skip_if_not_installed("yaml")
-  path <- test_path("fixtures", "definition-export", "valid", "language.yaml")
+  path <- definition_fixture_path("language.yaml")
   definitions <- definition_export_spec(yaml::read_yaml(
     path
   ))$tables$survey$definitions
