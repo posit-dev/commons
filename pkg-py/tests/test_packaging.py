@@ -7,7 +7,7 @@ check the built artifact rather than the source tree.
 """
 
 import importlib.resources
-from importlib.metadata import metadata, version
+from importlib.metadata import metadata, requires, version
 
 import commons
 
@@ -25,3 +25,20 @@ def test_package_ships_type_information() -> None:
     # py.typed is what makes the annotations visible to consumers' type
     # checkers; a missing marker degrades silently to Any at the boundary.
     assert (importlib.resources.files("commons") / "py.typed").is_file()
+
+
+def test_the_opentelemetry_api_is_a_declared_dependency() -> None:
+    # `commons._tracing` imports `opentelemetry.trace` unguarded, so the API
+    # package has to be required unconditionally rather than arrive through
+    # chatlas. The SDK is genuinely optional and stays in the `tracing` extra.
+    unconditional = [
+        requirement
+        for requirement in requires("commons") or []
+        if ";" not in requirement
+    ]
+    assert any(
+        requirement.startswith("opentelemetry-api") for requirement in unconditional
+    )
+    assert not any(
+        requirement.startswith("opentelemetry-sdk") for requirement in unconditional
+    )
