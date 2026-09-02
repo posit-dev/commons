@@ -618,6 +618,33 @@ def test_semantic_layer_harvests_inline_measure_source() -> None:
     assert "def order_count()" in layer.source_text["order_count"]
 
 
+def test_collect_nested_list_keeps_first_definition_wins() -> None:
+    # Both functions are named `calc`, so they collide in `source_text`
+    # (keyed by Python name) without colliding in `measures` (keyed by the
+    # distinct `name=` given to each).
+    def make_first() -> Any:
+        @measure(description="First.", name="first")
+        def calc() -> int:
+            return 1
+
+        return as_measure(calc)
+
+    def make_second() -> Any:
+        @measure(description="Second.", name="second")
+        def calc() -> int:
+            return 2
+
+        return as_measure(calc)
+
+    first, second = make_first(), make_second()
+
+    top_level = semantic_layer(first, second)
+    nested = semantic_layer([first, second])
+
+    assert nested.source_text["calc"] == top_level.source_text["calc"]
+    assert "return 1" in nested.source_text["calc"]
+
+
 def test_semantic_layer_reports_its_size() -> None:
     layer = semantic_layer(_count_measure())
 

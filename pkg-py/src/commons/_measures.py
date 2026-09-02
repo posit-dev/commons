@@ -415,7 +415,9 @@ def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
         for entry in item:
             found, text = _collect(entry)
             measures.extend(found)
-            sources.update(text)
+            for name, name_text in text.items():
+                # First definition wins, matching semantic_layer()'s rule.
+                sources.setdefault(name, name_text)
         return measures, sources
 
     record = as_measure(item)
