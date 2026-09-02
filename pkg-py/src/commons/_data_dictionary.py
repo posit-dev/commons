@@ -80,6 +80,13 @@ class Column(_Permissive):
 
 
 class Definition(_Permissive):
+    """One authored governed definition, as written in the YAML.
+
+    `expr` is optional here and required by the export spec, which is what
+    type-checks it and reports where it went wrong. Requiring it twice would
+    mean two places to keep in step.
+    """
+
     expr: str | None = None
     label: str | None = None
     description: str | None = None
@@ -195,6 +202,10 @@ class DataDictionary(_Permissive):
         entry = self.tables.get(table)
         if entry is None:
             return []
+        # Governed definitions belong between the columns and the
+        # relationships, and are added once the compiler can supply them.
+        # They render as compiled SQL, never as the authored expression, so
+        # there is nothing correct to show before compilation happens.
         parts = [
             part
             for part in (
@@ -277,6 +288,8 @@ class DataDictionary(_Permissive):
             if prose:
                 chunks.append(f"Table `{name}`: {prose}")
         chunks.extend(f"{term}: {body}" for term, body in self.glossary.items())
+        # One chunk per governed definition joins these once the compiler can
+        # supply them, for the same reason as the first-touch entry.
         return [chunk for chunk in chunks if chunk]
 
 
