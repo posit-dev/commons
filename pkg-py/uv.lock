@@ -205,6 +205,7 @@ source = { editable = "." }
 dependencies = [
     { name = "chatlas" },
     { name = "duckdb" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "pyarrow" },
     { name = "pydantic" },
@@ -216,7 +217,6 @@ dependencies = [
 
 [package.optional-dependencies]
 tracing = [
-    { name = "httpx" },
     { name = "opentelemetry-exporter-otlp-json-file" },
     { name = "opentelemetry-sdk" },
 ]
@@ -235,7 +235,7 @@ dev = [
 requires-dist = [
     { name = "chatlas", specifier = ">=0.22.0" },
     { name = "duckdb", specifier = ">=1.0" },
-    { name = "httpx", marker = "extra == 'tracing'", specifier = ">=0.27" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3" },
     { name = "opentelemetry-exporter-otlp-json-file", marker = "extra == 'tracing'" },
     { name = "opentelemetry-sdk", marker = "extra == 'tracing'", specifier = ">=1.39" },
