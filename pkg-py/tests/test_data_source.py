@@ -103,3 +103,34 @@ def test_the_guard_is_given_the_sources_dialect() -> None:
     assert source.query("SELECT * EXCLUDE (order_id, region) FROM sales")[0] == {
         "revenue": 100.0
     }
+
+
+def test_a_frame_may_be_named_tables() -> None:
+    # `tables` is an option for engine and board sources only. Consuming it
+    # when no positional source was given would silently drop a frame.
+    source = data_source(tables=sales_frame())
+
+    assert list_tables(source) == ["tables"]
+    assert source.query("SELECT count(*) AS n FROM tables") == [{"n": 3}]
+
+
+def test_a_frame_named_tables_alongside_others_is_not_dropped() -> None:
+    source = data_source(sales=sales_frame(), tables=sales_frame())
+
+    assert sorted(list_tables(source)) == ["sales", "tables"]
+
+
+def test_frame_names_colliding_only_by_case_are_rejected() -> None:
+    # DuckDB resolves quoted identifiers case-insensitively, so these are one
+    # table. Without a check the second write raises a raw DuckDB error.
+    with pytest.raises(ValueError, match="differ only by case"):
+        data_source(sales=sales_frame(), SALES=sales_frame())
+
+
+def test_non_ascii_names_that_duckdb_keeps_distinct_are_allowed() -> None:
+    # DuckDB folds ASCII only, so these are two tables. Python's casefold()
+    # maps "ß" to "ss" and would have rejected them as one.
+    source = data_source(straße=sales_frame(), STRASSE=sales_frame())
+
+    assert sorted(list_tables(source)) == ["STRASSE", "straße"]
+    assert source.query('SELECT count(*) AS n FROM "straße"') == [{"n": 3}]
