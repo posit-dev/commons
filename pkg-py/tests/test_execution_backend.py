@@ -274,3 +274,24 @@ async def test_cancellation_still_escalates_for_a_process_ignoring_sigterm(
 
     await asyncio.sleep(0.8)
     assert not sentinel.exists()
+
+
+async def test_a_second_cancellation_cannot_abort_the_shutdown(tmp_path) -> None:
+    # Shutdown is not the caller's to interrupt. A cancel landing while the
+    # grace period is being awaited would otherwise skip SIGKILL and leave a
+    # SIGTERM-ignoring child running.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.3)
+    call = asyncio.create_task(
+        backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
+    )
+    await asyncio.sleep(0.1)
+
+    call.cancel()
+    await asyncio.sleep(0.05)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()
