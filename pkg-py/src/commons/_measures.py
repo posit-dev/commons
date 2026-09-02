@@ -502,8 +502,11 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
 
 # The import machinery (sys.path, sys.modules) is process-global state, not
 # owned by any one SemanticLayer, so concurrent construction must serialize
-# around it rather than around the layer itself.
-_IMPORT_LOCK = threading.Lock()
+# around it rather than around the layer itself. Reentrant, not a plain
+# Lock: the lock is held across exec_module(), which runs a measure file's
+# top-level code, and that code can itself call semantic_layer() on another
+# path, re-entering this same function on the same thread.
+_IMPORT_LOCK = threading.RLock()
 
 
 def _load_module_from_path(path: Path) -> ModuleType:

@@ -3,6 +3,7 @@
 import enum
 import importlib
 import sys
+import threading
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from pathlib import Path
@@ -833,3 +834,30 @@ def test_installed_but_unimported_module_is_a_construction_error(
     message = str(excinfo.value)
     assert "certainly_not_a_measure" in message
     assert "already-importable" in message
+
+
+def test_semantic_layer_reenters_during_a_measure_files_import() -> None:
+    # A non-reentrant lock deadlocks here rather than raising, so this runs
+    # on a daemon thread with a timeout: a regression fails the test instead
+    # of hanging the suite.
+    result: dict[str, Any] = {}
+
+    def target() -> None:
+        result["layer"] = semantic_layer(
+            MEASURE_FILES / "reentrant" / "composes_a_sibling.py"
+        )
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+
+    assert not thread.is_alive(), (
+        "semantic_layer() deadlocked re-entering during a measure file's import"
+    )
+
+    outer_layer = result["layer"]
+    assert list(outer_layer.measures) == ["outer_measure"]
+
+    module_name = outer_layer.measures["outer_measure"].func.__module__
+    fixture_module = sys.modules[module_name]
+    assert list(fixture_module.NESTED_LAYER.measures) == ["nested_order_count"]
