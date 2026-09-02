@@ -97,9 +97,7 @@ def _split_parameters(
             raise TypeError(_undeclared_message(func, name))
 
         if param.default is inspect.Parameter.empty:
-            if field_meta.default is not PydanticUndefined or (
-                field_meta.default_factory is not None
-            ):
+            if _annotation_declares_default(annotation):
                 raise TypeError(_annotation_default_message(func, name))
             default = PydanticUndefined
         else:
@@ -124,6 +122,21 @@ def _described_field(annotation: Any) -> FieldInfo | None:
         if isinstance(metadata, FieldInfo) and (metadata.description or "").strip():
             return metadata
     return None
+
+
+def _annotation_declares_default(annotation: Any) -> bool:
+    # An annotation can carry more than one Field(...); the default can hide
+    # in any of them, not just the one _described_field() returns.
+    if get_origin(annotation) is not Annotated:
+        return False
+    return any(
+        isinstance(metadata, FieldInfo)
+        and (
+            metadata.default is not PydanticUndefined
+            or metadata.default_factory is not None
+        )
+        for metadata in get_args(annotation)[1:]
+    )
 
 
 def _undeclared_message(func: Callable[..., Any], name: str) -> str:
