@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import string
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy
 
 from . import _duckdb
 from ._backends import Backend, DuckDBBackend, EngineBackend
 from ._sql_guard import check_query
+
+if TYPE_CHECKING:
+    from ._data_dictionary import DataDictionary
 
 __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 
@@ -70,6 +73,7 @@ class DataSource:
     tables: list[str]
     table_ids: dict[str, TableId] = field(default_factory=dict)
     pending: _PendingPins | None = None
+    dictionary: DataDictionary | None = None
 
     @classmethod
     def from_frames(cls, **frames: Any) -> DataSource:
@@ -227,27 +231,48 @@ class DataSource:
         return self.backend.dialect()
 
 
-def data_source(*args: Any, **kwargs: Any) -> DataSource:
+def data_source(
+    *args: Any,
+    tables: Any = None,
+    dictionary: Any = None,
+    **frames: Any,
+) -> DataSource:
     """Create a data source from an engine, a pins board, or named frames.
 
     A thin dispatcher over the constructors, which are the documented way in.
-    `tables` is an option for the engine and board forms; with no positional
-    source it is an ordinary frame name, so a frame may be called `tables`.
+
+    `tables` and `dictionary` are keyword-only options, so both names are
+    reserved in every form: a frame passed under either name is rejected
+    with a TypeError naming it, never silently consumed. `tables` selects
+    tables of the engine and board forms; `dictionary` attaches a data
+    dictionary to any form. To use either as a frame name, call
+    `DataSource.from_frames()` directly.
     """
+    from ._data_dictionary import as_data_dictionary
+
     if len(args) > 1:
         raise TypeError(
             f"data_source() accepts one positional argument, got {len(args)}."
         )
-    if not args:
-        return DataSource.from_frames(**kwargs)
 
-    tables = kwargs.pop("tables", None)
-    if kwargs:
-        raise TypeError(
-            "Pass either a connection or named data frames, not both. "
-            f"Got a positional argument and the frames {sorted(kwargs)}."
-        )
-    return _from_positional(args[0], tables)
+    resolved = as_data_dictionary(dictionary)
+    if args:
+        if frames:
+            raise TypeError(
+                "Pass either a connection or named data frames, not both. "
+                f"Got a positional argument and the frames {sorted(frames)}."
+            )
+        source = _from_positional(args[0], tables)
+    else:
+        if tables is not None:
+            raise TypeError(
+                "`tables` selects tables of an engine or pins board; with "
+                "named frames there is nothing for it to select."
+            )
+        source = DataSource.from_frames(**frames)
+
+    source.dictionary = resolved
+    return source
 
 
 def _from_positional(value: Any, tables: Any) -> DataSource:
