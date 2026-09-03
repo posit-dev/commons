@@ -397,7 +397,7 @@ definition_gist <- function(definitions) {
       # data-dict omits the type when it infers no single one. sprintf()
       # over a zero-length argument yields character(0), which silently
       # dropped the whole "(kind, type)" prefix rather than just the type.
-      scope <- if (length(def$type) == 0 || is.na(def$type)) {
+      scope <- if (length(def$type) == 0) {
         def$kind
       } else {
         sprintf("%s, %s", def$kind, def$type)
