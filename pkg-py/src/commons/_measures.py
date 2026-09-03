@@ -77,7 +77,7 @@ class Measure:
 def _split_parameters(
     func: Callable[..., Any],
 ) -> tuple[dict[str, tuple[Any, FieldInfo]], tuple[str, ...]]:
-    if inspect.iscoroutinefunction(func):
+    if inspect.iscoroutinefunction(func) or inspect.isasyncgenfunction(func):
         raise TypeError(_async_message(func))
 
     try:

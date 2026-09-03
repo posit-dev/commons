@@ -1,5 +1,6 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
+from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from typing import Annotated, Any, Literal, get_args, get_origin
 
@@ -157,6 +158,18 @@ def test_positional_only_parameter_is_an_error() -> None:
 
 def test_async_def_measure_is_an_error() -> None:
     async def m(x: Annotated[str, Field(description="d")]) -> None: ...
+
+    with pytest.raises(TypeError, match="async") as excinfo:
+        _split_parameters(m)
+
+    assert "m" in str(excinfo.value)
+
+
+def test_async_generator_measure_is_an_error() -> None:
+    # iscoroutinefunction() alone misses this: a `yield` inside an async def
+    # makes it an async generator function, a different kind entirely.
+    async def m(x: Annotated[str, Field(description="d")]) -> AsyncIterator[str]:
+        yield x
 
     with pytest.raises(TypeError, match="async") as excinfo:
         _split_parameters(m)
