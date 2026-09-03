@@ -31,8 +31,6 @@ data_dict_cli_context <- function(result) {
   )
 }
 
-# The conformance corpus is a cross-language fixture: both suites read the
-# same YAML files. These read the synced copy, as every shared fixture does.
 definition_fixture_path <- function(name, kind = "valid") {
   test_path("fixtures", "shared", "definition-export", kind, name)
 }
@@ -47,8 +45,6 @@ definition_fixture_paths <- function(kind) {
   )))
 }
 
-# Which data-dict problem code each invalid fixture must produce. Shared, so
-# both suites hold one copy of the mapping.
 definition_fixture_error_code <- function(path) {
   shared_fixture("definitions")$invalid[[basename(path)]]
 }
@@ -88,9 +84,7 @@ definition_export_contract <- function(export) {
 }
 
 # The fixture arrives from JSON as nested lists, while
-# definition_export_contract() produces character vectors. Normalize the
-# fixture side so a comparison reports a real difference rather than a
-# difference in how each format spells an empty sequence.
+# definition_export_contract() produces character vectors.
 definition_fixture_contract <- function(cases) {
   lapply(cases, function(case) {
     translation <- case$translation %||% list()

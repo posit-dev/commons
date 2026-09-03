@@ -188,8 +188,6 @@ test_that("the export matches the shared definitions contract", {
 
   for (path in paths) {
     export <- definition_export_spec(yaml::read_yaml(path))
-    # Keyed contract, not a sequence: the generated file sorts its keys for
-    # stable diffs while the export keeps authored order.
     local <- definition_export_contract(export)
     fixture <- definition_fixture_contract(spec$export_records[[basename(path)]])
     expect_equal(
