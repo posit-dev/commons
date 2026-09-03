@@ -31,6 +31,7 @@ The Python suite reads this directory directly. The R suite cannot. `testthat` n
   - `invalid` — the data-dict problem code each invalid fixture must produce (e.g. `cycle.yaml` must fail with the cycle error, not a generic parse failure). Hand-maintained; the generator preserves it.
 
   This fixture does not replace the conformance harness: the harness compares against a real binary, while this pins what both packages agree to consume.
+- **Definition expansion and rendering.** `definition-rendering.json` pins what happens to a governed definition after the compiler is done with it: which `{{token}}` queries expand and to what, the one-line gist shown at first touch and in retrieval, and the kind index under a character cap. It carries a bank of export records that each package hydrates into its own shape. A refused query pins the refusal and a reason slug rather than the message, because the wording belongs to each language.
 - **Trace file naming.** `trace(-[0-9]+)?\.jsonl`, one OTLP envelope per line.
 
 ## Conventions
