@@ -553,12 +553,13 @@ def _load_module_from_path(path: Path) -> ModuleType:
         ):
             return cached
 
-        if name in _load_mtimes:
-            # Not this name's first load: the file is being (re)executed
-            # because the checks above missed. See
-            # _invalidate_bytecode_cache for why this step is required, not
-            # just belt-and-suspenders.
-            _invalidate_bytecode_cache(path)
+        # Unconditional, not just on a detected reload: an earlier process
+        # can have already written this file's .pyc, and a same-second,
+        # same-size edit since then leaves it looking valid to
+        # SourceFileLoader on this process's first load too, which has no
+        # _load_mtimes entry to have noticed the edit itself. See
+        # _invalidate_bytecode_cache for why this step is required at all.
+        _invalidate_bytecode_cache(path)
 
         _check_directory_importable(path.parent, requested=path)
 
@@ -613,17 +614,21 @@ def _cached_module_path(module: ModuleType) -> Path | None:
 
 
 def _invalidate_bytecode_cache(path: Path) -> None:
-    """Remove one file's compiled cache before it is re-executed.
+    """Remove one file's compiled cache before executing it.
 
-    SourceFileLoader validates its own .pyc by whole-second mtime and size,
-    coarser than the nanosecond mtime this module's cache compares against.
-    An edit within the same second that leaves the file's size unchanged --
-    changing one digit, say -- is exactly the case our cache detects and
-    SourceFileLoader does not: left alone, it hands back the stale compiled
-    code and the reload silently runs the old version. Best-effort and
-    scoped to this one file: the cache directory may be read-only or
-    already gone, and __pycache__ is disposable by design, but only this
-    file's entry is touched.
+    Called on every execution, not only a detected reload: a stale,
+    timestamp-valid .pyc can predate this process entirely, written by an
+    earlier one. SourceFileLoader validates its own .pyc by whole-second
+    mtime and size, coarser than the nanosecond mtime this module's cache
+    compares against; an edit within the same second that leaves the file's
+    size unchanged (changing one digit, say) is exactly the case
+    SourceFileLoader cannot detect, whether this is a reload this process
+    already knows about or a first load of a file some other process
+    touched. Left uninvalidated, it hands back the stale compiled code and
+    the load silently runs the old version. Best-effort and scoped to this
+    one file: the cache directory may be read-only or already gone, and
+    __pycache__ is disposable by design, but only this file's entry is
+    touched.
     """
     try:
         Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)

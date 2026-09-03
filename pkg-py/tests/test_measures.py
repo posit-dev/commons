@@ -19,6 +19,7 @@ from commons._measures import (
     Injected,
     Measure,
     _load_module_from_path,
+    _load_mtimes,
     _split_parameters,
     as_measure,
     measure,
@@ -819,6 +820,35 @@ def test_load_module_from_path_reloads_an_edited_file(tmp_path: Path) -> None:
     second = _load_module_from_path(source)
 
     assert second is not first
+    assert second.VALUE == 2
+
+
+def test_load_module_from_path_invalidates_a_pre_existing_bytecode_cache(
+    tmp_path: Path,
+) -> None:
+    # A stale, timestamp-valid .pyc can predate this process's own record of
+    # having loaded the file at all -- written by an earlier process, then
+    # the file edited same-second, same-size before this process's first
+    # load of it. Simulated here without spawning a real second process: load
+    # once to produce the .pyc via SourceFileLoader, edit the file, then
+    # clear this process's own sys.modules and _load_mtimes entries for it
+    # so the next load has no in-memory record either -- indistinguishable,
+    # from _load_module_from_path's point of view, from a fresh process's
+    # first load of an already-edited file.
+    source = tmp_path / "m.py"
+    base_ns = 1_700_000_000 * 1_000_000_000
+    source.write_text("VALUE = 1\n")
+    os.utime(source, ns=(base_ns, base_ns))
+    first = _load_module_from_path(source)
+    name = first.__name__
+
+    source.write_text("VALUE = 2\n")
+    os.utime(source, ns=(base_ns, base_ns + 500_000_000))
+    sys.modules.pop(name, None)
+    _load_mtimes.pop(name, None)
+
+    second = _load_module_from_path(source)
+
     assert second.VALUE == 2
 
 
