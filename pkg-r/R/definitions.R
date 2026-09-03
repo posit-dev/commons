@@ -175,9 +175,15 @@ expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
   )[[1]]
   tokens <- unique(gsub("\\{\\{\\s*|\\s*\\}\\}", "", matches))
 
+  # Every token resolves against the query as written. Compiled SQL can name
+  # a table the query does not, and resolving against already-expanded text
+  # would let that count as the table appearing, which is the check that keeps
+  # a bare token bound to its own table.
+  resolved <- lapply(tokens, resolve_definition_token, sql, defs, call = call)
+
   applied <- NULL
-  for (token in tokens) {
-    def <- resolve_definition_token(token, sql, defs, call = call)
+  for (i in seq_along(tokens)) {
+    def <- resolved[[i]]
     # gsub replacement treats backslashes specially; the expansion is
     # literal SQL.
     replacement <- gsub(
@@ -187,7 +193,7 @@ expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
       fixed = TRUE
     )
     sql <- gsub(
-      sprintf("\\{\\{\\s*%s\\s*\\}\\}", escape_regex(token)),
+      sprintf("\\{\\{\\s*%s\\s*\\}\\}", escape_regex(tokens[[i]])),
       replacement,
       sql
     )
@@ -290,16 +296,21 @@ abort_unknown_token <- function(token, defs, call) {
 }
 
 definition_index_text <- function(registry, cap_chars = 4000) {
-  index <- definition_index_lines(registry)
-  if (length(index) == 0) {
-    return("")
+  kept <- character()
+  # Measured as joined, so the newlines between lines count against the cap
+  # rather than pushing the rendered index past it.
+  for (line in definition_index_lines(registry)) {
+    if (nchar(paste(c(kept, line), collapse = "\n")) > cap_chars) {
+      break
+    }
+    kept <- c(kept, line)
   }
-  fits <- cumsum(nchar(index)) <= cap_chars
-  paste(index[fits], collapse = "\n")
+  paste(kept, collapse = "\n")
 }
 
 definitions_overflow <- function(registry, cap_chars = 4000) {
-  !all(cumsum(nchar(definition_index_lines(registry))) <= cap_chars)
+  index <- paste(definition_index_lines(registry), collapse = "\n")
+  nchar(index) > cap_chars
 }
 
 definition_index_lines <- function(registry) {
@@ -383,9 +394,17 @@ definition_gist <- function(definitions) {
     function(def) {
       detail <- prose_detail(def$description, def$details)
       notes <- def$notes %||% character()
+      # data-dict omits the type when it infers no single one. sprintf()
+      # over a zero-length argument yields character(0), which silently
+      # dropped the whole "(kind, type)" prefix rather than just the type.
+      scope <- if (length(def$type) == 0 || is.na(def$type)) {
+        def$kind
+      } else {
+        sprintf("%s, %s", def$kind, def$type)
+      }
       paste(
         c(
-          sprintf("(%s, %s)", def$kind, def$type),
+          sprintf("(%s)", scope),
           if (nzchar(detail)) detail,
           if (!is.null(def$sql)) {
             sprintf(
