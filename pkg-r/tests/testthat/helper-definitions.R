@@ -66,9 +66,8 @@ metrics_caller <- function(src = definitions_source(), store = NULL) {
   }
 }
 
-# Records from the shared definition-rendering fixture, hydrated into the two
-# shapes this package consumes: a row of the registry data frame, and the
-# definition list the dictionary attaches to a table.
+# Records from the shared definition-rendering fixture, in the two shapes
+# this package uses: a registry row and a table's definition list.
 fixture_definition <- function(key) {
   record <- shared_fixture("definition-rendering")$records$values[[key]]
   record <- record[!vapply(record, is.null, logical(1))]
