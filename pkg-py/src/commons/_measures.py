@@ -514,11 +514,13 @@ _IMPORT_LOCK = threading.RLock()
 # dotted module name, defeating the single-segment name below.
 _UNSAFE_NAME_CHARS = re.compile(r"[^0-9a-zA-Z_]")
 
-# The mtime a path's cached module was loaded at, keyed by module name.
-# Compared against the file's current mtime on every load so a module is
-# reused only while its source is unchanged; sys.modules alone cannot tell a
-# fresh load from a stale one.
-_load_mtimes: dict[str, float] = {}
+# The mtime, in nanoseconds, a path's cached module was loaded at, keyed by
+# module name. st_mtime_ns, not st_mtime: a float mtime can lose enough
+# filesystem timestamp precision that two rapid edits look identical and a
+# stale module stays cached. Compared against the file's current mtime on
+# every load so a module is reused only while its source is unchanged;
+# sys.modules alone cannot tell a fresh load from a stale one.
+_load_mtimes: dict[str, int] = {}
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
@@ -542,9 +544,13 @@ def _load_module_from_path(path: Path) -> ModuleType:
     name = f"_commons_measure_source_{stem}_{digest}"
 
     with _IMPORT_LOCK:
-        mtime = resolved.stat().st_mtime
+        mtime_ns = resolved.stat().st_mtime_ns
         cached = sys.modules.get(name)
-        if cached is not None and _load_mtimes.get(name) == mtime:
+        if (
+            cached is not None
+            and _load_mtimes.get(name) == mtime_ns
+            and _cached_module_path(cached) == resolved
+        ):
             return cached
 
         _check_directory_importable(path.parent, requested=path)
@@ -556,9 +562,18 @@ def _load_module_from_path(path: Path) -> ModuleType:
                 f"Pass a .py file, a directory of them, or a module object."
             )
 
+        # A miss here can mean a stale or wrong-file entry already occupies
+        # `name`: the digest is only 32 bits, so two distinct files with the
+        # same sanitized stem can collide on it. Replacing the entry, rather
+        # than erroring, is safe because nothing depends on sys.modules[name]
+        # continuing to point at the other file's module -- a Measure holds
+        # its function directly, not a lookup through this name -- so the
+        # collision degrades to that other file re-executing on its own next
+        # load (the identity check above will miss for it too), never to
+        # this load returning its measures.
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
-        _load_mtimes[name] = mtime
+        _load_mtimes[name] = mtime_ns
 
         # Appended, not inserted at the front: a sibling file can then
         # import another sibling by plain absolute import, but a sibling
@@ -579,6 +594,15 @@ def _load_module_from_path(path: Path) -> ModuleType:
             if added_to_path and directory in sys.path:
                 sys.path.remove(directory)
         return module
+
+
+def _cached_module_path(module: ModuleType) -> Path | None:
+    """Resolve a cached module's own file, to confirm a name match is
+    actually the same file and not a truncated-digest collision between two
+    different ones.
+    """
+    file = getattr(module, "__file__", None)
+    return Path(file).resolve() if file else None
 
 
 def _check_directory_importable(directory: Path, requested: Path) -> None:

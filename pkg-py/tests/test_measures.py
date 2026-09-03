@@ -2,11 +2,13 @@
 
 import enum
 import importlib
+import os
 import sys
 import threading
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from types import ModuleType
 from typing import Annotated, Any, Literal, get_args, get_origin
 
 import pytest
@@ -16,6 +18,7 @@ from commons._measures import (
     INJECTED,
     Injected,
     Measure,
+    _load_module_from_path,
     _split_parameters,
     as_measure,
     measure,
@@ -784,6 +787,59 @@ def test_dotted_filename_does_not_get_a_dotted_module_name(
         ImportError, match="attempted relative import with no known parent package"
     ):
         semantic_layer(dotted)
+
+
+def test_load_module_from_path_reuses_an_unchanged_file(tmp_path: Path) -> None:
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+
+    first = _load_module_from_path(source)
+    second = _load_module_from_path(source)
+
+    assert first is second
+
+
+def test_load_module_from_path_reloads_an_edited_file(tmp_path: Path) -> None:
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    first = _load_module_from_path(source)
+
+    source.write_text("VALUE = 2\n")
+    # Python's own bytecode cache invalidates on a whole-second-truncated
+    # mtime, not the nanosecond one _load_mtimes compares against; bump by
+    # whole seconds so the .pyc it writes on the first load is not reused
+    # for the second, which would otherwise return stale content regardless
+    # of what our own cache decides.
+    stat = source.stat()
+    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+
+    second = _load_module_from_path(source)
+
+    assert second is not first
+    assert second.VALUE == 2
+
+
+def test_load_module_from_path_ignores_a_same_named_module_from_elsewhere(
+    tmp_path: Path,
+) -> None:
+    # Exercises the identity check directly rather than forcing a genuine
+    # 32-bit digest collision between two distinct filenames: plant a module
+    # under the exact sys.modules name this path would use, with the same
+    # recorded mtime but a __file__ pointing elsewhere, and confirm the real
+    # file is (re-)loaded rather than the stand-in being returned.
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    real = _load_module_from_path(source)
+    name = real.__name__
+
+    imposter = ModuleType(name)
+    imposter.__file__ = str(tmp_path / "elsewhere.py")
+    sys.modules[name] = imposter
+
+    loaded = _load_module_from_path(source)
+
+    assert loaded is not imposter
+    assert loaded.VALUE == 1
 
 
 def test_sys_path_is_restored_after_a_successful_load() -> None:
