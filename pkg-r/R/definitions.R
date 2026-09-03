@@ -175,10 +175,7 @@ expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
   )[[1]]
   tokens <- unique(gsub("\\{\\{\\s*|\\s*\\}\\}", "", matches))
 
-  # Every token resolves against the query as written. Compiled SQL can name
-  # a table the query does not, and resolving against already-expanded text
-  # would let that count as the table appearing, which is the check that keeps
-  # a bare token bound to its own table.
+  # Resolve every token against the original query, not the expanded SQL (#260).
   resolved <- lapply(tokens, resolve_definition_token, sql, defs, call = call)
 
   applied <- NULL
@@ -297,8 +294,8 @@ abort_unknown_token <- function(token, defs, call) {
 
 definition_index_text <- function(registry, cap_chars = 4000) {
   kept <- character()
-  # Measured as joined, so the newlines between lines count against the cap
-  # rather than pushing the rendered index past it.
+  # Measure the joined text, so the newlines between lines count against
+  # the cap too.
   for (line in definition_index_lines(registry)) {
     if (nchar(paste(c(kept, line), collapse = "\n")) > cap_chars) {
       break
@@ -394,9 +391,7 @@ definition_gist <- function(definitions) {
     function(def) {
       detail <- prose_detail(def$description, def$details)
       notes <- def$notes %||% character()
-      # data-dict omits the type when it infers no single one. sprintf()
-      # over a zero-length argument yields character(0), which silently
-      # dropped the whole "(kind, type)" prefix rather than just the type.
+      # data-dict omits the type when it can't infer one (#259).
       scope <- if (length(def$type) == 0) {
         def$kind
       } else {
