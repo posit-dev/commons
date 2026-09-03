@@ -800,18 +800,21 @@ def test_load_module_from_path_reuses_an_unchanged_file(tmp_path: Path) -> None:
 
 
 def test_load_module_from_path_reloads_an_edited_file(tmp_path: Path) -> None:
+    # An edit within the same whole second that leaves the file's size
+    # unchanged ("VALUE = 1" -> "VALUE = 2"): the case SourceFileLoader's own
+    # bytecode cache cannot detect, since it validates by whole-second mtime
+    # and size, coarser than the nanosecond mtime our cache compares
+    # against. Both mtimes are pinned explicitly, not read off the file
+    # naturally and nudged, so the test cannot straddle a real second
+    # boundary and become flaky.
     source = tmp_path / "m.py"
+    base_ns = 1_700_000_000 * 1_000_000_000
     source.write_text("VALUE = 1\n")
+    os.utime(source, ns=(base_ns, base_ns))
     first = _load_module_from_path(source)
 
     source.write_text("VALUE = 2\n")
-    # Python's own bytecode cache invalidates on a whole-second-truncated
-    # mtime, not the nanosecond one _load_mtimes compares against; bump by
-    # whole seconds so the .pyc it writes on the first load is not reused
-    # for the second, which would otherwise return stale content regardless
-    # of what our own cache decides.
-    stat = source.stat()
-    os.utime(source, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+    os.utime(source, ns=(base_ns, base_ns + 500_000_000))
 
     second = _load_module_from_path(source)
 

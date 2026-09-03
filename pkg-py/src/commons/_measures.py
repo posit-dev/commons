@@ -553,6 +553,13 @@ def _load_module_from_path(path: Path) -> ModuleType:
         ):
             return cached
 
+        if name in _load_mtimes:
+            # Not this name's first load: the file is being (re)executed
+            # because the checks above missed. See
+            # _invalidate_bytecode_cache for why this step is required, not
+            # just belt-and-suspenders.
+            _invalidate_bytecode_cache(path)
+
         _check_directory_importable(path.parent, requested=path)
 
         spec = importlib.util.spec_from_file_location(name, path)
@@ -603,6 +610,25 @@ def _cached_module_path(module: ModuleType) -> Path | None:
     """
     file = getattr(module, "__file__", None)
     return Path(file).resolve() if file else None
+
+
+def _invalidate_bytecode_cache(path: Path) -> None:
+    """Remove one file's compiled cache before it is re-executed.
+
+    SourceFileLoader validates its own .pyc by whole-second mtime and size,
+    coarser than the nanosecond mtime this module's cache compares against.
+    An edit within the same second that leaves the file's size unchanged --
+    changing one digit, say -- is exactly the case our cache detects and
+    SourceFileLoader does not: left alone, it hands back the stale compiled
+    code and the reload silently runs the old version. Best-effort and
+    scoped to this one file: the cache directory may be read-only or
+    already gone, and __pycache__ is disposable by design, but only this
+    file's entry is touched.
+    """
+    try:
+        Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
+    except (OSError, ValueError, NotImplementedError):
+        pass
 
 
 def _check_directory_importable(directory: Path, requested: Path) -> None:
