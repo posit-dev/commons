@@ -771,6 +771,21 @@ def test_measure_file_imports_a_sibling_file_directly() -> None:
     assert layer.measures["doubled_count"].func() == 42
 
 
+def test_dotted_filename_does_not_get_a_dotted_module_name(
+    tmp_path: Path,
+) -> None:
+    # path.stem for "sales.q3.py" is "sales.q3": left unsanitized, the
+    # generated module name would still be dotted, giving the loaded file a
+    # non-empty __package__ and undoing the single-segment name fix.
+    dotted = tmp_path / "sales.q3.py"
+    dotted.write_text("from ..nope import thing\n")
+
+    with pytest.raises(
+        ImportError, match="attempted relative import with no known parent package"
+    ):
+        semantic_layer(dotted)
+
+
 def test_sys_path_is_restored_after_a_successful_load() -> None:
     directory = str(MEASURE_FILES / "sibling_imports")
 

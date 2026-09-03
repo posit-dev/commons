@@ -14,8 +14,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import inspect
-import itertools
 import os
+import re
 import sys
 import threading
 from collections.abc import Callable, Mapping, Sequence
@@ -509,33 +509,56 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
 # path, re-entering this same function on the same thread.
 _IMPORT_LOCK = threading.RLock()
 
-# Every load of a path gets its own sys.modules key, even a repeat load of
-# the same path: semantic_layer() re-executes a file each time it is passed
-# (matching the R behaviour), and each execution needs a key nothing else
-# will ever overwrite.
-_load_count = itertools.count()
+# Anything that is not a plain identifier character, including the dots in a
+# name like `sales.q3.py`: left alone, a dotted stem would still produce a
+# dotted module name, defeating the single-segment name below.
+_UNSAFE_NAME_CHARS = re.compile(r"[^0-9a-zA-Z_]")
+
+# The mtime a path's cached module was loaded at, keyed by module name.
+# Compared against the file's current mtime on every load so a module is
+# reused only while its source is unchanged; sys.modules alone cannot tell a
+# fresh load from a stale one.
+_load_mtimes: dict[str, float] = {}
 
 
 def _load_module_from_path(path: Path) -> ModuleType:
+    resolved = path.resolve()
+    stem = _UNSAFE_NAME_CHARS.sub("_", path.stem)
+    # The digest, not a load counter: two semantic_layer() calls on the same
+    # path should reuse the same module when its source is unchanged, rather
+    # than each minting a new sys.modules entry the old one is never removed
+    # from -- an application constructing an agent per session leaked one
+    # module, and everything it held onto, per session. The cost is that a
+    # file edited mid-process reloads under the same name, so an earlier
+    # layer's Measure.func.__module__ then resolves to the newer module
+    # object; a development-time scenario, not a session-count-scaling leak.
+    #
     # A single path segment, not `commons._measure_sources.<stem>`: a dotted
     # name makes `commons._measure_sources` the loaded file's __package__,
     # so a relative import in the user's own file would resolve into
     # commons' internals instead of failing with Python's own "no known
     # parent package" error.
-    digest = hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:8]
-    name = f"_commons_measure_source_{path.stem}_{digest}_{next(_load_count)}"
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ValueError(
-            f"Cannot read measures from {path}: not a Python file.\n"
-            f"Pass a .py file, a directory of them, or a module object."
-        )
+    digest = hashlib.sha256(str(resolved).encode()).hexdigest()[:8]
+    name = f"_commons_measure_source_{stem}_{digest}"
 
     with _IMPORT_LOCK:
+        mtime = resolved.stat().st_mtime
+        cached = sys.modules.get(name)
+        if cached is not None and _load_mtimes.get(name) == mtime:
+            return cached
+
         _check_directory_importable(path.parent, requested=path)
+
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise ValueError(
+                f"Cannot read measures from {path}: not a Python file.\n"
+                f"Pass a .py file, a directory of them, or a module object."
+            )
 
         module = importlib.util.module_from_spec(spec)
         sys.modules[name] = module
+        _load_mtimes[name] = mtime
 
         # Appended, not inserted at the front: a sibling file can then
         # import another sibling by plain absolute import, but a sibling
@@ -550,6 +573,7 @@ def _load_module_from_path(path: Path) -> ModuleType:
         except BaseException:
             if sys.modules.get(name) is module:
                 sys.modules.pop(name, None)
+            _load_mtimes.pop(name, None)
             raise
         finally:
             if added_to_path and directory in sys.path:
