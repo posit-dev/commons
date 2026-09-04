@@ -107,6 +107,10 @@ class Table(_Permissive):
     # so the registry can be exercised without the compiler. Elements are
     # ExportRecord, typed Any so this model need not import _definitions.
     compiled_definitions: list[Any] = []
+    # The name the author wrote, kept when a catalog import re-keys this
+    # table to the warehouse label, so first touch and relationship matching
+    # can still find it.
+    authored_name: str | None = None
 
     @model_validator(mode="before")
     @classmethod
