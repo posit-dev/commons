@@ -315,17 +315,31 @@ def test_augment_gives_the_new_layer_a_fresh_store(tmp_path):
     assert "Orders" in augmented.search("orders retail")[0]
 
 
-def test_augment_folds_in_every_source():
-    first = a_source_with_dictionary({"details": "Orders from the retail system."})
-    second = a_source_with_dictionary({"glossary": {"AOV": "Average order value."}})
+# An empty case list would make the parametrized test below vacuously pass.
+def test_the_augment_fixture_is_not_empty():
+    assert SHARED["augment_context_layer"]["cases"]
 
-    augmented = augment_context_layer(None, [first, second])
 
-    assert augmented is not None
-    assert augmented.docs == (
-        "Orders from the retail system.",
-        "AOV: Average order value.",
-    )
+@pytest.mark.parametrize(
+    "case", SHARED["augment_context_layer"]["cases"], ids=lambda c: c["name"]
+)
+def test_augment_context_layer_shared_cases(case):
+    layer = None if case["docs"] is None else ContextLayer(case["docs"])
+    sources = [
+        data_source(
+            notes=pd.DataFrame({"n": [1]}),
+            dictionary=None if spec is None else DataDictionary.model_validate(spec),
+        )
+        for spec in case["dictionaries"]
+    ]
+
+    augmented = augment_context_layer(layer, sources)
+
+    if case["expected_docs"] is None:
+        assert augmented is None
+    else:
+        assert augmented is not None
+        assert list(augmented.docs) == case["expected_docs"]
 
 
 def test_a_dictionary_alone_is_searchable_context():

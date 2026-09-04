@@ -132,5 +132,102 @@
         ]
       }
     ]
+  },
+  "augment_context_layer": {
+    "description": "Folding each source's prose into an agent's context layer. The sources' chunks follow the caller's own documents and then each other in the order the sources were given, so the order a reader would expect is preserved. With no chunks to add, the layer is handed back as it was, absent included: an agent with neither context files nor dictionary prose has no layer rather than an empty one. `docs` and `expected_docs` are null for an absent layer and an empty list for a layer holding no documents; the two are not the same thing. Each entry in `dictionaries` is one source, null for a source carrying no dictionary. Whether the returned layer is a new object, and whether it carries a fresh index, is implementation detail and is not pinned here.",
+    "cases": [
+      {
+        "name": "source chunks follow the layer's own documents",
+        "docs": [
+          "Booked revenue excludes tax."
+        ],
+        "dictionaries": [
+          {
+            "details": "Orders from the retail system.",
+            "glossary": {
+              "AOV": "Average order value."
+            }
+          }
+        ],
+        "expected_docs": [
+          "Booked revenue excludes tax.",
+          "Orders from the retail system.",
+          "AOV: Average order value."
+        ]
+      },
+      {
+        "name": "a dictionary alone becomes the layer",
+        "docs": null,
+        "dictionaries": [
+          {
+            "details": "Orders from the retail system."
+          }
+        ],
+        "expected_docs": [
+          "Orders from the retail system."
+        ]
+      },
+      {
+        "name": "every source contributes, in the order given",
+        "docs": null,
+        "dictionaries": [
+          {
+            "details": "Orders from the retail system."
+          },
+          null,
+          {
+            "glossary": {
+              "AOV": "Average order value."
+            }
+          }
+        ],
+        "expected_docs": [
+          "Orders from the retail system.",
+          "AOV: Average order value."
+        ]
+      },
+      {
+        "name": "a source with no dictionary leaves the layer alone",
+        "docs": [
+          "Booked revenue excludes tax."
+        ],
+        "dictionaries": [
+          null
+        ],
+        "expected_docs": [
+          "Booked revenue excludes tax."
+        ]
+      },
+      {
+        "name": "a dictionary with no prose leaves the layer absent",
+        "docs": null,
+        "dictionaries": [
+          {
+            "details": null,
+            "tables": {
+              "orders": {
+                "description": null
+              }
+            },
+            "glossary": {}
+          }
+        ],
+        "expected_docs": null
+      },
+      {
+        "name": "an empty layer stays an empty layer",
+        "docs": [],
+        "dictionaries": [
+          null
+        ],
+        "expected_docs": []
+      },
+      {
+        "name": "no sources and no layer stays absent",
+        "docs": null,
+        "dictionaries": [],
+        "expected_docs": null
+      }
+    ]
   }
 }
