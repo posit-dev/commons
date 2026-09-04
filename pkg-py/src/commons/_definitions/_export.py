@@ -621,9 +621,11 @@ def _re2() -> Any:
 def _validate_regex(pattern: str) -> str:
     """Refuse a pattern data-dict's engine would refuse.
 
-    One known difference, which fails closed: Rust spells a named group
-    `(?<name>...)` and RE2 wants `(?P<name>...)`, so Rust's spelling is
-    refused here. A capture name has no effect on a definition.
+    Two known differences from Rust's `regex`, both failing closed and
+    neither changing what a definition matches: Rust spells a named group
+    `(?<name>...)` where RE2 wants `(?P<name>...)`, and Rust has an extended
+    mode `(?x)` that RE2 does not. Every other inline flag agrees. Closing
+    the gap needs a Rust `regex` binding rather than more translation.
     """
     connection = _re2()
     with _RE2_LOCK:
