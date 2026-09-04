@@ -221,3 +221,20 @@ def test_the_label_of_a_three_part_id_round_trips() -> None:
     table_id = TableId(table="ORDERS", schema="PUBLIC", catalog="ANALYTICS")
     assert table_id.label == "ANALYTICS.PUBLIC.ORDERS"
     assert normalize_table_registry(table_id.label)[table_id.label] == table_id
+
+
+def test_the_engine_backend_quotes_each_component_separately() -> None:
+    # The preparer takes one component at a time; handed "ANALYTICS.PUBLIC" it
+    # produces a single identifier with a dot inside it.
+    backend = EngineBackend(sqlalchemy.create_engine("sqlite://"))
+    quoted = backend.quote(
+        TableId(table="ORDERS", schema="PUBLIC", catalog="ANALYTICS")
+    )
+    assert quoted == '"ANALYTICS"."PUBLIC"."ORDERS"'
+
+
+def test_the_engine_backend_still_quotes_a_two_part_name() -> None:
+    backend = EngineBackend(sqlalchemy.create_engine("sqlite://"))
+    assert backend.quote(TableId(table="sales", schema="analytics")) == (
+        "analytics.sales"
+    )
