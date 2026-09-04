@@ -112,168 +112,57 @@ test_that("source compilation rejects metrics over mixed-grain definitions", {
   )
 })
 
-test_that("one checked expression emits all supported SQL targets", {
+test_that("warehouse lowering matches the shared contract", {
   skip_if_not_installed("yaml")
-  source <- data_source(
-    values = data.frame(
-      number = 1,
-      text = "Alpha",
-      flag = TRUE
-    )
-  )
-  definitions <- definition_compiled_table(
-    definition_compile_fixture("functions.yaml", source)
-  )
+  spec <- shared_fixture("definition-warehouse-sql")
+  cases <- spec$cases
+  expect_gt(length(cases), 0)
+  checked <- 0
 
-  expect_equal(
-    definition_translation(definitions$strings, "SQL(snowflake)")$code,
-    paste0(
-      "STARTSWITH(lower(trim(\"text\")), 'a') OR ",
-      "ENDSWITH(upper(\"text\"), 'Z')"
+  for (filename in names(cases)) {
+    file_cases <- cases[[filename]]
+    # The source only has to expose the tables the cases name; the corpus
+    # dictionary supplies everything else.
+    tables <- unique(vapply(
+      names(file_cases),
+      function(key) strsplit(key, "::", fixed = TRUE)[[1]][[1]],
+      character(1)
+    ))
+    frames <- stats::setNames(
+      lapply(tables, function(ignored) data.frame(row = 1)),
+      tables
     )
-  )
-  expect_equal(
-    definition_translation(definitions$strings, "SQL(databricks)")$code,
-    paste0(
-      "startswith(lower(trim(`text`)), 'a') OR ",
-      "endswith(upper(`text`), 'Z')"
+    source <- do.call(data_source, frames)
+    definitions <- definition_compiled_table(
+      definition_compile_fixture(filename, source)
     )
-  )
-  expect_equal(
-    definition_translation(definitions$remainder, "SQL(snowflake)")$code,
-    paste0(
-      "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE ",
-      "MOD(MOD(\"number\", 3) + 3, 3) END"
-    )
-  )
-  expect_equal(
-    definition_translation(definitions$remainder, "SQL(databricks)")$code,
-    paste0(
-      "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE ",
-      "MOD(MOD(`number`, 3) + 3, 3) END"
-    )
-  )
-  expect_match(
-    definition_translation(definitions$patterns, "SQL(snowflake)")$code,
-    "REGEXP_LIKE",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(definitions$patterns, "SQL(databricks)")$code,
-    "regexp_like",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(definitions$finite, "SQL(snowflake)")$code,
-    "NOT (",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(definitions$finite, "SQL(databricks)")$code,
-    "NOT (CASE",
-    fixed = TRUE
-  )
-})
 
-test_that("temporal, struct, and COLUMNS expressions lower by target", {
-  skip_if_not_installed("yaml")
-  source <- data_source(survey = data.frame(row = 1))
-  definitions <- definition_compiled_table(
-    definition_compile_fixture("language.yaml", source)
-  )
+    for (key in names(file_cases)) {
+      name <- strsplit(key, "::", fixed = TRUE)[[1]][[2]]
+      for (target in names(file_cases[[key]])) {
+        # `[[` throughout: `$` partial-matches, so `expected$code` would
+        # silently return `code_contains` on a case that has no exact code.
+        expected <- file_cases[[key]][[target]]
+        actual <- definition_translation(definitions[[name]], target)
+        info <- paste(filename, key, target)
+        if (!is.null(expected[["code"]])) {
+          expect_equal(actual$code, expected[["code"]], info = info)
+        }
+        for (fragment in expected[["code_contains"]] %||% character()) {
+          expect_true(grepl(fragment, actual$code, fixed = TRUE), info = info)
+        }
+        for (fragment in expected[["notes_contain"]] %||% character()) {
+          expect_true(
+            any(grepl(fragment, actual$notes, fixed = TRUE)),
+            info = info
+          )
+        }
+        checked <- checked + 1L
+      }
+    }
+  }
 
-  expect_equal(
-    definition_translation(definitions$fresh, "SQL(snowflake)")$code,
-    paste0(
-      '"observed" >= DATEADD(MICROSECOND, -((2) * 604800000000), ',
-      "CURRENT_TIMESTAMP())"
-    )
-  )
-  expect_equal(
-    definition_translation(definitions$fresh, "SQL(databricks)")$code,
-    paste0(
-      "`observed` >= timestampadd(MICROSECOND, -((2) * 604800000000), ",
-      "CURRENT_TIMESTAMP())"
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["fractional interval"]],
-      "SQL(snowflake)"
-    )$code,
-    paste0(
-      'DATEADD(MICROSECOND, -((1.5) * 3600000000), "observed")'
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["fractional interval"]],
-      "SQL(databricks)"
-    )$code,
-    paste0(
-      "timestampadd(MICROSECOND, -((1.5) * 3600000000), ",
-      "`observed`)"
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["postal length"]],
-      "SQL(snowflake)"
-    )$code,
-    'length(GET("profile", \'zip\'))'
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["postal length"]],
-      "SQL(databricks)"
-    )$code,
-    "length(`profile`.`zip`)"
-  )
-  expect_equal(
-    definition_translation(definitions$complete, "SQL(databricks)")$code,
-    "`q1` IS NOT NULL AND `q2` IS NOT NULL"
-  )
-  expect_match(
-    definition_translation(
-      definitions[["dynamic match"]],
-      "SQL(snowflake)"
-    )$notes,
-    "newline characters",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(
-      definitions[["negative quotient"]],
-      "SQL(snowflake)"
-    )$code,
-    "CASE WHEN",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(
-      definitions[["negative quotient"]],
-      "SQL(databricks)"
-    )$notes,
-    "negative zero divisor",
-    fixed = TRUE
-  )
-  expect_equal(
-    definition_translation(definitions[["offset time"]], "SQL(snowflake)")$code,
-    paste0(
-      '"observed" >= TO_TIMESTAMP_TZ(',
-      "'2024-01-01 07:30:00 +00:00')"
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["fractional time"]],
-      "SQL(databricks)"
-    )$code,
-    paste0(
-      "`observed` <= make_timestamp(",
-      "2024, 1, 1, 1, 30, 0.123, 'UTC')"
-    )
-  )
+  expect_gte(checked, 20L)
 })
 
 test_that("source selection binds authored warehouse identifiers", {
