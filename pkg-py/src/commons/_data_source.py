@@ -377,7 +377,10 @@ def data_source(
         from ._definitions import attach_compiled_definitions
 
         attach_compiled_definitions(
-            source.dictionary, source.dialect(), set(source.tables)
+            source.dictionary,
+            source.dialect(),
+            set(source.tables),
+            source.definition_bindings,
         )
     return source
 

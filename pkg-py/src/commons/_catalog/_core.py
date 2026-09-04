@@ -348,11 +348,7 @@ def merge_dictionary(
     return MergedDictionary(
         dictionary=dictionary,
         relations=relations,
-        definition_bindings={
-            "tables": matches,
-            "columns": column_matches,
-            "strict": True,
-        },
+        definition_bindings={"tables": matches, "columns": column_matches},
     )
 
 
