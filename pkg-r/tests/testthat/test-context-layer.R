@@ -31,6 +31,36 @@ test_that("dictionary_context_chunks matches the shared cases", {
   }
 })
 
+test_that("augment_context_layer matches the shared cases", {
+  cases <- shared_fixture("context_layer")$augment_context_layer$cases
+  # An empty list would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    layer <- if (is.null(case$docs)) {
+      NULL
+    } else {
+      new_context_layer(as.character(unlist(case$docs)))
+    }
+    sources <- lapply(case$dictionaries, function(spec) {
+      dictionary <- if (is.null(spec)) NULL else new_data_dictionary(spec)
+      suppressMessages(data_source(sales = test_sales(), dictionary = dictionary))
+    })
+
+    augmented <- augment_context_layer(layer, sources)
+
+    if (is.null(case$expected_docs)) {
+      expect_null(augmented, info = case$name)
+    } else {
+      expect_identical(
+        context_layer_state(augmented)$docs,
+        as.character(unlist(case$expected_docs)),
+        info = case$name
+      )
+    }
+  }
+})
+
 test_that("context_layer indexes files and finds relevant chunks", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
