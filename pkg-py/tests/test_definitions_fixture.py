@@ -1,8 +1,9 @@
 """The definitions contract both packages consume.
 
 This checks the fixture's own integrity: that it covers the corpus, that its
-sections agree with each other, and that it is not empty. Running the cases
-against an implementation comes with the registry and the compiler.
+sections agree with each other, and that it is not empty.
+test_definitions_registry.py runs the export records against the registry;
+running them against the compiler's own output comes with the compiler.
 """
 
 from typing import Any
