@@ -116,6 +116,31 @@ def test_a_namespace_selection_lists_and_excludes():
     assert registry.namespace_selected is True
 
 
+def test_a_bare_relation_is_validated_under_the_label_it_came_back_with():
+    # A selection entry naming a bare table is qualified by the warehouse
+    # from the connection's namespace. The access check pairs the two lists
+    # by label, so validate has to carry the qualified one.
+    registry = table_registry(
+        selectors=[Selector(table="orders")],
+        exact_relation=lambda selector: relation("main.sales.orders", kind="table"),
+        list_relations=lambda selector: [],
+    )
+
+    assert list(registry.relations) == ["main.sales.orders"]
+    assert list(registry.validate) == ["main.sales.orders"]
+
+
+def test_a_bare_relation_the_warehouse_lacks_keeps_the_name_that_was_asked_for():
+    registry = table_registry(
+        selectors=[Selector(table="orders")],
+        exact_relation=lambda selector: None,
+        list_relations=lambda selector: [],
+    )
+
+    assert list(registry.validate) == ["orders"]
+    assert registry.relations["orders"].discovered is False
+
+
 def test_a_selection_above_the_object_limit_is_refused():
     with pytest.raises(ValueError, match="above the supported limit"):
         table_registry(
