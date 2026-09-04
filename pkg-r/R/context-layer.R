@@ -97,7 +97,9 @@ dictionary_context_chunks <- function(dictionary) {
     glossary,
     definition_context_chunks(dictionary)
   )
-  chunks[nzchar(chunks)]
+  # vapply() names the table chunks after their tables; the chunks are just
+  # text, and the names would ride along into the layer's documents.
+  unname(chunks[nzchar(chunks)])
 }
 
 # Frontmatter carries file metadata (e.g. provenance) meant for maintainers,
