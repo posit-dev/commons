@@ -4,7 +4,7 @@ Python module does.
 
 from helper_lib import double  # type: ignore[missing-import]
 
-from commons._measures import measure
+from commons import measure
 
 
 @measure(description="Doubled count.")

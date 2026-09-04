@@ -2,7 +2,7 @@
 before the directory ever goes on sys.path.
 """
 
-from commons._measures import measure
+from commons import measure
 
 
 @measure(description="Should never load.")

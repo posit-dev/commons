@@ -4,7 +4,7 @@ Proves directory scanning keeps the first file's source for a colliding
 helper name.
 """
 
-from commons._measures import measure
+from commons import measure
 
 
 def helper() -> int:

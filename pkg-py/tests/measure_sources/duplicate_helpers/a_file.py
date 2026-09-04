@@ -1,6 +1,6 @@
 """First file, sorted before b_file.py in this directory."""
 
-from commons._measures import measure
+from commons import measure
 
 
 def helper() -> int:

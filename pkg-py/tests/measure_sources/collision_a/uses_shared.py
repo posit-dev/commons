@@ -4,7 +4,7 @@ that name for the rest of the process.
 
 from shared_lib import value  # type: ignore[missing-import]
 
-from commons._measures import measure
+from commons import measure
 
 
 @measure(description="From directory a.")

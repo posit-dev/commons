@@ -363,6 +363,57 @@ def _resolve_ref(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
     return defs[ref.removeprefix("#/$defs/")]
 
 
+def resolve_injections(
+    measures: Mapping[str, Measure],
+    injectables: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Bind each measure's injected arguments to the agent's named sources.
+
+    An argument named after a data source receives that source's connection,
+    even when the argument has a default. An argument matching no source keeps
+    its default; one with no default is an error, raised here so a measure
+    that can never run is caught at construction rather than mid-conversation.
+    The error names the first measure with an unresolvable argument; measures
+    after it are not checked.
+    """
+    resolved: dict[str, dict[str, Any]] = {}
+
+    for name, record in measures.items():
+        defaults = inspect.signature(record.func).parameters
+        bound: dict[str, Any] = {}
+        unresolvable: list[str] = []
+
+        for argument in record.injected:
+            if argument in injectables:
+                bound[argument] = injectables[argument]
+            elif defaults[argument].default is inspect.Parameter.empty:
+                unresolvable.append(argument)
+
+        if unresolvable:
+            raise ValueError(_unresolvable_message(name, unresolvable, injectables))
+
+        resolved[name] = bound
+
+    return resolved
+
+
+def _unresolvable_message(
+    name: str,
+    unresolvable: Sequence[str],
+    injectables: Mapping[str, Any],
+) -> str:
+    available = (
+        f"Available sources: {', '.join(injectables)}."
+        if injectables
+        else "The agent has no named data sources."
+    )
+    return (
+        f"Measure {name!r} has injected arguments matching no data source: "
+        f"{', '.join(unresolvable)}.\n"
+        f"{available}"
+    )
+
+
 @dataclass(frozen=True)
 class SemanticLayer:
     """The trusted calculations an agent can run.

@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from commons._measures import Injected, measure
+from commons import Injected, measure
 
 
 def double(x: int) -> int:
