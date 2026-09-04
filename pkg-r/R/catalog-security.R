@@ -111,16 +111,54 @@ catalog_check_session_snapshot <- function(
 ) {
   current <- catalog_session_snapshot(con, call = call)
   if (!identical(current, snapshot)) {
+    fields <- catalog_session_changed_fields(current, snapshot)
+    # cli reads a character vector out as a list, commas and "and" included.
+    changed <- unname(catalog_session_field_names[fields])
+    if (length(changed) == 0L) {
+      changed <- "identity"
+    }
     cli::cli_abort(
       paste(
-        "The connection principal, active role, or namespace changed after",
-        "catalog discovery; rebuild the data source."
+        "The connection {changed} changed after catalog discovery;",
+        "rebuild the data source."
       ),
       class = "commons_catalog_session_changed",
       call = call
     )
   }
   invisible(snapshot)
+}
+
+# How each snapshot field is worded in the refusal.
+catalog_session_field_names <- c(
+  principal = "principal",
+  role = "active role",
+  secondary_roles = "secondary roles",
+  catalog = "catalog",
+  schema = "schema"
+)
+
+# Name what moved rather than everything the snapshot compares: Databricks
+# has no role, so a fixed list would name a field that backend never had.
+catalog_session_changed_fields <- function(current, snapshot) {
+  fields <- names(catalog_session_field_names)
+  fields[vapply(
+    fields,
+    function(field) {
+      !identical(
+        catalog_session_field(current, field),
+        catalog_session_field(snapshot, field)
+      )
+    },
+    logical(1)
+  )]
+}
+
+catalog_session_field <- function(snapshot, field) {
+  if (field %in% c("catalog", "schema")) {
+    return(snapshot$namespace[[field]])
+  }
+  snapshot[[field]]
 }
 
 catalog_probe_relation <- function(con, id) {
@@ -164,7 +202,7 @@ catalog_access_error_kind <- function(err) {
         paste(
           "not authorized|insufficient privilege|permission denied|",
           "access denied|does not have.*privilege|not permitted|",
-          "permission_denied|sql access control error",
+          "permission_denied|sql access control error|not allowed to access",
           sep = ""
         ),
         conditionMessage(err),
@@ -220,10 +258,16 @@ catalog_require_queryable_relations <- function(
       logical(1)
     )]
   }
-  if (length(missing)) {
-    catalog_abort_missing_relations(missing, call = call)
-  }
+  # Every relation the listing did report is probed before anything is
+  # raised, so a name the caller got wrong and a relation they cannot read
+  # are found in one pass rather than one round trip each.
+  # Only the first refusal is raised, so only the first is kept: a selection
+  # may run to thousands of relations.
+  refused <- NULL
   for (i in seq_along(registry$ids)) {
+    if (registry$labels[[i]] %in% missing) {
+      next
+    }
     probe <- catalog_probe_relation(con, registry$ids[[i]])
     if (identical(probe$state, "queryable")) {
       next
@@ -235,10 +279,15 @@ catalog_require_queryable_relations <- function(
       missing <- c(missing, registry$labels[[i]])
       next
     }
-    catalog_abort_access(probe, registry$labels[[i]], call = call)
+    if (is.null(refused)) {
+      refused <- list(probe = probe, label = registry$labels[[i]])
+    }
   }
   if (length(missing)) {
     catalog_abort_missing_relations(missing, call = call)
+  }
+  if (!is.null(refused)) {
+    catalog_abort_access(refused$probe, refused$label, call = call)
   }
   invisible(registry)
 }
