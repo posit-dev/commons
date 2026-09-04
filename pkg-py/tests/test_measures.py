@@ -1148,7 +1148,7 @@ def test_an_imported_bare_record_is_not_harvested() -> None:
     module = _load_module_from_path(MEASURE_FILES / "bare_record" / "total.py")
 
     reexporter = ModuleType("reexporter")
-    reexporter.grand_total = module.grand_total
+    reexporter.__dict__["grand_total"] = module.grand_total
 
     measures, sources = _from_module(reexporter)
 
