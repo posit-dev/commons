@@ -17,6 +17,7 @@ and not its R counterpart in `pkg-r/R/definition-export.R`.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
@@ -32,12 +33,8 @@ _EXPORTED_TYPES = frozenset(
 _INTERVAL_UNITS = frozenset({"seconds", "minutes", "hours", "days", "weeks"})
 _TEMPORAL = frozenset({"date", "datetime"})
 
-# Constructs Rust's `regex` crate has no support for, written against that
-# grammar rather than against any host engine's: `regex` has no lookaround
-# ((?=, (?!, (?<=, (?<!), no atomic groups ((?>), and no backreferences. Python
-# accepts all of them, so without this guard commons would compile patterns
-# data-dict rejects.
-_RUST_UNSUPPORTED = re.compile(r"\(\?(?:[=!>]|<[=!])|\\[1-9]|\\k<")
+_RE2_LOCK = threading.Lock()
+_RE2_CONNECTION: Any = None
 
 _DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 _DATETIME = re.compile(
@@ -581,8 +578,7 @@ def _resolve_selection(
     if selector["kind"] == "regex":
         pattern = selector["pattern"]
         _validate_regex(pattern)
-        compiled = _compile_for_matching(pattern)
-        names = [name for name in names if compiled.search(name)]
+        names = _match_columns(pattern, names)
     if selector["kind"] == "list":
         missing = [name for name in selector["names"] if name not in names]
         if missing:
@@ -599,108 +595,64 @@ def _resolve_selection(
     }
 
 
-def _translate_from_rust(pattern: str, *, neutralize_classes: bool) -> str:
-    r"""Rewrite Rust-only spellings into Python's, outside character classes.
+def _re2() -> Any:
+    """A connection used only to reach RE2, DuckDB's regex engine.
 
-    A single left-to-right scan, because `(?<` and `\p{...}` mean one thing in
-    the pattern and another inside `[...]`, where they are literal characters.
-    Escapes are copied through so a `\[` does not open a class.
+    data-dict decides what a pattern means, using Rust's `regex`. commons
+    cannot ask it at runtime, so it asks the closest engine it already has:
+    RE2 and Rust's `regex` are both finite-automata engines, so they agree on
+    rejecting lookaround and backreferences and on accepting Unicode classes,
+    `\\z` and POSIX classes. Python's `re` disagrees with both, in both
+    directions, and no amount of pre-processing turns it into a proxy for
+    them.
 
-    With `neutralize_classes`, Unicode classes become `\w`. That is only for
-    deciding whether the rest of the pattern parses: it changes what the
-    pattern matches, so it must never be used to match anything.
+    The connection is opened once and reused, behind a lock because a DuckDB
+    connection is not safe to use from several threads at once.
     """
-    out: list[str] = []
-    index = 0
-    in_class = False
-    length = len(pattern)
-    while index < length:
-        char = pattern[index]
-        if char == "\\" and index + 1 < length:
-            following = pattern[index + 1]
-            if neutralize_classes and following in ("p", "P"):
-                after = index + 2
-                if after < length and pattern[after] == "{":
-                    close = pattern.find("}", after)
-                    if close != -1:
-                        out.append("\\w")
-                        index = close + 1
-                        continue
-                # The one-letter form, `\pL`.
-                if after < length:
-                    out.append("\\w")
-                    index = after + 1
-                    continue
-            out.append(pattern[index : index + 2])
-            index += 2
-            continue
-        if in_class:
-            if char == "]":
-                in_class = False
-            out.append(char)
-            index += 1
-            continue
-        if char == "[":
-            in_class = True
-            out.append(char)
-            index += 1
-            continue
-        # Rust spells a named group `(?<name>`, Python `(?P<name>`. The
-        # lookbehind forms `(?<=` and `(?<!` never reach here: the guard
-        # refuses them, because Rust has no lookaround at all.
-        if pattern.startswith("(?<", index) and not pattern.startswith(
-            ("(?<=", "(?<!"), index
-        ):
-            out.append("(?P<")
-            index += 3
-            continue
-        out.append(char)
-        index += 1
-    return "".join(out)
+    global _RE2_CONNECTION
+    with _RE2_LOCK:
+        if _RE2_CONNECTION is None:
+            import duckdb
+
+            _RE2_CONNECTION = duckdb.connect()
+        return _RE2_CONNECTION
 
 
 def _validate_regex(pattern: str) -> str:
-    r"""Refuse what data-dict's engine would refuse, and nothing else.
+    """Refuse a pattern data-dict's engine would refuse.
 
-    Two separate questions, and Python's `re` answers neither on its own.
-    Whether a construct exists in Rust's `regex` is settled by
-    `_RUST_UNSUPPORTED`: `re` accepts lookaround and backreferences that Rust
-    has not. Whether the pattern parses at all is settled by compiling it,
-    but only after the constructs Rust has and Python lacks are neutralized,
-    because `re` rejects `\p{L}` and `(?<name>` which data-dict accepts and
-    emits.
-
-    Dropping the parse check entirely would let `(` through to the warehouse
-    as broken SQL at conversation time, which is the opposite of failing at
-    construction.
+    One known difference, which fails closed: Rust spells a named group
+    `(?<name>...)` and RE2 wants `(?P<name>...)`, so Rust's spelling is
+    refused here. A capture name has no effect on a definition.
     """
-    if _RUST_UNSUPPORTED.search(pattern):
-        raise ValueError(f"Invalid data-dict regular expression {pattern!r}.")
-    try:
-        re.compile(_translate_from_rust(pattern, neutralize_classes=True))
-    except re.error as error:
-        raise ValueError(
-            f"Invalid data-dict regular expression {pattern!r}."
-        ) from error
+    connection = _re2()
+    with _RE2_LOCK:
+        try:
+            connection.execute("SELECT regexp_matches('', ?)", [pattern])
+        except Exception as error:
+            raise ValueError(
+                f"Invalid data-dict regular expression {pattern!r}. Note that a "
+                f"named group is spelled `(?P<name>...)` here."
+            ) from error
     return pattern
 
 
-def _compile_for_matching(pattern: str) -> re.Pattern[str]:
-    """Compile a pattern commons has to run itself, over column names.
+def _match_columns(pattern: str, names: list[str]) -> list[str]:
+    """Column names the pattern matches, in the order the table declares them.
 
-    Selecting columns is the one place a pattern cannot be passed through to
-    the source, so an engine difference stops being academic. A pattern
-    data-dict accepts but Python cannot run is reported as commons being
-    unable to evaluate it, not as the pattern being invalid.
+    Matched one at a time rather than in a single query, so the result order
+    is the table's rather than whatever the engine returns. A table has few
+    enough columns for that to cost nothing.
     """
-    try:
-        return re.compile(_translate_from_rust(pattern, neutralize_classes=False))
-    except re.error as error:
-        raise ValueError(
-            f"commons cannot evaluate the column selector {pattern!r} with "
-            f"Python's regular expression engine, though data-dict may accept "
-            f"it. Select the columns by name instead."
-        ) from error
+    connection = _re2()
+    with _RE2_LOCK:
+        return [
+            name
+            for name in names
+            if connection.execute(
+                "SELECT regexp_matches(?, ?)", [name, pattern]
+            ).fetchone()[0]
+        ]
 
 
 @dataclass

@@ -440,70 +440,80 @@ def test_the_invalid_corpus_also_fails_the_installed_data_dict():
         assert fixture[path.name] in codes, path.name
 
 
-# --- patterns Rust accepts but Python cannot run ---------------------------
+# --- regular expressions -------------------------------------------------
+#
+# data-dict validates patterns with Rust's `regex`. commons validates and
+# matches with RE2, through the DuckDB already in its dependencies. Both are
+# finite-automata engines with the same design and near-identical syntax,
+# which Python's `re` is not: `re` accepts lookaround and backreferences
+# neither has, and rejects `\p{L}`, `\z` and POSIX classes both accept.
 
 
-def test_a_unicode_class_pattern_is_accepted():
-    """data-dict accepts `\\p{L}`; Python's `re` cannot compile it.
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        r"\p{L}+",
+        r"\pL",
+        r"\z",
+        r"[[:alpha:]]+",
+        r"[[:alpha:](?<]",
+        "^EMEA",
+    ],
+)
+def test_patterns_rust_accepts_are_accepted(pattern: str):
+    assert one(f"region similar to '{pattern}'").kind == "filter"
 
-    Verified against the binary: it exports as a filter and emits
-    `regexp_full_match("region", '\\p{L}+')`. Validity is data-dict's
-    question, so commons must not answer it with Python's engine.
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "(?=x)",
+        "(?!x)",
+        "(?<=x)",
+        r"(a)\1",
+        r"(?P<a>x)\k<a>",
+        "(",
+        r"(\p{L}",
+        r"\p{L",
+        r"\p{not-a-property}",
+    ],
+)
+def test_patterns_rust_rejects_are_refused(pattern: str):
+    with pytest.raises(ValueError, match="regular expression"):
+        one(f"region similar to '{pattern}'")
+
+
+def test_a_rust_named_group_is_refused_and_says_why():
+    """The one known difference from data-dict, and it fails closed.
+
+    Rust spells a named group `(?<a>...)` and accepts it; RE2 wants
+    `(?P<a>...)` and rejects Rust's spelling. Verified against the binary:
+    `validate-spec` reports this pattern as ok. A capture name has no effect
+    on a definition, which is why the difference is recorded rather than
+    worked around with a hand-written translation.
     """
-    assert one(r"region similar to '\p{L}+'").kind == "filter"
+    with pytest.raises(ValueError, match="\\(\\?P<"):
+        one("region similar to '(?<a>x)'")
 
 
-def test_a_rust_named_group_selects_columns():
-    # Rust spells a named group `(?<name>...)`, Python `(?P<name>...)`.
+def test_a_unicode_class_selects_columns():
+    # The selector is the one pattern commons runs itself, so this is the
+    # case a Python engine could not have handled at all.
     record = export_spec(
         spec(
-            {"name": "d", "expr": "columns('(?<prefix>^flag)_') = true"},
+            {"name": "d", "expr": r"columns('^\p{L}+_') = true"},
             columns=[
                 {"name": "flag_a", "type": "boolean"},
-                {"name": "other", "type": "boolean"},
+                {"name": "9_bad", "type": "boolean"},
             ],
         )
     )["orders"].definitions["d"]
     assert record.columns == ["flag_a"]
 
 
-def test_a_selector_pattern_python_cannot_run_says_so():
-    """A COLUMNS selector has to be matched here, so the engine gap surfaces.
-
-    This is a genuine limitation rather than a rejection of the pattern, so
-    the message names the engine instead of calling the pattern invalid.
-    """
-    with pytest.raises(ValueError, match="cannot evaluate"):
-        export_spec(
-            spec(
-                {"name": "d", "expr": r"columns('\p{L}_') = true"},
-                columns=[{"name": "flag_a", "type": "boolean"}],
-            )
-        )
-
-
-def test_a_malformed_pattern_is_still_refused():
-    # Dropping Python's compile check must not stop commons refusing a pattern
-    # no engine can parse. Construction is the place to catch it; otherwise it
-    # reaches the warehouse as broken SQL at conversation time.
-    with pytest.raises(ValueError, match="regular expression"):
-        one("region similar to '('")
-
-
-def test_a_named_backreference_is_refused():
-    # Rust's `regex` has no backreferences in any spelling.
-    with pytest.raises(ValueError, match="regular expression"):
-        one(r"region similar to '(?<a>x)\k<a>'")
-
-
-def test_a_unicode_class_inside_a_malformed_pattern_is_still_refused():
-    with pytest.raises(ValueError, match="regular expression"):
-        one(r"region similar to '(\p{L}'")
-
-
 def test_a_bracketed_literal_is_not_read_as_a_named_group():
-    # `(?<` inside a character class is three literal characters, so
-    # translating it to `(?P<` would wrongly select a column named `P`.
+    # `(?<` inside a character class is three literal characters. Reading it
+    # as a group would select a column named P.
     record = export_spec(
         spec(
             {"name": "d", "expr": "columns('[(?<]') = true"},
