@@ -438,3 +438,45 @@ def test_the_invalid_corpus_also_fails_the_installed_data_dict():
         assert result.returncode != 0, path.name
         codes = [problem["code"] for problem in json.loads(result.stdout)["problems"]]
         assert fixture[path.name] in codes, path.name
+
+
+# --- patterns Rust accepts but Python cannot run ---------------------------
+
+
+def test_a_unicode_class_pattern_is_accepted():
+    """data-dict accepts `\\p{L}`; Python's `re` cannot compile it.
+
+    Verified against the binary: it exports as a filter and emits
+    `regexp_full_match("region", '\\p{L}+')`. Validity is data-dict's
+    question, so commons must not answer it with Python's engine.
+    """
+    assert one(r"region similar to '\p{L}+'").kind == "filter"
+
+
+def test_a_rust_named_group_selects_columns():
+    # Rust spells a named group `(?<name>...)`, Python `(?P<name>...)`.
+    record = export_spec(
+        spec(
+            {"name": "d", "expr": "columns('(?<prefix>^flag)_') = true"},
+            columns=[
+                {"name": "flag_a", "type": "boolean"},
+                {"name": "other", "type": "boolean"},
+            ],
+        )
+    )["orders"].definitions["d"]
+    assert record.columns == ["flag_a"]
+
+
+def test_a_selector_pattern_python_cannot_run_says_so():
+    """A COLUMNS selector has to be matched here, so the engine gap surfaces.
+
+    This is a genuine limitation rather than a rejection of the pattern, so
+    the message names the engine instead of calling the pattern invalid.
+    """
+    with pytest.raises(ValueError, match="cannot evaluate"):
+        export_spec(
+            spec(
+                {"name": "d", "expr": r"columns('\p{L}_') = true"},
+                columns=[{"name": "flag_a", "type": "boolean"}],
+            )
+        )
