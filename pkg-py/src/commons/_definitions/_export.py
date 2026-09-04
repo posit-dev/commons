@@ -621,20 +621,27 @@ def _re2() -> Any:
 def _validate_regex(pattern: str) -> str:
     """Refuse a pattern data-dict's engine would refuse.
 
-    Two known differences from Rust's `regex`, both failing closed and
-    neither changing what a definition matches: Rust spells a named group
-    `(?<name>...)` where RE2 wants `(?P<name>...)`, and Rust has an extended
-    mode `(?x)` that RE2 does not. Every other inline flag agrees. Closing
-    the gap needs a Rust `regex` binding rather than more translation.
+    RE2 is close to Rust's `regex` but not identical, and this does not
+    claim to know every difference. The ones found so far all fail closed
+    and none changes what a definition matches: Rust's named-group spelling
+    `(?<name>...)`, extended mode `(?x)`, and CRLF-aware multiline `(?R)`.
+    Closing the gap needs a Rust `regex` binding rather than more
+    translation, which three reviews showed does not converge.
     """
     connection = _re2()
     with _RE2_LOCK:
         try:
             connection.execute("SELECT regexp_matches('', ?)", [pattern])
         except Exception as error:
+            # The named-group hint is only offered when it could apply;
+            # attaching it to every refusal misdescribes the other causes.
+            hint = (
+                " Note that a named group is spelled `(?P<name>...)` here."
+                if "(?<" in pattern
+                else ""
+            )
             raise ValueError(
-                f"Invalid data-dict regular expression {pattern!r}. Note that a "
-                f"named group is spelled `(?P<name>...)` here."
+                f"Invalid data-dict regular expression {pattern!r}.{hint}"
             ) from error
     return pattern
 

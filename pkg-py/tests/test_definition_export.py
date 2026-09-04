@@ -484,31 +484,29 @@ def test_patterns_rust_rejects_are_refused(pattern: str):
 
 
 @pytest.mark.parametrize(
-    ("pattern", "why"),
-    [
-        ("(?<a>x)", "RE2 spells a named group `(?P<a>x)`"),
-        (r"(?x) foo \s+ bar", "RE2 has no extended mode"),
-    ],
+    "pattern",
+    ["(?<a>x)", r"(?x) foo \s+ bar", "(?R)^x$"],
 )
-def test_the_two_known_rust_constructs_re2_refuses(pattern: str, why: str):
-    """Everywhere RE2 and Rust disagree, verified against the binary.
+def test_rust_constructs_re2_refuses(pattern: str):
+    """Differences from Rust's `regex` found so far, verified against the binary.
 
-    Both are accepted by `data-dict validate-spec` and refused here, and both
-    fail closed at construction with a message rather than reaching the
-    warehouse. Neither changes what a definition matches: a capture name is
-    unused, and extended mode is only whitespace and comments. Every other
-    inline flag, `i`, `s`, `m` and `U`, behaves the same in both engines.
+    Each is accepted by `data-dict validate-spec` and refused here. This list
+    is not claimed to be exhaustive: RE2 and Rust are close but not identical,
+    and an earlier version of this test asserted exhaustiveness and was wrong.
+    What holds for all of them is the shape of the failure. They fail closed
+    at construction rather than reaching the warehouse, and none changes what
+    a definition matches: a capture name is unused, extended mode is only
+    whitespace and comments, and `(?R)` concerns CRLF line endings.
 
-    These are pinned so the behaviour is deliberate and visible. Closing the
-    gap would need a Rust `regex` binding; the only Python one is
-    unmaintained, and hand-translating the syntax is what the three earlier
-    reviews showed does not converge.
+    Closing the gap needs a binding to Rust's `regex`; the only Python one is
+    unmaintained, and hand-translating the syntax is what three reviews showed
+    does not converge.
     """
     with pytest.raises(ValueError, match="regular expression"):
         one(f"region similar to '{pattern}'")
 
 
-def test_the_named_group_message_names_the_spelling_it_wants():
+def test_only_a_named_group_refusal_mentions_the_spelling():
     """The one known difference from data-dict, and it fails closed.
 
     Rust spells a named group `(?<a>...)` and accepts it; RE2 wants
