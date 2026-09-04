@@ -17,11 +17,9 @@ from .._data_source import TableId
 from . import _databricks, _snowflake
 from ._core import (
     Manifest,
-    MergedDictionary,
     Relation,
     Selector,
     check_exclude,
-    has_suffix,
     id_type,
     merge_dictionary,
     table_registry,
@@ -105,7 +103,6 @@ def import_catalog(
         access_check=access_check,
     )
     check_session(backend, session)
-    _check_definitions_bound(merged, registry.dropped, exclude, identifier_case)
 
     # The manifest starts with every relation unknown, including the ones
     # just probed. Carrying the construction-time answer forward would save a
@@ -122,74 +119,6 @@ def import_catalog(
         dictionary=merged.dictionary,
         definition_bindings=merged.definition_bindings,
         session=session,
-    )
-
-
-def _check_definitions_bound(
-    merged: MergedDictionary,
-    dropped: list[Relation] | None = None,
-    exclude: list[str] | None = None,
-    identifier_case: str | None = None,
-) -> None:
-    """Refuse definitions the merge renamed out from under.
-
-    The merge re-keys an authored dictionary to the warehouse's own labels
-    and column spellings, but a definition's expression still names what the
-    author wrote. Lowering it as written would emit SQL against identifiers
-    the warehouse does not have, so it is refused until the compiler can bind
-    the two together.
-    """
-    bindings = merged.definition_bindings
-    exports = getattr(merged.dictionary, "definition_exports", None) or {}
-    if not bindings or not exports:
-        return
-    for authored_table, definitions in exports.items():
-        if not definitions:
-            continue
-        # An authored table that matched nothing is dropped by the merge, so
-        # its definitions would go with it and the agent would never be told.
-        if bindings["tables"].get(authored_table) is None:
-            if _was_excluded(authored_table, dropped, identifier_case):
-                raise ValueError(
-                    f"Authored table {authored_table!r} declares definitions, "
-                    f"and exclude dropped it from the catalog listing. Narrow "
-                    f"{exclude!r}, or drop the table from the data dictionary."
-                )
-            raise ValueError(
-                f"Authored table {authored_table!r} declares definitions, and "
-                f"does not match an exposed relation. Name it as the data "
-                f"source selects it, or drop it from the data dictionary."
-            )
-        # Every authored column is checked, not only the ones a definition
-        # reads: which columns an expression touches is in the compiler's
-        # parse tree, and the refusal is temporary either way. A column the
-        # warehouse never reported is caught here too, since a definition
-        # over it would lower to SQL naming nothing at all.
-        columns = bindings["columns"].get(authored_table) or {}
-        unbound = [name for name, discovered in columns.items() if discovered != name]
-        if unbound:
-            raise NotImplementedError(
-                f"Table {authored_table!r} declares definitions, and the "
-                f"warehouse does not have column {unbound[0]!r} under that "
-                f"name. Binding a definition to the discovered spelling is "
-                f"not available yet."
-            )
-
-
-def _was_excluded(
-    authored_table: str, dropped: list[Relation] | None, identifier_case: str | None
-) -> bool:
-    """Whether exclude is what removed the relation an authored name meant.
-
-    Compared against the relations exclude actually dropped rather than
-    against the patterns: a pattern is written in the warehouse's spelling
-    and an authored name need not be, so only the folded names line up. The
-    authored name may be qualified, so it is matched as a suffix, by the
-    same rule the merge uses to find the relation in the first place.
-    """
-    suffix = authored_table.split(".")
-    return any(
-        has_suffix(item, suffix, identifier_case) for item in dropped or []
     )
 
 

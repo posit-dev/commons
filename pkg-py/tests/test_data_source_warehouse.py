@@ -94,26 +94,6 @@ def test_exclude_is_refused_for_named_frames():
         data_source(sales=pd.DataFrame({"id": [1]}), exclude=["tmp_*"])
 
 
-def test_definitions_the_warehouse_spells_differently_are_refused():
-    # Until the compiler can bind an authored name to the discovered one, a
-    # definition over a renamed column would lower to SQL naming a column
-    # that is not there, so construction fails instead.
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": "sales",
-                    "columns": [{"name": "id", "type": "number(quantity)"}],
-                    "definitions": [{"name": "total", "expr": "sum(id)"}],
-                }
-            ]
-        }
-    )
-
-    with pytest.raises(NotImplementedError, match="does not have column"):
-        warehouse_source(dictionary=dictionary)
-
-
 def sales_dictionary(**table):
     return DataDictionary.model_validate(
         {

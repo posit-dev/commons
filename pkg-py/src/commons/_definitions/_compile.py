@@ -9,6 +9,8 @@ inlines each definition's sibling references into its SQL, and produces the
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from ._emit_duckdb import emit_duckdb
@@ -57,24 +59,49 @@ def _has_aggregate(ir: Ir) -> bool:
 
 
 def _children(ir: Ir) -> list[Ir]:
+    """Every node one level down, wherever the parent hung it.
+
+    A node's payload is a plain mapping, so a child can sit under a key, in a
+    list, or in a mapping inside a list: `CASE` holds its branches as a list
+    of condition-and-result pairs. Anything that stops at the first level it
+    does not recognize walks part of the tree and silently skips the rest.
+    """
     out: list[Ir] = []
-    for value in ir.attrs.values():
+
+    def collect(value: Any) -> None:
         if isinstance(value, Ir):
             out.append(value)
         elif isinstance(value, list):
             for item in value:
-                if isinstance(item, Ir):
-                    out.append(item)
-                elif isinstance(item, dict):
-                    # A `CASE` branch is a mapping of condition and result.
-                    out.extend(v for v in item.values() if isinstance(v, Ir))
+                collect(item)
         elif isinstance(value, dict):
-            out.extend(item for item in value.values() if isinstance(item, Ir))
+            for item in value.values():
+                collect(item)
+
+    collect(dict(ir.attrs))
     return out
 
 
+def _map_children(ir: Ir, transform: Callable[[Ir], Ir]) -> dict[str, Any]:
+    """A copy of a node's payload with `transform` applied to every child."""
+
+    def convert(value: Any) -> Any:
+        if isinstance(value, Ir):
+            return transform(value)
+        if isinstance(value, list):
+            return [convert(item) for item in value]
+        if isinstance(value, dict):
+            return {key: convert(item) for key, item in value.items()}
+        return value
+
+    return {key: convert(value) for key, value in ir.attrs.items()}
+
+
 def attach_compiled_definitions(
-    dictionary: Any, dialect: str, exposed: set[str]
+    dictionary: Any,
+    dialect: str,
+    exposed: set[str],
+    bindings: dict[str, Any] | None = None,
 ) -> None:
     """Compile every governed definition for `dialect`, onto the dictionary.
 
@@ -88,12 +115,18 @@ def attach_compiled_definitions(
     records have already reached the dictionary's retrieval chunks. Prose
     about an unexposed table is left alone, since only a definition emits SQL.
 
+    `bindings` is what a warehouse catalog import matched. With it, every
+    column a definition names is rewritten to the spelling the warehouse
+    reported, because the expression was written against the authored one.
+
     Nothing is assigned until every table compiles, so a refusal leaves the
     dictionary untouched and the caller can attach it to another source.
     """
     exports: dict[str, dict[str, DefinitionExport]] = (
         getattr(dictionary, "definition_exports", None) or {}
     )
+    if bindings is not None:
+        _check_definitions_matched(exports, bindings)
     compiled: dict[str, list[ExportRecord]] = {}
     for table_name, entry in dictionary.tables.items():
         # A catalog import re-keys the dictionary to the warehouse's labels
@@ -117,9 +150,107 @@ def attach_compiled_definitions(
                 f"{dialect!r} data source. commons lowers definitions to "
                 f"{', '.join(sorted(_TARGETS))}."
             )
+        if bindings is not None:
+            definitions = _bind_table(
+                definitions, bindings["columns"].get(authored) or {}, table_name
+            )
         compiled[table_name] = _compile_table(table_name, definitions, target)
     for table_name, entry in dictionary.tables.items():
         entry.compiled_definitions = compiled[table_name]
+
+
+def _check_definitions_matched(
+    exports: dict[str, dict[str, DefinitionExport]], bindings: dict[str, Any]
+) -> None:
+    """Refuse a definition whose table the catalog selection left out.
+
+    Compiling it is impossible and dropping it is worse than failing: the
+    agent would be told about a governed definition that quietly is not there.
+    """
+    for authored, definitions in exports.items():
+        if definitions and bindings["tables"].get(authored) is None:
+            raise ValueError(
+                f"Authored table {authored!r} declares definitions, and does "
+                f"not match an exposed relation. Name it as the data source "
+                f"selects it, or drop it from the data dictionary."
+            )
+
+
+def _bind_table(
+    definitions: dict[str, DefinitionExport],
+    columns: dict[str, str | None],
+    table: str,
+) -> dict[str, DefinitionExport]:
+    """Rewrite every definition's expression to the discovered spelling.
+
+    `DefinitionExport.columns`, the list of columns a definition reads, keeps
+    the authored spelling: it describes the dictionary the author wrote,
+    which is also what the R implementation leaves it as.
+    """
+    return {
+        name: replace(
+            definition,
+            ir=None
+            if definition.ir is None
+            else _bind_ir(definition.ir, columns, name, table),
+            selection=_bind_selection(definition.selection, columns, name, table),
+        )
+        for name, definition in definitions.items()
+    }
+
+
+def _bind_ir(ir: Ir, columns: dict[str, str | None], definition: str, table: str) -> Ir:
+    attrs = _map_children(
+        ir, lambda child: _bind_ir(child, columns, definition, table)
+    )
+    # A reference to a sibling definition is a name in the dictionary, not a
+    # column in the warehouse, and is inlined later rather than bound.
+    if ir.kind == "column" and ir.attrs.get("reference") != "definition":
+        attrs["path"] = _bind_path(attrs["path"], columns, definition, table)
+    # A COLUMNS(...) node carries the resolved selection alongside the copy
+    # the export record holds. The emitters read the record's, but leaving a
+    # stale one here would put two different answers in the same tree.
+    if "selection" in attrs:
+        attrs["selection"] = _bind_selection(
+            attrs["selection"], columns, definition, table
+        )
+    return Ir(kind=ir.kind, type=ir.type, shape=ir.shape, attrs=attrs)
+
+
+def _bind_selection(
+    selection: dict[str, Any] | None,
+    columns: dict[str, str | None],
+    definition: str,
+    table: str,
+) -> dict[str, Any] | None:
+    if selection is None:
+        return None
+    return {
+        **selection,
+        "columns": [
+            {
+                **column,
+                "path": _bind_path(column["path"], columns, definition, table),
+            }
+            for column in selection["columns"]
+        ],
+    }
+
+
+def _bind_path(
+    path: Any, columns: dict[str, str | None], definition: str, table: str
+) -> Any:
+    """The physical spelling of the column a path leads with."""
+    segments = list(path) if isinstance(path, list) else [path]
+    physical = columns.get(segments[0])
+    if physical is None:
+        raise ValueError(
+            f"Definition {definition!r} on table {table!r} references "
+            f"authored column {segments[0]!r}, which is absent from the "
+            f"selected relation."
+        )
+    segments[0] = physical
+    return segments if isinstance(path, list) else segments[0]
 
 
 def _compile_table(
@@ -196,6 +327,7 @@ def _reference_markers(definitions: dict[str, DefinitionExport]) -> dict[str, st
         used.update(definition.columns)
         if definition.ir is not None:
             used.update(_ir_identifiers(definition.ir))
+        used.update(_selection_identifiers(definition.selection))
     markers: dict[str, str] = {}
     for index, name in enumerate(definitions, start=1):
         marker = f"__commons_definition_reference_{index:03d}__"
@@ -214,38 +346,25 @@ def _ir_identifiers(ir: Ir) -> set[str]:
     return out
 
 
+def _selection_identifiers(selection: dict[str, Any] | None) -> set[str]:
+    """The columns a `COLUMNS(...)` selection resolved to.
+
+    A selection reaches the emitted SQL as a plain mapping rather than as
+    column nodes in the tree, so `_ir_identifiers` never sees it. Binding can
+    put any physical spelling here, which is why it has to be reserved too.
+    """
+    if selection is None:
+        return set()
+    out: set[str] = set()
+    for column in selection["columns"]:
+        path = column["path"]
+        out.update(path if isinstance(path, list) else [path])
+    return out
+
+
 def _mark_references(ir: Ir, markers: dict[str, str]) -> Ir:
     """Rename each sibling-definition reference to its marker."""
-    attrs: dict[str, Any] = {}
-    for key, value in ir.attrs.items():
-        if isinstance(value, Ir):
-            attrs[key] = _mark_references(value, markers)
-        elif isinstance(value, list):
-            attrs[key] = [
-                _mark_references(item, markers)
-                if isinstance(item, Ir)
-                # A `CASE` branch is a mapping of condition and result.
-                else (
-                    {
-                        inner_key: _mark_references(inner, markers)
-                        if isinstance(inner, Ir)
-                        else inner
-                        for inner_key, inner in item.items()
-                    }
-                    if isinstance(item, dict)
-                    else item
-                )
-                for item in value
-            ]
-        elif isinstance(value, dict):
-            attrs[key] = {
-                inner_key: _mark_references(inner, markers)
-                if isinstance(inner, Ir)
-                else inner
-                for inner_key, inner in value.items()
-            }
-        else:
-            attrs[key] = value
+    attrs = _map_children(ir, lambda child: _mark_references(child, markers))
     if ir.kind == "column" and ir.attrs.get("reference") == "definition":
         path = list(attrs["path"])
         path[0] = markers[path[0]]

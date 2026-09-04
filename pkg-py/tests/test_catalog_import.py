@@ -268,30 +268,6 @@ def test_an_exclude_that_matched_nothing_does_not_blame_exclude():
     assert "exclude dropped" not in str(refusal.value)
 
 
-@pytest.mark.parametrize(
-    "authored", ["sales", "PUBLIC.sales", "ANALYTICS.PUBLIC.sales"]
-)
-def test_definitions_on_an_excluded_table_name_exclude_however_qualified(authored):
-    # An authored name may be qualified, and a glob may not be, so the two
-    # are matched by the same suffix rule the merge uses.
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": authored,
-                    "columns": [{"name": "id", "type": "number(quantity)"}],
-                    "definitions": [{"name": "total", "expr": "sum(id)"}],
-                }
-            ]
-        }
-    )
-
-    with pytest.raises(ValueError, match="exclude dropped it"):
-        import_catalog(FakeWarehouse(), exclude=["SALES"], dictionary=dictionary)
-
-
-
-
 def test_excluding_a_name_the_warehouse_never_had_does_not_blame_exclude():
     # The relation was absent, not dropped, so exclude is not the reason
     # there is nothing left to expose.
