@@ -29,6 +29,8 @@ __all__ = [
     "MergedDictionary",
     "Relation",
     "Selector",
+    "_databricks",
+    "_snowflake",
     "check_exclude",
     "excluded",
     "id_type",
@@ -36,6 +38,4 @@ __all__ = [
     "normalize_identifier",
     "search",
     "table_registry",
-    "_databricks",
-    "_snowflake",
 ]

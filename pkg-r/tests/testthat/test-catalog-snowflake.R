@@ -1,33 +1,15 @@
-test_that("Snowflake SHOW results retain native relation metadata", {
-  rows <- data.frame(
-    name = c("Sales.Report", "ORDERS", "STAGE"),
-    database_name = c("Data.Base", "ANALYTICS", "ANALYTICS"),
-    schema_name = c("Odd Schema", "PUBLIC", "PUBLIC"),
-    kind = c("VIEW", "TABLE", "STAGE"),
-    comment = c("A useful view", "", "Ignored"),
-    stringsAsFactors = FALSE
+test_that("Snowflake catalog rows match the shared contract", {
+  spec <- shared_fixture("catalog-rows")$snowflake
+
+  catalog_rows_expect_relations(
+    snowflake_relations_from_show(catalog_rows_frame(spec$relations$rows)),
+    spec$relations$expected,
+    "snowflake relations"
   )
-
-  relations <- snowflake_relations_from_show(rows)
-
-  expect_length(relations, 2)
-  expect_equal(relations[[1]]$kind, "view")
-  expect_equal(relations[[1]]$description, "A useful view")
-  expect_null(relations[[2]]$description)
-  expect_identical(
-    relations[[1]]$id,
-    DBI::Id(
-      catalog = "Data.Base",
-      schema = "Odd Schema",
-      table = "Sales.Report"
-    )
-  )
-
-  con <- DBI::dbConnect(duckdb::duckdb())
-  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
-  expect_equal(
-    as.character(DBI::dbQuoteIdentifier(con, relations[[1]]$id)),
-    '"Data.Base"."Odd Schema"."Sales.Report"'
+  catalog_rows_expect_columns(
+    snowflake_describe_rows(catalog_rows_frame(spec$columns$rows)),
+    spec$columns$expected,
+    "snowflake columns"
   )
 })
 
