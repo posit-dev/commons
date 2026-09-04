@@ -95,6 +95,13 @@ class DataSource:
     table_ids: dict[str, TableId] = field(default_factory=dict)
     pending: _PendingPins | None = None
     dictionary: DataDictionary | None = None
+    # Set only for a warehouse source: what its catalog reported, what is
+    # known about access to each relation, and the connection identity all
+    # of that was decided for.
+    relations: dict[str, Any] | None = None
+    manifest: Any | None = None
+    session: Any | None = None
+    definition_bindings: dict[str, Any] | None = None
 
     @classmethod
     def from_frames(cls, **frames: Any) -> DataSource:
@@ -122,29 +129,87 @@ class DataSource:
         )
 
     @classmethod
-    def from_engine(cls, engine: sqlalchemy.Engine, tables: Any = None) -> DataSource:
+    def from_engine(
+        cls,
+        engine: sqlalchemy.Engine,
+        tables: Any = None,
+        exclude: list[str] | None = None,
+        dictionary: DataDictionary | None = None,
+    ) -> DataSource:
         """Query a caller's database directly. Nothing is copied.
 
-        With `tables` unset the backend's own listing is taken as given: it
-        reports what exists, so there is nothing to check and no round trip
-        worth paying for.
+        A Snowflake or Databricks engine imports its catalog: the selection is
+        resolved against the warehouse, access to it is verified for the
+        current principal, and what it reports is folded into `dictionary`.
+
+        With `tables` unset on any other backend, its own listing is taken as
+        given: it reports what exists, so there is nothing to check and no
+        round trip worth paying for.
+
+        `dictionary` is taken here because the warehouse listing is folded
+        into it during construction. Its definitions are lowered by
+        `data_source()`, once, so attach one through there rather than here.
         """
+        from ._catalog._import import is_warehouse
+
         backend = EngineBackend(engine)
+        if is_warehouse(backend):
+            return cls._from_warehouse(backend, tables, exclude, dictionary)
+        if exclude is not None:
+            raise ValueError(
+                "exclude selects out of a warehouse catalog listing, and is "
+                f"supported only for Snowflake and Databricks. This engine is "
+                f"{backend.dialect()}."
+            )
         if tables is None:
             discovered = backend.list_tables()
             return cls(
                 backend=backend,
                 tables=discovered,
                 table_ids={name: TableId(table=name) for name in discovered},
+                dictionary=dictionary,
             )
 
         registry = normalize_table_registry(tables)
         _check_tables_exist(backend, registry)
-        return cls(backend=backend, tables=list(registry), table_ids=registry)
+        return cls(
+            backend=backend,
+            tables=list(registry),
+            table_ids=registry,
+            dictionary=dictionary,
+        )
 
     @classmethod
-    def from_board(cls, board: Any, tables: Any) -> DataSource:
-        """Expose a pins board's pins as tables, each read on first use."""
+    def _from_warehouse(
+        cls,
+        backend: Backend,
+        tables: Any,
+        exclude: list[str] | None,
+        dictionary: DataDictionary | None,
+    ) -> DataSource:
+        from ._catalog._import import import_catalog
+
+        imported = import_catalog(backend, tables, exclude, dictionary)
+        return cls(
+            backend=backend,
+            tables=imported.tables,
+            table_ids=imported.table_ids,
+            dictionary=imported.dictionary,
+            relations=imported.relations,
+            manifest=imported.manifest,
+            session=imported.session,
+            definition_bindings=imported.definition_bindings,
+        )
+
+    @classmethod
+    def from_board(
+        cls, board: Any, tables: Any, dictionary: DataDictionary | None = None
+    ) -> DataSource:
+        """Expose a pins board's pins as tables, each read on first use.
+
+        As with `from_engine()`, a dictionary's definitions are lowered by
+        `data_source()` rather than here.
+        """
         if not isinstance(tables, dict):
             raise TypeError(
                 "For a pins board, tables must be a mapping of table name to "
@@ -176,11 +241,15 @@ class DataSource:
             tables=labels,
             table_ids={label: TableId(table=label) for label in labels},
             pending=_PendingPins(board=board, pins=dict(tables)),
+            dictionary=dictionary,
         )
 
     def query(self, sql: str) -> list[dict[str, Any]]:
         """Run one read-only statement, rejecting anything else first."""
+        from ._catalog import check_session
+
         check_query(sql, dialect=self.backend.dialect())
+        check_session(self.backend, self.session)
         if self.pending is None:
             return self.backend.query(sql)
         return self._query_loading_pins(sql)
@@ -255,6 +324,7 @@ class DataSource:
 def data_source(
     *args: Any,
     tables: Any = None,
+    exclude: Any = None,
     dictionary: Any = None,
     **frames: Any,
 ) -> DataSource:
@@ -262,11 +332,12 @@ def data_source(
 
     A thin dispatcher over the constructors, which are the documented way in.
 
-    `tables` and `dictionary` are keyword-only options, so both names are
-    reserved in every form: a frame passed under either name is rejected
-    with a TypeError naming it, never silently consumed. `tables` selects
-    tables of the engine and board forms; `dictionary` attaches a data
-    dictionary to any form. To use either as a frame name, call
+    `tables`, `exclude`, and `dictionary` are keyword-only options, so all
+    three names are reserved in every form: a frame passed under one of them
+    is rejected with a TypeError naming it, never silently consumed.
+    `tables` selects tables of the engine and board forms, `exclude` drops
+    relations from a warehouse catalog listing by glob, and `dictionary`
+    attaches a data dictionary to any form. To use one as a frame name, call
     `DataSource.from_frames()` directly.
 
     A dictionary's governed definitions are compiled for the source's
@@ -288,29 +359,48 @@ def data_source(
                 "Pass either a connection or named data frames, not both. "
                 f"Got a positional argument and the frames {sorted(frames)}."
             )
-        source = _from_positional(args[0], tables)
+        source = _from_positional(args[0], tables, exclude, resolved)
     else:
         if tables is not None:
             raise TypeError(
                 "`tables` selects tables of an engine or pins board; with "
                 "named frames there is nothing for it to select."
             )
+        if exclude is not None:
+            raise TypeError(
+                "`exclude` drops relations from a warehouse catalog listing; "
+                "with named frames there is no listing to drop them from."
+            )
         source = DataSource.from_frames(**frames)
+        source.dictionary = resolved
 
-    source.dictionary = resolved
-    if resolved is not None:
+    # A warehouse source merges the authored dictionary with what its catalog
+    # reported, so the one to compile against is the source's, not the one
+    # that was passed in.
+    if source.dictionary is not None:
         # The dialect is only known now, which is why lowering waits for it.
         from ._definitions import attach_compiled_definitions
 
-        attach_compiled_definitions(resolved, source.dialect(), set(source.tables))
+        attach_compiled_definitions(
+            source.dictionary, source.dialect(), set(source.tables)
+        )
     return source
 
 
-def _from_positional(value: Any, tables: Any) -> DataSource:
+def _from_positional(
+    value: Any, tables: Any, exclude: Any = None, dictionary: Any = None
+) -> DataSource:
     if isinstance(value, sqlalchemy.Engine):
-        return DataSource.from_engine(value, tables=tables)
+        return DataSource.from_engine(
+            value, tables=tables, exclude=exclude, dictionary=dictionary
+        )
     if hasattr(value, "pin_list") and hasattr(value, "pin_read"):
-        return DataSource.from_board(value, tables)
+        if exclude is not None:
+            raise TypeError(
+                "`exclude` drops relations from a warehouse catalog listing; "
+                "a pins board has no listing to drop them from."
+            )
+        return DataSource.from_board(value, tables, dictionary=dictionary)
     raise TypeError(
         "data_source() takes a SQLAlchemy Engine, a pins board, or named data "
         f"frames. Got {type(value).__name__}."
