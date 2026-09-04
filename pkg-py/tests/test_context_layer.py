@@ -1,4 +1,8 @@
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
+from raghilda.store import DuckDBStore
 
 from commons import ContextLayer, context_layer
 from commons._context_layer import strip_frontmatter
@@ -182,3 +186,49 @@ def test_prewarm_is_idempotent(tmp_path):
     layer.prewarm()
 
     assert layer._store_cache is first
+
+
+def test_search_rejects_a_non_positive_top_k(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+
+    with pytest.raises(ValueError, match="top_k"):
+        layer.search("revenue", top_k=0)
+
+
+def test_search_results_are_the_same_after_prewarm(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text(
+        "# Revenue\nRevenue excludes tax unless stated otherwise.\n\n"
+        "# Discounts\nDiscounts are applied before tax."
+    )
+
+    cold = context_layer(files=[path]).search("revenue")
+    warm_layer = context_layer(files=[path])
+    warm_layer.prewarm()
+
+    assert warm_layer.search("revenue") == cold
+
+
+def test_concurrent_first_searches_build_one_store(tmp_path, monkeypatch):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+
+    builds = 0
+    real_create = DuckDBStore.create
+
+    def counting_create(*args, **kwargs):
+        nonlocal builds
+        builds += 1
+        time.sleep(0.05)  # widen the race window
+        return real_create(*args, **kwargs)
+
+    monkeypatch.setattr(DuckDBStore, "create", counting_create)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: layer.search("revenue"), range(8)))
+
+    assert builds == 1
+    assert all(result == results[0] for result in results)
