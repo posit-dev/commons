@@ -1,4 +1,4 @@
-"""Governed definitions: the registry, and the compiler that will feed it.
+"""Governed definitions: the registry, and the compiler that feeds it.
 
 Definitions are authored in data-dict's expression language, not in the SQL
 dialect of the attached source, so they are type-checked against the
@@ -12,6 +12,7 @@ IR. Cross-implementation conformance against the data-dict binary is the
 authority, not this code.
 """
 
+from ._compile import attach_compiled_definitions, mixed_grain
 from ._registry import (
     ExportRecord,
     Registry,
@@ -28,10 +29,12 @@ __all__ = [
     "ExportRecord",
     "Registry",
     "applied_text",
+    "attach_compiled_definitions",
     "build_registry",
     "context_chunks",
     "entry_text",
     "expand_tokens",
     "index_overflows",
     "index_text",
+    "mixed_grain",
 ]
