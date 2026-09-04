@@ -41,15 +41,36 @@ def _fold(name: str) -> str:
 
 @dataclass(frozen=True)
 class TableId:
-    """A table's identity, schema-qualified where the backend has schemas."""
+    """A table's identity, qualified as far as the backend has levels.
+
+    Warehouses name a table `catalog.schema.table`, so the components are
+    kept apart rather than folded into one string. Folding them means quoting
+    `ANALYTICS.PUBLIC` as a single identifier, which names a schema with a dot
+    in it rather than a catalog and a schema.
+    """
 
     table: str
     schema: str | None = None
+    catalog: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.catalog is not None and self.schema is None:
+            raise ValueError(
+                "A TableId with a catalog needs a schema: there is no level "
+                "between them to leave out."
+            )
+
+    @property
+    def parts(self) -> list[str]:
+        """The components, outermost first."""
+        return [
+            part for part in (self.catalog, self.schema, self.table) if part is not None
+        ]
 
     @property
     def label(self) -> str:
         """The name the agent uses for this table."""
-        return f"{self.schema}.{self.table}" if self.schema else self.table
+        return ".".join(self.parts)
 
 
 @dataclass
@@ -352,7 +373,7 @@ def normalize_table_registry(tables: Any) -> dict[str, TableId]:
 
 def _table_entry_id(entry: Any) -> TableId:
     if isinstance(entry, TableId):
-        if not entry.table or (entry.schema is not None and not entry.schema):
+        if not all(entry.parts):
             raise ValueError("TableId entries must not contain empty name components.")
         return entry
     if not isinstance(entry, str) or not entry:
@@ -366,9 +387,16 @@ def _table_entry_id(entry: Any) -> TableId:
             "Schema-qualified entries in tables must not contain empty name "
             f"components: {entry!r}."
         )
+    if len(parts) > 3:
+        raise ValueError(
+            "A table name has at most three parts, catalog.schema.table, got "
+            f"{entry!r}. Spell a name containing a dot as a TableId."
+        )
     if len(parts) == 1:
         return TableId(table=entry)
-    return TableId(table=parts[-1], schema=".".join(parts[:-1]))
+    if len(parts) == 2:
+        return TableId(table=parts[1], schema=parts[0])
+    return TableId(table=parts[2], schema=parts[1], catalog=parts[0])
 
 
 def _check_tables_exist(backend: Backend, registry: dict[str, TableId]) -> None:
