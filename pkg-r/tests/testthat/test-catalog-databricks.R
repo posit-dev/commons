@@ -1,34 +1,21 @@
-test_that("Databricks information schema retains native relation metadata", {
-  rows <- data.frame(
-    table_catalog = c("Data.Catalog", "main"),
-    table_schema = c("Odd Schema", "default"),
-    table_name = c("Sales.Report", "orders"),
-    table_type = c("VIEW", "MANAGED"),
-    comment = c("A useful view", ""),
-    stringsAsFactors = FALSE
+test_that("Databricks catalog rows match the shared contract", {
+  spec <- shared_fixture("catalog-rows")$databricks
+
+  catalog_rows_expect_relations(
+    databricks_relations_from_information_schema(
+      catalog_rows_frame(spec$relations$rows)
+    ),
+    spec$relations$expected,
+    "databricks relations"
   )
-
-  relations <- databricks_relations_from_information_schema(rows)
-
-  expect_length(relations, 2)
-  expect_equal(relations[[1]]$kind, "view")
-  expect_equal(relations[[1]]$description, "A useful view")
-  expect_equal(relations[[2]]$kind, "table")
-  expect_null(relations[[2]]$description)
-  expect_identical(
-    relations[[1]]$id,
-    DBI::Id(
-      catalog = "Data.Catalog",
-      schema = "Odd Schema",
-      table = "Sales.Report"
-    )
-  )
-
-  con <- DBI::dbConnect(duckdb::duckdb())
-  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
-  expect_equal(
-    as.character(DBI::dbQuoteIdentifier(con, relations[[1]]$id)),
-    '"Data.Catalog"."Odd Schema"."Sales.Report"'
+  nullable <- vapply(spec$columns$nullable, function(x) x == "true", logical(1))
+  catalog_rows_expect_columns(
+    databricks_columns_from_describe(
+      catalog_rows_frame(spec$columns$rows),
+      nullable
+    ),
+    spec$columns$expected,
+    "databricks columns"
   )
 })
 

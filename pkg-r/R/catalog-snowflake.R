@@ -468,6 +468,12 @@ snowflake_describe_relation <- function(con, id, call = rlang::caller_env()) {
       )
     }
   )
+  snowflake_describe_rows(rows)
+}
+
+# Split from the query so the row handling is shared with the Python suite
+# through tests/shared/catalog-rows.json.
+snowflake_describe_rows <- function(rows) {
   names(rows) <- tolower(names(rows))
   rows <- rows[toupper(rows$kind) == "COLUMN", , drop = FALSE]
   description <- rows$comment
