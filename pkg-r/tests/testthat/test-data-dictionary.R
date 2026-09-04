@@ -473,20 +473,9 @@ test_that("dictionary prose is searchable via the context layer", {
   )
 })
 
-test_that("augmenting keeps existing context docs", {
-  skip_if_not_installed("yaml")
-  path <- withr::local_tempfile(fileext = ".md")
-  writeLines("Booked revenue excludes tax.", path)
-  layer <- context_layer(files = path)
-  augmented <- augment_context_layer(layer, list(local_dict_source()))
-
-  expect_true("Booked revenue excludes tax." %in% context_layer_state(augmented)$docs)
-  expect_gt(length(context_layer_state(augmented)$docs), length(context_layer_state(layer)$docs))
-})
-
-test_that("augmenting without dictionaries is a no-op", {
-  expect_null(augment_context_layer(NULL, list(test_source())))
-})
+# Which documents augmenting produces, and that it is a no-op when there is
+# nothing to add, are pinned in tests/shared/context_layer.json and checked by
+# test-context-layer.R.
 
 test_that("agent tools share first-touch state", {
   skip_if_not_installed("yaml")
