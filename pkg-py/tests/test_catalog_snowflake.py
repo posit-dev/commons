@@ -268,3 +268,26 @@ def test_a_near_match_from_a_case_insensitive_like_is_not_accepted():
         backend, Selector(catalog="ANALYTICS", schema="PUBLIC", table="ORDERS")
     )
     assert found is None
+
+
+def test_a_capped_exact_lookup_is_refused_rather_than_reported_absent():
+    """A full page from `SHOW OBJECTS LIKE` may have dropped the match.
+
+    R checks this only when listing a namespace, not on the exact lookup.
+    This diverges deliberately: without it a capped reply reports the table
+    as absent, which is a wrong answer rather than a loud one. The case is
+    vanishingly rare, since it needs a schema holding a page-full of
+    case-variant names, and failing loudly is the cheaper direction.
+    """
+    row = {
+        "name": "orders",
+        "database_name": "ANALYTICS",
+        "schema_name": "PUBLIC",
+        "kind": "TABLE",
+        "comment": None,
+    }
+    backend = FakeBackend(rows=[row] * SHOW_ROW_LIMIT)
+    with pytest.raises(ValueError, match="truncated"):
+        exact_relation(
+            backend, Selector(catalog="ANALYTICS", schema="PUBLIC", table="ORDERS")
+        )

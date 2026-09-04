@@ -158,6 +158,10 @@ def exact_relation(backend: Any, selector: Selector) -> Relation | None:
         f"SHOW OBJECTS LIKE {_quote_string(selector.table or '')} "
         f"{_namespace_target(Selector(namespace.catalog, namespace.schema))}"
     )
+    # R checks this only when listing a namespace. Checked here too, because
+    # a capped reply that dropped the match reports the table as absent, and
+    # a wrong answer is worse than a loud one.
+    check_show_complete(rows, "relations")
     for relation in relations_from_show(rows):
         if relation.id.table == requested.table:
             return Relation(
