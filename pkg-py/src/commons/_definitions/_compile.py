@@ -65,12 +65,20 @@ def _children(ir: Ir) -> list[Ir]:
     return out
 
 
-def attach_compiled_definitions(dictionary: Any, dialect: str) -> None:
+def attach_compiled_definitions(
+    dictionary: Any, dialect: str, exposed: set[str] | None = None
+) -> None:
     """Compile every governed definition for `dialect`, onto the dictionary.
 
     Called once a source is known, because the dialect decides the emitter.
     A dictionary with no definitions needs no emitter, so an unsupported
     dialect is only an error when there is something to lower.
+
+    `exposed` names the source's tables. A definition on a table outside them
+    would compile to SQL against a relation that is not there, so it is
+    refused here rather than at `build_registry()`: by then the compiled
+    records have already reached the dictionary's retrieval chunks. Prose
+    about an unexposed table is left alone, since only a definition emits SQL.
     """
     exports: dict[str, dict[str, DefinitionExport]] = (
         getattr(dictionary, "definition_exports", None) or {}
@@ -80,6 +88,12 @@ def attach_compiled_definitions(dictionary: Any, dialect: str) -> None:
         if not definitions:
             entry.compiled_definitions = []
             continue
+        if exposed is not None and table_name not in exposed:
+            raise ValueError(
+                f"The data dictionary declares definitions on table "
+                f"{table_name!r}, which the data source does not expose. "
+                f"Exposed tables: {', '.join(sorted(exposed))}."
+            )
         target = _TARGETS.get(dialect)
         if target is None:
             raise ValueError(
