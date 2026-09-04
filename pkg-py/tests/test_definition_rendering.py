@@ -68,6 +68,22 @@ def test_every_record_in_the_bank_is_used() -> None:
     assert used == set(RECORDS)
 
 
+def test_the_index_cases_pin_both_sides_of_the_cap() -> None:
+    # A fixture where nothing overflows would pass against an implementation
+    # that never reports overflow.
+    overflows = {case["overflows"] for case in cases("index")}
+
+    assert overflows == {True, False}
+
+
+def test_the_gist_cases_cover_a_typeless_definition() -> None:
+    # The defect this section exists for: an absent type must not take the
+    # rest of the gist with it.
+    typeless = [key for key, found in RECORDS.items() if found["type"] is None]
+
+    assert any(case["record"] in typeless for case in cases("gist"))
+
+
 @pytest.mark.parametrize("case", cases("index"), ids=lambda c: c["name"])
 def test_the_index_matches_the_shared_contract(case: dict) -> None:
     registry = Registry([record(key) for key in case["records"]])

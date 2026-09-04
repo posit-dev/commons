@@ -83,7 +83,7 @@ def build_registry(sources: dict[str, Any]) -> Registry:
         dictionary = getattr(source, "dictionary", None)
         if dictionary is None:
             continue
-        exposed = set(getattr(source, "tables", []))
+        exposed = set(getattr(source, "tables", None) or [])
         for table, entry in dictionary.tables.items():
             compiled = getattr(entry, "compiled_definitions", None) or []
             if not compiled:
@@ -201,7 +201,9 @@ def _abort_unknown(token: str, records: list[ExportRecord]) -> None:
 
 
 def _flatten_inline(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    # Collapse each newline and the whitespace around it; other whitespace
+    # stays as authored. tests/shared/definition-rendering.json pins this.
+    return re.sub(r"\s*\n\s*", " ", text).strip()
 
 
 def _index_lines(registry: Registry) -> list[str]:

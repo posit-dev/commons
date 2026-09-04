@@ -1,4 +1,4 @@
-"""Governed definitions: the registry, and the compiler that feeds it.
+"""Governed definitions: the registry, and the compiler that will feed it.
 
 Definitions are authored in data-dict's expression language, not in the SQL
 dialect of the attached source, so they are type-checked against the

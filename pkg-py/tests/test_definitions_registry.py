@@ -137,6 +137,30 @@ def test_a_dotted_token_is_read_as_table_qualified() -> None:
     assert sql == "SELECT (sum(revenue)) FROM sales"
 
 
+def test_a_qualified_token_whose_table_is_absent_from_the_query_errors() -> None:
+    with pytest.raises(ValueError, match="does not appear in this query"):
+        expand_tokens(
+            "SELECT {{returns::total}} FROM sales", [record("total", table="returns")]
+        )
+
+
+def test_an_unknown_qualified_token_lists_what_is_available() -> None:
+    with pytest.raises(ValueError, match="No governed definition matches"):
+        expand_tokens("SELECT {{sales::nope}} FROM sales", [record("total")])
+
+
+def test_an_unknown_dotted_token_lists_what_is_available() -> None:
+    with pytest.raises(ValueError, match="No governed definition matches"):
+        expand_tokens("SELECT {{sales.nope}} FROM sales", [record("total")])
+
+
+def test_a_dotted_token_whose_table_is_absent_from_the_query_errors() -> None:
+    with pytest.raises(ValueError, match="does not appear in this query"):
+        expand_tokens(
+            "SELECT {{other.total}} FROM sales", [record("total", table="other")]
+        )
+
+
 def test_a_definition_name_may_contain_spaces() -> None:
     sql, _ = expand_tokens(
         "SELECT {{net revenue}} FROM sales", [record("net revenue", sql="sum(x)")]
@@ -325,6 +349,34 @@ def test_an_empty_source_set_builds_an_empty_registry() -> None:
     from commons._definitions import build_registry
 
     assert build_registry({}).records == []
+
+
+def test_the_registry_merges_sources_and_for_source_filters_by_label() -> None:
+    from commons import _duckdb
+    from commons._backends import DuckDBBackend
+    from commons._data_dictionary import DataDictionary, Table
+    from commons._data_source import DataSource
+    from commons._definitions import build_registry
+
+    def source_with(definition_name: str) -> DataSource:
+        dictionary = DataDictionary(tables={"sales": Table()})
+        dictionary.tables["sales"].compiled_definitions = [
+            record(definition_name, source="")
+        ]
+        return DataSource(
+            backend=DuckDBBackend(_duckdb.connect()),
+            tables=["sales"],
+            dictionary=dictionary,
+        )
+
+    registry = build_registry(
+        {"one": source_with("total"), "two": source_with("count_all")}
+    )
+
+    assert sorted(item.source for item in registry.records) == ["one", "two"]
+    assert [item.name for item in registry.for_source("one")] == ["total"]
+    assert [item.name for item in registry.for_source("two")] == ["count_all"]
+    assert len(registry.for_source()) == 2
 
 
 # ---- against the shared contract -----------------------------------------

@@ -100,7 +100,8 @@ class Table(_Permissive):
     columns: dict[str, Column] = {}
     definitions: dict[str, Definition] = {}
     # Attached by _definitions at data-source construction; empty until then,
-    # so the registry can be exercised without the compiler.
+    # so the registry can be exercised without the compiler. Elements are
+    # ExportRecord, typed Any so this model need not import _definitions.
     compiled_definitions: list[Any] = []
 
     @model_validator(mode="before")
