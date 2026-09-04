@@ -1,6 +1,30 @@
 # These tests exercise the real worker: they need an installed commons (the
 # worker loads the package from the library, not from load_all()).
 
+# Every run_r call arms later timers that outlive it. Run each test on its own
+# loop so the leftovers die with it: shiny::testServer() reads outputs
+# through shiny:::wait_for_it(), which spins until later::loop_empty(), so a
+# timer left on the global loop stalls other files' testServer() blocks for its
+# full delay (#267). later::with_loop() and later::with_temp_loop() are the
+# exported analogs, but both wrap an expression rather than a scope, so this
+# calls the internal they use to switch loops.
+local_temp_loop <- function(env = parent.frame()) {
+  old <- later::current_loop()
+  loop <- later::create_loop(parent = NULL)
+  later:::setCurrentRegistryId(loop$id)
+  withr::defer(
+    {
+      later:::setCurrentRegistryId(old$id)
+      later::destroy_loop(loop)
+    },
+    envir = env
+  )
+  invisible(loop)
+}
+
+# Only meaningful when nothing else has queued work on the global loop.
+global_loop_clean <- later::loop_empty(later::global_loop())
+
 local_worker <- function(env = parent.frame()) {
   worker <- new_r_worker()
   withr::defer(worker_close(worker), envir = env)
@@ -18,6 +42,7 @@ worker_read_lines <- function(worker, path) {
 }
 
 test_that("run_r executes code against stored handles", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
   register_handle(store, test_sales())
@@ -53,6 +78,7 @@ test_that("run_r executes code against stored handles", {
 })
 
 test_that("run_r session state persists across calls, and handles sync lazily", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
 
@@ -64,6 +90,7 @@ test_that("run_r session state persists across calls, and handles sync lazily", 
 })
 
 test_that("worker entry points stay outside the model environment", {
+  local_temp_loop()
   worker <- local_guardrail_worker()
   store <- new_handle_store()
   outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
@@ -84,6 +111,7 @@ test_that("worker entry points stay outside the model environment", {
 })
 
 test_that("run_r prepends a worker-local package library", {
+  local_temp_loop()
   worker <- local_guardrail_worker()
   worker_ensure(worker)
 
@@ -97,6 +125,7 @@ test_that("run_r prepends a worker-local package library", {
 })
 
 test_that("run_r loads integer64 methods for stored handles", {
+  local_temp_loop()
   skip_if_not_installed("bit64")
   worker <- local_worker()
   store <- new_handle_store()
@@ -111,6 +140,7 @@ test_that("run_r loads integer64 methods for stored handles", {
 })
 
 test_that("run_r returns plots as images and opens the display", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
   register_handle(store, test_sales())
@@ -139,6 +169,7 @@ test_that("run_r returns plots as images and opens the display", {
 })
 
 test_that("run_r collapses code and output above plots", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
 
@@ -167,6 +198,7 @@ test_that("run_r collapses code and output above plots", {
 })
 
 test_that("run_r preloads measure sources for reading, comments included", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
   fn_sources <- c(order_count = "function() {\n  # count every order\n  6L\n}")
@@ -179,6 +211,7 @@ test_that("run_r preloads measure sources for reading, comments included", {
 })
 
 test_that("run_r delivers the citation request when no fallback tool has", {
+  local_temp_loop()
   agent <- test_agent()
   withr::defer(worker_close(agent$.__enclos_env__$private$worker))
   run_r <- agent_tool(agent, "run_r")
@@ -190,6 +223,7 @@ test_that("run_r delivers the citation request when no fallback tool has", {
 })
 
 test_that("run_r surfaces errors from model code without failing the tool", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
 
@@ -204,6 +238,7 @@ test_that("run_r surfaces errors from model code without failing the tool", {
 })
 
 test_that("run_r displays code directly when it produces no output", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
 
@@ -227,6 +262,7 @@ test_that("run_r displays code directly when it produces no output", {
 })
 
 test_that("run_r highlights malformed code without exposing HTML", {
+  local_temp_loop()
   expect_no_warning(
     html <- run_r_html("x <- '<unsafe>' +", list())
   )
@@ -236,6 +272,7 @@ test_that("run_r highlights malformed code without exposing HTML", {
 })
 
 test_that("run_r displays worker failures directly and escapes their HTML", {
+  local_temp_loop()
   res <- run_r_result("x <- '<unsafe>'", list(failure = "worker <broke>"))
 
   expect_match(res@value, "Error: worker <broke>", fixed = TRUE)
@@ -248,6 +285,7 @@ test_that("run_r displays worker failures directly and escapes their HTML", {
 })
 
 test_that("the worker cannot see parent-only environment variables", {
+  local_temp_loop()
   withr::local_envvar(COMMONS_TEST_SECRET = "s3cret")
   worker <- local_worker()
   store <- new_handle_store()
@@ -262,6 +300,7 @@ test_that("the worker cannot see parent-only environment variables", {
 })
 
 test_that("run_r interrupts code exceeding the time limit, keeping the session", {
+  local_temp_loop()
   withr::local_options(commons.run_r_timeout = 2)
   worker <- local_worker()
   store <- new_handle_store()
@@ -275,6 +314,7 @@ test_that("run_r interrupts code exceeding the time limit, keeping the session",
 })
 
 test_that("a crashed worker reports the crash and respawns on the next call", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
   register_handle(store, test_sales())
@@ -289,6 +329,7 @@ test_that("a crashed worker reports the crash and respawns on the next call", {
 })
 
 test_that("concurrent run_r calls take turns on the worker", {
+  local_temp_loop()
   worker <- local_worker()
   store <- new_handle_store()
 
@@ -300,6 +341,7 @@ test_that("concurrent run_r calls take turns on the worker", {
 })
 
 test_that("guardrails allow computation and worker-local files", {
+  local_temp_loop()
   worker <- local_guardrail_worker()
   store <- new_handle_store()
   worker_ensure(worker)
@@ -330,6 +372,7 @@ test_that("guardrails allow computation and worker-local files", {
 })
 
 test_that("guardrails deny external filesystem access and subprocesses", {
+  local_temp_loop()
   worker <- local_guardrail_worker()
   store <- new_handle_store()
   outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
@@ -373,6 +416,7 @@ test_that("guardrails deny external filesystem access and subprocesses", {
 })
 
 test_that("guardrails resolve symlinks and nonexistent descendants", {
+  local_temp_loop()
   worker <- local_guardrail_worker()
   store <- new_handle_store()
   worker_ensure(worker)
@@ -399,6 +443,7 @@ test_that("guardrails resolve symlinks and nonexistent descendants", {
 })
 
 test_that("guardrails follow the configured network policy", {
+  local_temp_loop()
   restricted <- local_guardrail_worker()
   full <- local_guardrail_worker("full")
   store <- new_handle_store()
@@ -444,6 +489,7 @@ test_that("guardrails follow the configured network policy", {
 })
 
 test_that("guardrails restore bindings after success and model errors", {
+  local_temp_loop()
   worker <- local_guardrail_worker()
   store <- new_handle_store()
   outside <- withr::local_tempfile(tmpdir = dirname(tempdir()))
@@ -470,4 +516,22 @@ test_that("guardrails restore bindings after success and model errors", {
     worker_read_lines(worker, outside),
     "available after restoration"
   )
+})
+
+test_that("run_r's timers stay on the loop the call ran on", {
+  local_temp_loop()
+  worker <- local_worker()
+  store <- new_handle_store()
+  register_handle(store, test_sales())
+
+  sync_promise(run_r_tool(worker, store, "sum(r1$revenue)"))
+
+  # The leftovers belong to this loop, so they are discarded with it rather
+  # than stalling other files' testServer() blocks (#267).
+  expect_false(later::loop_empty())
+})
+
+test_that("these tests leave the global later loop as they found it", {
+  skip_if_not(global_loop_clean, "global later loop was already busy")
+  expect_true(later::loop_empty(later::global_loop()))
 })
