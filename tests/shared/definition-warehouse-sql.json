@@ -1,0 +1,74 @@
+{
+  "corpus_dir": "definition-export",
+  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested.",
+  "cases": {
+    "functions.yaml": {
+      "values::strings": {
+        "SQL(snowflake)": {
+          "code": "STARTSWITH(lower(trim(\"text\")), 'a') OR ENDSWITH(upper(\"text\"), 'Z')"
+        },
+        "SQL(databricks)": {
+          "code": "startswith(lower(trim(`text`)), 'a') OR endswith(upper(`text`), 'Z')"
+        }
+      },
+      "values::remainder": {
+        "SQL(snowflake)": {
+          "code": "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE MOD(MOD(\"number\", 3) + 3, 3) END"
+        },
+        "SQL(databricks)": {
+          "code": "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE MOD(MOD(`number`, 3) + 3, 3) END"
+        }
+      },
+      "values::patterns": {
+        "SQL(snowflake)": { "code_contains": ["REGEXP_LIKE"] },
+        "SQL(databricks)": { "code_contains": ["regexp_like", "concat('^(?:'"] }
+      },
+      "values::finite": {
+        "SQL(snowflake)": { "code_contains": ["NOT ("] },
+        "SQL(databricks)": { "code_contains": ["NOT (CASE"] }
+      }
+    },
+    "language.yaml": {
+      "survey::fresh": {
+        "SQL(snowflake)": {
+          "code": "\"observed\" >= DATEADD(MICROSECOND, -((2) * 604800000000), CURRENT_TIMESTAMP())"
+        },
+        "SQL(databricks)": {
+          "code": "`observed` >= timestampadd(MICROSECOND, -((2) * 604800000000), CURRENT_TIMESTAMP())"
+        }
+      },
+      "survey::fractional interval": {
+        "SQL(snowflake)": {
+          "code": "DATEADD(MICROSECOND, -((1.5) * 3600000000), \"observed\")"
+        },
+        "SQL(databricks)": {
+          "code": "timestampadd(MICROSECOND, -((1.5) * 3600000000), `observed`)"
+        }
+      },
+      "survey::postal length": {
+        "SQL(snowflake)": { "code": "length(GET(\"profile\", 'zip'))" },
+        "SQL(databricks)": { "code": "length(`profile`.`zip`)" }
+      },
+      "survey::complete": {
+        "SQL(databricks)": { "code": "`q1` IS NOT NULL AND `q2` IS NOT NULL" }
+      },
+      "survey::offset time": {
+        "SQL(snowflake)": {
+          "code": "\"observed\" >= TO_TIMESTAMP_TZ('2024-01-01 07:30:00 +00:00')"
+        }
+      },
+      "survey::fractional time": {
+        "SQL(databricks)": {
+          "code": "`observed` <= make_timestamp(2024, 1, 1, 1, 30, 0.123, 'UTC')"
+        }
+      },
+      "survey::dynamic match": {
+        "SQL(snowflake)": { "notes_contain": ["newline characters"] }
+      },
+      "survey::negative quotient": {
+        "SQL(snowflake)": { "code_contains": ["CASE WHEN"] },
+        "SQL(databricks)": { "notes_contain": ["negative zero divisor"] }
+      }
+    }
+  }
+}

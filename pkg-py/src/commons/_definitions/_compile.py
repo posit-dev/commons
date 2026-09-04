@@ -12,13 +12,17 @@ from __future__ import annotations
 from typing import Any
 
 from ._emit_duckdb import emit_duckdb
+from ._emit_sql import emit_sql
 from ._export import DefinitionExport, Ir
 from ._registry import ExportRecord
 
 __all__ = ["attach_compiled_definitions", "mixed_grain"]
 
-# Only DuckDB is ported so far; Snowflake and Databricks are stage 2.
-_TARGETS = {"duckdb": "SQL(duckdb)"}
+_TARGETS = {
+    "duckdb": "SQL(duckdb)",
+    "snowflake": "SQL(snowflake)",
+    "databricks": "SQL(databricks)",
+}
 
 
 def mixed_grain(definitions: dict[str, DefinitionExport]) -> dict[str, bool]:
@@ -98,8 +102,8 @@ def attach_compiled_definitions(
         if target is None:
             raise ValueError(
                 f"Definitions on table {table_name!r} cannot be compiled for a "
-                f"{dialect!r} data source. commons lowers definitions to DuckDB "
-                f"only."
+                f"{dialect!r} data source. commons lowers definitions to "
+                f"{', '.join(sorted(_TARGETS))}."
             )
         entry.compiled_definitions = _compile_table(table_name, definitions, target)
 
@@ -120,13 +124,22 @@ def _compile_table(
             f"and aggregate grain and would need a subquery rewrite."
         )
     markers = _reference_markers(definitions)
-    emitted = {
-        name: emit_duckdb(
-            _mark_references(definition.ir, markers), definition.selection
-        )
-        for name, definition in definitions.items()
-        if definition.ir is not None
-    }
+    emitted = {}
+    for name, definition in definitions.items():
+        if definition.ir is None:
+            continue
+        marked = _mark_references(definition.ir, markers)
+        if target == "SQL(duckdb)":
+            emitted[name] = emit_duckdb(marked, definition.selection)
+            continue
+        dialect = target[len("SQL(") : -1]
+        result = emit_sql(marked, dialect, definition.selection)
+        if result["error"] is not None:
+            raise ValueError(
+                f"Definition {name!r} on table {table!r} cannot be compiled "
+                f"for {target}. {result['error']}"
+            )
+        emitted[name] = result
     composed = _compose(table, definitions, emitted, markers)
     return [
         ExportRecord(
