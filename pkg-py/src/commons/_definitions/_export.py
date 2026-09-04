@@ -33,6 +33,10 @@ _EXPORTED_TYPES = frozenset(
 _INTERVAL_UNITS = frozenset({"seconds", "minutes", "hours", "days", "weeks"})
 _TEMPORAL = frozenset({"date", "datetime"})
 
+# Rust's named-group spelling, `(?<name>`. The lookbehind forms `(?<=` and
+# `(?<!` share the prefix and are a different refusal entirely.
+_RUST_NAMED_GROUP = re.compile(r"\(\?<[^=!]")
+
 _RE2_LOCK = threading.Lock()
 _RE2_CONNECTION: Any = None
 
@@ -637,7 +641,7 @@ def _validate_regex(pattern: str) -> str:
             # attaching it to every refusal misdescribes the other causes.
             hint = (
                 " Note that a named group is spelled `(?P<name>...)` here."
-                if "(?<" in pattern
+                if _RUST_NAMED_GROUP.search(pattern)
                 else ""
             )
             raise ValueError(
