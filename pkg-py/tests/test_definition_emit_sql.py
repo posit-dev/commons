@@ -91,3 +91,77 @@ def test_every_corpus_definition_lowers_for_both_warehouses(dialect: str):
         assert records
         total += len(records)
     assert total == 42
+
+
+@pytest.mark.parametrize(
+    ("dialect", "expected"),
+    [
+        ("snowflake", '("amount" > 100) AND "amount" < 500'),
+        ("databricks", "(`amount` > 100) AND `amount` < 500"),
+    ],
+)
+def test_a_referenced_definition_is_inlined_for_each_dialect(
+    dialect: str, expected: str
+):
+    """Composition has to know how the target quotes an identifier.
+
+    The reference marker is emitted as a quoted identifier, so a composer that
+    only recognises double quotes leaves Databricks SQL referring to a column
+    named `__commons_definition_reference_001__`.
+    """
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "t",
+                    "columns": [{"name": "amount", "type": "number"}],
+                    "definitions": [
+                        {"name": "big", "expr": "amount > 100"},
+                        {"name": "d", "expr": "big and amount < 500"},
+                    ],
+                }
+            ]
+        }
+    )
+    attach_compiled_definitions(dictionary, dialect)
+    records = {r.name: r for r in dictionary.tables["t"].compiled_definitions}
+    assert records["d"].sql == expected
+
+
+def test_a_backquoted_identifier_survives_composition_on_databricks():
+    # A doubled backtick is one literal backtick, so the scanner must not read
+    # it as the end of the identifier and lose its place.
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "t",
+                    "columns": [{"name": "we`ird", "type": "number"}],
+                    "definitions": [
+                        {"name": "big", "expr": "`we``ird` > 100"},
+                        {"name": "d", "expr": "big and `we``ird` < 500"},
+                    ],
+                }
+            ]
+        }
+    )
+    attach_compiled_definitions(dictionary, "databricks")
+    records = {r.name: r for r in dictionary.tables["t"].compiled_definitions}
+    assert records["d"].sql == "(`we``ird` > 100) AND `we``ird` < 500"
+
+
+@pytest.mark.parametrize("dialect", ["duckdb", "snowflake", "databricks"])
+def test_no_compiled_definition_keeps_a_reference_marker(dialect: str):
+    """The class the Databricks quoting bug belonged to.
+
+    A marker left in the SQL is a column that does not exist, and it only
+    shows up when a definition references a sibling. Rather than testing one
+    dialect's quoting, this asserts the invariant over the whole corpus for
+    every dialect commons lowers to.
+    """
+    checked = 0
+    for filename in ["core.yaml", "functions.yaml", "language.yaml"]:
+        for record in compile_corpus(filename, dialect).values():
+            assert "__commons_definition_reference_" not in record.sql, record.name
+            checked += 1
+    assert checked == 42

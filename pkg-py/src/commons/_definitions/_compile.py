@@ -140,7 +140,7 @@ def _compile_table(
                 f"for {target}. {result['error']}"
             )
         emitted[name] = result
-    composed = _compose(table, definitions, emitted, markers)
+    composed = _compose(table, definitions, emitted, markers, _quote_for(target))
     return [
         ExportRecord(
             name=name,
@@ -223,11 +223,17 @@ def _mark_references(ir: Ir, markers: dict[str, str]) -> Ir:
     return Ir(kind=ir.kind, type=ir.type, shape=ir.shape, attrs=attrs)
 
 
+def _quote_for(target: str) -> str:
+    """How the target writes an identifier."""
+    return "`" if target == "SQL(databricks)" else '"'
+
+
 def _compose(
     table: str,
     definitions: dict[str, DefinitionExport],
     emitted: dict[str, dict[str, Any]],
     markers: dict[str, str],
+    quote: str,
 ) -> dict[str, dict[str, Any]]:
     """Inline each definition's references, in dependency order."""
     composed: dict[str, dict[str, Any]] = {}
@@ -254,19 +260,27 @@ def _compose(
             for reference in references:
                 notes.extend(composed[reference]["notes"])
             composed[name] = {
-                "code": _substitute_identifiers(emitted[name]["code"], replacements),
+                "code": _substitute_identifiers(
+                    emitted[name]["code"], replacements, quote
+                ),
                 "notes": sorted(set(notes)),
             }
         pending = [name for name in pending if name not in ready]
     return composed
 
 
-def _substitute_identifiers(code: str, replacements: dict[str, str]) -> str:
+def _substitute_identifiers(code: str, replacements: dict[str, str], quote: str) -> str:
     """Replace quoted marker identifiers with the SQL they stand for.
 
-    A scan rather than a string replace, so a marker appearing inside a string
-    literal is left alone. The substituted SQL is parenthesised because it
-    lands in the middle of an expression whose precedence it does not know.
+    `quote` is how the target writes an identifier, which is a backtick for
+    Databricks and a double quote otherwise. Getting it wrong leaves the
+    marker in the emitted SQL as a column that does not exist.
+
+    A scan rather than a string replace, so a marker inside a string literal
+    is left alone and a doubled quote is read as one literal character rather
+    than the end of the identifier. The substituted SQL is parenthesised
+    because it lands in the middle of an expression whose precedence it does
+    not know.
     """
     if not replacements:
         return code
@@ -274,10 +288,10 @@ def _substitute_identifiers(code: str, replacements: dict[str, str]) -> str:
     index = 0
     while index < len(code):
         char = code[index]
-        if char in ("'", '"'):
+        if char in ("'", quote):
             token, index = _take_quoted(code, index, char)
-            if char == '"':
-                name = token[1:-1].replace('""', '"')
+            if char == quote:
+                name = token[1:-1].replace(quote * 2, quote)
                 if name in replacements:
                     out.append(f"({replacements[name]})")
                     continue
