@@ -9,6 +9,7 @@ Running the queries that produce those rows belongs to the per-backend
 readers, which keeps this testable without a warehouse.
 """
 
+from . import _databricks, _snowflake
 from ._core import (
     Manifest,
     MergedDictionary,
@@ -35,4 +36,6 @@ __all__ = [
     "normalize_identifier",
     "search",
     "table_registry",
+    "_databricks",
+    "_snowflake",
 ]
