@@ -150,6 +150,13 @@ def id_type(selector: Selector) -> str:
     return "relation" if selector.table is not None else "namespace"
 
 
+def _selector_id(selector: Selector) -> TableId:
+    assert selector.table is not None
+    return TableId(
+        table=selector.table, schema=selector.schema, catalog=selector.catalog
+    )
+
+
 def table_registry(
     selectors: list[Selector],
     exact_relation: Callable[[Selector], Relation | None],
@@ -164,10 +171,15 @@ def table_registry(
     namespace_selected = False
     for selector in selectors:
         if id_type(selector) == "relation":
+            # An entry naming a table is kept whether or not the warehouse
+            # has it, and is always validated. Dropping a missing one turns
+            # "that table is not there" into a quietly smaller selection.
+            table_id = _selector_id(selector)
             found = exact_relation(selector)
-            if found is not None:
-                relations.append(found)
-                validate.append(found.id)
+            relations.append(
+                found if found is not None else Relation(id=table_id, discovered=False)
+            )
+            validate.append(table_id)
             continue
         namespace_selected = True
         relations.extend(list_relations(selector))

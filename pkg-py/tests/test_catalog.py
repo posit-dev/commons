@@ -378,3 +378,51 @@ def test_a_dictionary_without_tables_is_returned_untouched():
         dictionary, {}, describe_relation=lambda table_id: [], identifier_case="upper"
     )
     assert merged.definition_bindings is None
+
+
+def test_a_rekeyed_table_still_shows_its_relationships():
+    """The authored name is what the relationship prose says.
+
+    After the merge re-keys `orders` to its warehouse label, a relationship
+    written as `orders.order_id = ...` still has to reach the table's
+    first-touch entry, or the join disappears from the prompt.
+    """
+    merged = merged_fixture()
+    entry = merged.dictionary.entry_parts("ANALYTICS.PUBLIC.ORDERS", None)
+    assert any("orders.order_id = external.order_id" in part for part in entry)
+
+
+def test_an_explicitly_selected_table_that_is_missing_is_kept_for_validation():
+    """A named table that the warehouse does not have must still be reported.
+
+    Dropping it here turns "you asked for a table that is not there" into a
+    silently smaller selection.
+    """
+    registry = table_registry(
+        selectors=[Selector(catalog="main", schema="sales", table="absent")],
+        exact_relation=lambda selector: None,
+        list_relations=lambda selector: [],
+    )
+    assert list(registry.validate) == ["main.sales.absent"]
+    assert registry.relations["main.sales.absent"].discovered is False
+
+
+def test_an_explicitly_selected_table_that_exists_is_marked_discovered():
+    registry = table_registry(
+        selectors=[Selector(catalog="main", schema="sales", table="orders")],
+        exact_relation=lambda selector: relation("main.sales.orders", kind="table"),
+        list_relations=lambda selector: [],
+    )
+    assert registry.relations["main.sales.orders"].discovered is True
+    assert list(registry.validate) == ["main.sales.orders"]
+
+
+def test_an_excluded_explicit_selection_is_not_validated():
+    registry = table_registry(
+        selectors=[Selector(catalog="main", schema="sales", table="TMP_LOAD")],
+        exact_relation=lambda selector: None,
+        list_relations=lambda selector: [],
+        exclude=["TMP_*"],
+    )
+    assert registry.validate == {}
+    assert registry.relations == {}
