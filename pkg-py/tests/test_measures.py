@@ -610,12 +610,27 @@ def test_semantic_layer_rejects_an_undecorated_function() -> None:
 
 
 def test_semantic_layer_rejects_duplicate_names() -> None:
+    # Two *different* measures that share a name: each factory call decorates
+    # a fresh function, so the records are distinct objects.
+    def make() -> Measure:
+        @measure(description="Count of orders.", name="order_count")
+        def calc() -> int:
+            return 1
+
+        return _as_measure(calc)
+
+    with pytest.raises(ValueError, match="order_count"):
+        semantic_layer(make(), make())
+
+
+def test_semantic_layer_accepts_the_same_measure_twice() -> None:
     @measure(description="Count of orders.")
     def order_count() -> int:
         return 1
 
-    with pytest.raises(ValueError, match="order_count"):
-        semantic_layer(order_count, order_count)
+    layer = semantic_layer(order_count, order_count)
+
+    assert list(layer.measures) == ["order_count"]
 
 
 def test_semantic_layer_harvests_inline_measure_source() -> None:
@@ -965,3 +980,97 @@ def test_semantic_layer_reenters_during_a_measure_files_import() -> None:
     module_name = outer_layer.measures["outer_measure"].func.__module__
     fixture_module = sys.modules[module_name]
     assert list(fixture_module.NESTED_LAYER.measures) == ["nested_order_count"]
+
+
+def test_semantic_layer_supports_membership_and_iteration() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert "order_count" in layer
+    assert "other" not in layer
+    assert list(layer) == ["order_count"]
+
+
+def test_a_directory_and_a_file_inside_it_overlap_without_error() -> None:
+    layer = semantic_layer(
+        MEASURE_FILES / "sibling_imports",
+        MEASURE_FILES / "sibling_imports" / "uses_helper.py",
+    )
+
+    assert list(layer.measures) == ["doubled_count"]
+
+
+def test_a_module_level_alias_is_collected_once() -> None:
+    layer = semantic_layer(MEASURE_FILES / "aliased" / "aliased.py")
+
+    assert list(layer.measures) == ["aliased_measure"]
+
+
+def test_distinct_measures_from_two_files_sharing_a_name_are_an_error() -> None:
+    with pytest.raises(ValueError, match="dup"):
+        semantic_layer(
+            MEASURE_FILES / "duplicate_measures" / "a_measure.py",
+            MEASURE_FILES / "duplicate_measures" / "b_measure.py",
+        )
+
+
+def test_a_non_python_file_path_is_an_error(tmp_path: Path) -> None:
+    notes = tmp_path / "notes.txt"
+    notes.write_text("not python\n")
+
+    with pytest.raises(ValueError, match="not a Python file"):
+        semantic_layer(notes)
+
+
+def test_a_directorys_init_py_is_never_imported() -> None:
+    # has_init/__init__.py raises if it is ever executed.
+    layer = semantic_layer(MEASURE_FILES / "has_init")
+
+    assert list(layer.measures) == ["has_init_measure"]
+
+
+def test_source_text_falls_back_when_source_is_unavailable() -> None:
+    # A function built by exec has no file for inspect.getsource to read.
+    namespace: dict[str, Any] = {}
+    exec("def ghost() -> int:\n    return 1\n", namespace)  # noqa: S102
+    record = _as_measure(measure(description="d")(namespace["ghost"]))
+
+    layer = semantic_layer(record)
+
+    assert layer.source_text["ghost"] == "# source unavailable for ghost"
+
+
+def test_a_directory_already_on_sys_path_is_left_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    module = _load_module_from_path(source)
+
+    assert module.VALUE == 1
+    assert str(tmp_path) in sys.path
+
+
+def test_a_dotted_filename_loads_despite_the_collision_check() -> None:
+    # "email.mime" resolves to a real stdlib submodule; the check must skip
+    # a stem that cannot be imported as a single segment rather than report
+    # a phantom shadowing (or import the parent package as a side effect).
+    layer = semantic_layer(MEASURE_FILES / "dotted" / "email.mime.py")
+
+    assert list(layer.measures) == ["dotted_measure"]
+
+
+def test_a_subdirectory_shadowing_the_standard_library_is_an_error() -> None:
+    # pkg_collision/json/ is importable as a namespace package once its
+    # parent is on sys.path, exactly like a json.py sibling.
+    with pytest.raises(ValueError, match="standard library"):
+        semantic_layer(MEASURE_FILES / "pkg_collision" / "orders.py")
+
+
+def test_a_module_level_bare_record_is_harvested() -> None:
+    layer = semantic_layer(MEASURE_FILES / "bare_record" / "total.py")
+
+    assert list(layer.measures) == ["grand_total"]
+    assert layer.measures["grand_total"].func() == 1
+    assert "def total" in layer.source_text["total"]

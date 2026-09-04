@@ -18,7 +18,7 @@ import os
 import re
 import sys
 import threading
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType, ModuleType
@@ -228,6 +228,10 @@ def measure(
     they call stay ordinary callables. Model-supplied arguments are expected
     to be scalars, enums, or arrays of those; richer shapes are not rejected,
     but the schema block renders them only approximately.
+
+    ``provenance`` records links back to wherever the measure's definition
+    came from. The R implementation attaches provenance through a roxygen
+    tag instead, and only to measures sourced from a file.
     """
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -366,6 +370,11 @@ class SemanticLayer:
     ``source_text`` holds the source of the measures and the module-level
     helpers they call, keyed by Python name. Only text is kept: the agent's
     worker session reads measure definitions but never receives a callable.
+    Two functions that share a Python name share one entry, and the first
+    definition collected wins, so a measure whose function shares its name
+    with an earlier one is shown that earlier function's source instead.
+
+    The layout of this object is internal and may change without notice.
     """
 
     measures: Mapping[str, Measure]
@@ -373,6 +382,12 @@ class SemanticLayer:
 
     def __len__(self) -> int:
         return len(self.measures)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.measures)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.measures
 
     def __repr__(self) -> str:
         count = len(self.measures)
@@ -383,13 +398,23 @@ class SemanticLayer:
 def semantic_layer(*items: Any) -> SemanticLayer:
     """Collect measures into a semantic layer.
 
-    Each item is a measure, a list of measures, a module, or a path to a
-    Python file or a directory of them. Directory searches are not recursive.
+    Each item is a measure, a list (or tuple) of measures, a module, or a
+    path to a Python file or a directory of them. Directory searches are
+    not recursive.
 
-    A sibling file is imported by plain absolute import; its directory is on
-    sys.path only while the file loads. A file whose name collides with the
-    standard library, or with a module already imported from elsewhere, is a
-    construction error.
+    A sibling file is imported by plain absolute import; its directory is
+    on sys.path only while the file loads. Even a single requested file
+    puts its whole directory on sys.path, so every .py file beside it --
+    and every subdirectory, which is importable as a package -- is checked:
+    a name that collides with the standard library, an installed package,
+    or a module already imported from elsewhere is a construction error. A
+    sibling imported this way stays in sys.modules under its bare name for
+    the rest of the process, so two directories that each define a
+    same-named helper cannot both be loaded in one process.
+
+    Collecting the same measure twice -- the same file passed alongside
+    its own directory, say -- is not an error; two different measures
+    sharing one name is.
     """
     measures: dict[str, Measure] = {}
     source_text: dict[str, str] = {}
@@ -398,7 +423,12 @@ def semantic_layer(*items: Any) -> SemanticLayer:
     for item in items:
         found, sources = _collect(item)
         for record in found:
-            if record.name in measures:
+            existing = measures.get(record.name)
+            # The same record collected again -- the same function twice, a
+            # file and the directory containing it, an in-module alias -- is
+            # one measure, not a collision; only a *different* measure
+            # claiming the name is an error.
+            if existing is not None and existing is not record:
                 duplicates.append(record.name)
             measures[record.name] = record
         _merge_sources(source_text, sources)
@@ -436,8 +466,8 @@ def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
     record = as_measure(item)
     if record is None:
         raise TypeError(
-            f"Every item in semantic_layer() must be a measure, a list of "
-            f"measures, a module, or a path; got {item!r}.\n"
+            f"Every item in semantic_layer() must be a measure, a list or "
+            f"tuple of measures, a module, or a path; got {item!r}.\n"
             f"Decorate the function with @measure to make it one."
         )
     return [record], {record.func.__name__: _source_text(record.func)}
@@ -492,11 +522,23 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
     measures: list[Measure] = []
     sources: dict[str, str] = {}
     for name, value in vars(module).items():
-        if not inspect.isfunction(value) or value.__module__ != module.__name__:
-            continue
-        sources[name] = _source_text(value)
-        record = as_measure(value)
-        if record is not None:
+        if inspect.isfunction(value):
+            if value.__module__ != module.__name__:
+                continue
+            sources[name] = _source_text(value)
+            record = as_measure(value)
+        else:
+            # A measure can also sit at module level as a bare record. One
+            # wrapping a function from elsewhere is an imported name and
+            # belongs to the module that defined it, same as any other
+            # import.
+            record = as_measure(value)
+            if record is None:
+                continue
+            if getattr(record.func, "__module__", None) != module.__name__:
+                continue
+            sources.setdefault(record.func.__name__, _source_text(record.func))
+        if record is not None and all(record is not seen for seen in measures):
             measures.append(record)
     return measures, sources
 
@@ -506,7 +548,10 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
 # around it rather than around the layer itself. Reentrant, not a plain
 # Lock: the lock is held across exec_module(), which runs a measure file's
 # top-level code, and that code can itself call semantic_layer() on another
-# path, re-entering this same function on the same thread.
+# path, re-entering this same function on the same thread. The flip side of
+# holding it across user code: a measure file whose import joins a *thread*
+# that constructs a layer deadlocks, because the lock stays owned by the
+# importing thread.
 _IMPORT_LOCK = threading.RLock()
 
 # Anything that is not a plain identifier character, including the dots in a
@@ -642,14 +687,32 @@ def _check_directory_importable(directory: Path, requested: Path) -> None:
 
     Every .py file in the directory is checked, not only ``requested``: the
     sys.path entry makes all of them importable, so an unloaded file with a
-    colliding name is exactly as dangerous. ``requested`` is named in every
-    message so a sibling file's collision is not reported with nothing
-    connecting it to the file the caller actually asked to load.
+    colliding name is exactly as dangerous. Subdirectories are checked too:
+    each is importable as a package, or as a namespace package with no
+    __init__.py at all. ``requested`` is named in every message so a
+    sibling's collision is not reported with nothing connecting it to the
+    file the caller actually asked to load.
     """
-    for entry in sorted(directory.glob("*.py")):
-        if entry.name == "__init__.py":
+    for entry in sorted(directory.iterdir()):
+        if entry.is_file():
+            if entry.suffix != ".py" or entry.name == "__init__.py":
+                continue
+            stem = entry.stem
+        elif entry.is_dir():
+            stem = entry.name
+        else:
             continue
-        stem = entry.stem
+
+        # A name that is not a plain identifier -- the dots in
+        # `sales.q3.py`, a dunder like __pycache__ -- cannot be imported by
+        # that name, so it can shadow nothing, and looking it up would be
+        # worse than skipping it: find_spec() on a dotted name imports the
+        # parent package as a side effect of this read-only check, then
+        # either raises (swallowed below, silently skipping the check) or
+        # resolves to an unrelated submodule and reports a phantom
+        # collision.
+        if not stem.isidentifier() or (stem.startswith("__") and stem.endswith("__")):
+            continue
 
         # Must run before the directory joins sys.path: added first, the
         # file would resolve to itself and every directory would look
