@@ -403,10 +403,21 @@ def _fixture_measure(spec: dict[str, Any]) -> Measure:
     A real function is generated because @measure inspects a signature, not a
     spec; each described argument keeps its position, required arguments and
     injected arguments come first (Python requires that), and defaulted
-    arguments follow. No existing fixture case mixes required-after-optional
-    or optional-before-injected, so this ordering renders identically to
-    declaration order for every case in measure-schema.json.
+    arguments follow. A case declaring a required argument after an optional
+    one cannot be built without reordering, which would render a different
+    argument order than the R runner, so it is rejected rather than built.
     """
+    optional_seen = False
+    for argument in spec["arguments"]:
+        if argument["required"] and optional_seen:
+            raise ValueError(
+                f"Fixture case {spec['name']!r} declares required argument "
+                f"{argument['name']!r} after an optional one; Python requires "
+                "defaulted parameters last, so this runner cannot preserve "
+                "declaration order for that case."
+            )
+        optional_seen = optional_seen or not argument["required"]
+
     namespace: dict[str, Any] = {}
     required_params: list[str] = []
     optional_params: list[str] = []

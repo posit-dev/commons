@@ -217,8 +217,9 @@ def measure(
     """Mark a function as a measure.
 
     The decorated function is returned unchanged, so measures and the helpers
-    they call stay ordinary callables. Model-supplied arguments are limited to
-    scalars, enums, and arrays of those.
+    they call stay ordinary callables. Model-supplied arguments are expected
+    to be scalars, enums, or arrays of those; richer shapes are not rejected,
+    but the schema block renders them only approximately.
     """
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
