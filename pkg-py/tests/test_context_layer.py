@@ -1,11 +1,16 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
 
+import pandas as pd
 import pytest
 from raghilda.store import DuckDBStore
 
-from commons import ContextLayer, context_layer
-from commons._context_layer import _dictionary_chunks, strip_frontmatter
+from commons import ContextLayer, context_layer, data_source
+from commons._context_layer import (
+    _dictionary_chunks,
+    augment_context_layer,
+    strip_frontmatter,
+)
 from commons._data_dictionary import DataDictionary
 
 from ._shared import load_shared_fixture
@@ -248,3 +253,93 @@ def test_dictionary_context_chunks_shared_cases(case):
     dictionary = None if spec is None else DataDictionary.model_validate(spec)
 
     assert _dictionary_chunks(dictionary) == case["expected"]
+
+
+def a_source_with_dictionary(spec):
+    """A real source over an in-memory DuckDB, carrying the given dictionary."""
+    return data_source(
+        notes=pd.DataFrame({"n": [1]}),
+        dictionary=DataDictionary.model_validate(spec),
+    )
+
+
+def test_augment_appends_dictionary_chunks_to_a_new_layer(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+    source = a_source_with_dictionary({"details": "Orders from the retail system."})
+
+    augmented = augment_context_layer(layer, [source])
+
+    assert augmented is not None
+    assert augmented is not layer
+    assert layer.docs == ("# Revenue\nRevenue excludes tax.",)
+    assert augmented.docs == (
+        "# Revenue\nRevenue excludes tax.",
+        "Orders from the retail system.",
+    )
+
+
+def test_augment_creates_a_layer_when_there_was_none():
+    source = a_source_with_dictionary({"details": "Orders from the retail system."})
+
+    augmented = augment_context_layer(None, [source])
+
+    assert augmented is not None
+    assert augmented.docs == ("Orders from the retail system.",)
+
+
+def test_augment_returns_the_argument_unchanged_when_there_is_nothing_to_add(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+    bare = data_source(notes=pd.DataFrame({"n": [1]}))
+
+    assert augment_context_layer(layer, [bare]) is layer
+    assert augment_context_layer(None, [bare]) is None
+    assert augment_context_layer(layer, []) is layer
+    assert augment_context_layer(None, []) is None
+
+
+def test_augment_gives_the_new_layer_a_fresh_store(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\nRevenue excludes tax.")
+    layer = context_layer(files=[path])
+    layer.prewarm()
+    source = a_source_with_dictionary({"details": "Orders from the retail system."})
+
+    augmented = augment_context_layer(layer, [source])
+
+    assert augmented is not None
+    assert augmented._store_cache is None
+    assert "Orders" in augmented.search("orders retail")[0]
+
+
+def test_augment_folds_in_every_source():
+    first = a_source_with_dictionary({"details": "Orders from the retail system."})
+    second = a_source_with_dictionary({"glossary": {"AOV": "Average order value."}})
+
+    augmented = augment_context_layer(None, [first, second])
+
+    assert augmented is not None
+    assert augmented.docs == (
+        "Orders from the retail system.",
+        "AOV: Average order value.",
+    )
+
+
+def test_a_dictionary_alone_is_searchable_context():
+    source = a_source_with_dictionary(
+        {
+            "details": None,
+            "tables": {},
+            "glossary": {"AOV": "Average order value, revenue divided by order count."},
+        }
+    )
+
+    layer = augment_context_layer(None, [source])
+
+    assert layer is not None
+    assert layer.search("average order value") == [
+        "AOV: Average order value, revenue divided by order count."
+    ]
