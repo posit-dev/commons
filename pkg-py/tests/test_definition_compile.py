@@ -304,3 +304,54 @@ def test_every_corpus_definition_compiles_to_sql_duckdb_accepts():
                 assert json.loads(row[0])["error"] is False, record.sql
                 checked += 1
     assert checked == 42
+
+
+def test_definitions_on_a_table_the_source_does_not_expose_fail_construction(
+    tmp_path,
+):
+    """Caught at `data_source()`, not deferred to the registry.
+
+    Waiting for `build_registry()` would let the compiled records reach the
+    dictionary's retrieval chunks first, describing a table the agent cannot
+    query.
+    """
+    path = tmp_path / "data-dict.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "tables": [
+                    {
+                        "name": "elsewhere",
+                        "columns": [{"name": "amount", "type": "number"}],
+                        "definitions": [{"name": "big", "expr": "amount > 100"}],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="does not expose"):
+        data_source(orders=pd.DataFrame({"amount": [1]}), dictionary=path)
+
+
+def test_a_table_without_definitions_need_not_be_exposed(tmp_path):
+    # Prose about a table the source does not expose is the author's business;
+    # only a definition would produce SQL against something that is not there.
+    path = tmp_path / "data-dict.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "tables": [
+                    {"name": "elsewhere", "description": "Documented elsewhere."},
+                    {
+                        "name": "orders",
+                        "columns": [{"name": "amount", "type": "number"}],
+                        "definitions": [{"name": "big", "expr": "amount > 100"}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    source = data_source(orders=pd.DataFrame({"amount": [1]}), dictionary=path)
+    assert source.dictionary is not None

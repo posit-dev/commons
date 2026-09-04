@@ -276,7 +276,7 @@ def data_source(
         # The dialect is only known now, which is why lowering waits for it.
         from ._definitions import attach_compiled_definitions
 
-        attach_compiled_definitions(resolved, source.dialect())
+        attach_compiled_definitions(resolved, source.dialect(), set(source.tables))
     return source
 
 
