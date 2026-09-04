@@ -33,9 +33,10 @@ _EXPORTED_TYPES = frozenset(
 _INTERVAL_UNITS = frozenset({"seconds", "minutes", "hours", "days", "weeks"})
 _TEMPORAL = frozenset({"date", "datetime"})
 
-# Rust's named-group spelling, `(?<name>`. The lookbehind forms `(?<=` and
-# `(?<!` share the prefix and are a different refusal entirely.
-_RUST_NAMED_GROUP = re.compile(r"\(\?<[^=!]")
+# Rust's named-group spelling, `(?<name>`, where a name starts with a letter
+# or underscore. The lookbehind forms `(?<=` and `(?<!` share the prefix and
+# are a different refusal, as are malformed forms like `(?<)` and `(?<1>`.
+_RUST_NAMED_GROUP = re.compile(r"\(\?<[A-Za-z_]")
 
 _RE2_LOCK = threading.Lock()
 _RE2_CONNECTION: Any = None
