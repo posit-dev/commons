@@ -1,0 +1,41 @@
+{
+  "description": "Which parts of a warehouse session identity a refusal reports as changed. The comparison runs before every catalog operation, and the answer decides what the user is told to look at, so it is pinned rather than described twice. A field is absent (null) when the backend has none: Databricks reports no role, so a refusal there must never name one. The names here are the snapshot's own fields; each implementation words them for its own message.",
+  "cases": [
+    {
+      "name": "a snowflake role change",
+      "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "after": {"backend": "snowflake", "principal": "ANALYST", "role": "ADMIN", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "changed": ["role"]
+    },
+    {
+      "name": "a snowflake secondary role change",
+      "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "after": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "NONE", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "changed": ["secondary_roles"]
+    },
+    {
+      "name": "a databricks principal change names no role",
+      "before": {"backend": "databricks", "principal": "analyst@example.com", "role": null, "secondary_roles": null, "catalog": "main", "schema": "default"},
+      "after": {"backend": "databricks", "principal": "other@example.com", "role": null, "secondary_roles": null, "catalog": "main", "schema": "default"},
+      "changed": ["principal"]
+    },
+    {
+      "name": "a databricks namespace change names both parts",
+      "before": {"backend": "databricks", "principal": "analyst@example.com", "role": null, "secondary_roles": null, "catalog": "main", "schema": "default"},
+      "after": {"backend": "databricks", "principal": "analyst@example.com", "role": null, "secondary_roles": null, "catalog": "sandbox", "schema": "scratch"},
+      "changed": ["catalog", "schema"]
+    },
+    {
+      "name": "several fields at once, in snapshot order",
+      "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "after": {"backend": "snowflake", "principal": "ADMIN_USER", "role": "ADMIN", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "STAGING"},
+      "changed": ["principal", "role", "schema"]
+    },
+    {
+      "name": "a role that was dropped rather than swapped",
+      "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "after": {"backend": "snowflake", "principal": "ANALYST", "role": null, "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "changed": ["role"]
+    }
+  ]
+}

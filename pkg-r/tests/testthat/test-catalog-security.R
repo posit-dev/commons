@@ -73,6 +73,11 @@ test_that("catalog operations reject changed sessions", {
     catalog_search(source, "sales"),
     class = "commons_catalog_session_changed"
   )
+  # The refusal names what moved rather than every field it compares.
+  expect_error(
+    source_query(source, "SELECT * FROM sales"),
+    regexp = "active role"
+  )
 })
 
 test_that("transient access failures remain retryable", {
@@ -122,23 +127,68 @@ test_that("authorization failures are cached per relation", {
   expect_equal(calls, 1L)
 })
 
-test_that("warehouse access errors are classified conservatively", {
-  authorization <- structure(
-    list(message = "hidden", call = NULL, sqlstate = "42501"),
-    class = c("error", "condition")
+test_that("warehouse access errors match the shared contract", {
+  cases <- shared_fixture("catalog-access-errors")$cases
+  expect_gt(length(cases), 0L)
+
+  for (case in cases) {
+    err <- structure(
+      list(message = case$message, call = NULL, sqlstate = case$sqlstate),
+      class = c("error", "condition")
+    )
+    expect_equal(catalog_access_error_kind(err), case$kind, info = case$name)
+  }
+})
+
+test_that("a databricks refusal never names a role", {
+  before <- list(
+    backend = "databricks",
+    principal = "analyst@example.com",
+    namespace = list(catalog = "main", schema = "default")
+  )
+  local_mocked_bindings(
+    catalog_session_snapshot = function(...) {
+      list(
+        backend = "databricks",
+        principal = "other@example.com",
+        namespace = list(catalog = "main", schema = "default")
+      )
+    }
   )
 
-  expect_equal(catalog_access_error_kind(authorization), "authorization")
+  err <- expect_error(
+    catalog_check_session_snapshot(DBI::ANSI(), before),
+    class = "commons_catalog_session_changed"
+  )
+  expect_match(conditionMessage(err), "principal changed")
+  expect_no_match(conditionMessage(err), "role")
+})
+
+test_that("changed session fields match the shared contract", {
+  cases <- shared_fixture("catalog-session-changed")$cases
+  expect_gt(length(cases), 0L)
+
+  for (case in cases) {
+    expect_equal(
+      catalog_session_changed_fields(
+        catalog_session_fixture_snapshot(case$after),
+        catalog_session_fixture_snapshot(case$before)
+      ),
+      unlist(case$changed),
+      info = case$name
+    )
+  }
+})
+
+test_that("an NA sqlstate is read as no sqlstate", {
+  # R-only: the fixture carries an empty string for a driver that reported
+  # no sqlstate, and only a DBI driver can hand back NA_character_ instead.
   missing_sqlstate <- structure(
     list(message = "bad syntax", call = NULL, sqlstate = NA_character_),
     class = c("error", "condition")
   )
+
   expect_equal(catalog_access_error_kind(missing_sqlstate), "unknown")
-  expect_equal(
-    catalog_access_error_kind(simpleError("warehouse is temporarily unavailable")),
-    "transient"
-  )
-  expect_equal(catalog_access_error_kind(simpleError("bad syntax")), "unknown")
 })
 
 test_that("catalog SQL probes bind typed nulls", {
@@ -342,6 +392,55 @@ test_that("exact missing warehouse relations retain their diagnostic", {
     ),
     "not on the connection"
   )
+})
+
+test_that("access precedence matches the shared contract", {
+  cases <- shared_fixture("catalog-access-precedence")$cases
+  expect_gt(length(cases), 0L)
+
+  for (case in cases) {
+    script <- catalog_precedence_script(case$relations)
+    registry <- list(
+      labels = names(script),
+      ids = lapply(names(script), function(label) DBI::Id(table = label))
+    )
+    relations <- lapply(script, function(item) {
+      list(id = DBI::Id(table = item$label), discovered = item$discovered == "true")
+    })
+    probed <- character()
+    local_mocked_bindings(
+      catalog_probe_relation = function(con, id) {
+        label <- id@name[["table"]]
+        probed <<- c(probed, label)
+        catalog_precedence_probe(script[[label]]$probe)
+      },
+      catalog_relation_exists = function(con, id) {
+        answer <- script[[id@name[["table"]]]]$exists %||% "unknown"
+        if (identical(answer, "unknown")) NULL else identical(answer, "true")
+      }
+    )
+
+    expected <- case$expected
+    if (identical(expected$outcome, "ok")) {
+      expect_no_error(
+        catalog_require_queryable_relations(DBI::ANSI(), registry, relations)
+      )
+      expect_equal(probed, catalog_precedence_probed(script), info = case$name)
+      next
+    }
+    expectation <- catalog_precedence_expectation(expected$outcome)
+    err <- expect_error(
+      catalog_require_queryable_relations(DBI::ANSI(), registry, relations),
+      class = expectation$class
+    )
+    if (!is.null(expectation$regexp)) {
+      expect_match(conditionMessage(err), expectation$regexp, info = case$name)
+    }
+    for (label in unlist(expected$labels)) {
+      expect_match(conditionMessage(err), label, fixed = TRUE, info = case$name)
+    }
+    expect_equal(probed, catalog_precedence_probed(script), info = case$name)
+  }
 })
 
 test_that("discovered relations may have an unknown kind", {
