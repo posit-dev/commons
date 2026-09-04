@@ -217,7 +217,9 @@ def measure(
     """Mark a function as a measure.
 
     The decorated function is returned unchanged, so measures and the helpers
-    they call stay ordinary callables.
+    they call stay ordinary callables. Model-supplied arguments are expected
+    to be scalars, enums, or arrays of those; richer shapes are not rejected,
+    but the schema block renders them only approximately.
     """
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -246,6 +248,95 @@ def measure(
         return func
 
     return decorate
+
+
+def measure_schema_text(
+    record: Measure,
+    source_names: Sequence[str] = (),
+    heading: str | None = None,
+) -> str:
+    """Render the block search_pool shows the model for one measure.
+
+    The exact text is a cross-language contract pinned by
+    ``tests/shared/measure-schema.json``; change that fixture, not just this
+    function.
+    """
+    schema = record.params.model_json_schema()
+    properties: dict[str, Any] = schema.get("properties", {})
+    required = set(schema.get("required", ()))
+    defs: dict[str, Any] = schema.get("$defs", {})
+
+    details = ""
+    # Naming the source a measure queries points the SQL fallback at the right
+    # one. `source_names` is empty for single-source agents, so the line never
+    # appears there.
+    named_sources = set(source_names)
+    named = [name for name in record.injected if name in named_sources]
+    if named:
+        details += f"sources: {', '.join(named)}\n"
+    if properties:
+        lines = [
+            f"  - {name} ({_argument_detail(prop, defs)}, "
+            f"{'required' if name in required else 'optional'}) "
+            f"{prop.get('description', '')}"
+            for name, prop in properties.items()
+        ]
+        details += "arguments:\n" + "\n".join(lines)
+    details = details.removesuffix("\n")
+    if details:
+        details = f"\n\n{details}"
+
+    resolved_heading = record.name if heading is None else heading
+    return f"### {resolved_heading}\n{record.description}{details}"
+
+
+def _argument_detail(prop: dict[str, Any], defs: dict[str, Any]) -> str:
+    resolved = _resolve_node(prop, defs)
+    if "enum" in resolved:
+        return f"one of {{{', '.join(str(value) for value in resolved['enum'])}}}"
+    if resolved.get("type") == "array":
+        return f"array of {{{_items_label(resolved.get('items', {}), defs)}}}"
+    return str(resolved.get("type", "string"))
+
+
+def _items_label(items: dict[str, Any], defs: dict[str, Any]) -> str:
+    # An array's items can be an enum, whose vocabulary is worth listing, or a
+    # basic type, which is named. Not `_argument_detail`: that would nest the
+    # enum branch's "one of" inside "array of".
+    resolved = _resolve_node(items, defs)
+    if "enum" in resolved:
+        return ", ".join(str(value) for value in resolved["enum"])
+    return str(resolved.get("type", "string"))
+
+
+def _resolve_node(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a JSON Schema node to the single shape it actually describes.
+
+    pydantic emits two shapes ``_argument_detail`` and ``_items_label`` must
+    see through, in this order: a nullable field or item is an `anyOf` union
+    with a `{"type": "null"}` branch, and a bare `enum.Enum` (unlike a
+    `Literal`, which is inlined) is a `$ref` into `$defs`. Unwrapping the
+    union before resolving the reference means a nullable bare enum, and a
+    nullable array of them, both resolve the same as a required one.
+    """
+    return _resolve_ref(_unwrap_any_of(node), defs)
+
+
+def _unwrap_any_of(node: dict[str, Any]) -> dict[str, Any]:
+    branches = node.get("anyOf")
+    if branches is None:
+        return node
+    non_null = [branch for branch in branches if branch.get("type") != "null"]
+    # A union of more than one real type has no single detail to derive; leave
+    # it as is; it falls through to `string` below, same as before this fix.
+    return non_null[0] if len(non_null) == 1 else node
+
+
+def _resolve_ref(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
+    ref = node.get("$ref")
+    if ref is None:
+        return node
+    return defs[ref.removeprefix("#/$defs/")]
 
 
 def as_measure(obj: Any) -> Measure | None:

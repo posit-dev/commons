@@ -1,5 +1,6 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
+import enum
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from typing import Annotated, Any, Literal, get_args, get_origin
@@ -14,7 +15,10 @@ from commons._measures import (
     _split_parameters,
     as_measure,
     measure,
+    measure_schema_text,
 )
+
+from ._shared import load_shared_fixture
 
 
 def test_injected_alias_carries_the_marker() -> None:
@@ -368,3 +372,178 @@ def test_measure_is_frozen() -> None:
     m = _count_measure()
     with pytest.raises(FrozenInstanceError):
         m.name = "other"  # type: ignore[misc]
+
+
+SCHEMA_CASES: list[dict[str, Any]] = load_shared_fixture("measure-schema")[
+    "measure_schema_text"
+]["cases"]
+
+_SCALARS: dict[str, Any] = {
+    "string": str,
+    "integer": int,
+    "number": float,
+    "boolean": bool,
+}
+
+
+def _fixture_annotation(spec: dict[str, Any]) -> Any:
+    kind = spec["type"]
+    if kind == "enum":
+        return Literal[tuple(spec["values"])]  # type: ignore[misc]
+    if kind == "array":
+        return list[_fixture_annotation(spec["items"])]
+    return _SCALARS[kind]
+
+
+def _fixture_measure(spec: dict[str, Any]) -> Measure:
+    """Build a measure from a fixture spec and decorate it with the production
+    @measure, so this runner enters through the same front door as
+    test-measures.R's runner enters measure().
+
+    A real function is generated because @measure inspects a signature, not a
+    spec; each described argument keeps its position, required arguments and
+    injected arguments come first (Python requires that), and defaulted
+    arguments follow. A case declaring a required argument after an optional
+    one cannot be built without reordering, which would render a different
+    argument order than the R runner, so it is rejected rather than built.
+    """
+    optional_seen = False
+    for argument in spec["arguments"]:
+        if argument["required"] and optional_seen:
+            raise ValueError(
+                f"Fixture case {spec['name']!r} declares required argument "
+                f"{argument['name']!r} after an optional one; Python requires "
+                "defaulted parameters last, so this runner cannot preserve "
+                "declaration order for that case."
+            )
+        optional_seen = optional_seen or not argument["required"]
+
+    namespace: dict[str, Any] = {}
+    required_params: list[str] = []
+    optional_params: list[str] = []
+
+    for argument in spec["arguments"]:
+        type_name = f"_{argument['name']}_type"
+        namespace[type_name] = Annotated[
+            _fixture_annotation(argument), Field(description=argument["description"])
+        ]
+        if argument["required"]:
+            required_params.append(f"{argument['name']}: {type_name}")
+        else:
+            default_name = f"_{argument['name']}_default"
+            namespace[default_name] = argument["default"]
+            optional_params.append(f"{argument['name']}: {type_name} = {default_name}")
+
+    injected_params: list[str] = []
+    for injected_name in spec["injected"]:
+        type_name = f"_{injected_name}_type"
+        namespace[type_name] = Injected[Any]
+        injected_params.append(f"{injected_name}: {type_name}")
+
+    params = ", ".join(required_params + injected_params + optional_params)
+    exec(f"def {spec['name']}({params}) -> None: ...", namespace)  # noqa: S102
+    func = namespace[spec["name"]]
+
+    decorated = measure(description=spec["description"], name=spec["name"])(func)
+    return _as_measure(decorated)
+
+
+def test_schema_fixture_is_not_empty() -> None:
+    assert SCHEMA_CASES
+
+
+@pytest.mark.parametrize("case", SCHEMA_CASES, ids=lambda case: case["name"])
+def test_measure_schema_text_matches_the_shared_fixture(case: dict[str, Any]) -> None:
+    rendered = measure_schema_text(
+        _fixture_measure(case["measure"]),
+        source_names=case["source_names"],
+        heading=case.get("heading"),
+    )
+
+    assert rendered == case["expected"]
+
+
+def test_measure_schema_text_names_a_bare_enum_arguments_vocabulary() -> None:
+    """pydantic schemas a bare enum.Enum as a `$ref` into `$defs`, not inline."""
+
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        region: Annotated[Region, Field(description="The sales region.")],
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "region (one of {EMEA, AMER}, required) The sales region." in rendered
+
+
+def test_measure_schema_text_names_a_bare_enum_arrays_vocabulary() -> None:
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        regions: Annotated[list[Region], Field(description="Regions to include.")],
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "regions (array of {EMEA, AMER}, required) Regions to include." in rendered
+
+
+def test_measure_schema_text_names_a_nullable_bare_enum_arguments_vocabulary() -> None:
+    """pydantic wraps a nullable field in `anyOf` with a null branch."""
+
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        region: Annotated[
+            Region | None, Field(description="Bare enum, nullable.")
+        ] = None,
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "region (one of {EMEA, AMER}, optional) Bare enum, nullable." in rendered
+
+
+def test_measure_schema_text_names_a_nullable_literal_arguments_vocabulary() -> None:
+    @measure(description="Orders by region.")
+    def regional_orders(
+        region: Annotated[
+            Literal["EMEA", "AMER"] | None, Field(description="Literal, nullable.")
+        ] = None,
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "region (one of {EMEA, AMER}, optional) Literal, nullable." in rendered
+
+
+def test_measure_schema_text_names_a_nullable_enum_arrays_vocabulary() -> None:
+    class Region(str, enum.Enum):
+        EMEA = "EMEA"
+        AMER = "AMER"
+
+    @measure(description="Orders by region.")
+    def regional_orders(
+        regions: Annotated[
+            list[Region] | None, Field(description="Enum array, nullable.")
+        ] = None,
+    ) -> int:
+        return 1
+
+    rendered = measure_schema_text(_as_measure(regional_orders))
+
+    assert "regions (array of {EMEA, AMER}, optional) Enum array, nullable." in rendered

@@ -151,3 +151,69 @@ test_that("search_pool_text reports when nothing matches", {
     "Nothing in the semantic layer"
   )
 })
+
+fixture_scalar_type <- function(kind, description = "", required = TRUE) {
+  switch(
+    kind,
+    integer = ellmer::type_integer(description, required = required),
+    number = ellmer::type_number(description, required = required),
+    boolean = ellmer::type_boolean(description, required = required),
+    ellmer::type_string(description, required = required)
+  )
+}
+
+fixture_type <- function(arg) {
+  required <- isTRUE(arg$required)
+  if (identical(arg$type, "enum")) {
+    return(ellmer::type_enum(
+      values = unlist(arg$values),
+      description = arg$description,
+      required = required
+    ))
+  }
+  if (identical(arg$type, "array")) {
+    items <- if (identical(arg$items$type, "enum")) {
+      ellmer::type_enum(values = unlist(arg$items$values))
+    } else {
+      fixture_scalar_type(arg$items$type)
+    }
+    return(ellmer::type_array(
+      items = items,
+      description = arg$description,
+      required = required
+    ))
+  }
+  fixture_scalar_type(arg$type, arg$description, required)
+}
+
+# Build a measure from a fixture spec. The injected arguments only have to
+# exist as formals; measure() marks them as hidden from the model.
+fixture_measure <- function(spec) {
+  arguments <- list()
+  for (arg in spec$arguments) {
+    arguments[[arg$name]] <- fixture_type(arg)
+  }
+  formal_names <- c(names(arguments), unlist(spec$injected))
+  fn <- as.function(c(
+    stats::setNames(rep(list(quote(expr = )), length(formal_names)), formal_names),
+    list(NULL)
+  ))
+  measure(spec$name, spec$description, fn, arguments = arguments)
+}
+
+test_that("measure_schema_text matches the shared fixture", {
+  cases <- shared_fixture("measure-schema")$measure_schema_text$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    args <- list(
+      fixture_measure(case$measure),
+      source_names = unlist(case$source_names) %||% character()
+    )
+    if (!is.null(case$heading)) {
+      args$heading <- case$heading
+    }
+    rendered <- do.call(measure_schema_text, args)
+    expect_identical(rendered, case$expected, info = case$name)
+  }
+})
