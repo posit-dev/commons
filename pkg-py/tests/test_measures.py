@@ -2,7 +2,6 @@
 
 import enum
 import importlib
-import inspect
 import os
 import py_compile
 import sys
@@ -20,6 +19,7 @@ from commons._measures import (
     INJECTED,
     Injected,
     Measure,
+    SemanticLayer,
     _from_module,
     _load_module_from_path,
     _load_mtimes,
@@ -979,17 +979,18 @@ def test_a_same_named_module_without_a_spec_is_a_construction_error(
         sys.modules.pop("planted", None)
 
 
-def _region_revenue(default: Any = inspect.Parameter.empty) -> Measure:
-    if default is inspect.Parameter.empty:
+def _region_revenue() -> Measure:
+    @measure(description="Revenue for a region.")
+    def region_revenue(warehouse: Injected[Any]) -> int:
+        return 0
 
-        @measure(description="Revenue for a region.")
-        def region_revenue(warehouse: Injected[Any]) -> int:
-            return 0
-    else:
+    return _as_measure(region_revenue)
 
-        @measure(description="Revenue for a region.")
-        def region_revenue(warehouse: Injected[Any] = default) -> int:
-            return 0
+
+def _region_revenue_with_default() -> Measure:
+    @measure(description="Revenue for a region.")
+    def region_revenue(warehouse: Injected[Any] = "fallback") -> int:
+        return 0
 
     return _as_measure(region_revenue)
 
@@ -1005,7 +1006,7 @@ def test_resolve_injections_binds_a_matching_source() -> None:
 
 def test_resolve_injections_prefers_a_source_over_a_default() -> None:
     connection = object()
-    layer = semantic_layer(_region_revenue(default="fallback"))
+    layer = semantic_layer(_region_revenue_with_default())
 
     resolved = resolve_injections(layer.measures, {"warehouse": connection})
 
@@ -1013,7 +1014,7 @@ def test_resolve_injections_prefers_a_source_over_a_default() -> None:
 
 
 def test_resolve_injections_leaves_an_unmatched_default_alone() -> None:
-    layer = semantic_layer(_region_revenue(default="fallback"))
+    layer = semantic_layer(_region_revenue_with_default())
 
     resolved = resolve_injections(layer.measures, {"finance": object()})
 
@@ -1060,16 +1061,45 @@ def test_resolve_injections_returns_an_entry_for_every_measure() -> None:
     assert resolve_injections(layer.measures, {}) == {"order_count": {}}
 
 
+def test_resolve_injections_resolves_every_measure_independently() -> None:
+    connection = object()
+    layer = semantic_layer(_region_revenue(), _count_measure())
+
+    resolved = resolve_injections(layer.measures, {"warehouse": connection})
+
+    assert resolved == {
+        "region_revenue": {"warehouse": connection},
+        "order_count": {},
+    }
+
+
+def test_resolve_injections_names_the_failing_measure() -> None:
+    layer = semantic_layer(_count_measure(), _region_revenue())
+
+    with pytest.raises(ValueError) as excinfo:
+        resolve_injections(layer.measures, {})
+
+    message = str(excinfo.value)
+    assert "region_revenue" in message
+    assert "order_count" not in message
+
+
 def test_public_api_exposes_the_semantic_layer() -> None:
     import commons
 
-    assert set(commons.__all__) >= {
+    assert set(commons.__all__) == {
+        "DataSource",
         "Injected",
         "Measure",
         "SemanticLayer",
+        "data_source",
+        "list_tables",
         "measure",
         "semantic_layer",
     }
+    assert commons.Injected is Injected
+    assert commons.Measure is Measure
+    assert commons.SemanticLayer is SemanticLayer
     assert commons.measure is measure
     assert commons.semantic_layer is semantic_layer
 
