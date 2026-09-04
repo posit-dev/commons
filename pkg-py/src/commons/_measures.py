@@ -11,9 +11,17 @@ hidden from the model by forgetting to describe it.
 
 from __future__ import annotations
 
+import hashlib
+import importlib.util
 import inspect
-from collections.abc import Callable, Mapping, Sequence
+import os
+import re
+import sys
+import threading
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
+from types import MappingProxyType, ModuleType
 from typing import (
     Annotated,
     Any,
@@ -220,6 +228,10 @@ def measure(
     they call stay ordinary callables. Model-supplied arguments are expected
     to be scalars, enums, or arrays of those; richer shapes are not rejected,
     but the schema block renders them only approximately.
+
+    ``provenance`` records links back to wherever the measure's definition
+    came from. The R implementation attaches provenance through a roxygen
+    tag instead, and only to measures sourced from a file.
     """
 
     def decorate(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -248,6 +260,18 @@ def measure(
         return func
 
     return decorate
+
+
+def as_measure(obj: Any) -> Measure | None:
+    """Recognize a measure, whether decorated function or bare record."""
+    if isinstance(obj, Measure):
+        return obj
+    record = getattr(obj, MEASURE_ATTRIBUTE, None)
+    return record if isinstance(record, Measure) else None
+
+
+def _humanize(name: str) -> str:
+    return name.replace("_", " ")
 
 
 def measure_schema_text(
@@ -339,13 +363,431 @@ def _resolve_ref(node: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
     return defs[ref.removeprefix("#/$defs/")]
 
 
-def as_measure(obj: Any) -> Measure | None:
-    """Recognize a measure, whether decorated function or bare record."""
-    if isinstance(obj, Measure):
-        return obj
-    record = getattr(obj, MEASURE_ATTRIBUTE, None)
-    return record if isinstance(record, Measure) else None
+@dataclass(frozen=True)
+class SemanticLayer:
+    """The trusted calculations an agent can run.
+
+    ``source_text`` holds the source of the measures and the module-level
+    helpers they call, keyed by Python function name. Only text is kept:
+    the agent's worker session reads measure definitions but never receives
+    a callable. Two functions that share a Python name share one entry, and
+    the first definition collected wins, so a measure whose function shares
+    its name with an earlier one is shown that earlier function's source
+    instead. The R implementation sources a path's files into one shared
+    environment, so there the last definition of a same-named helper wins
+    instead, and is what every measure calling it actually runs.
+
+    The layout of this object is internal and may change without notice.
+    """
+
+    measures: Mapping[str, Measure]
+    source_text: Mapping[str, str]
+
+    def __len__(self) -> int:
+        return len(self.measures)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self.measures)
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.measures
+
+    def __repr__(self) -> str:
+        count = len(self.measures)
+        plural = "" if count == 1 else "s"
+        return f"A commons semantic layer with {count} measure{plural}."
 
 
-def _humanize(name: str) -> str:
-    return name.replace("_", " ")
+def semantic_layer(*items: Any) -> SemanticLayer:
+    """Collect measures into a semantic layer.
+
+    Each item is a measure, a list (or tuple) of measures, a module, or a
+    path to a Python file or a directory of them. Directory searches are
+    not recursive.
+
+    A sibling file is imported by plain absolute import; its directory is
+    on sys.path only while the file loads. Even a single requested file
+    puts its whole directory on sys.path, so every .py file beside it --
+    and every subdirectory, which is importable as a package -- is checked:
+    a name that collides with the standard library, an installed package,
+    or a module already imported from elsewhere is a construction error. A
+    sibling imported this way stays in sys.modules under its bare name for
+    the rest of the process, so two directories that each define a
+    same-named helper cannot both be loaded in one process.
+
+    Collecting the same measure twice -- the same file passed alongside
+    its own directory, say -- is not an error; two different measures
+    sharing one name is. The R implementation is stricter here: it rejects
+    a repeated name even when it is the same measure twice.
+    """
+    measures: dict[str, Measure] = {}
+    source_text: dict[str, str] = {}
+    duplicates: list[str] = []
+
+    for item in items:
+        found, sources = _collect(item)
+        for record in found:
+            existing = measures.get(record.name)
+            # The same record collected again -- the same function twice, a
+            # file and the directory containing it, an in-module alias -- is
+            # one measure, not a collision; only a *different* measure
+            # claiming the name is an error.
+            if existing is not None and existing is not record:
+                duplicates.append(record.name)
+            measures[record.name] = record
+        _merge_sources(source_text, sources)
+
+    if duplicates:
+        raise ValueError(
+            f"Measure names must be unique; duplicated: "
+            f"{', '.join(sorted(set(duplicates)))}.\n"
+            f"Give one of the colliding measures a distinct name with "
+            f"@measure(name=...)."
+        )
+
+    return SemanticLayer(
+        measures=MappingProxyType(measures),
+        source_text=MappingProxyType(source_text),
+    )
+
+
+def _collect(item: Any) -> tuple[list[Measure], dict[str, str]]:
+    if isinstance(item, (list, tuple)):
+        measures: list[Measure] = []
+        sources: dict[str, str] = {}
+        for entry in item:
+            found, text = _collect(entry)
+            measures.extend(found)
+            _merge_sources(sources, text)
+        return measures, sources
+
+    if isinstance(item, ModuleType):
+        return _from_module(item)
+
+    if isinstance(item, (str, os.PathLike)):
+        return _from_path(Path(item))
+
+    record = as_measure(item)
+    if record is None:
+        raise TypeError(
+            f"Every item in semantic_layer() must be a measure, a list or "
+            f"tuple of measures, a module, or a path; got {item!r}.\n"
+            f"Decorate the function with @measure to make it one."
+        )
+    return [record], {record.func.__name__: _source_text(record.func)}
+
+
+def _from_path(path: Path) -> tuple[list[Measure], dict[str, str]]:
+    if not path.exists():
+        raise ValueError(
+            f"Path does not exist: {path}.\n"
+            f"semantic_layer() takes measures, modules, Python files, or "
+            f"directories of them."
+        )
+
+    if path.is_dir():
+        # Not recursive, and __init__.py is skipped: a directory of measure
+        # files is a directory, not a package.
+        files = sorted(
+            entry
+            for entry in path.iterdir()
+            if entry.suffix == ".py" and entry.name != "__init__.py"
+        )
+        # Once for the whole directory, before anything in it executes: the
+        # check scans every entry anyway, so repeating it per file is O(n^2)
+        # find_spec calls, and failing before the first load keeps a rejected
+        # directory from partially executing.
+        _check_directory_importable(path, requested=path)
+        directory_checked = True
+    else:
+        # The suffix is checked here, not left for the loader to discover:
+        # spec_from_file_location gives a .pyc or .so a real loader, so
+        # without this check such a file would execute as bytecode or native
+        # code instead of raising the error below.
+        if path.suffix != ".py":
+            raise ValueError(
+                f"Cannot read measures from {path}: not a Python file.\n"
+                f"Pass a .py file, a directory of them, or a module object."
+            )
+        files = [path]
+        directory_checked = False
+
+    measures: list[Measure] = []
+    sources: dict[str, str] = {}
+    for file in files:
+        found, text = _from_module(
+            _load_module_from_path(file, directory_checked=directory_checked)
+        )
+        measures.extend(found)
+        _merge_sources(sources, text)
+    return measures, sources
+
+
+def _merge_sources(target: dict[str, str], found: Mapping[str, str]) -> None:
+    """Merge harvested source text; the first definition of a name wins.
+
+    Every place source text is combined across items uses this, so a new
+    merge point cannot quietly pick the wrong precedence.
+    """
+    for name, text in found.items():
+        target.setdefault(name, text)
+
+
+def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
+    """Harvest a module's measures and the source of every function it defines.
+
+    Helpers are harvested too, so the worker session can show the reasoning a
+    measure delegates to. Imported names are skipped: they belong to the
+    module they were defined in.
+    """
+    measures: list[Measure] = []
+    sources: dict[str, str] = {}
+    for value in vars(module).values():
+        if inspect.isfunction(value):
+            if value.__module__ != module.__name__:
+                continue
+            # Keyed by the function's own name, not the binding: an alias
+            # (`also_known_as = measure_fn`) is one function and gets one
+            # entry, matching how directly-passed measures are keyed.
+            sources.setdefault(value.__name__, _source_text(value))
+            record = as_measure(value)
+        else:
+            # A measure can also sit at module level as a bare record. One
+            # wrapping a function from elsewhere is an imported name and
+            # belongs to the module that defined it, same as any other
+            # import.
+            record = as_measure(value)
+            if record is None:
+                continue
+            if getattr(record.func, "__module__", None) != module.__name__:
+                continue
+            sources.setdefault(record.func.__name__, _source_text(record.func))
+        if record is not None and all(record is not seen for seen in measures):
+            measures.append(record)
+    return measures, sources
+
+
+# The import machinery (sys.path, sys.modules) is process-global state, not
+# owned by any one SemanticLayer, so concurrent construction must serialize
+# around it rather than around the layer itself. Reentrant, not a plain
+# Lock: the lock is held across exec_module(), which runs a measure file's
+# top-level code, and that code can itself call semantic_layer() on another
+# path, re-entering this same function on the same thread. The flip side of
+# holding it across user code: a measure file whose import joins a *thread*
+# that constructs a layer deadlocks, because the lock stays owned by the
+# importing thread.
+_IMPORT_LOCK = threading.RLock()
+
+# Anything that is not a plain identifier character, including the dots in a
+# name like `sales.q3.py`: left alone, a dotted stem would still produce a
+# dotted module name, defeating the single-segment name below.
+_UNSAFE_NAME_CHARS = re.compile(r"[^0-9a-zA-Z_]")
+
+# The mtime, in nanoseconds, a path's cached module was loaded at, keyed by
+# module name. st_mtime_ns, not st_mtime: a float mtime can lose enough
+# filesystem timestamp precision that two rapid edits look identical and a
+# stale module stays cached. Compared against the file's current mtime on
+# every load so a module is reused only while its source is unchanged;
+# sys.modules alone cannot tell a fresh load from a stale one.
+_load_mtimes: dict[str, int] = {}
+
+
+def _load_module_from_path(
+    path: Path, *, directory_checked: bool = False
+) -> ModuleType:
+    resolved = path.resolve()
+    stem = _UNSAFE_NAME_CHARS.sub("_", path.stem)
+    # The digest, not a load counter: two semantic_layer() calls on the same
+    # path should reuse the same module when its source is unchanged, rather
+    # than each minting a new sys.modules entry the old one is never removed
+    # from -- an application constructing an agent per session leaked one
+    # module, and everything it held onto, per session. The cost is that a
+    # file edited mid-process reloads under the same name, so an earlier
+    # layer's Measure.func.__module__ then resolves to the newer module
+    # object; a development-time scenario, not a session-count-scaling leak.
+    #
+    # A single path segment, not `commons._measure_sources.<stem>`: a dotted
+    # name makes `commons._measure_sources` the loaded file's __package__,
+    # so a relative import in the user's own file would resolve into
+    # commons' internals instead of failing with Python's own "no known
+    # parent package" error.
+    digest = hashlib.sha256(str(resolved).encode()).hexdigest()[:8]
+    name = f"_commons_measure_source_{stem}_{digest}"
+
+    with _IMPORT_LOCK:
+        mtime_ns = resolved.stat().st_mtime_ns
+        cached = sys.modules.get(name)
+        if (
+            cached is not None
+            and _load_mtimes.get(name) == mtime_ns
+            and _cached_module_path(cached) == resolved
+        ):
+            return cached
+
+        # Unconditional, not just on a detected reload: an earlier process
+        # can have already written this file's .pyc, and a same-second,
+        # same-size edit since then leaves it looking valid to
+        # SourceFileLoader on this process's first load too, which has no
+        # _load_mtimes entry to have noticed the edit itself. See
+        # _invalidate_bytecode_cache for why this step is required at all.
+        _invalidate_bytecode_cache(path)
+
+        # Skipped when the caller already checked this directory: _from_path
+        # checks a directory once up front rather than once per file in it.
+        if not directory_checked:
+            _check_directory_importable(path.parent, requested=path)
+
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise ValueError(
+                f"Cannot read measures from {path}: not a Python file.\n"
+                f"Pass a .py file, a directory of them, or a module object."
+            )
+
+        # A miss here can mean a stale or wrong-file entry already occupies
+        # `name`: the digest is only 32 bits, so two distinct files with the
+        # same sanitized stem can collide on it. Replacing the entry, rather
+        # than erroring, is safe because nothing depends on sys.modules[name]
+        # continuing to point at the other file's module -- a Measure holds
+        # its function directly, not a lookup through this name -- so the
+        # collision degrades to that other file re-executing on its own next
+        # load (the identity check above will miss for it too), never to
+        # this load returning its measures.
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        _load_mtimes[name] = mtime_ns
+
+        # Appended, not inserted at the front: a sibling file can then
+        # import another sibling by plain absolute import, but a sibling
+        # named like a stdlib module must not shadow it for the rest of the
+        # process.
+        directory = str(path.parent)
+        added_to_path = directory not in sys.path
+        if added_to_path:
+            sys.path.append(directory)
+        try:
+            spec.loader.exec_module(module)
+        except BaseException:
+            if sys.modules.get(name) is module:
+                sys.modules.pop(name, None)
+            _load_mtimes.pop(name, None)
+            raise
+        finally:
+            if added_to_path and directory in sys.path:
+                sys.path.remove(directory)
+        return module
+
+
+def _cached_module_path(module: ModuleType) -> Path | None:
+    """Resolve a cached module's own file, to confirm a name match is
+    actually the same file and not a truncated-digest collision between two
+    different ones.
+    """
+    file = getattr(module, "__file__", None)
+    return Path(file).resolve() if file else None
+
+
+def _invalidate_bytecode_cache(path: Path) -> None:
+    """Remove one file's compiled cache before executing it.
+
+    Called on every execution, not only a detected reload: a stale,
+    timestamp-valid .pyc can predate this process entirely, written by an
+    earlier one. SourceFileLoader validates its own .pyc by whole-second
+    mtime and size, coarser than the nanosecond mtime this module's cache
+    compares against; an edit within the same second that leaves the file's
+    size unchanged (changing one digit, say) is exactly the case
+    SourceFileLoader cannot detect, whether this is a reload this process
+    already knows about or a first load of a file some other process
+    touched. Left uninvalidated, it hands back the stale compiled code and
+    the load silently runs the old version. Best-effort and scoped to this
+    one file: the cache directory may be read-only or already gone, and
+    __pycache__ is disposable by design, but only this file's entry is
+    touched.
+    """
+    try:
+        Path(importlib.util.cache_from_source(str(path))).unlink(missing_ok=True)
+    except (OSError, ValueError, NotImplementedError):
+        pass
+
+
+def _check_directory_importable(directory: Path, requested: Path) -> None:
+    """Fail before a directory goes on sys.path if a file in it would shadow
+    an importable module or collide with one already loaded from elsewhere.
+
+    Every .py file in the directory is checked, not only ``requested``: the
+    sys.path entry makes all of them importable, so an unloaded file with a
+    colliding name is exactly as dangerous. Subdirectories are checked too:
+    each is importable as a package, or as a namespace package with no
+    __init__.py at all. ``requested`` is named in every message so a
+    sibling's collision is not reported with nothing connecting it to the
+    file the caller actually asked to load.
+    """
+    for entry in sorted(directory.iterdir()):
+        if entry.is_file():
+            if entry.suffix != ".py" or entry.name == "__init__.py":
+                continue
+            stem = entry.stem
+        elif entry.is_dir():
+            stem = entry.name
+        else:
+            continue
+
+        # A name that is not a plain identifier -- the dots in
+        # `sales.q3.py`, a dunder like __pycache__ -- cannot be imported by
+        # that name, so it can shadow nothing, and looking it up would be
+        # worse than skipping it: find_spec() on a dotted name imports the
+        # parent package as a side effect of this read-only check, then
+        # either raises (swallowed below, silently skipping the check) or
+        # resolves to an unrelated submodule and reports a phantom
+        # collision.
+        if not stem.isidentifier() or (stem.startswith("__") and stem.endswith("__")):
+            continue
+
+        # Must run before the directory joins sys.path: added first, the
+        # file would resolve to itself and every directory would look
+        # shadowed. A stdlib name is always findable, so it is folded into
+        # this check rather than tested separately, keeping exactly one
+        # raise per entry. find_spec() also catches a module already cached
+        # in sys.modules under this name (e.g. by an earlier measure
+        # directory's sibling import), except when that cached entry has no
+        # discoverable spec, which find_spec() reports by raising instead of
+        # returning one; the sys.modules check below catches that case.
+        try:
+            spec = importlib.util.find_spec(stem)
+        except (ImportError, ValueError):
+            spec = None
+        if spec is not None and (
+            spec.origin is None or Path(spec.origin).resolve() != entry.resolve()
+        ):
+            if stem in sys.stdlib_module_names:
+                raise ValueError(
+                    f"While loading {requested}, {entry} collides with the "
+                    f"standard library module {stem!r}; one of the two will "
+                    f"be unreachable.\n"
+                    f"Rename {entry}."
+                )
+            origin_note = f" ({spec.origin})" if spec.origin else ""
+            raise ValueError(
+                f"While loading {requested}, {entry} would be shadowed by "
+                f"the already-importable module {stem!r}{origin_note}.\n"
+                f"Rename {entry}."
+            )
+
+        existing = sys.modules.get(stem)
+        existing_file = getattr(existing, "__file__", None) if existing else None
+        if existing is not None and (
+            existing_file is None or Path(existing_file).resolve() != entry.resolve()
+        ):
+            raise ValueError(
+                f"While loading {requested}, {entry} collides with {stem!r}, "
+                f"already imported from "
+                f"{existing_file or 'a module with no file'}.\n"
+                f"Rename {entry}."
+            )
+
+
+def _source_text(func: Callable[..., Any]) -> str:
+    try:
+        return inspect.getsource(func)
+    except (OSError, TypeError):
+        return f"# source unavailable for {func.__name__}"

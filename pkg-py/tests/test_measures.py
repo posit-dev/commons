@@ -1,8 +1,15 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
 import enum
+import importlib
+import os
+import py_compile
+import sys
+import threading
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
+from pathlib import Path
+from types import ModuleType
 from typing import Annotated, Any, Literal, get_args, get_origin
 
 import pytest
@@ -12,10 +19,14 @@ from commons._measures import (
     INJECTED,
     Injected,
     Measure,
+    _from_module,
+    _load_module_from_path,
+    _load_mtimes,
     _split_parameters,
     as_measure,
     measure,
     measure_schema_text,
+    semantic_layer,
 )
 
 from ._shared import load_shared_fixture
@@ -547,3 +558,599 @@ def test_measure_schema_text_names_a_nullable_enum_arrays_vocabulary() -> None:
     rendered = measure_schema_text(_as_measure(regional_orders))
 
     assert "regions (array of {EMEA, AMER}, optional) Enum array, nullable." in rendered
+
+
+def test_semantic_layer_keys_measures_by_name() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    layer = semantic_layer(order_count)
+
+    assert list(layer.measures) == ["order_count"]
+    assert layer.measures["order_count"].description == "Count of orders."
+
+
+def test_semantic_layer_accepts_a_list_of_measures() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    @measure(description="Total revenue.")
+    def total_revenue() -> int:
+        return 2
+
+    layer = semantic_layer([order_count, total_revenue])
+
+    assert list(layer.measures) == ["order_count", "total_revenue"]
+
+
+def test_semantic_layer_accepts_a_bare_measure_record() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_is_empty_with_no_arguments() -> None:
+    layer = semantic_layer()
+
+    assert len(layer) == 0
+    assert layer.measures == {}
+
+
+def test_semantic_layer_rejects_a_non_measure() -> None:
+    with pytest.raises(TypeError, match="2026"):
+        semantic_layer(2026)
+
+
+def test_semantic_layer_rejects_an_undecorated_function() -> None:
+    def helper() -> int:
+        return 1
+
+    with pytest.raises(TypeError, match="helper"):
+        semantic_layer(helper)
+
+
+def test_semantic_layer_rejects_duplicate_names() -> None:
+    # Two *different* measures that share a name: each factory call decorates
+    # a fresh function, so the records are distinct objects.
+    def make() -> Measure:
+        @measure(description="Count of orders.", name="order_count")
+        def calc() -> int:
+            return 1
+
+        return _as_measure(calc)
+
+    with pytest.raises(ValueError, match="order_count"):
+        semantic_layer(make(), make())
+
+
+def test_semantic_layer_accepts_the_same_measure_twice() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    layer = semantic_layer(order_count, order_count)
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_harvests_inline_measure_source() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        return 1
+
+    layer = semantic_layer(order_count)
+
+    assert "def order_count()" in layer.source_text["order_count"]
+
+
+def test_collect_nested_list_keeps_first_definition_wins() -> None:
+    # Both functions are named `calc`, so they collide in `source_text`
+    # (keyed by Python name) without colliding in `measures` (keyed by the
+    # distinct `name=` given to each).
+    def make_first() -> Any:
+        @measure(description="First.", name="first")
+        def calc() -> int:
+            return 1
+
+        return as_measure(calc)
+
+    def make_second() -> Any:
+        @measure(description="Second.", name="second")
+        def calc() -> int:
+            return 2
+
+        return as_measure(calc)
+
+    first, second = make_first(), make_second()
+
+    top_level = semantic_layer(first, second)
+    nested = semantic_layer([first, second])
+
+    assert nested.source_text["calc"] == top_level.source_text["calc"]
+    assert "return 1" in nested.source_text["calc"]
+
+
+def test_semantic_layer_reports_its_size() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert len(layer) == 1
+    assert "1 measure" in repr(layer)
+
+
+MEASURE_FILES = Path(__file__).parent / "measure_sources"
+
+
+def test_semantic_layer_reads_a_file_path() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_accepts_a_string_path() -> None:
+    layer = semantic_layer(str(MEASURE_FILES / "orders.py"))
+
+    assert list(layer.measures) == ["order_count"]
+
+
+def test_semantic_layer_reads_a_directory_without_recursing() -> None:
+    layer = semantic_layer(MEASURE_FILES)
+
+    assert list(layer.measures) == ["order_count", "total_revenue"]
+
+
+def test_semantic_layer_reads_a_module_object() -> None:
+    module = importlib.import_module("commons._measures")
+
+    layer = semantic_layer(module)
+
+    assert layer.measures == {}
+
+
+def test_semantic_layer_mixes_files_and_inline_measures() -> None:
+    @measure(description="Inline.")
+    def inline_measure() -> int:
+        return 1
+
+    layer = semantic_layer(MEASURE_FILES / "orders.py", inline_measure)
+
+    assert list(layer.measures) == ["order_count", "inline_measure"]
+
+
+def test_semantic_layer_harvests_helper_source_alongside_measures() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert set(layer.source_text) >= {"double", "order_count"}
+    assert "x * 2" in layer.source_text["double"]
+    assert "@measure(" in layer.source_text["order_count"]
+
+
+def test_harvested_source_excludes_imported_names() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert "measure" not in layer.source_text
+    assert "Field" not in layer.source_text
+
+
+def test_only_text_leaves_the_semantic_layer() -> None:
+    layer = semantic_layer(MEASURE_FILES / "orders.py")
+
+    assert all(isinstance(text, str) for text in layer.source_text.values())
+
+
+def test_same_file_name_in_two_directories_both_load() -> None:
+    layer = semantic_layer(
+        MEASURE_FILES / "orders.py", MEASURE_FILES / "nested" / "orders.py"
+    )
+
+    assert list(layer.measures) == ["order_count", "nested_order_count"]
+
+
+def test_missing_path_is_an_error() -> None:
+    with pytest.raises(ValueError, match="not a measure"):
+        semantic_layer("not a measure")
+
+
+def test_missing_path_error_names_the_path() -> None:
+    with pytest.raises(ValueError, match="nowhere.py"):
+        semantic_layer(MEASURE_FILES / "nowhere.py")
+
+
+def test_directory_scan_keeps_the_first_files_helper_source() -> None:
+    # a_file.py sorts before b_file.py; both define a `helper` function, and
+    # the first one scanned must win.
+    layer = semantic_layer(MEASURE_FILES / "duplicate_helpers")
+
+    assert list(layer.measures) == ["measure_a", "measure_b"]
+    assert "return 1" in layer.source_text["helper"]
+    assert "return 2" not in layer.source_text["helper"]
+
+
+def test_failed_import_does_not_dirty_sys_modules() -> None:
+    path = MEASURE_FILES / "broken" / "broken_import.py"
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_layer(path)
+
+    assert not any("broken_import" in name for name in sys.modules)
+
+
+def test_failed_import_that_deletes_its_own_module_entry_still_raises() -> None:
+    # If the module removes its sys.modules entry before raising, cleanup
+    # must not turn the real error into a KeyError.
+    path = MEASURE_FILES / "broken" / "self_removing_import.py"
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_layer(path)
+
+
+def test_measure_file_imports_a_sibling_file_directly() -> None:
+    layer = semantic_layer(MEASURE_FILES / "sibling_imports" / "uses_helper.py")
+
+    assert list(layer.measures) == ["doubled_count"]
+    assert layer.measures["doubled_count"].func() == 42
+
+
+def test_dotted_filename_does_not_get_a_dotted_module_name(
+    tmp_path: Path,
+) -> None:
+    # path.stem for "sales.q3.py" is "sales.q3": left unsanitized, the
+    # generated module name would still be dotted, giving the loaded file a
+    # non-empty __package__ and undoing the single-segment name fix.
+    dotted = tmp_path / "sales.q3.py"
+    dotted.write_text("from ..nope import thing\n")
+
+    with pytest.raises(
+        ImportError, match="attempted relative import with no known parent package"
+    ):
+        semantic_layer(dotted)
+
+
+def test_load_module_from_path_reuses_an_unchanged_file(tmp_path: Path) -> None:
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+
+    first = _load_module_from_path(source)
+    second = _load_module_from_path(source)
+
+    assert first is second
+
+
+def test_load_module_from_path_reloads_an_edited_file(tmp_path: Path) -> None:
+    # An edit within the same whole second that leaves the file's size
+    # unchanged ("VALUE = 1" -> "VALUE = 2"): the case SourceFileLoader's own
+    # bytecode cache cannot detect, since it validates by whole-second mtime
+    # and size, coarser than the nanosecond mtime our cache compares
+    # against. Both mtimes are pinned explicitly, not read off the file
+    # naturally and nudged, so the test cannot straddle a real second
+    # boundary and become flaky.
+    source = tmp_path / "m.py"
+    base_ns = 1_700_000_000 * 1_000_000_000
+    source.write_text("VALUE = 1\n")
+    os.utime(source, ns=(base_ns, base_ns))
+    first = _load_module_from_path(source)
+
+    source.write_text("VALUE = 2\n")
+    os.utime(source, ns=(base_ns, base_ns + 500_000_000))
+
+    second = _load_module_from_path(source)
+
+    assert second is not first
+    assert second.VALUE == 2
+
+
+def test_load_module_from_path_invalidates_a_pre_existing_bytecode_cache(
+    tmp_path: Path,
+) -> None:
+    # A stale, timestamp-valid .pyc can predate this process's own record of
+    # having loaded the file at all -- written by an earlier process, then
+    # the file edited same-second, same-size before this process's first
+    # load of it. Simulated here without spawning a real second process: load
+    # once to produce the .pyc via SourceFileLoader, edit the file, then
+    # clear this process's own sys.modules and _load_mtimes entries for it
+    # so the next load has no in-memory record either -- indistinguishable,
+    # from _load_module_from_path's point of view, from a fresh process's
+    # first load of an already-edited file.
+    source = tmp_path / "m.py"
+    base_ns = 1_700_000_000 * 1_000_000_000
+    source.write_text("VALUE = 1\n")
+    os.utime(source, ns=(base_ns, base_ns))
+    first = _load_module_from_path(source)
+    name = first.__name__
+
+    source.write_text("VALUE = 2\n")
+    os.utime(source, ns=(base_ns, base_ns + 500_000_000))
+    sys.modules.pop(name, None)
+    _load_mtimes.pop(name, None)
+
+    second = _load_module_from_path(source)
+
+    assert second.VALUE == 2
+
+
+def test_load_module_from_path_ignores_a_same_named_module_from_elsewhere(
+    tmp_path: Path,
+) -> None:
+    # Exercises the identity check directly rather than forcing a genuine
+    # 32-bit digest collision between two distinct filenames: plant a module
+    # under the exact sys.modules name this path would use, with the same
+    # recorded mtime but a __file__ pointing elsewhere, and confirm the real
+    # file is (re-)loaded rather than the stand-in being returned.
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    real = _load_module_from_path(source)
+    name = real.__name__
+
+    imposter = ModuleType(name)
+    imposter.__file__ = str(tmp_path / "elsewhere.py")
+    sys.modules[name] = imposter
+
+    loaded = _load_module_from_path(source)
+
+    assert loaded is not imposter
+    assert loaded.VALUE == 1
+
+
+def test_sys_path_is_restored_after_a_successful_load() -> None:
+    directory = str(MEASURE_FILES / "sibling_imports")
+
+    semantic_layer(MEASURE_FILES / "sibling_imports" / "uses_helper.py")
+
+    assert directory not in sys.path
+
+
+def test_sys_path_is_restored_after_a_failing_load() -> None:
+    directory = str(MEASURE_FILES / "broken")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        semantic_layer(MEASURE_FILES / "broken" / "broken_import.py")
+
+    assert directory not in sys.path
+
+
+def test_stdlib_name_collision_is_a_construction_error() -> None:
+    path = MEASURE_FILES / "stdlib_collision" / "json.py"
+
+    with pytest.raises(ValueError, match="json.py") as excinfo:
+        semantic_layer(path)
+
+    assert "standard library" in str(excinfo.value)
+
+
+def test_same_named_helper_in_two_directories_is_a_construction_error() -> None:
+    try:
+        semantic_layer(MEASURE_FILES / "collision_a" / "uses_shared.py")
+
+        with pytest.raises(ValueError, match="shared_lib"):
+            semantic_layer(MEASURE_FILES / "collision_b" / "shared_lib.py")
+    finally:
+        sys.modules.pop("shared_lib", None)
+
+
+def test_installed_but_unimported_module_is_a_construction_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A directory on sys.path stands in for an installed package: find_spec()
+    # can resolve it without anything having imported it yet.
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir()
+    (site_packages / "certainly_not_a_measure.py").write_text("VALUE = 1\n")
+    monkeypatch.syspath_prepend(str(site_packages))
+    sys.modules.pop("certainly_not_a_measure", None)
+
+    measures_dir = tmp_path / "measures"
+    measures_dir.mkdir()
+    colliding = measures_dir / "certainly_not_a_measure.py"
+    colliding.write_text(
+        "from commons._measures import measure\n\n\n"
+        "@measure(description='d')\n"
+        "def m() -> int:\n"
+        "    return 1\n"
+    )
+
+    with pytest.raises(ValueError, match="certainly_not_a_measure.py") as excinfo:
+        semantic_layer(colliding)
+
+    message = str(excinfo.value)
+    assert "certainly_not_a_measure" in message
+    assert "already-importable" in message
+
+
+def test_a_same_named_module_without_a_spec_is_a_construction_error(
+    tmp_path: Path,
+) -> None:
+    # A module planted straight into sys.modules (a stub or test double,
+    # say) has no __spec__ for find_spec() to return, so the collision
+    # check falls back to looking in sys.modules itself.
+    (tmp_path / "planted.py").write_text(
+        "from commons._measures import measure\n\n\n"
+        "@measure(description='d')\n"
+        "def m() -> int:\n"
+        "    return 1\n"
+    )
+    sys.modules["planted"] = ModuleType("planted")
+    try:
+        with pytest.raises(ValueError, match="already imported from"):
+            semantic_layer(tmp_path / "planted.py")
+    finally:
+        sys.modules.pop("planted", None)
+
+
+def test_semantic_layer_reenters_during_a_measure_files_import() -> None:
+    # A non-reentrant lock deadlocks here rather than raising, so this runs
+    # on a daemon thread with a timeout: a regression fails the test instead
+    # of hanging the suite.
+    result: dict[str, Any] = {}
+
+    def target() -> None:
+        result["layer"] = semantic_layer(
+            MEASURE_FILES / "reentrant" / "composes_a_sibling.py"
+        )
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+
+    assert not thread.is_alive(), (
+        "semantic_layer() deadlocked re-entering during a measure file's import"
+    )
+
+    outer_layer = result["layer"]
+    assert list(outer_layer.measures) == ["outer_measure"]
+
+    module_name = outer_layer.measures["outer_measure"].func.__module__
+    fixture_module = sys.modules[module_name]
+    assert list(fixture_module.NESTED_LAYER.measures) == ["nested_order_count"]
+
+
+def test_semantic_layer_supports_membership_and_iteration() -> None:
+    layer = semantic_layer(_count_measure())
+
+    assert "order_count" in layer
+    assert "other" not in layer
+    assert list(layer) == ["order_count"]
+
+
+def test_semantic_layer_mappings_are_read_only() -> None:
+    # Only text and frozen records leave the layer; a plain dict here would
+    # let a caller mutate the layer after construction.
+    layer = semantic_layer(_count_measure())
+
+    with pytest.raises(TypeError):
+        layer.measures["other"] = _count_measure()  # type: ignore[index]
+    with pytest.raises(TypeError):
+        layer.source_text["other"] = "def other(): ..."  # type: ignore[index]
+
+
+def test_a_directory_and_a_file_inside_it_overlap_without_error() -> None:
+    layer = semantic_layer(
+        MEASURE_FILES / "sibling_imports",
+        MEASURE_FILES / "sibling_imports" / "uses_helper.py",
+    )
+
+    assert list(layer.measures) == ["doubled_count"]
+
+
+def test_a_module_level_alias_is_collected_once() -> None:
+    layer = semantic_layer(MEASURE_FILES / "aliased" / "aliased.py")
+
+    assert list(layer.measures) == ["aliased_measure"]
+
+
+def test_a_module_level_alias_shares_one_source_text_entry() -> None:
+    # Keyed by function name, not binding: the alias is the same function.
+    layer = semantic_layer(MEASURE_FILES / "aliased" / "aliased.py")
+
+    assert set(layer.source_text) == {"aliased_measure"}
+
+
+def test_distinct_measures_from_two_files_sharing_a_name_are_an_error() -> None:
+    with pytest.raises(ValueError, match="dup"):
+        semantic_layer(
+            MEASURE_FILES / "duplicate_measures" / "a_measure.py",
+            MEASURE_FILES / "duplicate_measures" / "b_measure.py",
+        )
+
+
+def test_a_non_python_file_path_is_an_error(tmp_path: Path) -> None:
+    notes = tmp_path / "notes.txt"
+    notes.write_text("not python\n")
+
+    with pytest.raises(ValueError, match="not a Python file"):
+        semantic_layer(notes)
+
+
+def test_a_compiled_bytecode_path_is_an_error(tmp_path: Path) -> None:
+    # spec_from_file_location gives a .pyc a real loader, so without an
+    # explicit suffix check this path would execute as bytecode.
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    compiled = tmp_path / "m.pyc"
+    py_compile.compile(str(source), cfile=str(compiled))
+
+    with pytest.raises(ValueError, match="not a Python file"):
+        semantic_layer(compiled)
+
+
+def test_a_non_python_file_is_rejected_before_the_directory_check(
+    tmp_path: Path,
+) -> None:
+    # The requested file's error must win over a sibling's collision: the
+    # sibling is only checked because its directory would go on sys.path,
+    # which never happens for a file that is not Python at all.
+    (tmp_path / "json.py").write_text("VALUE = 1\n")
+    notes = tmp_path / "notes.txt"
+    notes.write_text("not python\n")
+
+    with pytest.raises(ValueError, match="not a Python file"):
+        semantic_layer(notes)
+
+
+def test_a_directorys_init_py_is_never_imported() -> None:
+    # has_init/__init__.py raises if it is ever executed.
+    layer = semantic_layer(MEASURE_FILES / "has_init")
+
+    assert list(layer.measures) == ["has_init_measure"]
+
+
+def test_source_text_falls_back_when_source_is_unavailable() -> None:
+    # A function built by exec has no file for inspect.getsource to read.
+    namespace: dict[str, Any] = {}
+    exec("def ghost() -> int:\n    return 1\n", namespace)  # noqa: S102
+    record = _as_measure(measure(description="d")(namespace["ghost"]))
+
+    layer = semantic_layer(record)
+
+    assert layer.source_text["ghost"] == "# source unavailable for ghost"
+
+
+def test_a_directory_already_on_sys_path_is_left_in_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+
+    module = _load_module_from_path(source)
+
+    assert module.VALUE == 1
+    assert str(tmp_path) in sys.path
+
+
+def test_a_dotted_filename_loads_despite_the_collision_check() -> None:
+    # "email.mime" resolves to a real stdlib submodule; the check must skip
+    # a stem that cannot be imported as a single segment rather than report
+    # a phantom shadowing (or import the parent package as a side effect).
+    layer = semantic_layer(MEASURE_FILES / "dotted" / "email.mime.py")
+
+    assert list(layer.measures) == ["dotted_measure"]
+
+
+def test_a_subdirectory_shadowing_the_standard_library_is_an_error() -> None:
+    # pkg_collision/json/ is importable as a namespace package once its
+    # parent is on sys.path, exactly like a json.py sibling.
+    with pytest.raises(ValueError, match="standard library"):
+        semantic_layer(MEASURE_FILES / "pkg_collision" / "orders.py")
+
+
+def test_a_module_level_bare_record_is_harvested() -> None:
+    layer = semantic_layer(MEASURE_FILES / "bare_record" / "total.py")
+
+    assert list(layer.measures) == ["grand_total"]
+    assert layer.measures["grand_total"].func() == 1
+    assert "def total" in layer.source_text["total"]
+
+
+def test_an_imported_bare_record_is_not_harvested() -> None:
+    # A bare record re-exported by another module belongs to the module
+    # that defined its function, same as an imported function.
+    module = _load_module_from_path(MEASURE_FILES / "bare_record" / "total.py")
+
+    reexporter = ModuleType("reexporter")
+    reexporter.__dict__["grand_total"] = module.grand_total
+
+    measures, sources = _from_module(reexporter)
+
+    assert measures == []
+    assert sources == {}
