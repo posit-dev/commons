@@ -37,6 +37,7 @@ class ContextLayer:
 
     @property
     def docs(self) -> tuple[str, ...]:
+        """The documents as read from their files, frontmatter stripped."""
         return self._docs
 
     def __repr__(self) -> str:
@@ -49,12 +50,11 @@ def context_layer(
 ) -> ContextLayer:
     """Create a context layer from text or Markdown files.
 
-    Args:
-        files: Paths to text or Markdown files.
-
-    Raises:
-        TypeError: If ``files`` is a bare string rather than a collection.
-        FileNotFoundError: If any path does not exist.
+    ``files`` must be a collection of paths; a bare string or path raises
+    ``TypeError``. Files are read eagerly and decoded as UTF-8, so a missing
+    path (``FileNotFoundError``), a directory (``IsADirectoryError``), or a
+    file in another encoding (``UnicodeDecodeError``) fails here rather than
+    mid-conversation.
     """
     if isinstance(files, (str, bytes, os.PathLike)):
         raise TypeError(
@@ -68,6 +68,9 @@ def context_layer(
     for path in files:
         with open(path, encoding="utf-8") as handle:
             md = strip_frontmatter(handle.read())
+        # readLines() in pkg-r/R/context-layer.R drops the final line ending;
+        # do the same so both read the same document from the same file.
+        md = md.removesuffix("\n")
         if md.strip():
             docs.append(md)
 

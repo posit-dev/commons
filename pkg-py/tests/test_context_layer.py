@@ -8,6 +8,11 @@ from ._shared import load_shared_fixture
 SHARED = load_shared_fixture("context_layer")
 
 
+# An empty case list would make the parametrized test below vacuously pass.
+def test_the_fixture_is_not_empty():
+    assert SHARED["strip_frontmatter"]["cases"]
+
+
 @pytest.mark.parametrize(
     "case", SHARED["strip_frontmatter"]["cases"], ids=lambda c: c["name"]
 )
@@ -29,6 +34,13 @@ def test_context_layer_skips_a_frontmatter_only_file(tmp_path):
     path.write_text("---\nprovenance: some-source\n---\n")
 
     assert context_layer(files=[path]).docs == ()
+
+
+def test_context_layer_drops_the_final_line_ending(tmp_path):
+    path = tmp_path / "notes.md"
+    path.write_text("# Revenue\n")
+
+    assert context_layer(files=[path]).docs == ("# Revenue",)
 
 
 def test_context_layer_defaults_to_no_documents():
