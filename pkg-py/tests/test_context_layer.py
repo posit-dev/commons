@@ -5,7 +5,8 @@ import pytest
 from raghilda.store import DuckDBStore
 
 from commons import ContextLayer, context_layer
-from commons._context_layer import strip_frontmatter
+from commons._context_layer import _dictionary_chunks, strip_frontmatter
+from commons._data_dictionary import DataDictionary
 
 from ._shared import load_shared_fixture
 
@@ -232,3 +233,18 @@ def test_concurrent_first_searches_build_one_store(tmp_path, monkeypatch):
 
     assert builds == 1
     assert all(result == results[0] for result in results)
+
+
+# An empty case list would make the parametrized test below vacuously pass.
+def test_the_dictionary_chunk_fixture_is_not_empty():
+    assert SHARED["dictionary_context_chunks"]["cases"]
+
+
+@pytest.mark.parametrize(
+    "case", SHARED["dictionary_context_chunks"]["cases"], ids=lambda c: c["name"]
+)
+def test_dictionary_context_chunks_shared_cases(case):
+    spec = case["dictionary"]
+    dictionary = None if spec is None else DataDictionary.model_validate(spec)
+
+    assert _dictionary_chunks(dictionary) == case["expected"]

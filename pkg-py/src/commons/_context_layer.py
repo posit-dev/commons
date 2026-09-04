@@ -12,10 +12,14 @@ import os
 import re
 import threading
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from raghilda.chunker import MarkdownChunker
 from raghilda.document import MarkdownDocument
 from raghilda.store import DuckDBStore
+
+if TYPE_CHECKING:
+    from ._data_dictionary import DataDictionary
 
 __all__ = ["ContextLayer", "context_layer"]
 
@@ -109,6 +113,17 @@ class ContextLayer:
             for hit in hits
             if any(m.name == "bm25" and m.value is not None for m in hit.metrics)
         ]
+
+
+def _dictionary_chunks(dictionary: DataDictionary | None) -> list[str]:
+    """The dictionary's retrievable prose, or nothing when there is none.
+
+    A source without a dictionary is ordinary, so the absence is handled
+    here rather than by every caller.
+    """
+    if dictionary is None:
+        return []
+    return dictionary.context_chunks()
 
 
 def context_layer(
