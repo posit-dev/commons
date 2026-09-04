@@ -581,7 +581,7 @@ def _resolve_selection(
     if selector["kind"] == "regex":
         pattern = selector["pattern"]
         _validate_regex(pattern)
-        compiled = re.compile(pattern)
+        compiled = _compile_for_matching(pattern)
         names = [name for name in names if compiled.search(name)]
     if selector["kind"] == "list":
         missing = [name for name in selector["names"] if name not in names]
@@ -600,15 +600,42 @@ def _resolve_selection(
 
 
 def _validate_regex(pattern: str) -> str:
+    r"""Refuse a pattern data-dict's engine would refuse, and only that.
+
+    Whether a pattern is valid is data-dict's question, answered by Rust's
+    `regex`. Python's `re` is not a proxy for it in either direction: it
+    accepts lookaround and backreferences that Rust rejects, which
+    `_RUST_UNSUPPORTED` catches, and it rejects Unicode classes like `\p{L}`
+    and Rust-spelled named groups that data-dict accepts and emits. Compiling
+    here to decide validity would refuse working dictionaries.
+    """
     if _RUST_UNSUPPORTED.search(pattern):
         raise ValueError(f"Invalid data-dict regular expression {pattern!r}.")
+    return pattern
+
+
+# Rust spells a named group `(?<name>...)` and Python `(?P<name>...)`. The
+# lookbehind forms `(?<=` and `(?<!` are already refused above, so any `(?<`
+# reaching here starts a name.
+_RUST_NAMED_GROUP = re.compile(r"\(\?<")
+
+
+def _compile_for_matching(pattern: str) -> re.Pattern[str]:
+    """Compile a pattern commons has to run itself, over column names.
+
+    Selecting columns is the one place a pattern cannot simply be passed
+    through to the source, so an engine difference stops being academic. A
+    pattern data-dict accepts but Python cannot run is reported as commons
+    being unable to evaluate it, not as the pattern being invalid.
+    """
     try:
-        re.compile(pattern)
+        return re.compile(_RUST_NAMED_GROUP.sub("(?P<", pattern))
     except re.error as error:
         raise ValueError(
-            f"Invalid data-dict regular expression {pattern!r}."
+            f"commons cannot evaluate the column selector {pattern!r} with "
+            f"Python's regular expression engine, though data-dict may accept "
+            f"it. Select the columns by name instead."
         ) from error
-    return pattern
 
 
 @dataclass
