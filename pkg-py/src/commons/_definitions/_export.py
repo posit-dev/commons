@@ -37,7 +37,7 @@ _TEMPORAL = frozenset({"date", "datetime"})
 # ((?=, (?!, (?<=, (?<!), no atomic groups ((?>), and no backreferences. Python
 # accepts all of them, so without this guard commons would compile patterns
 # data-dict rejects.
-_RUST_UNSUPPORTED = re.compile(r"\(\?(?:[=!>]|<[=!])|\\[1-9]")
+_RUST_UNSUPPORTED = re.compile(r"\(\?(?:[=!>]|<[=!])|\\[1-9]|\\k<")
 
 _DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 _DATETIME = re.compile(
@@ -599,37 +599,102 @@ def _resolve_selection(
     }
 
 
-def _validate_regex(pattern: str) -> str:
-    r"""Refuse a pattern data-dict's engine would refuse, and only that.
+def _translate_from_rust(pattern: str, *, neutralize_classes: bool) -> str:
+    r"""Rewrite Rust-only spellings into Python's, outside character classes.
 
-    Whether a pattern is valid is data-dict's question, answered by Rust's
-    `regex`. Python's `re` is not a proxy for it in either direction: it
-    accepts lookaround and backreferences that Rust rejects, which
-    `_RUST_UNSUPPORTED` catches, and it rejects Unicode classes like `\p{L}`
-    and Rust-spelled named groups that data-dict accepts and emits. Compiling
-    here to decide validity would refuse working dictionaries.
+    A single left-to-right scan, because `(?<` and `\p{...}` mean one thing in
+    the pattern and another inside `[...]`, where they are literal characters.
+    Escapes are copied through so a `\[` does not open a class.
+
+    With `neutralize_classes`, Unicode classes become `\w`. That is only for
+    deciding whether the rest of the pattern parses: it changes what the
+    pattern matches, so it must never be used to match anything.
+    """
+    out: list[str] = []
+    index = 0
+    in_class = False
+    length = len(pattern)
+    while index < length:
+        char = pattern[index]
+        if char == "\\" and index + 1 < length:
+            following = pattern[index + 1]
+            if neutralize_classes and following in ("p", "P"):
+                after = index + 2
+                if after < length and pattern[after] == "{":
+                    close = pattern.find("}", after)
+                    if close != -1:
+                        out.append("\\w")
+                        index = close + 1
+                        continue
+                # The one-letter form, `\pL`.
+                if after < length:
+                    out.append("\\w")
+                    index = after + 1
+                    continue
+            out.append(pattern[index : index + 2])
+            index += 2
+            continue
+        if in_class:
+            if char == "]":
+                in_class = False
+            out.append(char)
+            index += 1
+            continue
+        if char == "[":
+            in_class = True
+            out.append(char)
+            index += 1
+            continue
+        # Rust spells a named group `(?<name>`, Python `(?P<name>`. The
+        # lookbehind forms `(?<=` and `(?<!` never reach here: the guard
+        # refuses them, because Rust has no lookaround at all.
+        if pattern.startswith("(?<", index) and not pattern.startswith(
+            ("(?<=", "(?<!"), index
+        ):
+            out.append("(?P<")
+            index += 3
+            continue
+        out.append(char)
+        index += 1
+    return "".join(out)
+
+
+def _validate_regex(pattern: str) -> str:
+    r"""Refuse what data-dict's engine would refuse, and nothing else.
+
+    Two separate questions, and Python's `re` answers neither on its own.
+    Whether a construct exists in Rust's `regex` is settled by
+    `_RUST_UNSUPPORTED`: `re` accepts lookaround and backreferences that Rust
+    has not. Whether the pattern parses at all is settled by compiling it,
+    but only after the constructs Rust has and Python lacks are neutralized,
+    because `re` rejects `\p{L}` and `(?<name>` which data-dict accepts and
+    emits.
+
+    Dropping the parse check entirely would let `(` through to the warehouse
+    as broken SQL at conversation time, which is the opposite of failing at
+    construction.
     """
     if _RUST_UNSUPPORTED.search(pattern):
         raise ValueError(f"Invalid data-dict regular expression {pattern!r}.")
+    try:
+        re.compile(_translate_from_rust(pattern, neutralize_classes=True))
+    except re.error as error:
+        raise ValueError(
+            f"Invalid data-dict regular expression {pattern!r}."
+        ) from error
     return pattern
-
-
-# Rust spells a named group `(?<name>...)` and Python `(?P<name>...)`. The
-# lookbehind forms `(?<=` and `(?<!` are already refused above, so any `(?<`
-# reaching here starts a name.
-_RUST_NAMED_GROUP = re.compile(r"\(\?<")
 
 
 def _compile_for_matching(pattern: str) -> re.Pattern[str]:
     """Compile a pattern commons has to run itself, over column names.
 
-    Selecting columns is the one place a pattern cannot simply be passed
-    through to the source, so an engine difference stops being academic. A
-    pattern data-dict accepts but Python cannot run is reported as commons
-    being unable to evaluate it, not as the pattern being invalid.
+    Selecting columns is the one place a pattern cannot be passed through to
+    the source, so an engine difference stops being academic. A pattern
+    data-dict accepts but Python cannot run is reported as commons being
+    unable to evaluate it, not as the pattern being invalid.
     """
     try:
-        return re.compile(_RUST_NAMED_GROUP.sub("(?P<", pattern))
+        return re.compile(_translate_from_rust(pattern, neutralize_classes=False))
     except re.error as error:
         raise ValueError(
             f"commons cannot evaluate the column selector {pattern!r} with "

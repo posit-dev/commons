@@ -480,3 +480,37 @@ def test_a_selector_pattern_python_cannot_run_says_so():
                 columns=[{"name": "flag_a", "type": "boolean"}],
             )
         )
+
+
+def test_a_malformed_pattern_is_still_refused():
+    # Dropping Python's compile check must not stop commons refusing a pattern
+    # no engine can parse. Construction is the place to catch it; otherwise it
+    # reaches the warehouse as broken SQL at conversation time.
+    with pytest.raises(ValueError, match="regular expression"):
+        one("region similar to '('")
+
+
+def test_a_named_backreference_is_refused():
+    # Rust's `regex` has no backreferences in any spelling.
+    with pytest.raises(ValueError, match="regular expression"):
+        one(r"region similar to '(?<a>x)\k<a>'")
+
+
+def test_a_unicode_class_inside_a_malformed_pattern_is_still_refused():
+    with pytest.raises(ValueError, match="regular expression"):
+        one(r"region similar to '(\p{L}'")
+
+
+def test_a_bracketed_literal_is_not_read_as_a_named_group():
+    # `(?<` inside a character class is three literal characters, so
+    # translating it to `(?P<` would wrongly select a column named `P`.
+    record = export_spec(
+        spec(
+            {"name": "d", "expr": "columns('[(?<]') = true"},
+            columns=[
+                {"name": "P", "type": "boolean"},
+                {"name": "x", "type": "boolean"},
+            ],
+        )
+    )["orders"].definitions["d"]
+    assert record.columns == []
