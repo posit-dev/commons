@@ -368,11 +368,14 @@ class SemanticLayer:
     """The trusted calculations an agent can run.
 
     ``source_text`` holds the source of the measures and the module-level
-    helpers they call, keyed by Python name. Only text is kept: the agent's
-    worker session reads measure definitions but never receives a callable.
-    Two functions that share a Python name share one entry, and the first
-    definition collected wins, so a measure whose function shares its name
-    with an earlier one is shown that earlier function's source instead.
+    helpers they call, keyed by Python function name. Only text is kept:
+    the agent's worker session reads measure definitions but never receives
+    a callable. Two functions that share a Python name share one entry, and
+    the first definition collected wins, so a measure whose function shares
+    its name with an earlier one is shown that earlier function's source
+    instead. The R implementation sources a path's files into one shared
+    environment, so there the last definition of a same-named helper wins
+    instead, and is what every measure calling it actually runs.
 
     The layout of this object is internal and may change without notice.
     """
@@ -414,7 +417,8 @@ def semantic_layer(*items: Any) -> SemanticLayer:
 
     Collecting the same measure twice -- the same file passed alongside
     its own directory, say -- is not an error; two different measures
-    sharing one name is.
+    sharing one name is. The R implementation is stricter here: it rejects
+    a repeated name even when it is the same measure twice.
     """
     measures: dict[str, Measure] = {}
     source_text: dict[str, str] = {}
@@ -481,22 +485,39 @@ def _from_path(path: Path) -> tuple[list[Measure], dict[str, str]]:
             f"directories of them."
         )
 
-    # Not recursive, and __init__.py is skipped: a directory of measure files
-    # is a directory, not a package.
-    files = (
-        sorted(
+    if path.is_dir():
+        # Not recursive, and __init__.py is skipped: a directory of measure
+        # files is a directory, not a package.
+        files = sorted(
             entry
             for entry in path.iterdir()
             if entry.suffix == ".py" and entry.name != "__init__.py"
         )
-        if path.is_dir()
-        else [path]
-    )
+        # Once for the whole directory, before anything in it executes: the
+        # check scans every entry anyway, so repeating it per file is O(n^2)
+        # find_spec calls, and failing before the first load keeps a rejected
+        # directory from partially executing.
+        _check_directory_importable(path, requested=path)
+        directory_checked = True
+    else:
+        # The suffix is checked here, not left for the loader to discover:
+        # spec_from_file_location gives a .pyc or .so a real loader, so
+        # without this check such a file would execute as bytecode or native
+        # code instead of raising the error below.
+        if path.suffix != ".py":
+            raise ValueError(
+                f"Cannot read measures from {path}: not a Python file.\n"
+                f"Pass a .py file, a directory of them, or a module object."
+            )
+        files = [path]
+        directory_checked = False
 
     measures: list[Measure] = []
     sources: dict[str, str] = {}
     for file in files:
-        found, text = _from_module(_load_module_from_path(file))
+        found, text = _from_module(
+            _load_module_from_path(file, directory_checked=directory_checked)
+        )
         measures.extend(found)
         _merge_sources(sources, text)
     return measures, sources
@@ -521,11 +542,14 @@ def _from_module(module: ModuleType) -> tuple[list[Measure], dict[str, str]]:
     """
     measures: list[Measure] = []
     sources: dict[str, str] = {}
-    for name, value in vars(module).items():
+    for value in vars(module).values():
         if inspect.isfunction(value):
             if value.__module__ != module.__name__:
                 continue
-            sources[name] = _source_text(value)
+            # Keyed by the function's own name, not the binding: an alias
+            # (`also_known_as = measure_fn`) is one function and gets one
+            # entry, matching how directly-passed measures are keyed.
+            sources.setdefault(value.__name__, _source_text(value))
             record = as_measure(value)
         else:
             # A measure can also sit at module level as a bare record. One
@@ -568,7 +592,9 @@ _UNSAFE_NAME_CHARS = re.compile(r"[^0-9a-zA-Z_]")
 _load_mtimes: dict[str, int] = {}
 
 
-def _load_module_from_path(path: Path) -> ModuleType:
+def _load_module_from_path(
+    path: Path, *, directory_checked: bool = False
+) -> ModuleType:
     resolved = path.resolve()
     stem = _UNSAFE_NAME_CHARS.sub("_", path.stem)
     # The digest, not a load counter: two semantic_layer() calls on the same
@@ -606,7 +632,10 @@ def _load_module_from_path(path: Path) -> ModuleType:
         # _invalidate_bytecode_cache for why this step is required at all.
         _invalidate_bytecode_cache(path)
 
-        _check_directory_importable(path.parent, requested=path)
+        # Skipped when the caller already checked this directory: _from_path
+        # checks a directory once up front rather than once per file in it.
+        if not directory_checked:
+            _check_directory_importable(path.parent, requested=path)
 
         spec = importlib.util.spec_from_file_location(name, path)
         if spec is None or spec.loader is None:

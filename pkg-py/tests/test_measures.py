@@ -3,6 +3,7 @@
 import enum
 import importlib
 import os
+import py_compile
 import sys
 import threading
 from collections.abc import AsyncIterator
@@ -18,6 +19,7 @@ from commons._measures import (
     INJECTED,
     Injected,
     Measure,
+    _from_module,
     _load_module_from_path,
     _load_mtimes,
     _split_parameters,
@@ -955,6 +957,26 @@ def test_installed_but_unimported_module_is_a_construction_error(
     assert "already-importable" in message
 
 
+def test_a_same_named_module_without_a_spec_is_a_construction_error(
+    tmp_path: Path,
+) -> None:
+    # A module planted straight into sys.modules (a stub or test double,
+    # say) has no __spec__ for find_spec() to return, so the collision
+    # check falls back to looking in sys.modules itself.
+    (tmp_path / "planted.py").write_text(
+        "from commons._measures import measure\n\n\n"
+        "@measure(description='d')\n"
+        "def m() -> int:\n"
+        "    return 1\n"
+    )
+    sys.modules["planted"] = ModuleType("planted")
+    try:
+        with pytest.raises(ValueError, match="already imported from"):
+            semantic_layer(tmp_path / "planted.py")
+    finally:
+        sys.modules.pop("planted", None)
+
+
 def test_semantic_layer_reenters_during_a_measure_files_import() -> None:
     # A non-reentrant lock deadlocks here rather than raising, so this runs
     # on a daemon thread with a timeout: a regression fails the test instead
@@ -990,6 +1012,17 @@ def test_semantic_layer_supports_membership_and_iteration() -> None:
     assert list(layer) == ["order_count"]
 
 
+def test_semantic_layer_mappings_are_read_only() -> None:
+    # Only text and frozen records leave the layer; a plain dict here would
+    # let a caller mutate the layer after construction.
+    layer = semantic_layer(_count_measure())
+
+    with pytest.raises(TypeError):
+        layer.measures["other"] = _count_measure()  # type: ignore[index]
+    with pytest.raises(TypeError):
+        layer.source_text["other"] = "def other(): ..."  # type: ignore[index]
+
+
 def test_a_directory_and_a_file_inside_it_overlap_without_error() -> None:
     layer = semantic_layer(
         MEASURE_FILES / "sibling_imports",
@@ -1005,6 +1038,13 @@ def test_a_module_level_alias_is_collected_once() -> None:
     assert list(layer.measures) == ["aliased_measure"]
 
 
+def test_a_module_level_alias_shares_one_source_text_entry() -> None:
+    # Keyed by function name, not binding: the alias is the same function.
+    layer = semantic_layer(MEASURE_FILES / "aliased" / "aliased.py")
+
+    assert set(layer.source_text) == {"aliased_measure"}
+
+
 def test_distinct_measures_from_two_files_sharing_a_name_are_an_error() -> None:
     with pytest.raises(ValueError, match="dup"):
         semantic_layer(
@@ -1014,6 +1054,32 @@ def test_distinct_measures_from_two_files_sharing_a_name_are_an_error() -> None:
 
 
 def test_a_non_python_file_path_is_an_error(tmp_path: Path) -> None:
+    notes = tmp_path / "notes.txt"
+    notes.write_text("not python\n")
+
+    with pytest.raises(ValueError, match="not a Python file"):
+        semantic_layer(notes)
+
+
+def test_a_compiled_bytecode_path_is_an_error(tmp_path: Path) -> None:
+    # spec_from_file_location gives a .pyc a real loader, so without an
+    # explicit suffix check this path would execute as bytecode.
+    source = tmp_path / "m.py"
+    source.write_text("VALUE = 1\n")
+    compiled = tmp_path / "m.pyc"
+    py_compile.compile(str(source), cfile=str(compiled))
+
+    with pytest.raises(ValueError, match="not a Python file"):
+        semantic_layer(compiled)
+
+
+def test_a_non_python_file_is_rejected_before_the_directory_check(
+    tmp_path: Path,
+) -> None:
+    # The requested file's error must win over a sibling's collision: the
+    # sibling is only checked because its directory would go on sys.path,
+    # which never happens for a file that is not Python at all.
+    (tmp_path / "json.py").write_text("VALUE = 1\n")
     notes = tmp_path / "notes.txt"
     notes.write_text("not python\n")
 
@@ -1074,3 +1140,17 @@ def test_a_module_level_bare_record_is_harvested() -> None:
     assert list(layer.measures) == ["grand_total"]
     assert layer.measures["grand_total"].func() == 1
     assert "def total" in layer.source_text["total"]
+
+
+def test_an_imported_bare_record_is_not_harvested() -> None:
+    # A bare record re-exported by another module belongs to the module
+    # that defined its function, same as an imported function.
+    module = _load_module_from_path(MEASURE_FILES / "bare_record" / "total.py")
+
+    reexporter = ModuleType("reexporter")
+    reexporter.grand_total = module.grand_total
+
+    measures, sources = _from_module(reexporter)
+
+    assert measures == []
+    assert sources == {}
