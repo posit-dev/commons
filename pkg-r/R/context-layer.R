@@ -102,7 +102,7 @@ dictionary_context_chunks <- function(dictionary) {
 
 # Frontmatter carries file metadata (e.g. provenance) meant for maintainers,
 # not the model; drop it so retrieval can't surface it. The metadata block is
-# optional so an emptied-out fence is removed rather than indexed as text.
+# optional so an empty frontmatter section is removed rather than indexed as text.
 strip_frontmatter <- function(md) {
   sub("(?s)^---\r?\n(.*?\r?\n)?---(\r?\n|$)", "", md, perl = TRUE)
 }
