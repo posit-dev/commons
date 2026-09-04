@@ -373,6 +373,8 @@ def resolve_injections(
     even when the argument has a default. An argument matching no source keeps
     its default; one with no default is an error, raised here so a measure
     that can never run is caught at construction rather than mid-conversation.
+    The error names the first measure with an unresolvable argument; measures
+    after it are not checked.
     """
     resolved: dict[str, dict[str, Any]] = {}
 
