@@ -93,11 +93,9 @@ history as of <code>to</code>.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list of conversations, named by conversation id and ordered
-oldest-first. Each conversation is a list of <a href="https://ellmer.tidyverse.org/reference/Turn.html" class="external-link">ellmer::Turn</a>s and carries
-a <code>last_active</code> attribute: a <code>POSIXct</code> giving the time of the
-conversation's most recent chat activity. The list carries a <code>source</code>
-attribute identifying the local trace directory or Connect content from
-which it was read.</p>
+oldest-first. Each conversation is a list with a <code>turns</code> field containing
+a list of <a href="https://ellmer.tidyverse.org/reference/Turn.html" class="external-link">ellmer::Turn</a>s and a <code>last_active</code> field containing a
+<code>POSIXct</code> giving the time of the conversation's most recent chat activity.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>

@@ -52,12 +52,11 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 ## Value
 
 A list of conversations, named by conversation id and ordered
-oldest-first. Each conversation is a list of
-[ellmer::Turn](https://ellmer.tidyverse.org/reference/Turn.html)s and
-carries a `last_active` attribute: a `POSIXct` giving the time of the
-conversation's most recent chat activity. The list carries a `source`
-attribute identifying the local trace directory or Connect content from
-which it was read.
+oldest-first. Each conversation is a list with a `turns` field
+containing a list of
+[ellmer::Turn](https://ellmer.tidyverse.org/reference/Turn.html)s and a
+`last_active` field containing a `POSIXct` giving the time of the
+conversation's most recent chat activity.
 
 ## Details
 
