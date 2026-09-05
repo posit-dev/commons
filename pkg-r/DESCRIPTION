@@ -25,7 +25,7 @@ Imports:
     coro,
     DBI,
     duckdb (>= 1.5.4.2),
-    ellmer (>= 0.4.1),
+    ellmer (>= 0.5.0),
     evaluate,
     glue,
     highr,
