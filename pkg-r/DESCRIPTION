@@ -71,6 +71,9 @@ VignetteBuilder: knitr
 Remotes:
     posit-dev/shinychat/pkg-r
 Config/testthat/edition: 3
+Config/testthat/parallel: true
+Config/testthat/start-first: run-r, citation-scan, citation-browser, commons,
+    data-source, pool, definitions, trajectory-review
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0
