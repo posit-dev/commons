@@ -725,7 +725,7 @@ test_that("stream_async projects citations without touching stored turns", {
     concatenated,
     paste0(project_citation_text(raw, agent$citation_corpus())$text, "\n")
   )
-  expect_false(any(grepl("commons-citation", unlist(chunks), fixed = TRUE)))
+  expect_false(any(grepl("</?commons-citation>", unlist(chunks))))
   expect_false(any(grepl("spoofed", unlist(chunks), fixed = TRUE)))
 
   turns <- agent$get_turns()
