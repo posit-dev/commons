@@ -108,6 +108,8 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
 
+   A commons chat app must list `bsicons`, `htmltools`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
+
    commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
 
    Connect the selected data sources, dictionaries, semantic layer, remaining context, and any additional instructions.
