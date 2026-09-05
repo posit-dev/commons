@@ -18,8 +18,10 @@ commons(
 }
 \arguments{
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
-\code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}. A system prompt already set on the client is
-ignored, with a warning; use \code{instructions} to add to commons' prompt.}
+\code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}. For best results, enable thinking when
+supported by the selected provider and model. A system prompt already set
+on the client is ignored, with a warning; use \code{instructions} to add to
+commons' prompt.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
