@@ -302,7 +302,8 @@ Commons <- R6::R6Class(
     },
 
     set_turns = function(value) {
-      # Replacements queue a reminder; truncations preserve its current state.
+      # History that is not a prefix of the current turns may come from a
+      # previous session, where the R state behind its tool calls is gone.
       if (length(value) == 0) {
         private$restore_reminder_pending <- FALSE
       } else if (!turns_are_prefix(value, self$get_turns())) {

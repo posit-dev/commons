@@ -36,7 +36,8 @@ append_restored_conversation_reminder <- function(inputs) {
   )
 }
 
-# Replayed turns are new objects, so compare their text.
+# shinychat reconstructs stored turns, so compare their roles and text rather
+# than the resulting objects.
 turns_are_prefix <- function(value, current) {
   if (length(value) > length(current)) {
     return(FALSE)
