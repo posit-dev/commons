@@ -118,28 +118,28 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 }
 
 .commons-provenance-info {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
+  display: inline-flex;
+  margin-left: 0.2rem;
+  vertical-align: 0.1em;
 }
 
 .commons-provenance-info-trigger {
   align-items: center;
   background: transparent;
-  border: 1.5px solid currentcolor;
+  border: 1px solid currentcolor;
   border-radius: 50%;
   color: var(--bs-secondary-color, #6c757d);
   display: inline-flex;
   font-family: inherit;
-  font-size: 0.75rem;
+  font-size: 0.55rem;
   font-style: normal;
   font-weight: 600;
-  height: 1.125rem;
+  height: 0.8rem;
   justify-content: center;
   line-height: 1;
   padding: 0;
   text-decoration: none;
-  width: 1.125rem;
+  width: 0.8rem;
 }
 
 .commons-provenance-info-trigger:hover {

@@ -5,4 +5,16 @@ querying them, and A/B/C provenance semantics so every answer carries a
 classification as to how much it can be trusted.
 """
 
-__all__: list[str] = []
+from ._data_source import DataSource, data_source, list_tables
+from ._measures import Injected, Measure, SemanticLayer, measure, semantic_layer
+
+__all__: list[str] = [
+    "DataSource",
+    "Injected",
+    "Measure",
+    "SemanticLayer",
+    "data_source",
+    "list_tables",
+    "measure",
+    "semantic_layer",
+]

@@ -1,5 +1,5 @@
 definition_compile_fixture <- function(name, source) {
-  path <- test_path("fixtures", "definition-export", "valid", name)
+  path <- definition_fixture_path(name)
   definition_compile_source(yaml::read_yaml(path), source)
 }
 

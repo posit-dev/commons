@@ -31,9 +31,14 @@ data_dict_cli_context <- function(result) {
   )
 }
 
+definition_fixture_path <- function(name, kind = "valid") {
+  test_path("fixtures", "shared", "definition-export", kind, name)
+}
+
 definition_fixture_paths <- function(kind) {
   sort(Sys.glob(test_path(
     "fixtures",
+    "shared",
     "definition-export",
     kind,
     "*.yaml"
@@ -41,20 +46,7 @@ definition_fixture_paths <- function(kind) {
 }
 
 definition_fixture_error_code <- function(path) {
-  codes <- c(
-    "between-temporal.yaml" = "S21",
-    "columns-non-filter.yaml" = "S21",
-    "columns-transitive.yaml" = "S21",
-    "cycle.yaml" = "S34",
-    "duplicate.yaml" = "S10",
-    "nested-aggregate.yaml" = "S30",
-    "parse.yaml" = "S19",
-    "regex-engine.yaml" = "S21",
-    "shadow.yaml" = "S33",
-    "type.yaml" = "S21",
-    "unknown.yaml" = "S20"
-  )
-  unname(codes[[basename(path)]])
+  shared_fixture("definitions")$invalid[[basename(path)]]
 }
 
 definition_export_contract <- function(export) {
@@ -86,6 +78,46 @@ definition_export_contract <- function(export) {
           notes = as.character(unlist(translation$notes, use.names = FALSE))
         )
       )
+    }
+  }
+  out
+}
+
+# The fixture arrives from JSON as nested lists, while
+# definition_export_contract() produces character vectors.
+definition_fixture_contract <- function(cases) {
+  lapply(cases, function(case) {
+    translation <- case$translation %||% list()
+    list(
+      expression = case$expression,
+      kind = case$kind,
+      type = case$type,
+      columns = as.character(unlist(case$columns, use.names = FALSE)),
+      definitions = as.character(unlist(case$definitions, use.names = FALSE)),
+      translation = list(
+        target = translation$target,
+        code = translation$code,
+        error = translation$error,
+        notes = as.character(unlist(translation$notes, use.names = FALSE))
+      )
+    )
+  })
+}
+
+# Grain is derived from the typed IR rather than exported, so it is compared
+# separately from the export contract.
+definition_export_grain <- function(export) {
+  out <- list()
+  for (table in export$tables) {
+    definitions <- table$definitions
+    if (length(definitions) == 0) {
+      next
+    }
+    names(definitions) <- vapply(definitions, `[[`, character(1), "name")
+    mixed <- definition_mixed_grain(definitions)
+    for (i in seq_along(definitions)) {
+      key <- paste(table$name, names(definitions)[[i]], sep = "::")
+      out[[key]] <- mixed[[i]]
     }
   }
   out

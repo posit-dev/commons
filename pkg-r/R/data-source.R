@@ -967,7 +967,7 @@ check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env(
 
   exists <- vapply(
     table_registry$ids,
-    function(id) isTRUE(DBI::dbExistsTable(con, id)),
+    function(id) isTRUE(suppressMessages(DBI::dbExistsTable(con, id))),
     logical(1)
   )
   missing <- table_registry$labels[!exists]
