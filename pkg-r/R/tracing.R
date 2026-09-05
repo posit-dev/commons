@@ -19,7 +19,6 @@ new_trajectory_tracing <- function(
 ) {
   rlang::check_bool(log, call = call)
   check_share_with(share_with, call = call)
-  repair_connect_trace_routing()
 
   if (!log) {
     if (!is.null(share_with)) {
@@ -48,12 +47,6 @@ new_trajectory_tracing <- function(
     ))
   }
 
-  enable_content_capture()
-
-  if (!otel::is_tracing_enabled() && !is_connect_runtime()) {
-    enable_local_tracing()
-  }
-
   if (!otel::is_tracing_enabled()) {
     if (is_connect_runtime()) {
       enable_content_observability()
@@ -63,70 +56,15 @@ new_trajectory_tracing <- function(
     return(FALSE)
   }
 
+  if (!content_capture_enabled()) {
+    return(FALSE)
+  }
+
   if (!is.null(share_with)) {
     share_trajectory_access(share_with)
   }
 
   TRUE
-}
-
-# Connect 2026.07 can overwrite content routing with its server attributes.
-repair_connect_trace_routing <- function() {
-  if (!is_connect_runtime() || !is_installed("otel")) {
-    return(invisible(FALSE))
-  }
-
-  guid <- Sys.getenv("CONNECT_CONTENT_GUID")
-  job_key <- Sys.getenv("CONNECT_CONTENT_JOB_KEY")
-  if (!nzchar(guid) || !nzchar(job_key)) {
-    return(invisible(FALSE))
-  }
-
-  current <- Sys.getenv("OTEL_RESOURCE_ATTRIBUTES")
-  pairs <- strsplit(current, ",", fixed = TRUE)[[1]]
-  pairs <- pairs[nzchar(pairs)]
-  names <- sub("=.*$", "", pairs)
-  values <- sub("^[^=]*=", "", pairs)
-
-  correctly_routed <-
-    any(names == "content.guid" & values == guid) &&
-    any(names == "job.key" & values == job_key)
-  if (correctly_routed) {
-    return(invisible(FALSE))
-  }
-
-  pairs <- pairs[!names %in% c("content.guid", "job.key")]
-  pairs <- c(
-    pairs,
-    paste0("content.guid=", guid),
-    paste0("job.key=", job_key)
-  )
-  Sys.setenv(OTEL_RESOURCE_ATTRIBUTES = paste(pairs, collapse = ","))
-  repair_otelsdk_resource_attributes(guid, job_key)
-  reset_otel_tracer_provider()
-  refresh_ellmer_otel_cache()
-  invisible(TRUE)
-}
-
-# otelsdk's C++ SDK statically caches its environment-derived resource when
-# ellmer first initializes OTel. Rebuilding the provider does not refresh it.
-repair_otelsdk_resource_attributes <- function(guid, job_key) {
-  if (!is_installed("otelsdk")) {
-    return(invisible(NULL))
-  }
-  tryCatch(
-    {
-      the <- asNamespace("otelsdk")$the
-      attributes <- the$default_resource_attributes
-      if (is.environment(the) && is.list(attributes)) {
-        attributes[["content.guid"]] <- guid
-        attributes[["job.key"]] <- job_key
-        the$default_resource_attributes <- attributes
-      }
-    },
-    error = function(err) NULL
-  )
-  invisible(NULL)
 }
 
 # Start and activate a span for the calling frame's lifetime, ending when it
@@ -214,92 +152,19 @@ local_conversation_turn_span <- function(envir = parent.frame()) {
   invisible(span)
 }
 
-# HACK: ellmer snapshots its tracer and the GenAI content-capture flag once,
-# in its .onLoad (`otel_cache_tracer()` in ellmer's R/otel.R). Because ellmer
-# loads as a commons dependency, that snapshot is always taken before any
-# commons code runs, and ellmer exports no way to refresh it. So after
-# changing the OTEL_* environment, reach into ellmer and re-run its caching
-# function. If ellmer's internals change, capture silently stays off for the
-# session; setting the env vars before R starts (as `warn_tracing_disabled()`
-# suggests) remains the manual path.
-refresh_ellmer_otel_cache <- function() {
-  tryCatch(
-    utils::getFromNamespace("otel_cache_tracer", "ellmer")(),
-    error = function(err) NULL
-  )
-  invisible(NULL)
-}
-
-# ellmer captures message content only when this semconv env var is truthy
-# ("true"/"1", matching ellmer's parsing). An explicit pre-set value is
-# respected -- a deliberate opt-out must not be flipped process-wide -- like
-# enable_local_tracing() respects an explicit OTEL_TRACES_EXPORTER.
-enable_content_capture <- function() {
+# ellmer reads this semconv setting when its namespace loads, so changing it
+# while constructing an agent would be too late for the current process.
+content_capture_enabled <- function() {
   current <- Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
-  if (nzchar(current)) {
-    if (!tolower(current) %in% c("true", "1")) {
-      cli::cli_warn(c(
-        "{.envvar OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT} is set
-         to {.val {current}}, so logged trajectories will not include message
-         content.",
-        i = "Unset it or set it to {.val true} to capture full trajectories."
-      ))
-    }
-    return(invisible(FALSE))
+  if (tolower(current) %in% c("true", "1")) {
+    return(TRUE)
   }
-  Sys.setenv(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
-  refresh_ellmer_otel_cache()
-  invisible(TRUE)
-}
-
-# Configure otelsdk's file exporter for a local session that hasn't set up
-# OTel itself. Only steps in when no exporter is configured at all: a user's
-# explicit OTEL_TRACES_EXPORTER (even "none") is respected.
-enable_local_tracing <- function() {
-  if (nzchar(Sys.getenv("OTEL_TRACES_EXPORTER"))) {
-    return(invisible(FALSE))
-  }
-  if (!is_installed("otelsdk")) {
-    cli::cli_warn(c(
-      "Local trajectory logging requires the {.pkg otelsdk} package.",
-      i = "Install {.pkg otelsdk} to enable it."
-    ))
-    return(invisible(FALSE))
-  }
-
-  dir <- commons_traces_dir()
-  if (!dir.exists(dir)) {
-    dir.create(dir, recursive = TRUE)
-  }
-  Sys.setenv(
-    OTEL_TRACES_EXPORTER = "otlp/file",
-    OTEL_EXPORTER_OTLP_TRACES_FILE = file.path(dir, "trace-%N.jsonl")
-  )
-  reset_otel_tracer_provider()
-  refresh_ellmer_otel_cache()
-  invisible(TRUE)
-}
-
-# HACK: the otel package builds its default tracer provider from the OTEL_*
-# environment on the first `otel::get_tracer()` call -- which ellmer's .onLoad
-# triggers, before any commons code can run -- and caches it in the internal
-# `otel:::the` environment. There is no public API to reconfigure it, so to
-# honor env vars set after load, clear the cached provider and let the next
-# `get_tracer()` rebuild it. Ordering matters: set the env vars first, then
-# reset here, then refresh ellmer's snapshot (which calls `get_tracer()`).
-# If otel's internals change, this quietly does nothing and
-# `warn_tracing_disabled()` tells the user to configure `.Renviron` instead.
-reset_otel_tracer_provider <- function() {
-  tryCatch(
-    {
-      the <- asNamespace("otel")$the
-      if (is.environment(the)) {
-        the$tracer_provider <- NULL
-      }
-    },
-    error = function(err) NULL
-  )
-  invisible(NULL)
+  cli::cli_warn(c(
+    "Trajectory logging requires GenAI message-content capture.",
+    i = "Set {.envvar OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT} to
+         {.val true} before R starts."
+  ))
+  FALSE
 }
 
 # Tracing is off on Connect either because this content's Content

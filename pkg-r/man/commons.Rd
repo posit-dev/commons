@@ -50,15 +50,15 @@ best-effort R guardrails with
 are not a security boundary.}
 
 \item{log}{Whether to capture conversation trajectories with OpenTelemetry
-(default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content
-capture in \pkg{ellmer} and tags each turn's spans with a conversation
-id; the spans go wherever OTel is configured to export. On Posit Connect,
+(default \code{FALSE}). When \code{TRUE}, commons tags each turn's spans with a
+conversation id; the spans go wherever OTel is configured to export.
+Set \code{OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true} before R
+starts so \pkg{ellmer} includes message content. On Posit Connect,
 traces land in Connect's observability store (browsable in its Trace
 Viewer); commons switches on the content's \emph{Content Observability}
 setting itself when needed, though capture only starts once the content
-restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
-automatically when no exporter is set up. Read trajectories back with
-\code{\link[=trajectory_read]{trajectory_read()}}.}
+restarts. Configure an exporter before starting R for local capture. Read
+trajectories back with \code{\link[=trajectory_read]{trajectory_read()}}.}
 
 \item{share_with}{An optional character vector of Connect usernames granted
 access to this content's trajectories when running on Posit Connect.
