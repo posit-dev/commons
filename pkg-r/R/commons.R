@@ -177,14 +177,9 @@ commons <- function(
   )
 }
 
-ellmer_chat_class <- function() {
-  # Chat is exported in dev ellmer; use ellmer::Chat after its next release.
-  utils::getFromNamespace("Chat", "ellmer")
-}
-
 Commons <- R6::R6Class(
   "Commons",
-  inherit = ellmer_chat_class(),
+  inherit = ellmer::Chat,
   public = list(
     initialize = function(
       client,
@@ -199,7 +194,11 @@ Commons <- R6::R6Class(
       share_with = NULL
     ) {
       rlang::check_dots_empty()
-      do.call(super$initialize, ellmer_chat_initialize_args(client))
+      super$initialize(
+        provider = client$get_provider(),
+        model = client$get_model_object(),
+        echo = "none"
+      )
       semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
 
@@ -442,19 +441,6 @@ Commons <- R6::R6Class(
     }
   )
 )
-
-ellmer_chat_initialize_args <- function(client) {
-  args <- list(provider = client$get_provider())
-  model <- tryCatch(
-    client$get_model_object(),
-    error = function(err) NULL
-  )
-  if (!is.null(model)) {
-    args$model <- model
-  }
-  args$echo <- "none"
-  args
-}
 
 turn_has_user_message <- function(turn) {
   any(!vapply(turn@contents, is_tool_result_content, logical(1)))

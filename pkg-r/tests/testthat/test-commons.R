@@ -25,19 +25,11 @@ test_that("commons() registers only the tools the agent's composition earns", {
   )
 })
 
-test_that("ellmer chat initialization supports both model APIs", {
-  client <- list(get_provider = function() "provider")
+test_that("commons() preserves the client's model configuration", {
+  client <- test_client()
+  agent <- commons(client, test_source())
 
-  expect_equal(
-    ellmer_chat_initialize_args(client),
-    list(provider = "provider", echo = "none")
-  )
-
-  client$get_model_object <- function() "model"
-  expect_equal(
-    ellmer_chat_initialize_args(client),
-    list(provider = "provider", model = "model", echo = "none")
-  )
+  expect_identical(agent$get_model_object(), client$get_model_object())
 })
 
 test_that("commons() configures run_r network access", {
