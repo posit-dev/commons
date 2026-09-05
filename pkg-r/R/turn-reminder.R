@@ -36,8 +36,7 @@ append_restored_conversation_reminder <- function(inputs) {
   )
 }
 
-# Content-based prefix check: shinychat replays stored turns through
-# ellmer::contents_replay(), so object identity is not meaningful here.
+# Replayed turns are new objects, so compare their text.
 turns_are_prefix <- function(value, current) {
   if (length(value) > length(current)) {
     return(FALSE)
@@ -48,8 +47,6 @@ turns_are_prefix <- function(value, current) {
   )
 }
 
-# Distinct from trajectory-read.R's turn_signature(), which produces a
-# structured signature for exchange matching.
 turn_text_signature <- function(turn) {
   texts <- vapply(
     turn@contents,
