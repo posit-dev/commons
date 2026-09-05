@@ -30,8 +30,9 @@ commons(
   An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
   giving the provider and model to use, e.g.
   [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
-  A system prompt already set on the client is ignored, with a warning;
-  use `instructions` to add to commons' prompt.
+  For best results, enable thinking when supported by the selected
+  provider and model. A system prompt already set on the client is
+  ignored, with a warning; use `instructions` to add to commons' prompt.
 
 - data_sources:
 
