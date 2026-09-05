@@ -12,13 +12,17 @@ from __future__ import annotations
 from typing import Any
 
 from ._emit_duckdb import emit_duckdb
+from ._emit_sql import emit_sql
 from ._export import DefinitionExport, Ir
 from ._registry import ExportRecord
 
 __all__ = ["attach_compiled_definitions", "mixed_grain"]
 
-# Only DuckDB is ported so far; Snowflake and Databricks are stage 2.
-_TARGETS = {"duckdb": "SQL(duckdb)"}
+_TARGETS = {
+    "duckdb": "SQL(duckdb)",
+    "snowflake": "SQL(snowflake)",
+    "databricks": "SQL(databricks)",
+}
 
 
 def mixed_grain(definitions: dict[str, DefinitionExport]) -> dict[str, bool]:
@@ -98,8 +102,8 @@ def attach_compiled_definitions(
         if target is None:
             raise ValueError(
                 f"Definitions on table {table_name!r} cannot be compiled for a "
-                f"{dialect!r} data source. commons lowers definitions to DuckDB "
-                f"only."
+                f"{dialect!r} data source. commons lowers definitions to "
+                f"{', '.join(sorted(_TARGETS))}."
             )
         entry.compiled_definitions = _compile_table(table_name, definitions, target)
 
@@ -120,14 +124,23 @@ def _compile_table(
             f"and aggregate grain and would need a subquery rewrite."
         )
     markers = _reference_markers(definitions)
-    emitted = {
-        name: emit_duckdb(
-            _mark_references(definition.ir, markers), definition.selection
-        )
-        for name, definition in definitions.items()
-        if definition.ir is not None
-    }
-    composed = _compose(table, definitions, emitted, markers)
+    emitted = {}
+    for name, definition in definitions.items():
+        if definition.ir is None:
+            continue
+        marked = _mark_references(definition.ir, markers)
+        if target == "SQL(duckdb)":
+            emitted[name] = emit_duckdb(marked, definition.selection)
+            continue
+        dialect = target[len("SQL(") : -1]
+        result = emit_sql(marked, dialect, definition.selection)
+        if result["error"] is not None:
+            raise ValueError(
+                f"Definition {name!r} on table {table!r} cannot be compiled "
+                f"for {target}. {result['error']}"
+            )
+        emitted[name] = result
+    composed = _compose(table, definitions, emitted, markers, _quote_for(target))
     return [
         ExportRecord(
             name=name,
@@ -210,11 +223,17 @@ def _mark_references(ir: Ir, markers: dict[str, str]) -> Ir:
     return Ir(kind=ir.kind, type=ir.type, shape=ir.shape, attrs=attrs)
 
 
+def _quote_for(target: str) -> str:
+    """How the target writes an identifier."""
+    return "`" if target == "SQL(databricks)" else '"'
+
+
 def _compose(
     table: str,
     definitions: dict[str, DefinitionExport],
     emitted: dict[str, dict[str, Any]],
     markers: dict[str, str],
+    quote: str,
 ) -> dict[str, dict[str, Any]]:
     """Inline each definition's references, in dependency order."""
     composed: dict[str, dict[str, Any]] = {}
@@ -241,19 +260,27 @@ def _compose(
             for reference in references:
                 notes.extend(composed[reference]["notes"])
             composed[name] = {
-                "code": _substitute_identifiers(emitted[name]["code"], replacements),
+                "code": _substitute_identifiers(
+                    emitted[name]["code"], replacements, quote
+                ),
                 "notes": sorted(set(notes)),
             }
         pending = [name for name in pending if name not in ready]
     return composed
 
 
-def _substitute_identifiers(code: str, replacements: dict[str, str]) -> str:
+def _substitute_identifiers(code: str, replacements: dict[str, str], quote: str) -> str:
     """Replace quoted marker identifiers with the SQL they stand for.
 
-    A scan rather than a string replace, so a marker appearing inside a string
-    literal is left alone. The substituted SQL is parenthesised because it
-    lands in the middle of an expression whose precedence it does not know.
+    `quote` is how the target writes an identifier, which is a backtick for
+    Databricks and a double quote otherwise. Getting it wrong leaves the
+    marker in the emitted SQL as a column that does not exist.
+
+    A scan rather than a string replace, so a marker inside a string literal
+    is left alone and a doubled quote is read as one literal character rather
+    than the end of the identifier. The substituted SQL is parenthesised
+    because it lands in the middle of an expression whose precedence it does
+    not know.
     """
     if not replacements:
         return code
@@ -261,10 +288,10 @@ def _substitute_identifiers(code: str, replacements: dict[str, str]) -> str:
     index = 0
     while index < len(code):
         char = code[index]
-        if char in ("'", '"'):
+        if char in ("'", quote):
             token, index = _take_quoted(code, index, char)
-            if char == '"':
-                name = token[1:-1].replace('""', '"')
+            if char == quote:
+                name = token[1:-1].replace(quote * 2, quote)
                 if name in replacements:
                     out.append(f"({replacements[name]})")
                     continue
