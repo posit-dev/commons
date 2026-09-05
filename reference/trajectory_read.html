@@ -66,8 +66,9 @@ from local trace files.</p>
 content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
 directory that <code><a href="commons.html">commons()</a></code> writes to.</p></li>
-<li><p>A Connect content GUID, a content URL (<code>.../content/&lt;guid&gt;/</code>), or a
-dashboard URL (<code>.../connect/#/apps/&lt;guid&gt;/</code>).</p></li>
+<li><p>A Connect content GUID, a content URL (<code>.../content/&lt;guid&gt;/</code>), a
+vanity URL (<code>.../content/&lt;name&gt;/</code>), or a dashboard URL
+(<code>.../connect/#/apps/&lt;guid&gt;/</code>).</p></li>
 <li><p>A directory of OTLP NDJSON trace files (<code>trace-*.jsonl</code>).</p></li>
 </ul></dd>
 
@@ -101,9 +102,9 @@ a list of <a href="https://ellmer.tidyverse.org/reference/Turn.html" class="exte
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Reading traces from Connect requires the <code>CONNECT_API_KEY</code> environment
 variable (and <code>CONNECT_SERVER</code>, when the server can't be inferred from the
-project's deployment record), and editor-level access to the content: you
-must own it or be a collaborator. See the <code>share_with</code> argument of
-<code><a href="commons.html">commons()</a></code>.</p>
+URL, the project's deployment record, or the sole Connect server registered
+with rsconnect), and editor-level access to the content: you must own it or
+be a collaborator. See the <code>share_with</code> argument of <code><a href="commons.html">commons()</a></code>.</p>
     </div>
 
     <div class="section level2">

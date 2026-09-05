@@ -27,8 +27,9 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
     [`commons()`](https://posit-dev.github.io/commons/reference/commons.md)
     writes to.
 
-  - A Connect content GUID, a content URL (`.../content/<guid>/`), or a
-    dashboard URL (`.../connect/#/apps/<guid>/`).
+  - A Connect content GUID, a content URL (`.../content/<guid>/`), a
+    vanity URL (`.../content/<name>/`), or a dashboard URL
+    (`.../connect/#/apps/<guid>/`).
 
   - A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
 
@@ -62,9 +63,9 @@ conversation's most recent chat activity.
 
 Reading traces from Connect requires the `CONNECT_API_KEY` environment
 variable (and `CONNECT_SERVER`, when the server can't be inferred from
-the project's deployment record), and editor-level access to the
-content: you must own it or be a collaborator. See the `share_with`
-argument of
+the URL, the project's deployment record, or the sole Connect server
+registered with rsconnect), and editor-level access to the content: you
+must own it or be a collaborator. See the `share_with` argument of
 [`commons()`](https://posit-dev.github.io/commons/reference/commons.md).
 
 ## Examples
