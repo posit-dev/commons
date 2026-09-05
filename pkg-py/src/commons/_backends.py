@@ -65,8 +65,7 @@ class DuckDBBackend:
         return [row[0] for row in rows]
 
     def quote(self, table_id: TableId) -> str:
-        parts = [table_id.schema, table_id.table] if table_id.schema else [table_id.table]
-        return ".".join(quote_identifier(part) for part in parts)
+        return ".".join(quote_identifier(part) for part in table_id.parts)
 
     def dialect(self) -> str:
         return "duckdb"
@@ -96,9 +95,16 @@ class EngineBackend:
     def quote(self, table_id: TableId) -> str:
         preparer = self._engine.dialect.identifier_preparer
         quoted = preparer.quote(table_id.table)
-        if table_id.schema:
-            return f"{preparer.quote_schema(table_id.schema)}.{quoted}"
-        return quoted
+        if table_id.schema is None:
+            return quoted
+        # quote_schema() is given one component at a time: handed
+        # "ANALYTICS.PUBLIC" it produces one identifier containing a dot.
+        outer = ".".join(
+            preparer.quote_schema(part)
+            for part in (table_id.catalog, table_id.schema)
+            if part is not None
+        )
+        return f"{outer}.{quoted}"
 
     def dialect(self) -> str:
         return self._engine.dialect.name
@@ -107,6 +113,9 @@ class EngineBackend:
         inspector = sqlalchemy.inspect(self._engine)
 
         def exists(table_id: TableId) -> bool:
-            return inspector.has_table(table_id.table, schema=table_id.schema)
+            # SQLAlchemy takes every level above the table as one dotted
+            # `schema`, so a catalog is joined onto it rather than dropped.
+            outer = ".".join(table_id.parts[:-1])
+            return inspector.has_table(table_id.table, schema=outer or None)
 
         return exists
