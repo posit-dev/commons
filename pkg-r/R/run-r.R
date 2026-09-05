@@ -437,7 +437,6 @@ schedule_worker_reap <- function(
   cancel_worker_reap(worker)
   worker$reap <- later::later(
     function() {
-      worker$reap <- NULL
       quiet <- difftime(Sys.time(), worker$last_used, units = "secs") >= idle
       if (worker$pending == 0L && quiet) {
         worker_close(worker)
@@ -468,23 +467,18 @@ worker_await <- function(
   promises::promise(function(resolve, reject) {
     settled <- FALSE
     timed_out <- FALSE
-    cancel_timeout <- NULL
     cancel_kill <- NULL
-    cancel_watch <- NULL
 
     # later::later() and later::later_fd() each return their own canceller.
     # Hand every one of them back once the call settles, so a caller that
     # waits on later::loop_empty() is not held up by a timer for a call that
-    # already finished.
+    # already finished. Calling one after its callback ran is a safe no-op.
     release <- function() {
       for (cancel in list(cancel_timeout, cancel_kill, cancel_watch)) {
         if (!is.null(cancel)) {
           cancel()
         }
       }
-      cancel_timeout <<- NULL
-      cancel_kill <<- NULL
-      cancel_watch <<- NULL
     }
 
     settle <- function(value) {
@@ -505,7 +499,6 @@ worker_await <- function(
 
     cancel_timeout <- later::later(
       function() {
-        cancel_timeout <<- NULL
         if (settled) {
           return()
         }
@@ -513,7 +506,6 @@ worker_await <- function(
         try(rs$interrupt(), silent = TRUE)
         cancel_kill <<- later::later(
           function() {
-            cancel_kill <<- NULL
             if (!settled) {
               kill_worker(sprintf(
                 "the code exceeded the %d-second time limit and the R session did not respond to an interrupt, so it was restarted. Session variables were reset.",
@@ -529,15 +521,14 @@ worker_await <- function(
 
     fd <- processx::conn_get_fileno(rs$get_poll_connection())
     poll <- function() {
-      cancel_watch <<- later::later_fd(
+      later::later_fd(
         function(ready) {
-          cancel_watch <<- NULL
           if (settled) {
             return()
           }
           msg <- tryCatch(rs$read(), error = function(e) NULL)
           if (is.null(msg)) {
-            poll()
+            cancel_watch <<- poll()
           } else if (msg$code == 200) {
             if (timed_out) {
               settle(list(failure = sprintf(
@@ -554,12 +545,12 @@ worker_await <- function(
               "the R session crashed and was restarted. Session variables were reset."
             )
           } else {
-            poll()
+            cancel_watch <<- poll()
           }
         },
         readfds = fd
       )
     }
-    poll()
+    cancel_watch <- poll()
   })
 }
