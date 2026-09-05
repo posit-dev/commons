@@ -161,8 +161,9 @@ content_capture_enabled <- function() {
   }
   cli::cli_warn(c(
     "Trajectory logging requires GenAI message-content capture.",
-    i = "Set {.envvar OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT} to
-         {.val true} before R starts."
+    i = "Set
+         {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true}
+         in your {.file ~/.Renviron} and restart R."
   ))
   FALSE
 }

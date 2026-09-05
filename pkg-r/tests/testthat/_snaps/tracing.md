@@ -90,5 +90,5 @@
     Condition
       Warning:
       Trajectory logging requires GenAI message-content capture.
-      i Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` to "true" before R starts.
+      i Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in your '~/.Renviron' and restart R.
 
