@@ -51,7 +51,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
    - measure loading and data-dictionary behavior; and
    - dependency and deployment expectations for a commons app.
 
-2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
+2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, `deploy.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
 
 3. **Discovery: Collect the source material.** Collect source material incrementally. Do not present the full discovery checklist in one message. Ask one focused question, inspect what the user provides, and use the resulting evidence to determine the next question. Do not ask the user for information that can be discovered from supplied files, repositories, or connections.
 
@@ -108,11 +108,41 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
 
+   A commons chat app must list `bsicons`, `htmltools`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
+
    commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
 
    Connect the selected data sources, dictionaries, semantic layer, remaining context, and any additional instructions.
 
-   In `agent.R`, you might set `options(commons.context_cache)` to a folder in the project directory before constructing the agent. Then, in the file that deploys the agent, call `agent$prewarm()` before deployment so the deployed app starts with a built context index and populated pins cache.
+   To ship a pre-built context index, set its project-relative location in `agent.R` before constructing the agent. Because both local deployment code and the deployed app source this file, they resolve the same cache path:
+
+   ```r
+   options(commons.context_cache = "commons-cache")
+   ```
+
+   In `deploy.R`, source the agent construction code, construct a temporary deployment-only agent, and prewarm it before enumerating the files to deploy:
+
+   ```r
+   source("agent.R", local = TRUE)
+   agent <- build_agent()
+   agent$prewarm()
+
+   app_files <- c(
+     "app.R",
+     "agent.R",
+     list.files("commons-cache", recursive = TRUE, full.names = TRUE)
+   )
+
+   rsconnect::deployApp(
+     appDir = ".",
+     appFiles = app_files,
+     appPrimaryDoc = "app.R"
+   )
+   ```
+
+   Adapt `build_agent()` and the rest of `app_files` to the project. The cache must be built before `app_files` is collected, and explicit file lists must include `commons-cache/`. Git-ignore the generated directory, but do not use `app_cache/`: rsconnect excludes that directory from bundles. Keep this deployment-only agent separate from the fresh agent constructed for each Shiny session.
+
+   `agent$prewarm()` finishes building the context index before it returns. It also starts pin downloads in a background process; do not claim that pins are bundled unless the board cache is project-local and those downloads are known to have finished before deployment.
 
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions.
 
