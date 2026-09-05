@@ -251,8 +251,9 @@ test_that("summarize_questions flattens exchanges across conversations", {
 
 test_that("trajectory reviewer accepts empty trajectories and rejects other shapes", {
   expect_no_error(check_trajectories(list()))
+  expect_no_error(check_trajectories(list(conv1 = list(turns = list()))))
   expect_snapshot(check_trajectories("nope"), error = TRUE)
-  expect_error(check_trajectories(list(list())))
+  expect_error(check_trajectories(list(conv1 = list())))
 })
 
 test_that("the viewer filters conversations and follows selection", {

@@ -762,7 +762,8 @@ test_that("trajectory_read reads OTLP files from a directory", {
 
   expect_length(trajectories, 1)
   expect_length(read_local_spans(path), 1)
-  expect_s7_class(trajectories[[1]][[1]], ellmer::UserTurn)
+  expect_named(trajectories[[1]], "turns")
+  expect_s7_class(trajectories[[1]]$turns[[1]], ellmer::UserTurn)
   expect_equal(
     attr(trajectories, "source"),
     list(kind = "local", path = normalizePath(path))
@@ -834,7 +835,7 @@ test_that("trajectory_read drops content-less conversations, keeping the rest", 
 
   expect_snapshot(.res <- trajectory_read(path))
   expect_length(.res, 1)
-  expect_s7_class(.res[[1]][[1]], ellmer::UserTurn)
+  expect_s7_class(.res[[1]]$turns[[1]], ellmer::UserTurn)
 })
 
 test_that("from/to filter conversations by chat-span start time", {
@@ -886,8 +887,11 @@ test_that("a conversation continuing past `to` returns history as of `to`", {
   full <- trajectory_read(path)
   as_of <- trajectory_read(path, to = .POSIXct(200, tz = "UTC"))
 
-  expect_s7_class(full[[1]][[length(full[[1]])]], ellmer::AssistantTurn)
-  expect_length(as_of[[1]], length(full[[1]]) - 1)
+  expect_s7_class(
+    full[[1]]$turns[[length(full[[1]]$turns)]],
+    ellmer::AssistantTurn
+  )
+  expect_length(as_of[[1]]$turns, length(full[[1]]$turns) - 1)
 })
 
 test_that("n keeps the most recent conversations", {

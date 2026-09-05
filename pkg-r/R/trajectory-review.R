@@ -95,6 +95,7 @@ trajectory_review <- function(
   check_viewer_packages()
   check_trajectories(trajectories)
   review_dir <- resolve_review_dir(review_dir)
+  trajectories <- lapply(trajectories, `[[`, "turns")
   trajectories <- drop_side_conversations(trajectories)
   trajectories[] <- lapply(trajectories, sanitize_trajectory_turns)
   summary <- summarize_trajectories(trajectories)
@@ -130,12 +131,21 @@ check_viewer_packages <- function(call = rlang::caller_env()) {
 check_trajectories <- function(trajectories, call = rlang::caller_env()) {
   ok <- is.list(trajectories) &&
     (length(trajectories) == 0 || !is.null(names(trajectories))) &&
-    all(vapply(trajectories, is.list, logical(1)))
+    all(vapply(
+      trajectories,
+      function(conversation) {
+        is.list(conversation) &&
+          "turns" %in% names(conversation) &&
+          is.list(conversation$turns)
+      },
+      logical(1)
+    ))
 
   if (!ok) {
     cli::cli_abort(
       "{.arg trajectories} must be a named list of conversations as returned
-       by {.fn trajectory_read}: each a list of {.cls ellmer::Turn}s.",
+       by {.fn trajectory_read}: each with a {.code turns} list of
+       {.cls ellmer::Turn}s.",
       call = call
     )
   }

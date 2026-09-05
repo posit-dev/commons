@@ -34,11 +34,11 @@
 #' [commons()].
 #'
 #' @return A list of conversations, named by conversation id and ordered
-#'   oldest-first. Each conversation is a list of [ellmer::Turn]s and carries
-#'   a `last_active` attribute: a `POSIXct` giving the time of the
-#'   conversation's most recent chat activity. The list carries a `source`
-#'   attribute identifying the local trace directory or Connect content from
-#'   which it was read.
+#'   oldest-first. Each conversation is a list with a `turns` field containing
+#'   a list of [ellmer::Turn]s. The turns carry a `last_active` attribute: a
+#'   `POSIXct` giving the time of the conversation's most recent chat activity.
+#'   The outer list carries a `source` attribute identifying the local trace
+#'   directory or Connect content from which it was read.
 #'
 #' @examples
 #' \dontrun{
@@ -80,6 +80,7 @@ trajectory_read <- function(
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
+  trajectories <- lapply(trajectories, function(turns) list(turns = turns))
   attr(trajectories, "source") <- trajectory_source_record(resolved)
   trajectories
 }
