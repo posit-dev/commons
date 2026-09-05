@@ -762,8 +762,9 @@ test_that("trajectory_read reads OTLP files from a directory", {
 
   expect_length(trajectories, 1)
   expect_length(read_local_spans(path), 1)
-  expect_named(trajectories[[1]], "turns")
+  expect_named(trajectories[[1]], c("turns", "last_active"))
   expect_s7_class(trajectories[[1]]$turns[[1]], ellmer::UserTurn)
+  expect_s3_class(trajectories[[1]]$last_active, "POSIXct")
 })
 
 test_that("local trace files can follow a custom exporter template", {

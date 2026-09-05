@@ -35,7 +35,7 @@
 #'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list with a `turns` field containing
-#'   a list of [ellmer::Turn]s. The turns carry a `last_active` attribute: a
+#'   a list of [ellmer::Turn]s and a `last_active` field containing a
 #'   `POSIXct` giving the time of the conversation's most recent chat activity.
 #'
 #' @examples
@@ -78,7 +78,11 @@ trajectory_read <- function(
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
-  lapply(trajectories, function(turns) list(turns = turns))
+  lapply(trajectories, function(turns) {
+    last_active <- attr(turns, "last_active")
+    attr(turns, "last_active") <- NULL
+    list(turns = turns, last_active = last_active)
+  })
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone
