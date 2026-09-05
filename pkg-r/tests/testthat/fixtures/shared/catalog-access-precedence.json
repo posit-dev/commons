@@ -1,0 +1,75 @@
+{
+  "description": "What a source construction reports when several explicitly named relations fail at once. Every relation the listing did report is probed before anything is raised, so a name the caller got wrong and a relation they cannot read are found in one pass rather than one round trip each. A name the warehouse never listed is reported ahead of a refusal: it is the more actionable problem, and an access error about a table that is not there reads as a permissions problem the caller does not have. Booleans travel as strings so the file reads the same from both JSON readers. `discovered` is whether the listing reported the relation, `probe` is what the zero-row query did, and `exists` is what the backend answers about an unexplained failure.",
+  "cases": [
+    {
+      "name": "every relation is readable",
+      "relations": [
+        {"label": "A", "discovered": "true", "probe": "queryable"},
+        {"label": "B", "discovered": "true", "probe": "queryable"}
+      ],
+      "expected": {"outcome": "ok", "labels": []}
+    },
+    {
+      "name": "a name the listing never reported",
+      "relations": [
+        {"label": "A", "discovered": "false", "probe": "queryable"},
+        {"label": "B", "discovered": "true", "probe": "queryable"}
+      ],
+      "expected": {"outcome": "missing", "labels": ["A"]}
+    },
+    {
+      "name": "a missing name is reported ahead of a refusal",
+      "relations": [
+        {"label": "A", "discovered": "false", "probe": "queryable"},
+        {"label": "B", "discovered": "true", "probe": "authorization"}
+      ],
+      "expected": {"outcome": "missing", "labels": ["A"]}
+    },
+    {
+      "name": "a relation the probe proves absent is missing too",
+      "relations": [
+        {"label": "A", "discovered": "true", "probe": "unknown", "exists": "false"},
+        {"label": "B", "discovered": "true", "probe": "authorization"}
+      ],
+      "expected": {"outcome": "missing", "labels": ["A"]}
+    },
+    {
+      "name": "every missing name is reported at once",
+      "relations": [
+        {"label": "A", "discovered": "false", "probe": "queryable"},
+        {"label": "B", "discovered": "true", "probe": "unknown", "exists": "false"}
+      ],
+      "expected": {"outcome": "missing", "labels": ["A", "B"]}
+    },
+    {
+      "name": "the first refusal is the one raised",
+      "relations": [
+        {"label": "A", "discovered": "true", "probe": "authorization"},
+        {"label": "B", "discovered": "true", "probe": "transient"}
+      ],
+      "expected": {"outcome": "authorization", "labels": ["A"]}
+    },
+    {
+      "name": "a transient refusal on its own",
+      "relations": [
+        {"label": "A", "discovered": "true", "probe": "queryable"},
+        {"label": "B", "discovered": "true", "probe": "transient"}
+      ],
+      "expected": {"outcome": "transient", "labels": ["B"]}
+    },
+    {
+      "name": "an unexplained failure the backend cannot explain away",
+      "relations": [
+        {"label": "A", "discovered": "true", "probe": "unknown", "exists": "unknown"}
+      ],
+      "expected": {"outcome": "access", "labels": ["A"]}
+    },
+    {
+      "name": "an unexplained failure on a relation that is there",
+      "relations": [
+        {"label": "A", "discovered": "true", "probe": "unknown", "exists": "true"}
+      ],
+      "expected": {"outcome": "access", "labels": ["A"]}
+    }
+  ]
+}

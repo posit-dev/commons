@@ -174,12 +174,18 @@ def table_registry(
             # An entry naming a table is kept whether or not the warehouse
             # has it, and is always validated. Dropping a missing one turns
             # "that table is not there" into a quietly smaller selection.
-            table_id = _selector_id(selector)
             found = exact_relation(selector)
-            relations.append(
-                found if found is not None else Relation(id=table_id, discovered=False)
+            # Keyed by the relation's own id rather than the selector's: an
+            # entry naming a bare table is qualified with the connection's
+            # namespace once the warehouse answers, and the two lists have to
+            # agree on the label or the access check cannot pair them up.
+            relation = (
+                found
+                if found is not None
+                else Relation(id=_selector_id(selector), discovered=False)
             )
-            validate.append(table_id)
+            relations.append(relation)
+            validate.append(relation.id)
             continue
         namespace_selected = True
         relations.extend(list_relations(selector))
@@ -220,7 +226,9 @@ class Manifest:
     objects: dict[str, Relation]
     searchable: bool = False
     access: dict[str, str] = field(default_factory=dict)
-    access_errors: dict[str, str] = field(default_factory=dict)
+    # The driver's own failure, kept for the relations whose refusal is
+    # cached, so a later refusal can still be raised from what caused it.
+    access_errors: dict[str, BaseException] = field(default_factory=dict)
 
     @classmethod
     def build(

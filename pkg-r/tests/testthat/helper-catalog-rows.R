@@ -54,3 +54,47 @@ catalog_rows_expect_columns <- function(columns, expected, info) {
     }
   }
 }
+
+# A session snapshot from the shared fixture's field-by-field spelling.
+catalog_session_fixture_snapshot <- function(fields) {
+  list(
+    backend = fields$backend,
+    principal = fields$principal,
+    role = fields$role,
+    secondary_roles = fields$secondary_roles,
+    namespace = list(catalog = fields$catalog, schema = fields$schema)
+  )
+}
+
+# The access-precedence fixture's relations, keyed by label.
+catalog_precedence_script <- function(relations) {
+  stats::setNames(relations, vapply(relations, `[[`, character(1), "label"))
+}
+
+catalog_precedence_probe <- function(state) {
+  if (identical(state, "queryable")) {
+    return(list(state = "queryable", error = NULL))
+  }
+  list(state = state, error = simpleError(state))
+}
+
+# Every refusal here is a cli condition, so the missing-relation outcome is
+# told apart by what it says rather than by a class it shares with the rest.
+catalog_precedence_expectation <- function(outcome) {
+  switch(
+    outcome,
+    missing = list(class = "rlang_error", regexp = "not on the connection"),
+    authorization = list(class = "commons_catalog_authorization_error"),
+    transient = list(class = "commons_catalog_transient_error"),
+    list(class = "commons_catalog_access_error")
+  )
+}
+
+# The relations a run must have probed: every one the listing reported.
+catalog_precedence_probed <- function(script) {
+  names(script)[vapply(
+    script,
+    function(item) identical(item$discovered, "true"),
+    logical(1)
+  )]
+}
