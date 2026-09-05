@@ -37,8 +37,6 @@
 #'   oldest-first. Each conversation is a list with a `turns` field containing
 #'   a list of [ellmer::Turn]s. The turns carry a `last_active` attribute: a
 #'   `POSIXct` giving the time of the conversation's most recent chat activity.
-#'   The outer list carries a `source` attribute identifying the local trace
-#'   directory or Connect content from which it was read.
 #'
 #' @examples
 #' \dontrun{
@@ -80,23 +78,7 @@ trajectory_read <- function(
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
-  trajectories <- lapply(trajectories, function(turns) list(turns = turns))
-  attr(trajectories, "source") <- trajectory_source_record(resolved)
-  trajectories
-}
-
-trajectory_source_record <- function(resolved) {
-  if (identical(resolved$kind, "connect")) {
-    return(list(
-      kind = "connect",
-      server = resolved$client$server,
-      content_guid = resolved$guid
-    ))
-  }
-  list(
-    kind = "local",
-    path = normalizePath(resolved$path, mustWork = FALSE)
-  )
+  lapply(trajectories, function(turns) list(turns = turns))
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone
