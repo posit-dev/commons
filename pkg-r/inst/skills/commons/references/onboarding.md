@@ -112,6 +112,8 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Connect the selected data sources, dictionaries, semantic layer, remaining context, and any additional instructions.
 
+   In `agent.R`, you might set `options(commons.context_cache)` to a folder in the project directory before constructing the agent. Then, in the file that deploys the agent, call `agent$prewarm()` before deployment so the deployed app starts with a built context index and populated pins cache.
+
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions.
 
    Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Follow the scope the user confirmed, whether incremental or comprehensive. Once the user chooses a comprehensive first version, do not defer confirmed material merely to produce a smaller agent.

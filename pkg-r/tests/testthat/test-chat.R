@@ -105,3 +105,20 @@ test_that("commons_server requires a commons agent", {
     error = TRUE
   )
 })
+
+test_that("commons_app() prewarms the agent on idle", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  app <- commons_app(test_agent())
+  app_env <- environment(app$serverFuncSource)
+  prewarmed <- FALSE
+  testthat::local_mocked_bindings(
+    prewarm_on_idle = function(client) prewarmed <<- TRUE,
+    .package = "commons"
+  )
+  shiny::testServer(app_env$server, {
+    session$flushReact()
+  })
+  expect_true(prewarmed)
+})
