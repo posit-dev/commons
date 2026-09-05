@@ -149,8 +149,7 @@ check_trajectories <- function(trajectories, call = rlang::caller_env()) {
   if (!ok) {
     cli::cli_abort(
       "{.arg trajectories} must be a named list of conversations as returned
-       by {.fn trajectory_read}: each with a {.code turns} list of
-       {.cls ellmer::Turn}s and a {.code last_active} {.cls POSIXct}.",
+       by {.fn trajectory_read}.",
       call = call
     )
   }
