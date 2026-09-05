@@ -103,6 +103,10 @@ class Table(_Permissive):
     # so the registry can be exercised without the compiler. Elements are
     # ExportRecord, typed Any so this model need not import _definitions.
     compiled_definitions: list[Any] = []
+    # The name the author wrote, kept when a catalog import re-keys this
+    # table to the warehouse label, so first touch and relationship matching
+    # can still find it.
+    authored_name: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -230,7 +234,7 @@ class DataDictionary(_Permissive):
                 entry.details,
                 columns_text,
                 definitions_entry_text(entry.compiled_definitions),
-                self._relationships_text(table),
+                self._relationships_text(table, entry.authored_name),
             )
             if part
         ]
@@ -244,13 +248,22 @@ class DataDictionary(_Permissive):
             _column_line(name, column) for name, column in entry.columns.items()
         )
 
-    def _relationships_text(self, table: str) -> str | None:
+    def _relationships_text(
+        self, table: str, authored_name: str | None = None
+    ) -> str | None:
+        """Relationships mentioning this table, under either of its names.
+
+        A catalog import re-keys a table to its warehouse label, while the
+        relationship prose still says what the author wrote, so both names
+        have to match or the join disappears from the entry.
+        """
+        names = [table, authored_name] if authored_name else [table]
         lines = []
         for relationship in self.relationships:
             text = " ".join(
                 part for part in (relationship.join, relationship.description) if part
             )
-            if not _word_pattern(table).search(text):
+            if not any(_word_pattern(name).search(text) for name in names):
                 continue
             head = " ".join(
                 part
