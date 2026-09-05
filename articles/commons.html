@@ -520,9 +520,11 @@ argument.</p>
 single-user Shiny app. For multi-user deployments, compose shinychat’s
 UI with <code><a href="../reference/commons_server.html">commons_theme()</a></code> on the page and
 <code><a href="../reference/commons_server.html">commons_server()</a></code> in the server, and create a new agent for
-each Shiny session. This example assumes that <code>observations</code>
-and <code>site_area</code> are data frames loaded when the app
-starts.</p>
+each Shiny session. <code><a href="../reference/commons_server.html">commons_server()</a></code> warms the agent during
+post-startup idle time; <code>agent$prewarm()</code> warms the context
+index and pins cache ahead of deployment. This example assumes that
+<code>observations</code> and <code>site_area</code> are data frames
+loaded when the app starts.</p>
 </div>
 
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

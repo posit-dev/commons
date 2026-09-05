@@ -378,9 +378,12 @@ deployments, compose shinychat’s UI with
 [`commons_theme()`](https://posit-dev.github.io/commons/reference/commons_server.md)
 on the page and
 [`commons_server()`](https://posit-dev.github.io/commons/reference/commons_server.md)
-in the server, and create a new agent for each Shiny session. This
-example assumes that `observations` and `site_area` are data frames
-loaded when the app starts.
+in the server, and create a new agent for each Shiny session.
+[`commons_server()`](https://posit-dev.github.io/commons/reference/commons_server.md)
+warms the agent during post-startup idle time; `agent$prewarm()` warms
+the context index and pins cache ahead of deployment. This example
+assumes that `observations` and `site_area` are data frames loaded when
+the app starts.
 
 [^1]: commons expands definitions used in custom SQL to expressions
     compiled for the data source. Because this is still custom SQL, the
