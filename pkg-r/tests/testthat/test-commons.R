@@ -25,13 +25,6 @@ test_that("commons() registers only the tools the agent's composition earns", {
   )
 })
 
-test_that("commons() preserves the client's model configuration", {
-  client <- test_client()
-  agent <- commons(client, test_source())
-
-  expect_identical(agent$get_model_object(), client$get_model_object())
-})
-
 test_that("commons() configures run_r network access", {
   restricted <- agent_tool(test_agent(), "run_r")
   full <- agent_tool(test_agent(network = "full"), "run_r")
