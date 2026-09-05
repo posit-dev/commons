@@ -272,6 +272,11 @@ def data_source(
         source = DataSource.from_frames(**frames)
 
     source.dictionary = resolved
+    if resolved is not None:
+        # The dialect is only known now, which is why lowering waits for it.
+        from ._definitions import attach_compiled_definitions
+
+        attach_compiled_definitions(resolved, source.dialect(), set(source.tables))
     return source
 
 
