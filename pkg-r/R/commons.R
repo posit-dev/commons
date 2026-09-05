@@ -302,7 +302,13 @@ Commons <- R6::R6Class(
     },
 
     set_turns = function(value) {
-      private$restore_reminder_pending <- FALSE
+      # History that is not a prefix of the current turns may come from a
+      # previous session, where the R state behind its tool calls is gone.
+      if (length(value) == 0) {
+        private$restore_reminder_pending <- FALSE
+      } else if (!turns_are_prefix(value, self$get_turns())) {
+        private$restore_reminder_pending <- TRUE
+      }
       super$set_turns(value)
     },
 
@@ -414,11 +420,6 @@ Commons <- R6::R6Class(
 
     citation_corpus = function() {
       private$corpus
-    },
-
-    queue_restore_reminder = function() {
-      private$restore_reminder_pending <- TRUE
-      invisible(self)
     },
 
     prewarm = function() {

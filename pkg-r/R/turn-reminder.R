@@ -35,3 +35,26 @@ append_restored_conversation_reminder <- function(inputs) {
     list(ContentTurnReminder(text = restored_conversation_turn_reminder))
   )
 }
+
+# shinychat reconstructs stored turns, so compare their roles and text rather
+# than the resulting objects.
+turns_are_prefix <- function(value, current) {
+  if (length(value) > length(current)) {
+    return(FALSE)
+  }
+  identical(
+    vapply(value, turn_text_signature, character(1)),
+    vapply(current[seq_along(value)], turn_text_signature, character(1))
+  )
+}
+
+turn_text_signature <- function(turn) {
+  texts <- vapply(
+    turn@contents,
+    function(content) {
+      if (S7::S7_inherits(content, ellmer::ContentText)) content@text else ""
+    },
+    character(1)
+  )
+  paste(c(turn@role, texts), collapse = "\x1f")
+}
