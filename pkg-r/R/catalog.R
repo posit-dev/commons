@@ -103,14 +103,16 @@ new_catalog_manifest <- function(
 }
 
 catalog_searchable <- function(source) {
-  !is.null(source$manifest) && isTRUE(source$manifest$searchable)
+  source_state <- data_source_state(source)
+  !is.null(source_state$manifest) && isTRUE(source_state$manifest$searchable)
 }
 
 catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
+  source_state <- data_source_state(source)
   catalog_check_session(source)
   rlang::check_string(query)
   rlang::check_number_whole(limit, min = 1)
-  relations <- source$manifest$objects %||% list()
+  relations <- source_state$manifest$objects %||% list()
   if (!is.null(kinds)) {
     if (!is.character(kinds) || anyNA(kinds)) {
       cli::cli_abort(
@@ -144,17 +146,18 @@ catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
   relations <- relations[keep]
   scores <- scores[keep]
   relations <- relations[order(scores, decreasing = TRUE)]
-  if (!is.null(source$session)) {
+  if (!is.null(source_state$session)) {
     relations <- catalog_search_queryable(source, relations, limit)
   }
   utils::head(relations, limit)
 }
 
 catalog_search_queryable <- function(source, relations, limit) {
+  source_state <- data_source_state(source)
   results <- list()
   candidates <- utils::head(relations, catalog_search_probe_limit)
   for (label in names(candidates)) {
-    if (!is.null(source$semantic_stubs[[label]])) {
+    if (!is.null(source_state$semantic_stubs[[label]])) {
       results[[label]] <- candidates[[label]]
       if (length(results) >= limit) {
         break

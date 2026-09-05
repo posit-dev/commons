@@ -1,5 +1,5 @@
 definition_compile_fixture <- function(name, source) {
-  path <- test_path("fixtures", "definition-export", "valid", name)
+  path <- definition_fixture_path(name)
   definition_compile_source(yaml::read_yaml(path), source)
 }
 
@@ -17,13 +17,11 @@ definition_translation <- function(definition, target) {
 }
 
 definition_mock_source <- function(table = "values", bindings = NULL) {
-  structure(
-    list(
-      con = structure(list(), class = "mock_connection"),
-      tables = table,
-      definition_bindings = bindings
-    ),
-    class = "commons_data_source"
+  new_data_source(
+    structure(list(), class = "mock_connection"),
+    tables = table,
+    owned = FALSE,
+    definition_bindings = bindings
   )
 }
 
@@ -57,7 +55,7 @@ test_that("definitions compile and compose for a DuckDB source", {
   )
 
   net_revenue <- DBI::dbGetQuery(
-    source$con,
+    data_source_state(source)$con,
     paste0(
       "SELECT ",
       definitions$net_revenue$sql,
@@ -65,7 +63,7 @@ test_that("definitions compile and compose for a DuckDB source", {
     )
   )
   enterprise_revenue <- DBI::dbGetQuery(
-    source$con,
+    data_source_state(source)$con,
     paste0(
       "SELECT ",
       definitions$enterprise_revenue$sql,

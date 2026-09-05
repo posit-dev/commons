@@ -25,8 +25,9 @@ Imports:
     coro,
     DBI,
     duckdb (>= 1.5.4.2),
-    ellmer (>= 0.4.1),
+    ellmer (>= 0.5.0),
     evaluate,
+    filelock,
     glue,
     highr,
     htmltools,
@@ -61,6 +62,7 @@ Suggests:
     ragg,
     readr,
     rmarkdown,
+    rsconnect,
     shiny (>= 1.11.1),
     shinytest2,
     testthat (>= 3.0.0),
@@ -71,6 +73,9 @@ VignetteBuilder: knitr
 Remotes:
     posit-dev/shinychat/pkg-r
 Config/testthat/edition: 3
+Config/testthat/parallel: true
+Config/testthat/start-first: run-r, citation-scan, citation-browser, commons,
+    data-source, pool, definitions, trajectory-review
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0

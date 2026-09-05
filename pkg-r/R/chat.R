@@ -111,16 +111,24 @@ commons_server <- function(id, client, ...) {
     attributes = list("commons.server.id" = id)
   )
 
-  # Build the context index and start the background pin-cache download
-  # during post-startup idle time (while the user reads the welcome message).
-  # Errors are swallowed: the first search retries the index build and
-  # surfaces the failure to the model, and an unwarmed pin is simply
-  # downloaded at its first use.
-  later::later(function() {
-    tryCatch(client$prewarm(), error = function(err) NULL)
-  })
+  prewarm_on_idle(client)
 
   shinychat::chat_server(id, client = client, ...)
+}
+
+# An error escaping a later::later() callback would stop the app, so
+# downgrade failures to warnings.
+prewarm_on_idle <- function(client) {
+  later::later(function() {
+    tryCatch(
+      client$prewarm(),
+      error = function(err) {
+        msg <- conditionMessage(err)
+        cli::cli_warn("{msg}")
+      }
+    )
+  })
+  invisible(NULL)
 }
 
 check_chat_packages <- function(call = rlang::caller_env()) {
@@ -164,6 +172,7 @@ commons_chat_dependency <- function() {
     name = "commons-chat",
     version = paste0("0.0.0.9000.", as.integer(stamp)),
     src = c(file = src),
+    script = "commons-chat.js",
     stylesheet = "commons-chat.css",
     all_files = TRUE
   )

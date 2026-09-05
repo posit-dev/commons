@@ -9,7 +9,7 @@
 
 ## When to use this reference
 
-Use this reference to create a new commons agent from existing data, documentation, and trusted code. Start with a small working agent, use it to understand the pieces, and then expand it.
+Use this reference to create a new commons agent from existing data, documentation, and trusted code. Unless the user has a clear plan for what they want to do, start with a small working scope, use it to understand the pieces, and then expand it.
 
 Use the [extraction reference](extracting-from-artifacts.md) after the project scaffold exists and the user has confirmed the agent's scope and data source mapping. Use the [trajectory reference](iterating-from-trajectories.md) to improve an agent from logged conversations.
 
@@ -30,6 +30,8 @@ Do routine investigation and implementation without interrupting the user. Pause
 
 Explain a principle in plain language when it materially affects a user decision, especially the solid-but-not-perfect foundation and the fine-grained-versus-prepared data tradeoff. Do not present the full principles list as required reading. Do not begin onboarding with a general explanation of commons or its principles; introduce only the context needed for the current question.
 
+Trusted code may be distributed across multiple repositories. When the user identifies those repositories as relevant sources, inspect them in place and consider the evidence from all of them. Recommend excluding a repository only when there is a concrete concern about its relevance, trustworthiness, or fit with the confirmed scope; explain that concern and let the user decide.
+
 At each decision point:
 
 1. Summarize the evidence, uncertainties, and conflicting information.
@@ -49,7 +51,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
    - measure loading and data-dictionary behavior; and
    - dependency and deployment expectations for a commons app.
 
-2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
+2. **Scaffold the project.** Create the project layout in `SKILL.md`, including `DESCRIPTION`, `app.R`, `agent.R`, `deploy.R`, and the relevant agent instruction file. Add only boilerplate at this stage: create the directories and required fields, but do not invent domain content or calculations. If the applicable instruction file already exists, preserve its instructions and add commons-specific guidance only as it becomes known.
 
 3. **Discovery: Collect the source material.** Collect source material incrementally. Do not present the full discovery checklist in one message. Ask one focused question, inspect what the user provides, and use the resulting evidence to determine the next question. Do not ask the user for information that can be discovered from supplied files, repositories, or connections.
 
@@ -76,7 +78,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Ask for a link or file path when the relevant material is not already available. When requesting each source, tell the user to include only material they trust and that is relevant to the intended agent. Do not front-load this guidance before it affects a source-selection decision.
 
-   If the supplied materials are extensive, span several domains, or lack clear organization, recommend a narrower initial scope that can produce a useful working agent. Treat the scope as a decision point; do not exclude materials without the user's confirmation.
+   If supplied materials include domains or artifacts whose relevance to the intended scope is unclear, surface that uncertainty. When a smaller first scope would materially reduce implementation risk or help the user validate the design sooner, explain that benefit and recommend what to defer. Treat this as a decision point, not a prerequisite: if the user chooses to implement the full scope now, accept that decision and proceed without repeatedly pushing to narrow it. Do not treat distribution across multiple repositories as a reason by itself to reduce scope.
 
 4. **Investigate the data and artifacts.** Inspect the supplied data, documentation, schemas, source code, and data pipelines. Run scratch code to understand table grain, joins, transformations, update processes, and surprising behavior that may need to appear in a data dictionary.
 
@@ -104,12 +106,44 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic layer, and context layer design now that the extracted artifacts are visible. Treat consequential changes as decision points, and update the agent instruction file only when they change its durable guidance.
 
-10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend a model with Thinking enabled.
+10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend enabling thinking in the ellmer chat passed to `commons()`.
+
+   A commons chat app must list `bsicons`, `htmltools`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
 
    commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
 
    Connect the selected data sources, dictionaries, semantic layer, remaining context, and any additional instructions.
 
+   To ship a pre-built context index, set its project-relative location in `agent.R` before constructing the agent. Because both local deployment code and the deployed app source this file, they resolve the same cache path:
+
+   ```r
+   options(commons.context_cache = "commons-cache")
+   ```
+
+   In `deploy.R`, source the agent construction code, construct a temporary deployment-only agent, and prewarm it before enumerating the files to deploy:
+
+   ```r
+   source("agent.R", local = TRUE)
+   agent <- build_agent()
+   agent$prewarm()
+
+   app_files <- c(
+     "app.R",
+     "agent.R",
+     list.files("commons-cache", recursive = TRUE, full.names = TRUE)
+   )
+
+   rsconnect::deployApp(
+     appDir = ".",
+     appFiles = app_files,
+     appPrimaryDoc = "app.R"
+   )
+   ```
+
+   Adapt `build_agent()` and the rest of `app_files` to the project. The cache must be built before `app_files` is collected, and explicit file lists must include `commons-cache/`. Git-ignore the generated directory, but do not use `app_cache/`: rsconnect excludes that directory from bundles. Keep this deployment-only agent separate from the fresh agent constructed for each Shiny session.
+
+   `agent$prewarm()` finishes building the context index before it returns. It also starts pin downloads in a background process; do not claim that pins are bundled unless the board cache is project-local and those downloads are known to have finished before deployment.
+
    Verify that the agent starts, that representative context searches retrieve the intended guidance, and that it can answer a few representative questions.
 
-   Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Expand sources and trusted calculations only after the agent works and the user confirms that they understand and accept its current behavior.
+   Give the user a working way to try out the agent. Ask them to verify that representative answers, business meanings, source choices, and stated limitations match their expectations. Treat their acceptance and any issues they identify as a decision point. Add only unresolved implementation constraints to the agent instruction file; do not record the review itself. Follow the scope the user confirmed, whether incremental or comprehensive. Once the user chooses a comprehensive first version, do not defer confirmed material merely to produce a smaller agent.

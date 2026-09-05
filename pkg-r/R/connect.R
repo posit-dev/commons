@@ -42,6 +42,59 @@ connect_req <- function(client, ...) {
     httr2::req_headers_redacted(Authorization = paste("Key", client$api_key))
 }
 
+# Search exposes vanity URLs to content viewers without requiring the
+# administrator-only endpoint that lists every vanity URL on the server.
+connect_vanity_guid <- function(
+  client,
+  url,
+  query,
+  call = rlang::caller_env()
+) {
+  page_number <- 1L
+  repeat {
+    body <- connect_req(client, "search", "content") |>
+      httr2::req_url_query(
+        q = query,
+        include = "vanity_url",
+        page_number = page_number,
+        page_size = 100
+      ) |>
+      httr2::req_perform() |>
+      httr2::resp_body_json(simplifyVector = TRUE)
+    results <- body$results
+    if (
+      is.data.frame(results) &&
+        all(c("guid", "vanity_url") %in% names(results))
+    ) {
+      expected <- paste0(client$server, "/", sub("^/+", "", query))
+      matches <- !is.na(results$vanity_url) &
+        normalize_connect_url(results$vanity_url) ==
+          normalize_connect_url(expected)
+      if (any(matches)) {
+        return(results$guid[which(matches)[[1]]])
+      }
+    }
+    if (is.null(body$total) || page_number >= body$total) {
+      break
+    }
+    page_number <- page_number + 1L
+  }
+
+  cli::cli_abort(
+    c(
+      "Can't find content for the Connect vanity URL {.url {url}}.",
+      i = "Check that the URL is correct and that your API key can access the
+           content."
+    ),
+    call = call
+  )
+}
+
+normalize_connect_url <- function(x) {
+  x <- sub("[?#].*$", "", x)
+  utils::URLdecode(sub("/+$", "", x))
+}
+
 # Fetch trace rows for a content item as raw OTLP NDJSON lines, paging until
 # the X-Total-Count header is exhausted. On servers with a single trace store,
 # `enough(lines)` can stop paging early.

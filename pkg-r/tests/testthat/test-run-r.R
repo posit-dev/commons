@@ -471,3 +471,26 @@ test_that("guardrails restore bindings after success and model errors", {
     "available after restoration"
   )
 })
+
+test_that("a settled call and a closed worker leave the later loop empty", {
+  later::with_temp_loop({
+    # shiny::testServer() reads outputs through shiny:::wait_for_it(), which
+    # spins until later::loop_empty(). A callback left behind here stalls the
+    # next testServer() block for the callback's full delay.
+    worker <- new_r_worker()
+    store <- new_handle_store()
+    register_handle(store, test_sales())
+
+    tryCatch(
+      {
+        sync_promise(run_r_tool(worker, store, "sum(r1$revenue)"))
+        expect_false(later::loop_empty())
+
+        worker_close(worker)
+        later::run_now()
+        expect_true(later::loop_empty())
+      },
+      finally = worker_close(worker)
+    )
+  })
+})

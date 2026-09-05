@@ -2,7 +2,7 @@ This repository is a monorepo holding two implementations of commons: the R pack
 
 If you worked in this repository before the two packages were split apart, `MIGRATING.md` covers what moved and what to change in your setup.
 
-Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run pytest`, `uv run ruff check`). CI is scoped the same way.
+Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run ruff check`, `uv run pyrefly check src tests`, `uv run pytest`). CI is scoped the same way. Run all of a package's checks before pushing; the pyrefly invocation needs its explicit `src tests` paths, because with none it consults the repo's git ignore files and a worktree checked out under an ignored directory silently type-checks nothing.
 
 Neither package has been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
 

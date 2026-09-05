@@ -23,8 +23,8 @@ test_that("read_measures derives a measure from a documented function", {
 
   measures <- read_measures(path)
 
-  expect_length(measures, 1)
-  td <- measures[[1]]
+  expect_length(measures$measures, 1)
+  td <- measures$measures[[1]]
   expect_equal(tool_name(td), "order_count")
   expect_match(tool_description(td), "Count orders")
   expect_match(tool_description(td), "Total orders")
@@ -48,7 +48,7 @@ test_that("read_measures maps param type code spans to ellmer types", {
     "m <- function(a, b, c, d, e, f) NULL"
   ))
 
-  props <- tool_properties(read_measures(path)[[1]])
+  props <- tool_properties(read_measures(path)$measures[[1]])
 
   expect_equal(type_kind(props$a), "string")
   expect_equal(type_kind(props$b), "integer")
@@ -72,7 +72,7 @@ test_that("read_measures derives required from the signature, not the type", {
     "m <- function(required_arg, optional_arg = NULL) NULL"
   ))
 
-  props <- tool_properties(read_measures(path)[[1]])
+  props <- tool_properties(read_measures(path)$measures[[1]])
 
   expect_true(S7::prop(props$required_arg, "required"))
   expect_false(S7::prop(props$optional_arg, "required"))
@@ -89,7 +89,7 @@ test_that("read_measures uses the param text as the type description", {
     "m <- function(region) NULL"
   ))
 
-  props <- tool_properties(read_measures(path)[[1]])
+  props <- tool_properties(read_measures(path)$measures[[1]])
   expect_equal(S7::prop(props$region, "description"), "The sales region.")
 })
 
@@ -107,7 +107,7 @@ test_that("read_measures infers untyped args from their defaults", {
     "m <- function(i = 10L, n = 1.5, b = TRUE, s) NULL"
   ))
 
-  props <- tool_properties(read_measures(path)[[1]])
+  props <- tool_properties(read_measures(path)$measures[[1]])
 
   expect_equal(type_kind(props$i), "integer")
   expect_equal(type_kind(props$n), "number")
@@ -126,7 +126,7 @@ test_that("read_measures treats formals without @param as injection parameters",
     "m <- function(region, warehouse, board) NULL"
   ))
 
-  td <- read_measures(path)[[1]]
+  td <- read_measures(path)$measures[[1]]
 
   expect_named(tool_properties(td), "region")
   expect_equal(measure_injection_names(td), c("warehouse", "board"))
@@ -151,8 +151,8 @@ test_that("read_measures ignores undocumented and untagged functions", {
 
   measures <- read_measures(path)
 
-  expect_length(measures, 1)
-  expect_equal(tool_name(measures[[1]]), "m")
+  expect_length(measures$measures, 1)
+  expect_equal(tool_name(measures$measures[[1]]), "m")
 })
 
 test_that("read_measures returns only @measure functions", {
@@ -171,8 +171,8 @@ test_that("read_measures returns only @measure functions", {
 
   measures <- read_measures(path)
 
-  expect_length(measures, 1)
-  expect_equal(tool_name(measures[[1]]), "tagged")
+  expect_length(measures$measures, 1)
+  expect_equal(tool_name(measures$measures[[1]]), "tagged")
 })
 
 test_that("read_measures shares an env across files in one call", {
@@ -197,8 +197,8 @@ test_that("read_measures shares an env across files in one call", {
 
   measures <- read_measures(c(a, b))
 
-  expect_length(measures, 1)
-  td <- measures[[1]]
+  expect_length(measures$measures, 1)
+  td <- measures$measures[[1]]
   expect_equal(tool_name(td), "uses_helper")
   expect_equal(do.call(td, list()), 2026L)
 })
@@ -225,8 +225,8 @@ test_that("semantic_layer isolates measures read from separate path args", {
 
   layer <- semantic_layer(a, b)
 
-  expect_named(layer$measures, "uses_helper")
-  expect_error(do.call(layer$measures$uses_helper, list()))
+  expect_named(semantic_layer_state(layer)$measures, "uses_helper")
+  expect_error(do.call(semantic_layer_state(layer)$measures$uses_helper, list()))
 })
 
 test_that("read_measures reads multiple files and directories", {
@@ -244,7 +244,10 @@ test_that("read_measures reads multiple files and directories", {
 
   measures <- read_measures(dir)
 
-  expect_setequal(vapply(measures, tool_name, character(1)), c("one", "two"))
+  expect_setequal(
+    vapply(measures$measures, tool_name, character(1)),
+    c("one", "two")
+  )
 })
 
 test_that("read_measures produces measures usable in a semantic_layer", {
@@ -261,7 +264,7 @@ test_that("read_measures produces measures usable in a semantic_layer", {
   layer <- semantic_layer(read_measures(path))
 
   expect_s3_class(layer, "commons_semantic_layer")
-  expect_named(layer$measures, "order_count")
+  expect_named(semantic_layer_state(layer)$measures, "order_count")
 })
 
 test_that("read_measures harvests measure and helper sources, comments included", {
@@ -281,13 +284,13 @@ test_that("read_measures harvests measure and helper sources, comments included"
 
   measures <- read_measures(path)
 
-  sources <- attr(measures, "fn_sources")
+  sources <- measures$fn_sources
   expect_named(sources, c("double", "order_count"))
   expect_match(sources[["double"]], "# helpers ride along", fixed = TRUE)
   expect_match(sources[["order_count"]], "double(1013L)", fixed = TRUE)
 })
 
-test_that("read_measures parses @provenance tags without changing the measure", {
+test_that("read_measures keeps @provenance separate from the measure", {
   skip_if_not_installed("roxygen2")
 
   base <- measures_script(c(
@@ -307,8 +310,10 @@ test_that("read_measures parses @provenance tags without changing the measure", 
     "revenue <- function(quarter) 1L"
   ))
 
-  base_measure <- expect_no_warning(read_measures(base)[[1]])
-  tagged_measure <- expect_no_warning(read_measures(tagged)[[1]])
+  base_files <- expect_no_warning(read_measures(base))
+  tagged_files <- expect_no_warning(read_measures(tagged))
+  base_measure <- base_files$measures[[1]]
+  tagged_measure <- tagged_files$measures[[1]]
 
   expect_equal(tool_name(tagged_measure), tool_name(base_measure))
   expect_equal(
@@ -319,6 +324,32 @@ test_that("read_measures parses @provenance tags without changing the measure", 
     names(tool_properties(tagged_measure)),
     names(tool_properties(base_measure))
   )
+  expect_identical(
+    tagged_files$provenance[[1]],
+    c(
+      "https://github.com/org/app/blob/abc1234/R/server.R#L1-L9",
+      "trajectory analysis (2026-07-09)"
+    )
+  )
+  layer <- semantic_layer(tagged_files)
+  expect_identical(
+    semantic_layer_state(layer)$measure_provenance$revenue,
+    tagged_files$provenance[[1]]
+  )
+
+  agent <- test_agent(semantic_layer = layer)
+  result <- agent_tool(agent, "call_measure")(
+    "revenue",
+    '{"quarter":"Q1"}'
+  )
+  footer <- as.character(result@extra$display$footer)
+  expect_match(footer, "View source", fixed = TRUE)
+  expect_match(
+    footer,
+    "https://github.com/org/app/blob/abc1234/R/server.R#L1-L9",
+    fixed = TRUE
+  )
+  expect_no_match(footer, "trajectory analysis", fixed = TRUE)
 })
 
 test_that("read_measures validates its inputs", {

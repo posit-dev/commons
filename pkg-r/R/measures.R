@@ -44,7 +44,8 @@
 #' reference to a variable defined elsewhere, so the measure doesn't depend on
 #' where the semantic layer is created.
 #'
-#' @return A `commons_semantic_layer` object.
+#' @return A `commons_semantic_layer` R6 object. Its internals are private and
+#'   may change without notice.
 #'
 #' @seealso [measure()] to define a measure.
 #'
@@ -89,6 +90,9 @@ semantic_layer <- function(...) {
     )
   }
 
+  measure_provenance <- expanded$provenance
+  names(measure_provenance) <- names(measures)
+
   # Measures that didn't come from files (so no harvested source) still get a
   # readable, if comment-free, deparse.
   fn_sources <- expanded$fn_sources
@@ -96,30 +100,33 @@ semantic_layer <- function(...) {
     fn_sources[[nm]] <- fn_source_text(tool_fn(measures[[nm]]))
   }
 
-  new_semantic_layer(measures, fn_sources)
+  new_semantic_layer(measures, fn_sources, measure_provenance)
 }
 
 # Expand each `...` element into measures: character vectors are read from disk,
 # lists of measures are spliced in, and a lone measure is kept as is. `env` is
 # the caller of semantic_layer(), so measures read from disk close over the data
 # the user defined there rather than only the global environment. Function
-# sources harvested by read_measures() ride along as an attribute on each
-# measure list; they're gathered here before unlist() drops attributes.
+# sources and provenance harvested by read_measures() ride alongside their
+# measures in an internal bundle.
 expand_measures <- function(args, env = rlang::caller_env()) {
   expanded <- lapply(args, function(arg) {
     if (is.character(arg)) {
       read_measures(arg, env)
-    } else if (is_measure_list(arg)) {
+    } else if (inherits(arg, "commons_measure_files")) {
       arg
+    } else if (is_measure_list(arg)) {
+      new_measure_files(arg)
     } else {
-      list(arg)
+      new_measure_files(list(arg))
     }
   })
-  fn_sources <- unlist(lapply(expanded, attr, "fn_sources"))
+  fn_sources <- unlist(lapply(expanded, `[[`, "fn_sources"))
   fn_sources <- fn_sources[!duplicated(names(fn_sources))] %||% character()
   list(
-    measures = unlist(expanded, recursive = FALSE) %||% list(),
-    fn_sources = fn_sources
+    measures = do.call(c, lapply(expanded, `[[`, "measures")) %||% list(),
+    fn_sources = fn_sources,
+    provenance = do.call(c, lapply(expanded, `[[`, "provenance")) %||% list()
   )
 }
 
@@ -238,15 +245,23 @@ resolve_injections <- function(
   })
 }
 
-new_semantic_layer <- function(measures = list(), fn_sources = character()) {
-  structure(
-    list(measures = measures, fn_sources = fn_sources),
-    class = "commons_semantic_layer"
+new_semantic_layer <- function(
+  measures = list(),
+  fn_sources = character(),
+  measure_provenance = list()
+) {
+  SemanticLayer$new(
+    measures = measures,
+    fn_sources = fn_sources,
+    measure_provenance = measure_provenance
   )
 }
 
 check_semantic_layer <- function(semantic_layer, call = rlang::caller_env()) {
-  if (!inherits(semantic_layer, "commons_semantic_layer")) {
+  if (
+    !is.environment(semantic_layer) ||
+      !inherits(semantic_layer, "commons_semantic_layer")
+  ) {
     cli::cli_abort(
       "{.arg semantic_layer} must be a {.fn semantic_layer}.",
       call = call
@@ -268,26 +283,39 @@ is_measure_list <- function(x) {
   is.list(x) && !inherits(x, "ellmer::ToolDef")
 }
 
-measure_schema_text <- function(td, source_names = character()) {
+measure_schema_text <- function(
+  td,
+  source_names = character(),
+  heading = tool_name(td)
+) {
   props <- tool_properties(td)
-  args <- if (length(props) == 0) {
-    "  (no arguments)"
-  } else {
-    paste(
-      vapply(
-        names(props),
-        function(nm) arg_schema_line(nm, props[[nm]]),
-        character(1)
-      ),
-      collapse = "\n"
+  args <- if (length(props) > 0) {
+    paste0(
+      "arguments:\n",
+      paste(
+        vapply(
+          names(props),
+          function(nm) arg_schema_line(nm, props[[nm]]),
+          character(1)
+        ),
+        collapse = "\n"
+      )
     )
+  } else {
+    ""
   }
+
+  details <- paste0(measure_sources_line(td, source_names), args)
+  details <- sub("\n$", "", details)
+  if (nzchar(details)) {
+    details <- paste0("\n\n", details)
+  }
+
   sprintf(
-    "### %s\n%s\n\n%sarguments:\n%s",
-    tool_name(td),
+    "### %s\n%s%s",
+    heading,
     tool_description(td),
-    measure_sources_line(td, source_names),
-    args
+    details
   )
 }
 
@@ -308,14 +336,21 @@ arg_schema_line <- function(name, type) {
   detail <- switch(
     kind,
     enum = sprintf("one of {%s}", paste(type_values(type), collapse = ", ")),
-    array = sprintf(
-      "array of {%s}",
-      paste(type_values(S7::prop(type, "items")), collapse = ", ")
-    ),
+    array = sprintf("array of {%s}", array_items_label(S7::prop(type, "items"))),
     kind
   )
   desc <- S7::prop(type, "description") %||% ""
   sprintf("  - %s (%s, %s) %s", name, detail, required, desc)
+}
+
+# An array's items can be an enum, whose vocabulary is worth listing, or a
+# basic type, which has no `values` property to read.
+array_items_label <- function(items) {
+  if (identical(type_kind(items), "enum")) {
+    paste(type_values(items), collapse = ", ")
+  } else {
+    type_kind(items)
+  }
 }
 
 # The provider sees only `call_measure`, so measure arguments are checked here.

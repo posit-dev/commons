@@ -1,0 +1,2 @@
+Stand-in so this otherwise-empty directory is tracked: json/ is importable
+as a namespace package once its parent directory is on sys.path.

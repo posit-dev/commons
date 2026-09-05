@@ -28,7 +28,7 @@ test_that("data_source wraps an existing connection without copying", {
   DBI::dbWriteTable(con, "reps", data.frame(rep = "Ada"))
 
   src <- data_source(con)
-  expect_identical(src$con, con)
+  expect_identical(data_source_state(src)$con, con)
   expect_setequal(list_tables(src), c("sales", "reps"))
 
   src_one <- data_source(con, tables = "sales")
@@ -110,13 +110,13 @@ test_that("source_query rejects multiple statements without executing them", {
     source_query(src, "SELECT 1 AS ok; DROP TABLE sales;"),
     "disallowed semicolon"
   )
-  expect_true(DBI::dbExistsTable(src$con, "sales"))
+  expect_true(DBI::dbExistsTable(data_source_state(src)$con, "sales"))
 })
 
 test_that("the frame-path DuckDB is locked down", {
   src <- test_source()
   expect_error(
-    DBI::dbExecute(src$con, "SET enable_external_access = true")
+    DBI::dbExecute(data_source_state(src)$con, "SET enable_external_access = true")
   )
 })
 
@@ -148,7 +148,7 @@ test_that("data_source defers reading a board's pins until first use", {
     tables = c(orders = "team-orders", reps = "team-reps")
   )
   expect_setequal(list_tables(src), c("orders", "reps"))
-  expect_length(DBI::dbListTables(src$con), 0)
+  expect_length(DBI::dbListTables(data_source_state(src)$con), 0)
 })
 
 test_that("source_describe loads only the table it describes", {
@@ -165,7 +165,7 @@ test_that("source_describe loads only the table it describes", {
 
   d <- source_describe(src, "orders")
   expect_equal(d$schema$column, "id")
-  expect_equal(DBI::dbListTables(src$con), "orders")
+  expect_equal(DBI::dbListTables(data_source_state(src)$con), "orders")
 })
 
 test_that("source_query loads the tables a query references", {
@@ -188,12 +188,12 @@ test_that("source_query loads the tables a query references", {
     'SELECT o.id, r.team FROM ORDERS o JOIN "reps" r ON o.rep = r.rep'
   )
   expect_equal(nrow(res), 3)
-  expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
-  expect_equal(names(src$pending$pins), "regions")
+  expect_setequal(DBI::dbListTables(data_source_state(src)$con), c("orders", "reps"))
+  expect_equal(names(data_source_state(src)$pending$pins), "regions")
 
   source_query(src, "SELECT count(*) AS n FROM orders")
-  expect_setequal(DBI::dbListTables(src$con), c("orders", "reps"))
-  expect_equal(names(src$pending$pins), "regions")
+  expect_setequal(DBI::dbListTables(data_source_state(src)$con), c("orders", "reps"))
+  expect_equal(names(data_source_state(src)$pending$pins), "regions")
 })
 
 test_that("source_query doesn't read a pin named only in a string literal", {
@@ -213,7 +213,7 @@ test_that("source_query doesn't read a pin named only in a string literal", {
 
   res <- source_query(src, "SELECT id, 'regions' AS label FROM orders")
   expect_equal(nrow(res), 3)
-  expect_equal(names(src$pending$pins), "regions")
+  expect_equal(names(data_source_state(src)$pending$pins), "regions")
 })
 
 test_that("source_query preserves a genuine query error, unmasked", {
@@ -346,28 +346,43 @@ test_that("prewarm_downloads() downloads best-effort, tolerating a bad pin", {
   )
 })
 
-test_that("source_prewarm() spawns at most one live process per source", {
+test_that("source_prewarm() downloads pins in its background process", {
   skip_if_not_installed("pins")
 
-  local_mocked_bindings(prewarm_downloads = function(board, pins) Sys.sleep(30))
   board <- board_with_pins("team-orders" = data.frame(id = 1:3))
   src <- data_source(board, tables = c(orders = "team-orders"))
 
   source_prewarm(src)
-  p <- src$pending$process
+  process <- data_source_state(src)$pending$process
+  process$wait(5000)
+
+  expect_equal(process$get_result(), c("team-orders" = TRUE))
+})
+
+test_that("source_prewarm() spawns at most one live process per source", {
+  skip_if_not_installed("pins")
+
+  local_mocked_bindings(
+    prewarm_downloads = function(board, pins, lock) Sys.sleep(30)
+  )
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  source_prewarm(src)
+  p <- data_source_state(src)$pending$process
   withr::defer(p$kill())
   expect_true(p$is_alive())
 
   # A second prewarm (e.g. another agent sharing the source) doesn't respawn.
   source_prewarm(src)
-  expect_identical(src$pending$process, p)
+  expect_identical(data_source_state(src)$pending$process, p)
 
   # Once the child is gone with pins still pending, prewarm respawns.
   p$kill()
   p$wait(5000)
   source_prewarm(src)
-  expect_false(identical(src$pending$process, p))
-  withr::defer(src$pending$process$kill())
+  expect_false(identical(data_source_state(src)$pending$process, p))
+  withr::defer(data_source_state(src)$pending$process$kill())
 })
 
 test_that("source_prewarm() is a no-op without pending pins", {
@@ -379,7 +394,7 @@ test_that("source_prewarm() is a no-op without pending pins", {
   source_ensure_all(src)
 
   source_prewarm(src)
-  expect_null(src$pending$process)
+  expect_null(data_source_state(src)$pending$process)
 })
 
 test_that("dbWriteTable works after duckdb_lock_down", {

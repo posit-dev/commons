@@ -259,7 +259,8 @@ test_that("Databricks imports and binds metric-view parameters", {
     )
   )
   source <- test_source()
-  source$semantic_models <- list(model = model)
+  state <- data_source_state(source)
+  state$semantic_models <- list(model = model)
   members <- registry_semantic_members(
     semantic_models_registry(list(databricks = source))
   )
@@ -367,8 +368,9 @@ test_that("Databricks metric SQL uses MEASURE and model fields", {
     )
   )
   source <- test_source()
+  state <- data_source_state(source)
   label <- table_id_label(model$id)
-  source$semantic_models <- stats::setNames(list(model), label)
+  state$semantic_models <- stats::setNames(list(model), label)
   members <- registry_semantic_members(
     semantic_models_registry(list(databricks = source))
   )

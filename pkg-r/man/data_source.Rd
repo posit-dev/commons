@@ -44,7 +44,8 @@ source's tables and columns, in the
 \verb{Data dictionaries} section.}
 }
 \value{
-A \code{commons_data_source} object.
+A \code{commons_data_source} R6 object. Its internals are private and may
+change without notice.
 }
 \description{
 A data source is the set of tables available to a \code{\link[=commons]{commons()}} agent.
@@ -60,13 +61,16 @@ when the data isn't already in a database.
 \item A \code{pins} board, e.g. \code{\link[pins:board_connect]{pins::board_connect()}}, is read into the same
 in-process database: each pin in \code{tables} becomes a table. Pin names are
 validated against the board at construction (a single listing call), but
-each pin is downloaded only when its table is first used.
-\code{\link[=commons_server]{commons_server()}} starts a background process right after startup that
-downloads the remaining pins into the local pins cache, so a first use
-typically only reads an already-downloaded file. A table reflects the pin's
-value at first use and is not refreshed for the lifetime of the data
-source; if a pin can't be read (e.g. a network failure), the error surfaces
-at that first use and the read is retried on the next one.
+each pin is downloaded only when its table is first used. Calling the
+agent's \code{prewarm()} method (see \code{\link[=commons]{commons()}}) starts a background process
+that downloads the remaining pins into the local
+pins cache, so a first use typically only reads an already-downloaded
+file. Since the pins cache is on disk, \code{prewarm()} can also run
+ahead of deployment to warm the cache the deployed app will read. A
+table reflects the pin's value at first use and is not refreshed for
+the lifetime of the data source; if a pin can't be read (e.g. a network
+failure), the error surfaces at that first use and the read is retried
+on the next one.
 }
 }
 \section{Data dictionaries}{

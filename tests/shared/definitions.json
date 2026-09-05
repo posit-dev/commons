@@ -1,0 +1,743 @@
+{
+  "corpus_dir": "definition-export",
+  "data_dict_commit": "d950c5ac90d0ab939d330600f3a5ee1bfde0f604",
+  "export_records": {
+    "core.yaml": {
+      "orders::enterprise_revenue": {
+        "columns": [
+          "order_total"
+        ],
+        "definitions": [
+          "is_enterprise"
+        ],
+        "expression": "SUM(CASE WHEN is_enterprise THEN order_total ELSE 0 END)",
+        "kind": "metric",
+        "translation": {
+          "code": "sum(CASE WHEN \"is_enterprise\" THEN \"order_total\" ELSE 0 END)",
+          "error": null,
+          "notes": [
+            "DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "orders::is_enterprise": {
+        "columns": [
+          "tile_size"
+        ],
+        "definitions": [],
+        "expression": "tile_size IN ('Mid-Market-3', 'Enterprise-1')",
+        "kind": "filter",
+        "translation": {
+          "code": "\"tile_size\" IN ('Mid-Market-3', 'Enterprise-1')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "orders::list_price": {
+        "columns": [
+          "order_total"
+        ],
+        "definitions": [],
+        "expression": "order_total * 1.2",
+        "kind": "derived",
+        "translation": {
+          "code": "\"order_total\" * 1.2",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "orders::net_revenue": {
+        "columns": [
+          "status_cd",
+          "order_total"
+        ],
+        "definitions": [],
+        "expression": "SUM(CASE WHEN status_cd = 90 THEN 0 ELSE order_total END)",
+        "kind": "metric",
+        "translation": {
+          "code": "sum(CASE WHEN \"status_cd\" = 90 THEN 0 ELSE \"order_total\" END)",
+          "error": null,
+          "notes": [
+            "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there.",
+            "DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      }
+    },
+    "functions.yaml": {
+      "values::boolean folds": {
+        "columns": [
+          "flag"
+        ],
+        "definitions": [],
+        "expression": "ANY(flag) OR ALL(flag)",
+        "kind": "metric",
+        "translation": {
+          "code": "bool_or(\"flag\") OR bool_and(\"flag\")",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "values::finite": {
+        "columns": [
+          "number"
+        ],
+        "definitions": [],
+        "expression": "IS_FINITE(number) AND NOT IS_INFINITE(number) AND NOT IS_NAN(number)",
+        "kind": "filter",
+        "translation": {
+          "code": "isfinite(\"number\") AND NOT isinf(\"number\") AND NOT isnan(\"number\")",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "values::folds": {
+        "columns": [
+          "number"
+        ],
+        "definitions": [],
+        "expression": "MIN(number) + MAX(number) + SUM(number) + AVG(number) + COUNT(number) + COUNT_DISTINCT(number) + ROW_COUNT()",
+        "kind": "metric",
+        "translation": {
+          "code": "min(\"number\") + max(\"number\") + sum(\"number\") + avg(\"number\") + count(\"number\") + count(DISTINCT \"number\") + count(*)",
+          "error": null,
+          "notes": [
+            "DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "values::numeric": {
+        "columns": [
+          "number"
+        ],
+        "definitions": [],
+        "expression": "ABS(number) + FLOOR(number) + CEIL(number) + ROUND(number, 2)",
+        "kind": "derived",
+        "translation": {
+          "code": "abs(\"number\") + floor(\"number\") + ceil(\"number\") + round(\"number\", 2)",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "values::patterns": {
+        "columns": [
+          "text"
+        ],
+        "definitions": [],
+        "expression": "text LIKE 'A_%' AND text SIMILAR TO 'A.*'",
+        "kind": "filter",
+        "translation": {
+          "code": "regexp_full_match(\"text\", '^A..*$') AND regexp_full_match(\"text\", 'A.*')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "values::remainder": {
+        "columns": [
+          "number"
+        ],
+        "definitions": [],
+        "expression": "MOD(number, 3)",
+        "kind": "derived",
+        "translation": {
+          "code": "mod(mod(\"number\", 3) + 3, 3)",
+          "error": null,
+          "notes": [
+            "DuckDB yields null for an integer modulus by zero, where data-dict yields a NaN."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "values::strings": {
+        "columns": [
+          "text"
+        ],
+        "definitions": [],
+        "expression": "STARTS_WITH(LOWER(TRIM(text)), 'a') OR ENDS_WITH(UPPER(text), 'Z')",
+        "kind": "filter",
+        "translation": {
+          "code": "starts_with(lower(trim(\"text\")), 'a') OR ends_with(upper(\"text\"), 'Z')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      }
+    },
+    "language.yaml": {
+      "survey::amount band": {
+        "columns": [
+          "amount"
+        ],
+        "definitions": [],
+        "expression": "amount <= 2 * MIN(amount)",
+        "kind": "filter",
+        "translation": {
+          "code": "\"amount\" <= 2 * min(\"amount\")",
+          "error": null,
+          "notes": [
+            "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::anything missing": {
+        "columns": [
+          "q1",
+          "q2",
+          "created",
+          "observed",
+          "amount",
+          "ratio",
+          "pattern",
+          "category",
+          "profile",
+          "tags"
+        ],
+        "definitions": [],
+        "expression": "COLUMNS(*) IS NOT NULL",
+        "kind": "filter",
+        "translation": {
+          "code": "\"q1\" IS NOT NULL AND \"q2\" IS NOT NULL AND \"created\" IS NOT NULL AND \"observed\" IS NOT NULL AND \"amount\" IS NOT NULL AND \"ratio\" IS NOT NULL AND \"pattern\" IS NOT NULL AND \"category\" IS NOT NULL AND \"profile\" IS NOT NULL AND \"tags\" IS NOT NULL AND \"untyped\" IS NOT NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::case without else": {
+        "columns": [
+          "q1",
+          "amount"
+        ],
+        "definitions": [],
+        "expression": "CASE WHEN q1 THEN amount END",
+        "kind": "derived",
+        "translation": {
+          "code": "CASE WHEN \"q1\" THEN \"amount\" END",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "survey::category A": {
+        "columns": [
+          "category"
+        ],
+        "definitions": [],
+        "expression": "category = 'A'",
+        "kind": "filter",
+        "translation": {
+          "code": "\"category\" = 'A'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::complete": {
+        "columns": [
+          "q1",
+          "q2"
+        ],
+        "definitions": [],
+        "expression": "COLUMNS([q1, q2]) IS NOT NULL",
+        "kind": "filter",
+        "translation": {
+          "code": "\"q1\" IS NOT NULL AND \"q2\" IS NOT NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::computed interval": {
+        "columns": [
+          "observed",
+          "amount"
+        ],
+        "definitions": [],
+        "expression": "observed + interval(amount + 1, days)",
+        "kind": "derived",
+        "translation": {
+          "code": "\"observed\" + (\"amount\" + 1 * INTERVAL '1 days')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "datetime"
+      },
+      "survey::constant": {
+        "columns": [],
+        "definitions": [],
+        "expression": "1",
+        "kind": "metric",
+        "translation": {
+          "code": "1",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "survey::deep score": {
+        "columns": [
+          "profile.geo.latitude",
+          "profile.nick names"
+        ],
+        "definitions": [],
+        "expression": "profile.geo.latitude + LENGTH(profile.`nick names`)",
+        "kind": "derived",
+        "translation": {
+          "code": "\"profile\".\"geo\".\"latitude\" + length(\"profile\".\"nick names\")",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "survey::dynamic match": {
+        "columns": [
+          "pattern",
+          "profile.zip"
+        ],
+        "definitions": [],
+        "expression": "pattern LIKE profile.zip",
+        "kind": "filter",
+        "translation": {
+          "code": "\"pattern\" LIKE \"profile\".\"zip\"",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::exact match": {
+        "columns": [
+          "pattern"
+        ],
+        "definitions": [],
+        "expression": "pattern LIKE 'a'",
+        "kind": "filter",
+        "translation": {
+          "code": "\"pattern\" = 'a'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::fractional interval": {
+        "columns": [
+          "observed"
+        ],
+        "definitions": [],
+        "expression": "observed - interval(1.5, hours)",
+        "kind": "derived",
+        "translation": {
+          "code": "\"observed\" - (1.5 * INTERVAL '1 hours')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "datetime"
+      },
+      "survey::fractional time": {
+        "columns": [
+          "observed"
+        ],
+        "definitions": [],
+        "expression": "observed <= '2024-01-01T01:30:00.123Z'",
+        "kind": "filter",
+        "translation": {
+          "code": "\"observed\" <= TIMESTAMP '2024-01-01 01:30:00.123'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::fresh": {
+        "columns": [
+          "observed"
+        ],
+        "definitions": [],
+        "expression": "observed >= NOW() - interval(2, weeks)",
+        "kind": "filter",
+        "translation": {
+          "code": "\"observed\" >= current_timestamp - INTERVAL '2 weeks'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::long postal": {
+        "columns": [],
+        "definitions": [
+          "postal length"
+        ],
+        "expression": "`postal length` > 5",
+        "kind": "filter",
+        "translation": {
+          "code": "\"postal length\" > 5",
+          "error": null,
+          "notes": [
+            "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::missing tags": {
+        "columns": [
+          "tags"
+        ],
+        "definitions": [],
+        "expression": "tags IS NULL",
+        "kind": "filter",
+        "translation": {
+          "code": "\"tags\" IS NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::missing unknown": {
+        "columns": [
+          "untyped"
+        ],
+        "definitions": [],
+        "expression": "untyped IS NULL",
+        "kind": "filter",
+        "translation": {
+          "code": "\"untyped\" IS NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::mixed temporal case": {
+        "columns": [
+          "q1",
+          "created",
+          "observed"
+        ],
+        "definitions": [],
+        "expression": "CASE WHEN q1 THEN created ELSE observed END",
+        "kind": "derived",
+        "translation": {
+          "code": "CASE WHEN \"q1\" THEN \"created\" ELSE \"observed\" END",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": null
+      },
+      "survey::negative infinity": {
+        "columns": [
+          "amount"
+        ],
+        "definitions": [],
+        "expression": "amount > -INF",
+        "kind": "filter",
+        "translation": {
+          "code": "\"amount\" > -CAST('Infinity' AS DOUBLE)",
+          "error": null,
+          "notes": [
+            "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::negative quotient": {
+        "columns": [
+          "amount",
+          "ratio"
+        ],
+        "definitions": [],
+        "expression": "-(amount - 2) / (ratio + 1.0)",
+        "kind": "derived",
+        "translation": {
+          "code": "-(\"amount\" - 2) / (\"ratio\" + 1.0)",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "survey::null logic": {
+        "columns": [
+          "q1"
+        ],
+        "definitions": [],
+        "expression": "NOT q1 OR NULL IS NULL",
+        "kind": "filter",
+        "translation": {
+          "code": "NOT \"q1\" OR NULL IS NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::nullable date shift": {
+        "columns": [
+          "created"
+        ],
+        "definitions": [],
+        "expression": "created + NULL",
+        "kind": "derived",
+        "translation": {
+          "code": "\"created\" + NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "datetime"
+      },
+      "survey::offset time": {
+        "columns": [
+          "observed"
+        ],
+        "definitions": [],
+        "expression": "observed >= '2024-01-01T01:30:00-06:00'",
+        "kind": "filter",
+        "translation": {
+          "code": "\"observed\" >= TIMESTAMP '2024-01-01 07:30:00'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::postal length": {
+        "columns": [
+          "profile.zip"
+        ],
+        "definitions": [],
+        "expression": "LENGTH(profile.zip)",
+        "kind": "derived",
+        "translation": {
+          "code": "length(\"profile\".\"zip\")",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "survey::precise threshold": {
+        "columns": [
+          "amount"
+        ],
+        "definitions": [],
+        "expression": "amount > 0.12345678901234567",
+        "kind": "filter",
+        "translation": {
+          "code": "\"amount\" > 0.12345678901234566",
+          "error": null,
+          "notes": [
+            "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::prefix match": {
+        "columns": [
+          "pattern"
+        ],
+        "definitions": [],
+        "expression": "pattern LIKE 'a%'",
+        "kind": "filter",
+        "translation": {
+          "code": "starts_with(\"pattern\", 'a')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::range predicate": {
+        "columns": [
+          "amount"
+        ],
+        "definitions": [],
+        "expression": "amount BETWEEN -10 AND 10 AND amount NOT IN (0, 1)",
+        "kind": "filter",
+        "translation": {
+          "code": "\"amount\" BETWEEN -10 AND 10 AND \"amount\" NOT IN (0, 1)",
+          "error": null,
+          "notes": [
+            "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+          ],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::recent": {
+        "columns": [
+          "created"
+        ],
+        "definitions": [],
+        "expression": "created >= '2024-01-01'",
+        "kind": "filter",
+        "translation": {
+          "code": "\"created\" >= DATE '2024-01-01'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::right associative arithmetic": {
+        "columns": [
+          "amount",
+          "ratio"
+        ],
+        "definitions": [],
+        "expression": "amount - (ratio - 1)",
+        "kind": "derived",
+        "translation": {
+          "code": "\"amount\" - (\"ratio\" - 1)",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      },
+      "survey::selected dates": {
+        "columns": [
+          "created"
+        ],
+        "definitions": [],
+        "expression": "COLUMNS('^created$') >= '2020-01-01'",
+        "kind": "filter",
+        "translation": {
+          "code": "\"created\" >= '2020-01-01'",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::suffix mismatch": {
+        "columns": [
+          "pattern"
+        ],
+        "definitions": [],
+        "expression": "pattern NOT LIKE '%z'",
+        "kind": "filter",
+        "translation": {
+          "code": "NOT ends_with(\"pattern\", 'z')",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "boolean"
+      },
+      "survey::untyped count": {
+        "columns": [
+          "untyped"
+        ],
+        "definitions": [],
+        "expression": "COUNT(untyped)",
+        "kind": "metric",
+        "translation": {
+          "code": "count(\"untyped\")",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "number"
+      }
+    }
+  },
+  "invalid": {
+    "between-temporal.yaml": "S21",
+    "columns-non-filter.yaml": "S21",
+    "columns-transitive.yaml": "S21",
+    "cycle.yaml": "S34",
+    "duplicate.yaml": "S10",
+    "nested-aggregate.yaml": "S30",
+    "parse.yaml": "S19",
+    "regex-engine.yaml": "S21",
+    "shadow.yaml": "S33",
+    "type.yaml": "S21",
+    "unknown.yaml": "S20"
+  },
+  "mixed_grain": {
+    "core.yaml": {
+      "orders::enterprise_revenue": false,
+      "orders::is_enterprise": false,
+      "orders::list_price": false,
+      "orders::net_revenue": false
+    },
+    "functions.yaml": {
+      "values::boolean folds": false,
+      "values::finite": false,
+      "values::folds": false,
+      "values::numeric": false,
+      "values::patterns": false,
+      "values::remainder": false,
+      "values::strings": false
+    },
+    "language.yaml": {
+      "survey::amount band": true,
+      "survey::anything missing": false,
+      "survey::case without else": false,
+      "survey::category A": false,
+      "survey::complete": false,
+      "survey::computed interval": false,
+      "survey::constant": false,
+      "survey::deep score": false,
+      "survey::dynamic match": false,
+      "survey::exact match": false,
+      "survey::fractional interval": false,
+      "survey::fractional time": false,
+      "survey::fresh": false,
+      "survey::long postal": false,
+      "survey::missing tags": false,
+      "survey::missing unknown": false,
+      "survey::mixed temporal case": false,
+      "survey::negative infinity": false,
+      "survey::negative quotient": false,
+      "survey::null logic": false,
+      "survey::nullable date shift": false,
+      "survey::offset time": false,
+      "survey::postal length": false,
+      "survey::precise threshold": false,
+      "survey::prefix match": false,
+      "survey::range predicate": false,
+      "survey::recent": false,
+      "survey::right associative arithmetic": false,
+      "survey::selected dates": false,
+      "survey::suffix mismatch": false,
+      "survey::untyped count": false
+    }
+  }
+}

@@ -1,6 +1,6 @@
 test_that("dictionary definitions use landed export records", {
   src <- definitions_source()
-  defs <- src$dictionary$tables$sales$definitions
+  defs <- data_source_state(src)$dictionary$tables$sales$definitions
 
   expect_named(defs, c("emea", "big_revenue", "region_band"))
   expect_equal(defs$emea$expression, "region = 'EMEA'")
@@ -43,7 +43,7 @@ test_that("definition envelopes infer types and accept general names", {
     )
   )
 
-  definition <- src$dictionary$tables$sales$definitions[["not a name"]]
+  definition <- data_source_state(src)$dictionary$tables$sales$definitions[["not a name"]]
   expect_equal(definition$type, "boolean")
   expect_equal(definition$kind, "filter")
 
@@ -137,7 +137,7 @@ test_that("boolean aggregates and constants are metrics", {
       "        expr: \"42\""
     )
   )
-  defs <- src$dictionary$tables$sales$definitions
+  defs <- data_source_state(src)$dictionary$tables$sales$definitions
 
   expect_equal(defs$any_emea$kind, "metric")
   expect_equal(defs$any_emea$type, "boolean")
@@ -386,7 +386,7 @@ test_that("the prompt definition index is capped", {
 
 test_that("first touch shows compiled SQL without expression source", {
   src <- definitions_source()
-  entry <- dictionary_entry_text(src$dictionary, "sales")
+  entry <- dictionary_entry_text(data_source_state(src)$dictionary, "sales")
 
   expect_match(entry, "Governed definitions", fixed = TRUE)
   expect_no_match(entry, "Expression:", fixed = TRUE)
@@ -398,7 +398,7 @@ test_that("first touch shows compiled SQL without expression source", {
 
 test_that("definitions are indexed as context chunks", {
   src <- definitions_source()
-  chunks <- dictionary_context_chunks(src$dictionary)
+  chunks <- dictionary_context_chunks(data_source_state(src)$dictionary)
   hit <- grepl("Governed definition `{{big_revenue}}`", chunks, fixed = TRUE)
 
   expect_true(any(hit))
@@ -415,4 +415,60 @@ test_that("run_sql description explains compiled tokens", {
   expect_match(run_sql_description(registry), "{{table::name}}", fixed = TRUE)
   expect_match(run_sql_description(registry), "compiled", fixed = TRUE)
   expect_no_match(run_sql_description(empty), "tokens")
+})
+
+test_that("token expansion matches the shared contract", {
+  spec <- shared_fixture("definition-rendering")$expand_tokens
+  expect_gt(length(spec$cases), 0)
+
+  for (case in spec$cases) {
+    defs <- fixture_registry(unlist(case$records))$defs
+    if (is.null(case$expanded)) {
+      expect_error(
+        expand_definitions(case$sql, defs),
+        definition_refusal_pattern[[case$reason]],
+        info = case$name
+      )
+      next
+    }
+    expansion <- expand_definitions(case$sql, defs)
+    expect_identical(expansion$sql, case$expanded, info = case$name)
+    expect_identical(
+      as.character(expansion$applied$name),
+      as.character(unlist(case$applied)),
+      info = case$name
+    )
+  }
+})
+
+test_that("the definition gist matches the shared contract", {
+  spec <- shared_fixture("definition-rendering")$gist
+  expect_gt(length(spec$cases), 0)
+
+  for (case in spec$cases) {
+    expect_identical(
+      unname(definition_gist(list(fixture_definition(case$record)))),
+      case$expected,
+      info = case$name
+    )
+  }
+})
+
+test_that("the definition index matches the shared contract", {
+  spec <- shared_fixture("definition-rendering")$index
+  expect_gt(length(spec$cases), 0)
+
+  for (case in spec$cases) {
+    registry <- fixture_registry(unlist(case$records))
+    expect_identical(
+      definition_index_text(registry, cap_chars = case$cap_chars),
+      case$text,
+      info = case$name
+    )
+    expect_identical(
+      definitions_overflow(registry, cap_chars = case$cap_chars),
+      case$overflows,
+      info = case$name
+    )
+  }
 })

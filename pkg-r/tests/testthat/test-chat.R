@@ -53,8 +53,7 @@ test_that("commons_theme() bundles the commons chat assets", {
 
   commons_dep <- deps[[which(names == "commons-chat")]]
   expect_identical(commons_dep$stylesheet, "commons-chat.css")
-  # Tooltip positioning is owned by shinychat (asides) and bslib (pills).
-  expect_null(commons_dep$script)
+  expect_identical(commons_dep$script, "commons-chat.js")
 })
 
 test_that("icon URLs resolve inside the commons-chat dependency", {
@@ -78,4 +77,21 @@ test_that("commons_server requires a commons agent", {
     commons_server("chat", client = test_client()),
     error = TRUE
   )
+})
+
+test_that("commons_app() prewarms the agent on idle", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  app <- commons_app(test_agent())
+  app_env <- environment(app$serverFuncSource)
+  prewarmed <- FALSE
+  testthat::local_mocked_bindings(
+    prewarm_on_idle = function(client) prewarmed <<- TRUE,
+    .package = "commons"
+  )
+  shiny::testServer(app_env$server, {
+    session$flushReact()
+  })
+  expect_true(prewarmed)
 })

@@ -27,8 +27,9 @@ test_semantic_model <- function(
 
 test_semantic_source <- function(...) {
   source <- test_source()
+  state <- data_source_state(source)
   model <- test_semantic_model(...)
   label <- table_id_label(model$id)
-  source$semantic_models <- stats::setNames(list(model), label)
+  state$semantic_models <- stats::setNames(list(model), label)
   source
 }

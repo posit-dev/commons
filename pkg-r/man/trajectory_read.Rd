@@ -13,8 +13,9 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
 directory that \code{\link[=commons]{commons()}} writes to.
-\item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), or a
-dashboard URL (\verb{.../connect/#/apps/<guid>/}).
+\item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), a
+vanity URL (\verb{.../content/<name>/}), or a dashboard URL
+(\verb{.../connect/#/apps/<guid>/}).
 \item A directory of OTLP NDJSON trace files (\verb{trace-*.jsonl}).
 }}
 
@@ -32,11 +33,9 @@ history as of \code{to}.}
 }
 \value{
 A list of conversations, named by conversation id and ordered
-oldest-first. Each conversation is a list of \link[ellmer:Turn]{ellmer::Turn}s and carries
-a \code{last_active} attribute: a \code{POSIXct} giving the time of the
-conversation's most recent chat activity. The list carries a \code{source}
-attribute identifying the local trace directory or Connect content from
-which it was read.
+oldest-first. Each conversation is a list with a \code{turns} field containing
+a list of \link[ellmer:Turn]{ellmer::Turn}s and a \code{last_active} field containing a
+\code{POSIXct} giving the time of the conversation's most recent chat activity.
 }
 \description{
 \code{trajectory_read()} reads conversation trajectories captured by
@@ -48,9 +47,9 @@ from local trace files.
 \details{
 Reading traces from Connect requires the \code{CONNECT_API_KEY} environment
 variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
-project's deployment record), and editor-level access to the content: you
-must own it or be a collaborator. See the \code{share_with} argument of
-\code{\link[=commons]{commons()}}.
+URL, the project's deployment record, or the sole Connect server registered
+with rsconnect), and editor-level access to the content: you must own it or
+be a collaborator. See the \code{share_with} argument of \code{\link[=commons]{commons()}}.
 }
 \examples{
 \dontrun{

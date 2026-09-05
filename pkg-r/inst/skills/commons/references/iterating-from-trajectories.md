@@ -46,7 +46,7 @@ trajectories <- commons::trajectory_read(
   from = Sys.Date() - 7
 )
 
-turns <- trajectories[[1]]
+turns <- trajectories[[1]][["turns"]]
 print(turns)
 ```
 

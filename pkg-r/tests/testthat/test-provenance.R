@@ -1,3 +1,13 @@
+test_that("provenance information control is the web component", {
+  expect_identical(
+    provenance_info_control(),
+    paste0(
+      '<commons-provenance-info class="commons-provenance-info">',
+      "</commons-provenance-info>"
+    )
+  )
+})
+
 test_that("derive_provenance_tag matches the shared truth table", {
   cases <- shared_fixture("provenance")$derive_provenance_tag$cases
   # An empty table would make the loop below vacuously succeed.
@@ -16,14 +26,6 @@ test_that("derive_provenance_tag matches the shared truth table", {
 
 test_that("provenance_display uses R display copy", {
   display <- shared_fixture("provenance")$provenance_display$tags
-  display$A$body <- paste(
-    "This answer comes from a trusted calculation defined by",
-    "your data team."
-  )
-  display$C$body <- paste(
-    "This answer was not produced by a trusted calculation and has",
-    "no verified supporting citation. AI can be wrong."
-  )
   expect_setequal(names(display), names(provenance_display))
 
   for (tag in names(display)) {
@@ -47,6 +49,7 @@ test_that("provenance_aside renders A and C, nothing for B/NA", {
     fixed = TRUE
   )
   expect_no_match(trusted, "data:image", fixed = TRUE)
+  expect_match(trusted, "<commons-provenance-info", fixed = TRUE)
 
   expect_match(untrusted, '^<shiny-aside label="Untrusted"')
   expect_match(
@@ -61,5 +64,5 @@ test_that("provenance_aside renders A and C, nothing for B/NA", {
 
   cited <- provenance_aside("B", include_cited = TRUE)
   expect_match(cited, '^<shiny-aside label="Cited"')
-  expect_match(cited, "verified against a trusted source", fixed = TRUE)
+  expect_match(cited, "supports its approach", fixed = TRUE)
 })

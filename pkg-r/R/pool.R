@@ -11,24 +11,14 @@ call_metrics_impl <- function(
   filters = NULL,
   where = NULL,
   source_name = NULL,
-  semantic_models = NULL,
   arguments = "{}"
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
-  n_models <- length(source$semantic_models)
-  source <- source_hydrate_semantic_models(source, metrics)
-  if (length(source$semantic_models) > n_models) {
-    source_index <- if (length(sources) == 1L) {
-      1L
-    } else {
-      match(label, names(sources))
-    }
-    sources[[source_index]] <- source
-    semantic_models <- semantic_models_registry(sources)
-  }
+  source_hydrate_semantic_models(source, metrics)
+  # Another agent may have hydrated the shared source since construction.
+  semantic_models <- semantic_models_registry(sources)
   defs <- registry_defs(registry, label)
-  semantic_models <- semantic_models %||% semantic_models_registry(sources)
   semantic_members <- registry_semantic_members(semantic_models, label)
   origins <- resolve_metric_origins(metrics, defs, semantic_members)
   if (length(unique(origins)) > 1L) {
@@ -72,9 +62,10 @@ call_metrics_impl <- function(
     )
   }
   on_table <- defs[defs$table == tables, ]
-  columns <- names(source$dictionary$tables[[tables]]$columns)
-  con <- source$con
-  id <- DBI::dbQuoteIdentifier(con, source$table_ids[[tables]])
+  source_state <- data_source_state(source)
+  columns <- names(source_state$dictionary$tables[[tables]]$columns)
+  con <- source_state$con
+  id <- DBI::dbQuoteIdentifier(con, source_state$table_ids[[tables]])
 
   dim_names <- strip_token_braces(dimensions %||% character())
   dims <- vapply(
@@ -142,7 +133,8 @@ call_metrics_impl <- function(
     filters,
     note = note,
     advert = advert,
-    args = args
+    args = args,
+    metadata = metric_definition_metadata(metric_defs)
   )
 }
 
@@ -218,12 +210,13 @@ call_semantic_metrics <- function(
   source_name,
   arguments
 ) {
+  source_state <- data_source_state(source)
   metric_members <- resolve_semantic_members(metrics, members, "metric")
   models <- unique(metric_members$model)
   if (length(models) != 1L) {
     cli::cli_abort("Metrics in one call must belong to one native semantic model.")
   }
-  model <- source$semantic_models[[models[[1]]]]
+  model <- source_state$semantic_models[[models[[1]]]]
   model_members <- members[members$model == models[[1]], , drop = FALSE]
   dimension_members <- resolve_semantic_members(
     dimensions,
@@ -245,7 +238,7 @@ call_semantic_metrics <- function(
       filter_members,
       where,
       model_members,
-      source$con,
+      source_state$con,
       arguments = arguments
     ),
     databricks_metric_view = {
@@ -260,7 +253,7 @@ call_semantic_metrics <- function(
         dimension_members,
         where,
         model_members,
-        source$con,
+        source_state$con,
         arguments = arguments
       )
     },
@@ -275,7 +268,8 @@ call_semantic_metrics <- function(
     handles,
     metrics,
     dimensions,
-    filters
+    filters,
+    metadata = semantic_metric_metadata(metric_members)
   )
 }
 
@@ -292,17 +286,47 @@ metric_tool_result <- function(
     metrics = metrics,
     dimensions = dimensions,
     filters = filters
-  ))
+  )),
+  metadata = NULL
 ) {
   tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
     markdown = sprintf("```sql\n%s\n```\n\n%s", sql, df_to_markdown(result)),
-    html = measure_display_html(args, result),
+    html = measure_display_html(args, result, metadata),
     tag = "A",
     show_tag = FALSE
   )
+}
+
+metric_definition_metadata <- function(definitions) {
+  data.frame(
+    title = metric_metadata_title(definitions$name, definitions$label),
+    description = vapply(
+      seq_len(nrow(definitions)),
+      function(i) prose_detail(
+        definitions$description[[i]],
+        definitions$details[[i]]
+      ),
+      character(1)
+    ),
+    stringsAsFactors = FALSE
+  )
+}
+
+semantic_metric_metadata <- function(metrics) {
+  data.frame(
+    title = metric_metadata_title(metrics$name, metrics$label),
+    description = ifelse(is.na(metrics$description), "", metrics$description),
+    stringsAsFactors = FALSE
+  )
+}
+
+metric_metadata_title <- function(name, label) {
+  fallback <- is.na(label) | !nzchar(label)
+  label[fallback] <- humanize_name(name[fallback])
+  label
 }
 
 registry_has_metrics <- function(registry) {
@@ -459,7 +483,8 @@ search_pool_text <- function(
   query,
   source_names = character(),
   semantic_models = NULL,
-  calculations = list()
+  calculations = list(),
+  measure_titles = FALSE
 ) {
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
@@ -535,7 +560,12 @@ search_pool_text <- function(
     hits,
     function(hit) {
       if (hit <= length(measures)) {
-        measure_schema_text(measures[[hit]], source_names = source_names)
+        td <- measures[[hit]]
+        measure_schema_text(
+          td,
+          source_names = source_names,
+          heading = if (measure_titles) tool_title(td) else tool_name(td)
+        )
       } else if (hit <= length(measures) + nrow(defs)) {
         definition_pool_text(defs[hit - length(measures), ], defs)
       } else if (
