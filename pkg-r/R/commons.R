@@ -60,9 +60,8 @@
 #' agent's `prewarm()` method automatically during post-startup idle time.
 #'
 #' To warm the caches before deployment, call `agent$prewarm()` in a
-#' pre-deploy script. Errors propagate so a failed warm can stop the deployment.
-#' The context index is cached on disk once per version of the context documents;
-#' pin downloads populate the local pins cache.
+#' pre-deploy script. The context index is cached on disk once per version of 
+#' the context documents; pin downloads populate the local pins cache.
 #'
 #' To ship a pre-built context index with an app, configure a directory inside
 #' the app in both the pre-deploy script and the deployed app, then prewarm the
