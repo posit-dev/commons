@@ -264,7 +264,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   expect_no_match(verified, "How answer trust is determined", fixed = TRUE)
   expect_match(
     verified,
-    "This answer comes from a trusted calculation defined by your data team.",
+    "This answer comes from a trusted calculation.",
     fixed = TRUE
   )
   app$wait_for_js(
@@ -281,7 +281,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
         "(() => { const control = document.querySelector('",
         verified_dialog,
         " .commons-provenance-info'); return ",
-        "control.previousSibling.textContent.endsWith('data team. ') && ",
+        "control.previousSibling.textContent.endsWith('calculation. ') && ",
         "getComputedStyle(control).display === 'inline-flex'; })()"
       )
     )

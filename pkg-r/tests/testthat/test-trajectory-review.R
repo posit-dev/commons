@@ -111,11 +111,11 @@ test_that("provenance pills describe trusted, cited, and uncited answers", {
   expect_match(trusted, commons_icon_url("trusted-icon.svg"), fixed = TRUE)
 
   expect_match(cited, "Cited")
-  expect_match(cited, "verified against a trusted source")
+  expect_match(cited, "supports its approach")
   expect_match(cited, "commons-answer-pill-cited")
 
   expect_match(uncited, "Untrusted")
-  expect_match(uncited, "AI can be wrong")
+  expect_match(uncited, "does not cite trusted context")
   expect_match(uncited, "not produced by a trusted calculation")
   expect_match(uncited, "commons-answer-pill-icon")
   expect_match(uncited, "commons-answer-pill-caution")
