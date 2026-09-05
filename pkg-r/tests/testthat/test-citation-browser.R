@@ -275,6 +275,17 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     ),
     timeout = 30 * 1000
   )
+  expect_true(
+    app$get_js(
+      paste0(
+        "(() => { const control = document.querySelector('",
+        verified_dialog,
+        " .commons-provenance-info'); return ",
+        "control.previousSibling.textContent.endsWith('data team. ') && ",
+        "getComputedStyle(control).display === 'inline-flex'; })()"
+      )
+    )
+  )
   app$get_js(
     paste0(
       "document.querySelector('",
