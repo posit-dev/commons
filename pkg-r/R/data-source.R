@@ -12,13 +12,16 @@
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
-#'   each pin is downloaded only when its table is first used.
-#'   [commons_server()] starts a background process right after startup that
-#'   downloads the remaining pins into the local pins cache, so a first use
-#'   typically only reads an already-downloaded file. A table reflects the pin's
-#'   value at first use and is not refreshed for the lifetime of the data
-#'   source; if a pin can't be read (e.g. a network failure), the error surfaces
-#'   at that first use and the read is retried on the next one.
+#'   each pin is downloaded only when its table is first used. Calling the
+#'   agent's `prewarm()` method (see [commons()]) starts a background process
+#'   that downloads the remaining pins into the local
+#'   pins cache, so a first use typically only reads an already-downloaded
+#'   file. Since the pins cache is on disk, `prewarm()` can also run
+#'   ahead of deployment to warm the cache the deployed app will read. A
+#'   table reflects the pin's value at first use and is not refreshed for
+#'   the lifetime of the data source; if a pin can't be read (e.g. a network
+#'   failure), the error surfaces at that first use and the read is retried
+#'   on the next one.
 #'
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
@@ -455,7 +458,7 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
   for (table in todo) {
     pin <- pending$pins[[table]]
     value <- tryCatch(
-      pins::pin_read(pending$board, pin),
+      with_pin_lock(pending$board, pin, pins::pin_read(pending$board, pin)),
       error = function(err) {
         cli::cli_abort(
           "Failed to read pin {.val {pin}} for table {.val {table}}.",
@@ -482,6 +485,30 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
 source_ensure_all <- function(source, call = rlang::caller_env()) {
   state <- data_source_state(source)
   source_ensure_tables(source, state$tables, call = call)
+}
+
+# pins has no cache locking, so a background prewarm downloading a pin can
+# race a first-use pin_read() of the same pin and leave a truncated cache
+# entry. Both sides take an exclusive lock keyed by the board's cache path
+# and pin name, so the reader waits out an in-flight download instead of
+# duplicating it.
+with_pin_lock <- function(board, pin, expr) {
+  # `cache` is a pins implementation detail (verified against pins 1.4.x);
+  # the guards below fail open to an unlocked read if it ever goes away.
+  cache <- board$cache
+  # Boards without a download cache (e.g. board_folder) never download, so
+  # there is no race to guard against.
+  if (is.null(cache) || is.na(cache) || !nzchar(cache)) {
+    return(force(expr))
+  }
+  # Sanitized names can collide ("a/b" vs "a_b"), which merely serializes
+  # two pins on one lock. Lock files are never removed, but they're empty
+  # and there is at most one per pin.
+  name <- gsub("[^A-Za-z0-9._-]", "_", pin)
+  dir.create(cache, recursive = TRUE, showWarnings = FALSE)
+  lock <- filelock::lock(file.path(cache, paste0("commons-", name, ".lock")))
+  on.exit(filelock::unlock(lock), add = TRUE)
+  force(expr)
 }
 
 # Warm the pins on-disk cache in a background process rather than loading into
@@ -528,7 +555,7 @@ prewarm_downloads <- function(board, pins) {
     function(pin) {
       tryCatch(
         {
-          pins::pin_download(board, pin)
+          with_pin_lock(board, pin, pins::pin_download(board, pin))
           TRUE
         },
         error = function(err) FALSE

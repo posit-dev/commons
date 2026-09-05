@@ -404,6 +404,8 @@ test_that("commons() errors on injection parameters matching no name", {
 
 
 test_that("prewarm() builds the context store ahead of the first search", {
+  cache_dir <- withr::local_tempdir()
+  withr::local_options(commons.context_cache = cache_dir)
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
   layer <- context_layer(files = path)
@@ -415,6 +417,7 @@ test_that("prewarm() builds the context store ahead of the first search", {
 
   agent$prewarm()
   expect_false(is.null(context_layer_state(layer)$store))
+  expect_length(list.files(file.path(cache_dir, "context")), 1)
   expect_match(context_search(layer, "revenue")[[1]], "booked")
 })
 
@@ -422,8 +425,22 @@ test_that("prewarm() without a context layer is a no-op", {
   expect_no_error(test_agent()$prewarm())
 })
 
+test_that("prewarm() propagates failures", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  local_mocked_bindings(
+    context_store = function(...) stop("index build exploded"),
+    .package = "commons"
+  )
+  expect_error(agent$prewarm(), "index build exploded")
+})
+
 test_that("prewarm() records a cache-miss build and its own span", {
   skip_if_not_installed("otelsdk")
+  # A fresh cache root guarantees a cold build regardless of test order.
+  withr::local_options(commons.context_cache = withr::local_tempdir())
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
@@ -443,6 +460,7 @@ test_that("prewarm() records a cache-miss build and its own span", {
 
 test_that("prewarm() records a cache hit without a build span", {
   skip_if_not_installed("otelsdk")
+  withr::local_options(commons.context_cache = withr::local_tempdir())
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)

@@ -54,6 +54,37 @@
 #'   role is viewer cannot read traces even when named here; trace readers
 #'   need at least a publisher account.
 #'
+#' @section Cache pre-warming:
+#' A commons agent builds its context search index and downloads uncached pins
+#' the first time it needs them. [commons_server()] and [commons_app()] call the
+#' agent's `prewarm()` method automatically during post-startup idle time.
+#'
+#' To warm the caches before deployment, call `agent$prewarm()` in a
+#' pre-deploy script. The context index is cached on disk once per version of 
+#' the context documents; pin downloads populate the local pins cache.
+#'
+#' To ship a pre-built context index with an app, configure a directory inside
+#' the app in both the pre-deploy script and the deployed app, then prewarm the
+#' agent before deploying:
+#'
+#' ```r
+#' options(commons.context_cache = "commons-cache")
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_sources = data_source(sales = sales)
+#' )
+#' agent$prewarm()
+#' ```
+#'
+#' Do not use `app_cache/` for this workflow because rsconnect excludes it from
+#' deployed bundles. Without explicit configuration, commons uses Connect's
+#' persistent content data directory when available, an `app_cache/` directory
+#' beside hosted apps, or the per-user cache directory. Set the cache directory
+#' with `options(commons.context_cache = "path/to/dir")` or the
+#' `COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE` to
+#' disable persistence. The cache is capped at 256 MB with least-recently-used
+#' eviction; change the cap with `options(commons.context_cache_max_size)`.
+#'
 #' @section Agent tools:
 #' Depending on its semantic layer, context layer, and data sources, a commons
 #' agent receives some combination of these tools:
@@ -389,6 +420,16 @@ Commons <- R6::R6Class(
     },
 
     prewarm = function() {
+      # A direct call is typically warming caches ahead of deployment, so
+      # failures propagate: a cold cache should fail the deploy.
+      # prewarm_on_idle() downgrades them to warnings.
+      private$prewarm_context()
+      private$prewarm_sources()
+      invisible(self)
+    }
+  ),
+  private = list(
+    prewarm_context = function() {
       layer <- private$context_layer
       layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
       if (!is.null(layer_state) && length(layer_state$docs) > 0) {
@@ -396,18 +437,29 @@ Commons <- R6::R6Class(
           "commons_context_prewarm",
           attributes = list(
             "commons.context.n_docs" = length(layer_state$docs),
-            "commons.context.cache_hit" = !is.null(layer_state$store)
+            # tryCatch: telemetry must not abort prewarming (resolving the
+            # cache dir can fail or warn on an unwritable root).
+            "commons.context.cache_hit" =
+              !is.null(layer_state$store) ||
+              isTRUE(tryCatch(
+                context_cache_enabled() &&
+                  file.exists(context_store_path(layer_state$docs)),
+                error = function(err) FALSE
+              ))
           )
         )
         context_store(layer)
       }
+      invisible(self)
+    },
+
+    prewarm_sources = function() {
       for (source in private$sources) {
         source_prewarm(source)
       }
       invisible(self)
-    }
-  ),
-  private = list(
+    },
+
     sources = NULL,
     context_layer = NULL,
     registry = NULL,
