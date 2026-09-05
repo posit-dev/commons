@@ -54,6 +54,38 @@
 #'   role is viewer cannot read traces even when named here; trace readers
 #'   need at least a publisher account.
 #'
+#' @section Cache pre-warming:
+#' A commons agent builds its context search index and downloads uncached pins
+#' the first time it needs them. [commons_server()] and [commons_app()] call the
+#' agent's `prewarm()` method automatically during post-startup idle time.
+#'
+#' To warm the caches before deployment, call `agent$prewarm()` in a
+#' pre-deploy script. Errors propagate so a failed warm can stop the deployment.
+#' The context index is cached on disk once per version of the context documents;
+#' pin downloads populate the local pins cache.
+#'
+#' To ship a pre-built context index with an app, configure a directory inside
+#' the app in both the pre-deploy script and the deployed app, then prewarm the
+#' agent before deploying:
+#'
+#' ```r
+#' options(commons.context_cache = "commons-cache")
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_sources = data_source(sales = sales)
+#' )
+#' agent$prewarm()
+#' ```
+#'
+#' Do not use `app_cache/` for this workflow because rsconnect excludes it from
+#' deployed bundles. Without explicit configuration, commons uses Connect's
+#' persistent content data directory when available, an `app_cache/` directory
+#' beside hosted apps, or the per-user cache directory. Set the cache directory
+#' with `options(commons.context_cache = "path/to/dir")` or the
+#' `COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE` to
+#' disable persistence. The cache is capped at 256 MB with least-recently-used
+#' eviction; change the cap with `options(commons.context_cache_max_size)`.
+#'
 #' @section Agent tools:
 #' Depending on its semantic layer, context layer, and data sources, a commons
 #' agent receives some combination of these tools:
@@ -392,7 +424,7 @@ Commons <- R6::R6Class(
     prewarm = function() {
       # A direct call is typically warming caches ahead of deployment, so
       # failures propagate: a cold cache should fail the deploy.
-      # commons_prewarm() and prewarm_on_idle() downgrade them to warnings.
+      # prewarm_on_idle() downgrades them to warnings.
       private$prewarm_context()
       private$prewarm_sources()
       invisible(self)

@@ -419,6 +419,8 @@ test_that("commons() errors on injection parameters matching no name", {
 
 
 test_that("prewarm() builds the context store ahead of the first search", {
+  cache_dir <- withr::local_tempdir()
+  withr::local_options(commons.context_cache = cache_dir)
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
   layer <- context_layer(files = path)
@@ -430,6 +432,7 @@ test_that("prewarm() builds the context store ahead of the first search", {
 
   agent$prewarm()
   expect_false(is.null(context_layer_state(layer)$store))
+  expect_length(list.files(file.path(cache_dir, "context")), 1)
   expect_match(context_search(layer, "revenue")[[1]], "booked")
 })
 
