@@ -443,10 +443,10 @@ def test_the_invalid_corpus_also_fails_the_installed_data_dict():
 # --- regular expressions -------------------------------------------------
 #
 # data-dict validates patterns with Rust's `regex`. commons validates and
-# matches with RE2, through the DuckDB already in its dependencies. Both are
-# finite-automata engines with the same design and near-identical syntax,
-# which Python's `re` is not: `re` accepts lookaround and backreferences
-# neither has, and rejects `\p{L}`, `\z` and POSIX classes both accept.
+# matches with RE2, through the google-re2 binding. Both are finite-automata
+# engines with the same design and near-identical syntax, which Python's `re`
+# is not: `re` accepts lookaround and backreferences neither has, and rejects
+# `\p{L}`, `\z` and POSIX classes both accept.
 
 
 @pytest.mark.parametrize(
@@ -485,7 +485,7 @@ def test_patterns_rust_rejects_are_refused(pattern: str):
 
 @pytest.mark.parametrize(
     "pattern",
-    ["(?<a>x)", r"(?x) foo \s+ bar", "(?R)^x$"],
+    [r"(?x) foo \s+ bar", "(?R)^x$"],
 )
 def test_rust_constructs_re2_refuses(pattern: str):
     """Differences from Rust's `regex` found so far, verified against the binary.
@@ -495,8 +495,8 @@ def test_rust_constructs_re2_refuses(pattern: str):
     and an earlier version of this test asserted exhaustiveness and was wrong.
     What holds for all of them is the shape of the failure. They fail closed
     at construction rather than reaching the warehouse, and none changes what
-    a definition matches: a capture name is unused, extended mode is only
-    whitespace and comments, and `(?R)` concerns CRLF line endings.
+    a definition matches: extended mode is only whitespace and comments, and
+    `(?R)` concerns CRLF line endings.
 
     Closing the gap needs a binding to Rust's `regex`; the only Python one is
     unmaintained, and hand-translating the syntax is what three reviews showed
@@ -506,17 +506,11 @@ def test_rust_constructs_re2_refuses(pattern: str):
         one(f"region similar to '{pattern}'")
 
 
-def test_only_a_named_group_refusal_mentions_the_spelling():
-    """The one known difference from data-dict, and it fails closed.
-
-    Rust spells a named group `(?<a>...)` and accepts it; RE2 wants
-    `(?P<a>...)` and rejects Rust's spelling. Verified against the binary:
-    `validate-spec` reports this pattern as ok. A capture name has no effect
-    on a definition, which is why the difference is recorded rather than
-    worked around with a hand-written translation.
-    """
-    with pytest.raises(ValueError, match="\\(\\?P<"):
-        one("region similar to '(?<a>x)'")
+def test_rusts_named_group_spelling_is_accepted():
+    """RE2 has taken Rust's `(?<name>...)` spelling since its 2023-07 release,
+    so the named group is not a divergence from data-dict. Verified against
+    the binary: `validate-spec` reports this pattern as ok."""
+    assert one("region similar to '(?<a>x)'").kind == "filter"
 
 
 def test_a_unicode_class_selects_columns():

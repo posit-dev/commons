@@ -17,10 +17,11 @@ and not its R counterpart in `pkg-r/R/definition-export.R`.
 from __future__ import annotations
 
 import re
-import threading
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
+
+import re2
 
 from ._expression import Node, parse_expression
 
@@ -33,13 +34,10 @@ _EXPORTED_TYPES = frozenset(
 _INTERVAL_UNITS = frozenset({"seconds", "minutes", "hours", "days", "weeks"})
 _TEMPORAL = frozenset({"date", "datetime"})
 
-# Rust's named-group spelling, `(?<name>`, where a name starts with a letter
-# or underscore. The lookbehind forms `(?<=` and `(?<!` share the prefix and
-# are a different refusal, as are malformed forms like `(?<)` and `(?<1>`.
-_RUST_NAMED_GROUP = re.compile(r"\(\?<[A-Za-z_]")
-
-_RE2_LOCK = threading.Lock()
-_RE2_CONNECTION: Any = None
+# RE2 logs every failed compile to stderr unless told not to; a refused
+# pattern is reported by the ValueError in `_validate_regex`, not by log spew.
+_RE2_OPTIONS = re2.Options()
+_RE2_OPTIONS.log_errors = False
 
 _DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 _DATETIME = re.compile(
@@ -600,73 +598,37 @@ def _resolve_selection(
     }
 
 
-def _re2() -> Any:
-    """A connection used only to reach RE2, DuckDB's regex engine.
-
-    data-dict decides what a pattern means, using Rust's `regex`. commons
-    cannot ask it at runtime, so it asks the closest engine it already has:
-    RE2 and Rust's `regex` are both finite-automata engines, so they agree on
-    rejecting lookaround and backreferences and on accepting Unicode classes,
-    `\\z` and POSIX classes. Python's `re` disagrees with both, in both
-    directions, and no amount of pre-processing turns it into a proxy for
-    them.
-
-    The connection is opened once and reused, behind a lock because a DuckDB
-    connection is not safe to use from several threads at once.
-    """
-    global _RE2_CONNECTION
-    with _RE2_LOCK:
-        if _RE2_CONNECTION is None:
-            import duckdb
-
-            _RE2_CONNECTION = duckdb.connect()
-        return _RE2_CONNECTION
-
-
 def _validate_regex(pattern: str) -> str:
     """Refuse a pattern data-dict's engine would refuse.
 
+    data-dict decides what a pattern means, using Rust's `regex`. commons
+    cannot ask it at runtime, so it asks the closest engine with a maintained
+    binding: RE2 and Rust's `regex` are both finite-automata engines, so they
+    agree on rejecting lookaround and backreferences and on accepting Unicode
+    classes, `\\z` and POSIX classes. Python's `re` disagrees with both, in
+    both directions, and no amount of pre-processing turns it into a proxy
+    for them.
+
     RE2 is close to Rust's `regex` but not identical, and this does not
     claim to know every difference. The ones found so far all fail closed
-    and none changes what a definition matches: Rust's named-group spelling
-    `(?<name>...)`, extended mode `(?x)`, and CRLF-aware multiline `(?R)`.
-    Closing the gap needs a Rust `regex` binding rather than more
-    translation, which three reviews showed does not converge.
+    and none changes what a definition matches: extended mode `(?x)` and
+    CRLF-aware multiline `(?R)`. Closing the gap needs a Rust `regex`
+    binding rather than more translation, which three reviews showed does
+    not converge.
     """
-    connection = _re2()
-    with _RE2_LOCK:
-        try:
-            connection.execute("SELECT regexp_matches('', ?)", [pattern])
-        except Exception as error:
-            # The named-group hint is only offered when it could apply;
-            # attaching it to every refusal misdescribes the other causes.
-            hint = (
-                " Note that a named group is spelled `(?P<name>...)` here."
-                if _RUST_NAMED_GROUP.search(pattern)
-                else ""
-            )
-            raise ValueError(
-                f"Invalid data-dict regular expression {pattern!r}.{hint}"
-            ) from error
+    try:
+        re2.compile(pattern, _RE2_OPTIONS)
+    except re2.error as error:
+        raise ValueError(
+            f"Invalid data-dict regular expression {pattern!r}."
+        ) from error
     return pattern
 
 
 def _match_columns(pattern: str, names: list[str]) -> list[str]:
-    """Column names the pattern matches, in the order the table declares them.
-
-    Matched one at a time rather than in a single query, so the result order
-    is the table's rather than whatever the engine returns. A table has few
-    enough columns for that to cost nothing.
-    """
-    connection = _re2()
-    with _RE2_LOCK:
-        return [
-            name
-            for name in names
-            if connection.execute(
-                "SELECT regexp_matches(?, ?)", [name, pattern]
-            ).fetchone()[0]
-        ]
+    """Column names the pattern matches, in the order the table declares them."""
+    compiled = re2.compile(pattern, _RE2_OPTIONS)
+    return [name for name in names if compiled.search(name)]
 
 
 @dataclass
