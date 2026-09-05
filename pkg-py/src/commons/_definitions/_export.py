@@ -260,6 +260,9 @@ def _resolve_one(
             f"Definition {name!r} on table {table!r} has no inferred type."
         )
 
+    from ._emit_duckdb import emit_duckdb
+
+    emitted = emit_duckdb(ir, state.selection)
     references = _direct_references(
         definition["ast"], definition_names, set(columns), columns
     )
@@ -280,6 +283,14 @@ def _resolve_one(
         type=ir.type if ir.type in _EXPORTED_TYPES else None,
         columns=references.columns,
         definitions=references.definitions,
+        translations=[
+            {
+                "target": "SQL(duckdb)",
+                "code": emitted["code"],
+                "error": None,
+                "notes": emitted["notes"],
+            }
+        ],
         ir=ir,
         shape=ir.shape,
         selection=state.selection,
