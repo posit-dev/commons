@@ -14,6 +14,16 @@
       Error:
       ! Set the `CONNECT_API_KEY` environment variable to a Posit Connect API key.
 
+# connect_vanity_guid explains an inaccessible URL
+
+    Code
+      connect_vanity_guid(list(server = "https://connect.example.com", api_key = "key"),
+      "https://connect.example.com/content/missing", "missing")
+    Condition
+      Error:
+      ! Can't find content for the Connect vanity URL <https://connect.example.com/content/missing>.
+      i Check that the URL is correct and that your API key can access the content.
+
 # connect_trace_lines explains auth failures on the traces endpoint
 
     Code

@@ -13,8 +13,9 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
 directory that \code{\link[=commons]{commons()}} writes to.
-\item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), or a
-dashboard URL (\verb{.../connect/#/apps/<guid>/}).
+\item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), a
+vanity URL (\verb{.../content/<name>/}), or a dashboard URL
+(\verb{.../connect/#/apps/<guid>/}).
 \item A directory of OTLP NDJSON trace files (\verb{trace-*.jsonl}).
 }}
 
@@ -46,9 +47,9 @@ from local trace files.
 \details{
 Reading traces from Connect requires the \code{CONNECT_API_KEY} environment
 variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
-project's deployment record), and editor-level access to the content: you
-must own it or be a collaborator. See the \code{share_with} argument of
-\code{\link[=commons]{commons()}}.
+URL, the project's deployment record, or the sole Connect server registered
+with rsconnect), and editor-level access to the content: you must own it or
+be a collaborator. See the \code{share_with} argument of \code{\link[=commons]{commons()}}.
 }
 \examples{
 \dontrun{

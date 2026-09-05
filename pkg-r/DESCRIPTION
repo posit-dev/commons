@@ -62,6 +62,7 @@ Suggests:
     ragg,
     readr,
     rmarkdown,
+    rsconnect,
     shiny (>= 1.11.1),
     shinytest2,
     testthat (>= 3.0.0),

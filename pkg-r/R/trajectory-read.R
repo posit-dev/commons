@@ -13,8 +13,9 @@
 #'     content's own traces; in a project that has been deployed with
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
 #'     directory that [commons()] writes to.
-#'   * A Connect content GUID, a content URL (`.../content/<guid>/`), or a
-#'     dashboard URL (`.../connect/#/apps/<guid>/`).
+#'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
+#'     vanity URL (`.../content/<name>/`), or a dashboard URL
+#'     (`.../connect/#/apps/<guid>/`).
 #'   * A directory of OTLP NDJSON trace files (`trace-*.jsonl`).
 #' @param ... These dots are for future extensions and must be empty.
 #' @param n Keep only the `n` most recent conversations, after `from`/`to`
@@ -29,9 +30,9 @@
 #' @details
 #' Reading traces from Connect requires the `CONNECT_API_KEY` environment
 #' variable (and `CONNECT_SERVER`, when the server can't be inferred from the
-#' project's deployment record), and editor-level access to the content: you
-#' must own it or be a collaborator. See the `share_with` argument of
-#' [commons()].
+#' URL, the project's deployment record, or the sole Connect server registered
+#' with rsconnect), and editor-level access to the content: you must own it or
+#' be a collaborator. See the `share_with` argument of [commons()].
 #'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list with a `turns` field containing
@@ -233,20 +234,25 @@ resolve_trajectory_source <- function(source, call = rlang::caller_env()) {
       return(list(
         kind = "connect",
         guid = source,
-        client = connect_client(call = call)
+        client = connect_client(
+          server = trajectory_guid_server(call),
+          call = call
+        )
       ))
     }
     if (grepl("^https?://", source)) {
       url_guid <- content_url_guid(source)
       if (is.null(url_guid)) {
-        cli::cli_abort(
-          c(
-            "Can't find a content GUID in {.url {source}}.",
-            i = "Supported URLs contain {.code /content/<guid>} (a content
-                 URL) or {.code #/apps/<guid>} (a dashboard URL)."
-          ),
-          call = call
-        )
+        vanity <- content_vanity_url(source)
+        if (!is.null(vanity)) {
+          client <- connect_client(server = vanity$server, call = call)
+          return(list(
+            kind = "connect",
+            guid = connect_vanity_guid(client, source, vanity$query, call),
+            client = client
+          ))
+        }
+        trajectory_url_abort(source, call)
       }
       return(list(
         kind = "connect",
@@ -262,6 +268,69 @@ resolve_trajectory_source <- function(source, call = rlang::caller_env()) {
      GUID, or a Connect content URL.",
     call = call
   )
+}
+
+trajectory_url_abort <- function(source, call) {
+  cli::cli_abort(
+    c(
+      "Can't identify Connect content from {.url {source}}.",
+      i = "Supported URLs contain {.code /content/<guid>},
+           {.code /content/<name>}, or {.code #/apps/<guid>}."
+    ),
+    call = call
+  )
+}
+
+trajectory_guid_server <- function(call = rlang::caller_env()) {
+  server <- Sys.getenv("CONNECT_SERVER")
+  if (nzchar(server)) {
+    return(server)
+  }
+
+  deployment <- find_rsconnect_deployment()
+  if (!is.null(deployment)) {
+    return(deployment$server)
+  }
+
+  servers <- registered_connect_servers()
+  if (length(servers) == 1) {
+    return(servers)
+  }
+
+  message <- c(
+    "Can't determine which Posit Connect server contains this GUID.",
+    i = "Set {.envvar CONNECT_SERVER} or pass a full content URL."
+  )
+  if (length(servers) > 1) {
+    message <- c(
+      message,
+      i = "Registered Connect servers: {.url {servers}}."
+    )
+  }
+  cli::cli_abort(message, call = call)
+}
+
+registered_connect_servers <- function() {
+  if (!requireNamespace("rsconnect", quietly = TRUE)) {
+    return(character())
+  }
+  accounts <- tryCatch(rsconnect::accounts(), error = function(err) NULL)
+  if (is.null(accounts) || nrow(accounts) == 0) {
+    return(character())
+  }
+
+  names <- unique(accounts$server)
+  names <- setdiff(names, c("shinyapps.io", "connect.posit.cloud"))
+  servers <- vapply(
+    names,
+    function(name) {
+      info <- tryCatch(rsconnect::serverInfo(name), error = function(err) NULL)
+      if (is.null(info$url)) "" else info$url
+    },
+    character(1)
+  )
+  servers <- sub("/__api__/?$", "", servers)
+  unique(servers[nzchar(servers)])
 }
 
 resolve_default_source <- function(call = rlang::caller_env()) {
@@ -321,6 +390,18 @@ content_url_guid <- function(x) {
     return(list(server = match[2], guid = match[3]))
   }
   NULL
+}
+
+content_vanity_url <- function(x) {
+  if (!grepl("^https?://", x)) {
+    return(NULL)
+  }
+  x <- sub("[?#].*$", "", x)
+  match <- regmatches(x, regexec("^(.*?)/content/(.+?)/?$", x))[[1]]
+  if (length(match) == 0) {
+    return(NULL)
+  }
+  list(server = match[2], query = utils::URLdecode(match[3]))
 }
 
 # Find the project's Connect deployment record (written by rsconnect under

@@ -1154,6 +1154,56 @@ test_that("a GUID source resolves to a Connect read", {
   expect_equal(resolved$client$server, "https://connect.example.com")
 })
 
+test_that("a GUID source infers its server from rsconnect", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+  withr::local_dir(withr::local_tempdir())
+  local_mocked_bindings(
+    registered_connect_servers = function() "https://connect.example.com"
+  )
+
+  resolved <- resolve_trajectory_source(
+    "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+  )
+
+  expect_equal(resolved$client$server, "https://connect.example.com")
+})
+
+test_that("a GUID source prefers its environment and project deployment", {
+  withr::local_envvar(CONNECT_SERVER = "https://env.example.com")
+  expect_equal(trajectory_guid_server(), "https://env.example.com")
+
+  withr::local_envvar(CONNECT_SERVER = NA)
+  dir <- withr::local_tempdir()
+  record_dir <- file.path(dir, "rsconnect", "documents", "app.R", "server")
+  dir.create(record_dir, recursive = TRUE)
+  writeLines(
+    c(
+      "name: my-agent",
+      "hostUrl: https://project.example.com/__api__",
+      "url: https://project.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
+    ),
+    file.path(record_dir, "my-agent.dcf")
+  )
+  withr::local_dir(dir)
+
+  expect_equal(trajectory_guid_server(), "https://project.example.com")
+})
+
+test_that("a GUID source requires an unambiguous server", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+  withr::local_dir(withr::local_tempdir())
+  local_mocked_bindings(
+    registered_connect_servers = function() {
+      c("https://one.example.com", "https://two.example.com")
+    }
+  )
+
+  expect_snapshot(
+    resolve_trajectory_source("ea3c1445-cb71-42df-a2f2-bdb18874ef41"),
+    error = TRUE
+  )
+})
+
 test_that("a content URL source carries its own server", {
   withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
 
@@ -1176,6 +1226,42 @@ test_that("a dashboard URL source carries its own server", {
   expect_equal(resolved$kind, "connect")
   expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
   expect_equal(resolved$client$server, "https://connect.example.com")
+})
+
+test_that("a vanity URL is resolved through Connect", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+  state <- new.env()
+  local_mocked_bindings(
+    connect_vanity_guid = function(client, url, query, ...) {
+      state$client <- client
+      state$url <- url
+      state$query <- query
+      "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+    }
+  )
+
+  url <- "https://connect.example.com/content/my-agent"
+  resolved <- resolve_trajectory_source(url)
+
+  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_equal(state$client$server, "https://connect.example.com")
+  expect_equal(state$url, url)
+  expect_equal(state$query, "my-agent")
+})
+
+test_that("a vanity URL resolves against a configured Connect server", {
+  url <- Sys.getenv("COMMONS_TEST_CONNECT_VANITY_URL")
+  guid <- Sys.getenv("COMMONS_TEST_CONNECT_GUID")
+  skip_if(!nzchar(url), "COMMONS_TEST_CONNECT_VANITY_URL is not set")
+  skip_if(!nzchar(guid), "COMMONS_TEST_CONNECT_GUID is not set")
+  skip_if(
+    !nzchar(Sys.getenv("CONNECT_API_KEY")),
+    "CONNECT_API_KEY is not set"
+  )
+
+  resolved <- resolve_trajectory_source(url)
+
+  expect_equal(resolved$guid, guid)
 })
 
 test_that("a URL without a recognizable GUID errors rather than reading locally", {
@@ -1273,6 +1359,18 @@ test_that("content_url_guid extracts the server and GUID", {
 
   expect_null(content_url_guid("https://connect.example.com/other"))
   expect_null(content_url_guid("plain-string"))
+})
+
+test_that("content_vanity_url extracts the server and search query", {
+  expect_equal(
+    content_vanity_url("https://connect.example.com/content/my-agent/"),
+    list(server = "https://connect.example.com", query = "my-agent")
+  )
+  expect_equal(
+    content_vanity_url("https://connect.example.com/rsc/content/my%20agent"),
+    list(server = "https://connect.example.com/rsc", query = "my agent")
+  )
+  expect_null(content_vanity_url("https://connect.example.com/other"))
 })
 
 test_that("deployment records are found in project subdirectories", {
