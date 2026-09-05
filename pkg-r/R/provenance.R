@@ -50,7 +50,7 @@ provenance_aside <- function(tag, include_cited = FALSE) {
     '<shiny-aside label="%s"%s>%s</shiny-aside>',
     escape_attr(entry$label),
     if (is.null(icon)) "" else sprintf(' icon="%s"', escape_attr(icon)),
-    paste(entry$body, as.character(provenance_info_control()), sep = "\n\n")
+    paste(entry$body, as.character(provenance_info_control()))
   )
 }
 
