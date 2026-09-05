@@ -34,11 +34,9 @@
 #' [commons()].
 #'
 #' @return A list of conversations, named by conversation id and ordered
-#'   oldest-first. Each conversation is a list of [ellmer::Turn]s and carries
-#'   a `last_active` attribute: a `POSIXct` giving the time of the
-#'   conversation's most recent chat activity. The list carries a `source`
-#'   attribute identifying the local trace directory or Connect content from
-#'   which it was read.
+#'   oldest-first. Each conversation is a list with a `turns` field containing
+#'   a list of [ellmer::Turn]s and a `last_active` field containing a
+#'   `POSIXct` giving the time of the conversation's most recent chat activity.
 #'
 #' @examples
 #' \dontrun{
@@ -80,22 +78,7 @@ trajectory_read <- function(
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
-  attr(trajectories, "source") <- trajectory_source_record(resolved)
   trajectories
-}
-
-trajectory_source_record <- function(resolved) {
-  if (identical(resolved$kind, "connect")) {
-    return(list(
-      kind = "connect",
-      server = resolved$client$server,
-      content_guid = resolved$guid
-    ))
-  }
-  list(
-    kind = "local",
-    path = normalizePath(resolved$path, mustWork = FALSE)
-  )
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone
@@ -217,7 +200,11 @@ enough_trace_lines <- function(n, from, to) {
 # them as empty conversations reads like data loss, so drop them, pointing
 # at the likely cause when nothing at all carried content.
 drop_contentless <- function(trajectories) {
-  empty <- vapply(trajectories, function(turns) length(turns) == 0, logical(1))
+  empty <- vapply(
+    trajectories,
+    function(conversation) length(conversation$turns) == 0,
+    logical(1)
+  )
   if (length(trajectories) > 0 && all(empty)) {
     cli::cli_warn(c(
       "Found {length(trajectories)} conversation{?s} of spans, but none carry
@@ -670,13 +657,15 @@ build_trajectories <- function(spans) {
     function(span, id) {
       turns <- parsed[[exchange_key(span)]]
       exchanges <- split_exchanges(turns)
-      attr(turns, "last_active") <- nano_posixct(span_time(span))
       attr(turns, "provenance") <- associate_exchange_provenance(
         exchanges,
         candidates[[id]],
         id
       )
-      turns
+      list(
+        turns = turns,
+        last_active = nano_posixct(span_time(span))
+      )
     },
     latest,
     names(latest)

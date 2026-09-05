@@ -22,10 +22,6 @@ review_test_turns <- function() {
       )
     )
   )
-  attr(turns, "last_active") <- as.POSIXct(
-    "2026-08-11 09:30:00",
-    tz = "UTC"
-  )
   attr(turns, "provenance") <- list(list(
     provenance_tag = "B",
     citation_decisions = list(list(
@@ -36,6 +32,13 @@ review_test_turns <- function() {
     ))
   ))
   turns
+}
+
+review_test_conversation <- function() {
+  list(
+    turns = review_test_turns(),
+    last_active = as.POSIXct("2026-08-11 09:30:00", tz = "UTC")
+  )
 }
 
 review_test_notes <- function(id = "conv/1") {
@@ -60,7 +63,7 @@ review_test_notes <- function(id = "conv/1") {
 test_that("review_document renders a self-contained trajectory review", {
   markdown <- review_document(
     "conv/1",
-    review_test_turns(),
+    review_test_conversation(),
     list(conversation = TRUE, exchanges = 1L),
     review_test_notes(),
     updated_at = "2026-08-12T16:10:00Z"
@@ -151,7 +154,7 @@ test_that("review state round trips through YAML frontmatter", {
   writeLines(
     review_document(
       id,
-      review_test_turns(),
+      review_test_conversation(),
       list(conversation = TRUE, exchanges = 1L),
       review_test_notes(id),
       updated_at = "2026-08-12T16:10:00Z"
@@ -219,7 +222,7 @@ test_that("review state ignores unrelated Markdown and rejects malformed reviews
 test_that("conversation reviews are created, replaced, and removed", {
   parent <- withr::local_tempdir()
   review_dir <- file.path(parent, "reviews")
-  trajectories <- list(`conv/1` = review_test_turns())
+  trajectories <- list(`conv/1` = review_test_conversation())
 
   write_conversation_review(
     review_dir,
@@ -247,7 +250,7 @@ test_that("conversation reviews are created, replaced, and removed", {
   writeLines(
     review_document(
       "unknown",
-      review_test_turns(),
+      review_test_conversation(),
       list(conversation = TRUE, exchanges = integer()),
       list(),
       updated_at = "2026-08-12T16:10:00Z"
@@ -274,7 +277,7 @@ test_that("conversation reviews are created, replaced, and removed", {
 
 test_that("conversation reviews with notes remain after their final unflag", {
   review_dir <- withr::local_tempdir()
-  trajectories <- list(conv1 = review_test_turns())
+  trajectories <- list(conv1 = review_test_conversation())
   notes <- review_test_notes("conv1")[1]
 
   write_conversation_review(
