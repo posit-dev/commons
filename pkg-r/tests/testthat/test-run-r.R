@@ -122,6 +122,14 @@ test_that("run_r returns plots as images and opens the display", {
     res@value
   )
   expect_length(images, 1)
+  expect_identical(images[[1]]@type, "image/png")
+  expect_false(grepl("\n", images[[1]]@data, fixed = TRUE))
+  expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
+  expect_match(
+    html_svg_source(res@extra$display$html),
+    "viewBox='0 0 768.00 512.00'",
+    fixed = TRUE
+  )
   notes <- Filter(
     \(x) S7::S7_inherits(x, ellmer::ContentText),
     res@value
@@ -132,7 +140,11 @@ test_that("run_r returns plots as images and opens the display", {
     logical(1)
   )))
   expect_identical(res@extra$display$open, TRUE)
-  expect_match(res@extra$display$html, "data:image/png;base64,")
+  expect_match(
+    res@extra$display$html,
+    "data:image/svg+xml;base64,",
+    fixed = TRUE
+  )
   expect_match(res@extra$display$html, "commons-run-r-details")
   expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
   expect_match(res@extra$display$html, "<summary>Details</summary>", fixed = TRUE)
@@ -159,10 +171,18 @@ test_that("run_r collapses code and output above plots", {
   expect_match(res@extra$display$html, "#&gt; private text", fixed = TRUE)
   expect_match(res@extra$display$html, "#&gt; private message", fixed = TRUE)
   expect_match(res@extra$display$html, "#&gt; private warning", fixed = TRUE)
-  expect_match(res@extra$display$html, "data:image/png;base64,")
+  expect_match(
+    res@extra$display$html,
+    "data:image/svg+xml;base64,",
+    fixed = TRUE
+  )
   expect_lt(
     as.integer(regexpr("commons-run-r-details", res@extra$display$html)),
-    as.integer(regexpr("data:image/png;base64,", res@extra$display$html))
+    as.integer(regexpr(
+      "data:image/svg+xml;base64,",
+      res@extra$display$html,
+      fixed = TRUE
+    ))
   )
 })
 

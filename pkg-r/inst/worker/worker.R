@@ -509,12 +509,14 @@ worker_run_code <- function(
     if (is.null(last_plot)) {
       return()
     }
-    path <- tempfile("plot-", fileext = ".png")
-    if (requireNamespace("ragg", quietly = TRUE)) {
-      ragg::agg_png(path, width = plot_width, height = plot_height, scaling = 1.5)
-    } else {
-      grDevices::png(path, width = plot_width, height = plot_height)
-    }
+    path <- tempfile("plot-", fileext = ".svg")
+    # Match the parent process's point-sized SVG device.
+    svglite::svglite(
+      path,
+      width = plot_width / 72,
+      height = plot_height / 72,
+      scaling = 1.5
+    )
     tryCatch(
       grDevices::replayPlot(last_plot),
       finally = grDevices::dev.off()

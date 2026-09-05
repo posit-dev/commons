@@ -184,9 +184,11 @@ run_r_value <- function(segments) {
       source = NULL,
       plot = {
         flush()
-        out[[length(out) + 1L]] <- ellmer::content_image_file(
+        dims <- plot_dimensions()
+        out[[length(out) + 1L]] <- model_plot_image(
           seg$path,
-          resize = "none"
+          dims$width,
+          dims$height
         )
       },
       warning = buffer <- c(buffer, paste0("Warning: ", seg$text)),
@@ -226,12 +228,8 @@ run_r_html <- function(code, segments) {
     }
     if (seg$type == "plot") {
       plot_html <- c(plot_html, sprintf(
-        "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" alt=\"Plot produced by R code\"/>",
-        jsonlite::base64_enc(readBin(
-          seg$path,
-          "raw",
-          file.size(seg$path)
-        ))
+        "<img class=\"commons-run-r-plot\" src=\"data:image/svg+xml;base64,%s\" alt=\"Plot produced by R code\"/>",
+        plot_image_data(seg$path)
       ))
     } else {
       output <- c(
