@@ -1198,9 +1198,9 @@ test_that("a GUID source requires an unambiguous server", {
     }
   )
 
-  expect_error(
+  expect_snapshot(
     resolve_trajectory_source("ea3c1445-cb71-42df-a2f2-bdb18874ef41"),
-    "Can't determine which Posit Connect server"
+    error = TRUE
   )
 })
 
@@ -1247,6 +1247,21 @@ test_that("a vanity URL is resolved through Connect", {
   expect_equal(state$client$server, "https://connect.example.com")
   expect_equal(state$url, url)
   expect_equal(state$query, "my-agent")
+})
+
+test_that("a vanity URL resolves against a configured Connect server", {
+  url <- Sys.getenv("COMMONS_TEST_CONNECT_VANITY_URL")
+  guid <- Sys.getenv("COMMONS_TEST_CONNECT_GUID")
+  skip_if(!nzchar(url), "COMMONS_TEST_CONNECT_VANITY_URL is not set")
+  skip_if(!nzchar(guid), "COMMONS_TEST_CONNECT_GUID is not set")
+  skip_if(
+    !nzchar(Sys.getenv("CONNECT_API_KEY")),
+    "CONNECT_API_KEY is not set"
+  )
+
+  resolved <- resolve_trajectory_source(url)
+
+  expect_equal(resolved$guid, guid)
 })
 
 test_that("a URL without a recognizable GUID errors rather than reading locally", {

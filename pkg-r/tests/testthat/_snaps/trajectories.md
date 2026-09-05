@@ -65,6 +65,16 @@
       Error in `trajectory_read()`:
       ! `source` must be `NULL`, a directory path, a Connect content GUID, or a Connect content URL.
 
+# a GUID source requires an unambiguous server
+
+    Code
+      resolve_trajectory_source("ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+    Condition
+      Error:
+      ! Can't determine which Posit Connect server contains this GUID.
+      i Set `CONNECT_SERVER` or pass a full content URL.
+      i Registered Connect servers: <https://one.example.com> and <https://two.example.com>.
+
 # a URL without a recognizable GUID errors rather than reading locally
 
     Code
