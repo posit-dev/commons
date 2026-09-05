@@ -32,6 +32,7 @@ A commons agent project follows this on-disk convention. The onboarding, extract
 my-agent/
 ├── app.R                    # Shiny entry point
 ├── agent.R                  # reusable commons() construction
+├── deploy.R                 # prewarm context and deploy the app
 ├── DESCRIPTION
 ├── AGENTS.md                # or the active coding agent's equivalent
 ├── instructions.md          # optional concise, always-needed guidance
