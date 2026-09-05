@@ -78,11 +78,7 @@ trajectory_read <- function(
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
-  lapply(trajectories, function(turns) {
-    last_active <- attr(turns, "last_active")
-    attr(turns, "last_active") <- NULL
-    list(turns = turns, last_active = last_active)
-  })
+  trajectories
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone
@@ -204,7 +200,11 @@ enough_trace_lines <- function(n, from, to) {
 # them as empty conversations reads like data loss, so drop them, pointing
 # at the likely cause when nothing at all carried content.
 drop_contentless <- function(trajectories) {
-  empty <- vapply(trajectories, function(turns) length(turns) == 0, logical(1))
+  empty <- vapply(
+    trajectories,
+    function(conversation) length(conversation$turns) == 0,
+    logical(1)
+  )
   if (length(trajectories) > 0 && all(empty)) {
     cli::cli_warn(c(
       "Found {length(trajectories)} conversation{?s} of spans, but none carry
@@ -657,13 +657,15 @@ build_trajectories <- function(spans) {
     function(span, id) {
       turns <- parsed[[exchange_key(span)]]
       exchanges <- split_exchanges(turns)
-      attr(turns, "last_active") <- nano_posixct(span_time(span))
       attr(turns, "provenance") <- associate_exchange_provenance(
         exchanges,
         candidates[[id]],
         id
       )
-      turns
+      list(
+        turns = turns,
+        last_active = nano_posixct(span_time(span))
+      )
     },
     latest,
     names(latest)

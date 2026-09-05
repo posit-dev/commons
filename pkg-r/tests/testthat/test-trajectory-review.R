@@ -65,7 +65,6 @@ test_that("summarize_trajectories describes each conversation", {
     test_tool_turns("run_sql", id = "c2"),
     list(ellmer::AssistantTurn("5650."))
   )
-  attr(active, "last_active") <- as.POSIXct("2026-07-22 14:30:00")
   attr(active, "provenance") <- list(
     provenance_record("A"),
     provenance_record("C")
@@ -75,7 +74,13 @@ test_that("summarize_trajectories describes each conversation", {
     ellmer::AssistantTurn("Revenue excludes tax.")
   )
   attr(conv2, "provenance") <- list(provenance_record(NA_character_))
-  trajectories <- list(conv1 = active, conv2 = conv2)
+  trajectories <- list(
+    conv1 = list(
+      turns = active,
+      last_active = as.POSIXct("2026-07-22 14:30:00")
+    ),
+    conv2 = list(turns = conv2, last_active = as.POSIXct(NA))
+  )
 
   summary <- summarize_trajectories(trajectories)
 
@@ -210,7 +215,10 @@ test_that("side calls are excluded from the viewer", {
   expect_true(is_side_conversation(promptless))
   expect_false(is_side_conversation(real))
 
-  trajectories <- list(t = title_call, p = promptless, r = real)
+  trajectories <- lapply(
+    list(t = title_call, p = promptless, r = real),
+    function(turns) list(turns = turns, last_active = as.POSIXct(NA))
+  )
   expect_message(
     kept <- drop_side_conversations(trajectories),
     "Excluding 2 logged calls"
@@ -229,14 +237,19 @@ test_that("summarize_questions flattens exchanges across conversations", {
     test_tool_turns("run_sql", id = "c2"),
     list(ellmer::AssistantTurn("5650."))
   )
-  attr(first, "last_active") <- as.POSIXct("2026-07-22 14:30:00")
   attr(first, "provenance") <- list(
     provenance_record("A"),
     provenance_record("C")
   )
   conv2 <- list(ellmer::UserTurn("What does revenue mean?"))
   attr(conv2, "provenance") <- list(provenance_record(NA_character_))
-  trajectories <- list(conv1 = first, conv2 = conv2)
+  trajectories <- list(
+    conv1 = list(
+      turns = first,
+      last_active = as.POSIXct("2026-07-22 14:30:00")
+    ),
+    conv2 = list(turns = conv2, last_active = as.POSIXct(NA))
+  )
 
   questions <- summarize_questions(trajectories)
 
@@ -269,16 +282,23 @@ test_that("the viewer filters conversations and follows selection", {
     test_tool_turns("call_measure"),
     list(ellmer::AssistantTurn("1."))
   )
-  attr(early, "last_active") <- as.POSIXct("2026-07-01 09:00:00")
   attr(early, "provenance") <- list(provenance_record("A"))
   late <- c(
     list(ellmer::UserTurn("Two?")),
     test_tool_turns("run_sql"),
     list(ellmer::AssistantTurn("2."))
   )
-  attr(late, "last_active") <- as.POSIXct("2026-07-20 09:00:00")
   attr(late, "provenance") <- list(provenance_record("C"))
-  trajectories <- list(conv1 = early, conv2 = late)
+  trajectories <- list(
+    conv1 = list(
+      turns = early,
+      last_active = as.POSIXct("2026-07-01 09:00:00")
+    ),
+    conv2 = list(
+      turns = late,
+      last_active = as.POSIXct("2026-07-20 09:00:00")
+    )
+  )
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   review_dir <- withr::local_tempdir()
@@ -363,7 +383,9 @@ test_that("flags and notes write to and restore from review documents", {
   skip_if_not_installed("htmltools")
 
   turns <- list(ellmer::UserTurn("One?"), ellmer::AssistantTurn("1."))
-  trajectories <- list(conv1 = turns)
+  trajectories <- list(
+    conv1 = list(turns = turns, last_active = as.POSIXct(NA))
+  )
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   review_dir <- withr::local_tempdir()
