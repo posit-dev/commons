@@ -346,10 +346,25 @@ test_that("prewarm_downloads() downloads best-effort, tolerating a bad pin", {
   )
 })
 
+test_that("source_prewarm() downloads pins in its background process", {
+  skip_if_not_installed("pins")
+
+  board <- board_with_pins("team-orders" = data.frame(id = 1:3))
+  src <- data_source(board, tables = c(orders = "team-orders"))
+
+  source_prewarm(src)
+  process <- data_source_state(src)$pending$process
+  process$wait(5000)
+
+  expect_equal(process$get_result(), c("team-orders" = TRUE))
+})
+
 test_that("source_prewarm() spawns at most one live process per source", {
   skip_if_not_installed("pins")
 
-  local_mocked_bindings(prewarm_downloads = function(board, pins) Sys.sleep(30))
+  local_mocked_bindings(
+    prewarm_downloads = function(board, pins, lock) Sys.sleep(30)
+  )
   board <- board_with_pins("team-orders" = data.frame(id = 1:3))
   src <- data_source(board, tables = c(orders = "team-orders"))
 

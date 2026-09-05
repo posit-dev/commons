@@ -536,7 +536,11 @@ source_prewarm <- function(source) {
   pending$process <- tryCatch(
     callr::r_bg(
       prewarm_downloads,
-      args = list(board = pending$board, pins = unique(unname(pending$pins))),
+      args = list(
+        board = pending$board,
+        pins = unique(unname(pending$pins)),
+        lock = with_pin_lock
+      ),
       supervise = TRUE
     ),
     error = function(err) NULL
@@ -549,13 +553,13 @@ source_prewarm <- function(source) {
 # functions in run-r.R). Best-effort: a failing pin is skipped so it can't
 # stop the rest from warming. The per-pin result is unused in production but
 # makes tests deterministic.
-prewarm_downloads <- function(board, pins) {
+prewarm_downloads <- function(board, pins, lock = with_pin_lock) {
   vapply(
     pins,
     function(pin) {
       tryCatch(
         {
-          with_pin_lock(board, pin, pins::pin_download(board, pin))
+          lock(board, pin, pins::pin_download(board, pin))
           TRUE
         },
         error = function(err) FALSE
