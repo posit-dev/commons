@@ -120,7 +120,7 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
 .commons-provenance-info {
   display: inline-flex;
   margin-left: 0.2rem;
-  vertical-align: -0.1em;
+  vertical-align: 0.1em;
 }
 
 .commons-provenance-info-trigger {
@@ -131,15 +131,15 @@ shiny-chat-container .shiny-chat-thinking[data-streaming] {
   color: var(--bs-secondary-color, #6c757d);
   display: inline-flex;
   font-family: inherit;
-  font-size: 0.625rem;
+  font-size: 0.55rem;
   font-style: normal;
   font-weight: 600;
-  height: 0.9rem;
+  height: 0.8rem;
   justify-content: center;
   line-height: 1;
   padding: 0;
   text-decoration: none;
-  width: 0.9rem;
+  width: 0.8rem;
 }
 
 .commons-provenance-info-trigger:hover {
