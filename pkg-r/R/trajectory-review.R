@@ -96,7 +96,10 @@ trajectory_review <- function(
   check_trajectories(trajectories)
   review_dir <- resolve_review_dir(review_dir)
   trajectories <- drop_side_conversations(trajectories)
-  trajectories[] <- lapply(trajectories, sanitize_trajectory_turns)
+  trajectories[] <- lapply(trajectories, function(conversation) {
+    conversation$turns <- sanitize_trajectory_turns(conversation$turns)
+    conversation
+  })
   summary <- summarize_trajectories(trajectories)
   questions <- summarize_questions(trajectories)
   shiny::shinyApp(
@@ -130,19 +133,35 @@ check_viewer_packages <- function(call = rlang::caller_env()) {
 check_trajectories <- function(trajectories, call = rlang::caller_env()) {
   ok <- is.list(trajectories) &&
     (length(trajectories) == 0 || !is.null(names(trajectories))) &&
-    all(vapply(trajectories, is.list, logical(1)))
+    all(vapply(
+      trajectories,
+      function(conversation) {
+        is.list(conversation) &&
+          "turns" %in% names(conversation) &&
+          is.list(conversation$turns) &&
+          "last_active" %in% names(conversation) &&
+          inherits(conversation$last_active, "POSIXct") &&
+          length(conversation$last_active) == 1
+      },
+      logical(1)
+    ))
 
   if (!ok) {
     cli::cli_abort(
       "{.arg trajectories} must be a named list of conversations as returned
-       by {.fn trajectory_read}: each a list of {.cls ellmer::Turn}s.",
+       by {.fn trajectory_read}: each with a {.code turns} list of
+       {.cls ellmer::Turn}s and a {.code last_active} {.cls POSIXct}.",
       call = call
     )
   }
 }
 
 drop_side_conversations <- function(trajectories) {
-  side <- vapply(trajectories, is_side_conversation, logical(1))
+  side <- vapply(
+    trajectories,
+    function(conversation) is_side_conversation(conversation$turns),
+    logical(1)
+  )
   if (any(side)) {
     cli::cli_inform(
       "Excluding {sum(side)} logged call{?s} that {?isn't/aren't} part of the
@@ -169,7 +188,8 @@ summarize_trajectories <- function(trajectories) {
   unname(Map(conversation_record, names(trajectories), trajectories))
 }
 
-conversation_record <- function(id, turns) {
+conversation_record <- function(id, conversation) {
+  turns <- conversation$turns
   exchanges <- split_exchanges(turns)
   provenance <- attr(turns, "provenance") %||% list()
   list(
@@ -181,14 +201,15 @@ conversation_record <- function(id, turns) {
       \(record) record$provenance_tag %||% NA_character_,
       character(1)
     ),
-    last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
+    last_active = conversation$last_active
   )
 }
 
 summarize_questions <- function(trajectories) {
   records <- list()
   for (i in rlang::seq2(1, length(trajectories))) {
-    turns <- trajectories[[i]]
+    conversation <- trajectories[[i]]
+    turns <- conversation$turns
     exchanges <- split_exchanges(turns)
     provenance <- attr(turns, "provenance") %||% list()
     for (j in rlang::seq2(1, length(exchanges))) {
@@ -203,7 +224,7 @@ summarize_questions <- function(trajectories) {
         } else {
           record$provenance_tag %||% NA_character_
         },
-        last_active = attr(turns, "last_active") %||% as.POSIXct(NA)
+        last_active = conversation$last_active
       )
     }
   }
@@ -546,7 +567,7 @@ viewer_server <- function(
       if (is.null(conversation)) {
         return(NULL)
       }
-      trajectory_messages(trajectories[[conversation]])
+      trajectory_messages(trajectories[[conversation]]$turns)
     })
     review_selection <- shiny::reactive({
       conversation <- selected_conversation()
@@ -729,7 +750,7 @@ viewer_server <- function(
       }
       if (
         !exchange %in%
-          seq_along(split_exchanges(trajectories[[conversation]]))
+          seq_along(split_exchanges(trajectories[[conversation]]$turns))
       ) {
         return()
       }
