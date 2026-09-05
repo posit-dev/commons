@@ -28,6 +28,60 @@ test_that("is_connect_runtime detects Connect env vars", {
   expect_true(is_connect_runtime())
 })
 
+test_that("connect_vanity_guid matches the full vanity URL", {
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ...) req,
+    req_perform = function(req, ...) req,
+    resp_body_json = function(resp, ...) {
+      list(
+        results = data.frame(
+          guid = c("wrong-guid", "right-guid"),
+          vanity_url = c(
+            "https://connect.example.com/my-agent-test/",
+            "https://connect.example.com/my-agent/"
+          )
+        ),
+        total = 1L
+      )
+    },
+    .package = "httr2"
+  )
+
+  guid <- connect_vanity_guid(
+    list(server = "https://connect.example.com", api_key = "key"),
+    "https://connect.example.com/content/my-agent",
+    "my-agent"
+  )
+
+  expect_equal(guid, "right-guid")
+})
+
+test_that("connect_vanity_guid explains an inaccessible URL", {
+  local_mocked_bindings(
+    connect_req = function(client, ...) structure(list(), class = "fake_req")
+  )
+  local_mocked_bindings(
+    req_url_query = function(req, ...) req,
+    req_perform = function(req, ...) req,
+    resp_body_json = function(resp, ...) {
+      list(results = data.frame(), total = 1L)
+    },
+    .package = "httr2"
+  )
+
+  expect_error(
+    connect_vanity_guid(
+      list(server = "https://connect.example.com", api_key = "key"),
+      "https://connect.example.com/content/missing",
+      "missing"
+    ),
+    "Can't find content for the Connect vanity URL"
+  )
+})
+
 test_that("connect_trace_lines pages until the total is exhausted", {
   pages <- list(
     c("line1", "line2"),

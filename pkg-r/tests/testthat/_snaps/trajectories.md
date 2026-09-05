@@ -71,6 +71,6 @@
       resolve_trajectory_source("https://connect.example.com/other")
     Condition
       Error:
-      ! Can't find a content GUID in <https://connect.example.com/other>.
-      i Supported URLs contain `/content/<guid>` (a content URL) or `#/apps/<guid>` (a dashboard URL).
+      ! Can't identify Connect content from <https://connect.example.com/other>.
+      i Supported URLs contain `/content/<guid>`, `/content/<name>`, or `#/apps/<guid>`.
 
