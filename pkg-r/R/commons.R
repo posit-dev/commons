@@ -12,8 +12,10 @@
 #' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
-#'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
-#'   ignored, with a warning; use `instructions` to add to commons' prompt.
+#'   [ellmer::chat_anthropic()]. For best results, enable thinking when
+#'   supported by the selected provider and model. A system prompt already set
+#'   on the client is ignored, with a warning; use `instructions` to add to
+#'   commons' prompt.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()].
