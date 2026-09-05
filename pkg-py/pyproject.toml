@@ -17,6 +17,7 @@ dependencies = [
     "jinja2>=3",
     "pyarrow>=17",
     "sqlglot>=25",
+    "google-re2>=1.1.20251105",
 ]
 
 [project.urls]
