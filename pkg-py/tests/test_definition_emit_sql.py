@@ -26,7 +26,7 @@ def compile_corpus(filename: str, dialect: str) -> dict:
     dictionary = DataDictionary.model_validate(
         yaml.safe_load(path.read_text(encoding="utf-8"))
     )
-    attach_compiled_definitions(dictionary, dialect)
+    attach_compiled_definitions(dictionary, dialect, set(dictionary.tables))
     return {
         f"{table_name}::{record.name}": record
         for table_name, table in dictionary.tables.items()
@@ -89,7 +89,7 @@ def test_a_dialect_commons_cannot_lower_is_still_refused():
         }
     )
     with pytest.raises(ValueError, match="postgresql"):
-        attach_compiled_definitions(dictionary, "postgresql")
+        attach_compiled_definitions(dictionary, "postgresql", set(dictionary.tables))
 
 
 def test_warehouse_refusals_match_the_shared_contract():
@@ -114,11 +114,13 @@ def test_warehouse_refusals_match_the_shared_contract():
             dialect = target[len("SQL(") : -1]
             if "error_contains" in expected:
                 with pytest.raises(ValueError) as excinfo:
-                    attach_compiled_definitions(dictionary, dialect)
+                    attach_compiled_definitions(
+                        dictionary, dialect, set(dictionary.tables)
+                    )
                 for fragment in expected["error_contains"]:
                     assert fragment in str(excinfo.value), info
             else:
-                attach_compiled_definitions(dictionary, dialect)
+                attach_compiled_definitions(dictionary, dialect, set(dictionary.tables))
                 (record,) = dictionary.tables[case["table"]].compiled_definitions
                 assert record.sql == expected["code"], info
             checked += 1
@@ -165,7 +167,7 @@ def test_a_referenced_definition_is_inlined_for_each_dialect(
             ]
         }
     )
-    attach_compiled_definitions(dictionary, dialect)
+    attach_compiled_definitions(dictionary, dialect, set(dictionary.tables))
     records = {r.name: r for r in dictionary.tables["t"].compiled_definitions}
     assert records["d"].sql == expected
 
@@ -187,7 +189,7 @@ def test_a_backquoted_identifier_survives_composition_on_databricks():
             ]
         }
     )
-    attach_compiled_definitions(dictionary, "databricks")
+    attach_compiled_definitions(dictionary, "databricks", set(dictionary.tables))
     records = {r.name: r for r in dictionary.tables["t"].compiled_definitions}
     assert records["d"].sql == "(`we``ird` > 100) AND `we``ird` < 500"
 
