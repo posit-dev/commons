@@ -9,6 +9,9 @@ license-files = ["LICENSE.md"]
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
     "chatlas>=0.22.0",
+    # The API only. The SDK, which turns spans into exported data, is optional
+    # and lives in the `tracing` extra.
+    "opentelemetry-api>=1.0",
     "pydantic>=2",
     "duckdb>=1.0",
     "raghilda>=0.2.1",
