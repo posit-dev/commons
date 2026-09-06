@@ -1,3 +1,15 @@
+test_that("strip_frontmatter matches the shared cases", {
+  cases <- shared_fixture("context_layer")$strip_frontmatter$cases
+
+  for (case in cases) {
+    expect_identical(
+      strip_frontmatter(case$input),
+      case$expected,
+      info = case$name
+    )
+  }
+})
+
 test_that("context_layer indexes files and finds relevant chunks", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
