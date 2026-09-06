@@ -1,0 +1,124 @@
+{
+  "corpus_dir": "definition-export",
+  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested. `composed_code` pins the SQL after a referenced sibling definition is inlined, and appears only where that composition is the point. The `unsupported` section holds constructs a target cannot express, with inline dictionaries rather than corpus keys: `error_contains` pins the refusal, and a target that accepts the construct pins `code`.",
+  "cases": {
+    "functions.yaml": {
+      "values::strings": {
+        "SQL(snowflake)": {
+          "code": "STARTSWITH(lower(trim(\"text\")), 'a') OR ENDSWITH(upper(\"text\"), 'Z')"
+        },
+        "SQL(databricks)": {
+          "code": "startswith(lower(trim(`text`)), 'a') OR endswith(upper(`text`), 'Z')"
+        }
+      },
+      "values::remainder": {
+        "SQL(snowflake)": {
+          "code": "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE MOD(MOD(\"number\", 3) + 3, 3) END"
+        },
+        "SQL(databricks)": {
+          "code": "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE MOD(MOD(`number`, 3) + 3, 3) END"
+        }
+      },
+      "values::patterns": {
+        "SQL(snowflake)": { "code_contains": ["REGEXP_LIKE"] },
+        "SQL(databricks)": { "code_contains": ["regexp_like", "concat('^(?:'"] }
+      },
+      "values::finite": {
+        "SQL(snowflake)": { "code_contains": ["NOT ("] },
+        "SQL(databricks)": { "code_contains": ["NOT (CASE"] }
+      }
+    },
+    "language.yaml": {
+      "survey::fresh": {
+        "SQL(snowflake)": {
+          "code": "\"observed\" >= DATEADD(MICROSECOND, -((2) * 604800000000), CURRENT_TIMESTAMP())"
+        },
+        "SQL(databricks)": {
+          "code": "`observed` >= timestampadd(MICROSECOND, -((2) * 604800000000), CURRENT_TIMESTAMP())"
+        }
+      },
+      "survey::fractional interval": {
+        "SQL(snowflake)": {
+          "code": "DATEADD(MICROSECOND, -((1.5) * 3600000000), \"observed\")"
+        },
+        "SQL(databricks)": {
+          "code": "timestampadd(MICROSECOND, -((1.5) * 3600000000), `observed`)"
+        }
+      },
+      "survey::postal length": {
+        "SQL(snowflake)": { "code": "length(GET(\"profile\", 'zip'))" },
+        "SQL(databricks)": { "code": "length(`profile`.`zip`)" }
+      },
+      "survey::long postal": {
+        "SQL(snowflake)": {
+          "composed_code": "(length(GET(\"profile\", 'zip'))) > 5"
+        },
+        "SQL(databricks)": {
+          "composed_code": "(length(`profile`.`zip`)) > 5"
+        }
+      },
+      "survey::complete": {
+        "SQL(databricks)": { "code": "`q1` IS NOT NULL AND `q2` IS NOT NULL" }
+      },
+      "survey::offset time": {
+        "SQL(snowflake)": {
+          "code": "\"observed\" >= TO_TIMESTAMP_TZ('2024-01-01 07:30:00 +00:00')"
+        }
+      },
+      "survey::fractional time": {
+        "SQL(databricks)": {
+          "code": "`observed` <= make_timestamp(2024, 1, 1, 1, 30, 0.123, 'UTC')"
+        }
+      },
+      "survey::dynamic match": {
+        "SQL(snowflake)": { "notes_contain": ["newline characters"] }
+      },
+      "survey::negative quotient": {
+        "SQL(snowflake)": { "code_contains": ["CASE WHEN"] },
+        "SQL(databricks)": { "notes_contain": ["negative zero divisor"] }
+      }
+    }
+  },
+  "unsupported": {
+    "standalone interval": {
+      "table": "values",
+      "definition": {"name": "duration", "expr": "interval(2, days)"},
+      "targets": {
+        "SQL(snowflake)": {"error_contains": ["standalone interval"]},
+        "SQL(databricks)": {"error_contains": ["standalone interval"]}
+      }
+    },
+    "dynamic round scale": {
+      "table": "values",
+      "columns": [{"name": "number", "type": "number(quantity)"}],
+      "definition": {"name": "dynamic_round", "expr": "ROUND(number, number)"},
+      "targets": {
+        "SQL(snowflake)": {"code": "round(\"number\", TRUNC(\"number\"))"},
+        "SQL(databricks)": {"error_contains": ["dynamic ROUND"]}
+      }
+    },
+    "fractional round scale": {
+      "table": "values",
+      "columns": [{"name": "number", "type": "number(quantity)"}],
+      "definition": {"name": "fractional_scale", "expr": "ROUND(number, 1.5)"},
+      "targets": {
+        "SQL(snowflake)": {"code": "round(\"number\", TRUNC(1.5))"},
+        "SQL(databricks)": {"code": "round(`number`, CAST(1.5 AS INT))"}
+      }
+    },
+    "nanosecond datetime": {
+      "table": "values",
+      "columns": [{"name": "observed", "type": "datetime"}],
+      "definition": {
+        "name": "after_threshold",
+        "expr": "observed > '2024-01-01T00:00:00.123456789Z'"
+      },
+      "targets": {
+        "SQL(snowflake)": {
+          "code": "\"observed\" > TO_TIMESTAMP_TZ('2024-01-01 00:00:00.123456789 +00:00')"
+        },
+        "SQL(databricks)": {"error_contains": ["microsecond precision"]}
+      }
+    }
+  }
+}
