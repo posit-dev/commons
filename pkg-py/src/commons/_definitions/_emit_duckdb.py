@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ._export import Ir
+if TYPE_CHECKING:
+    from ._export import Ir
 
 __all__ = ["emit_duckdb"]
 

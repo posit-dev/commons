@@ -145,6 +145,13 @@ def test_a_float_is_written_in_fixed_notation_however_large():
     assert float(written) == 1e20
 
 
+def test_a_float_is_written_in_fixed_notation_however_small():
+    # Python's repr would give `1e-06`, which is not what data-dict emits.
+    written = sql("amount > 0.000001").split(" > ")[1]
+    assert "e" not in written and "E" not in written
+    assert float(written) == 1e-6
+
+
 def test_a_float_round_trips_to_the_value_it_came_from():
     for literal in ["0.1", "1.5", "3.14159265358979", "0.000001"]:
         written = sql(f"amount > {literal}").split(" > ")[1]

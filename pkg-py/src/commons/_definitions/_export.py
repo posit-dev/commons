@@ -8,7 +8,8 @@ A definition's `expr` is written in data-dict's typed expression language, not
 in the SQL dialect of the attached source, so it cannot be run as authored. It
 is parsed, type-checked against the dictionary, given an inferred kind and
 value type, and its direct column and sibling-definition references resolved.
-Lowering to a dialect happens later, against a source.
+The type-checked expression is then lowered to DuckDB SQL, with notes where
+DuckDB's semantics differ from data-dict's.
 
 Conformance against the data-dict binary is the authority here, not this code
 and not its R counterpart in `pkg-r/R/definition-export.R`.
@@ -23,6 +24,7 @@ from typing import Any
 
 import re2
 
+from ._emit_duckdb import emit_duckdb
 from ._expression import Node, parse_expression
 
 __all__ = ["DefinitionExport", "TableExport", "export_spec"]
@@ -64,7 +66,7 @@ class Ir:
 
 @dataclass
 class DefinitionExport:
-    """One definition's export record, before a source lowers it."""
+    """One definition's export record, with its DuckDB lowering."""
 
     name: str
     label: str | None
@@ -76,7 +78,7 @@ class DefinitionExport:
     type: str | None
     columns: list[str]
     definitions: list[str]
-    # Filled by the emitter once a source supplies a dialect.
+    # The DuckDB lowering and its conformance notes, filled during resolution.
     translations: list[dict[str, Any]] = field(default_factory=list)
     ir: Ir | None = None
     shape: str = "row"
@@ -259,8 +261,6 @@ def _resolve_one(
         raise ValueError(
             f"Definition {name!r} on table {table!r} has no inferred type."
         )
-
-    from ._emit_duckdb import emit_duckdb
 
     emitted = emit_duckdb(ir, state.selection)
     references = _direct_references(
