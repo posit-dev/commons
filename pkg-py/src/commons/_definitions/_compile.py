@@ -134,6 +134,10 @@ def _compile_table(
             f"and aggregate grain and would need a subquery rewrite."
         )
     markers = _reference_markers(definitions)
+    # Only the source's own target is lowered, and ExportRecord carries that
+    # one target. The R implementation emits every target up front and keeps
+    # them on the definition's translations, so an unselected target's error
+    # is inspectable there; here it is never computed.
     emitted = {}
     for name, definition in definitions.items():
         if definition.ir is None:

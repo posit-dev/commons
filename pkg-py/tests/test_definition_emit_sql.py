@@ -18,6 +18,7 @@ from commons._definitions import attach_compiled_definitions
 from tests._shared import SHARED_DIR, load_shared_fixture
 
 _DIALECT_TARGETS = {"snowflake": "SQL(snowflake)", "databricks": "SQL(databricks)"}
+_EXPECTED_KEYS = {"code", "code_contains", "notes_contain", "composed_code"}
 
 
 def compile_corpus(filename: str, dialect: str) -> dict:
@@ -50,10 +51,18 @@ def test_the_warehouse_lowering_matches_the_shared_contract():
         }
         for key, targets in cases.items():
             for target, expected in targets.items():
+                unknown = set(expected) - _EXPECTED_KEYS
+                assert not unknown, f"{filename} {key} {target}: {sorted(unknown)}"
                 record = compiled[target][key]
                 assert record.target == target, key
+                # record.sql is the composed SQL either way: the uncomposed
+                # per-target emission is not exposed (see _compile.py).
                 if "code" in expected:
                     assert record.sql == expected["code"], f"{filename} {key} {target}"
+                if "composed_code" in expected:
+                    assert record.sql == expected["composed_code"], (
+                        f"{filename} {key} {target}"
+                    )
                 for fragment in expected.get("code_contains", []):
                     assert fragment in record.sql, f"{filename} {key} {target}"
                 for fragment in expected.get("notes_contain", []):
@@ -81,6 +90,88 @@ def test_a_dialect_commons_cannot_lower_is_still_refused():
     )
     with pytest.raises(ValueError, match="postgresql"):
         attach_compiled_definitions(dictionary, "postgresql")
+
+
+@pytest.mark.parametrize("dialect", ["snowflake", "databricks"])
+def test_a_standalone_interval_cannot_lower_for_a_warehouse(dialect: str):
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "values",
+                    "definitions": [
+                        {"name": "duration", "expr": "interval(2, days)"}
+                    ],
+                }
+            ]
+        }
+    )
+    attach_compiled_definitions(dictionary, "duckdb")
+    with pytest.raises(ValueError, match="standalone interval"):
+        attach_compiled_definitions(dictionary, dialect)
+
+
+def test_a_dynamic_round_scale_cannot_lower_for_databricks():
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "values",
+                    "columns": [{"name": "number", "type": "number"}],
+                    "definitions": [
+                        {"name": "dynamic_round", "expr": "ROUND(number, number)"}
+                    ],
+                }
+            ]
+        }
+    )
+    attach_compiled_definitions(dictionary, "snowflake")
+    with pytest.raises(ValueError, match="dynamic ROUND"):
+        attach_compiled_definitions(dictionary, "databricks")
+
+
+def test_a_constant_fractional_round_scale_lowers_for_both_warehouses():
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "values",
+                    "columns": [{"name": "number", "type": "number"}],
+                    "definitions": [
+                        {"name": "fractional_scale", "expr": "ROUND(number, 1.5)"}
+                    ],
+                }
+            ]
+        }
+    )
+    attach_compiled_definitions(dictionary, "snowflake")
+    records = {r.name: r for r in dictionary.tables["values"].compiled_definitions}
+    assert records["fractional_scale"].sql == 'round("number", TRUNC(1.5))'
+    attach_compiled_definitions(dictionary, "databricks")
+    records = {r.name: r for r in dictionary.tables["values"].compiled_definitions}
+    assert records["fractional_scale"].sql == "round(`number`, CAST(1.5 AS INT))"
+
+
+def test_a_nanosecond_datetime_cannot_lower_for_databricks():
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "values",
+                    "columns": [{"name": "observed", "type": "datetime"}],
+                    "definitions": [
+                        {
+                            "name": "after_threshold",
+                            "expr": "observed > '2024-01-01T00:00:00.123456789Z'",
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+    attach_compiled_definitions(dictionary, "snowflake")
+    with pytest.raises(ValueError, match="microsecond precision"):
+        attach_compiled_definitions(dictionary, "databricks")
 
 
 @pytest.mark.parametrize("dialect", ["snowflake", "databricks"])

@@ -1,6 +1,6 @@
 {
   "corpus_dir": "definition-export",
-  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested.",
+  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested. `composed_code` pins the SQL after a referenced sibling definition is inlined, and appears only where that composition is the point.",
   "cases": {
     "functions.yaml": {
       "values::strings": {
@@ -48,6 +48,14 @@
       "survey::postal length": {
         "SQL(snowflake)": { "code": "length(GET(\"profile\", 'zip'))" },
         "SQL(databricks)": { "code": "length(`profile`.`zip`)" }
+      },
+      "survey::long postal": {
+        "SQL(snowflake)": {
+          "composed_code": "(length(GET(\"profile\", 'zip'))) > 5"
+        },
+        "SQL(databricks)": {
+          "composed_code": "(length(`profile`.`zip`)) > 5"
+        }
       },
       "survey::complete": {
         "SQL(databricks)": { "code": "`q1` IS NOT NULL AND `q2` IS NOT NULL" }

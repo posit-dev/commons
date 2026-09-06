@@ -118,6 +118,28 @@ test_that("warehouse lowering matches the shared contract", {
   cases <- spec$cases
   expect_gt(length(cases), 0)
   checked <- 0
+  composed_compilations <- new.env(parent = emptyenv())
+  # Composed SQL exists only for the source's own target, so a case that
+  # pins composition recompiles the corpus with a mock source on that
+  # dialect, once per file and dialect.
+  compile_composed <- function(filename, target, tables) {
+    dialect <- sub("^SQL\\((.*)\\)$", "\\1", target)
+    cache <- paste(filename, dialect)
+    if (!exists(cache, envir = composed_compilations)) {
+      local_mocked_bindings(
+        is_snowflake_connection = function(con) dialect == "snowflake",
+        is_databricks_connection = function(con) dialect == "databricks"
+      )
+      assign(
+        cache,
+        definition_compiled_table(
+          definition_compile_fixture(filename, definition_mock_source(tables))
+        ),
+        envir = composed_compilations
+      )
+    }
+    get(cache, envir = composed_compilations)
+  }
 
   for (filename in names(cases)) {
     file_cases <- cases[[filename]]
@@ -145,6 +167,14 @@ test_that("warehouse lowering matches the shared contract", {
         expected <- file_cases[[key]][[target]]
         actual <- definition_translation(definitions[[name]], target)
         info <- paste(filename, key, target)
+        unknown <- setdiff(
+          names(expected),
+          c("code", "code_contains", "notes_contain", "composed_code")
+        )
+        expect_true(
+          length(unknown) == 0,
+          info = paste(info, paste(unknown, collapse = ", "))
+        )
         if (!is.null(expected[["code"]])) {
           expect_equal(actual$code, expected[["code"]], info = info)
         }
@@ -154,6 +184,14 @@ test_that("warehouse lowering matches the shared contract", {
         for (fragment in expected[["notes_contain"]] %||% character()) {
           expect_true(
             any(grepl(fragment, actual$notes, fixed = TRUE)),
+            info = info
+          )
+        }
+        if (!is.null(expected[["composed_code"]])) {
+          composed <- compile_composed(filename, target, tables)
+          expect_equal(
+            composed[[name]]$sql,
+            expected[["composed_code"]],
             info = info
           )
         }
