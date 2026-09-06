@@ -312,7 +312,12 @@ catalog_match_exact_relation <- function(relations, id, requested = id) {
 
   relation <- relations[[which(is_requested)[[1]]]]
   relation$identity <- relation$id
-  relation$id <- requested
+  # A relation the warehouse reports without a namespace has none to be
+  # labelled with, and none to be queried under either: a Databricks
+  # temporary view answers only to its bare name.
+  if (any(c("catalog", "schema") %in% names(relation$identity@name))) {
+    relation$id <- requested
+  }
   relation$discovered <- TRUE
   relation
 }

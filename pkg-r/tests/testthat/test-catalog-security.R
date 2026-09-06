@@ -576,3 +576,41 @@ test_that("discovered relations may have an unknown kind", {
     relations = relations
   ))
 })
+
+test_that("relation labels match the shared contract", {
+  cases <- shared_fixture("catalog-relation-labels")$cases
+  expect_gt(length(cases), 0L)
+
+  for (case in cases) {
+    local_mocked_bindings(
+      dbGetQuery = catalog_labels_reply(case),
+      .package = "DBI"
+    )
+
+    registry <- catalog_table_registry(
+      con = DBI::ANSI(),
+      tables = catalog_labels_authored(case$authored),
+      current_namespace = catalog_labels_binding(case, "current_namespace"),
+      id_type = catalog_labels_binding(case, "id_type"),
+      exact_relation = catalog_labels_binding(case, "exact_relation"),
+      list_relations = function(...) list()
+    )
+
+    expect_equal(registry$labels, case$label, info = case$name)
+    # The access check pairs the two lists by label, so a selection entry has
+    # to be validated under the label it ended up with.
+    expect_equal(registry$validate$labels, case$label, info = case$name)
+
+    relation <- registry$relations[[case$label]]
+    expect_equal(
+      if (is.null(relation$identity)) NULL else table_id_label(relation$identity),
+      case$identity,
+      info = case$name
+    )
+    expect_equal(
+      isTRUE(relation$discovered),
+      !is.null(case$reported),
+      info = case$name
+    )
+  }
+})

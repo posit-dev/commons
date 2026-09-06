@@ -103,10 +103,79 @@ catalog_precedence_probed <- function(script) {
   )]
 }
 
-# The relation-label fixture's authored entry, as a `tables` string.
+# The relation-label fixture's authored entry, as a `tables` entry. A
+# `DBI::Id` rather than a dotted string, since a case may author a name that
+# contains a dot of its own.
 catalog_labels_authored <- function(authored) {
-  paste(
-    c(authored$catalog, authored$schema, authored$table),
-    collapse = "."
+  do.call(
+    DBI::Id,
+    c(
+      if (!is.null(authored$catalog)) list(catalog = authored$catalog),
+      if (!is.null(authored$schema)) list(schema = authored$schema),
+      list(table = authored$table)
+    )
   )
+}
+
+# The backend functions a relation-label case runs against.
+catalog_labels_backends <- list(
+  snowflake = list(
+    current_namespace = function(...) snowflake_current_namespace(...),
+    id_type = function(...) snowflake_id_type(...),
+    exact_relation = function(...) snowflake_exact_relation(...)
+  ),
+  databricks = list(
+    current_namespace = function(...) databricks_current_namespace(...),
+    id_type = function(...) databricks_id_type(...),
+    exact_relation = function(...) databricks_exact_relation(...)
+  )
+)
+
+catalog_labels_binding <- function(case, name) {
+  catalog_labels_backends[[case$backend]][[name]]
+}
+
+# The listing a relation-label case answers with. Only a Databricks
+# `SHOW TABLES` reply can report a relation with no namespace of its own,
+# which is what a session-scoped temporary view is.
+catalog_labels_reply <- function(case) {
+  function(conn, statement, ...) {
+    if (grepl("CURRENT_DATABASE|CURRENT_CATALOG", statement)) {
+      return(data.frame(
+        CATALOG = case$namespace$catalog,
+        SCHEMA = case$namespace$schema
+      ))
+    }
+    if (identical(case$backend, "databricks")) {
+      if (is.null(case$reported)) {
+        return(data.frame(
+          database = character(),
+          tableName = character(),
+          isTemporary = logical()
+        ))
+      }
+      temporary <- isTRUE(case$reported$temporary)
+      return(data.frame(
+        database = if (temporary) "" else case$namespace$schema,
+        tableName = case$reported$table,
+        isTemporary = temporary
+      ))
+    }
+    if (is.null(case$reported)) {
+      return(data.frame(
+        name = character(),
+        kind = character(),
+        database_name = character(),
+        schema_name = character(),
+        comment = character()
+      ))
+    }
+    data.frame(
+      name = case$reported$table,
+      kind = "TABLE",
+      database_name = case$reported$catalog,
+      schema_name = case$reported$schema,
+      comment = NA_character_
+    )
+  }
 }

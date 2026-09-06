@@ -13,6 +13,7 @@ import pytest
 import sqlalchemy.exc
 
 from commons._catalog import Relation, Selector, table_registry
+from commons._catalog import _databricks as databricks
 from commons._catalog import _snowflake as snowflake
 from commons._catalog._security import (
     CatalogAccessError,
@@ -184,13 +185,49 @@ class _LabelBackend:
         return "snowflake"
 
 
+class _HiveLabelBackend:
+    """A Databricks connection whose `SHOW TABLES` answers from the case.
+
+    Only this reply can report a relation with no namespace of its own, which
+    is what a session-scoped temporary view is.
+    """
+
+    def __init__(self, namespace, reported):
+        self._namespace = namespace
+        self._reported = reported
+
+    def query(self, sql: str):
+        if "CURRENT_CATALOG" in sql:
+            return [dict(self._namespace)]
+        if self._reported is None:
+            return []
+        temporary = bool(self._reported.get("temporary"))
+        return [
+            {
+                "database": "" if temporary else self._namespace["schema"],
+                "tableName": self._reported["table"],
+                "isTemporary": temporary,
+            }
+        ]
+
+    def dialect(self):
+        return "databricks"
+
+
+_LABEL_BACKENDS = {
+    "snowflake": (_LabelBackend, snowflake.exact_relation),
+    "databricks": (_HiveLabelBackend, databricks.exact_relation),
+}
+
+
 def test_relation_labels_match_the_shared_contract():
     cases = load_shared_fixture("catalog-relation-labels")["cases"]
     assert cases
 
     for case in cases:
         authored = case["authored"]
-        backend = _LabelBackend(case["namespace"], case["reported"])
+        connection, exact_relation = _LABEL_BACKENDS[case["backend"]]
+        backend = connection(case["namespace"], case["reported"])
         registry = table_registry(
             selectors=[
                 Selector(
@@ -199,7 +236,7 @@ def test_relation_labels_match_the_shared_contract():
                     table=authored["table"],
                 )
             ],
-            exact_relation=functools.partial(snowflake.exact_relation, backend),
+            exact_relation=functools.partial(exact_relation, backend),
             list_relations=lambda selector: [],
         )
 

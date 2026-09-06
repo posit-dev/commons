@@ -1,8 +1,9 @@
 {
-  "description": "The label a selection entry ends up under. The label is what the agent sees in the table listing, what a catalog search scores against, and what every access error names, so both packages have to derive it the same way. A confirmed entry takes the name as authored, qualified with the connection's namespace only when the entry named no schema of its own: that is what makes a bare entry name exactly one relation. An entry the warehouse never reported keeps the authored name whole, because there is no confirmed namespace to qualify it with and repeating what the caller typed is what makes the error legible. The warehouse's own id is kept separately as the relation's identity, since it carries that backend's casing and is what later metadata queries name. Identifiers here are already folded to the backend's case, so these cases pin qualification alone and say nothing about case folding, which `catalog-merge.json` covers.",
+  "description": "The label a selection entry ends up under. The label is what the agent sees in the table listing, what a catalog search scores against, and what every access error names, so both packages have to derive it the same way. A confirmed entry takes the name as authored, qualified with the connection's namespace only when the entry named no schema of its own: that is what makes a bare entry name exactly one relation. An entry the warehouse never reported keeps the authored name whole, because there is no confirmed namespace to qualify it with and repeating what the caller typed is what makes the error legible. A relation the warehouse reports without a namespace of its own keeps its bare name, because the label is also the id every later query names it by, and a namespace it does not belong to would name nothing. The warehouse's own id is kept separately as the relation's identity, since it carries that backend's casing and is what later metadata queries name. Identifiers here are already folded to the backend's case, so these cases pin qualification alone and say nothing about case folding, which `catalog-merge.json` covers. Each case names the backend it runs against, because only a Databricks `SHOW TABLES` reply can report a relation with no namespace.",
   "cases": [
     {
       "name": "a bare entry is qualified with the connection namespace",
+      "backend": "snowflake",
       "authored": {"table": "ORDERS"},
       "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
       "reported": {"catalog": "ANALYTICS", "schema": "PUBLIC", "table": "ORDERS"},
@@ -11,6 +12,7 @@
     },
     {
       "name": "an entry naming its own schema is not given a catalog",
+      "backend": "snowflake",
       "authored": {"schema": "SALES", "table": "ORDERS"},
       "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
       "reported": {"catalog": "ANALYTICS", "schema": "SALES", "table": "ORDERS"},
@@ -19,6 +21,7 @@
     },
     {
       "name": "a fully qualified entry is already its own label",
+      "backend": "snowflake",
       "authored": {"catalog": "ANALYTICS", "schema": "SALES", "table": "ORDERS"},
       "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
       "reported": {"catalog": "ANALYTICS", "schema": "SALES", "table": "ORDERS"},
@@ -27,11 +30,21 @@
     },
     {
       "name": "an entry the warehouse never reported keeps the authored name",
+      "backend": "snowflake",
       "authored": {"table": "ORDERS"},
       "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
       "reported": null,
       "label": "ORDERS",
       "identity": null
+    },
+    {
+      "name": "a temporary view is not given the namespace it was listed under",
+      "backend": "databricks",
+      "authored": {"table": "commons quoted.table"},
+      "namespace": {"catalog": "hive_metastore", "schema": "default"},
+      "reported": {"table": "commons quoted.table", "temporary": true},
+      "label": "commons quoted.table",
+      "identity": "commons quoted.table"
     }
   ]
 }

@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from .._data_source import TableId
-from ._core import Relation, Selector, id_type
+from ._core import Relation, Selector, id_type, matched_relation
 
 __all__ = [
     "columns_from_describe",
@@ -139,16 +139,36 @@ def _list_hive_relations(backend: Any, selector: Selector) -> list[Relation]:
     rows = backend.query(
         f"SHOW TABLES IN {_quote_path([selector.catalog or _HIVE, selector.schema])}"
     )
-    return [
-        Relation(
-            id=TableId(
-                catalog=selector.catalog,
-                schema=selector.schema,
-                table=_lower_keys(row)["tablename"],
+    relations = []
+    for row in rows:
+        values = _lower_keys(row)
+        temporary = _is_temporary(values)
+        relations.append(
+            Relation(
+                id=TableId(
+                    catalog=None if temporary else selector.catalog,
+                    schema=None if temporary else selector.schema,
+                    table=values["tablename"],
+                )
             )
         )
-        for row in rows
-    ]
+    return relations
+
+
+def _is_temporary(values: dict[str, Any]) -> bool:
+    """Whether a `SHOW TABLES` row is a session-scoped temporary view.
+
+    `SHOW TABLES` lists the session's temporary views alongside the schema's
+    own tables, reporting them with an empty database and `isTemporary` set. A
+    temporary view belongs to no schema and answers only to its bare name, so
+    qualifying it with the listed namespace would build an id naming nothing.
+    """
+    if "istemporary" in values:
+        return bool(values["istemporary"])
+    for column in ("database", "namespace"):
+        if column in values:
+            return not values[column]
+    return False
 
 
 def _is_hive(selector: Selector) -> bool:
@@ -179,12 +199,7 @@ def exact_relation(backend: Any, selector: Selector) -> Relation | None:
     )
     for relation in relations:
         if relation.id.table == requested.table:
-            return Relation(
-                id=requested,
-                kind=relation.kind,
-                description=relation.description,
-                identity=relation.id,
-            )
+            return matched_relation(relation, requested)
     return None
 
 

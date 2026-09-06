@@ -17,6 +17,7 @@ __all__ = [
     "check_exclude",
     "excluded",
     "id_type",
+    "matched_relation",
     "merge_dictionary",
     "normalize_identifier",
     "search",
@@ -82,6 +83,25 @@ class MergedDictionary:
     dictionary: Any
     relations: dict[str, Relation]
     definition_bindings: dict[str, Any] | None
+
+
+def matched_relation(relation: Relation, requested: TableId) -> Relation:
+    """An exact selection's match, under the label it was asked for.
+
+    `requested` is the authored name qualified with the namespace the lookup
+    ran in. The warehouse's own id is kept as the identity, since it carries
+    that backend's casing and is what later metadata queries name. A relation
+    the warehouse reports without a namespace has none to be labelled with,
+    and none to be queried under either: a Databricks temporary view answers
+    only to its bare name.
+    """
+    qualified = relation.id.schema is not None or relation.id.catalog is not None
+    return Relation(
+        id=requested if qualified else relation.id,
+        kind=relation.kind,
+        description=relation.description,
+        identity=relation.id,
+    )
 
 
 def normalize_identifier(value: Any, identifier_case: str | None) -> Any:
