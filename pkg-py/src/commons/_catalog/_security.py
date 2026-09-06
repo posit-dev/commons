@@ -8,8 +8,9 @@ relation is not probed again; a transient one is not, so the next touch
 retries; anything unrecognized is neither cached nor treated as a refusal.
 
 The session snapshot exists for the same reason. Access was decided for the
-principal, role, and namespace in force at discovery, so if any of those
-change the answers no longer apply and the source has to be rebuilt.
+principal and namespace in force at discovery, and on Snowflake for its
+active and secondary roles as well, so if any of those change the answers no
+longer apply and the source has to be rebuilt.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from .._data_source import TableId
 from ._core import Manifest, Relation
 
 __all__ = [
+    "CachedRefusal",
     "CatalogAccessError",
     "CatalogAuthorizationError",
     "CatalogSessionChangedError",
@@ -55,6 +57,10 @@ _TRANSIENT_MESSAGE = re.compile(
 
 _TRANSIENT_SQLSTATE = re.compile("^08|^HYT|^40|^57P01")
 
+# SQLAlchemy appends the statement, and its parameters, to the wrapper it
+# raises.
+_STATEMENT_TAIL = re.compile(r"\n\[(SQL|parameters): .*", re.DOTALL)
+
 
 class CatalogAccessError(Exception):
     """Query access to a relation could not be verified."""
@@ -70,6 +76,21 @@ class CatalogTransientError(CatalogAccessError):
 
 class CatalogSessionChangedError(Exception):
     """The connection's identity moved after the catalog was discovered."""
+
+
+class CachedRefusal(Exception):
+    """A driver's refusal, kept without the frames that produced it."""
+
+
+def _without_frames(error: BaseException) -> BaseException:
+    """The driver's complaint, detached from the stack that raised it.
+
+    A cached refusal outlives the failure by the life of the data source, and
+    an exception holds its traceback, which holds every frame below it and
+    the connection those frames were using. The type name and the message are
+    what a later `raise ... from` needs; the frames are not.
+    """
+    return CachedRefusal(f"{type(error).__name__}: {error}")
 
 
 @dataclass(frozen=True)
@@ -93,8 +114,10 @@ class Probe:
 def session_snapshot(backend: Any) -> SessionSnapshot | None:
     """Read the identity a Snowflake or Databricks connection is acting under.
 
-    Any other backend returns None: nothing else commons supports scopes
-    catalog access to a role that can change underneath the source.
+    Both report a principal and a namespace, and Snowflake its active and
+    secondary roles as well. Any other backend returns None: nothing else
+    commons supports scopes catalog access to an identity that can change
+    underneath the source.
     """
     dialect = backend.dialect()
     if dialect == "snowflake":
@@ -179,7 +202,7 @@ _FIELD_NAMES = {
 def changed_session_fields(
     current: SessionSnapshot | None, snapshot: SessionSnapshot
 ) -> list[str]:
-    """Which parts of the session identity differ, in snapshot order.
+    """Which parts of the session identity differ, in `_FIELD_NAMES` order.
 
     The refusal names what moved rather than everything it compares, because
     a backend need not have every field: Databricks reports no role, and
@@ -214,7 +237,7 @@ def classify_access_error(error: BaseException) -> str:
     is neither cached nor retried on its own.
     """
     sqlstate = _sqlstate(error)
-    message = str(error)
+    message = _driver_message(error)
     if (
         sqlstate.startswith("28")
         or sqlstate == "42501"
@@ -224,6 +247,17 @@ def classify_access_error(error: BaseException) -> str:
     if _TRANSIENT_SQLSTATE.match(sqlstate) or _TRANSIENT_MESSAGE.search(message):
         return "transient"
     return "unknown"
+
+
+def _driver_message(error: BaseException) -> str:
+    """What the driver complained about, without the statement that caused it.
+
+    The probe names the relation, so classifying the wrapper's text would let
+    a table decide its own answer: a `permission_denied_events` that is merely
+    absent would read as a refusal, and be cached as one.
+    """
+    driver = getattr(error, "orig", None) or error.__cause__ or error
+    return _STATEMENT_TAIL.sub("", str(driver))
 
 
 def _sqlstate(error: BaseException) -> str:
@@ -269,13 +303,15 @@ def require_queryable_relations(
     missing = [
         label
         for label in validate
-        if relations is not None and not relations[label].discovered
+        if relations is not None and _undiscovered(relations.get(label))
     ]
-    # Only the first refusal is raised, so only the first is kept: a
-    # selection may run to thousands of relations.
+    # A selection may run to thousands of relations, so the skip test reads
+    # from a set and the list is kept only to order the message.
+    skip = set(missing)
+    # Only the first refusal is raised, so only the first is kept.
     refused: tuple[Probe, str] | None = None
     for label, table_id in validate.items():
-        if label in missing:
+        if label in skip:
             continue
         probe = probe_relation(backend, table_id)
         if probe.state == "queryable":
@@ -288,6 +324,15 @@ def require_queryable_relations(
         _abort_missing(missing)
     if refused is not None:
         _abort_access(*refused)
+
+
+def _undiscovered(relation: Relation | None) -> bool:
+    """Whether the listing reported this relation, tolerating an absent entry.
+
+    A caller that passes a `relations` mapping the labels do not line up with
+    gets its relation probed rather than an error about the mapping.
+    """
+    return relation is not None and not relation.discovered
 
 
 def _relation_exists(backend: Any, table_id: TableId) -> bool | None:
@@ -327,7 +372,7 @@ def ensure_queryable(
     if probe.state == "authorization":
         manifest.access[label] = probe.state
         if probe.error is not None:
-            manifest.access_errors[label] = probe.error
+            manifest.access_errors[label] = _without_frames(probe.error)
     _abort_access(probe, label)
 
 

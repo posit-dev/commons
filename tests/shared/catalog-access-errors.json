@@ -1,5 +1,5 @@
 {
-  "description": "How a failed catalog access probe is classified from the driver's error. The classification decides which error a user sees and whether the failure is cached: an authorization failure is stable and is remembered per relation, a transient one is retried on the next touch, and an unknown one is neither. Drivers differ in what they raise, so each case gives only the two things every driver carries, a SQLSTATE (empty when the driver reported none) and a message.",
+  "description": "How a failed catalog access probe is classified from the driver's error. The classification decides which error a user sees and whether the failure is cached: an authorization failure is stable and is remembered per relation, a transient one is retried on the next touch, and an unknown one is neither. Drivers differ in what they raise, so each case gives only the two things every driver carries, a SQLSTATE (empty when the driver reported none) and a message. A case with a `sql` field asserts that only the driver's own complaint is read: both packages wrap a failing statement in a way that repeats it back, so each suite attaches that statement the way its own drivers do, and the expected kind stays the one the message alone earns.",
   "cases": [
     {
       "name": "insufficient privilege sqlstate",
@@ -96,6 +96,27 @@
       "sqlstate": "",
       "message": "column BOGUS not found",
       "kind": "unknown"
+    },
+    {
+      "name": "an absent relation whose name reads as a refusal",
+      "sqlstate": "42S02",
+      "message": "Object does not exist, or operation cannot be performed.",
+      "sql": "SELECT * FROM \"ANALYTICS\".\"PUBLIC\".\"PERMISSION_DENIED_EVENTS\" WHERE 1 = 0",
+      "kind": "unknown"
+    },
+    {
+      "name": "an absent relation whose name reads as transient",
+      "sqlstate": "42S02",
+      "message": "Object does not exist, or operation cannot be performed.",
+      "sql": "SELECT * FROM \"ANALYTICS\".\"PUBLIC\".\"NETWORK_SOCKET_TIMEOUTS\" WHERE 1 = 0",
+      "kind": "unknown"
+    },
+    {
+      "name": "a genuine refusal is still read through the statement",
+      "sqlstate": "",
+      "message": "SQL access control error: Insufficient privileges to operate on table 'ORDERS'",
+      "sql": "SELECT * FROM \"ANALYTICS\".\"PUBLIC\".\"ORDERS\" WHERE 1 = 0",
+      "kind": "authorization"
     }
   ]
 }

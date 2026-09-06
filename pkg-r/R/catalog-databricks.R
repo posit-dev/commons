@@ -300,7 +300,7 @@ databricks_exact_relation <- function(con, id, call = rlang::caller_env()) {
   } else {
     databricks_list_unity_relations(con, complete, call = call)
   }
-  catalog_match_exact_relation(relations, id)
+  catalog_match_exact_relation(relations, id, requested = complete)
 }
 
 databricks_relations_from_information_schema <- function(

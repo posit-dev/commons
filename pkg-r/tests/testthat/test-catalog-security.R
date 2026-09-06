@@ -80,6 +80,55 @@ test_that("catalog operations reject changed sessions", {
   )
 })
 
+test_that("a refusal reads several changed fields as a list", {
+  before <- list(
+    backend = "snowflake",
+    principal = "ANALYST",
+    role = "REPORTER",
+    secondary_roles = '{"roles":"READER","value":"ALL"}',
+    namespace = list(catalog = "ANALYTICS", schema = "PUBLIC")
+  )
+  local_mocked_bindings(
+    catalog_session_snapshot = function(...) {
+      list(
+        backend = "snowflake",
+        principal = "OTHER",
+        role = "ADMIN",
+        secondary_roles = '{"roles":"READER","value":"ALL"}',
+        namespace = list(catalog = "ANALYTICS", schema = "SALES")
+      )
+    }
+  )
+
+  err <- expect_error(
+    catalog_check_session_snapshot(DBI::ANSI(), before),
+    class = "commons_catalog_session_changed"
+  )
+  expect_match(
+    conditionMessage(err),
+    "principal, active role, and schema changed"
+  )
+})
+
+test_that("a refusal with nothing to name falls back to the identity", {
+  before <- list(
+    backend = "snowflake",
+    principal = "ANALYST",
+    role = "REPORTER",
+    secondary_roles = '{"roles":"READER","value":"ALL"}',
+    namespace = list(catalog = "ANALYTICS", schema = "PUBLIC")
+  )
+  # A connection that stops reporting a session at all: nothing compares, so
+  # there is no field to name and the refusal says so rather than nothing.
+  local_mocked_bindings(catalog_session_snapshot = function(...) NULL)
+
+  err <- expect_error(
+    catalog_check_session_snapshot(DBI::ANSI(), before),
+    class = "commons_catalog_session_changed"
+  )
+  expect_match(conditionMessage(err), "The connection identity changed")
+})
+
 test_that("transient access failures remain retryable", {
   source <- catalog_security_test_source()
   state <- data_source_state(source)
@@ -127,13 +176,71 @@ test_that("authorization failures are cached per relation", {
   expect_equal(calls, 1L)
 })
 
+test_that("a cached refusal still names what the driver said", {
+  source <- catalog_security_test_source()
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      list(
+        state = "authorization",
+        error = simpleError("permission denied on relation sales")
+      )
+    }
+  )
+
+  expect_error(
+    catalog_ensure_queryable(source, "sales"),
+    class = "commons_catalog_authorization_error"
+  )
+  # The second refusal never touched the warehouse, so what it is raised from
+  # has to come from the cache rather than from a fresh probe.
+  cached <- expect_error(
+    catalog_ensure_queryable(source, "sales"),
+    class = "commons_catalog_authorization_error"
+  )
+  expect_match(
+    conditionMessage(cached$parent),
+    "permission denied on relation sales"
+  )
+})
+
+test_that("an unrecognized failure is neither cached nor a refusal", {
+  source <- catalog_security_test_source()
+  state <- data_source_state(source)
+  calls <- 0L
+  local_mocked_bindings(
+    catalog_probe_relation = function(...) {
+      calls <<- calls + 1L
+      list(state = "unknown", error = simpleError("something odd"))
+    }
+  )
+
+  for (i in 1:2) {
+    expect_error(
+      catalog_ensure_queryable(source, "sales"),
+      class = "commons_catalog_access_error"
+    )
+  }
+
+  # Neither remembered nor treated as a refusal, so the next touch retries
+  # rather than being answered from the cache.
+  expect_equal(state$manifest$access[["sales"]], "unknown")
+  expect_null(state$manifest$access_errors[["sales"]])
+  expect_equal(calls, 2L)
+})
+
 test_that("warehouse access errors match the shared contract", {
   cases <- shared_fixture("catalog-access-errors")$cases
   expect_gt(length(cases), 0L)
 
   for (case in cases) {
+    message <- case$message
+    if (!is.null(case$sql)) {
+      # odbc repeats the statement back on a <SQL> line, which is how the
+      # probe's own relation name reaches the classifier.
+      message <- paste0(message, "\n<SQL> '", case$sql, "'")
+    }
     err <- structure(
-      list(message = case$message, call = NULL, sqlstate = case$sqlstate),
+      list(message = message, call = NULL, sqlstate = case$sqlstate),
       class = c("error", "condition")
     )
     expect_equal(catalog_access_error_kind(err), case$kind, info = case$name)
@@ -174,7 +281,7 @@ test_that("changed session fields match the shared contract", {
         catalog_session_fixture_snapshot(case$after),
         catalog_session_fixture_snapshot(case$before)
       ),
-      unlist(case$changed),
+      as.character(unlist(case$changed)),
       info = case$name
     )
   }

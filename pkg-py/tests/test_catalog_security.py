@@ -8,9 +8,11 @@ warehouse is the one deciding whether a principal may read a relation.
 from typing import Any
 
 import pytest
+import sqlalchemy.exc
 
 from commons._catalog import Manifest, Relation
 from commons._catalog._security import (
+    CachedRefusal,
     CatalogAccessError,
     CatalogAuthorizationError,
     CatalogSessionChangedError,
@@ -157,6 +159,31 @@ def test_a_databricks_refusal_never_names_a_role():
     assert "role" not in str(refusal.value)
 
 
+def test_a_refusal_reads_several_changed_fields_as_a_list():
+    taken = session_snapshot(FakeBackend([[snowflake_row()]]))
+    moved = FakeBackend(
+        [[{**snowflake_row(role="ADMIN"), "PRINCIPAL": "OTHER", "SCHEMA": "SALES"}]]
+    )
+
+    with pytest.raises(CatalogSessionChangedError) as refusal:
+        check_session(moved, taken)
+
+    assert "principal, active role and schema changed" in str(refusal.value)
+
+
+def test_a_refusal_with_nothing_to_name_falls_back_to_the_identity():
+    taken = session_snapshot(FakeBackend([[snowflake_row()]]))
+    assert taken is not None
+    # A backend that stops reporting a session at all: nothing compares, so
+    # there is no field to name and the refusal says so rather than nothing.
+    moved = FakeBackend(dialect="duckdb")
+
+    with pytest.raises(CatalogSessionChangedError) as refusal:
+        check_session(moved, taken)
+
+    assert "The connection identity changed" in str(refusal.value)
+
+
 def test_an_unchanged_session_passes():
     taken = session_snapshot(FakeBackend([[snowflake_row()]]))
     backend = FakeBackend([[snowflake_row()]])
@@ -213,6 +240,50 @@ def test_authorization_failures_are_cached_per_relation():
 
     assert manifest.access["sales"] == "authorization"
     assert len(backend.queries) == 1
+
+
+def test_a_cached_refusal_still_names_what_the_driver_said():
+    manifest = Manifest.build({"sales": Relation(id=SALES)})
+    backend = FakeBackend([DriverError("permission denied on relation sales")])
+
+    with pytest.raises(CatalogAuthorizationError):
+        ensure_queryable(backend, manifest, "sales", SALES)
+    with pytest.raises(CatalogAuthorizationError) as cached:
+        ensure_queryable(backend, manifest, "sales", SALES)
+
+    # The second refusal never touched the warehouse, so what it is raised
+    # from has to come from the cache rather than from a fresh probe.
+    assert backend.queries == [backend.queries[0]]
+    assert isinstance(cached.value.__cause__, CachedRefusal)
+    assert "permission denied on relation sales" in str(cached.value.__cause__)
+
+
+def test_a_cached_refusal_does_not_hold_on_to_the_failing_stack():
+    manifest = Manifest.build({"sales": Relation(id=SALES)})
+    backend = FakeBackend([DriverError("permission denied")])
+
+    with pytest.raises(CatalogAuthorizationError):
+        ensure_queryable(backend, manifest, "sales", SALES)
+
+    # An exception's traceback pins every frame below it, and the connection
+    # those frames were using, for as long as the manifest lives.
+    assert manifest.access_errors["sales"].__traceback__ is None
+
+
+def test_an_unrecognized_failure_is_neither_cached_nor_a_refusal():
+    manifest = Manifest.build({"sales": Relation(id=SALES)})
+    backend = FakeBackend([DriverError("something odd"), DriverError("something odd")])
+
+    for _ in range(2):
+        with pytest.raises(CatalogAccessError) as failure:
+            ensure_queryable(backend, manifest, "sales", SALES)
+        assert type(failure.value) is CatalogAccessError
+
+    # Neither remembered nor treated as a refusal, so the next touch retries
+    # rather than being answered from the cache.
+    assert manifest.access["sales"] == "unknown"
+    assert "sales" not in manifest.access_errors
+    assert len(backend.queries) == 2
 
 
 def test_a_relation_already_known_queryable_is_not_probed_again():
@@ -325,3 +396,28 @@ def test_a_chained_driver_error_still_yields_its_sqlstate():
     outer.__cause__ = inner
 
     assert classify_access_error(outer) == "authorization"
+
+
+def test_a_wrapped_driver_error_yields_its_sqlstate_through_orig():
+    # The branch real failures take: SQLAlchemy hangs the driver's own
+    # exception off `orig` rather than chaining it.
+    wrapped = sqlalchemy.exc.ProgrammingError(
+        'SELECT * FROM "ANALYTICS"."PUBLIC"."SALES" WHERE 1 = 0',
+        {},
+        DriverError("hidden", sqlstate="42501"),
+    )
+
+    assert classify_access_error(wrapped) == "authorization"
+
+
+def test_the_probe_statement_does_not_decide_the_classification():
+    # SQLAlchemy repeats the statement back, and the probe names the
+    # relation, so a table called permission_denied_events would otherwise
+    # read as a refusal and be cached as one.
+    wrapped = sqlalchemy.exc.ProgrammingError(
+        'SELECT * FROM "AUDIT"."PUBLIC"."PERMISSION_DENIED_EVENTS" WHERE 1 = 0',
+        {},
+        DriverError("Object does not exist", sqlstate="42S02"),
+    )
+
+    assert classify_access_error(wrapped) == "unknown"

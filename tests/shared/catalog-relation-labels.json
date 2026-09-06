@@ -1,0 +1,37 @@
+{
+  "description": "The label a selection entry ends up under. The label is what the agent sees in the table listing, what a catalog search scores against, and what every access error names, so both packages have to derive it the same way. A confirmed entry takes the name as authored, qualified with the connection's namespace only when the entry named no schema of its own: that is what makes a bare entry name exactly one relation. An entry the warehouse never reported keeps the authored name whole, because there is no confirmed namespace to qualify it with and repeating what the caller typed is what makes the error legible. The warehouse's own id is kept separately as the relation's identity, since it carries that backend's casing and is what later metadata queries name. Identifiers here are already folded to the backend's case, so these cases pin qualification alone and say nothing about case folding, which `catalog-merge.json` covers.",
+  "cases": [
+    {
+      "name": "a bare entry is qualified with the connection namespace",
+      "authored": {"table": "ORDERS"},
+      "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "reported": {"catalog": "ANALYTICS", "schema": "PUBLIC", "table": "ORDERS"},
+      "label": "ANALYTICS.PUBLIC.ORDERS",
+      "identity": "ANALYTICS.PUBLIC.ORDERS"
+    },
+    {
+      "name": "an entry naming its own schema is not given a catalog",
+      "authored": {"schema": "SALES", "table": "ORDERS"},
+      "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "reported": {"catalog": "ANALYTICS", "schema": "SALES", "table": "ORDERS"},
+      "label": "SALES.ORDERS",
+      "identity": "ANALYTICS.SALES.ORDERS"
+    },
+    {
+      "name": "a fully qualified entry is already its own label",
+      "authored": {"catalog": "ANALYTICS", "schema": "SALES", "table": "ORDERS"},
+      "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "reported": {"catalog": "ANALYTICS", "schema": "SALES", "table": "ORDERS"},
+      "label": "ANALYTICS.SALES.ORDERS",
+      "identity": "ANALYTICS.SALES.ORDERS"
+    },
+    {
+      "name": "an entry the warehouse never reported keeps the authored name",
+      "authored": {"table": "ORDERS"},
+      "namespace": {"catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "reported": null,
+      "label": "ORDERS",
+      "identity": null
+    }
+  ]
+}

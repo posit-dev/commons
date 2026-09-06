@@ -141,6 +141,12 @@ catalog_session_field_names <- c(
 # Name what moved rather than everything the snapshot compares: Databricks
 # has no role, so a fixed list would name a field that backend never had.
 catalog_session_changed_fields <- function(current, snapshot) {
+  # A connection reporting no session at all has no field that moved, and
+  # naming all of them would be the same mistake as naming a role Databricks
+  # never had. The refusal falls back to the identity as a whole.
+  if (is.null(current)) {
+    return(character())
+  }
   fields <- names(catalog_session_field_names)
   fields[vapply(
     fields,
@@ -188,13 +194,28 @@ catalog_probe_sql <- function(con, sql, bindings = list()) {
   )
 }
 
+# What the driver complained about, without the statement that caused it.
+# The probe names the relation, so classifying the whole message would let a
+# table decide its own answer: a permission_denied_events that is merely
+# absent would read as a refusal, and be cached as one. odbc appends the
+# statement on a <SQL> line.
+catalog_driver_message <- function(err) {
+  driver <- err$parent %||% err
+  sub("\n?<SQL> '.*", "", conditionMessage(driver))
+}
+
 catalog_access_error_kind <- function(err) {
   sqlstate <- toupper(as.character(
-    err$sqlstate %||% err$state %||% err$parent$sqlstate %||% ""
+    err$sqlstate %||%
+      err$state %||%
+      err$parent$sqlstate %||%
+      err$parent$state %||%
+      ""
   ))
   if (length(sqlstate) != 1L || is.na(sqlstate)) {
     sqlstate <- ""
   }
+  message <- catalog_driver_message(err)
   if (
     startsWith(sqlstate, "28") ||
       identical(sqlstate, "42501") ||
@@ -205,7 +226,7 @@ catalog_access_error_kind <- function(err) {
           "permission_denied|sql access control error|not allowed to access",
           sep = ""
         ),
-        conditionMessage(err),
+        message,
         ignore.case = TRUE
       )
   ) {
@@ -221,7 +242,7 @@ catalog_access_error_kind <- function(err) {
           "network|socket|http (429|503)|unexpected eof",
           sep = ""
         ),
-        conditionMessage(err),
+        message,
         ignore.case = TRUE
       )
   ) {

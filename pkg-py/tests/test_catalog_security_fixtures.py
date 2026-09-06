@@ -7,9 +7,13 @@ reported as changed decides what they are told to look at, so both are pinned
 once and read by both suites.
 """
 
-import pytest
+import functools
 
-from commons._catalog import Relation
+import pytest
+import sqlalchemy.exc
+
+from commons._catalog import Relation, Selector, table_registry
+from commons._catalog import _snowflake as snowflake
 from commons._catalog._security import (
     CatalogAccessError,
     CatalogAuthorizationError,
@@ -34,8 +38,16 @@ def test_access_errors_match_the_shared_contract():
     assert cases
 
     for case in cases:
-        error = DriverError(case["message"], case["sqlstate"] or None)
-        assert classify_access_error(error) == case["kind"], case["name"]
+        assert classify_access_error(_driver_error(case)) == case["kind"], case["name"]
+
+
+def _driver_error(case):
+    error = DriverError(case["message"], case["sqlstate"] or None)
+    if not case.get("sql"):
+        return error
+    # SQLAlchemy repeats the statement back in the wrapper it raises, which
+    # is how the probe's own relation name reaches the classifier.
+    return sqlalchemy.exc.ProgrammingError(case["sql"], {}, error)
 
 
 def test_changed_session_fields_match_the_shared_contract():
@@ -44,10 +56,14 @@ def test_changed_session_fields_match_the_shared_contract():
 
     for case in cases:
         before, after = _snapshot(case["before"]), _snapshot(case["after"])
+        assert before is not None, case["name"]
         assert changed_session_fields(after, before) == case["changed"], case["name"]
 
 
 def _snapshot(fields):
+    # A null case is a connection that reports no session at all.
+    if fields is None:
+        return None
     return SessionSnapshot(
         backend=fields["backend"],
         principal=fields["principal"],
@@ -124,6 +140,10 @@ def test_access_precedence_matches_the_shared_contract():
         else:
             with pytest.raises(_OUTCOMES[expected["outcome"]]) as refusal:
                 require_queryable_relations(backend, validate, relations)
+            # The exact class, not a base one: an authorization refusal and an
+            # unexplained failure are both CatalogAccessError, and the fixture
+            # is pinning which of the two the caller gets.
+            assert type(refusal.value) is _OUTCOMES[expected["outcome"]], case["name"]
             for label in expected["labels"]:
                 assert label in str(refusal.value), case["name"]
         # The contract is that nothing is raised until every relation the
@@ -131,3 +151,65 @@ def test_access_precedence_matches_the_shared_contract():
         assert backend.probed == [
             item["label"] for item in case["relations"] if item["discovered"] == "true"
         ], case["name"]
+
+
+class _LabelBackend:
+    """A Snowflake connection whose listing answers from the fixture case."""
+
+    def __init__(self, namespace, reported):
+        self._namespace = namespace
+        self._reported = reported
+
+    def query(self, sql: str):
+        if "CURRENT_DATABASE" in sql:
+            return [
+                {
+                    "catalog": self._namespace["catalog"],
+                    "schema": self._namespace["schema"],
+                }
+            ]
+        if self._reported is None:
+            return []
+        return [
+            {
+                "name": self._reported["table"],
+                "kind": "TABLE",
+                "database_name": self._reported["catalog"],
+                "schema_name": self._reported["schema"],
+                "comment": None,
+            }
+        ]
+
+    def dialect(self):
+        return "snowflake"
+
+
+def test_relation_labels_match_the_shared_contract():
+    cases = load_shared_fixture("catalog-relation-labels")["cases"]
+    assert cases
+
+    for case in cases:
+        authored = case["authored"]
+        backend = _LabelBackend(case["namespace"], case["reported"])
+        registry = table_registry(
+            selectors=[
+                Selector(
+                    catalog=authored.get("catalog"),
+                    schema=authored.get("schema"),
+                    table=authored["table"],
+                )
+            ],
+            exact_relation=functools.partial(snowflake.exact_relation, backend),
+            list_relations=lambda selector: [],
+        )
+
+        assert list(registry.relations) == [case["label"]], case["name"]
+        # The access check pairs the two lists by label, so a selection entry
+        # has to be validated under the label it ended up with.
+        assert list(registry.validate) == [case["label"]], case["name"]
+
+        identity = registry.relations[case["label"]].identity
+        assert (identity.label if identity else None) == case["identity"], case["name"]
+        assert registry.relations[case["label"]].discovered is (
+            case["reported"] is not None
+        ), case["name"]

@@ -57,6 +57,10 @@ catalog_rows_expect_columns <- function(columns, expected, info) {
 
 # A session snapshot from the shared fixture's field-by-field spelling.
 catalog_session_fixture_snapshot <- function(fields) {
+  # A null case is a connection that reports no session at all.
+  if (is.null(fields)) {
+    return(NULL)
+  }
   list(
     backend = fields$backend,
     principal = fields$principal,
@@ -97,4 +101,12 @@ catalog_precedence_probed <- function(script) {
     function(item) identical(item$discovered, "true"),
     logical(1)
   )]
+}
+
+# The relation-label fixture's authored entry, as a `tables` string.
+catalog_labels_authored <- function(authored) {
+  paste(
+    c(authored$catalog, authored$schema, authored$table),
+    collapse = "."
+  )
 }

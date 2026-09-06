@@ -26,7 +26,7 @@
       "changed": ["catalog", "schema"]
     },
     {
-      "name": "several fields at once, in snapshot order",
+      "name": "several fields at once, in the order the refusal names them",
       "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
       "after": {"backend": "snowflake", "principal": "ADMIN_USER", "role": "ADMIN", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "STAGING"},
       "changed": ["principal", "role", "schema"]
@@ -36,6 +36,12 @@
       "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
       "after": {"backend": "snowflake", "principal": "ANALYST", "role": null, "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
       "changed": ["role"]
+    },
+    {
+      "name": "a connection reporting no session at all names no field",
+      "before": {"backend": "snowflake", "principal": "ANALYST", "role": "REPORTER", "secondary_roles": "ALL", "catalog": "ANALYTICS", "schema": "PUBLIC"},
+      "after": null,
+      "changed": []
     }
   ]
 }
