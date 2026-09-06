@@ -92,86 +92,37 @@ def test_a_dialect_commons_cannot_lower_is_still_refused():
         attach_compiled_definitions(dictionary, "postgresql")
 
 
-@pytest.mark.parametrize("dialect", ["snowflake", "databricks"])
-def test_a_standalone_interval_cannot_lower_for_a_warehouse(dialect: str):
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": "values",
-                    "definitions": [
-                        {"name": "duration", "expr": "interval(2, days)"}
-                    ],
-                }
-            ]
-        }
-    )
-    attach_compiled_definitions(dictionary, "duckdb")
-    with pytest.raises(ValueError, match="standalone interval"):
-        attach_compiled_definitions(dictionary, dialect)
+def test_warehouse_refusals_match_the_shared_contract():
+    """Constructs a target cannot express, and their accepted counterparts.
 
-
-def test_a_dynamic_round_scale_cannot_lower_for_databricks():
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": "values",
-                    "columns": [{"name": "number", "type": "number"}],
-                    "definitions": [
-                        {"name": "dynamic_round", "expr": "ROUND(number, number)"}
-                    ],
-                }
-            ]
-        }
-    )
-    attach_compiled_definitions(dictionary, "snowflake")
-    with pytest.raises(ValueError, match="dynamic ROUND"):
-        attach_compiled_definitions(dictionary, "databricks")
-
-
-def test_a_constant_fractional_round_scale_lowers_for_both_warehouses():
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": "values",
-                    "columns": [{"name": "number", "type": "number"}],
-                    "definitions": [
-                        {"name": "fractional_scale", "expr": "ROUND(number, 1.5)"}
-                    ],
-                }
-            ]
-        }
-    )
-    attach_compiled_definitions(dictionary, "snowflake")
-    records = {r.name: r for r in dictionary.tables["values"].compiled_definitions}
-    assert records["fractional_scale"].sql == 'round("number", TRUNC(1.5))'
-    attach_compiled_definitions(dictionary, "databricks")
-    records = {r.name: r for r in dictionary.tables["values"].compiled_definitions}
-    assert records["fractional_scale"].sql == "round(`number`, CAST(1.5 AS INT))"
-
-
-def test_a_nanosecond_datetime_cannot_lower_for_databricks():
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": "values",
-                    "columns": [{"name": "observed", "type": "datetime"}],
-                    "definitions": [
-                        {
-                            "name": "after_threshold",
-                            "expr": "observed > '2024-01-01T00:00:00.123456789Z'",
-                        }
-                    ],
-                }
-            ]
-        }
-    )
-    attach_compiled_definitions(dictionary, "snowflake")
-    with pytest.raises(ValueError, match="microsecond precision"):
-        attach_compiled_definitions(dictionary, "databricks")
+    A refusal is an error on the translation, which surfaces as construction
+    failing when the source's own target is the one that cannot lower the
+    definition.
+    """
+    unsupported = load_shared_fixture("definition-warehouse-sql")["unsupported"]
+    assert unsupported, "the unsupported section is empty"
+    checked = 0
+    for case_name, case in unsupported.items():
+        table = {"name": case["table"], "definitions": [case["definition"]]}
+        if "columns" in case:
+            table["columns"] = case["columns"]
+        for target, expected in case["targets"].items():
+            info = f"{case_name} {target}"
+            unknown = set(expected) - {"code", "error_contains"}
+            assert not unknown, f"{info}: {sorted(unknown)}"
+            dictionary = DataDictionary.model_validate({"tables": [table]})
+            dialect = target[len("SQL(") : -1]
+            if "error_contains" in expected:
+                with pytest.raises(ValueError) as excinfo:
+                    attach_compiled_definitions(dictionary, dialect)
+                for fragment in expected["error_contains"]:
+                    assert fragment in str(excinfo.value), info
+            else:
+                attach_compiled_definitions(dictionary, dialect)
+                (record,) = dictionary.tables[case["table"]].compiled_definitions
+                assert record.sql == expected["code"], info
+            checked += 1
+    assert checked >= 8
 
 
 @pytest.mark.parametrize("dialect", ["snowflake", "databricks"])

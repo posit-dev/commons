@@ -203,6 +203,71 @@ test_that("warehouse lowering matches the shared contract", {
   expect_gte(checked, 20L)
 })
 
+test_that("warehouse refusals match the shared contract", {
+  skip_if_not_installed("yaml")
+  unsupported <- shared_fixture("definition-warehouse-sql")[["unsupported"]]
+  expect_gt(length(unsupported), 0)
+  checked <- 0
+
+  for (case_name in names(unsupported)) {
+    case <- unsupported[[case_name]]
+    raw <- list(tables = list(list(
+      name = case[["table"]],
+      columns = case[["columns"]],
+      definitions = list(case[["definition"]])
+    )))
+    # The source only has to expose the table; the dictionary supplies the
+    # rest. DuckDB lowers every construct here, so its translation records
+    # carry each target's acceptance or refusal.
+    source <- do.call(
+      data_source,
+      stats::setNames(list(data.frame(row = 1)), case[["table"]])
+    )
+    definition <- definition_compiled_table(
+      definition_compile_source(raw, source)
+    )[[case[["definition"]][["name"]]]]
+
+    for (target in names(case[["targets"]])) {
+      expected <- case[["targets"]][[target]]
+      info <- paste(case_name, target)
+      unknown <- setdiff(names(expected), c("code", "error_contains"))
+      expect_true(
+        length(unknown) == 0,
+        info = paste(info, paste(unknown, collapse = ", "))
+      )
+      actual <- definition_translation(definition, target)
+      if (!is.null(expected[["error_contains"]])) {
+        for (fragment in expected[["error_contains"]]) {
+          expect_true(
+            grepl(fragment, actual[["error"]], fixed = TRUE),
+            info = info
+          )
+        }
+        # A source on that dialect refuses the definition at construction.
+        dialect <- sub("^SQL\\((.*)\\)$", "\\1", target)
+        local_mocked_bindings(
+          is_snowflake_connection = function(con) dialect == "snowflake",
+          is_databricks_connection = function(con) dialect == "databricks"
+        )
+        expect_error(
+          definition_compile_source(
+            raw,
+            definition_mock_source(case[["table"]])
+          ),
+          "cannot be compiled",
+          info = info
+        )
+      } else {
+        expect_null(actual[["error"]], info = info)
+        expect_equal(actual[["code"]], expected[["code"]], info = info)
+      }
+      checked <- checked + 1L
+    }
+  }
+
+  expect_gte(checked, 8L)
+})
+
 test_that("source selection binds authored warehouse identifiers", {
   skip_if_not_installed("yaml")
   local_mocked_bindings(
@@ -300,119 +365,6 @@ test_that("unknown source backends reject definitions only when present", {
   expect_error(
     definition_compile_source(defined, source),
     "Definitions.*positive.*cannot be compiled"
-  )
-})
-
-test_that("unsupported translations are explicit and selected errors abort", {
-  raw <- list(
-    tables = list(list(
-      name = "values",
-      definitions = list(list(
-        name = "duration",
-        expr = "interval(2, days)"
-      ))
-    ))
-  )
-  duckdb <- data_source(values = data.frame(row = 1))
-  definitions <- definition_compiled_table(
-    definition_compile_source(raw, duckdb)
-  )
-
-  expect_match(
-    definition_translation(definitions$duration, "SQL(snowflake)")$error,
-    "standalone interval"
-  )
-  expect_match(
-    definition_translation(definitions$duration, "SQL(databricks)")$error,
-    "standalone interval"
-  )
-
-  local_mocked_bindings(
-    is_snowflake_connection = function(con) TRUE,
-    is_databricks_connection = function(con) FALSE
-  )
-  expect_error(
-    definition_compile_source(raw, definition_mock_source("values")),
-    "cannot be compiled for.*SQL\\(snowflake\\)"
-  )
-})
-
-test_that("target restrictions stay on their translation records", {
-  raw <- list(
-    tables = list(list(
-      name = "values",
-      columns = list(list(name = "number", type = "number(quantity)")),
-      definitions = list(list(
-        name = "dynamic_round",
-        expr = "ROUND(number, number)"
-      ))
-    ))
-  )
-  definitions <- definition_compiled_table(definition_compile_source(
-    raw,
-    data_source(values = data.frame(number = 1))
-  ))
-
-  expect_null(
-    definition_translation(definitions$dynamic_round, "SQL(snowflake)")$error
-  )
-  expect_match(
-    definition_translation(
-      definitions$dynamic_round,
-      "SQL(databricks)"
-    )$error,
-    "dynamic ROUND"
-  )
-
-  constant <- list(
-    tables = list(list(
-      name = "values",
-      columns = list(list(name = "number", type = "number(quantity)")),
-      definitions = list(list(
-        name = "fractional_scale",
-        expr = "ROUND(number, 1.5)"
-      ))
-    ))
-  )
-  definitions <- definition_compiled_table(definition_compile_source(
-    constant,
-    data_source(values = data.frame(number = 1))
-  ))
-  expect_equal(
-    definition_translation(
-      definitions$fractional_scale,
-      "SQL(snowflake)"
-    )$code,
-    'round("number", TRUNC(1.5))'
-  )
-  expect_equal(
-    definition_translation(
-      definitions$fractional_scale,
-      "SQL(databricks)"
-    )$code,
-    "round(`number`, CAST(1.5 AS INT))"
-  )
-
-  nanosecond <- list(
-    tables = list(list(
-      name = "values",
-      columns = list(list(name = "observed", type = "datetime")),
-      definitions = list(list(
-        name = "after_threshold",
-        expr = "observed > '2024-01-01T00:00:00.123456789Z'"
-      ))
-    ))
-  )
-  definitions <- definition_compiled_table(definition_compile_source(
-    nanosecond,
-    data_source(values = data.frame(observed = Sys.time()))
-  ))
-  expect_match(
-    definition_translation(
-      definitions$after_threshold,
-      "SQL(databricks)"
-    )$error,
-    "microsecond precision"
   )
 })
 

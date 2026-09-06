@@ -1,6 +1,6 @@
 {
   "corpus_dir": "definition-export",
-  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested. `composed_code` pins the SQL after a referenced sibling definition is inlined, and appears only where that composition is the point.",
+  "note": "Snowflake and Databricks lowering. Unlike SQL(duckdb), these targets have no upstream authority: the pinned data-dict binary emits DuckDB and R targets only, so nothing external says what correct output is. This fixture is therefore hand-maintained and is the contract between the two commons implementations, not a record of data-dict's output. See commons kata g0ax for the upstream ask that would replace it. Cases are keyed by corpus file, then table::definition, then target. `code` is exact; `code_contains` and `notes_contain` pin a rule whose full rendering is long enough that pinning it would obscure what is being tested. `composed_code` pins the SQL after a referenced sibling definition is inlined, and appears only where that composition is the point. The `unsupported` section holds constructs a target cannot express, with inline dictionaries rather than corpus keys: `error_contains` pins the refusal, and a target that accepts the construct pins `code`.",
   "cases": {
     "functions.yaml": {
       "values::strings": {
@@ -76,6 +76,48 @@
       "survey::negative quotient": {
         "SQL(snowflake)": { "code_contains": ["CASE WHEN"] },
         "SQL(databricks)": { "notes_contain": ["negative zero divisor"] }
+      }
+    }
+  },
+  "unsupported": {
+    "standalone interval": {
+      "table": "values",
+      "definition": {"name": "duration", "expr": "interval(2, days)"},
+      "targets": {
+        "SQL(snowflake)": {"error_contains": ["standalone interval"]},
+        "SQL(databricks)": {"error_contains": ["standalone interval"]}
+      }
+    },
+    "dynamic round scale": {
+      "table": "values",
+      "columns": [{"name": "number", "type": "number(quantity)"}],
+      "definition": {"name": "dynamic_round", "expr": "ROUND(number, number)"},
+      "targets": {
+        "SQL(snowflake)": {"code": "round(\"number\", TRUNC(\"number\"))"},
+        "SQL(databricks)": {"error_contains": ["dynamic ROUND"]}
+      }
+    },
+    "fractional round scale": {
+      "table": "values",
+      "columns": [{"name": "number", "type": "number(quantity)"}],
+      "definition": {"name": "fractional_scale", "expr": "ROUND(number, 1.5)"},
+      "targets": {
+        "SQL(snowflake)": {"code": "round(\"number\", TRUNC(1.5))"},
+        "SQL(databricks)": {"code": "round(`number`, CAST(1.5 AS INT))"}
+      }
+    },
+    "nanosecond datetime": {
+      "table": "values",
+      "columns": [{"name": "observed", "type": "datetime"}],
+      "definition": {
+        "name": "after_threshold",
+        "expr": "observed > '2024-01-01T00:00:00.123456789Z'"
+      },
+      "targets": {
+        "SQL(snowflake)": {
+          "code": "\"observed\" > TO_TIMESTAMP_TZ('2024-01-01 00:00:00.123456789 +00:00')"
+        },
+        "SQL(databricks)": {"error_contains": ["microsecond precision"]}
       }
     }
   }
