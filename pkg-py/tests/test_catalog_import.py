@@ -265,7 +265,7 @@ def test_an_exclude_that_matched_nothing_does_not_blame_exclude():
     with pytest.raises(ValueError, match="contains no objects") as refusal:
         import_catalog(backend, exclude=["NOTHING_*"])
 
-    assert "exclude dropped" not in str(refusal.value)
+    assert "dropped every relation" not in str(refusal.value)
 
 
 def test_excluding_a_name_the_warehouse_never_had_does_not_blame_exclude():
@@ -276,4 +276,4 @@ def test_excluding_a_name_the_warehouse_never_had_does_not_blame_exclude():
             FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING", exclude=["MISSING"]
         )
 
-    assert "exclude dropped" not in str(refusal.value)
+    assert "dropped every relation" not in str(refusal.value)

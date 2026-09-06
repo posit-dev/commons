@@ -49,6 +49,9 @@ class ExportRecord:
     label: str | None
     description: str | None
     details: str | None
+    # The authored spellings, even on a warehouse source whose `sql` names
+    # the columns the catalog reported: this describes the dictionary the
+    # author wrote rather than the relation it was matched to.
     columns: list[str]
     definitions: list[str]
     sql: str

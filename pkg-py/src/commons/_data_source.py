@@ -390,10 +390,11 @@ def data_source(
     dialect during construction, so construction raises if the dialect has
     no emitter (DuckDB, Snowflake, and Databricks have one), if a definition
     sits on a table the source does not expose, or if a metric mixes row and
-    aggregate grain. On a warehouse it also raises if a table declaring
-    definitions matched no exposed relation, and, until the compiler can
-    bind an authored name to the discovered one, if the warehouse spells one
-    of that table's columns differently.
+    aggregate grain. On a warehouse the authored column spellings are bound
+    to the names the catalog reported before anything is lowered, so it
+    raises there only if a table declaring definitions matched no exposed
+    relation, or if a definition names an authored column the selected
+    relation does not have.
     """
     from ._data_dictionary import as_data_dictionary
 

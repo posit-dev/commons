@@ -183,3 +183,49 @@ def test_a_bound_selection_cannot_be_mistaken_for_a_reference_marker():
     )
 
     assert markers["base"] != marker
+
+
+def test_a_derived_selection_drops_a_column_the_relation_does_not_have():
+    # A pattern names no column, so a dictionary that still documents one the
+    # warehouse dropped should not take every wildcard definition with it.
+    compiled = imported_sql(
+        {"name": "any_set", "expr": "COLUMNS('.*') IS NOT NULL"},
+        columns=[
+            {"name": "id", "type": "number(quantity)"},
+            {"name": "ghost", "type": "number(quantity)"},
+        ],
+    )
+
+    assert compiled["any_set"] == '"ID" IS NOT NULL'
+
+
+def test_a_star_selection_drops_a_column_the_relation_does_not_have():
+    compiled = imported_sql(
+        {"name": "any_set", "expr": "COLUMNS(*) IS NOT NULL"},
+        columns=[
+            {"name": "id", "type": "number(quantity)"},
+            {"name": "ghost", "type": "number(quantity)"},
+        ],
+    )
+
+    assert compiled["any_set"] == '"ID" IS NOT NULL'
+
+
+def test_a_named_selection_still_refuses_a_column_the_relation_lacks():
+    # The author wrote this column out, so its absence is worth reporting.
+    with pytest.raises(ValueError, match="authored column 'ghost'"):
+        imported_sql(
+            {"name": "any_set", "expr": "COLUMNS([id, ghost]) IS NOT NULL"},
+            columns=[
+                {"name": "id", "type": "number(quantity)"},
+                {"name": "ghost", "type": "number(quantity)"},
+            ],
+        )
+
+
+def test_a_derived_selection_left_with_nothing_is_refused():
+    with pytest.raises(ValueError, match="has none of the ones"):
+        imported_sql(
+            {"name": "any_set", "expr": "COLUMNS('.*') IS NOT NULL"},
+            columns=[{"name": "ghost", "type": "number(quantity)"}],
+        )

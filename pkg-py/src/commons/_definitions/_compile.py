@@ -117,7 +117,12 @@ def attach_compiled_definitions(
 
     `bindings` is what a warehouse catalog import matched. With it, every
     column a definition names is rewritten to the spelling the warehouse
-    reported, because the expression was written against the authored one.
+    reported, because the expression was written against the authored one,
+    and two further refusals apply: a table that declares definitions and
+    matched no relation, and a definition naming an authored column the
+    relation does not have. Without it, which is every source that has no
+    catalog to match against, the authored spellings are lowered as written
+    and neither refusal is reachable.
 
     Nothing is assigned until every table compiles, so a refusal leaves the
     dictionary untouched and the caller can attach it to another source.
@@ -184,8 +189,9 @@ def _bind_table(
     """Rewrite every definition's expression to the discovered spelling.
 
     `DefinitionExport.columns`, the list of columns a definition reads, keeps
-    the authored spelling: it describes the dictionary the author wrote,
-    which is also what the R implementation leaves it as.
+    the authored spelling. It describes the dictionary the author wrote,
+    rather than the relation it was matched to, so it is the one place the
+    authored names survive binding.
     """
     return {
         name: replace(
@@ -223,27 +229,54 @@ def _bind_selection(
     definition: str,
     table: str,
 ) -> dict[str, Any] | None:
+    """Rewrite a `COLUMNS(...)` selection to the discovered spellings.
+
+    A selection the author wrote out by name is bound strictly: naming a
+    column the warehouse does not have is a mistake worth reporting. A
+    selection derived from a pattern or from the whole table is not, because
+    the author named no column at all. It is resolved over the authored
+    columns, so a dictionary that still documents a dropped column would
+    otherwise take every wildcard definition on the table down with it, and
+    the refusal would name a column that appears nowhere in the expression.
+    The other side of that intersection is already tolerated: a warehouse
+    column the dictionary does not describe is simply not selected.
+    """
     if selection is None:
         return None
-    return {
-        **selection,
-        "columns": [
-            {
-                **column,
-                "path": _bind_path(column["path"], columns, definition, table),
-            }
-            for column in selection["columns"]
-        ],
-    }
+    named = selection.get("form") == "list"
+    bound = []
+    for column in selection["columns"]:
+        path = _bind_path(
+            column["path"], columns, definition, table, required=named
+        )
+        if path is not None:
+            bound.append({**column, "path": path})
+    if not bound:
+        raise ValueError(
+            f"Definition {definition!r} on table {table!r} selects columns, "
+            f"and the selected relation has none of the ones the data "
+            f"dictionary describes."
+        )
+    return {**selection, "columns": bound}
 
 
 def _bind_path(
-    path: Any, columns: dict[str, str | None], definition: str, table: str
+    path: Any,
+    columns: dict[str, str | None],
+    definition: str,
+    table: str,
+    required: bool = True,
 ) -> Any:
-    """The physical spelling of the column a path leads with."""
+    """The physical spelling of the column a path leads with.
+
+    Returns None for a column the relation does not have, when the caller
+    can drop it rather than refuse.
+    """
     segments = list(path) if isinstance(path, list) else [path]
     physical = columns.get(segments[0])
     if physical is None:
+        if not required:
+            return None
         raise ValueError(
             f"Definition {definition!r} on table {table!r} references "
             f"authored column {segments[0]!r}, which is absent from the "
