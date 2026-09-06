@@ -39,14 +39,6 @@ test_that("definitions compile and compose for a DuckDB source", {
 
   expect_equal(compiled$target, "SQL(duckdb)")
   expect_equal(
-    definitions$enterprise_revenue$sql,
-    paste0(
-      "sum(CASE WHEN (\"tile_size\" IN ",
-      "('Mid-Market-3', 'Enterprise-1')) ",
-      "THEN \"order_total\" ELSE 0 END)"
-    )
-  )
-  expect_equal(
     definition_translation(
       definitions$enterprise_revenue,
       "SQL(duckdb)"
@@ -72,6 +64,36 @@ test_that("definitions compile and compose for a DuckDB source", {
   )
   expect_equal(net_revenue$value, 100)
   expect_equal(enterprise_revenue$value, 100)
+})
+
+test_that("composed SQL and notes match the shared contract", {
+  skip_if_not_installed("yaml")
+  fixture <- shared_fixture("definitions")$composed
+  checked <- 0L
+  for (path in definition_fixture_paths("valid")) {
+    raw <- yaml::read_yaml(path)
+    tables <- vapply(raw$tables, `[[`, "", "name")
+    frames <- stats::setNames(
+      lapply(tables, function(table) data.frame(x = 1)),
+      tables
+    )
+    source <- do.call(data_source, frames)
+    compiled <- definition_compile_source(raw, source)
+    expected <- fixture[[basename(path)]]
+    for (table in compiled$tables) {
+      for (definition in table$definitions) {
+        key <- paste0(table$name, "::", definition$name)
+        notes <- expected[[key]]$notes
+        expect_equal(definition$sql, expected[[key]]$sql)
+        expect_equal(
+          definition$notes,
+          if (length(notes)) unlist(notes) else character(0)
+        )
+        checked <- checked + 1L
+      }
+    }
+  }
+  expect_equal(checked, 42L)
 })
 
 test_that("source compilation rejects metrics over mixed-grain definitions", {

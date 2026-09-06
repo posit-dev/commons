@@ -247,6 +247,11 @@ def data_source(
     tables of the engine and board forms; `dictionary` attaches a data
     dictionary to any form. To use either as a frame name, call
     `DataSource.from_frames()` directly.
+
+    A dictionary's governed definitions are compiled for the source's
+    dialect here, so construction raises if the dialect has no emitter
+    (only DuckDB does today), if a definition sits on a table the source
+    does not expose, or if a metric mixes row and aggregate grain.
     """
     from ._data_dictionary import as_data_dictionary
 
@@ -272,6 +277,11 @@ def data_source(
         source = DataSource.from_frames(**frames)
 
     source.dictionary = resolved
+    if resolved is not None:
+        # The dialect is only known now, which is why lowering waits for it.
+        from ._definitions import attach_compiled_definitions
+
+        attach_compiled_definitions(resolved, source.dialect(), set(source.tables))
     return source
 
 
