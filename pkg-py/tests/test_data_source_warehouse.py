@@ -94,26 +94,6 @@ def test_exclude_is_refused_for_named_frames():
         data_source(sales=pd.DataFrame({"id": [1]}), exclude=["tmp_*"])
 
 
-def test_definitions_the_warehouse_spells_differently_are_refused():
-    # Until the compiler can bind an authored name to the discovered one, a
-    # definition over a renamed column would lower to SQL naming a column
-    # that is not there, so construction fails instead.
-    dictionary = DataDictionary.model_validate(
-        {
-            "tables": [
-                {
-                    "name": "sales",
-                    "columns": [{"name": "id", "type": "number(quantity)"}],
-                    "definitions": [{"name": "total", "expr": "sum(id)"}],
-                }
-            ]
-        }
-    )
-
-    with pytest.raises(NotImplementedError, match="does not have column"):
-        warehouse_source(dictionary=dictionary)
-
-
 def sales_dictionary(**table):
     return DataDictionary.model_validate(
         {
@@ -140,6 +120,24 @@ def test_a_definition_survives_the_rekeying_a_merge_does(monkeypatch):
     assert source.dictionary is not None
     entry = source.dictionary.tables["ANALYTICS.PUBLIC.SALES"]
     assert [record.name for record in entry.compiled_definitions] == ["total"]
+
+
+def test_a_definition_reaches_sql_with_the_warehouse_spelling(monkeypatch):
+    # The public constructor is the only path a user takes, and the two other
+    # definition tests here use a warehouse whose spelling already matches,
+    # so binding is an identity transform in them and proves nothing.
+    backend = FakeWarehouse()
+    monkeypatch.setattr("commons._data_source.EngineBackend", lambda engine: backend)
+    dictionary = sales_dictionary(definitions=[{"name": "total", "expr": "sum(id)"}])
+
+    source = data_source(sqlalchemy.create_engine("sqlite://"), dictionary=dictionary)
+
+    assert source.dictionary is not None
+    entry = source.dictionary.tables["ANALYTICS.PUBLIC.SALES"]
+    record = entry.compiled_definitions[0]
+    assert record.sql == 'sum("ID")'
+    # The record still reports the column the author wrote.
+    assert record.columns == ["id"]
 
 
 def test_a_definition_on_a_table_that_matched_nothing_is_refused(monkeypatch):

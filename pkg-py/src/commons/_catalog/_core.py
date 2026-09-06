@@ -87,6 +87,10 @@ class TableRegistry:
 class MergedDictionary:
     dictionary: Any
     relations: dict[str, Relation]
+    # What the merge matched, for the definition compiler: "tables" maps each
+    # authored table name to the relation label it matched, or None, and
+    # "columns" maps each authored column name to the spelling the warehouse
+    # reported. None when there was no catalog to match against.
     definition_bindings: dict[str, Any] | None
 
 
@@ -402,11 +406,7 @@ def merge_dictionary(
     return MergedDictionary(
         dictionary=dictionary,
         relations=relations,
-        definition_bindings={
-            "tables": matches,
-            "columns": column_matches,
-            "strict": True,
-        },
+        definition_bindings={"tables": matches, "columns": column_matches},
     )
 
 
