@@ -789,6 +789,9 @@ test_that("stream_async preserves structured provider content", {
 
 test_that("stream_async records provenance at span creation and completion", {
   skip_if_not_installed("otelsdk")
+  withr::local_envvar(
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
   path <- withr::local_tempfile(fileext = ".md")
   writeLines("Canopy cover is always acre-weighted for reporting.", path)
   local_mocked_bindings(collect_appended_tags = function(...) "B")
