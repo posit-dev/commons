@@ -11,12 +11,13 @@ import pytest
 from commons._catalog import CatalogSessionChangedError, Selector
 from commons._catalog._import import import_catalog, is_warehouse
 from commons._data_dictionary import DataDictionary
-from tests._warehouse import FakeWarehouse
+from commons._data_source import TableId
+from tests._warehouse import FakeDatabricks, FakeWarehouse
 
 
 def test_only_warehouse_backends_import_a_catalog():
     assert is_warehouse(FakeWarehouse())
-    assert is_warehouse(FakeWarehouse(dialect="databricks"))
+    assert is_warehouse(FakeDatabricks())
     assert not is_warehouse(FakeWarehouse(dialect="duckdb"))
 
 
@@ -58,12 +59,13 @@ def test_a_named_relation_is_access_checked_before_the_source_exists():
         import_catalog(backend, "ANALYTICS.PUBLIC.SALES")
 
 
-def test_what_the_import_probed_is_remembered_as_readable():
-    # A relation checked on the way in should not be probed again the first
-    # time an agent touches it.
+def test_construction_probes_are_not_carried_into_the_manifest():
+    # Every relation starts unknown, including the ones construction just
+    # probed. Carrying that answer forward would serve a grant revoked
+    # between construction and first touch, so first touch re-probes.
     imported = import_catalog(FakeWarehouse(), "ANALYTICS.PUBLIC.SALES")
 
-    assert imported.manifest.access == {"ANALYTICS.PUBLIC.SALES": "queryable"}
+    assert imported.manifest.access == {"ANALYTICS.PUBLIC.SALES": "unknown"}
 
 
 def test_a_selection_resolving_to_nothing_is_an_error():
@@ -117,3 +119,185 @@ def test_an_unauthorized_table_stops_the_dictionary_merge():
 
     with pytest.raises(Exception, match="not authorized"):
         import_catalog(backend, dictionary=dictionary)
+
+
+def _prose() -> DataDictionary:
+    """A dictionary that matches SALES, so the merge describes it."""
+    return DataDictionary.model_validate(
+        {"tables": [{"name": "sales", "description": "Authored prose"}]}
+    )
+
+
+def _kinds(queries: list[str]) -> list[str]:
+    """Each query as the step it belongs to, so order can be asserted."""
+    steps = []
+    for sql in queries:
+        if sql.startswith(("SELECT CURRENT_USER()",)):
+            steps.append("session")
+        elif sql.startswith(("SELECT CURRENT_DATABASE()", "SELECT CURRENT_CATALOG()")):
+            steps.append("namespace")
+        elif sql.startswith("SHOW OBJECTS") or "information_schema.tables" in sql:
+            steps.append("list")
+        elif (
+            sql.startswith(("DESC TABLE", "DESCRIBE TABLE"))
+            or "information_schema.columns" in sql
+        ):
+            steps.append("describe")
+        elif sql.startswith("SELECT * FROM"):
+            steps.append("probe")
+        else:
+            raise AssertionError(f"unclassified query: {sql}")
+    return steps
+
+
+def test_the_session_is_read_before_anything_it_decides():
+    backend = FakeWarehouse()
+
+    import_catalog(backend, "ANALYTICS.PUBLIC.SALES")
+
+    # Every access answer that follows was decided for this identity, so
+    # reading it second would be reading it about a different connection.
+    assert _kinds(backend.queries)[0] == "session"
+
+
+def test_a_named_relation_is_probed_before_it_is_described():
+    backend = FakeWarehouse()
+
+    import_catalog(backend, "ANALYTICS.PUBLIC.SALES", dictionary=_prose())
+
+    steps = _kinds(backend.queries)
+    # A name the caller got wrong should fail at construction, which only
+    # holds if the probe precedes the describe that would otherwise reveal it.
+    assert steps.index("probe") < steps.index("describe")
+
+
+def test_the_session_is_read_again_after_discovery():
+    backend = FakeWarehouse()
+
+    import_catalog(backend, "ANALYTICS.PUBLIC.SALES", dictionary=_prose())
+
+    steps = _kinds(backend.queries)
+    # A role that moved during discovery invalidates what was just learned,
+    # so the second read has to come after the last thing it invalidates.
+    assert steps[-1] == "session"
+    assert steps.count("session") == 2
+    assert steps.index("describe") < len(steps) - 1
+
+
+def test_a_databricks_selection_is_imported_the_same_way():
+    backend = FakeDatabricks()
+
+    imported = import_catalog(backend, dictionary=_databricks_prose())
+
+    assert imported.tables == ["main.sales.sales", "main.sales.orders"]
+    assert imported.session is not None
+    assert imported.session.principal == "analyst@example.com"
+    # Databricks reports no role, so there is none to snapshot.
+    assert imported.session.role is None
+    assert _kinds(backend.queries)[0] == "session"
+    assert _kinds(backend.queries)[-1] == "session"
+
+
+def test_a_databricks_authored_name_matches_whatever_its_case():
+    # Databricks reports lower-cased identifiers, so an authored name in any
+    # other case still has to find the relation it describes.
+    backend = FakeDatabricks()
+
+    imported = import_catalog(backend, dictionary=_databricks_prose("SALES"))
+
+    assert imported.dictionary is not None
+    table = imported.dictionary.tables["main.sales.sales"]
+    assert table.description == "Authored prose"
+
+
+def test_a_databricks_relation_is_probed_before_it_is_described():
+    backend = FakeDatabricks()
+
+    import_catalog(backend, "main.sales.orders", dictionary=_databricks_prose("orders"))
+
+    steps = _kinds(backend.queries)
+    assert steps.index("probe") < steps.index("describe")
+
+
+def _databricks_prose(name: str = "sales") -> DataDictionary:
+    return DataDictionary.model_validate(
+        {"tables": [{"name": name, "description": "Authored prose"}]}
+    )
+
+
+def test_an_empty_selection_is_refused():
+    with pytest.raises(ValueError, match="at least one relation or namespace"):
+        import_catalog(FakeWarehouse(), [])
+
+
+def test_a_selection_entry_with_an_empty_component_is_refused():
+    with pytest.raises(ValueError, match="empty name components"):
+        import_catalog(FakeWarehouse(), "ANALYTICS..SALES")
+
+
+def test_a_selection_entry_of_the_wrong_type_is_refused():
+    with pytest.raises(TypeError, match="table name or a TableId"):
+        import_catalog(FakeWarehouse(), 5)
+
+
+def test_a_table_id_names_one_relation():
+    imported = import_catalog(
+        FakeWarehouse(), TableId(catalog="ANALYTICS", schema="PUBLIC", table="SALES")
+    )
+
+    assert imported.tables == ["ANALYTICS.PUBLIC.SALES"]
+
+
+def test_a_named_relation_the_warehouse_lacks_fails_construction():
+    with pytest.raises(ValueError, match="does not have"):
+        import_catalog(FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING")
+
+
+def test_exclude_that_empties_the_selection_says_so():
+    with pytest.raises(ValueError, match="dropped every relation"):
+        import_catalog(FakeWarehouse(), exclude=["*"])
+
+
+def test_an_exclude_that_matched_nothing_does_not_blame_exclude():
+    # The namespace was already empty, so exclude is not what emptied it.
+    backend = FakeWarehouse(relations=[])
+
+    with pytest.raises(ValueError, match="contains no objects") as refusal:
+        import_catalog(backend, exclude=["NOTHING_*"])
+
+    assert "exclude dropped" not in str(refusal.value)
+
+
+@pytest.mark.parametrize(
+    "authored", ["sales", "PUBLIC.sales", "ANALYTICS.PUBLIC.sales"]
+)
+def test_definitions_on_an_excluded_table_name_exclude_however_qualified(authored):
+    # An authored name may be qualified, and a glob may not be, so the two
+    # are matched by the same suffix rule the merge uses.
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": authored,
+                    "columns": [{"name": "id", "type": "number(quantity)"}],
+                    "definitions": [{"name": "total", "expr": "sum(id)"}],
+                }
+            ]
+        }
+    )
+
+    with pytest.raises(ValueError, match="exclude dropped it"):
+        import_catalog(FakeWarehouse(), exclude=["SALES"], dictionary=dictionary)
+
+
+
+
+def test_excluding_a_name_the_warehouse_never_had_does_not_blame_exclude():
+    # The relation was absent, not dropped, so exclude is not the reason
+    # there is nothing left to expose.
+    with pytest.raises(ValueError, match="contains no objects") as refusal:
+        import_catalog(
+            FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING", exclude=["MISSING"]
+        )
+
+    assert "exclude dropped" not in str(refusal.value)

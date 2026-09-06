@@ -21,6 +21,7 @@ from ._core import (
     Relation,
     Selector,
     check_exclude,
+    has_suffix,
     id_type,
     merge_dictionary,
     table_registry,
@@ -79,6 +80,11 @@ def import_catalog(
     if registry.validate:
         require_queryable_relations(backend, registry.validate, registry.relations)
     if not registry.relations:
+        if registry.dropped:
+            raise ValueError(
+                "The resolved catalog selection contains no objects: exclude "
+                f"dropped every relation it resolved to. Narrow {exclude!r}."
+            )
         raise ValueError("The resolved catalog selection contains no objects.")
 
     # A relation named in the selection has just been probed, so the merge
@@ -99,17 +105,15 @@ def import_catalog(
         access_check=access_check,
     )
     check_session(backend, session)
-    _check_definitions_bound(merged)
+    _check_definitions_bound(merged, registry.dropped, exclude, identifier_case)
 
+    # The manifest starts with every relation unknown, including the ones
+    # just probed. Carrying the construction-time answer forward would save a
+    # round trip on first touch at the cost of serving a grant revoked in
+    # between, and the sibling implementation re-probes for the same reason.
     manifest = Manifest.build(
         merged.relations, namespace_selected=registry.namespace_selected
     )
-    # What was probed on the way in is known to be readable, and a first
-    # touch of it should not pay for the same round trip again.
-    for label in queryable:
-        if label in manifest.access:
-            manifest.access[label] = "queryable"
-
     return ImportedCatalog(
         tables=list(merged.relations),
         table_ids={label: item.id for label, item in merged.relations.items()},
@@ -121,7 +125,12 @@ def import_catalog(
     )
 
 
-def _check_definitions_bound(merged: MergedDictionary) -> None:
+def _check_definitions_bound(
+    merged: MergedDictionary,
+    dropped: list[Relation] | None = None,
+    exclude: list[str] | None = None,
+    identifier_case: str | None = None,
+) -> None:
     """Refuse definitions the merge renamed out from under.
 
     The merge re-keys an authored dictionary to the warehouse's own labels
@@ -140,6 +149,12 @@ def _check_definitions_bound(merged: MergedDictionary) -> None:
         # An authored table that matched nothing is dropped by the merge, so
         # its definitions would go with it and the agent would never be told.
         if bindings["tables"].get(authored_table) is None:
+            if _was_excluded(authored_table, dropped, identifier_case):
+                raise ValueError(
+                    f"Authored table {authored_table!r} declares definitions, "
+                    f"and exclude dropped it from the catalog listing. Narrow "
+                    f"{exclude!r}, or drop the table from the data dictionary."
+                )
             raise ValueError(
                 f"Authored table {authored_table!r} declares definitions, and "
                 f"does not match an exposed relation. Name it as the data "
@@ -161,6 +176,23 @@ def _check_definitions_bound(merged: MergedDictionary) -> None:
             )
 
 
+def _was_excluded(
+    authored_table: str, dropped: list[Relation] | None, identifier_case: str | None
+) -> bool:
+    """Whether exclude is what removed the relation an authored name meant.
+
+    Compared against the relations exclude actually dropped rather than
+    against the patterns: a pattern is written in the warehouse's spelling
+    and an authored name need not be, so only the folded names line up. The
+    authored name may be qualified, so it is matched as a suffix, by the
+    same rule the merge uses to find the relation in the first place.
+    """
+    suffix = authored_table.split(".")
+    return any(
+        has_suffix(item, suffix, identifier_case) for item in dropped or []
+    )
+
+
 def _selectors(backend: Any, reader: Any, tables: Any) -> list[Selector]:
     """Read a `tables` selection, defaulting to the connection's namespace.
 
@@ -178,25 +210,19 @@ def _selectors(backend: Any, reader: Any, tables: Any) -> list[Selector]:
 def _selector(entry: Any) -> Selector:
     """One selection entry as a `Selector`, whatever it was spelled as.
 
-    A string is read the way it is everywhere else, as a relation whose dots
-    qualify it. A namespace has to be a `Selector`, because `ANALYTICS.PUBLIC`
-    on its own does not say whether PUBLIC is a schema or a table.
+    A string or a `TableId` is read the way it is everywhere else, as a
+    relation whose dots qualify it, so the spelling rules and their wording
+    come from the one place that owns them. A namespace has to be a
+    `Selector`, because `ANALYTICS.PUBLIC` on its own does not say whether
+    PUBLIC is a schema or a table.
     """
     if isinstance(entry, Selector):
+        # Raises unless the selector names a relation or a namespace.
         id_type(entry)
         return entry
-    if isinstance(entry, TableId):
-        return Selector(catalog=entry.catalog, schema=entry.schema, table=entry.table)
-    if isinstance(entry, str) and entry:
-        parts = entry.split(".")
-        if len(parts) > 3 or any(part == "" for part in parts):
-            raise ValueError(
-                "A relation is named catalog.schema.table, with no empty or "
-                f"skipped components, got {entry!r}."
-            )
-        padded = [None] * (3 - len(parts)) + parts
-        return Selector(catalog=padded[0], schema=padded[1], table=padded[2])
-    raise TypeError(
-        "Each entry in tables must be a relation name, a TableId, or a "
-        f"Selector naming a namespace, got {entry!r}."
+    from .._data_source import _table_entry_id
+
+    table_id = _table_entry_id(entry)
+    return Selector(
+        catalog=table_id.catalog, schema=table_id.schema, table=table_id.table
     )

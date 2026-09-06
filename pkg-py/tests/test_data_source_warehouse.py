@@ -75,6 +75,25 @@ def test_exclude_is_refused_by_a_backend_with_no_catalog_listing(tmp_path):
         DataSource.from_engine(engine, exclude=["staging_*"])
 
 
+def test_exclude_is_refused_for_a_pins_board():
+    class Board:
+        def pin_list(self):
+            return ["sales"]
+
+        def pin_read(self, name):
+            raise AssertionError("not reached")
+
+    with pytest.raises(TypeError, match="warehouse catalog listing"):
+        data_source(Board(), tables={"sales": "sales"}, exclude=["tmp_*"])
+
+
+def test_exclude_is_refused_for_named_frames():
+    import pandas as pd
+
+    with pytest.raises(TypeError, match="no listing to drop them from"):
+        data_source(sales=pd.DataFrame({"id": [1]}), exclude=["tmp_*"])
+
+
 def test_definitions_the_warehouse_spells_differently_are_refused():
     # Until the compiler can bind an authored name to the discovered one, a
     # definition over a renamed column would lower to SQL naming a column

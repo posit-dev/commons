@@ -76,6 +76,11 @@ class TableRegistry:
     relations: dict[str, Relation]
     validate: dict[str, TableId]
     namespace_selected: bool
+    # The relations the listing reported and exclude then removed, so a
+    # caller left with nothing, or with a dictionary entry that now matches
+    # nothing, can say which it was. A name the warehouse never had is not in
+    # here: exclude is not what made it absent.
+    dropped: list[Relation] = field(default_factory=list)
 
 
 @dataclass
@@ -221,6 +226,9 @@ def table_registry(
         relations.extend(list_relations(selector))
 
     keep = excluded([item.name for item in relations], exclude)
+    dropped = [
+        item for item, hidden in zip(relations, keep) if hidden and item.discovered
+    ]
     relations = [item for item, hidden in zip(relations, keep) if not hidden]
     validate = [
         table_id
@@ -252,6 +260,7 @@ def table_registry(
         relations=labelled,
         validate={table_id.label: table_id for table_id in validate},
         namespace_selected=namespace_selected,
+        dropped=dropped,
     )
 
 
@@ -475,14 +484,14 @@ def _match_one(
         relative = [
             label
             for label in labels
-            if _has_suffix(relations[label], suffix, identifier_case)
+            if has_suffix(relations[label], suffix, identifier_case)
         ]
     if len(relative) > 1:
         _abort_ambiguous(authored_name, relative)
     return relative[0] if relative else None
 
 
-def _has_suffix(
+def has_suffix(
     relation: Relation, suffix: list[str], identifier_case: str | None
 ) -> bool:
     path = relation.id.parts
