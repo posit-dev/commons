@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .._data_source import TableId
-from ._core import Relation, Selector, id_type
+from ._core import Relation, Selector, id_type, matched_relation
 
 __all__ = [
     "SHOW_ROW_LIMIT",
@@ -164,12 +164,7 @@ def exact_relation(backend: Any, selector: Selector) -> Relation | None:
     check_show_complete(rows, "relations")
     for relation in relations_from_show(rows):
         if relation.id.table == requested.table:
-            return Relation(
-                id=requested,
-                kind=relation.kind,
-                description=relation.description,
-                identity=relation.id,
-            )
+            return matched_relation(relation, requested)
     return None
 
 

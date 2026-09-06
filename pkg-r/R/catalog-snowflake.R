@@ -428,7 +428,14 @@ snowflake_exact_relation <- function(con, id, call = rlang::caller_env()) {
     }
   )
   relations <- snowflake_relations_from_show(rows)
-  catalog_match_exact_relation(relations, id)
+  catalog_match_exact_relation(
+    relations,
+    id,
+    requested = do.call(
+      DBI::Id,
+      as.list(c(namespace@name, table = unname(components[["table"]])))
+    )
+  )
 }
 
 snowflake_relations_from_show <- function(rows) {
