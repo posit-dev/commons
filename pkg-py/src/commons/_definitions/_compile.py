@@ -95,8 +95,12 @@ def attach_compiled_definitions(
         getattr(dictionary, "definition_exports", None) or {}
     )
     compiled: dict[str, list[ExportRecord]] = {}
-    for table_name in dictionary.tables:
-        definitions = exports.get(table_name) or {}
+    for table_name, entry in dictionary.tables.items():
+        # A catalog import re-keys the dictionary to the warehouse's labels
+        # and records what the author called each table, which is how its
+        # exports are still found afterwards.
+        authored = getattr(entry, "authored_name", None) or table_name
+        definitions = exports.get(authored) or {}
         if not definitions:
             compiled[table_name] = []
             continue
