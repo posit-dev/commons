@@ -17,7 +17,7 @@ from ._registry import ExportRecord
 
 __all__ = ["attach_compiled_definitions", "mixed_grain"]
 
-# Only DuckDB is ported so far; Snowflake and Databricks are stage 2.
+# Only DuckDB is supported so far; Snowflake and Databricks are stage 2.
 _TARGETS = {"duckdb": "SQL(duckdb)"}
 
 
@@ -66,7 +66,7 @@ def _children(ir: Ir) -> list[Ir]:
 
 
 def attach_compiled_definitions(
-    dictionary: Any, dialect: str, exposed: set[str] | None = None
+    dictionary: Any, dialect: str, exposed: set[str]
 ) -> None:
     """Compile every governed definition for `dialect`, onto the dictionary.
 
@@ -79,16 +79,20 @@ def attach_compiled_definitions(
     refused here rather than at `build_registry()`: by then the compiled
     records have already reached the dictionary's retrieval chunks. Prose
     about an unexposed table is left alone, since only a definition emits SQL.
+
+    Nothing is assigned until every table compiles, so a refusal leaves the
+    dictionary untouched and the caller can attach it to another source.
     """
     exports: dict[str, dict[str, DefinitionExport]] = (
         getattr(dictionary, "definition_exports", None) or {}
     )
-    for table_name, entry in dictionary.tables.items():
+    compiled: dict[str, list[ExportRecord]] = {}
+    for table_name in dictionary.tables:
         definitions = exports.get(table_name) or {}
         if not definitions:
-            entry.compiled_definitions = []
+            compiled[table_name] = []
             continue
-        if exposed is not None and table_name not in exposed:
+        if table_name not in exposed:
             raise ValueError(
                 f"The data dictionary declares definitions on table "
                 f"{table_name!r}, which the data source does not expose. "
@@ -101,7 +105,9 @@ def attach_compiled_definitions(
                 f"{dialect!r} data source. commons lowers definitions to DuckDB "
                 f"only."
             )
-        entry.compiled_definitions = _compile_table(table_name, definitions, target)
+        compiled[table_name] = _compile_table(table_name, definitions, target)
+    for table_name, entry in dictionary.tables.items():
+        entry.compiled_definitions = compiled[table_name]
 
 
 def _compile_table(
@@ -226,6 +232,8 @@ def _compose(
             if all(reference in composed for reference in definitions[name].definitions)
         ]
         if not ready:
+            # Unreachable while phase 1 rejects reference cycles; this guards
+            # a caller that builds export records by hand.
             raise ValueError(
                 f"Definitions on table {table!r} cannot be composed because "
                 f"their dependency graph is unresolved: "
@@ -275,13 +283,13 @@ def _substitute_identifiers(code: str, replacements: dict[str, str]) -> str:
     return "".join(out)
 
 
-def _take_quoted(code: str, start: str | int, quote: str) -> tuple[str, int]:
-    index = int(start) + 1
+def _take_quoted(code: str, start: int, quote: str) -> tuple[str, int]:
+    index = start + 1
     while index < len(code):
         if code[index] == quote:
             if index + 1 < len(code) and code[index + 1] == quote:
                 index += 2
                 continue
-            return code[int(start) : index + 1], index + 1
+            return code[start : index + 1], index + 1
         index += 1
     raise ValueError("Generated SQL contains an unterminated quoted value.")

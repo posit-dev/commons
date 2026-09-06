@@ -39,7 +39,7 @@ def dictionary_yaml(*definitions: dict, columns: list[dict] | None = None) -> di
 
 def compiled(*definitions: dict, **kwargs) -> list:
     dictionary = DataDictionary.model_validate(dictionary_yaml(*definitions, **kwargs))
-    attach_compiled_definitions(dictionary, "duckdb")
+    attach_compiled_definitions(dictionary, "duckdb", {"orders"})
     return dictionary.tables["orders"].compiled_definitions
 
 
@@ -149,6 +149,47 @@ def test_a_string_that_looks_like_a_definition_name_is_not_substituted():
     assert records["d"].sql.endswith("\"region\" = 'big'")
 
 
+def test_a_string_literal_holding_marker_text_is_not_substituted():
+    # `big` is the first definition, so its marker is
+    # `__commons_definition_reference_001__`. A string literal holding that
+    # exact text must survive: only the quoted identifier is a reference.
+    records = by_name(
+        compiled(
+            {"name": "big", "expr": "amount > 100"},
+            {
+                "name": "d",
+                "expr": "big and region = '__commons_definition_reference_001__'",
+            },
+        )
+    )
+    assert records["d"].sql == (
+        '("amount" > 100) AND "region" = \'__commons_definition_reference_001__\''
+    )
+
+
+def test_a_column_named_like_a_marker_is_not_confused_with_one():
+    # The marker pool skips names the dictionary already uses, so `big`'s
+    # marker grows a suffix and the real column is left alone.
+    marker_named_column = {
+        "name": "__commons_definition_reference_001__",
+        "type": "number",
+    }
+    records = by_name(
+        compiled(
+            {"name": "big", "expr": "amount > 100"},
+            {"name": "d", "expr": "big and __commons_definition_reference_001__ > 0"},
+            columns=[
+                {"name": "amount", "type": "number"},
+                {"name": "region", "type": "string"},
+                marker_named_column,
+            ],
+        )
+    )
+    assert records["d"].sql == (
+        '("amount" > 100) AND "__commons_definition_reference_001__" > 0'
+    )
+
+
 def test_an_unreferenced_definition_keeps_its_own_sql():
     records = by_name(compiled({"name": "d", "expr": "amount > 0"}))
     assert records["d"].sql == '"amount" > 0'
@@ -174,20 +215,20 @@ def test_the_record_carries_what_the_registry_needs():
 
 
 def test_a_dialect_with_no_emitter_is_refused():
-    # Only DuckDB is ported so far. A source commons cannot lower for must
+    # Only DuckDB is supported so far. A source commons cannot lower for must
     # fail at construction rather than emit the wrong dialect's SQL.
     with pytest.raises(ValueError, match="postgresql"):
         dictionary = DataDictionary.model_validate(
             dictionary_yaml({"name": "d", "expr": "amount > 0"})
         )
-        attach_compiled_definitions(dictionary, "postgresql")
+        attach_compiled_definitions(dictionary, "postgresql", {"orders"})
 
 
 def test_a_dictionary_with_no_definitions_needs_no_emitter():
     dictionary = DataDictionary.model_validate(
         {"tables": [{"name": "orders", "columns": [{"name": "amount"}]}]}
     )
-    attach_compiled_definitions(dictionary, "postgresql")
+    attach_compiled_definitions(dictionary, "postgresql", {"orders"})
     assert dictionary.tables["orders"].compiled_definitions == []
 
 
@@ -292,7 +333,7 @@ def test_every_corpus_definition_compiles_to_sql_duckdb_accepts():
     for path in sorted((SHARED_DIR / "definition-export" / "valid").glob("*.yaml")):
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         dictionary = DataDictionary.model_validate(raw)
-        attach_compiled_definitions(dictionary, "duckdb")
+        attach_compiled_definitions(dictionary, "duckdb", set(dictionary.tables))
         for table in dictionary.tables.values():
             for record in table.compiled_definitions:
                 # `json_serialize_sql` reports a parse failure in its result
@@ -332,6 +373,31 @@ def test_definitions_on_a_table_the_source_does_not_expose_fail_construction(
     )
     with pytest.raises(ValueError, match="does not expose"):
         data_source(orders=pd.DataFrame({"amount": [1]}), dictionary=path)
+
+
+def test_a_refused_compile_leaves_the_dictionary_untouched():
+    # `orders` compiles before `elsewhere` is refused, so this only passes
+    # if nothing is assigned until every table succeeds — leaving the
+    # dictionary reusable for another source.
+    dictionary = DataDictionary.model_validate(
+        {
+            "tables": [
+                {
+                    "name": "orders",
+                    "columns": [{"name": "amount", "type": "number"}],
+                    "definitions": [{"name": "big", "expr": "amount > 100"}],
+                },
+                {
+                    "name": "elsewhere",
+                    "columns": [{"name": "amount", "type": "number"}],
+                    "definitions": [{"name": "big", "expr": "amount > 100"}],
+                },
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="does not expose"):
+        attach_compiled_definitions(dictionary, "duckdb", {"orders"})
+    assert dictionary.tables["orders"].compiled_definitions == []
 
 
 def test_a_table_without_definitions_need_not_be_exposed(tmp_path):

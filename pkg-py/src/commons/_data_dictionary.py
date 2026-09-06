@@ -8,6 +8,10 @@ because nothing reads that range.
 
 Prose fields stay as authored markdown, because they reach the model verbatim.
 
+Reading a dictionary also type-checks any ``definitions:`` blocks against
+data-dict's expression language, so an unusable definition raises here,
+before any source exists. Only the lowering to SQL waits for a dialect.
+
 The three channels are methods rather than separate structures.
 ``pkg-r`` spreads the same rendering across ``R/data-dictionary.R``,
 ``R/prompt.R`` and ``R/context-layer.R``; here the dictionary owns it and the
@@ -130,8 +134,9 @@ class DataDictionary(_Permissive):
     glossary: dict[str, str] = {}
     # Phase 1 of the compiler, keyed by table name. Source-independent, so it
     # is produced here; the SQL needs a dialect and waits for `data_source()`.
-    # Values are `_definitions._export.DefinitionExport`, typed loosely so
-    # this module need not import the compiler's types.
+    # Values map each definition name to its
+    # `_definitions._export.DefinitionExport`, typed loosely so this module
+    # need not import the compiler's types.
     definition_exports: dict[str, Any] = {}
 
     @model_validator(mode="before")
