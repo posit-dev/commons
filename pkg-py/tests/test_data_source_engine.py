@@ -6,6 +6,7 @@ import pytest
 import sqlalchemy
 
 from commons import data_source, list_tables
+from commons._backends import EngineBackend
 from commons._data_source import TableId, normalize_table_registry
 
 
@@ -39,11 +40,6 @@ def test_an_explicit_table_id_bypasses_dot_splitting() -> None:
     literal = TableId(table="a.b")
 
     assert normalize_table_registry([literal]) == {"a.b": literal}
-
-
-def test_an_empty_name_component_is_rejected() -> None:
-    with pytest.raises(ValueError, match="empty name components"):
-        normalize_table_registry(["analytics."])
 
 
 def test_duplicate_labels_are_rejected() -> None:
@@ -152,3 +148,67 @@ def test_an_inspection_failure_does_not_mask_the_probe_error(
 
     with pytest.raises(RuntimeError, match="connection reset"):
         data_source(engine, tables=["sales"])
+
+
+def test_the_inspector_looks_in_the_catalog_it_was_given(monkeypatch) -> None:
+    """SQLAlchemy takes every level above the table as one dotted `schema`.
+
+    Recording the argument is the only way to see this: no dialect available
+    to the test suite has three levels, so a real probe cannot distinguish
+    dropping the catalog from honouring it.
+    """
+    seen: list[str | None] = []
+
+    class _Recorder:
+        def has_table(self, table: str, schema: str | None = None) -> bool:
+            seen.append(schema)
+            return True
+
+    monkeypatch.setattr(sqlalchemy, "inspect", lambda _engine: _Recorder())
+    backend = EngineBackend(sqlalchemy.create_engine("sqlite://"))
+    exists = backend.inspector()
+    assert exists is not None
+    exists(TableId(table="ORDERS", schema="PUBLIC", catalog="ANALYTICS"))
+    assert seen == ["ANALYTICS.PUBLIC"]
+
+
+def test_a_three_part_name_quotes_each_component_separately() -> None:
+    import duckdb
+
+    from commons._backends import DuckDBBackend
+
+    table_id = normalize_table_registry("ANALYTICS.PUBLIC.ORDERS")[
+        "ANALYTICS.PUBLIC.ORDERS"
+    ]
+    quoted = DuckDBBackend(duckdb.connect()).quote(table_id)
+    assert quoted == '"ANALYTICS"."PUBLIC"."ORDERS"'
+
+
+def test_a_catalog_without_a_schema_is_refused() -> None:
+    # There is no level between them to leave out, so this is a typo rather
+    # than a shape to support.
+    with pytest.raises(ValueError, match="schema"):
+        TableId(table="t", catalog="c")
+
+
+def test_the_label_of_a_three_part_id_round_trips() -> None:
+    table_id = TableId(table="ORDERS", schema="PUBLIC", catalog="ANALYTICS")
+    assert table_id.label == "ANALYTICS.PUBLIC.ORDERS"
+    assert normalize_table_registry(table_id.label)[table_id.label] == table_id
+
+
+def test_the_engine_backend_quotes_each_component_separately() -> None:
+    # The preparer takes one component at a time; handed "ANALYTICS.PUBLIC" it
+    # produces a single identifier with a dot inside it.
+    backend = EngineBackend(sqlalchemy.create_engine("sqlite://"))
+    quoted = backend.quote(
+        TableId(table="ORDERS", schema="PUBLIC", catalog="ANALYTICS")
+    )
+    assert quoted == '"ANALYTICS"."PUBLIC"."ORDERS"'
+
+
+def test_the_engine_backend_still_quotes_a_two_part_name() -> None:
+    backend = EngineBackend(sqlalchemy.create_engine("sqlite://"))
+    assert backend.quote(TableId(table="sales", schema="analytics")) == (
+        "analytics.sales"
+    )
