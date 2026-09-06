@@ -712,14 +712,40 @@ def _walk(node: Node, visit: Any) -> None:
         _walk(child, visit)
 
 
+def _as_mapping(value: Any) -> dict[str, Any]:
+    """The raw form of a dictionary entry, however it was supplied.
+
+    Callers construct a dictionary either from parsed YAML, where entries are
+    plain mappings, or from the reader's own models, where they are not.
+    """
+    if isinstance(value, dict):
+        return value
+    dump = getattr(value, "model_dump", None)
+    if callable(dump):
+        dumped = dump()
+        return dumped if isinstance(dumped, dict) else {}
+    return {}
+
+
 def _named_entries(entries: Any, what: str) -> dict[str, Any]:
     if not entries:
         return {}
+    if isinstance(entries, dict):
+        # data-dict authors a sequence, but the reader keys it by name before
+        # validating, so both shapes reach here.
+        keyed: dict[str, Any] = {}
+        for key, value in entries.items():
+            name = str(key)
+            if not name:
+                raise ValueError(f"Each {what} needs a non-empty name.")
+            keyed[name] = {**_as_mapping(value), "name": name}
+        return keyed
     if not isinstance(entries, list):
         raise TypeError(f"The data dictionary's {what}s must be a list.")
     out: dict[str, Any] = {}
     for entry in entries:
-        name = entry.get("name") if isinstance(entry, dict) else None
+        entry = _as_mapping(entry) if not isinstance(entry, dict) else entry
+        name = entry.get("name")
         if not isinstance(name, str) or not name:
             raise ValueError(f"Each {what} needs a non-empty name.")
         if name in out:

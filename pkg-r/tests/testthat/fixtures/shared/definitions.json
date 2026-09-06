@@ -1,4 +1,199 @@
 {
+  "composed": {
+    "core.yaml": {
+      "orders::enterprise_revenue": {
+        "notes": [
+          "DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed."
+        ],
+        "sql": "sum(CASE WHEN (\"tile_size\" IN ('Mid-Market-3', 'Enterprise-1')) THEN \"order_total\" ELSE 0 END)"
+      },
+      "orders::is_enterprise": {
+        "notes": [],
+        "sql": "\"tile_size\" IN ('Mid-Market-3', 'Enterprise-1')"
+      },
+      "orders::list_price": {
+        "notes": [],
+        "sql": "\"order_total\" * 1.2"
+      },
+      "orders::net_revenue": {
+        "notes": [
+          "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there.",
+          "DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed."
+        ],
+        "sql": "sum(CASE WHEN \"status_cd\" = 90 THEN 0 ELSE \"order_total\" END)"
+      }
+    },
+    "functions.yaml": {
+      "values::boolean folds": {
+        "notes": [],
+        "sql": "bool_or(\"flag\") OR bool_and(\"flag\")"
+      },
+      "values::finite": {
+        "notes": [],
+        "sql": "isfinite(\"number\") AND NOT isinf(\"number\") AND NOT isnan(\"number\")"
+      },
+      "values::folds": {
+        "notes": [
+          "DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed."
+        ],
+        "sql": "min(\"number\") + max(\"number\") + sum(\"number\") + avg(\"number\") + count(\"number\") + count(DISTINCT \"number\") + count(*)"
+      },
+      "values::numeric": {
+        "notes": [],
+        "sql": "abs(\"number\") + floor(\"number\") + ceil(\"number\") + round(\"number\", 2)"
+      },
+      "values::patterns": {
+        "notes": [],
+        "sql": "regexp_full_match(\"text\", '^A..*$') AND regexp_full_match(\"text\", 'A.*')"
+      },
+      "values::remainder": {
+        "notes": [
+          "DuckDB yields null for an integer modulus by zero, where data-dict yields a NaN."
+        ],
+        "sql": "mod(mod(\"number\", 3) + 3, 3)"
+      },
+      "values::strings": {
+        "notes": [],
+        "sql": "starts_with(lower(trim(\"text\")), 'a') OR ends_with(upper(\"text\"), 'Z')"
+      }
+    },
+    "language.yaml": {
+      "survey::amount band": {
+        "notes": [
+          "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+        ],
+        "sql": "\"amount\" <= 2 * min(\"amount\")"
+      },
+      "survey::anything missing": {
+        "notes": [],
+        "sql": "\"q1\" IS NOT NULL AND \"q2\" IS NOT NULL AND \"created\" IS NOT NULL AND \"observed\" IS NOT NULL AND \"amount\" IS NOT NULL AND \"ratio\" IS NOT NULL AND \"pattern\" IS NOT NULL AND \"category\" IS NOT NULL AND \"profile\" IS NOT NULL AND \"tags\" IS NOT NULL AND \"untyped\" IS NOT NULL"
+      },
+      "survey::case without else": {
+        "notes": [],
+        "sql": "CASE WHEN \"q1\" THEN \"amount\" END"
+      },
+      "survey::category A": {
+        "notes": [],
+        "sql": "\"category\" = 'A'"
+      },
+      "survey::complete": {
+        "notes": [],
+        "sql": "\"q1\" IS NOT NULL AND \"q2\" IS NOT NULL"
+      },
+      "survey::computed interval": {
+        "notes": [],
+        "sql": "\"observed\" + (\"amount\" + 1 * INTERVAL '1 days')"
+      },
+      "survey::constant": {
+        "notes": [],
+        "sql": "1"
+      },
+      "survey::deep score": {
+        "notes": [],
+        "sql": "\"profile\".\"geo\".\"latitude\" + length(\"profile\".\"nick names\")"
+      },
+      "survey::dynamic match": {
+        "notes": [],
+        "sql": "\"pattern\" LIKE \"profile\".\"zip\""
+      },
+      "survey::exact match": {
+        "notes": [],
+        "sql": "\"pattern\" = 'a'"
+      },
+      "survey::fractional interval": {
+        "notes": [],
+        "sql": "\"observed\" - (1.5 * INTERVAL '1 hours')"
+      },
+      "survey::fractional time": {
+        "notes": [],
+        "sql": "\"observed\" <= TIMESTAMP '2024-01-01 01:30:00.123'"
+      },
+      "survey::fresh": {
+        "notes": [],
+        "sql": "\"observed\" >= current_timestamp - INTERVAL '2 weeks'"
+      },
+      "survey::long postal": {
+        "notes": [
+          "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+        ],
+        "sql": "(length(\"profile\".\"zip\")) > 5"
+      },
+      "survey::missing tags": {
+        "notes": [],
+        "sql": "\"tags\" IS NULL"
+      },
+      "survey::missing unknown": {
+        "notes": [],
+        "sql": "\"untyped\" IS NULL"
+      },
+      "survey::mixed temporal case": {
+        "notes": [],
+        "sql": "CASE WHEN \"q1\" THEN \"created\" ELSE \"observed\" END"
+      },
+      "survey::negative infinity": {
+        "notes": [
+          "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+        ],
+        "sql": "\"amount\" > -CAST('Infinity' AS DOUBLE)"
+      },
+      "survey::negative quotient": {
+        "notes": [],
+        "sql": "-(\"amount\" - 2) / (\"ratio\" + 1.0)"
+      },
+      "survey::null logic": {
+        "notes": [],
+        "sql": "NOT \"q1\" OR NULL IS NULL"
+      },
+      "survey::nullable date shift": {
+        "notes": [],
+        "sql": "\"created\" + NULL"
+      },
+      "survey::offset time": {
+        "notes": [],
+        "sql": "\"observed\" >= TIMESTAMP '2024-01-01 07:30:00'"
+      },
+      "survey::postal length": {
+        "notes": [],
+        "sql": "length(\"profile\".\"zip\")"
+      },
+      "survey::precise threshold": {
+        "notes": [
+          "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+        ],
+        "sql": "\"amount\" > 0.12345678901234566"
+      },
+      "survey::prefix match": {
+        "notes": [],
+        "sql": "starts_with(\"pattern\", 'a')"
+      },
+      "survey::range predicate": {
+        "notes": [
+          "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
+        ],
+        "sql": "\"amount\" BETWEEN -10 AND 10 AND \"amount\" NOT IN (0, 1)"
+      },
+      "survey::recent": {
+        "notes": [],
+        "sql": "\"created\" >= DATE '2024-01-01'"
+      },
+      "survey::right associative arithmetic": {
+        "notes": [],
+        "sql": "\"amount\" - (\"ratio\" - 1)"
+      },
+      "survey::selected dates": {
+        "notes": [],
+        "sql": "\"created\" >= '2020-01-01'"
+      },
+      "survey::suffix mismatch": {
+        "notes": [],
+        "sql": "NOT ends_with(\"pattern\", 'z')"
+      },
+      "survey::untyped count": {
+        "notes": [],
+        "sql": "count(\"untyped\")"
+      }
+    }
+  },
   "corpus_dir": "definition-export",
   "data_dict_commit": "d950c5ac90d0ab939d330600f3a5ee1bfde0f604",
   "export_records": {
