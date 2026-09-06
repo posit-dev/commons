@@ -14,11 +14,11 @@ a table name the agent can query.}
 \item{tables}{Which tables to expose, used when a connection or a board is
 supplied.
 
-For a connection, a character vector of table names, schema-qualified
-strings like \code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every
-table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are
-interpreted as schema-qualified names; use \code{DBI::Id(table = "a.b")} for
-literal table names containing dots. For Snowflake and Databricks
+For a connection, a character vector of table names, qualified strings
+like \code{"schema.table"} or \code{"catalog.schema.table"}, or \code{DBI::Id} objects.
+Defaults to every table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings
+containing dots are interpreted as qualified names, at most three parts;
+use \code{DBI::Id(table = "a.b")} for literal table names containing dots. For Snowflake and Databricks
 connections, a \code{DBI::Id} ending in \code{catalog} or \code{schema} selects every
 table and view in that namespace. Leaving \code{tables} unset selects the
 current schema. A Databricks \code{hive_metastore} selection must include a

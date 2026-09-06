@@ -29,11 +29,11 @@
 #' @param tables Which tables to expose, used when a connection or a board is
 #'   supplied.
 #'
-#'   For a connection, a character vector of table names, schema-qualified
-#'   strings like `"schema.table"`, or `DBI::Id` objects. Defaults to every
-#'   table returned by [DBI::dbListTables()]. Strings containing dots are
-#'   interpreted as schema-qualified names; use `DBI::Id(table = "a.b")` for
-#'   literal table names containing dots. For Snowflake and Databricks
+#'   For a connection, a character vector of table names, qualified strings
+#'   like `"schema.table"` or `"catalog.schema.table"`, or `DBI::Id` objects.
+#'   Defaults to every table returned by [DBI::dbListTables()]. Strings
+#'   containing dots are interpreted as qualified names, at most three parts;
+#'   use `DBI::Id(table = "a.b")` for literal table names containing dots. For Snowflake and Databricks
 #'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
@@ -901,22 +901,33 @@ table_entry_id <- function(table, call = rlang::caller_env()) {
     )
   }
 
+  # strsplit() drops a trailing empty piece, so "orders." splits to "orders";
+  # check the trailing dot separately rather than accept it as a bare name.
   parts <- strsplit(table, ".", fixed = TRUE)[[1]]
-  if (any(parts == "")) {
+  if (any(parts == "") || endsWith(table, ".")) {
     cli::cli_abort(
       "Schema-qualified entries in {.arg tables} must not contain empty name components.",
       call = call
     )
   }
 
+  if (length(parts) > 3) {
+    cli::cli_abort(
+      c(
+        "A table name has at most three parts, catalog.schema.table: {.val {table}}.",
+        i = "Spell a name containing a dot as a {.cls DBI::Id}."
+      ),
+      call = call
+    )
+  }
   if (length(parts) == 1) {
     return(DBI::Id(table = table))
   }
+  if (length(parts) == 2) {
+    return(DBI::Id(schema = parts[[1]], table = parts[[2]]))
+  }
 
-  DBI::Id(
-    schema = paste(parts[-length(parts)], collapse = "."),
-    table = parts[[length(parts)]]
-  )
+  DBI::Id(catalog = parts[[1]], schema = parts[[2]], table = parts[[3]])
 }
 
 table_id_label <- function(id, call = rlang::caller_env()) {
