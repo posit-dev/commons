@@ -190,6 +190,12 @@ def test_listing_a_database_scopes_to_that_database():
     assert backend.queries == ['SHOW OBJECTS IN DATABASE "ANALYTICS"']
 
 
+def test_listing_a_schema_without_a_catalog_uses_the_current_database():
+    backend = FakeBackend(rows=show_rows())
+    list_relations(backend, Selector(schema="PUBLIC"))
+    assert backend.queries == ['SHOW OBJECTS IN SCHEMA "PUBLIC"']
+
+
 def test_a_quote_inside_an_identifier_is_doubled():
     backend = FakeBackend(rows=[])
     list_relations(backend, Selector(catalog='we"ird'))
@@ -216,6 +222,31 @@ def test_an_exact_relation_the_warehouse_does_not_have_is_not_found():
         backend, Selector(catalog="ANALYTICS", schema="PUBLIC", table="ABSENT")
     )
     assert found is None
+
+
+def test_a_bare_table_is_looked_up_in_the_current_namespace():
+    """A selector naming only a table resolves against the connection.
+
+    Without this test, deleting the current-namespace fallback fails
+    nothing: the recording fake accepts the malformed query, and the name
+    filter still matches the canned rows.
+    """
+
+    class NamespaceBackend(FakeBackend):
+        def query(self, sql: str):
+            rows = super().query(sql)
+            if sql.startswith("SELECT CURRENT"):
+                return [{"catalog": "ANALYTICS", "schema": "PUBLIC"}]
+            return rows
+
+    backend = NamespaceBackend(rows=show_rows())
+    found = exact_relation(backend, Selector(table="ORDERS"))
+    assert backend.queries == [
+        "SELECT CURRENT_DATABASE() AS catalog, CURRENT_SCHEMA() AS schema",
+        'SHOW OBJECTS LIKE \'ORDERS\' IN SCHEMA "ANALYTICS"."PUBLIC"',
+    ]
+    assert found is not None
+    assert found.id.label == "ANALYTICS.PUBLIC.ORDERS"
 
 
 def test_describing_a_relation_quotes_its_full_path():
