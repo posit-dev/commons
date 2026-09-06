@@ -1,0 +1,337 @@
+{
+  "limits": {
+    "object": 25000,
+    "prompt": 3000,
+    "search_probe": 100
+  },
+  "exclusion": [
+    {
+      "name": "a star matches any suffix",
+      "patterns": ["TMP_*"],
+      "names": ["TMP_LOAD", "orders"],
+      "hidden": [true, false]
+    },
+    {
+      "name": "glob metacharacters are literal",
+      "patterns": ["a.b"],
+      "names": ["a.b", "axb"],
+      "hidden": [true, false]
+    },
+    {
+      "name": "a question mark is one character",
+      "patterns": ["order?"],
+      "names": ["orders", "order"],
+      "hidden": [true, false]
+    },
+    {
+      "name": "matching is case-sensitive",
+      "patterns": ["tmp_*"],
+      "names": ["TMP_LOAD"],
+      "hidden": [false]
+    },
+    {
+      "name": "no patterns hides nothing",
+      "patterns": [],
+      "names": ["orders"],
+      "hidden": [false]
+    }
+  ],
+  "merge": [
+    {
+      "name": "authored prose wins and the warehouse owns the shape",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "orders",
+            "description": "Authored orders.",
+            "columns": [
+              {
+                "name": "amount",
+                "type": "number(quantity)",
+                "description": "Authored amount."
+              },
+              {"name": "note", "description": "Authored only."}
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": "Warehouse orders.",
+          "columns": [
+            {
+              "column": "AMOUNT",
+              "type": "NUMBER(38,2)",
+              "nullable": true,
+              "description": "Warehouse amount."
+            },
+            {
+              "column": "ORDER_ID",
+              "type": "NUMBER(38,0)",
+              "nullable": false,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.ORDERS": {
+            "authored_name": "orders",
+            "kind": "table",
+            "description": "Authored orders.",
+            "columns": [
+              {
+                "name": "AMOUNT",
+                "type": "NUMBER(38,2)",
+                "nullable": true,
+                "description": "Authored amount."
+              },
+              {
+                "name": "ORDER_ID",
+                "type": "NUMBER(38,0)",
+                "nullable": false,
+                "description": null
+              },
+              {
+                "name": "note",
+                "type": null,
+                "nullable": null,
+                "description": "Authored only."
+              }
+            ]
+          }
+        },
+        "bindings": {
+          "tables": {"orders": "ANALYTICS.PUBLIC.ORDERS"},
+          "columns": {"orders": {"amount": "AMOUNT", "note": null}}
+        }
+      }
+    },
+    {
+      "name": "an exact label match keeps no alias",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [{"name": "ANALYTICS.PUBLIC.ORDERS"}]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "view",
+          "description": null,
+          "columns": []
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.ORDERS": {
+            "authored_name": null,
+            "kind": "view",
+            "description": null,
+            "columns": []
+          }
+        },
+        "bindings": {
+          "tables": {"ANALYTICS.PUBLIC.ORDERS": "ANALYTICS.PUBLIC.ORDERS"},
+          "columns": {"ANALYTICS.PUBLIC.ORDERS": {}}
+        }
+      }
+    },
+    {
+      "name": "an authored kind survives a warehouse that reports none",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [{"name": "ANALYTICS.PUBLIC.ORDERS", "kind": "view"}]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": null,
+          "description": null,
+          "columns": []
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.ORDERS": {
+            "authored_name": null,
+            "kind": "view",
+            "description": null,
+            "columns": []
+          }
+        },
+        "bindings": {
+          "tables": {"ANALYTICS.PUBLIC.ORDERS": "ANALYTICS.PUBLIC.ORDERS"},
+          "columns": {"ANALYTICS.PUBLIC.ORDERS": {}}
+        }
+      }
+    },
+    {
+      "name": "warehouse prose fills a gap the author left",
+      "identifier_case": "lower",
+      "dictionary": {
+        "tables": [{"name": "orders"}]
+      },
+      "relations": [
+        {
+          "label": "main.sales.orders",
+          "catalog": "main",
+          "schema": "sales",
+          "table": "orders",
+          "kind": "table",
+          "description": "Warehouse orders.",
+          "columns": []
+        }
+      ],
+      "expect": {
+        "tables": {
+          "main.sales.orders": {
+            "authored_name": "orders",
+            "kind": "table",
+            "description": "Warehouse orders.",
+            "columns": []
+          }
+        },
+        "bindings": {
+          "tables": {"orders": "main.sales.orders"},
+          "columns": {"orders": {}}
+        }
+      }
+    },
+    {
+      "name": "an unmatched authored table leaves the merge",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "orders",
+            "columns": [{"name": "amount", "type": "number(quantity)"}]
+          },
+          {"name": "unselected", "description": "Not selected."}
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": null,
+          "columns": [
+            {
+              "column": "AMOUNT",
+              "type": "NUMBER(38,2)",
+              "nullable": true,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.ORDERS": {
+            "authored_name": "orders",
+            "kind": "table",
+            "description": null,
+            "columns": [
+              {
+                "name": "AMOUNT",
+                "type": "NUMBER(38,2)",
+                "nullable": true,
+                "description": null
+              }
+            ]
+          }
+        },
+        "bindings": {
+          "tables": {"orders": "ANALYTICS.PUBLIC.ORDERS", "unselected": null},
+          "columns": {"orders": {"amount": "AMOUNT"}}
+        }
+      }
+    },
+    {
+      "name": "an ambiguous relative name is an error",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [{"name": "orders"}]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": null,
+          "columns": []
+        },
+        {
+          "label": "ANALYTICS.CURATED.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "CURATED",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": null,
+          "columns": []
+        }
+      ],
+      "expect": {"error": "ambiguous"}
+    },
+    {
+      "name": "two authored tables cannot claim one relation",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [{"name": "orders"}, {"name": "ANALYTICS.PUBLIC.ORDERS"}]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": null,
+          "columns": []
+        }
+      ],
+      "expect": {"error": "claimed"}
+    },
+    {
+      "name": "an ambiguous discovered column is an error",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {"name": "orders", "columns": [{"name": "Amount"}]}
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.ORDERS",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": null,
+          "columns": [
+            {"column": "AMOUNT", "type": "NUMBER(38,2)", "nullable": true, "description": null},
+            {"column": "amount", "type": "NUMBER(10,0)", "nullable": true, "description": null}
+          ]
+        }
+      ],
+      "expect": {"error": "ambiguous_column"}
+    }
+  ]
+}
