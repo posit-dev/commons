@@ -58,9 +58,13 @@ def _children(ir: Ir) -> list[Ir]:
         if isinstance(value, Ir):
             out.append(value)
         elif isinstance(value, list):
-            out.extend(item for item in value if isinstance(item, Ir))
+            for item in value:
+                if isinstance(item, Ir):
+                    out.append(item)
+                elif isinstance(item, dict):
+                    # A `CASE` branch is a mapping of condition and result.
+                    out.extend(v for v in item.values() if isinstance(v, Ir))
         elif isinstance(value, dict):
-            # A `CASE` branch is a mapping of condition and result.
             out.extend(item for item in value.values() if isinstance(item, Ir))
     return out
 
@@ -197,7 +201,19 @@ def _mark_references(ir: Ir, markers: dict[str, str]) -> Ir:
             attrs[key] = _mark_references(value, markers)
         elif isinstance(value, list):
             attrs[key] = [
-                _mark_references(item, markers) if isinstance(item, Ir) else item
+                _mark_references(item, markers)
+                if isinstance(item, Ir)
+                # A `CASE` branch is a mapping of condition and result.
+                else (
+                    {
+                        inner_key: _mark_references(inner, markers)
+                        if isinstance(inner, Ir)
+                        else inner
+                        for inner_key, inner in item.items()
+                    }
+                    if isinstance(item, dict)
+                    else item
+                )
                 for item in value
             ]
         elif isinstance(value, dict):

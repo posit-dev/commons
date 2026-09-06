@@ -65,6 +65,24 @@ def test_grain_matches_the_shared_contract():
     assert checked == 42
 
 
+def test_composed_sql_matches_the_shared_contract():
+    fixture = load_shared_fixture("definitions")["composed"]
+    paths = sorted((SHARED_DIR / "definition-export" / "valid").glob("*.yaml"))
+    assert paths
+    checked = 0
+    for path in paths:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        dictionary = DataDictionary.model_validate(raw)
+        attach_compiled_definitions(dictionary, "duckdb", set(dictionary.tables))
+        for table in dictionary.tables.values():
+            for record in table.compiled_definitions:
+                expected = fixture[path.name][f"{record.table}::{record.name}"]
+                assert record.sql == expected["sql"], record.name
+                assert record.notes == expected["notes"], record.name
+                checked += 1
+    assert checked == 42
+
+
 def test_a_row_expression_holding_an_aggregate_is_mixed_grain():
     records = by_name(compiled({"name": "d", "expr": "amount > avg(amount)"}))
     assert records["d"].mixed_grain is True

@@ -3,9 +3,10 @@
 # pinned data-dict binary.
 #
 # `export_records` is data-dict's own output, projected to the fields both
-# packages consume. `mixed_grain` and `invalid` are not in that output:
-# grain is derived from the typed IR, and the problem codes come from
-# validate-spec. Both are hand-maintained and this script preserves them.
+# packages consume. `mixed_grain`, `composed`, and `invalid` are not in that
+# output: grain is derived from the typed IR, composition is commons' own
+# step, and the problem codes come from validate-spec. All three are
+# hand-maintained and this script preserves them.
 #
 # The binary is the authority. Regenerating against a build from any other
 # revision would quietly bless whatever that build does.
@@ -94,6 +95,7 @@ spec = {
     "corpus_dir": "definition-export",
     "export_records": records,
     "mixed_grain": existing.get("mixed_grain", {}),
+    "composed": existing.get("composed", {}),
     "invalid": existing.get("invalid", {}),
 }
 out.write_text(json.dumps(spec, indent=2, sort_keys=True) + "\n")
