@@ -112,168 +112,160 @@ test_that("source compilation rejects metrics over mixed-grain definitions", {
   )
 })
 
-test_that("one checked expression emits all supported SQL targets", {
+test_that("warehouse lowering matches the shared contract", {
   skip_if_not_installed("yaml")
-  source <- data_source(
-    values = data.frame(
-      number = 1,
-      text = "Alpha",
-      flag = TRUE
-    )
-  )
-  definitions <- definition_compiled_table(
-    definition_compile_fixture("functions.yaml", source)
-  )
+  spec <- shared_fixture("definition-warehouse-sql")
+  cases <- spec$cases
+  expect_gt(length(cases), 0)
+  checked <- 0
+  composed_compilations <- new.env(parent = emptyenv())
+  # Composed SQL exists only for the source's own target, so a case that
+  # pins composition recompiles the corpus with a mock source on that
+  # dialect, once per file and dialect.
+  compile_composed <- function(filename, target, tables) {
+    dialect <- sub("^SQL\\((.*)\\)$", "\\1", target)
+    cache <- paste(filename, dialect)
+    if (!exists(cache, envir = composed_compilations)) {
+      local_mocked_bindings(
+        is_snowflake_connection = function(con) dialect == "snowflake",
+        is_databricks_connection = function(con) dialect == "databricks"
+      )
+      assign(
+        cache,
+        definition_compiled_table(
+          definition_compile_fixture(filename, definition_mock_source(tables))
+        ),
+        envir = composed_compilations
+      )
+    }
+    get(cache, envir = composed_compilations)
+  }
 
-  expect_equal(
-    definition_translation(definitions$strings, "SQL(snowflake)")$code,
-    paste0(
-      "STARTSWITH(lower(trim(\"text\")), 'a') OR ",
-      "ENDSWITH(upper(\"text\"), 'Z')"
+  for (filename in names(cases)) {
+    file_cases <- cases[[filename]]
+    # The source only has to expose the tables the cases name; the corpus
+    # dictionary supplies everything else.
+    tables <- unique(vapply(
+      names(file_cases),
+      function(key) strsplit(key, "::", fixed = TRUE)[[1]][[1]],
+      character(1)
+    ))
+    frames <- stats::setNames(
+      lapply(tables, function(ignored) data.frame(row = 1)),
+      tables
     )
-  )
-  expect_equal(
-    definition_translation(definitions$strings, "SQL(databricks)")$code,
-    paste0(
-      "startswith(lower(trim(`text`)), 'a') OR ",
-      "endswith(upper(`text`), 'Z')"
+    source <- do.call(data_source, frames)
+    definitions <- definition_compiled_table(
+      definition_compile_fixture(filename, source)
     )
-  )
-  expect_equal(
-    definition_translation(definitions$remainder, "SQL(snowflake)")$code,
-    paste0(
-      "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE ",
-      "MOD(MOD(\"number\", 3) + 3, 3) END"
-    )
-  )
-  expect_equal(
-    definition_translation(definitions$remainder, "SQL(databricks)")$code,
-    paste0(
-      "CASE WHEN 3 = 0 THEN CAST('NaN' AS DOUBLE) ELSE ",
-      "MOD(MOD(`number`, 3) + 3, 3) END"
-    )
-  )
-  expect_match(
-    definition_translation(definitions$patterns, "SQL(snowflake)")$code,
-    "REGEXP_LIKE",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(definitions$patterns, "SQL(databricks)")$code,
-    "regexp_like",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(definitions$finite, "SQL(snowflake)")$code,
-    "NOT (",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(definitions$finite, "SQL(databricks)")$code,
-    "NOT (CASE",
-    fixed = TRUE
-  )
+
+    for (key in names(file_cases)) {
+      name <- strsplit(key, "::", fixed = TRUE)[[1]][[2]]
+      for (target in names(file_cases[[key]])) {
+        # `[[` throughout: `$` partial-matches, so `expected$code` would
+        # silently return `code_contains` on a case that has no exact code.
+        expected <- file_cases[[key]][[target]]
+        actual <- definition_translation(definitions[[name]], target)
+        info <- paste(filename, key, target)
+        unknown <- setdiff(
+          names(expected),
+          c("code", "code_contains", "notes_contain", "composed_code")
+        )
+        expect_true(
+          length(unknown) == 0,
+          info = paste(info, paste(unknown, collapse = ", "))
+        )
+        if (!is.null(expected[["code"]])) {
+          expect_equal(actual$code, expected[["code"]], info = info)
+        }
+        for (fragment in expected[["code_contains"]] %||% character()) {
+          expect_true(grepl(fragment, actual$code, fixed = TRUE), info = info)
+        }
+        for (fragment in expected[["notes_contain"]] %||% character()) {
+          expect_true(
+            any(grepl(fragment, actual$notes, fixed = TRUE)),
+            info = info
+          )
+        }
+        if (!is.null(expected[["composed_code"]])) {
+          composed <- compile_composed(filename, target, tables)
+          expect_equal(
+            composed[[name]]$sql,
+            expected[["composed_code"]],
+            info = info
+          )
+        }
+        checked <- checked + 1L
+      }
+    }
+  }
+
+  expect_gte(checked, 20L)
 })
 
-test_that("temporal, struct, and COLUMNS expressions lower by target", {
+test_that("warehouse refusals match the shared contract", {
   skip_if_not_installed("yaml")
-  source <- data_source(survey = data.frame(row = 1))
-  definitions <- definition_compiled_table(
-    definition_compile_fixture("language.yaml", source)
-  )
+  unsupported <- shared_fixture("definition-warehouse-sql")[["unsupported"]]
+  expect_gt(length(unsupported), 0)
+  checked <- 0
 
-  expect_equal(
-    definition_translation(definitions$fresh, "SQL(snowflake)")$code,
-    paste0(
-      '"observed" >= DATEADD(MICROSECOND, -((2) * 604800000000), ',
-      "CURRENT_TIMESTAMP())"
+  for (case_name in names(unsupported)) {
+    case <- unsupported[[case_name]]
+    raw <- list(tables = list(list(
+      name = case[["table"]],
+      columns = case[["columns"]],
+      definitions = list(case[["definition"]])
+    )))
+    # The source only has to expose the table; the dictionary supplies the
+    # rest. DuckDB lowers every construct here, so its translation records
+    # carry each target's acceptance or refusal.
+    source <- do.call(
+      data_source,
+      stats::setNames(list(data.frame(row = 1)), case[["table"]])
     )
-  )
-  expect_equal(
-    definition_translation(definitions$fresh, "SQL(databricks)")$code,
-    paste0(
-      "`observed` >= timestampadd(MICROSECOND, -((2) * 604800000000), ",
-      "CURRENT_TIMESTAMP())"
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["fractional interval"]],
-      "SQL(snowflake)"
-    )$code,
-    paste0(
-      'DATEADD(MICROSECOND, -((1.5) * 3600000000), "observed")'
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["fractional interval"]],
-      "SQL(databricks)"
-    )$code,
-    paste0(
-      "timestampadd(MICROSECOND, -((1.5) * 3600000000), ",
-      "`observed`)"
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["postal length"]],
-      "SQL(snowflake)"
-    )$code,
-    'length(GET("profile", \'zip\'))'
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["postal length"]],
-      "SQL(databricks)"
-    )$code,
-    "length(`profile`.`zip`)"
-  )
-  expect_equal(
-    definition_translation(definitions$complete, "SQL(databricks)")$code,
-    "`q1` IS NOT NULL AND `q2` IS NOT NULL"
-  )
-  expect_match(
-    definition_translation(
-      definitions[["dynamic match"]],
-      "SQL(snowflake)"
-    )$notes,
-    "newline characters",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(
-      definitions[["negative quotient"]],
-      "SQL(snowflake)"
-    )$code,
-    "CASE WHEN",
-    fixed = TRUE
-  )
-  expect_match(
-    definition_translation(
-      definitions[["negative quotient"]],
-      "SQL(databricks)"
-    )$notes,
-    "negative zero divisor",
-    fixed = TRUE
-  )
-  expect_equal(
-    definition_translation(definitions[["offset time"]], "SQL(snowflake)")$code,
-    paste0(
-      '"observed" >= TO_TIMESTAMP_TZ(',
-      "'2024-01-01 07:30:00 +00:00')"
-    )
-  )
-  expect_equal(
-    definition_translation(
-      definitions[["fractional time"]],
-      "SQL(databricks)"
-    )$code,
-    paste0(
-      "`observed` <= make_timestamp(",
-      "2024, 1, 1, 1, 30, 0.123, 'UTC')"
-    )
-  )
+    definition <- definition_compiled_table(
+      definition_compile_source(raw, source)
+    )[[case[["definition"]][["name"]]]]
+
+    for (target in names(case[["targets"]])) {
+      expected <- case[["targets"]][[target]]
+      info <- paste(case_name, target)
+      unknown <- setdiff(names(expected), c("code", "error_contains"))
+      expect_true(
+        length(unknown) == 0,
+        info = paste(info, paste(unknown, collapse = ", "))
+      )
+      actual <- definition_translation(definition, target)
+      if (!is.null(expected[["error_contains"]])) {
+        for (fragment in expected[["error_contains"]]) {
+          expect_true(
+            grepl(fragment, actual[["error"]], fixed = TRUE),
+            info = info
+          )
+        }
+        # A source on that dialect refuses the definition at construction.
+        dialect <- sub("^SQL\\((.*)\\)$", "\\1", target)
+        local_mocked_bindings(
+          is_snowflake_connection = function(con) dialect == "snowflake",
+          is_databricks_connection = function(con) dialect == "databricks"
+        )
+        expect_error(
+          definition_compile_source(
+            raw,
+            definition_mock_source(case[["table"]])
+          ),
+          "cannot be compiled",
+          info = info
+        )
+      } else {
+        expect_null(actual[["error"]], info = info)
+        expect_equal(actual[["code"]], expected[["code"]], info = info)
+      }
+      checked <- checked + 1L
+    }
+  }
+
+  expect_gte(checked, 8L)
 })
 
 test_that("source selection binds authored warehouse identifiers", {
@@ -373,119 +365,6 @@ test_that("unknown source backends reject definitions only when present", {
   expect_error(
     definition_compile_source(defined, source),
     "Definitions.*positive.*cannot be compiled"
-  )
-})
-
-test_that("unsupported translations are explicit and selected errors abort", {
-  raw <- list(
-    tables = list(list(
-      name = "values",
-      definitions = list(list(
-        name = "duration",
-        expr = "interval(2, days)"
-      ))
-    ))
-  )
-  duckdb <- data_source(values = data.frame(row = 1))
-  definitions <- definition_compiled_table(
-    definition_compile_source(raw, duckdb)
-  )
-
-  expect_match(
-    definition_translation(definitions$duration, "SQL(snowflake)")$error,
-    "standalone interval"
-  )
-  expect_match(
-    definition_translation(definitions$duration, "SQL(databricks)")$error,
-    "standalone interval"
-  )
-
-  local_mocked_bindings(
-    is_snowflake_connection = function(con) TRUE,
-    is_databricks_connection = function(con) FALSE
-  )
-  expect_error(
-    definition_compile_source(raw, definition_mock_source("values")),
-    "cannot be compiled for.*SQL\\(snowflake\\)"
-  )
-})
-
-test_that("target restrictions stay on their translation records", {
-  raw <- list(
-    tables = list(list(
-      name = "values",
-      columns = list(list(name = "number", type = "number(quantity)")),
-      definitions = list(list(
-        name = "dynamic_round",
-        expr = "ROUND(number, number)"
-      ))
-    ))
-  )
-  definitions <- definition_compiled_table(definition_compile_source(
-    raw,
-    data_source(values = data.frame(number = 1))
-  ))
-
-  expect_null(
-    definition_translation(definitions$dynamic_round, "SQL(snowflake)")$error
-  )
-  expect_match(
-    definition_translation(
-      definitions$dynamic_round,
-      "SQL(databricks)"
-    )$error,
-    "dynamic ROUND"
-  )
-
-  constant <- list(
-    tables = list(list(
-      name = "values",
-      columns = list(list(name = "number", type = "number(quantity)")),
-      definitions = list(list(
-        name = "fractional_scale",
-        expr = "ROUND(number, 1.5)"
-      ))
-    ))
-  )
-  definitions <- definition_compiled_table(definition_compile_source(
-    constant,
-    data_source(values = data.frame(number = 1))
-  ))
-  expect_equal(
-    definition_translation(
-      definitions$fractional_scale,
-      "SQL(snowflake)"
-    )$code,
-    'round("number", TRUNC(1.5))'
-  )
-  expect_equal(
-    definition_translation(
-      definitions$fractional_scale,
-      "SQL(databricks)"
-    )$code,
-    "round(`number`, CAST(1.5 AS INT))"
-  )
-
-  nanosecond <- list(
-    tables = list(list(
-      name = "values",
-      columns = list(list(name = "observed", type = "datetime")),
-      definitions = list(list(
-        name = "after_threshold",
-        expr = "observed > '2024-01-01T00:00:00.123456789Z'"
-      ))
-    ))
-  )
-  definitions <- definition_compiled_table(definition_compile_source(
-    nanosecond,
-    data_source(values = data.frame(observed = Sys.time()))
-  ))
-  expect_match(
-    definition_translation(
-      definitions$after_threshold,
-      "SQL(databricks)"
-    )$error,
-    "microsecond precision"
   )
 })
 
