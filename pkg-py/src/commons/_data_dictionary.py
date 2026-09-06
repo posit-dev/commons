@@ -101,6 +101,9 @@ class Definition(_Permissive):
 class Table(_Permissive):
     description: str | None = None
     details: str | None = None
+    # The warehouse's object kind (table, view, ...), filled by a catalog
+    # merge; an authored value survives when the warehouse has none.
+    kind: str | None = None
     columns: dict[str, Column] = {}
     definitions: dict[str, Definition] = {}
     # Attached by _definitions at data-source construction; empty until then,

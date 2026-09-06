@@ -1,18 +1,21 @@
 """Merging a warehouse catalog into an authored dictionary.
 
-The rules the R side settled and this must keep: authored prose wins,
-warehouse types are authoritative, identifier case normalizes per backend,
-and an ambiguous relative name is an error rather than a guess.
+The rules, which both implementations keep: authored prose wins, warehouse
+types are authoritative, identifier case normalizes per backend, and an
+ambiguous relative name is an error rather than a guess.
 
 Everything here is a pure function over the rows a warehouse listing returns,
 so it needs no warehouse. The queries that produce those rows are the
 per-backend readers.
 """
 
+from typing import cast
+
 import pytest
 
 from commons._catalog import (
     Manifest,
+    MergedDictionary,
     Relation,
     Selector,
     check_exclude,
@@ -23,8 +26,10 @@ from commons._catalog import (
     search,
     table_registry,
 )
+from commons._catalog._core import OBJECT_LIMIT, PROMPT_LIMIT, SEARCH_PROBE_LIMIT
 from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
+from tests._shared import load_shared_fixture
 
 
 def relation(label: str, **kwargs) -> Relation:
@@ -124,6 +129,19 @@ def test_a_selection_above_the_object_limit_is_refused():
         )
 
 
+def test_a_selection_at_the_object_limit_is_allowed():
+    registry = table_registry(
+        selectors=[Selector(catalog="main", schema="sales")],
+        exact_relation=lambda table_id: None,
+        list_relations=lambda table_id: [
+            relation("main.sales.orders", kind="table"),
+            relation("main.sales.refunds", kind="table"),
+        ],
+        object_limit=2,
+    )
+    assert len(registry.relations) == 2
+
+
 def test_duplicate_labels_are_refused():
     with pytest.raises(ValueError, match="duplicate labels"):
         table_registry(
@@ -132,6 +150,20 @@ def test_duplicate_labels_are_refused():
             list_relations=lambda table_id: [
                 relation("main.sales.orders", kind="table"),
                 relation("main.sales.orders", kind="view"),
+            ],
+        )
+
+
+def test_every_duplicate_label_is_reported():
+    with pytest.raises(ValueError, match=r"orders.*refunds"):
+        table_registry(
+            selectors=[Selector(catalog="main", schema="sales")],
+            exact_relation=lambda table_id: None,
+            list_relations=lambda table_id: [
+                relation("main.sales.orders"),
+                relation("main.sales.refunds"),
+                relation("main.sales.orders"),
+                relation("main.sales.refunds"),
             ],
         )
 
@@ -205,6 +237,61 @@ def test_search_honours_its_limit():
     assert len(search(manifest_for_search(), "orders refunds", limit=1)) == 1
 
 
+def test_a_fractional_limit_is_refused():
+    with pytest.raises(ValueError, match="positive whole number"):
+        search(manifest_for_search(), "orders", limit=cast(int, 2.5))
+
+
+def test_a_boolean_limit_is_refused():
+    with pytest.raises(ValueError, match="positive whole number"):
+        search(manifest_for_search(), "orders", limit=cast(int, True))
+
+
+def test_search_skips_what_cannot_be_queried_and_fills_in():
+    results = search(
+        manifest_for_search(),
+        # `orders` ranks the orders relation first; `purchases` gives the
+        # refunds description a substring hit so it is scored second.
+        "orders purchases",
+        limit=1,
+        queryable=lambda label: label != "main.finance.orders",
+    )
+    assert list(results) == ["refunds"]
+
+
+def test_search_stops_probing_once_the_limit_is_met():
+    manifest = Manifest.build(
+        {f"schema.orders{i}": relation(f"schema.orders{i}") for i in range(20)},
+        namespace_selected=True,
+    )
+    probes = 0
+
+    def allow(label: str) -> bool:
+        nonlocal probes
+        probes += 1
+        return True
+
+    results = search(manifest, "orders", limit=3, queryable=allow)
+    assert len(results) == 3
+    assert probes == 3
+
+
+def test_search_probes_at_most_the_probe_limit():
+    manifest = Manifest.build(
+        {f"schema.orders{i}": relation(f"schema.orders{i}") for i in range(150)},
+        namespace_selected=True,
+    )
+    probes = 0
+
+    def deny(label: str) -> bool:
+        nonlocal probes
+        probes += 1
+        return False
+
+    assert search(manifest, "orders", limit=10, queryable=deny) == {}
+    assert probes == SEARCH_PROBE_LIMIT
+
+
 def test_a_manifest_is_searchable_only_when_the_listing_is_large():
     small = Manifest.build(
         {"a": relation("a")}, namespace_selected=True, prompt_limit=3000
@@ -222,6 +309,15 @@ def test_an_explicit_table_list_is_never_searchable():
         {"a": relation("a")}, namespace_selected=False, prompt_limit=0
     )
     assert manifest.searchable is False
+
+
+def test_a_manifest_at_exactly_the_prompt_limit_is_not_searchable():
+    objects = {"aaaa": relation("aaaa")}
+    # The listing is the labels joined by newlines: exactly four bytes here.
+    at_limit = Manifest.build(objects, namespace_selected=True, prompt_limit=4)
+    assert at_limit.searchable is False
+    over_limit = Manifest.build(objects, namespace_selected=True, prompt_limit=3)
+    assert over_limit.searchable is True
 
 
 # --- merging into a dictionary ---------------------------------------------
@@ -297,6 +393,125 @@ def test_authored_detail_the_warehouse_does_not_carry_survives():
 def test_discovered_columns_come_first_and_authored_only_ones_follow():
     columns = merged_fixture().dictionary.tables["ANALYTICS.PUBLIC.ORDERS"].columns
     assert list(columns) == ["AMOUNT", "ORDER_ID", "missing"]
+
+
+def test_the_warehouse_kind_reaches_the_merged_table():
+    table = merged_fixture().dictionary.tables["ANALYTICS.PUBLIC.ORDERS"]
+    assert table.kind == "table"
+
+
+def test_an_authored_kind_survives_when_the_warehouse_has_none():
+    dictionary = DataDictionary.model_validate(
+        {"tables": [{"name": "orders", "kind": "view"}]}
+    )
+    merged = merge_dictionary(
+        dictionary,
+        {"ANALYTICS.PUBLIC.ORDERS": relation("ANALYTICS.PUBLIC.ORDERS")},
+        describe_relation=lambda table_id: [],
+        identifier_case="upper",
+    )
+    assert merged.dictionary.tables["ANALYTICS.PUBLIC.ORDERS"].kind == "view"
+
+
+def test_the_access_check_runs_once_per_matched_relation():
+    calls = []
+    dictionary = DataDictionary.model_validate({"tables": [{"name": "orders"}]})
+    relations = {"ANALYTICS.PUBLIC.ORDERS": relation("ANALYTICS.PUBLIC.ORDERS")}
+    merge_dictionary(
+        dictionary,
+        relations,
+        describe_relation=lambda table_id: [],
+        identifier_case="upper",
+        access_check=lambda table_id, label: calls.append((table_id, label)),
+    )
+    assert calls == [
+        (relations["ANALYTICS.PUBLIC.ORDERS"].id, "ANALYTICS.PUBLIC.ORDERS")
+    ]
+
+
+def test_an_access_check_failure_stops_the_merge():
+    def deny(table_id: TableId, label: str) -> None:
+        raise PermissionError(label)
+
+    dictionary = DataDictionary.model_validate({"tables": [{"name": "orders"}]})
+    with pytest.raises(PermissionError):
+        merge_dictionary(
+            dictionary,
+            {"ANALYTICS.PUBLIC.ORDERS": relation("ANALYTICS.PUBLIC.ORDERS")},
+            describe_relation=lambda table_id: [],
+            identifier_case="upper",
+            access_check=deny,
+        )
+
+
+# --- the shared contract ---------------------------------------------------
+
+
+def test_catalog_limits_match_the_shared_contract():
+    limits = load_shared_fixture("catalog-merge")["limits"]
+    assert OBJECT_LIMIT == limits["object"]
+    assert PROMPT_LIMIT == limits["prompt"]
+    assert SEARCH_PROBE_LIMIT == limits["search_probe"]
+
+
+def test_exclusion_globs_match_the_shared_contract():
+    cases = load_shared_fixture("catalog-merge")["exclusion"]
+    assert cases
+    for case in cases:
+        assert excluded(case["names"], case["patterns"]) == case["hidden"], case["name"]
+
+
+def run_merge_case(case: dict) -> MergedDictionary:
+    relations = {}
+    for entry in case["relations"]:
+        relations[entry["label"]] = Relation(
+            id=TableId(
+                catalog=entry.get("catalog"),
+                schema=entry.get("schema"),
+                table=entry["table"],
+            ),
+            kind=entry.get("kind"),
+            description=entry.get("description"),
+        )
+    columns = {entry["label"]: entry["columns"] for entry in case["relations"]}
+    dictionary = DataDictionary.model_validate(case["dictionary"])
+    return merge_dictionary(
+        dictionary,
+        relations,
+        describe_relation=lambda table_id: columns[table_id.label],
+        identifier_case=case["identifier_case"],
+    )
+
+
+def test_the_dictionary_merge_matches_the_shared_contract():
+    cases = load_shared_fixture("catalog-merge")["merge"]
+    assert cases
+    for case in cases:
+        expect = case["expect"]
+        if "error" in expect:
+            with pytest.raises(ValueError):
+                run_merge_case(case)
+            continue
+
+        merged = run_merge_case(case)
+        assert list(merged.dictionary.tables) == list(expect["tables"]), case["name"]
+        for label, want in expect["tables"].items():
+            table = merged.dictionary.tables[label]
+            assert table.authored_name == want["authored_name"], case["name"]
+            assert table.kind == want["kind"], case["name"]
+            assert table.description == want["description"], case["name"]
+            assert list(table.columns) == [
+                column["name"] for column in want["columns"]
+            ], case["name"]
+            for want_column in want["columns"]:
+                column = table.columns[want_column["name"]]
+                assert column.type == want_column["type"], case["name"]
+                assert column.nullable == want_column["nullable"], case["name"]
+                assert column.description == want_column["description"], case["name"]
+        bindings = merged.definition_bindings
+        assert bindings is not None, case["name"]
+        assert bindings["tables"] == expect["bindings"]["tables"], case["name"]
+        assert bindings["columns"] == expect["bindings"]["columns"], case["name"]
 
 
 def test_the_bindings_record_what_each_authored_name_matched():

@@ -103,6 +103,12 @@ def _glob_regex(pattern: str) -> re.Pattern[str]:
 
 
 def excluded(names: list[str], patterns: list[str] | None) -> list[bool]:
+    """Which names an exclude list hides.
+
+    Matching is against the bare table name, case-sensitively: a pattern
+    cannot exclude by catalog or schema, and it must use the warehouse's
+    own spelling even on a case-folding backend.
+    """
     if not patterns:
         return [False] * len(names)
     compiled = [_glob_regex(pattern) for pattern in patterns]
@@ -164,7 +170,11 @@ def table_registry(
     exclude: list[str] | None = None,
     object_limit: int = OBJECT_LIMIT,
 ) -> TableRegistry:
-    """Resolve a `tables` selection into labelled relations."""
+    """Resolve a `tables` selection into labelled relations.
+
+    Raises when the selection resolves to more than `object_limit`
+    objects, and when two entries label the same relation.
+    """
     check_exclude(exclude)
     relations: list[Relation] = []
     validate: list[TableId] = []
@@ -201,11 +211,17 @@ def table_registry(
         )
 
     labelled: dict[str, Relation] = {}
+    duplicated: list[str] = []
     for item in relations:
         label = item.id.label
         if label in labelled:
-            raise ValueError(f"tables must not select duplicate labels: {label}.")
+            if label not in duplicated:
+                duplicated.append(label)
+            continue
         labelled[label] = item
+    if duplicated:
+        listed = ", ".join(repr(label) for label in duplicated)
+        raise ValueError(f"tables must not select duplicate labels: {listed}.")
     return TableRegistry(
         relations=labelled,
         validate={table_id.label: table_id for table_id in validate},
@@ -258,8 +274,13 @@ def search(
     Scores a whole-word hit and a substring hit separately, so `finance`
     matches both a schema named finance and a description mentioning
     financing.
+
+    `limit` must be a positive whole number. With `queryable` set, at most
+    `SEARCH_PROBE_LIMIT` candidates are probed, so no more than that many
+    results can come back however large `limit` is.
     """
-    if limit < 1:
+    # `bool` is an `int`, so `True` would otherwise be accepted as `1`.
+    if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
         raise ValueError("limit must be a positive whole number.")
     objects = manifest.objects
     if kinds is not None:
@@ -306,6 +327,10 @@ def merge_dictionary(
     The dictionary is re-keyed to the labels the agent will use, and each
     authored table records which relation it matched so definitions can be
     bound to physical names later.
+
+    Raises when an authored table matches more than one selected relation,
+    or two authored tables match the same one: the author has to say which
+    they meant.
     """
     if dictionary is None or not dictionary.tables:
         return MergedDictionary(dictionary, relations, None)
@@ -459,6 +484,8 @@ def _merge_table(
 ) -> tuple[Any, dict[str, str | None]]:
     table = authored.model_copy(deep=True)
     table.description = _authored_prose(table.description, relation.description)
+    # The warehouse's kind wins; an authored one survives when it has none.
+    table.kind = relation.kind or table.kind
     merged, matches = _merge_columns(table.columns, columns, identifier_case)
     table.columns = merged
     if authored_name != selected_name:
