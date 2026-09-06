@@ -9,6 +9,7 @@ Running the queries that produce those rows belongs to the per-backend
 readers, which keeps this testable without a warehouse.
 """
 
+from . import _databricks, _snowflake
 from ._core import (
     Manifest,
     MergedDictionary,
@@ -28,6 +29,8 @@ __all__ = [
     "MergedDictionary",
     "Relation",
     "Selector",
+    "_databricks",
+    "_snowflake",
     "check_exclude",
     "excluded",
     "id_type",

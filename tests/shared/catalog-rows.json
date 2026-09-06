@@ -1,0 +1,157 @@
+{
+  "note": "How a warehouse listing becomes relations and columns. These are the rows Snowflake's SHOW OBJECTS and DESC TABLE, and Databricks' system.information_schema.tables and DESCRIBE TABLE, actually return, and what both implementations must make of them: which rows are relations at all, what kind each is, which comments count as prose, and where a DESCRIBE reply stops being columns. Running the queries is each language's own business; agreeing on their replies is not. Hand-maintained, since no binary generates it. A blank comment means no description, so it is spelled \"\" rather than null to survive both JSON readers unchanged.",
+  "snowflake": {
+    "relations": {
+      "rows": [
+        {
+          "name": "Sales.Report",
+          "database_name": "Data.Base",
+          "schema_name": "Odd Schema",
+          "kind": "VIEW",
+          "comment": "A useful view"
+        },
+        {
+          "name": "ORDERS",
+          "database_name": "ANALYTICS",
+          "schema_name": "PUBLIC",
+          "kind": "TABLE",
+          "comment": ""
+        },
+        {
+          "name": "STAGE",
+          "database_name": "ANALYTICS",
+          "schema_name": "PUBLIC",
+          "kind": "STAGE",
+          "comment": "Not a relation"
+        }
+      ],
+      "expected": [
+        {
+          "catalog": "Data.Base",
+          "schema": "Odd Schema",
+          "table": "Sales.Report",
+          "kind": "view",
+          "description": "A useful view"
+        },
+        {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS",
+          "kind": "table",
+          "description": ""
+        }
+      ]
+    },
+    "columns": {
+      "rows": [
+        {
+          "name": "AMOUNT",
+          "type": "NUMBER(38,2)",
+          "kind": "COLUMN",
+          "null?": "Y",
+          "comment": "Warehouse amount description."
+        },
+        {
+          "name": "ORDER_ID",
+          "type": "NUMBER(38,0)",
+          "kind": "COLUMN",
+          "null?": "N",
+          "comment": ""
+        },
+        {
+          "name": "SOMETHING",
+          "type": "TEXT",
+          "kind": "EXPRESSION",
+          "null?": "Y",
+          "comment": "Not a column"
+        }
+      ],
+      "expected": [
+        {
+          "column": "AMOUNT",
+          "type": "NUMBER(38,2)",
+          "nullable": "true",
+          "description": "Warehouse amount description."
+        },
+        {
+          "column": "ORDER_ID",
+          "type": "NUMBER(38,0)",
+          "nullable": "false",
+          "description": ""
+        }
+      ]
+    }
+  },
+  "databricks": {
+    "relations": {
+      "rows": [
+        {
+          "table_catalog": "Data.Catalog",
+          "table_schema": "Odd Schema",
+          "table_name": "Sales.Report",
+          "table_type": "VIEW",
+          "comment": "A useful view"
+        },
+        {
+          "table_catalog": "main",
+          "table_schema": "default",
+          "table_name": "orders",
+          "table_type": "MANAGED",
+          "comment": ""
+        }
+      ],
+      "expected": [
+        {
+          "catalog": "Data.Catalog",
+          "schema": "Odd Schema",
+          "table": "Sales.Report",
+          "kind": "view",
+          "description": "A useful view"
+        },
+        {
+          "catalog": "main",
+          "schema": "default",
+          "table": "orders",
+          "kind": "table",
+          "description": ""
+        }
+      ]
+    },
+    "columns": {
+      "rows": [
+        {
+          "col_name": "amount",
+          "data_type": "decimal(38,2)",
+          "comment": "Money."
+        },
+        { "col_name": "order_id", "data_type": "bigint", "comment": "" },
+        { "col_name": "", "data_type": "", "comment": "" },
+        {
+          "col_name": "# Partition Information",
+          "data_type": "",
+          "comment": ""
+        },
+        {
+          "col_name": "part_col",
+          "data_type": "string",
+          "comment": "After the metadata marker"
+        }
+      ],
+      "nullable": { "amount": "true", "order_id": "false" },
+      "expected": [
+        {
+          "column": "amount",
+          "type": "decimal(38,2)",
+          "nullable": "true",
+          "description": "Money."
+        },
+        {
+          "column": "order_id",
+          "type": "bigint",
+          "nullable": "false",
+          "description": ""
+        }
+      ]
+    }
+  }
+}
