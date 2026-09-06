@@ -81,10 +81,11 @@
 #' data frames, commons additionally disables extension loading and filesystem
 #' access. These are safeguards, not a sandbox: when you supply your own
 #' connection, still open it in read-only mode where the backend supports it.
-#' Snowflake and Databricks sources snapshot the principal, active role, and
-#' namespace at creation, then reject catalog access and trusted calculations
-#' after those values change. Authored and native semantic material is exposed
-#' only after a zero-row query succeeds for the current principal.
+#' Snowflake and Databricks sources snapshot the principal and namespace at
+#' creation, and Snowflake its active and secondary roles as well, then reject
+#' catalog access and trusted calculations after any of those change. Authored
+#' and native semantic material is exposed only after a zero-row query
+#' succeeds for the current principal.
 #'
 #' @return A `commons_data_source` R6 object. Its internals are private and may
 #'   change without notice.

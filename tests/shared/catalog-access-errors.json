@@ -1,0 +1,122 @@
+{
+  "description": "How a failed catalog access probe is classified from the driver's error. The classification decides which error a user sees and whether the failure is cached: an authorization failure is stable and is remembered per relation, a transient one is retried on the next touch, and an unknown one is neither. Drivers differ in what they raise, so each case gives only the two things every driver carries, a SQLSTATE (empty when the driver reported none) and a message. A case with a `sql` field asserts that only the driver's own complaint is read: both packages wrap a failing statement in a way that repeats it back, so each suite attaches that statement the way its own drivers do, and the expected kind stays the one the message alone earns.",
+  "cases": [
+    {
+      "name": "insufficient privilege sqlstate",
+      "sqlstate": "42501",
+      "message": "hidden",
+      "kind": "authorization"
+    },
+    {
+      "name": "invalid authorization sqlstate class",
+      "sqlstate": "28000",
+      "message": "hidden",
+      "kind": "authorization"
+    },
+    {
+      "name": "snowflake access control message",
+      "sqlstate": "",
+      "message": "SQL access control error: Insufficient privileges to operate on table 'SALES'",
+      "kind": "authorization"
+    },
+    {
+      "name": "databricks permission message",
+      "sqlstate": "",
+      "message": "PERMISSION_DENIED: User does not have SELECT on Table 'main.default.sales'",
+      "kind": "authorization"
+    },
+    {
+      "name": "plain permission denied message",
+      "sqlstate": "",
+      "message": "Permission denied on relation sales",
+      "kind": "authorization"
+    },
+    {
+      "name": "a network policy refusal is authorization, not a network fault",
+      "sqlstate": "",
+      "message": "Incoming request with IP 10.0.0.1 is not allowed to access Snowflake",
+      "kind": "authorization"
+    },
+    {
+      "name": "connection exception sqlstate class",
+      "sqlstate": "08006",
+      "message": "hidden",
+      "kind": "transient"
+    },
+    {
+      "name": "timeout sqlstate",
+      "sqlstate": "HYT00",
+      "message": "hidden",
+      "kind": "transient"
+    },
+    {
+      "name": "serialization failure sqlstate",
+      "sqlstate": "40001",
+      "message": "hidden",
+      "kind": "transient"
+    },
+    {
+      "name": "admin shutdown sqlstate",
+      "sqlstate": "57P01",
+      "message": "hidden",
+      "kind": "transient"
+    },
+    {
+      "name": "warehouse starting message",
+      "sqlstate": "",
+      "message": "Warehouse 'COMPUTE_WH' is starting",
+      "kind": "transient"
+    },
+    {
+      "name": "a temporarily unavailable warehouse",
+      "sqlstate": "",
+      "message": "Warehouse is temporarily unavailable",
+      "kind": "transient"
+    },
+    {
+      "name": "rate limited message",
+      "sqlstate": "",
+      "message": "HTTP 429 too many requests",
+      "kind": "transient"
+    },
+    {
+      "name": "lowercase sqlstate is still matched",
+      "sqlstate": "hyt00",
+      "message": "hidden",
+      "kind": "transient"
+    },
+    {
+      "name": "syntax error with a sqlstate",
+      "sqlstate": "42601",
+      "message": "syntax error at or near SELCT",
+      "kind": "unknown"
+    },
+    {
+      "name": "unrecognized failure without a sqlstate",
+      "sqlstate": "",
+      "message": "column BOGUS not found",
+      "kind": "unknown"
+    },
+    {
+      "name": "an absent relation whose name reads as a refusal",
+      "sqlstate": "42S02",
+      "message": "Object does not exist, or operation cannot be performed.",
+      "sql": "SELECT * FROM \"ANALYTICS\".\"PUBLIC\".\"PERMISSION_DENIED_EVENTS\" WHERE 1 = 0",
+      "kind": "unknown"
+    },
+    {
+      "name": "an absent relation whose name reads as transient",
+      "sqlstate": "42S02",
+      "message": "Object does not exist, or operation cannot be performed.",
+      "sql": "SELECT * FROM \"ANALYTICS\".\"PUBLIC\".\"NETWORK_SOCKET_TIMEOUTS\" WHERE 1 = 0",
+      "kind": "unknown"
+    },
+    {
+      "name": "a genuine refusal is still read through the statement",
+      "sqlstate": "",
+      "message": "SQL access control error: Insufficient privileges to operate on table 'ORDERS'",
+      "sql": "SELECT * FROM \"ANALYTICS\".\"PUBLIC\".\"ORDERS\" WHERE 1 = 0",
+      "kind": "authorization"
+    }
+  ]
+}

@@ -23,7 +23,11 @@ catalog_table_registry <- function(
     if (identical(type, "relation")) {
       relation <- exact_relation(con, id, call = call)
       relations[[length(relations) + 1L]] <- relation
-      validate[[length(validate) + 1L]] <- id
+      # Keyed by the relation's own id rather than the authored one: an entry
+      # naming a bare table is qualified with the connection's namespace once
+      # the warehouse answers, and the two lists have to agree on the label
+      # or the access check cannot pair them up.
+      validate[[length(validate) + 1L]] <- relation$id
       next
     }
     namespace_selected <- TRUE
@@ -284,7 +288,11 @@ catalog_id_type <- function(id, backend, call = rlang::caller_env()) {
   if ("table" %in% roles) "relation" else "namespace"
 }
 
-catalog_match_exact_relation <- function(relations, id) {
+# `requested` is the authored name qualified with the namespace the lookup
+# ran in, and becomes the relation's label once the warehouse confirms it.
+# The warehouse's own id is kept as `identity`, since it carries that
+# backend's casing and is what later metadata queries have to name.
+catalog_match_exact_relation <- function(relations, id, requested = id) {
   requested_name <- id@name[["table"]]
   is_requested <- vapply(
     relations,
@@ -304,7 +312,12 @@ catalog_match_exact_relation <- function(relations, id) {
 
   relation <- relations[[which(is_requested)[[1]]]]
   relation$identity <- relation$id
-  relation$id <- id
+  # A relation the warehouse reports without a namespace has none to be
+  # labelled with, and none to be queried under either: a Databricks
+  # temporary view answers only to its bare name.
+  if (any(c("catalog", "schema") %in% names(relation$identity@name))) {
+    relation$id <- requested
+  }
   relation$discovered <- TRUE
   relation
 }

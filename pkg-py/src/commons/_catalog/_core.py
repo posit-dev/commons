@@ -17,6 +17,7 @@ __all__ = [
     "check_exclude",
     "excluded",
     "id_type",
+    "matched_relation",
     "merge_dictionary",
     "normalize_identifier",
     "search",
@@ -82,6 +83,25 @@ class MergedDictionary:
     dictionary: Any
     relations: dict[str, Relation]
     definition_bindings: dict[str, Any] | None
+
+
+def matched_relation(relation: Relation, requested: TableId) -> Relation:
+    """An exact selection's match, under the label it was asked for.
+
+    `requested` is the authored name qualified with the namespace the lookup
+    ran in. The warehouse's own id is kept as the identity, since it carries
+    that backend's casing and is what later metadata queries name. A relation
+    the warehouse reports without a namespace has none to be labelled with,
+    and none to be queried under either: a Databricks temporary view answers
+    only to its bare name.
+    """
+    qualified = relation.id.schema is not None or relation.id.catalog is not None
+    return Relation(
+        id=requested if qualified else relation.id,
+        kind=relation.kind,
+        description=relation.description,
+        identity=relation.id,
+    )
 
 
 def normalize_identifier(value: Any, identifier_case: str | None) -> Any:
@@ -184,12 +204,18 @@ def table_registry(
             # An entry naming a table is kept whether or not the warehouse
             # has it, and is always validated. Dropping a missing one turns
             # "that table is not there" into a quietly smaller selection.
-            table_id = _selector_id(selector)
             found = exact_relation(selector)
-            relations.append(
-                found if found is not None else Relation(id=table_id, discovered=False)
+            # Keyed by the relation's own id rather than the selector's: an
+            # entry naming a bare table is qualified with the connection's
+            # namespace once the warehouse answers, and the two lists have to
+            # agree on the label or the access check cannot pair them up.
+            relation = (
+                found
+                if found is not None
+                else Relation(id=_selector_id(selector), discovered=False)
             )
-            validate.append(table_id)
+            relations.append(relation)
+            validate.append(relation.id)
             continue
         namespace_selected = True
         relations.extend(list_relations(selector))
@@ -236,7 +262,9 @@ class Manifest:
     objects: dict[str, Relation]
     searchable: bool = False
     access: dict[str, str] = field(default_factory=dict)
-    access_errors: dict[str, str] = field(default_factory=dict)
+    # The driver's own failure, kept for the relations whose refusal is
+    # cached, so a later refusal can still be raised from what caused it.
+    access_errors: dict[str, BaseException] = field(default_factory=dict)
 
     @classmethod
     def build(

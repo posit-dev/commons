@@ -38,7 +38,7 @@ These checks provide defense in depth, but they are not a SQL parser or a databa
 
 The `tables` argument to `data_source()` controls which tables commons describes to the model. It is not an authorization boundary: SQL written by the agent can query any object available to the connection.
 
-On Posit Connect, [viewer OAuth integrations](https://docs.posit.co/connect/admin/access-controls/) can give an interactive application the current viewer's Snowflake or Databricks credentials. If the application creates its connection from those credentials, the warehouse continues to enforce that viewer's existing access policies, including row- and column-level security. commons snapshots the connection's principal, active role, and namespace when it creates a Snowflake or Databricks data source, and rejects subsequent operations if that identity changes.
+On Posit Connect, [viewer OAuth integrations](https://docs.posit.co/connect/admin/access-controls/) can give an interactive application the current viewer's Snowflake or Databricks credentials. If the application creates its connection from those credentials, the warehouse continues to enforce that viewer's existing access policies, including row- and column-level security. commons snapshots the connection's principal and namespace when it creates a Snowflake or Databricks data source, and its active and secondary roles as well on Snowflake, and rejects subsequent operations if that identity changes.
 
 Viewer credentials are not automatic: commons uses the DBI connection supplied by the application. When using viewer credentials, create the connection and the commons agent inside the Shiny server function so that each session has the correct database identity.
 
