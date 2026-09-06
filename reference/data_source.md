@@ -22,14 +22,14 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
 
   Which tables to expose, used when a connection or a board is supplied.
 
-  For a connection, a character vector of table names, schema-qualified
-  strings like `"schema.table"`, or
+  For a connection, a character vector of table names, qualified strings
+  like `"schema.table"` or `"catalog.schema.table"`, or
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) objects. Defaults
   to every table returned by
   [`DBI::dbListTables()`](https://dbi.r-dbi.org/reference/dbListTables.html).
-  Strings containing dots are interpreted as schema-qualified names; use
-  `DBI::Id(table = "a.b")` for literal table names containing dots. For
-  Snowflake and Databricks connections, a
+  Strings containing dots are interpreted as qualified names, at most
+  three parts; use `DBI::Id(table = "a.b")` for literal table names
+  containing dots. For Snowflake and Databricks connections, a
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) ending in
   `catalog` or `schema` selects every table and view in that namespace.
   Leaving `tables` unset selects the current schema. A Databricks
@@ -120,11 +120,11 @@ rejected before reaching the database. For the in-process DuckDB built
 from data frames, commons additionally disables extension loading and
 filesystem access. These are safeguards, not a sandbox: when you supply
 your own connection, still open it in read-only mode where the backend
-supports it. Snowflake and Databricks sources snapshot the principal,
-active role, and namespace at creation, then reject catalog access and
-trusted calculations after those values change. Authored and native
-semantic material is exposed only after a zero-row query succeeds for
-the current principal.
+supports it. Snowflake and Databricks sources snapshot the principal and
+namespace at creation, and Snowflake its active and secondary roles as
+well, then reject catalog access and trusted calculations after any of
+those change. Authored and native semantic material is exposed only
+after a zero-row query succeeds for the current principal.
 
 ## Examples
 

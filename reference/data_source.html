@@ -58,11 +58,11 @@ a table name the agent can query.</p></dd>
 <dt id="arg-tables">tables<a class="anchor" aria-label="anchor" href="#arg-tables"></a></dt>
 <dd><p>Which tables to expose, used when a connection or a board is
 supplied.</p>
-<p>For a connection, a character vector of table names, schema-qualified
-strings like <code>"schema.table"</code>, or <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> objects. Defaults to every
-table returned by <code><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">DBI::dbListTables()</a></code>. Strings containing dots are
-interpreted as schema-qualified names; use <code>DBI::Id(table = "a.b")</code> for
-literal table names containing dots. For Snowflake and Databricks
+<p>For a connection, a character vector of table names, qualified strings
+like <code>"schema.table"</code> or <code>"catalog.schema.table"</code>, or <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> objects.
+Defaults to every table returned by <code><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">DBI::dbListTables()</a></code>. Strings
+containing dots are interpreted as qualified names, at most three parts;
+use <code>DBI::Id(table = "a.b")</code> for literal table names containing dots. For Snowflake and Databricks
 connections, a <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> ending in <code>catalog</code> or <code>schema</code> selects every
 table and view in that namespace. Leaving <code>tables</code> unset selects the
 current schema. A Databricks <code>hive_metastore</code> selection must include a
@@ -146,10 +146,11 @@ rejected before reaching the database. For the in-process DuckDB built from
 data frames, commons additionally disables extension loading and filesystem
 access. These are safeguards, not a sandbox: when you supply your own
 connection, still open it in read-only mode where the backend supports it.
-Snowflake and Databricks sources snapshot the principal, active role, and
-namespace at creation, then reject catalog access and trusted calculations
-after those values change. Authored and native semantic material is exposed
-only after a zero-row query succeeds for the current principal.</p>
+Snowflake and Databricks sources snapshot the principal and namespace at
+creation, and Snowflake its active and secondary roles as well, then reject
+catalog access and trusted calculations after any of those change. Authored
+and native semantic material is exposed only after a zero-row query
+succeeds for the current principal.</p>
     </div>
 
     <div class="section level2">

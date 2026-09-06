@@ -57,9 +57,10 @@ give an interactive application the current viewer’s Snowflake or
 Databricks credentials. If the application creates its connection from
 those credentials, the warehouse continues to enforce that viewer’s
 existing access policies, including row- and column-level security.
-commons snapshots the connection’s principal, active role, and namespace
-when it creates a Snowflake or Databricks data source, and rejects
-subsequent operations if that identity changes.
+commons snapshots the connection’s principal and namespace when it
+creates a Snowflake or Databricks data source, and its active and
+secondary roles as well on Snowflake, and rejects subsequent operations
+if that identity changes.
 
 Viewer credentials are not automatic: commons uses the DBI connection
 supplied by the application. When using viewer credentials, create the
