@@ -42,11 +42,6 @@ def test_an_explicit_table_id_bypasses_dot_splitting() -> None:
     assert normalize_table_registry([literal]) == {"a.b": literal}
 
 
-def test_an_empty_name_component_is_rejected() -> None:
-    with pytest.raises(ValueError, match="empty name components"):
-        normalize_table_registry(["analytics."])
-
-
 def test_duplicate_labels_are_rejected() -> None:
     with pytest.raises(ValueError, match="duplicate labels"):
         normalize_table_registry(["sales", "sales"])
@@ -155,21 +150,6 @@ def test_an_inspection_failure_does_not_mask_the_probe_error(
         data_source(engine, tables=["sales"])
 
 
-def test_a_three_part_name_is_read_as_catalog_qualified() -> None:
-    """Warehouses name a table catalog.schema.table.
-
-    Before this, everything before the last dot became the schema, so
-    `ANALYTICS.PUBLIC.ORDERS` quoted to `"ANALYTICS.PUBLIC"."ORDERS"`: a
-    schema whose name contains a dot, which no warehouse has.
-    """
-    registry = normalize_table_registry("ANALYTICS.PUBLIC.ORDERS")
-    assert registry == {
-        "ANALYTICS.PUBLIC.ORDERS": TableId(
-            table="ORDERS", schema="PUBLIC", catalog="ANALYTICS"
-        )
-    }
-
-
 def test_the_inspector_looks_in_the_catalog_it_was_given(monkeypatch) -> None:
     """SQLAlchemy takes every level above the table as one dotted `schema`.
 
@@ -202,12 +182,6 @@ def test_a_three_part_name_quotes_each_component_separately() -> None:
     ]
     quoted = DuckDBBackend(duckdb.connect()).quote(table_id)
     assert quoted == '"ANALYTICS"."PUBLIC"."ORDERS"'
-
-
-def test_a_name_with_more_than_three_parts_is_refused() -> None:
-    # There is no fourth level to put it in, so guessing would be wrong.
-    with pytest.raises(ValueError, match="at most"):
-        normalize_table_registry("a.b.c.d")
 
 
 def test_a_catalog_without_a_schema_is_refused() -> None:

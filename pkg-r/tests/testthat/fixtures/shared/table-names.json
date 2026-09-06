@@ -1,0 +1,51 @@
+{
+  "parse_table_name": {
+    "description": "How a `tables` string splits into name components. Warehouses name a table catalog.schema.table, so three parts are catalog, schema, and table; folding the outer parts into one schema would quote them as a single identifier containing a dot, which names a schema no warehouse has. More than three parts are refused because there is no fourth level to put them in. Errors are pinned as reason slugs; the wording belongs to each language.",
+    "cases": [
+      {
+        "name": "a bare name is just a table",
+        "input": "orders",
+        "expected": { "table": "orders" }
+      },
+      {
+        "name": "two parts are schema and table",
+        "input": "public.orders",
+        "expected": { "schema": "public", "table": "orders" }
+      },
+      {
+        "name": "three parts are catalog, schema, and table",
+        "input": "analytics.public.orders",
+        "expected": {
+          "catalog": "analytics",
+          "schema": "public",
+          "table": "orders"
+        }
+      },
+      {
+        "name": "four parts have no level to go in",
+        "input": "a.b.c.d",
+        "error": "too_many_parts"
+      },
+      {
+        "name": "an empty leading component",
+        "input": ".orders",
+        "error": "empty_component"
+      },
+      {
+        "name": "an empty middle component",
+        "input": "analytics..orders",
+        "error": "empty_component"
+      },
+      {
+        "name": "an empty trailing component",
+        "input": "orders.",
+        "error": "empty_component"
+      },
+      {
+        "name": "an empty string",
+        "input": "",
+        "error": "not_a_name"
+      }
+    ]
+  }
+}

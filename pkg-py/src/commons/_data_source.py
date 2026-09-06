@@ -347,8 +347,9 @@ def _is_frame(value: Any) -> bool:
 def normalize_table_registry(tables: Any) -> dict[str, TableId]:
     """Turn a `tables` argument into label -> `TableId`.
 
-    Strings containing dots are read as schema-qualified. A literal table name
-    containing a dot is spelled as a `TableId`.
+    Strings containing dots are read as qualified names, at most three
+    parts: catalog.schema.table. A literal table name containing a dot is
+    spelled as a `TableId`.
     """
     if isinstance(tables, (str, TableId)):
         entries: list[Any] = [tables]
