@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 import pandas as pd
 import pytest
-from chatlas import Chat, ContentToolResult, Tool
+from chatlas import Chat, ContentToolResult, Tool, UserTurn
 from pydantic import Field
 
 from commons import Injected, context_layer, data_source, measure, semantic_layer
@@ -45,18 +45,26 @@ def client() -> Chat:
     return scripted_chat()
 
 
-def tool_names(client: Chat) -> list[str]:
-    return [tool.name for tool in client.get_tools()]
+# The agent builds its own chat, so what it registered and what it tells the
+# model are read off the agent rather than off the client it was given.
+def tool_names(agent: Commons) -> list[str]:
+    return [tool.name for tool in agent._client.get_tools()]
 
 
-def agent_tool(client: Chat, name: str) -> Tool:
-    tool = next(tool for tool in client.get_tools() if tool.name == name)
+def prompt(agent: Commons) -> str:
+    system_prompt = agent._client.system_prompt
+    assert system_prompt is not None
+    return system_prompt
+
+
+def agent_tool(agent: Commons, name: str) -> Tool:
+    tool = next(tool for tool in agent._client.get_tools() if tool.name == name)
     assert isinstance(tool, Tool)
     return tool
 
 
-def call_tool(client: Chat, tool: str, /, **arguments: Any) -> str:
-    result = agent_tool(client, tool).func(**arguments)
+def call_tool(agent: Commons, tool: str, /, **arguments: Any) -> str:
+    result = agent_tool(agent, tool).func(**arguments)
     assert isinstance(result, ContentToolResult)
     assert isinstance(result.value, str)
     return result.value
@@ -98,29 +106,74 @@ def test_instructions_naming_a_missing_file_fail_at_construction(
         Commons(client, source, instructions=str(tmp_path / "absent.md"))
 
 
-def test_a_system_prompt_on_the_client_warns_and_is_discarded(
+def test_a_system_prompt_on_the_client_warns_and_is_ignored(
     client: Chat, source: Any
 ) -> None:
     client.system_prompt = "You are a pirate."
 
     with pytest.warns(UserWarning, match="system prompt"):
+        agent = Commons(client, source)
+
+    assert "pirate" not in prompt(agent)
+
+
+def test_the_clients_history_warns_and_does_not_carry_over(
+    client: Chat, source: Any
+) -> None:
+    client.add_turn(UserTurn("An earlier question."))
+
+    with pytest.warns(UserWarning, match="set_turns"):
+        agent = Commons(client, source)
+
+    assert agent.get_turns() == []
+    assert len(client.get_turns()) == 1
+
+
+# ---- the agent's own chat -------------------------------------------------
+
+
+def test_the_client_it_was_given_is_left_alone(client: Chat, source: Any) -> None:
+    agent = Commons(client, source)
+
+    # The agent brings its own tools and prompt, and someone else may still be
+    # holding this object, so none of that reaches it.
+    assert client.get_tools() == []
+    assert client.system_prompt is None
+    assert tool_names(agent)
+    assert agent._client is not client
+
+
+def test_model_parameters_carry_onto_the_agents_chat(client: Chat, source: Any) -> None:
+    client.set_model_params(temperature=0.0, seed=7)
+
+    agent = Commons(client, source)
+
+    assert agent._client._standard_model_params == {"temperature": 0.0, "seed": 7}
+
+
+def test_model_parameters_that_cannot_be_read_are_reported(
+    client: Chat, source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client.set_model_params(temperature=0.0)
+    # chatlas has a setter and no getter, so the values are read off the
+    # attribute behind it; a chatlas that renames it says so rather than
+    # dropping a temperature in silence.
+    monkeypatch.delattr(client, "_standard_model_params")
+
+    with pytest.warns(UserWarning, match="set_model_params"):
         Commons(client, source)
 
-    assert client.system_prompt is not None
-    assert "pirate" not in client.system_prompt
 
+def test_the_provider_arguments_and_conversation_id_carry_over(
+    client: Chat, source: Any
+) -> None:
+    client.kwargs_chat = {"max_tokens": 2048}  # type: ignore[typeddict-unknown-key]
+    client.conversation_id = "abc123"
 
-def test_tools_on_the_client_warn_and_are_discarded(client: Chat, source: Any) -> None:
-    def unrelated() -> str:
-        """Do something else."""
-        return "done"
+    agent = Commons(client, source)
 
-    client.register_tool(unrelated)
-
-    with pytest.warns(UserWarning, match="tools"):
-        Commons(client, source)
-
-    assert "unrelated" not in tool_names(client)
+    assert agent._client.kwargs_chat == {"max_tokens": 2048}
+    assert agent._client.conversation_id == "abc123"
 
 
 # ---- assembly -------------------------------------------------------------
@@ -129,12 +182,12 @@ def test_tools_on_the_client_warn_and_are_discarded(client: Chat, source: Any) -
 def test_an_agent_registers_the_tools_its_composition_earns(
     client: Chat, source: Any
 ) -> None:
-    Commons(client, source)
+    agent = Commons(client, source)
 
     # Which conditions earn which tool is pinned by
     # tests/shared/tool-registration.json; what matters here is that the
     # agent's own composition is what they were asked about.
-    assert tool_names(client) == ["search_context", "describe_table", "run_sql"]
+    assert tool_names(agent) == ["search_context", "describe_table", "run_sql"]
 
 
 def test_a_semantic_layer_earns_the_measure_tools(client: Chat, source: Any) -> None:
@@ -142,24 +195,20 @@ def test_a_semantic_layer_earns_the_measure_tools(client: Chat, source: Any) -> 
     def order_count() -> int:
         return 3
 
-    Commons(client, source, semantic_layer=semantic_layer(order_count))
+    agent = Commons(client, source, semantic_layer=semantic_layer(order_count))
 
-    assert "search_pool" in tool_names(client)
-    assert "call_measure" in tool_names(client)
+    assert "search_pool" in tool_names(agent)
+    assert "call_measure" in tool_names(agent)
 
 
 def test_the_system_prompt_names_the_tables(client: Chat, source: Any) -> None:
-    Commons(client, source)
-
-    assert client.system_prompt is not None
-    assert "- sales" in client.system_prompt
+    assert "- sales" in prompt(Commons(client, source))
 
 
 def test_instructions_are_appended_to_the_prompt(client: Chat, source: Any) -> None:
-    Commons(client, source, instructions="Use fiscal-year conventions.")
+    agent = Commons(client, source, instructions="Use fiscal-year conventions.")
 
-    assert client.system_prompt is not None
-    assert client.system_prompt.endswith("Use fiscal-year conventions.")
+    assert prompt(agent).endswith("Use fiscal-year conventions.")
 
 
 def test_instructions_can_be_read_from_a_file(
@@ -168,10 +217,9 @@ def test_instructions_can_be_read_from_a_file(
     path = tmp_path / "house-style.md"
     path.write_text("Round revenue to whole dollars.", encoding="utf-8")
 
-    Commons(client, source, instructions=str(path))
+    agent = Commons(client, source, instructions=str(path))
 
-    assert client.system_prompt is not None
-    assert client.system_prompt.endswith("Round revenue to whole dollars.")
+    assert prompt(agent).endswith("Round revenue to whole dollars.")
 
 
 def test_the_prompt_describes_the_tools_the_agent_actually_has(
@@ -181,24 +229,21 @@ def test_the_prompt_describes_the_tools_the_agent_actually_has(
     def order_count() -> int:
         return 3
 
-    Commons(client, source, semantic_layer=semantic_layer(order_count))
-    with_measures = client.system_prompt or ""
-
-    bare = scripted_chat()
-    Commons(bare, source)
+    with_measures = prompt(
+        Commons(client, source, semantic_layer=semantic_layer(order_count))
+    )
+    bare = prompt(Commons(scripted_chat(), source))
 
     assert "call_measure" in with_measures
-    assert "call_measure" not in (bare.system_prompt or "")
+    assert "call_measure" not in bare
 
 
 def test_the_model_decides_which_reminder_the_prompt_expects(source: Any) -> None:
-    five = scripted_chat(model="claude-opus-5")
-    Commons(five, source)
-    four = scripted_chat(model="claude-sonnet-4-5")
-    Commons(four, source)
+    five = prompt(Commons(scripted_chat(model="claude-opus-5"), source))
+    four = prompt(Commons(scripted_chat(model="claude-sonnet-4-5"), source))
 
     # is_claude_5_model() drives one prompt section, so the two differ.
-    assert five.system_prompt != four.system_prompt
+    assert five != four
 
 
 def test_the_context_layer_gains_the_sources_prose(
@@ -252,8 +297,8 @@ def test_the_conversation_state_is_the_agents_own(client: Chat, source: Any) -> 
 def test_one_handle_store_serves_every_tool_call(client: Chat, source: Any) -> None:
     agent = Commons(client, source)
 
-    call_tool(client, "run_sql", sql="SELECT revenue FROM sales")
-    call_tool(client, "run_sql", sql="SELECT region FROM sales")
+    call_tool(agent, "run_sql", sql="SELECT revenue FROM sales")
+    call_tool(agent, "run_sql", sql="SELECT region FROM sales")
 
     assert agent._handles.ids() == ["r1", "r2"]
 
@@ -263,10 +308,10 @@ def test_a_tables_dictionary_entry_is_delivered_once_per_conversation(
 ) -> None:
     path = tmp_path / "data-dict.yaml"
     path.write_text(DICTIONARY, encoding="utf-8")
-    Commons(client, data_source(sales=frame(), dictionary=path))
+    agent = Commons(client, data_source(sales=frame(), dictionary=path))
 
-    first = call_tool(client, "run_sql", sql="SELECT revenue FROM sales")
-    second = call_tool(client, "run_sql", sql="SELECT region FROM sales")
+    first = call_tool(agent, "run_sql", sql="SELECT revenue FROM sales")
+    second = call_tool(agent, "run_sql", sql="SELECT region FROM sales")
 
     assert "One row per order line." in first
     assert "One row per order line." not in second
@@ -281,12 +326,12 @@ def test_a_measure_receives_a_named_sources_connection(client: Chat) -> None:
         rows = warehouse.execute("SELECT count(*) AS n FROM sales").fetchall()
         return int(rows[0][0])
 
-    Commons(
+    agent = Commons(
         client,
         {"warehouse": data_source(sales=frame())},
         semantic_layer=semantic_layer(order_count),
     )
-    result = call_tool(client, "call_measure", name="order_count", arguments="{}")
+    result = call_tool(agent, "call_measure", name="order_count", arguments="{}")
 
     assert "3" in result
 
@@ -304,13 +349,13 @@ def test_a_measure_can_still_take_an_argument_the_model_supplies(
         ).fetchall()
         return float(rows[0][0])
 
-    Commons(
+    agent = Commons(
         client,
         {"warehouse": data_source(sales=frame())},
         semantic_layer=semantic_layer(region_revenue),
     )
     result = call_tool(
-        client, "call_measure", name="region_revenue", arguments='{"region": "EMEA"}'
+        agent, "call_measure", name="region_revenue", arguments='{"region": "EMEA"}'
     )
 
     assert "800" in result
@@ -388,10 +433,13 @@ def test_prewarm_propagates_a_failure(client: Chat, tmp_path: Path) -> None:
 # ---- the model the prompt was built for -----------------------------------
 
 
-def test_the_agent_keeps_the_clients_provider(client: Chat, source: Any) -> None:
-    Commons(client, source)
+def test_the_agent_asks_the_clients_own_provider(client: Chat, source: Any) -> None:
+    agent = Commons(client, source)
 
-    assert isinstance(client.provider, ScriptedProvider)
+    # The provider carries the model, so taking it is how the agent ends up
+    # talking to what the caller chose.
+    assert agent._client.provider is client.provider
+    assert isinstance(agent._client.provider, ScriptedProvider)
 
 
 def test_an_agent_says_how_many_sources_it_has(client: Chat, source: Any) -> None:

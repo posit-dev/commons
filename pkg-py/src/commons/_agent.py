@@ -61,9 +61,10 @@ class Commons:
     sets its own system prompt, so an answer can be classified by how it was
     produced.
 
-    `client` is taken over rather than copied: its tools become the agent's
-    tools and its system prompt becomes commons' own. A system prompt already
-    set on it is discarded with a warning; use `instructions` to add to
+    The provider and the model come from `client`; the agent builds its own
+    chat from them, so nothing it does reaches an object the caller still
+    holds, and nothing already on that object reaches the agent. A system
+    prompt set on it is ignored with a warning; use `instructions` to add to
     commons' prompt instead.
 
     Parameters
@@ -98,8 +99,6 @@ class Commons:
                 "client must be a chatlas.Chat, e.g. from chatlas.ChatAnthropic(), "
                 f"not {type(client).__name__}."
             )
-        _warn_about_discarded_state(client)
-
         sources = _as_data_sources(data_sources)
         if context_layer is not None and not isinstance(context_layer, ContextLayer):
             raise TypeError(
@@ -116,7 +115,7 @@ class Commons:
             )
         check_instructions(instructions)
 
-        self._client = client
+        self._client = _agent_client(client)
         self._sources = sources
         self._context_layer = augment_context_layer(context_layer, sources.values())
         self._definitions = build_registry(sources)
@@ -147,13 +146,13 @@ class Commons:
                 first_touch=self._first_touch,
             )
         )
-        client.set_tools(list(tools))
-        client.system_prompt = _system_prompt(
+        self._client.set_tools(list(tools))
+        self._client.system_prompt = _system_prompt(
             sources,
             self._definitions,
             instructions=instructions,
             tools=tools,
-            model=client.model,
+            model=self._client.model,
         )
 
     def __repr__(self) -> str:
@@ -302,20 +301,53 @@ class Commons:
             self._restore_reminder_pending = False
 
 
-def _warn_about_discarded_state(client: Chat) -> None:
-    discarded = []
+# Called straight from __init__, so one stacklevel reaches whoever built the
+# agent from every warning below.
+_CALLER = 3
+
+
+def _agent_client(client: Chat) -> Chat:
+    """A chat of the caller's provider and model, holding none of its state.
+
+    The provider and the model come from `client`, and commons brings its own
+    system prompt and tools, as `pkg-r/R/commons.R` does when it initializes
+    from the client's provider. Building a chat rather than taking the given
+    one over means an agent never changes an object its caller still holds.
+    """
     if client.system_prompt is not None:
-        discarded.append("system prompt")
-    if client.get_tools():
-        discarded.append("tools")
-    if not discarded:
-        return
-    warnings.warn(
-        f"The {' and '.join(discarded)} set on client "
-        f"{'is' if len(discarded) == 1 else 'are'} discarded; commons builds "
-        "its own. Use `instructions` to add to commons' prompt.",
-        stacklevel=3,
-    )
+        warnings.warn(
+            "The system prompt set on client is ignored; commons builds its "
+            "own. Use `instructions` to add to commons' prompt.",
+            stacklevel=_CALLER,
+        )
+    if client.get_turns():
+        warnings.warn(
+            "An agent starts a new conversation, so the turns on client are "
+            "not carried over. Restore them with the agent's set_turns().",
+            stacklevel=_CALLER,
+        )
+
+    agent_client = Chat(provider=client.provider, kwargs_chat=client.kwargs_chat)
+    # chatlas never generates one, so an id the caller chose is theirs to keep.
+    agent_client.conversation_id = client.conversation_id
+
+    # chatlas has the setter for these and no getter, so they are read off the
+    # attribute behind it and written back through the public setter, which
+    # checks them against the provider again. An attribute that is missing, or
+    # no longer a mapping, has to be told apart from an empty one, which means
+    # nothing was set: dropping a temperature in silence is worse than saying
+    # that this chatlas does not show what was set.
+    params = getattr(client, "_standard_model_params", None)
+    if not isinstance(params, Mapping):
+        warnings.warn(
+            "Any model parameters set on client with set_model_params() are "
+            "not carried onto the agent: this version of chatlas does not "
+            "expose them.",
+            stacklevel=_CALLER,
+        )
+    elif params:
+        agent_client.set_model_params(**dict(params))
+    return agent_client
 
 
 def _as_data_sources(

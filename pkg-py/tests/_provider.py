@@ -97,8 +97,20 @@ class ScriptedProvider(Provider):
     def translate_model_params(self, params: Any) -> Any:
         return {}
 
+    # A real provider supports most of these, and chatlas drops any it does
+    # not, so declaring them is what lets set_model_params() be exercised.
     def supported_model_params(self) -> set[Any]:
-        return set()
+        return {
+            "temperature",
+            "top_p",
+            "top_k",
+            "frequency_penalty",
+            "presence_penalty",
+            "seed",
+            "max_tokens",
+            "log_probs",
+            "stop_sequences",
+        }
 
     def list_models(self) -> list[ModelInfo]:
         return []
