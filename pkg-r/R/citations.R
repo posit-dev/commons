@@ -155,21 +155,11 @@ add_citation_request <- function(result, tracker) {
 }
 
 citation_reminder_text <- function() {
-  paste(
-    "With this most recent tool call, this turn is now based on outputs",
-    "beyond trusted calculations.",
-    "If trusted text you have seen supports your final answer,",
-    "add a `<commons-citation>` block with one blockquote of the exact",
-    "supporting text, following the citation rules given earlier.",
-    "Otherwise, provide no citations."
-  )
+  read_prompt("citation-request.md")
 }
 
 citation_trust_exception <- function(tools) {
-  trusted_path_tools <- intersect(
-    tools,
-    c("search_pool", "call_measure", "call_metrics", "call_calculation")
-  )
+  trusted_path_tools <- intersect(trusted_tools, tools)
   if (!length(trusted_path_tools)) {
     return("")
   }
@@ -187,66 +177,29 @@ available_tool_names <- function(tools) {
   vapply(tools, tool_name, character(1))
 }
 
-citable_tool_output_text <- function(tools) {
-  items <- c(
-    "- Data dictionary prose shown in this system prompt.",
-    if ("search_pool" %in% tools) {
-      paste(
-        "- From `search_pool`: measure definitions; descriptions, SQL",
-        "expressions, and translation notes for governed definitions."
-      )
-    },
-    if ("search_context" %in% tools) {
-      "- From `search_context`: trusted context excerpts."
-    },
-    if ("describe_table" %in% tools) {
-      paste(
-        "- From `describe_table`: data dictionary descriptions, details,",
-        "documented columns, definitions, relationships, and terms."
-      )
-    },
-    if ("run_sql" %in% tools) {
-      paste(
-        "- From `run_sql`: data dictionary entries appended after the query",
-        "result."
-      )
-    }
-  )
-  paste(items, collapse = "\n")
-}
+# Which outputs are citable depends on which tools the agent registered, so the
+# template branches on one flag per tool. The order here is the order the
+# citation sections read in, not the order tools are registered.
+trusted_tools <- c(
+  "search_pool",
+  "call_measure",
+  "call_metrics",
+  "call_calculation"
+)
 
-non_citable_tool_output_text <- function(tools) {
-  items <- c(
-    if ("describe_table" %in% tools) {
-      paste(
-        "- Live relation metadata, inferred schema, and sample rows from",
-        "`describe_table`."
-      )
-    },
-    if ("call_measure" %in% tools) {
-      paste(
-        "- Result values from `call_measure`. An answer based on that tool",
-        "alone is already trusted and needs no citation."
-      )
-    },
-    if ("call_metrics" %in% tools) {
-      paste(
-        "- Result values from `call_metrics`. An answer based on that tool",
-        "alone is already trusted and needs no citation."
-      )
-    },
-    if ("call_calculation" %in% tools) {
-      paste(
-        "- Result values from `call_calculation`. An answer based on that tool",
-        "alone is already trusted and needs no citation."
-      )
-    },
-    if ("run_sql" %in% tools) "- Query result rows from `run_sql`.",
-    if ("run_r" %in% tools) {
-      "- Code, measure source, plots, and textual output from `run_r`."
-    }
-  )
-  paste(items, collapse = "\n")
+cited_tools <- c(
+  "search_pool",
+  "search_context",
+  "describe_table",
+  "run_sql",
+  "call_measure",
+  "call_metrics",
+  "call_calculation",
+  "run_r"
+)
+
+tool_availability <- function(tools) {
+  stats::setNames(as.list(cited_tools %in% tools), paste0("has_", cited_tools))
 }
 
 # The per-kind icon appears in the aside body's title; the pill renders

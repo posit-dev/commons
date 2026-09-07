@@ -365,11 +365,6 @@ test_that("citation trust exception names trusted calculation tools", {
       " or `call_metrics`"
     )
   )
-  expect_match(
-    non_citable_tool_output_text("call_calculation"),
-    "Result values from `call_calculation`",
-    fixed = TRUE
-  )
 })
 
 test_that("user messages reset citation requests but tool results do not", {
