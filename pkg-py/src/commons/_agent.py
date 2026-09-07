@@ -8,6 +8,7 @@ needs, plus the chatlas methods the two turn rules have to hook.
 
 from __future__ import annotations
 
+import copy
 import warnings
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from typing import Any, Literal
@@ -327,7 +328,14 @@ def _agent_client(client: Chat) -> Chat:
             stacklevel=_CALLER,
         )
 
-    agent_client = Chat(provider=client.provider, kwargs_chat=client.kwargs_chat)
+    # The provider is shared rather than copied, because it is what carries
+    # the model the caller chose. Its arguments are copied one level deep, so
+    # adding or dropping one later does not cross between the two chats; a
+    # value inside one is left alone, since it can be anything a provider
+    # takes and copying it could fail.
+    agent_client = Chat(
+        provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
+    )
     # chatlas never generates one, so an id the caller chose is theirs to keep.
     agent_client.conversation_id = client.conversation_id
 

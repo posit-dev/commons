@@ -148,6 +148,9 @@ def test_model_parameters_carry_onto_the_agents_chat(client: Chat, source: Any) 
 
     agent = Commons(client, source)
 
+    # Reading chatlas' own attribute is the only way to see these, and doing
+    # it here on purpose means a chatlas that renames it fails loudly rather
+    # than leaving the warning path as the only thing still exercised.
     assert agent._client._standard_model_params == {"temperature": 0.0, "seed": 7}
 
 
@@ -171,9 +174,12 @@ def test_the_provider_arguments_and_conversation_id_carry_over(
     client.conversation_id = "abc123"
 
     agent = Commons(client, source)
+    client.kwargs_chat["max_tokens"] = 8  # type: ignore[typeddict-unknown-key]
 
     assert agent._client.kwargs_chat == {"max_tokens": 2048}
     assert agent._client.conversation_id == "abc123"
+    # The provider carries the model, so it is shared on purpose.
+    assert agent._client.provider is client.provider
 
 
 # ---- assembly -------------------------------------------------------------
