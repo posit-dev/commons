@@ -20,6 +20,7 @@ from raghilda.store import DuckDBStore
 
 if TYPE_CHECKING:
     from ._data_dictionary import DataDictionary
+    from ._data_source import DataSource
 
 __all__ = ["ContextLayer", "context_layer"]
 
@@ -124,6 +125,32 @@ def _dictionary_chunks(dictionary: DataDictionary | None) -> list[str]:
     if dictionary is None:
         return []
     return dictionary.context_chunks()
+
+
+def augment_context_layer(
+    layer: ContextLayer | None, sources: Iterable[DataSource]
+) -> ContextLayer | None:
+    """Fold each source's prose into a layer the agent can retrieve from.
+
+    Returns a new layer, leaving the caller's untouched: source enrichment
+    belongs to the agent that owns the sources, so mutating the argument
+    would leak one agent's sources into the next agent built from the same
+    layer. With nothing to add, the argument comes back as it went in,
+    ``None`` included, so an agent with neither context nor a dictionary
+    has no layer rather than an empty one.
+    """
+    chunks: list[str] = []
+    for source in sources:
+        chunks.extend(_dictionary_chunks(source.dictionary))
+        # A warehouse's own semantic models contribute their retrieval prose
+        # here too, as they do in pkg-r/R/context-layer.R. This package has
+        # no semantic-model surface yet, so there is nothing to fold in.
+
+    if not chunks:
+        return layer
+
+    existing = layer.docs if layer is not None else ()
+    return ContextLayer([*existing, *chunks])
 
 
 def context_layer(
