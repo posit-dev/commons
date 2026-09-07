@@ -7,6 +7,7 @@ each tool body.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 __all__ = ["MAX_MARKDOWN_ROWS", "frame_rows", "rows_to_markdown"]
@@ -25,7 +26,7 @@ def rows_to_markdown(
     # Union rather than the first row's keys: a driver may omit a null column.
     columns = list(dict.fromkeys(key for row in rows for key in row))
     lines = [
-        "| " + " | ".join(columns) + " |",
+        "| " + " | ".join(_cell(column) for column in columns) + " |",
         "|" + "|".join("---" for _ in columns) + "|",
     ]
     lines.extend(
@@ -37,11 +38,18 @@ def rows_to_markdown(
     return "\n".join(lines)
 
 
+_LINE_BREAK = re.compile(r"\r\n|[\r\n]")
+
+
 def _cell(value: Any) -> str:
+    """One cell, with everything that would break the table out of it.
+
+    A column name goes through this too: a query names its own aliases, so a
+    header is no safer than a value.
+    """
     if value is None:
         return ""
-    # A pipe or a newline in a value would break the table apart.
-    return str(value).replace("|", "\\|").replace("\n", " ")
+    return _LINE_BREAK.sub(" ", str(value)).replace("|", "\\|")
 
 
 def frame_rows(frame: Any) -> list[dict[str, Any]] | None:

@@ -190,6 +190,15 @@ def test_a_metric_names_the_siblings_a_query_can_be_shaped_with() -> None:
     )
 
 
+def test_a_sibling_on_another_source_is_not_named() -> None:
+    records = [
+        record("net_revenue"),
+        record("emea", kind="filter", sql="region = 'EMEA'", source="other"),
+    ]
+
+    assert "{{emea}}" not in definition_pool_text(records[0], records)
+
+
 def test_a_filter_offers_call_metrics_only_when_the_table_has_a_metric() -> None:
     alone = [record("emea", kind="filter", sql="region = 'EMEA'")]
     beside = [*alone, record("net_revenue")]

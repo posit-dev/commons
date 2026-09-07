@@ -27,10 +27,17 @@ def test_a_null_reads_as_an_empty_cell() -> None:
     assert rows_to_markdown([{"a": None}]).splitlines()[2] == "|  |"
 
 
-def test_a_pipe_or_newline_in_a_value_cannot_break_the_table() -> None:
-    text = rows_to_markdown([{"note": "a|b\nc"}])
+def test_a_pipe_or_line_break_in_a_value_cannot_break_the_table() -> None:
+    text = rows_to_markdown([{"note": "a|b\r\nc\rd\ne"}])
 
-    assert text.splitlines()[2] == "| a\\|b c |"
+    assert text.splitlines()[2] == "| a\\|b c d e |"
+
+
+def test_a_column_name_is_escaped_like_a_value() -> None:
+    # A query names its own aliases, so the header is no safer than a cell.
+    text = rows_to_markdown([{"a|b": 1}])
+
+    assert text.splitlines()[0] == "| a\\|b |"
 
 
 def test_the_row_cap_is_reported() -> None:

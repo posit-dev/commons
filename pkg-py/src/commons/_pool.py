@@ -172,7 +172,11 @@ def definition_pool_text(record: ExportRecord, records: Sequence[ExportRecord]) 
         siblings = [
             other
             for other in records
-            if other.table == record.table
+            # Scoped to this source, as the metric check above is: a sibling
+            # on another source's table of the same name is not reachable
+            # from a call_metrics query against this one.
+            if other.source == record.source
+            and other.table == record.table
             and other.name != record.name
             and other.kind in ("filter", "derived")
             and not other.mixed_grain
