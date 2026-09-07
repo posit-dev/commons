@@ -21,15 +21,17 @@ test_that("both packages hand out the same handles", {
         expect_null(note, info = case$name)
         next
       }
-      expect_match(
-        note,
-        paste0("`", expected$handle, "`"),
-        fixed = TRUE,
-        info = case$name
-      )
+      opening <- section$note_template
+      opening <- gsub("{tool}", "run_r", opening, fixed = TRUE)
+      opening <- gsub("{handle}", expected$handle, opening, fixed = TRUE)
+      expected_first <- if (expected$truncated) {
+        paste(opening, section$truncation_note)
+      } else {
+        opening
+      }
       expect_identical(
-        grepl(section$truncation_note, note, fixed = TRUE),
-        expected$truncated,
+        strsplit(note, "\n", fixed = TRUE)[[1]][[1]],
+        expected_first,
         info = case$name
       )
       if (!is.null(expected$stored_rows)) {
@@ -48,4 +50,9 @@ test_that("both packages hand out the same handles", {
       info = case$name
     )
   }
+})
+
+test_that("a missing store registers nothing, and an empty store has no ids", {
+  expect_null(register_handle(NULL, 1))
+  expect_identical(handle_ids(new_handle_store()), character())
 })

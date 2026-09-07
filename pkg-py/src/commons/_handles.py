@@ -22,7 +22,8 @@ MAX_HANDLE_ROWS = 10_000
 @dataclass
 class HandleStore:
     max_rows: int = MAX_HANDLE_ROWS
-    _values: dict[str, Any] = field(default_factory=dict)
+    # Frames in the store would flood a repr, and == on one raises.
+    _values: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def register(self, value: Any) -> str | None:
         """Store a result and return the note telling the model how to reach it.
@@ -37,14 +38,21 @@ class HandleStore:
             self._values[handle] = value
             return _note(handle)
 
-        truncated = len(value) > self.max_rows
-        if truncated:
-            value = value.head(self.max_rows)
+        try:
+            truncated = len(value) > self.max_rows
+            if truncated:
+                value = value.head(self.max_rows)
+            description = describe_frame(value)
+        except (TypeError, AttributeError):
+            # is_frame is duck-typed, so a value that quacks like a frame but
+            # cannot be read like one is still stored, only undescribed.
+            self._values[handle] = value
+            return _note(handle)
         self._values[handle] = value
         capped = (
             f" Only the first {self.max_rows:,} rows are stored." if truncated else ""
         )
-        return f"{_note(handle)}{capped}\n{describe_frame(value)}"
+        return f"{_note(handle)}{capped}\n{description}"
 
     def ids(self) -> list[str]:
         return list(self._values)

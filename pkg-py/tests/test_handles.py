@@ -143,10 +143,16 @@ def test_shared_registration_cases():
             if handle is None:
                 assert note is None, case["name"]
                 continue
-            assert note is not None and f"`{handle}`" in note, case["name"]
-            assert (section["truncation_note"] in note) is expected["truncated"], case[
-                "name"
-            ]
+            assert note is not None, case["name"]
+            opening = (
+                section["note_template"]
+                .replace("{tool}", "run_python")
+                .replace("{handle}", handle)
+            )
+            first_line = note.splitlines()[0]
+            assert first_line == opening + (
+                f" {section['truncation_note']}" if expected["truncated"] else ""
+            ), case["name"]
             if "stored_rows" in expected:
                 assert len(store.get(handle)) == expected["stored_rows"], case["name"]
         assert store.ids() == [
@@ -179,3 +185,129 @@ def test_one_of_a_kind_reads_as_one_unique_value():
     note = _register(HandleStore(), frame)
 
     assert '1 unique value ("north")' in note
+
+
+def test_the_default_cap_is_ten_thousand_rows():
+    frame = pd.DataFrame({"n": range(10_001)})
+    store = HandleStore()
+
+    note = _register(store, frame)
+
+    assert "Only the first 10,000 rows are stored." in note
+    assert len(store.get("r1")) == 10_000
+
+
+def test_a_frame_with_duplicate_column_names_is_described():
+    frame = pd.DataFrame([[1, 2], [3, 4]], columns=["a", "a"])
+
+    note = _register(HandleStore(), frame)
+
+    assert note.count("* a: ") == 2
+
+
+def test_a_column_of_unhashable_values_reports_no_unique_count():
+    frame = pd.DataFrame({"j": [[1, 2], [3, 4]]})
+
+    note = _register(HandleStore(), frame)
+
+    assert "* j: object with 0 missing" in note
+    assert "unique" not in note
+
+
+def test_a_value_that_only_has_columns_is_not_a_frame():
+    class Table:
+        columns = ("a", "b")
+
+    store = HandleStore()
+
+    note = store.register(Table())
+
+    assert note == "Available to `run_python` as `r1`."
+    assert store.ids() == ["r1"]
+
+
+def test_an_unreadable_frame_is_stored_without_a_description():
+    class OddFrame:
+        columns = ("a",)
+
+        def __len__(self) -> int:
+            return 1
+
+        def __getitem__(self, key: object) -> object:
+            raise TypeError("cannot read columns")
+
+    store = HandleStore()
+
+    note = store.register(OddFrame())
+
+    assert note == "Available to `run_python` as `r1`."
+    assert store.ids() == ["r1"]
+
+
+def test_many_unique_values_stay_a_count():
+    frame = pd.DataFrame({"s": [f"value {index}" for index in range(11)]})
+
+    note = _register(HandleStore(), frame)
+
+    assert "11 unique values" in note
+    assert '"value' not in note
+
+
+def test_long_unique_values_stay_a_count():
+    frame = pd.DataFrame({"s": ["x" * 150, "y" * 150]})
+
+    note = _register(HandleStore(), frame)
+
+    assert "2 unique values" in note
+    assert "xxx" not in note
+
+
+def test_a_unique_value_with_quotes_is_escaped():
+    frame = pd.DataFrame({"s": ['say "hi"', "bye"]})
+
+    note = _register(HandleStore(), frame)
+
+    assert '"say \\"hi\\""' in note
+
+
+def test_an_empty_frame_is_described():
+    frame = pd.DataFrame({"n": pd.Series([], dtype="float64")})
+
+    note = _register(HandleStore(), frame)
+
+    assert "A data frame with 0 rows and 1 column:" in note
+    assert "* n: float64 with 0 missing" in note
+
+
+def test_a_frame_with_no_columns_is_described():
+    note = _register(HandleStore(), pd.DataFrame())
+
+    assert "A data frame with 0 rows and 0 columns:" in note
+
+
+def test_a_boolean_column_that_is_all_true_reports_no_false():
+    frame = pd.DataFrame({"flag": [True, True]})
+
+    note = _register(HandleStore(), frame)
+
+    dtype = frame["flag"].dtype
+    assert f"* flag: {dtype} with 2 True, 0 False, and 0 missing" in note
+
+
+def test_exactly_fifty_columns_are_all_described():
+    frame = pd.DataFrame({f"c{index}": [index] for index in range(50)})
+
+    note = _register(HandleStore(), frame)
+
+    assert "* c49: " in note
+    assert "more columns" not in note
+
+
+def test_fifty_one_columns_counts_one_more():
+    frame = pd.DataFrame({f"c{index}": [index] for index in range(51)})
+
+    note = _register(HandleStore(), frame)
+
+    assert "* c49: " in note
+    assert "* c50: " not in note
+    assert "and 1 more columns" in note
