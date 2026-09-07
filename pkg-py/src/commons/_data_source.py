@@ -15,6 +15,7 @@ import sqlalchemy
 
 from . import _duckdb
 from ._backends import Backend, DuckDBBackend, EngineBackend
+from ._frames import is_frame
 from ._sql_guard import check_query
 
 if TYPE_CHECKING:
@@ -347,7 +348,7 @@ class DataSource:
         for position, label in enumerate(labels):
             pin = self.pending.pins[label]
             value = self.pending.board.pin_read(pin)
-            if not _is_frame(value):
+            if not is_frame(value):
                 raise TypeError(
                     f"Pin {pin!r} is a {type(value).__name__}, not a data frame, "
                     f"so it cannot become the table {label!r}."
@@ -465,17 +466,11 @@ def _check_named_frames(frames: dict[str, Any]) -> None:
             "or a pins board."
         )
     for name, frame in frames.items():
-        if not _is_frame(frame):
+        if not is_frame(frame):
             raise TypeError(
                 f"{name} must be a pandas or polars data frame, got "
                 f"{type(frame).__name__}."
             )
-
-
-def _is_frame(value: Any) -> bool:
-    # Duck-typed rather than imported: pandas and polars are both optional at
-    # this boundary, and DuckDB accepts either through the same registration.
-    return hasattr(value, "__dataframe__") or hasattr(value, "columns")
 
 
 def normalize_table_registry(tables: Any) -> dict[str, TableId]:
