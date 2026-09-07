@@ -28,7 +28,7 @@ class ExecTimeoutError(TimeoutError):
     """The command ran past its deadline and was killed."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ExecResult:
     returncode: int
     stdout: str
@@ -61,8 +61,14 @@ class ExecBackend(Protocol):
         parent holds credentials the child has no business seeing, so the
         default fails closed.
 
+        ``input`` is encoded as UTF-8, and output is decoded as UTF-8 with
+        invalid bytes replaced. Both are the contract every backend
+        implements, not a local choice.
+
         Raises ``ExecTimeoutError`` if ``timeout`` passes before the command
-        finishes, having first made sure the process is gone.
+        finishes, having first made sure the process is gone. A command that
+        cannot be started at all raises the underlying ``OSError`` (usually
+        ``FileNotFoundError``) instead.
         """
         ...
 
@@ -95,9 +101,18 @@ class LocalBackend:
 
     def __init__(
         self,
+        *,
         output_limit: int = DEFAULT_OUTPUT_LIMIT,
         terminate_grace: float = TERMINATE_GRACE,
     ) -> None:
+        """Configure output retention and shutdown patience.
+
+        ``output_limit`` caps how many bytes are kept from each of stdout
+        and stderr; past the cap the oldest bytes are dropped, keeping the
+        tail. ``terminate_grace`` is how long to wait for SIGTERM to be
+        honoured before escalating to SIGKILL, and again for the exit to be
+        observed afterwards.
+        """
         self._output_limit = output_limit
         self._terminate_grace = terminate_grace
         # Shutdowns outlive the call that started them, so they need an owner
@@ -156,8 +171,11 @@ class LocalBackend:
             # burning CPU with nobody waiting on it.
             await self._shutdown(process)
             raise
+        # _collect awaited wait(), so the return code is known here; if that
+        # invariant ever breaks, fail loudly rather than report "succeeded".
+        assert process.returncode is not None
         return ExecResult(
-            returncode=process.returncode or 0,
+            returncode=process.returncode,
             stdout=stdout[0].decode(errors="replace"),
             stderr=stderr[0].decode(errors="replace"),
             stdout_truncated=stdout[1],

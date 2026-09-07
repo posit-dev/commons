@@ -100,13 +100,18 @@ async def test_output_past_the_cap_keeps_the_tail_and_the_process_still_finishes
 
 
 def _sleeper(sentinel: object, *, ignore_sigterm: bool = False) -> str:
-    """Code that outlives its timeout and records the fact if it is allowed to."""
+    """Code that outlives its timeout and records the fact if it is allowed to.
+
+    The sleep sits well past the point where a working shutdown has killed
+    the process, so a slow or loaded machine delays the kill into slack
+    rather than into a false failure.
+    """
     guard = (
         "import signal; signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
         if ignore_sigterm
         else ""
     )
-    return f"{guard}import time; time.sleep(0.6); open({str(sentinel)!r}, 'w').close()"
+    return f"{guard}import time; time.sleep(1.5); open({str(sentinel)!r}, 'w').close()"
 
 
 async def test_a_call_past_the_timeout_raises_and_the_process_does_not_survive(
@@ -118,7 +123,7 @@ async def test_a_call_past_the_timeout_raises_and_the_process_does_not_survive(
     with pytest.raises(ExecTimeoutError):
         await backend.exec([sys.executable, "-c", _sleeper(sentinel)], timeout=0.15)
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -149,7 +154,7 @@ async def test_a_process_that_ignores_sigterm_is_killed_anyway(tmp_path) -> None
             timeout=0.15,
         )
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -233,14 +238,14 @@ async def test_the_timeout_still_applies_after_the_output_streams_close(
     code = (
         "import os, time\n"
         "os.close(1); os.close(2)\n"
-        f"time.sleep(0.6); open({str(sentinel)!r}, 'w').close()\n"
+        f"time.sleep(1.5); open({str(sentinel)!r}, 'w').close()\n"
     )
     backend = LocalBackend()
 
     with pytest.raises(ExecTimeoutError):
         await backend.exec([sys.executable, "-c", code], timeout=0.15)
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -256,8 +261,17 @@ async def test_cancelling_a_call_does_not_leave_the_process_running(tmp_path) ->
     with pytest.raises(asyncio.CancelledError):
         await call
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
+
+
+async def test_a_command_that_cannot_be_started_raises_os_error() -> None:
+    # Nothing was spawned, so there is nothing to clean up: the failure
+    # propagates as-is rather than being dressed up as an exec result.
+    backend = LocalBackend()
+
+    with pytest.raises(FileNotFoundError):
+        await backend.exec(["/no/such/binary"])
 
 
 async def test_cancellation_still_escalates_for_a_process_ignoring_sigterm(
@@ -276,7 +290,7 @@ async def test_cancellation_still_escalates_for_a_process_ignoring_sigterm(
     with pytest.raises(asyncio.CancelledError):
         await call
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -297,7 +311,7 @@ async def test_a_second_cancellation_cannot_abort_the_shutdown(tmp_path) -> None
     with pytest.raises(asyncio.CancelledError):
         await call
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -356,7 +370,7 @@ async def test_an_unexpected_error_mid_call_still_kills_the_process(
     with pytest.raises(RuntimeError, match="pipe failed"):
         await backend.exec([sys.executable, "-c", _sleeper(sentinel)])
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -373,7 +387,7 @@ async def test_input_that_cannot_be_encoded_still_kills_the_process(
             [sys.executable, "-c", _sleeper(sentinel)], input="\ud800"
         )
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
 
 
@@ -399,5 +413,5 @@ async def test_cancellation_during_the_timeout_shutdown_cannot_abort_it(
     with pytest.raises((asyncio.CancelledError, ExecTimeoutError)):
         await call
 
-    await asyncio.sleep(0.8)
+    await asyncio.sleep(1.8)
     assert not sentinel.exists()
