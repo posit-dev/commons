@@ -94,5 +94,52 @@
         "pill_class": "caution"
       }
     }
+  },
+  "provenance_aside": {
+    "description": "The provenance marker appended after a classified answer. A live answer omits the \"Cited\" marker, because the verified citation's own aside already says as much; a review context asks for every outcome by passing include_cited. `emits` is false when nothing is rendered at all. A rendered marker carries that tag's label and body from provenance_display verbatim. The icon is not pinned here: its URL comes from each package's own served asset bundle.",
+    "cases": [
+      {
+        "name": "a verified answer renders its marker",
+        "tag": "A",
+        "include_cited": false,
+        "emits": true
+      },
+      {
+        "name": "an untrusted answer renders its marker",
+        "tag": "C",
+        "include_cited": false,
+        "emits": true
+      },
+      {
+        "name": "a cited answer renders nothing beside its own citation",
+        "tag": "B",
+        "include_cited": false,
+        "emits": false
+      },
+      {
+        "name": "a cited answer renders its marker in a review context",
+        "tag": "B",
+        "include_cited": true,
+        "emits": true
+      },
+      {
+        "name": "including cited markers leaves the other outcomes alone",
+        "tag": "A",
+        "include_cited": true,
+        "emits": true
+      },
+      {
+        "name": "an unclassified answer renders nothing",
+        "tag": null,
+        "include_cited": false,
+        "emits": false
+      },
+      {
+        "name": "an unclassified answer renders nothing in a review context",
+        "tag": null,
+        "include_cited": true,
+        "emits": false
+      }
+    ]
   }
 }

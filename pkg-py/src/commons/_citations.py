@@ -10,15 +10,20 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, get_args
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 from chatlas import ContentToolResult, Turn
 from chatlas.types import ContentText
 
+from ._measures import Measure, measure_schema_text
 from ._prompt import read_prompt
-from ._provenance import Tag
+from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
+
+if TYPE_CHECKING:
+    from ._context_layer import ContextLayer
+    from ._data_source import DataSource
 
 __all__ = [
     "CitationDecision",
@@ -187,6 +192,52 @@ def match_citation(quote: str, corpus: Sequence[CorpusEntry]) -> CorpusEntry | N
     )
 
 
+def build_citation_corpus(
+    context_layer: ContextLayer | None,
+    measures: Iterable[Measure],
+    sources: Mapping[str, DataSource],
+) -> list[CorpusEntry]:
+    """Collect the trusted text an answer's citations are verified against.
+
+    Which text is citable and under which label is a cross-language contract
+    pinned by ``tests/shared/citation-corpus.json``. Matching returns the
+    first entry containing the quote, so the specific sources are added ahead
+    of the general documentation corpus.
+    """
+    entries: list[CorpusEntry] = []
+
+    def add(label: str, kind: CitationKind, texts: Iterable[str | None]) -> None:
+        entries.extend(
+            CorpusEntry(label=label, kind=kind, text=text) for text in texts if text
+        )
+
+    # A measure block names its sources only for an agent that has several, so
+    # the corpus holds the block search_pool actually presented.
+    source_names = tuple(sources) if len(sources) > 1 else ()
+    for record in measures:
+        add(
+            f"{record.name} definition",
+            "definition",
+            [measure_schema_text(record, source_names=source_names)],
+        )
+
+    for name, source in sources.items():
+        dictionary = source.dictionary
+        if dictionary is None:
+            continue
+        add(
+            f"{name} dictionary",
+            "schema",
+            [dictionary.description, dictionary.details],
+        )
+        for table in dictionary.tables:
+            add(f"{table} table", "schema", [dictionary.entry_text(table)])
+
+    docs = context_layer.docs if context_layer is not None else ()
+    add("documentation", "prose", docs)
+    return entries
+
+
 def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> str:
     """Render a verified citation as the aside shinychat displays.
 
@@ -204,14 +255,9 @@ def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> 
         f"{html.escape(label, quote=False)}</span></span>\n\n"
     )
     return (
-        f'<shiny-aside label="{_escape_attr(label)}">'
+        f'<shiny-aside label="{escape_attr(label)}">'
         f"{title}{reason}{blockquote}</shiny-aside>"
     )
-
-
-# Ampersands first, so the entities this generates are not escaped again.
-def _escape_attr(text: str) -> str:
-    return text.replace("&", "&amp;").replace('"', "&quot;")
 
 
 def tool_result(value: Any, tag: Tag | None = None) -> ContentToolResult:
@@ -220,7 +266,7 @@ def tool_result(value: Any, tag: Tag | None = None) -> ContentToolResult:
     The tag is read back off ``extra`` when the turn is classified, so it is
     set here rather than at the point a result is added to the conversation.
     """
-    return ContentToolResult(value=value, extra={"commons_tag": tag})
+    return ContentToolResult(value=value, extra={TAG_EXTRA_KEY: tag})
 
 
 def citation_reminder_text() -> str:

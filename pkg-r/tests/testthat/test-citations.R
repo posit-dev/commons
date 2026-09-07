@@ -75,168 +75,60 @@ test_that("citation asides leave trust copy to their markers", {
   )
 })
 
-test_that("corpus entries carry a kind and a reader-facing label", {
-  skip_if_not_installed("yaml")
-  doc <- withr::local_tempfile(fileext = ".md")
-  writeLines("Fiscal year starts in February.", doc)
-  path <- withr::local_tempfile(fileext = ".yaml")
-  writeLines(
-    c(
-      '$version: "0.1.0"',
-      "name: retail sales",
-      "description: Order and revenue data for a small retailer.",
-      "tables:",
-      "  - name: sales",
-      "    columns:",
-      "      - name: revenue",
-      "        description: Booked revenue, net of discounts."
-    ),
-    path
-  )
-  source <- data_source(sales = test_sales(), dictionary = path)
+# A measure the fixture describes: its arguments are all commons-supplied, so
+# `arguments` stays empty and every formal is an injected source.
+fixture_corpus_measure <- function(spec) {
+  injected <- as.character(unlist(spec$injected) %||% character())
+  fn <- if (length(injected) == 0) {
+    function() NULL
+  } else {
+    formals <- rep(list(rlang::missing_arg()), length(injected))
+    names(formals) <- injected
+    rlang::new_function(formals, quote(NULL))
+  }
+  measure(spec$name, spec$description, fn)
+}
 
-  corpus <- build_citation_corpus(
-    augment_context_layer(context_layer(files = doc), list(source)),
-    list(order_count = count_measure_tool()),
-    list(sales_db = source)
-  )
+test_that("build_citation_corpus matches the shared fixture", {
+  cases <- shared_fixture("citation-corpus")$build_citation_corpus$cases
+  # An empty fixture would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
 
-  expect_equal(
-    match_citation("Fiscal year starts in February.", corpus),
-    list(label = "documentation", kind = "prose")
-  )
-  expect_equal(
-    match_citation(
-      "Count orders, optionally filtered by region and a revenue ceiling.",
-      corpus
-    ),
-    list(label = "order_count definition", kind = "definition")
-  )
-  expect_equal(
-    match_citation("Booked revenue, net of discounts.", corpus),
-    list(label = "sales table", kind = "schema")
-  )
-  expect_equal(
-    match_citation("Order and revenue data for a small retailer.", corpus),
-    list(label = "sales_db dictionary", kind = "schema")
-  )
-  expect_null(match_citation("tax", corpus))
-})
+  for (case in cases) {
+    layer <- if (is.null(case$docs)) {
+      NULL
+    } else {
+      new_context_layer(as.character(unlist(case$docs)))
+    }
+    registry <- lapply(case$measures, fixture_corpus_measure)
+    sources <- lapply(case$sources, function(spec) {
+      dictionary <- if (is.null(spec$dictionary)) {
+        NULL
+      } else {
+        new_data_dictionary(spec$dictionary)
+      }
+      suppressMessages(data_source(sales = test_sales(), dictionary = dictionary))
+    })
+    names(sources) <- vapply(case$sources, function(spec) spec$name, character(1))
 
-test_that("the citation corpus spans context, measures, and dictionaries", {
-  skip_if_not_installed("yaml")
-  doc <- withr::local_tempfile(fileext = ".md")
-  writeLines("Fiscal year starts in February.", doc)
-  layer <- context_layer(files = doc)
-  registry <- list(order_count = count_measure_tool())
-  path <- withr::local_tempfile(fileext = ".yaml")
-  writeLines(
-    c(
-      '$version: "0.1.0"',
-      "name: retail sales",
-      "tables:",
-      "  - name: sales",
-      "    description: One row per order line.",
-      "    columns:",
-      "      - name: revenue",
-      "        description: Booked revenue, net of discounts."
-    ),
-    path
-  )
-  source <- data_source(sales = test_sales(), dictionary = path)
+    corpus <- build_citation_corpus(layer, registry, sources)
 
-  corpus <- build_citation_corpus(
-    augment_context_layer(layer, list(source)),
-    registry,
-    list(source)
-  )
-
-  expect_false(is.null(match_citation(
-    "Fiscal year starts in February.",
-    corpus
-  )))
-  expect_equal(
-    match_citation(
-      "Count orders, optionally filtered by region and a revenue ceiling.",
-      corpus
-    )$label,
-    "order_count definition"
-  )
-  expect_equal(
-    match_citation("Booked revenue, net of discounts.", corpus)$label,
-    "sales table"
-  )
-})
-
-test_that("dictionary prose keeps its specific label once it is also context", {
-  skip_if_not_installed("yaml")
-  path <- withr::local_tempfile(fileext = ".yaml")
-  writeLines(
-    c(
-      '$version: "0.1.0"',
-      "name: retail sales",
-      "details: Revenue figures exclude tax collected at checkout.",
-      "tables:",
-      "  - name: sales",
-      "    description: One row per order line.",
-      "    details: Refunds appear as negative-revenue rows."
-    ),
-    path
-  )
-  source <- data_source(sales = test_sales(), dictionary = path)
-  own_doc <- withr::local_tempfile(fileext = ".md")
-  writeLines("Fiscal year starts in February.", own_doc)
-
-  corpus <- build_citation_corpus(
-    augment_context_layer(context_layer(files = own_doc), list(source)),
-    list(),
-    list(source)
-  )
-
-  expect_equal(
-    match_citation("One row per order line.", corpus)$label,
-    "sales table"
-  )
-  expect_equal(
-    match_citation("Refunds appear as negative-revenue rows.", corpus)$label,
-    "sales table"
-  )
-  expect_equal(
-    match_citation(
-      "Revenue figures exclude tax collected at checkout.",
-      corpus
-    )$label,
-    "data dictionary"
-  )
-  expect_equal(
-    match_citation("Fiscal year starts in February.", corpus)$label,
-    "documentation"
-  )
-})
-
-test_that("corpus measure text matches multi-source presentation", {
-  registry <- list(
-    region_revenue = measure(
-      "region_revenue",
-      "Total revenue for a region.",
-      function(region, sales_db) NULL,
-      arguments = list(region = ellmer::type_string("The sales region."))
+    expect_identical(
+      lapply(corpus, function(entry) entry[c("label", "kind")]),
+      lapply(case$expected, function(entry) entry[c("label", "kind")]),
+      info = case$name
     )
-  )
-  sources <- list(sales_db = test_source(), crm = test_source())
-
-  corpus <- build_citation_corpus(NULL, registry, sources)
-
-  # search_pool presents a `sources:` line to multi-source agents; a
-  # verbatim quote spanning it must verify.
-  expect_equal(
-    match_citation(
-      "Total revenue for a region.\n\nsources: sales_db",
-      corpus
-    )$label,
-    "region_revenue definition"
-  )
+    for (want in case$matches) {
+      found <- match_citation(want$quote, corpus)
+      expect_identical(
+        found$label,
+        want$label,
+        info = paste(case$name, want$quote, sep = ": ")
+      )
+    }
+  }
 })
+
 
 test_that("dataset-level dictionary prose is citable", {
   skip_if_not_installed("yaml")

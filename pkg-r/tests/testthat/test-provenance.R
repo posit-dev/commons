@@ -38,31 +38,47 @@ test_that("provenance_display uses R display copy", {
   }
 })
 
-test_that("provenance_aside renders A and C, nothing for B/NA", {
+test_that("provenance_aside matches the shared fixture", {
+  cases <- shared_fixture("provenance")$provenance_aside$cases
+  # An empty fixture would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    tag <- case$tag %||% NA_character_
+    aside <- provenance_aside(tag, include_cited = case$include_cited)
+
+    if (!isTRUE(case$emits)) {
+      expect_identical(aside, "", info = case$name)
+      next
+    }
+    entry <- provenance_display[[tag]]
+    expect_match(
+      aside,
+      paste0('^<shiny-aside label="', entry$label, '"'),
+      info = case$name
+    )
+    expect_match(aside, entry$body, fixed = TRUE, info = case$name)
+  }
+})
+
+test_that("the rendered marker carries its icon from the asset bundle", {
+  # Per-package, so out of the shared fixture: the URL is served by this
+  # package's own dependency, and the Python renderer omits it until its UI
+  # ships one.
   trusted <- provenance_aside("A")
   untrusted <- provenance_aside("C")
 
-  expect_match(trusted, '^<shiny-aside label="Verified answer"')
   expect_match(
     trusted,
     paste0('icon="', commons_icon_url("trusted-icon.svg"), '"'),
     fixed = TRUE
   )
-  expect_no_match(trusted, "data:image", fixed = TRUE)
-  expect_match(trusted, "<commons-provenance-info", fixed = TRUE)
-
-  expect_match(untrusted, '^<shiny-aside label="Untrusted"')
   expect_match(
     untrusted,
     paste0('icon="', commons_icon_url("warning-icon.svg"), '"'),
     fixed = TRUE
   )
+  expect_no_match(trusted, "data:image", fixed = TRUE)
   expect_no_match(untrusted, "data:image", fixed = TRUE)
-
-  expect_identical(provenance_aside("B"), "")
-  expect_identical(provenance_aside(NA_character_), "")
-
-  cited <- provenance_aside("B", include_cited = TRUE)
-  expect_match(cited, '^<shiny-aside label="Cited"')
-  expect_match(cited, "supports its approach", fixed = TRUE)
+  expect_match(trusted, "<commons-provenance-info", fixed = TRUE)
 })
