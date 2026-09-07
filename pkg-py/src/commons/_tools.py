@@ -275,7 +275,16 @@ def _call_measure(context: ToolContext) -> Tool:
             )
             raise ValueError(f"No measure named {name!r}. {available}")
         args = record.validate_args(_parse_json_arguments(arguments))
-        value = record.func(**args, **context.injections.get(name, {}))
+        injected = context.injections.get(name, {})
+        # A measure takes a source's connection by the source's own name, and
+        # a board source has to have read its pins before that connection can
+        # answer: the measure holds the connection, not the DataSource, so
+        # the read-on-demand that query() does never fires for it.
+        for argument in injected:
+            source = context.sources.get(argument)
+            if source is not None:
+                source.ensure_loaded()
+        value = record.func(**args, **injected)
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part

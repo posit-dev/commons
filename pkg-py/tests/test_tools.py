@@ -8,7 +8,8 @@ import pytest
 from chatlas import ContentToolResult, Tool
 from pydantic import Field
 
-from commons import ContextLayer, DataSource, data_source, measure
+from commons import ContextLayer, DataSource, Injected, data_source, measure
+from commons._backends import DuckDBBackend
 from commons._catalog import (
     CatalogTransientError,
     Manifest,
@@ -541,8 +542,6 @@ def test_an_unknown_measure_names_the_registered_ones(plain: DataSource) -> None
 
 
 def test_an_injected_argument_comes_from_the_agent(plain: DataSource) -> None:
-    from commons import Injected
-
     @measure(description="Count rows in a source.")
     def row_count(sales_db: Injected[Any]) -> int:
         return len(sales_db.query("SELECT 1 AS n FROM sales"))
@@ -667,3 +666,41 @@ def test_describe_table_loads_a_pin_before_reading_its_schema(
 
     assert "| revenue | DOUBLE |" in body
     assert "| 500.0 | EMEA |" in body
+
+
+def test_call_measure_reads_a_board_pin_before_the_measure_runs(
+    tmp_path: Path,
+) -> None:
+    # The measure is handed the connection, not the DataSource, so the
+    # read-on-demand that query() does never fires for it: without the
+    # preload the relation does not exist yet and the measure fails.
+    pins = pytest.importorskip("pins")
+    board = pins.board_folder(str(tmp_path))
+    board.pin_write(frame(), "sales-pin", type="csv")
+    source = data_source(board, tables={"sales": "sales-pin"})
+    connection = source.backend
+    assert isinstance(connection, DuckDBBackend)
+
+    @measure(description="Count rows the connection can see.")
+    def row_count(sales_db: Injected[Any]) -> int:
+        return sales_db.execute("SELECT count(*) AS n FROM sales").fetchone()[0]
+
+    found = as_measure(row_count)
+    assert found is not None
+    tools = build_commons_tools(
+        ToolContext(
+            sources={"sales_db": source},
+            measures={found.name: found},
+            injections={"row_count": {"sales_db": connection.connection}},
+        )
+    )
+
+    assert call(find(tools, "call_measure"), name="row_count").startswith("3")
+
+
+def test_ensure_loaded_is_a_no_op_for_a_source_with_no_pins(
+    plain: DataSource,
+) -> None:
+    plain.ensure_loaded()
+
+    assert plain.query("SELECT count(*) AS n FROM sales") == [{"n": 3}]
