@@ -94,7 +94,8 @@
           "dictionary": {
             "glossary": {
               "AOV": "Average order value.",
-              "GMV": "Gross merchandise value."
+              "GMV": "Gross merchandise value.",
+              "CAC": "Customer acquisition\n  cost,  as  authored."
             }
           }
         }
@@ -103,7 +104,7 @@
         "has_dictionary_context": true,
         "has_glossary_context": true,
         "dictionary_context": "",
-        "glossary_context": "- AOV: Average order value.\n- GMV: Gross merchandise value."
+        "glossary_context": "- AOV: Average order value.\n- GMV: Gross merchandise value.\n- CAC: Customer acquisition cost,  as  authored."
       }
     },
     {

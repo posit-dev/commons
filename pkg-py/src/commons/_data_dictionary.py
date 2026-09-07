@@ -356,7 +356,9 @@ def as_data_dictionary(x: Any) -> DataDictionary | None:
 
 
 def _flatten_inline(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    # Collapse each newline and the whitespace around it; other whitespace
+    # stays as authored.
+    return re.sub(r"\s*\n\s*", " ", text).strip()
 
 
 def _word_pattern(word: str) -> re.Pattern[str]:
