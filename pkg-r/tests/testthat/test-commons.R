@@ -547,57 +547,6 @@ test_that("commons() records an agent-creation span", {
   expect_equal(span$attributes[["commons.agent.has_context_layer"]], FALSE)
 })
 
-test_that("collect_appended_tags reads commons_tag across tool-calling turns", {
-  turns <- list(
-    ellmer::AssistantTurn(
-      contents = list(
-        ellmer::ContentToolRequest(
-          id = "1",
-          name = "run_sql",
-          arguments = list()
-        )
-      )
-    ),
-    ellmer::UserTurn(
-      contents = list(
-        ellmer::ContentToolResult(
-          value = "42",
-          request = NULL,
-          extra = list(commons_tag = "B")
-        )
-      )
-    ),
-    ellmer::AssistantTurn(
-      contents = list(ellmer::ContentText(text = "Answer."))
-    )
-  )
-  expect_identical(collect_appended_tags(turns, from_index = 1L), "B")
-})
-
-test_that("collect_appended_tags ignores turns before from_index", {
-  turns <- list(
-    ellmer::UserTurn(
-      contents = list(
-        ellmer::ContentToolResult(
-          value = "1",
-          request = NULL,
-          extra = list(commons_tag = "A")
-        )
-      )
-    ),
-    ellmer::UserTurn(
-      contents = list(
-        ellmer::ContentToolResult(
-          value = "2",
-          request = NULL,
-          extra = list(commons_tag = "B")
-        )
-      )
-    )
-  )
-  expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
-})
-
 # Split a real ellmer response inside reserved markup to test chunk invariance.
 stream_citations_fixture <- function(agent, raw, split_at) {
   skip_if_ellmer_streaming_hooks_unavailable()

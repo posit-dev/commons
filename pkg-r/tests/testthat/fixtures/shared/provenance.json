@@ -72,6 +72,53 @@
       }
     ]
   },
+  "collect_appended_tags": {
+    "description": "Which tags collect_appended_tags(turns, from_index) gathers from one exchange. Each case builds a conversation from `turns`: a turn has a `role` (`user` or `assistant`) and `contents`, where a content item is {\"type\": \"tool_result\", \"tag\": ...} or {\"type\": \"text\", \"text\": ...}. A tool result's `tag` is the commons_tag value the tool set; an absent `tag` key or a null value means the result carries no tag. `skip` counts the turns already present when the exchange began: Python passes it as from_index, R passes skip + 1. `expected` lists the tags collected, in turn order. A tag value outside A, B, and C is deliberately not pinned: Python drops it at collection, R returns it, and the only consumer, derive_provenance_tag, ignores anything but A and B either way.",
+    "cases": [
+      {
+        "name": "tags are collected across the appended turns",
+        "turns": [
+          {"role": "user", "contents": [{"type": "tool_result", "tag": "A"}]},
+          {"role": "user", "contents": [{"type": "tool_result", "tag": "B"}]}
+        ],
+        "skip": 0,
+        "expected": ["A", "B"]
+      },
+      {
+        "name": "turns already present when the exchange began are ignored",
+        "turns": [
+          {"role": "user", "contents": [{"type": "tool_result", "tag": "B"}]},
+          {"role": "user", "contents": [{"type": "tool_result", "tag": "A"}]}
+        ],
+        "skip": 1,
+        "expected": ["A"]
+      },
+      {
+        "name": "an exchange with no new turns collects nothing",
+        "turns": [
+          {"role": "assistant", "contents": [{"type": "text", "text": "hi"}]}
+        ],
+        "skip": 1,
+        "expected": []
+      },
+      {
+        "name": "content without a tag is skipped",
+        "turns": [
+          {
+            "role": "user",
+            "contents": [
+              {"type": "text", "text": "Revenue was 42."},
+              {"type": "tool_result"},
+              {"type": "tool_result", "tag": null},
+              {"type": "tool_result", "tag": "A"}
+            ]
+          }
+        ],
+        "skip": 0,
+        "expected": ["A"]
+      }
+    ]
+  },
   "provenance_display": {
     "description": "Word-for-word copy both UIs render. `icon` is null when the provenance marker has no icon.",
     "tags": {

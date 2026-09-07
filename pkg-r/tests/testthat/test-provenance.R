@@ -24,6 +24,40 @@ test_that("derive_provenance_tag matches the shared truth table", {
   }
 })
 
+test_that("collect_appended_tags matches the shared fixture", {
+  cases <- shared_fixture("provenance")$collect_appended_tags$cases
+  # An empty fixture would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    turns <- lapply(case$turns, function(turn) {
+      contents <- lapply(turn$contents, function(content) {
+        if (content$type == "text") {
+          return(ellmer::ContentText(text = content$text))
+        }
+        ellmer::ContentToolResult(
+          value = "42",
+          request = NULL,
+          extra = drop_nulls(list(commons_tag = content$tag))
+        )
+      })
+      if (turn$role == "assistant") {
+        ellmer::AssistantTurn(contents = contents)
+      } else {
+        ellmer::UserTurn(contents = contents)
+      }
+    })
+
+    # `skip` counts the turns present when the exchange began; from_index is
+    # 1-based here and 0-based in Python.
+    expect_identical(
+      collect_appended_tags(turns, from_index = case$skip + 1),
+      as.character(unlist(case$expected)),
+      info = case$name
+    )
+  }
+})
+
 test_that("provenance_display uses R display copy", {
   display <- shared_fixture("provenance")$provenance_display$tags
   expect_setequal(names(display), names(provenance_display))

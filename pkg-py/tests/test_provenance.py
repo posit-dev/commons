@@ -14,6 +14,7 @@ from chatlas.types import ContentText
 
 from commons._provenance import (
     PROVENANCE_DISPLAY,
+    TAG_EXTRA_KEY,
     Tag,
     collect_appended_tags,
     derive_provenance_tag,
@@ -26,6 +27,7 @@ SPEC = load_shared_fixture("provenance")
 DERIVATION_CASES: list[dict[str, Any]] = SPEC["derive_provenance_tag"]["cases"]
 DISPLAY: dict[str, Any] = SPEC["provenance_display"]["tags"]
 ASIDE_CASES: list[dict[str, Any]] = SPEC["provenance_aside"]["cases"]
+COLLECT_CASES: list[dict[str, Any]] = SPEC["collect_appended_tags"]["cases"]
 
 
 def test_shared_fixture_covers_every_outcome() -> None:
@@ -81,61 +83,47 @@ def test_display_copy_is_immutable() -> None:
         PROVENANCE_DISPLAY[Tag.A].label = "Something else"  # type: ignore[misc]
 
 
-def _tool_result(tag: Any) -> ContentToolResult:
-    return ContentToolResult(value="42", extra={"commons_tag": tag})
+def _content(spec: dict[str, Any]) -> Any:
+    if spec["type"] == "text":
+        return ContentText(text=spec["text"])
+    if "tag" not in spec:
+        return ContentToolResult(value="42")
+    return ContentToolResult(value="42", extra={TAG_EXTRA_KEY: spec["tag"]})
 
 
-def test_collects_the_tags_tool_results_set_in_the_appended_turns() -> None:
+@pytest.mark.parametrize("case", COLLECT_CASES, ids=lambda case: case["name"])
+def test_collection_matches_the_shared_fixture(case: dict[str, Any]) -> None:
     turns = [
-        UserTurn([_tool_result(Tag.A)]),
-        UserTurn([_tool_result(Tag.B)]),
-    ]
-
-    assert collect_appended_tags(turns, 0) == [Tag.A, Tag.B]
-
-
-def test_ignores_turns_before_the_index() -> None:
-    # The index is taken before a turn starts, so tags an earlier exchange set
-    # must not classify this one.
-    turns = [
-        UserTurn([_tool_result(Tag.B)]),
-        UserTurn([_tool_result(Tag.A)]),
-    ]
-
-    assert collect_appended_tags(turns, 1) == [Tag.A]
-
-
-def test_an_index_past_the_last_turn_collects_nothing() -> None:
-    assert collect_appended_tags([AssistantTurn([ContentText(text="hi")])], 1) == []
-
-
-def test_ignores_content_without_a_tag() -> None:
-    turns = [
-        UserTurn(
-            [
-                ContentText(text="Revenue was 42."),
-                ContentToolResult(value="42"),
-                _tool_result(None),
-                _tool_result(Tag.A),
-            ],
+        (AssistantTurn if turn["role"] == "assistant" else UserTurn)(
+            [_content(content) for content in turn["contents"]]
         )
+        for turn in case["turns"]
     ]
 
-    assert collect_appended_tags(turns, 0) == [Tag.A]
+    assert collect_appended_tags(turns, case["skip"]) == [
+        Tag(tag) for tag in case["expected"]
+    ]
 
 
-def test_reads_a_tag_that_deserialized_to_a_plain_string() -> None:
-    # A restored conversation arrives as JSON, so `extra` holds "A" rather
-    # than the enum member the tool set.
-    turns = [UserTurn([_tool_result("A")])]
-
-    assert collect_appended_tags(turns, 0) == [Tag.A]
+def test_the_shared_fixture_covers_collection_edges() -> None:
+    # A truncated fixture would still pass every parametrized case above.
+    assert any(case["skip"] > 0 for case in COLLECT_CASES)
+    assert any(case["expected"] == [] for case in COLLECT_CASES)
 
 
 def test_ignores_a_tag_value_that_is_not_an_outcome() -> None:
-    # Nothing validates `extra`, and an unrecognized tag must not abort the
-    # turn it appears in: the other tags still classify the answer.
-    turns = [UserTurn([_tool_result("Z"), _tool_result(Tag.B)])]
+    # Deliberately per-language, so the fixture does not pin it: Python drops
+    # an unreadable tag at collection, so it cannot cost the exchange the
+    # tags that are readable. R returns it; derive_provenance_tag ignores
+    # anything but A and B either way.
+    turns = [
+        UserTurn(
+            [
+                ContentToolResult(value="1", extra={TAG_EXTRA_KEY: "Z"}),
+                ContentToolResult(value="2", extra={TAG_EXTRA_KEY: "B"}),
+            ]
+        )
+    ]
 
     assert collect_appended_tags(turns, 0) == [Tag.B]
 
