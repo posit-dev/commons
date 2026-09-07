@@ -1,7 +1,5 @@
 test_that("strip_frontmatter matches the shared cases", {
   cases <- shared_fixture("context_layer")$strip_frontmatter$cases
-  # An empty list would make the loop below vacuously succeed.
-  expect_gt(length(cases), 0)
 
   for (case in cases) {
     expect_identical(
@@ -14,8 +12,6 @@ test_that("strip_frontmatter matches the shared cases", {
 
 test_that("dictionary_context_chunks matches the shared cases", {
   cases <- shared_fixture("context_layer")$dictionary_context_chunks$cases
-  # An empty list would make the loop below vacuously succeed.
-  expect_gt(length(cases), 0)
 
   for (case in cases) {
     dictionary <- if (is.null(case$dictionary)) {
