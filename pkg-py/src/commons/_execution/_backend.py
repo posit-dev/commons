@@ -56,6 +56,11 @@ class ExecBackend(Protocol):
     ) -> ExecResult:
         """Run ``cmd``, feeding ``input`` on stdin, and collect its output.
 
+        ``env`` replaces the parent's environment outright rather than
+        extending it, and omitting it gives the child an empty one: the
+        parent holds credentials the child has no business seeing, so the
+        default fails closed.
+
         Raises ``ExecTimeoutError`` if ``timeout`` passes before the command
         finishes, having first made sure the process is gone.
         """
@@ -130,33 +135,26 @@ class LocalBackend:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
-            env=None if env is None else dict(env),
+            env={} if env is None else dict(env),
         )
-        if process.stdin is not None:
-            if input is not None:
-                process.stdin.write(input.encode())
-            process.stdin.close()
         try:
+            if process.stdin is not None:
+                if input is not None:
+                    process.stdin.write(input.encode())
+                process.stdin.close()
             stdout, stderr = await asyncio.wait_for(self._collect(process), timeout)
         except TimeoutError:
-            await _terminate(process, self._terminate_grace)
+            await self._shutdown(process)
             raise ExecTimeoutError(
                 f"the command exceeded its {timeout}-second time limit"
             ) from None
-        except asyncio.CancelledError:
-            # Whoever started the process ends it. A cancelled call that left
-            # the worker running would keep holding the parent's file
-            # descriptors and go on burning CPU with nobody waiting on it.
-            #
-            # Shutdown runs in its own task so that a second cancellation
-            # stops us waiting on it without stopping the escalation itself;
-            # a caller cancelling twice must not be able to leave a
-            # SIGTERM-ignoring child alive.
-            shutdown = asyncio.ensure_future(_terminate(process, self._terminate_grace))
-            self._shutdowns.add(shutdown)
-            shutdown.add_done_callback(self._shutdowns.discard)
-            with contextlib.suppress(asyncio.CancelledError):
-                await asyncio.shield(shutdown)
+        except BaseException:
+            # Whoever started the process ends it. Timeout and cancellation
+            # are not the only ways out of a call: input can fail to encode,
+            # a pipe can fail mid-read. Any exit that left the worker running
+            # would keep holding the parent's file descriptors and go on
+            # burning CPU with nobody waiting on it.
+            await self._shutdown(process)
             raise
         return ExecResult(
             returncode=process.returncode or 0,
@@ -165,6 +163,22 @@ class LocalBackend:
             stdout_truncated=stdout[1],
             stderr_truncated=stderr[1],
         )
+
+    async def _shutdown(self, process: asyncio.subprocess.Process) -> None:
+        """Terminate ``process``, outliving cancellation of the caller.
+
+        Shutdown runs in its own task so that a cancellation landing while it
+        is in flight — a caller cancelling twice, or cancelling while the
+        post-timeout escalation is still waiting — stops us waiting on it
+        without stopping the escalation itself. It must not be possible to
+        leave a SIGTERM-ignoring child alive by cancelling at the wrong
+        moment.
+        """
+        shutdown = asyncio.ensure_future(_terminate(process, self._terminate_grace))
+        self._shutdowns.add(shutdown)
+        shutdown.add_done_callback(self._shutdowns.discard)
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.shield(shutdown)
 
 
 async def _terminate(process: asyncio.subprocess.Process, grace: float) -> None:

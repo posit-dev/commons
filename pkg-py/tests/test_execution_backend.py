@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import pytest
 
+from commons._execution import _backend as backend_module
 from commons._execution._backend import (
     ExecBackend,
     ExecTimeoutError,
@@ -179,7 +180,10 @@ class _NeverReaped:
 async def test_terminate_gives_up_when_the_exit_is_never_reaped() -> None:
     process = _NeverReaped()
 
-    await asyncio.wait_for(_terminate(cast(Any, process), 0.05), timeout=2)
+    # The bound is two grace periods (SIGTERM, then SIGKILL), so 0.5s leaves
+    # generous margin over the real 0.1s while still failing if the waits
+    # stop honouring the grace they were given.
+    await asyncio.wait_for(_terminate(cast(Any, process), 0.05), timeout=0.5)
 
     assert process.signals == ["term", "kill"]
 
@@ -291,6 +295,108 @@ async def test_a_second_cancellation_cannot_abort_the_shutdown(tmp_path) -> None
     await asyncio.sleep(0.05)
     call.cancel()
     with pytest.raises(asyncio.CancelledError):
+        await call
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()
+
+
+async def test_omitting_the_environment_gives_the_child_an_empty_one(
+    monkeypatch,
+) -> None:
+    # The parent holds credentials a child has no business seeing, so with no
+    # allowlist in hand the default has to fail closed: no environment at
+    # all, rather than the whole of the parent's.
+    monkeypatch.setenv("COMMONS_TEST_SECRET", "sk-not-a-real-key")
+    backend = LocalBackend()
+
+    result = await backend.exec(
+        [sys.executable, "-c", "import os; print(sorted(os.environ))"]
+    )
+
+    assert "COMMONS_TEST_SECRET" not in result.stdout
+
+
+async def test_stderr_past_the_cap_keeps_the_tail_and_sets_its_own_flag() -> None:
+    # The two streams are capped and flagged independently; a flag wired to
+    # the wrong stream is invisible if only stdout is ever exercised.
+    backend = LocalBackend(output_limit=2000)
+    code = (
+        "import sys\n"
+        "for i in range(200):\n"
+        "    sys.stderr.write(f'line-{i}:' + 'x' * 1000 + '\\n')\n"
+    )
+
+    result = await backend.exec([sys.executable, "-c", code])
+
+    assert result.returncode == 0
+    assert result.stdout == ""
+    assert not result.stdout_truncated
+    assert result.stderr_truncated
+    assert len(result.stderr) <= 2000
+    assert "line-199:" in result.stderr
+    assert "line-0:" not in result.stderr
+
+
+async def test_an_unexpected_error_mid_call_still_kills_the_process(
+    tmp_path, monkeypatch
+) -> None:
+    # Timeout and cancellation are not the only ways out of a call. A pipe
+    # failing mid-read (or any other surprise) must not leave the worker
+    # running with nobody waiting on it.
+    async def fail_read(
+        stream: asyncio.StreamReader | None, limit: int
+    ) -> tuple[bytes, bool]:
+        raise RuntimeError("pipe failed mid-read")
+
+    monkeypatch.setattr(backend_module, "_read_tail", fail_read)
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.1)
+
+    with pytest.raises(RuntimeError, match="pipe failed"):
+        await backend.exec([sys.executable, "-c", _sleeper(sentinel)])
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()
+
+
+async def test_input_that_cannot_be_encoded_still_kills_the_process(
+    tmp_path,
+) -> None:
+    # Model-written text can contain unpaired surrogates, which fail at
+    # encode time — after the child has already been spawned.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.1)
+
+    with pytest.raises(UnicodeEncodeError):
+        await backend.exec(
+            [sys.executable, "-c", _sleeper(sentinel)], input="\ud800"
+        )
+
+    await asyncio.sleep(0.8)
+    assert not sentinel.exists()
+
+
+async def test_cancellation_during_the_timeout_shutdown_cannot_abort_it(
+    tmp_path,
+) -> None:
+    # A cancel landing while the post-timeout shutdown is in flight must not
+    # skip SIGKILL. The shutdown runs in its own task precisely so that it
+    # outlives the call that started it.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.3)
+    call = asyncio.create_task(
+        backend.exec(
+            [sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)],
+            timeout=0.1,
+        )
+    )
+    # The timeout fires at ~0.1s and the SIGTERM grace then runs for 0.3s,
+    # so a cancel at 0.3s lands in the middle of the shutdown.
+    await asyncio.sleep(0.3)
+
+    call.cancel()
+    with pytest.raises((asyncio.CancelledError, ExecTimeoutError)):
         await call
 
     await asyncio.sleep(0.8)
