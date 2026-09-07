@@ -202,6 +202,19 @@ class DataDictionary(_Permissive):
             terms.append(term)
         return terms
 
+    def ambient_glossary_lines(
+        self, cap_chars: int = AMBIENT_GLOSSARY_CAP_CHARS
+    ) -> list[str]:
+        """Each ambient term and its definition, one per line and unbulleted.
+
+        The caller adds the bullet, because a prompt covering several sources
+        names the source between the bullet and the term.
+        """
+        return [
+            f"{term}: {_flatten_inline(self.glossary[term])}"
+            for term in self.ambient_glossary_terms(cap_chars)
+        ]
+
     # ---- channel 2: first touch ------------------------------------------
 
     def entry_text(

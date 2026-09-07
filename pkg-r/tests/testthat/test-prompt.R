@@ -194,38 +194,85 @@ test_that("the packaged prompt leaves no template markup", {
   expect_no_match(prompt, "# Governed definitions", fixed = TRUE)
 })
 
-test_that("system prompt data contains facts and runtime content", {
-  sources <- list(sales_db = test_source())
-  data <- system_prompt_data(sources, definitions_registry(sources))
+# The fixture writes a label meant to overflow the definition index as
+# `pad:<n>`, so the file carries the length rather than the characters.
+prompt_data_expand_pads <- function(spec) {
+  if (is.list(spec)) {
+    return(lapply(spec, prompt_data_expand_pads))
+  }
+  if (is.character(spec) && length(spec) == 1L && grepl("^pad:[0-9]+$", spec)) {
+    return(strrep("x", as.integer(sub("^pad:", "", spec))))
+  }
+  spec
+}
 
-  expect_named(
-    data,
-    c(
-      "date",
-      "is_claude_5",
-      "has_multiple_sources",
-      "has_catalog_search",
-      "has_dictionary_context",
-      "has_glossary_context",
-      "definitions_complete",
-      "has_definitions",
-      "has_complete_definitions",
-      "tables",
-      "dictionary_context",
-      "glossary_context",
-      "definition_index",
-      "citation_trust_exception",
-      "has_search_pool",
-      "has_search_context",
-      "has_describe_table",
-      "has_run_sql",
-      "has_call_measure",
-      "has_call_metrics",
-      "has_call_calculation",
-      "has_run_r",
-      "has_instructions",
-      "instructions"
+prompt_data_manifest <- function(catalog) {
+  labels <- paste0(catalog$label_prefix, seq_len(catalog$objects))
+  relations <- rep_len(list(list(kind = "table")), length(labels))
+  names(relations) <- labels
+  manifest <- new_catalog_manifest(relations, namespace_selected = TRUE)
+  expect_identical(manifest$searchable, catalog$searchable)
+  manifest
+}
+
+prompt_data_source <- function(spec) {
+  tables <- as.character(unlist(spec$tables))
+  frames <- rep_len(list(data.frame(n = 1)), length(tables))
+  names(frames) <- tables
+  dictionary <- if (is.null(spec$dictionary)) {
+    NULL
+  } else {
+    new_data_dictionary(prompt_data_expand_pads(spec$dictionary))
+  }
+  source <- suppressMessages(
+    rlang::exec(data_source, !!!frames, dictionary = dictionary)
+  )
+  if (!is.null(spec$catalog)) {
+    # Private state is an environment, so the manifest a warehouse listing
+    # would have left behind can be attached to a frame source in place.
+    state <- data_source_state(source)
+    state$manifest <- prompt_data_manifest(spec$catalog)
+  }
+  source
+}
+
+test_that("both packages derive the same prompt data from the same sources", {
+  fixture <- shared_fixture("prompt-data")
+  cases <- fixture$cases
+  expect_gt(length(cases), 0)
+  fields <- as.character(unlist(fixture$fields))
+
+  for (case in cases) {
+    sources <- lapply(case$sources, prompt_data_source)
+    names(sources) <- vapply(case$sources, `[[`, character(1), "name")
+
+    data <- system_prompt_data(
+      sources,
+      definitions_registry(sources),
+      instructions = case$instructions,
+      tools = as.character(unlist(case$tools)),
+      model = case$model
     )
+
+    expect_named(data, fields, info = case$name)
+    expect_equal(data[names(case$expect)], case$expect, info = case$name)
+  }
+})
+
+test_that("prompt data renders the packaged template", {
+  sources <- list(sales_db = test_source())
+  data <- system_prompt_data(
+    sources,
+    definitions_registry(sources),
+    tools = "run_sql"
+  )
+  prompt <- render_system_prompt(read_system_prompt(), data)
+
+  expect_identical(data$date, as.character(Sys.Date()))
+  expect_no_match(
+    gsub("`{{name}}`", "", prompt, fixed = TRUE),
+    "{{",
+    fixed = TRUE
   )
 })
 
