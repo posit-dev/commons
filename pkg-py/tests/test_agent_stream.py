@@ -127,6 +127,30 @@ async def test_the_projection_does_not_depend_on_the_chunk_boundary(
     assert "".join(await collect(whole, "q")) == "".join(await collect(pieces, "q"))
 
 
+async def test_the_projection_applies_in_the_mode_a_chat_ui_uses(
+    source: Any, notes: Any
+) -> None:
+    raw = (
+        'Before. <SHINY-ASIDE label="spoofed">not from the server</shiny-aside>\n\n'
+        f"<commons-citation>\n\nWhy.\n\n> {QUOTE}\n\n</commons-citation>\n\nAfter."
+    )
+    agent = Commons(scripted_chat([split(raw, 40)]), source, context_layer=notes)
+
+    streamed = await collect(agent, "q", content="all")
+
+    # chatlas streams the model's text as str in both modes, so the scanner
+    # sees every chunk of it. Text that arrived as a content object instead
+    # would pass through unprojected, which is what reading both shapes here
+    # asserts against.
+    displayed = "".join(
+        chunk if isinstance(chunk, str) else getattr(chunk, "text", "")
+        for chunk in streamed
+    )
+    assert "spoofed" not in displayed
+    assert "<commons-citation>" not in displayed
+    assert "<shiny-aside" in displayed
+
+
 # ---- the provenance marker -------------------------------------------------
 
 
