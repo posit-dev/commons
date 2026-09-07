@@ -630,3 +630,40 @@ def test_a_probe_that_could_not_be_read_is_raised_rather_than_hidden() -> None:
 
     with pytest.raises(CatalogTransientError):
         find(tools, "search_catalog").func(query="sales")
+
+
+def test_search_pool_reaches_the_pool(plain: DataSource) -> None:
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": plain}, measures=counted())
+    )
+
+    assert "### order_count" in call(find(tools, "search_pool"), query="count orders")
+
+
+def test_call_metrics_runs_the_governed_query(documented: DataSource) -> None:
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": documented}, definitions=Registry([record()]))
+    )
+
+    body = call(
+        find(tools, "call_metrics"), metrics=["net_revenue"], dimensions=["region"]
+    )
+
+    assert "| EMEA | 800.0 |" in body
+
+
+def test_describe_table_loads_a_pin_before_reading_its_schema(
+    tmp_path: Path,
+) -> None:
+    # The sample query is what loads the pin, so the column read that follows
+    # it has a table to read from.
+    pins = pytest.importorskip("pins")
+    board = pins.board_folder(str(tmp_path))
+    board.pin_write(frame(), "sales-pin", type="csv")
+    source = data_source(board, tables={"sales": "sales-pin"})
+    tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
+
+    body = call(find(tools, "describe_table"), table="sales")
+
+    assert "| revenue | DOUBLE |" in body
+    assert "| 500.0 | EMEA |" in body
