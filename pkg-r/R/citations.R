@@ -159,7 +159,7 @@ citation_reminder_text <- function() {
 }
 
 citation_trust_exception <- function(tools) {
-  trusted_path_tools <- intersect(TRUSTED_TOOLS, tools)
+  trusted_path_tools <- intersect(trusted_tools, tools)
   if (!length(trusted_path_tools)) {
     return("")
   }
@@ -180,14 +180,14 @@ available_tool_names <- function(tools) {
 # Which outputs are citable depends on which tools the agent registered, so the
 # template branches on one flag per tool. The order here is the order the
 # citation sections read in, not the order tools are registered.
-TRUSTED_TOOLS <- c(
+trusted_tools <- c(
   "search_pool",
   "call_measure",
   "call_metrics",
   "call_calculation"
 )
 
-CITED_TOOLS <- c(
+cited_tools <- c(
   "search_pool",
   "search_context",
   "describe_table",
@@ -199,7 +199,7 @@ CITED_TOOLS <- c(
 )
 
 tool_availability <- function(tools) {
-  stats::setNames(as.list(CITED_TOOLS %in% tools), paste0("has_", CITED_TOOLS))
+  stats::setNames(as.list(cited_tools %in% tools), paste0("has_", cited_tools))
 }
 
 # The per-kind icon appears in the aside body's title; the pill renders

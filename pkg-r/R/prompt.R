@@ -86,7 +86,7 @@ render_system_prompt <- function(
 # Substituted values are inserted literally and never rendered again, which is
 # what lets governed-definition tokens and app-authored instructions contain
 # template syntax of their own.
-TEMPLATE_TOKEN <- "(?s)\\{\\{\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\}\\}|\\{%.*?%\\}"
+template_token <- "(?s)\\{\\{\\s*[A-Za-z_][A-Za-z0-9_]*\\s*\\}\\}|\\{%.*?%\\}"
 
 render_template <- function(template, data, call = rlang::caller_env()) {
   # Jinja2's lexer normalizes line endings, so a template read from a CRLF
@@ -94,7 +94,7 @@ render_template <- function(template, data, call = rlang::caller_env()) {
   template <- gsub("\r\n", "\n", template, fixed = TRUE)
   check_template_syntax(template, call = call)
   check_template_data(template, data, call = call)
-  found <- gregexpr(TEMPLATE_TOKEN, template, perl = TRUE)[[1]]
+  found <- gregexpr(template_token, template, perl = TRUE)[[1]]
   if (found[[1]] == -1L) {
     return(template)
   }
