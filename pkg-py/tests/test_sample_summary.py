@@ -45,6 +45,15 @@ def test_a_nan_does_not_depend_on_which_row_came_first() -> None:
     assert line([nan, nan]) == "unknown with 2 NAs"
 
 
+def test_a_signalling_decimal_nan_is_missing_rather_than_an_error() -> None:
+    # math.isnan() refuses to convert one to a float and raises; asking the
+    # Decimal is what keeps that out of the middle of describe_table.
+    assert line([Decimal("sNaN"), Decimal(1), Decimal(3)]) == (
+        "Decimal with range [1, 3], and 1 NAs"
+    )
+    assert line([Decimal("NaN"), Decimal("sNaN")]) == "unknown with 2 NAs"
+
+
 def test_a_mix_of_numeric_types_is_still_summarized_as_a_number() -> None:
     assert line([1, 2.5]) == "number with range [1, 2.5], and 0 NAs"
 
@@ -113,3 +122,12 @@ def test_a_range_number_is_formatted_the_way_r_formats_it() -> None:
     ]
 
     assert wrong == []
+
+
+def test_an_aware_and_a_naive_timestamp_together_are_mixed_not_an_error() -> None:
+    # Python refuses to order one against the other, and a range would raise
+    # out of the middle of describe_table.
+    aware = datetime.datetime(2024, 1, 1, 10, tzinfo=datetime.UTC)
+    naive = datetime.datetime(2024, 1, 2, 10)  # noqa: DTZ001
+
+    assert line([aware, naive]) == "mixed with 0 NAs"

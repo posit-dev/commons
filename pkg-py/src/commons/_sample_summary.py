@@ -105,9 +105,15 @@ def _is_missing(value: Any) -> bool:
     in whatever order the query returned, so keeping one would make a column's
     range depend on which row happened to come first.
     """
-    if value is None:
-        return True
-    return isinstance(value, (float, Decimal)) and math.isnan(value)
+    return value is None or _is_nan(value)
+
+
+def _is_nan(value: Any) -> bool:
+    # Asked of the Decimal rather than of math, which refuses to convert a
+    # signalling NaN to a float and raises instead of answering.
+    if isinstance(value, Decimal):
+        return value.is_nan()
+    return isinstance(value, float) and math.isnan(value)
 
 
 def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
@@ -131,7 +137,9 @@ def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
         ]
     if all(isinstance(value, str) for value in present):
         return "str", [missing, _unique(present)]
-    if all(isinstance(value, datetime.datetime) for value in present):
+    if all(isinstance(value, datetime.datetime) for value in present) and _comparable(
+        present
+    ):
         zone = _timezone(present)
         facts = [_range(present, _format_datetime), missing]
         return "datetime", ([zone, *facts] if zone else facts)
@@ -146,6 +154,16 @@ def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
     ):
         return _one_name(present, "list"), []
     return "mixed", [missing]
+
+
+def _comparable(present: list[datetime.datetime]) -> bool:
+    """Whether these timestamps can be ordered against each other.
+
+    Python refuses to compare an aware timestamp with a naive one, and no
+    driver returns both from one column, so a column holding both is reported
+    as mixed rather than raising out of a tool.
+    """
+    return len({value.tzinfo is None for value in present}) == 1
 
 
 def _one_name(present: list[Any], fallback: str) -> str:
@@ -226,7 +244,7 @@ def _format_signif(value: float | Decimal, digits: int = RANGE_DIGITS) -> str:
     `10000000000`. Only the decimal places are decided by `digits`: the digits
     left of the point are never dropped.
     """
-    if math.isnan(value):
+    if _is_nan(value):
         return "NaN"
     if math.isinf(value):
         return "Inf" if value > 0 else "-Inf"
