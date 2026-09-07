@@ -1,8 +1,9 @@
-"""Parsing a citation block and verifying its quote against a trusted corpus.
+"""Citations: verifying a quote against a trusted corpus, and asking for one.
 
 The normalization rules and the matching verdicts are a cross-language contract
-pinned by ``tests/shared/citations.json``; change that fixture, not just this
-file. ``pkg-r/R/citations.R`` implements the same contract for R.
+pinned by ``tests/shared/citations.json``, and where the citation request lands
+by ``tests/shared/citation-request.json``; change those fixtures, not just this
+file. ``pkg-r/R/citations.R`` implements the same contracts for R.
 """
 
 from __future__ import annotations
@@ -10,17 +11,27 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal, get_args
+
+from chatlas import ContentToolResult, Turn
+from chatlas.types import ContentText
+
+from ._prompt import read_prompt
+from ._provenance import Tag
 
 __all__ = [
     "CitationDecision",
+    "CitationRequest",
     "CorpusEntry",
     "ParsedCitation",
     "citation_aside_html",
+    "citation_reminder_text",
     "match_citation",
     "normalize_citation",
     "parse_commons_citation",
+    "tool_result",
+    "turn_has_user_message",
 ]
 
 # The minimum length is a guard, not a tuning knob: a fragment this short can
@@ -201,3 +212,66 @@ def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> 
 # Ampersands first, so the entities this generates are not escaped again.
 def _escape_attr(text: str) -> str:
     return text.replace("&", "&amp;").replace('"', "&quot;")
+
+
+def tool_result(value: Any, tag: Tag | None = None) -> ContentToolResult:
+    """A tool result carrying the provenance tag of the output it holds.
+
+    The tag is read back off ``extra`` when the turn is classified, so it is
+    set here rather than at the point a result is added to the conversation.
+    """
+    return ContentToolResult(value=value, extra={"commons_tag": tag})
+
+
+def citation_reminder_text() -> str:
+    """The reminder text, from the prompt file both packages ship."""
+    return read_prompt("citation-request.md")
+
+
+@dataclass
+class CitationRequest:
+    """Whether this user turn has carried the citation reminder yet.
+
+    The citation contract lives in the system prompt; this is the nudge that
+    rides on the first tool result of a turn whose output has to be cited.
+    """
+
+    reminder: str = field(default_factory=citation_reminder_text)
+    requested: bool = False
+
+    def add_request(self, result: ContentToolResult) -> ContentToolResult:
+        """Add the reminder to ``result``, unless this turn has asked already.
+
+        An errored result passes through without spending the request: the
+        model is sent the error rather than the value, so a reminder added to
+        the value would never arrive.
+        """
+        if self.requested or result.error is not None:
+            return result
+        self.requested = True
+        result.value = _with_reminder(result.value, self.reminder)
+        return result
+
+    def reset(self) -> None:
+        """Start a new user turn, so the next eligible result asks again."""
+        self.requested = False
+
+
+def _with_reminder(value: Any, reminder: str) -> Any:
+    if isinstance(value, str):
+        return f"{value}\n\n{reminder}"
+    part = ContentText(text=reminder)
+    if isinstance(value, list):
+        return [*value, part]
+    # A tool result can hold something that is neither: it becomes the first
+    # part rather than being reformatted to make room for the reminder.
+    return [value, part]
+
+
+def turn_has_user_message(turn: Turn) -> bool:
+    """Whether a turn asks something new, rather than continuing the tool loop.
+
+    A turn of nothing but tool results is the same question still running, so
+    the reminder stays spent until the person says something.
+    """
+    return any(not isinstance(content, ContentToolResult) for content in turn.contents)
