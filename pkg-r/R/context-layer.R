@@ -101,9 +101,10 @@ dictionary_context_chunks <- function(dictionary) {
 }
 
 # Frontmatter carries file metadata (e.g. provenance) meant for maintainers,
-# not the model; drop it so retrieval can't surface it.
+# not the model; drop it so retrieval can't surface it. The metadata block is
+# optional so an empty frontmatter section is removed rather than indexed as text.
 strip_frontmatter <- function(md) {
-  sub("(?s)^---\r?\n.*?\r?\n---(\r?\n|$)", "", md, perl = TRUE)
+  sub("(?s)^---\r?\n(.*?\r?\n)?---(\r?\n|$)", "", md, perl = TRUE)
 }
 
 # The context store is a persistent, content-addressed DuckDB file: the key
