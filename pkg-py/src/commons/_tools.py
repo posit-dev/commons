@@ -41,6 +41,7 @@ from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import Tag
 from ._rows import frame_rows, rows_to_markdown
+from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
 __all__ = [
     "FirstTouch",
@@ -572,7 +573,14 @@ def _describe_table_text(
         parts.extend(
             dictionary.entry_parts(table, f"Columns of `{table}`:\n\n{columns}")
         )
-    parts.append(f"Sample rows:\n\n{rows_to_markdown(sample)}")
+    # A summary of the sample rather than the rows: five rows of values say
+    # less about a column than its range, its missing count, and the values it
+    # takes. The schema fixes the columns, so a table whose sample came back
+    # empty is still described column by column.
+    parts.append(
+        f"{SAMPLE_SUMMARY_HEADING}\n\n"
+        f"{sample_summary(sample, [str(found['column']) for found in schema])}"
+    )
 
     tracker.mark(label, table)
     return "\n\n".join(parts)

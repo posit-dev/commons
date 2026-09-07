@@ -365,15 +365,27 @@ def test_a_context_hit_carries_the_turn_citation_request(plain: DataSource) -> N
 # ---- describe_table --------------------------------------------------------
 
 
-def test_describe_table_shows_columns_and_sample_rows(plain: DataSource) -> None:
+def test_describe_table_shows_columns_and_a_summary_of_the_sample(
+    plain: DataSource,
+) -> None:
     tools = build_commons_tools(ToolContext(sources={"sales_db": plain}))
 
     body = call(find(tools, "describe_table"), table="sales")
 
     assert "Columns of `sales`:" in body
     assert "| revenue | DOUBLE |" in body
-    assert "Sample rows:" in body
-    assert "| 500.0 | EMEA |" in body
+    assert "Sample summary:\n\nA data frame with 3 rows and 2 columns:" in body
+    assert "* revenue: float with range [300, 900], and 0 NAs" in body
+
+
+def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
+    source = data_source(sales=frame().head(0))
+    tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
+
+    body = call(find(tools, "describe_table"), table="sales")
+
+    assert "A data frame with 0 rows and 2 columns:" in body
+    assert "* revenue: unknown with 0 NAs" in body
 
 
 def test_describe_table_delivers_the_dictionary_entry(documented: DataSource) -> None:
@@ -665,7 +677,7 @@ def test_describe_table_loads_a_pin_before_reading_its_schema(
     body = call(find(tools, "describe_table"), table="sales")
 
     assert "| revenue | DOUBLE |" in body
-    assert "| 500.0 | EMEA |" in body
+    assert "* revenue: float with range [300, 900], and 0 NAs" in body
 
 
 def test_call_measure_reads_a_board_pin_before_the_measure_runs(
