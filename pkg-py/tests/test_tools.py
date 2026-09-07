@@ -9,7 +9,12 @@ from chatlas import ContentToolResult, Tool
 from pydantic import Field
 
 from commons import ContextLayer, DataSource, data_source, measure
-from commons._catalog import Manifest, Relation
+from commons._catalog import (
+    CatalogTransientError,
+    Manifest,
+    Relation,
+    session_snapshot,
+)
 from commons._citations import CitationRequest
 from commons._data_source import TableId
 from commons._definitions import ExportRecord, Registry
@@ -26,6 +31,7 @@ from commons._tools import (
     run_sql_description,
     tool_description,
 )
+from tests._warehouse import FakeWarehouse
 
 DICTIONARY = """
 name: sales
@@ -579,3 +585,48 @@ def test_search_catalog_filters_by_kind(plain: DataSource) -> None:
     assert "No catalog objects" in call(
         find(tools, "search_catalog"), query="orders", kinds=["view"]
     )
+
+
+def _warehouse_source(backend: Any) -> DataSource:
+    return DataSource(
+        backend=backend,
+        tables=[],
+        session=session_snapshot(backend),
+        manifest=Manifest(
+            objects={
+                "ANALYTICS.PUBLIC.SALES": Relation(
+                    id=TableId(catalog="ANALYTICS", schema="PUBLIC", table="SALES"),
+                    kind="table",
+                    description="Booked sales activity.",
+                )
+            },
+            searchable=True,
+        ),
+    )
+
+
+def test_a_relation_the_principal_may_not_read_is_left_out() -> None:
+    backend = FakeWarehouse()
+    backend.refuse = {"SALES"}
+    tools = build_commons_tools(
+        ToolContext(sources={"warehouse": _warehouse_source(backend)})
+    )
+
+    assert call(find(tools, "search_catalog"), query="sales") == (
+        'No catalog objects found for "sales".'
+    )
+
+
+def test_a_probe_that_could_not_be_read_is_raised_rather_than_hidden() -> None:
+    # A refusal is an answer; a timeout is not, and swallowing it would
+    # report a relation the agent has as one it does not.
+    class TimingOut(FakeWarehouse):
+        def _probe(self, sql: str) -> list[dict[str, Any]]:
+            raise TimeoutError("the warehouse timed out")
+
+    tools = build_commons_tools(
+        ToolContext(sources={"warehouse": _warehouse_source(TimingOut())})
+    )
+
+    with pytest.raises(CatalogTransientError):
+        find(tools, "search_catalog").func(query="sales")

@@ -22,7 +22,7 @@ from chatlas import ContentToolResult, Tool
 from chatlas.types import ToolAnnotations
 
 from ._catalog import (
-    CatalogAccessError,
+    CatalogAuthorizationError,
     Manifest,
     Relation,
     _databricks,
@@ -466,7 +466,11 @@ def _queryable(source: DataSource, manifest: Manifest) -> Callable[[str], bool]:
             ensure_queryable(
                 source.backend, manifest, label, relation.identity or relation.id
             )
-        except CatalogAccessError:
+        except CatalogAuthorizationError:
+            # A refusal is an answer: this relation is not the agent's to see,
+            # so it is left out of the results. A transient or unreadable
+            # failure is not an answer and is raised, because dropping it
+            # would report a relation the agent has as one it does not.
             return False
         return True
 
