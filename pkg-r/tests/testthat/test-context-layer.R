@@ -29,7 +29,6 @@ test_that("dictionary_context_chunks matches the shared cases", {
 
 test_that("augment_context_layer matches the shared cases", {
   cases <- shared_fixture("context_layer")$augment_context_layer$cases
-  # An empty list would make the loop below vacuously succeed.
   expect_gt(length(cases), 0)
 
   for (case in cases) {

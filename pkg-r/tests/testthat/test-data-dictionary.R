@@ -473,9 +473,6 @@ test_that("dictionary prose is searchable via the context layer", {
   )
 })
 
-# Which documents augmenting produces, and that it is a no-op when there is
-# nothing to add, are pinned in tests/shared/context_layer.json and checked by
-# test-context-layer.R.
 
 test_that("agent tools share first-touch state", {
   skip_if_not_installed("yaml")
