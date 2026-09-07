@@ -14,16 +14,16 @@ types because it is describing an R vector; this names Python's, because a row
 here is a mapping of Python values and calling an `int` an `integer` would
 describe a vector nobody has:
 
-    R          Python     from
-    integer    int
-    numeric    float      also Decimal, and `number` for a mix of numeric types
-    character  str
-    logical    bool
-    date       date       datetime.date
-    date-time  datetime   datetime.datetime
-    list       list       also dict, bytes: a value with no summary to give
-    (typed)    unknown    every value in the sample was null
-    (n/a)      mixed      the sample holds more than one kind of value
+    R            Python     notes
+    integer      int
+    numeric      float      also Decimal; `number` for a mix of numeric types
+    character    str
+    logical      bool
+    date         date       datetime.date
+    date-time    datetime   datetime.datetime
+    list column  list       also dict and bytes: no summary worth giving
+    (its type)   unknown    every value in the sample was null
+    (n/a)        mixed      the sample holds more than one kind of value
 
 A driver returns one type per column, so `number` and `mixed` are for the rows
 a caller builds by hand rather than for anything a query produces.
@@ -90,12 +90,24 @@ def sample_summary(
 
 
 def _column_summary(values: list[Any]) -> str:
-    present = [value for value in values if value is not None]
+    present = [value for value in values if not _is_missing(value)]
     missing = f"{len(values) - len(present)} NAs"
     token, facts = _token_and_facts(present, missing)
     if not facts:
         return token
     return f"{token} with {_flatten(facts)}"
+
+
+def _is_missing(value: Any) -> bool:
+    """Whether a value is absent, counting a NaN as absent.
+
+    R counts a NaN as NA and leaves it out of a range, and a sample comes back
+    in whatever order the query returned, so keeping one would make a column's
+    range depend on which row happened to come first.
+    """
+    if value is None:
+        return True
+    return isinstance(value, (float, Decimal)) and math.isnan(value)
 
 
 def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
@@ -111,8 +123,10 @@ def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
     if all(
         isinstance(value, _NUMERIC) and not isinstance(value, bool) for value in present
     ):
+        # Not converted to float first: a Decimal and an integer wider than a
+        # float's mantissa both report their own value exactly.
         return _one_name(present, "number"), [
-            _range([float(value) for value in present], _format_signif),
+            _range(present, _format_number),
             missing,
         ]
     if all(isinstance(value, str) for value in present):
@@ -193,7 +207,18 @@ def _flatten(facts: list[str]) -> str:
     return ", ".join([*facts[:-2], f"{facts[-2]}, and {facts[-1]}"])
 
 
-def _format_signif(value: float, digits: int = RANGE_DIGITS) -> str:
+def _format_number(value: float | Decimal) -> str:
+    """Render one end of a range.
+
+    A whole number is written out in full, however many digits it has, which
+    is what keeps a `2147483647` id from being reported as `2.147e+09`.
+    """
+    if isinstance(value, int):
+        return str(value)
+    return _format_signif(value)
+
+
+def _format_signif(value: float | Decimal, digits: int = RANGE_DIGITS) -> str:
     """Render a number to `digits` significant digits, fixed or scientific.
 
     Fixed notation unless scientific is strictly shorter, which is what keeps
@@ -211,5 +236,17 @@ def _format_signif(value: float, digits: int = RANGE_DIGITS) -> str:
     significant = len(mantissa.replace("-", "").replace(".", "").rstrip("0")) or 1
     decimals = max(0, significant - 1 - int(exponent))
     fixed = f"{value:.{decimals}f}"
-    scientific = f"{value:.{significant - 1}e}"
+    scientific = _padded_exponent(f"{value:.{significant - 1}e}")
     return fixed if len(fixed) <= len(scientific) else scientific
+
+
+def _padded_exponent(text: str) -> str:
+    """Two exponent digits, which is what a float already formats to.
+
+    Decimal does not pad, so without this the same magnitude reads `1.234e-5`
+    from a DECIMAL column and `1.234e-05` from a DOUBLE one.
+    """
+    mantissa, marker, exponent = text.partition("e")
+    if not marker:
+        return text
+    return f"{mantissa}e{exponent[0]}{exponent[1:].zfill(2)}"

@@ -15,23 +15,20 @@ sample_summary_column <- function(spec) {
   if (identical(spec$type, "list")) {
     return(lapply(values, unlist))
   }
-  na <- switch(
-    spec$type,
-    integer = NA_integer_,
-    double = NA_real_,
-    boolean = NA,
-    NA_character_
-  )
-  flat <- vapply(values, function(value) if (is.null(value)) na else value, na)
+  # Through character, so a value the fixture spells rather than writes --
+  # "NaN", which JSON has no number for -- coerces like any other.
+  flat <- vapply(values, function(value) {
+    if (is.null(value)) NA_character_ else as.character(value)
+  }, character(1))
   switch(
     spec$type,
     integer = as.integer(flat),
     double = as.numeric(flat),
     string = as.character(flat),
     boolean = as.logical(flat),
-    date = as.Date(as.character(flat)),
-    datetime_utc = as.POSIXct(as.character(flat), tz = "UTC"),
-    datetime_naive = as.POSIXct(as.character(flat))
+    date = as.Date(flat),
+    datetime_utc = as.POSIXct(flat, tz = "UTC"),
+    datetime_naive = as.POSIXct(flat)
   )
 }
 

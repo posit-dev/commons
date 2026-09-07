@@ -26,6 +26,25 @@ def test_a_decimal_column_keeps_the_name_of_the_type_it_arrived_as() -> None:
     )
 
 
+def test_a_decimal_keeps_its_own_precision_and_pads_its_exponent() -> None:
+    # Not routed through float: the same magnitude has to read the same from a
+    # DECIMAL column as from a DOUBLE one.
+    assert line([Decimal("0.000012345"), Decimal(2)]) == (
+        "Decimal with range [1.234e-05, 2], and 0 NAs"
+    )
+
+
+def test_a_whole_number_wider_than_a_float_is_written_out_in_full() -> None:
+    assert line([1, 2**70]) == ("int with range [1, 1180591620717411303424], and 0 NAs")
+
+
+def test_a_nan_does_not_depend_on_which_row_came_first() -> None:
+    nan = float("nan")
+
+    assert line([nan, 1.0, 3.0]) == line([1.0, 3.0, nan])
+    assert line([nan, nan]) == "unknown with 2 NAs"
+
+
 def test_a_mix_of_numeric_types_is_still_summarized_as_a_number() -> None:
     assert line([1, 2.5]) == "number with range [1, 2.5], and 0 NAs"
 

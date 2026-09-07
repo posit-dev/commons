@@ -1,5 +1,5 @@
 {
-  "description": "The column-by-column summary describe_table shows for a table's sample rows. Five rows of values tell a model less about a column than its range, its missing count, and the values it actually takes, so both packages summarize the sample rather than printing it. A case declares each column's data and the line it must produce, and a runner builds the column in its own language and compares. What is pinned here is the wording: the header line, which facts each kind of column reports, the order they appear in, and the punctuation between them. What is not pinned is the type token in front of those facts, because the two packages are describing different things: R is describing an R vector and names R's types, and Python is describing a mapping of Python values and names Python's. So a column's `line` carries a {type} placeholder, and its `tokens` give the word each package puts there. A change to any other word in the line fails the other package's runner, which is the point. Two shapes are left out rather than pinned, because they are the one place the two genuinely cannot agree: a sample column whose every value is null, where the column's type is a string or a boolean. R's driver typed the vector, so R still reports `0 unique values` or `0 TRUEs, 0 FALSEs`; a list of mappings carries no type, so Python reports the NA count alone. The all-null numeric case below is pinned, because there the facts happen to match and only the token differs. Hand-maintained; the expected lines were read off ellmer 0.5.0's df_schema() rather than derived from either implementation.",
+  "description": "The column-by-column summary describe_table shows for a table's sample rows. Five rows of values tell a model less about a column than its range, its missing count, and the values it actually takes, so both packages summarize the sample rather than printing it. A case declares each column's data and the line it must produce, and a runner builds the column in its own language and compares. What is pinned here is the wording: the header line, which facts each kind of column reports, the order they appear in, and the punctuation between them. What is not pinned is the type token in front of those facts, because the two packages are describing different things: R is describing an R vector and names R's types, and Python is describing a mapping of Python values and names Python's. So a column's `line` carries a {type} placeholder, and its `tokens` give the word each package puts there. A change to any other word in the line fails the other package's runner, which is the point. Two shapes are left out rather than pinned, because they are the one place the two genuinely cannot agree: a sample column whose every value is null, where the column's type is a string or a boolean. R's driver typed the vector, so R still reports `0 unique values` or `0 TRUEs, 0 FALSEs`; a list of mappings carries no type, so Python reports the NA count alone. The all-null numeric case below is pinned, because there the facts happen to match and only the token differs. A value spelled \"NaN\" is one, since JSON has no way to write it, and both runners read it back as a not-a-number. Hand-maintained; the expected lines were read off ellmer 0.5.0's df_schema() rather than derived from either implementation.",
   "heading": "Sample summary:",
   "cases": [
     {
@@ -182,6 +182,32 @@
           "values": [10000000000, 1],
           "tokens": {"r": "numeric", "python": "float"},
           "line": "{type} with range [1, 1e+10], and 0 NAs"
+        }
+      ]
+    },
+    {
+      "name": "a NaN is missing rather than the end of a range",
+      "header": "A data frame with 3 rows and 1 columns:",
+      "columns": [
+        {
+          "name": "amount",
+          "type": "double",
+          "values": [1, "NaN", 3],
+          "tokens": {"r": "numeric", "python": "float"},
+          "line": "{type} with range [1, 3], and 1 NAs"
+        }
+      ]
+    },
+    {
+      "name": "a whole number is written out however wide it is",
+      "header": "A data frame with 2 rows and 1 columns:",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "values": [1, 2147483647],
+          "tokens": {"r": "integer", "python": "int"},
+          "line": "{type} with range [1, 2147483647], and 0 NAs"
         }
       ]
     },
