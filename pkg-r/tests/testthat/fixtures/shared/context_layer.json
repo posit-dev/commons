@@ -130,6 +130,45 @@
         "expected": [
           "Orders from the retail system."
         ]
+      },
+      {
+        "name": "empty strings are dropped",
+        "dictionary": {
+          "details": "",
+          "tables": {
+            "orders": {
+              "description": "One row per order.",
+              "details": null
+            }
+          },
+          "glossary": {}
+        },
+        "expected": [
+          "Table `orders`: One row per order."
+        ]
+      },
+      {
+        "name": "tables as a sequence keep declaration order",
+        "dictionary": {
+          "details": null,
+          "tables": [
+            {
+              "name": "orders",
+              "description": "One row per order.",
+              "details": null
+            },
+            {
+              "name": "customers",
+              "description": "One row per customer.",
+              "details": null
+            }
+          ],
+          "glossary": {}
+        },
+        "expected": [
+          "Table `orders`: One row per order.",
+          "Table `customers`: One row per customer."
+        ]
       }
     ]
   }
