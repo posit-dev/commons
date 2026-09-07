@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from collections.abc import Iterable
+
+from raghilda.chunker import MarkdownChunker
+from raghilda.document import MarkdownDocument
+from raghilda.store import DuckDBStore
 
 __all__ = ["ContextLayer", "context_layer"]
 
@@ -34,6 +39,8 @@ class ContextLayer:
 
     def __init__(self, docs: Iterable[str] = ()) -> None:
         self._docs = tuple(docs)
+        self._store_cache: DuckDBStore | None = None
+        self._store_lock = threading.Lock()
 
     @property
     def docs(self) -> tuple[str, ...]:
@@ -43,6 +50,65 @@ class ContextLayer:
     def __repr__(self) -> str:
         n = len(self._docs)
         return f"<ContextLayer: {n} document{'' if n == 1 else 's'}>"
+
+    # Store setup (duckdb creation, chunk insertion, BM25 indexing) is the
+    # most expensive part of building an agent and many conversations never
+    # search, so it is deferred to the first search. The lock keeps
+    # concurrent first searches on a shared layer from each building a
+    # store and discarding all but one.
+    def _store(self) -> DuckDBStore:
+        with self._store_lock:
+            if self._store_cache is None:
+                # TODO: emit the commons_context_store_build span the R
+                # store build emits, once pkg-py has its tracing module.
+                store = DuckDBStore.create(location=":memory:", embed=None)
+                chunker = MarkdownChunker()
+                # ingest() requires each document's origin to be distinct
+                # and non-empty, so each gets a distinct synthetic origin.
+                store.ingest(
+                    [
+                        MarkdownDocument(
+                            content=doc, origin=f"commons-context-{i}"
+                        )
+                        for i, doc in enumerate(self._docs)
+                    ],
+                    prepare=chunker.chunk,
+                )
+                store.build_index(type="bm25")
+                self._store_cache = store
+        return self._store_cache
+
+    def prewarm(self) -> None:
+        """Build the index now so the first search does not pay for it.
+
+        Optional and idempotent; worth calling when a search is known to be
+        coming, so its cost does not land on the first user turn.
+        """
+        if self._docs:
+            self._store()
+
+    # Public ahead of the R counterpart: context_search() in
+    # pkg-r/R/context-layer.R is internal there and spells the limit `n`.
+    def search(self, query: str, top_k: int = 3) -> list[str]:
+        """Retrieve the chunks most relevant to ``query``.
+
+        Returns chunk texts, best match first, at most ``top_k`` of them.
+        An empty layer, or a query nothing matches, returns an empty list.
+        ``top_k`` must be at least 1.
+        """
+        if top_k < 1:
+            raise ValueError(f"top_k must be at least 1, not {top_k}.")
+        if not self._docs:
+            return []
+        hits = self._store().retrieve_bm25(query, top_k=top_k)
+        # retrieve_bm25 pads its result up to top_k with unscored rows, so a
+        # query that matches nothing still comes back full. Only scored rows
+        # are hits.
+        return [
+            hit.text.strip()
+            for hit in hits
+            if any(m.name == "bm25" and m.value is not None for m in hit.metrics)
+        ]
 
 
 def context_layer(
