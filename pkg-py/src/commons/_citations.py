@@ -26,6 +26,7 @@ __all__ = [
     "CorpusEntry",
     "ParsedCitation",
     "citation_aside_html",
+    "citation_reminder_text",
     "match_citation",
     "normalize_citation",
     "parse_commons_citation",
@@ -239,7 +240,13 @@ class CitationRequest:
     requested: bool = False
 
     def add_request(self, result: ContentToolResult) -> ContentToolResult:
-        if self.requested:
+        """Add the reminder to ``result``, unless this turn has asked already.
+
+        An errored result passes through without spending the request: the
+        model is sent the error rather than the value, so a reminder added to
+        the value would never arrive.
+        """
+        if self.requested or result.error is not None:
             return result
         self.requested = True
         result.value = _with_reminder(result.value, self.reminder)

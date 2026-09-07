@@ -58,6 +58,17 @@ def test_a_value_that_is_neither_text_nor_parts_becomes_parts():
     assert result.value[1].text == "REMINDER"
 
 
+def test_an_errored_result_does_not_spend_the_request():
+    tracker = CitationRequest(reminder="REMINDER")
+    failed = tool_result("6 rows", tag=Tag.B)
+    failed.error = ValueError("boom")
+
+    assert tracker.add_request(failed).value == "6 rows"
+
+    result = tracker.add_request(tool_result("3 rows", tag=Tag.B))
+    assert result.value == "3 rows\n\nREMINDER"
+
+
 def test_shared_reset_cases():
     section = load_shared_fixture("citation-request")["resets"]
     assert section["cases"]
