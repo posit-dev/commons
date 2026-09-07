@@ -131,3 +131,31 @@ def test_an_aware_and_a_naive_timestamp_together_are_mixed_not_an_error() -> Non
     naive = datetime.datetime(2024, 1, 2, 10)  # noqa: DTZ001
 
     assert line([aware, naive]) == "mixed with 0 NAs"
+
+
+class _NamedButOffsetless(datetime.tzinfo):
+    """A tzinfo that names a zone without placing it, which Python calls naive."""
+
+    def utcoffset(self, dt: datetime.datetime | None) -> datetime.timedelta | None:
+        return None
+
+    def tzname(self, dt: datetime.datetime | None) -> str:
+        return "NOWHERE"
+
+    def dst(self, dt: datetime.datetime | None) -> datetime.timedelta | None:
+        return None
+
+
+def test_a_tzinfo_with_no_offset_is_naive_however_it_names_itself() -> None:
+    # Awareness is what utcoffset() answers, not whether a tzinfo is attached,
+    # so this must neither report a zone nor compare against a real one.
+    offsetless = datetime.datetime(2024, 1, 1, 10, tzinfo=_NamedButOffsetless())
+    later = datetime.datetime(2024, 1, 2, 10, tzinfo=_NamedButOffsetless())
+
+    assert line([offsetless, later]) == (
+        "datetime with range [2024-01-01 10:00:00, 2024-01-02 10:00:00], and 0 NAs"
+    )
+    assert (
+        line([offsetless, datetime.datetime(2024, 1, 3, 10, tzinfo=datetime.UTC)])
+        == "mixed with 0 NAs"
+    )

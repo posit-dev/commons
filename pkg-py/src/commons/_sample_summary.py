@@ -137,12 +137,15 @@ def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
         ]
     if all(isinstance(value, str) for value in present):
         return "str", [missing, _unique(present)]
-    if all(isinstance(value, datetime.datetime) for value in present) and _comparable(
-        present
-    ):
-        zone = _timezone(present)
-        facts = [_range(present, _format_datetime), missing]
-        return "datetime", ([zone, *facts] if zone else facts)
+    if all(isinstance(value, datetime.datetime) for value in present):
+        # One offset answer for the whole column, or there is no ordering to
+        # take a range from. Python refuses to compare an aware timestamp with
+        # a naive one, and no driver returns both from one column.
+        offsets = {value.utcoffset() is None for value in present}
+        if len(offsets) == 1:
+            zone = None if offsets.pop() else _timezone(present)
+            facts = [_range(present, _format_datetime), missing]
+            return "datetime", ([zone, *facts] if zone else facts)
     if all(
         isinstance(value, datetime.date) and not isinstance(value, datetime.datetime)
         for value in present
@@ -156,16 +159,6 @@ def _token_and_facts(present: list[Any], missing: str) -> tuple[str, list[str]]:
     return "mixed", [missing]
 
 
-def _comparable(present: list[datetime.datetime]) -> bool:
-    """Whether these timestamps can be ordered against each other.
-
-    Python refuses to compare an aware timestamp with a naive one, and no
-    driver returns both from one column, so a column holding both is reported
-    as mixed rather than raising out of a tool.
-    """
-    return len({value.tzinfo is None for value in present}) == 1
-
-
 def _one_name(present: list[Any], fallback: str) -> str:
     """The values' shared type name, or `fallback` when they differ."""
     names = {type(value).__name__ for value in present}
@@ -173,6 +166,7 @@ def _one_name(present: list[Any], fallback: str) -> str:
 
 
 def _timezone(present: list[datetime.datetime]) -> str | None:
+    """The zone these timestamps agree on, when they name one."""
     names = {value.tzname() for value in present}
     if len(names) != 1:
         return None
