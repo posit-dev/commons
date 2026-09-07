@@ -121,8 +121,9 @@ def collect_appended_tags(turns: Sequence[Turn], from_index: int) -> list[Tag]:
     return tags
 
 
-# Ampersands first, so the entities this generates are not escaped again.
 def escape_attr(text: str) -> str:
+    """Escape ``&`` and ``"`` for use inside an HTML attribute value."""
+    # Ampersands first, so the entities this generates are not escaped again.
     return text.replace("&", "&amp;").replace('"', "&quot;")
 
 

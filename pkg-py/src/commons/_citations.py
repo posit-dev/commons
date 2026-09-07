@@ -30,6 +30,7 @@ __all__ = [
     "CitationRequest",
     "CorpusEntry",
     "ParsedCitation",
+    "build_citation_corpus",
     "citation_aside_html",
     "citation_reminder_text",
     "match_citation",
