@@ -9,6 +9,7 @@ from what happens to be set.
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -56,13 +57,22 @@ _CONTAINER_MARKERS = ("/.dockerenv", "/run/.containerenv")
 
 def _venv_includes_system_site(executable: str) -> bool | None:
     """Read ``pyvenv.cfg`` for ``executable``; ``None`` if it is not a venv."""
+    # A bare name is looked up on PATH, so the warning inspects the same
+    # interpreter a launch would find rather than one relative to the
+    # caller's working directory.
+    if not os.path.isabs(executable):
+        executable = shutil.which(executable) or executable
+        if not os.path.isabs(executable):
+            return None
     # Deliberately not resolved: a virtual environment's bin/python is usually
     # a symlink to the interpreter it was built from, and following it lands on
     # that installation rather than on the environment being asked about.
     config = Path(executable).absolute().parent.parent / "pyvenv.cfg"
     try:
         text = config.read_text()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
+        # A config that cannot be read or decoded means the interpreter's
+        # startup hooks are unknown, not that this check should fail.
         return None
     for line in text.splitlines():
         key, sep, value = line.partition("=")
