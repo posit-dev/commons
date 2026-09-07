@@ -30,6 +30,14 @@ class Backend(Protocol):
 
     def quote(self, table_id: TableId) -> str: ...
 
+    def columns(self, table_id: TableId) -> list[dict[str, Any]]:
+        """A relation's columns, in the shape a catalog listing reports them.
+
+        For the backends a warehouse catalog never describes, since there the
+        listing itself already carries the columns.
+        """
+        ...
+
     def dialect(self) -> str: ...
 
     def inspector(self) -> Callable[[TableId], bool] | None:
@@ -66,6 +74,13 @@ class DuckDBBackend:
 
     def quote(self, table_id: TableId) -> str:
         return ".".join(quote_identifier(part) for part in table_id.parts)
+
+    def columns(self, table_id: TableId) -> list[dict[str, Any]]:
+        # A zero-row select, because the cursor description carries DuckDB's
+        # own type names and no round trip to a metadata table is needed.
+        cursor = self._con.execute(f"SELECT * FROM {self.quote(table_id)} LIMIT 0")
+        description = cursor.description or ()
+        return [{"column": name, "type": str(kind)} for name, kind, *_ in description]
 
     def dialect(self) -> str:
         return "duckdb"
@@ -105,6 +120,19 @@ class EngineBackend:
             if part is not None
         )
         return f"{outer}.{quoted}"
+
+    def columns(self, table_id: TableId) -> list[dict[str, Any]]:
+        inspector = sqlalchemy.inspect(self._engine)
+        outer = ".".join(table_id.parts[:-1])
+        return [
+            {
+                "column": column["name"],
+                "type": str(column["type"]),
+                "nullable": column.get("nullable"),
+                "description": column.get("comment"),
+            }
+            for column in inspector.get_columns(table_id.table, schema=outer or None)
+        ]
 
     def dialect(self) -> str:
         return self._engine.dialect.name

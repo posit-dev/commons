@@ -133,3 +133,13 @@ def test_non_ascii_names_that_duckdb_keeps_distinct_are_allowed() -> None:
 
     assert sorted(list_tables(source)) == ["STRASSE", "straße"]
     assert source.query('SELECT count(*) AS n FROM "straße"') == [{"n": 3}]
+
+
+def test_a_duckdb_backend_reports_its_own_column_types() -> None:
+    source = data_source(sales=sales_frame())
+
+    assert source.backend.columns(source.table_ids["sales"]) == [
+        {"column": "order_id", "type": "VARCHAR"},
+        {"column": "revenue", "type": "DOUBLE"},
+        {"column": "region", "type": "VARCHAR"},
+    ]
