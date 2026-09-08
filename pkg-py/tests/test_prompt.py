@@ -1,20 +1,76 @@
 """Prompt rendering, including the cases shared with the R package."""
 
+import re
+
 import jinja2
+import pandas as pd
 import pytest
 
+from commons import data_source
+from commons._catalog._core import Manifest, Relation
+from commons._data_dictionary import DataDictionary
+from commons._data_source import DataSource, TableId
+from commons._definitions._registry import build_registry
 from commons._prompt import (
+    EXECUTION_TOOL,
     check_instructions,
     citation_trust_exception,
     is_claude_5_model,
+    prompt_date,
     read_instructions,
     read_prompt,
     render_system_prompt,
+    system_prompt_data,
     system_prompt_template,
     tool_availability,
 )
 
 from ._shared import SHARED_DIR, load_shared_fixture
+
+PROMPT_DATA = load_shared_fixture("prompt-data")
+
+
+def _own_execution_tool(tool: str) -> str:
+    """Resolve the fixtures' `$execution_tool` placeholder to this package's."""
+    return EXECUTION_TOOL if tool == "$execution_tool" else tool
+
+_PAD = re.compile(r"^pad:(\d+)$")
+
+
+def _expand_pads(spec):
+    """Grow the `pad:<n>` labels the fixture uses to exceed the index cap."""
+    if isinstance(spec, dict):
+        return {key: _expand_pads(value) for key, value in spec.items()}
+    if isinstance(spec, list):
+        return [_expand_pads(item) for item in spec]
+    if isinstance(spec, str):
+        padded = _PAD.match(spec)
+        return "x" * int(padded.group(1)) if padded else spec
+    return spec
+
+
+def _manifest(catalog) -> Manifest:
+    labels = [
+        f"{catalog['label_prefix']}{index}"
+        for index in range(1, catalog["objects"] + 1)
+    ]
+    relations = {label: Relation(id=TableId(table=label)) for label in labels}
+    manifest = Manifest.build(relations, namespace_selected=True)
+    assert manifest.searchable == catalog["searchable"]
+    return manifest
+
+
+def _hydrate(spec) -> DataSource:
+    dictionary = spec.get("dictionary")
+    source = data_source(
+        dictionary=None
+        if dictionary is None
+        else DataDictionary.model_validate(_expand_pads(dictionary)),
+        **{name: pd.DataFrame({"n": [1]}) for name in spec["tables"]},
+    )
+    if spec.get("catalog") is not None:
+        source.manifest = _manifest(spec["catalog"])
+    return source
 
 
 def test_shared_render_cases():
@@ -35,8 +91,9 @@ def test_shared_tool_data_cases():
     assert cases
 
     for case in cases:
-        data: dict[str, object] = dict(tool_availability(case["tools"]))
-        data["citation_trust_exception"] = citation_trust_exception(case["tools"])
+        tools = [_own_execution_tool(tool) for tool in case["tools"]]
+        data: dict[str, object] = dict(tool_availability(tools))
+        data["citation_trust_exception"] = citation_trust_exception(tools)
         got = {key: data[key] for key in case["expected"]}
         assert got == case["expected"], case["name"]
 
@@ -154,3 +211,50 @@ def test_citation_request_text_names_the_dialect():
 
     assert "<commons-citation>" in reminder
     assert "\n" not in reminder
+
+
+@pytest.mark.parametrize("case", PROMPT_DATA["cases"], ids=lambda case: case["name"])
+def test_shared_prompt_data_cases(case):
+    sources = {spec["name"]: _hydrate(spec) for spec in case["sources"]}
+    data = system_prompt_data(
+        sources,
+        build_registry(sources),
+        instructions=case.get("instructions"),
+        tools=[_own_execution_tool(tool) for tool in case.get("tools", [])],
+        model=case.get("model"),
+    )
+
+    assert list(data) == PROMPT_DATA["fields"]
+    assert (
+        data["execution_tool"]
+        == PROMPT_DATA["substitutions"]["python"]["execution_tool"]
+    )
+    assert {key: data[key] for key in case["expect"]} == case["expect"]
+
+
+def test_shared_prompt_data_cases_are_not_empty():
+    assert PROMPT_DATA["cases"]
+
+
+def test_prompt_data_renders_the_packaged_template():
+    source = data_source(orders=pd.DataFrame({"n": [1]}))
+    sources = {"sales_db": source}
+    data = system_prompt_data(sources, build_registry(sources), tools=["run_sql"])
+
+    prompt = render_system_prompt(system_prompt_template(), data)
+
+    assert data["date"] == prompt_date()
+    assert "{{" not in prompt.replace("`{{name}}`", "")
+
+
+def test_prompt_data_reads_tool_names_from_any_iterable():
+    source = data_source(orders=pd.DataFrame({"n": [1]}))
+    sources = {"sales_db": source}
+    # Both the trust exception and the per-tool flags read `tools`, so a
+    # one-shot iterator has to survive being read twice.
+    data = system_prompt_data(
+        sources, build_registry(sources), tools=iter(["call_metrics"])
+    )
+
+    assert data["has_call_metrics"]
+    assert data["citation_trust_exception"].endswith("`call_metrics`")

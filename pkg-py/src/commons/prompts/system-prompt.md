@@ -16,9 +16,11 @@ When no trusted calculations are available, search context for relevant tables, 
 When a catalog is too broad to list, find relevant catalog objects with `search_catalog` before calling `describe_table`.
 {% endif %}
 
-When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `run_r` rather than re-deriving it in SQL.
+{% if has_execution_tool %}
+When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `{{ execution_tool }}` rather than re-deriving it in SQL.
 
-When a chart would communicate the answer better than text, render one with `run_r`; plots are shown to the user.
+When a chart would communicate the answer better than text, render one with `{{ execution_tool }}`; plots are shown to the user.
+{% endif %}
 
 ## Citations
 
@@ -58,8 +60,8 @@ These parts of tool outputs are not citable:
 {% if has_run_sql %}
 - Query result rows from `run_sql`.
 {% endif %}
-{% if has_run_r %}
-- Code, measure source, plots, and textual output from `run_r`.
+{% if has_execution_tool %}
+- Code, measure source, plots, and textual output from `{{ execution_tool }}`.
 {% endif %}
 
 If exact citable text you have seen supports the way you computed an answer,
