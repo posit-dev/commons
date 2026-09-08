@@ -65,14 +65,35 @@ async def test_stream_async_accepts_the_call_shinychat_makes() -> None:
     assert streamed[-1] == provenance_aside(Tag.C)
 
 
-def test_turn_and_tool_members_reach_the_agent() -> None:
-    """What shinychat touches for history and tools lands on the agent."""
+def test_tool_and_prompt_members_reach_the_agent() -> None:
+    """What shinychat touches for tools and the prompt lands on the agent."""
     subject = agent()
     client = CommonsChatClient(subject)
 
-    assert client.get_turns() == subject.get_turns()
     assert client.get_tools() == subject.get_tools()
     assert client.system_prompt == subject.system_prompt
+
+
+def test_get_turns_returns_dictionaries_a_chat_ui_can_subscript() -> None:
+    """shinychat serializes turns itself only for a real chatlas client."""
+    subject = agent()
+    subject.set_turns([UserTurn("How much?"), AssistantTurn("1400.")])
+
+    turns = CommonsChatClient(subject).get_turns()
+
+    assert [turn["role"] for turn in turns] == ["user", "assistant"]
+
+
+def test_set_turns_accepts_dictionaries_and_turns_alike() -> None:
+    """A restore hands back dictionaries; a client swap hands back turns."""
+    subject = agent()
+    client = CommonsChatClient(subject)
+
+    client.set_turns([UserTurn("From a swap.")])
+    assert [turn.role for turn in subject.get_turns()] == ["user"]
+
+    client.set_turns(client.get_turns())
+    assert [turn.role for turn in subject.get_turns()] == ["user"]
 
 
 def test_set_turns_round_trips_through_the_agent() -> None:
@@ -82,6 +103,24 @@ def test_set_turns_round_trips_through_the_agent() -> None:
     client.set_turns([])
 
     assert subject.get_turns() == []
+
+
+def test_shinychat_can_derive_a_title_from_the_adapters_turns() -> None:
+    """The default history flow subscripts every turn it was handed.
+
+    `history=True` is shinychat's default, so this runs after the first
+    answer in any app that does not turn it off. Turn objects raise here.
+    """
+    pytest.importorskip("shinychat")
+    from shinychat._history_client import as_turns_adapter
+    from shinychat._history_title import fallback_title
+
+    subject = agent()
+    subject.set_turns([UserTurn("How much revenue?"), AssistantTurn("1400.")])
+
+    turns = as_turns_adapter(CommonsChatClient(subject)).get_turns_json()
+
+    assert fallback_title(turns) == "How much revenue?"
 
 
 def test_system_prompt_is_writable_for_a_client_swap() -> None:
@@ -172,7 +211,7 @@ async def test_set_state_restores_the_turns() -> None:
     restored = CommonsChatClient(agent())
     await restored.set_state(payload)
 
-    assert [turn.role for turn in restored.get_turns()] == ["user", "assistant"]
+    assert [turn["role"] for turn in restored.get_turns()] == ["user", "assistant"]
 
 
 async def test_set_state_rejects_an_unknown_version() -> None:

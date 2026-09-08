@@ -58,14 +58,30 @@ class CommonsChatClient:
 
     # ---- turns: history, restore, and client swaps ------------------------
 
-    def get_turns(self, *, include_system_prompt: bool = False) -> list[Turn]:
-        return self._agent.get_turns(include_system_prompt=include_system_prompt)
+    def get_turns(
+        self, *, include_system_prompt: bool = False
+    ) -> list[dict[str, Any]]:
+        """The turns as JSON dictionaries, which is what a chat UI expects.
 
-    def set_turns(self, turns: Sequence[Turn]) -> None:
-        self._agent.set_turns(turns)
+        Turn objects would read more naturally here, but shinychat serializes
+        turns itself only for a real `chatlas.Chat`, and hands anything else
+        straight to code that subscripts them: a conversation title is
+        derived with `turn.get("role")`, which raises on a `Turn`. Its client
+        protocol asks a non-chatlas client for dictionaries, so this returns
+        them, and `set_turns()` takes them back in either shape.
+        """
+        return [
+            _serialize_turn(turn)
+            for turn in self._agent.get_turns(
+                include_system_prompt=include_system_prompt
+            )
+        ]
 
-    def add_turn(self, turn: Turn) -> None:
-        self._agent.add_turn(turn)
+    def set_turns(self, turns: Sequence[Turn | dict[str, Any]]) -> None:
+        self._agent.set_turns([_as_turn(turn) for turn in turns])
+
+    def add_turn(self, turn: Turn | dict[str, Any]) -> None:
+        self._agent.add_turn(_as_turn(turn))
 
     # ---- tools and prompt -------------------------------------------------
 
@@ -112,10 +128,7 @@ class CommonsChatClient:
         than forwarded. The format is chatlas's, so a bookmark written by
         either object stays readable by the other.
         """
-        return {
-            "version": 1,
-            "turns": [_serialize_turn(turn) for turn in self.get_turns()],
-        }
+        return {"version": 1, "turns": self.get_turns()}
 
     async def set_state(self, state: Any) -> None:
         """Restore turns from a payload `get_state()` wrote.
@@ -124,8 +137,6 @@ class CommonsChatClient:
         restore hook raises, rather than the `TypeError` a bare type check
         would suggest.
         """
-        from chatlas import Turn
-
         if not isinstance(state, dict):
             raise ValueError("A chat bookmark value must be a dictionary.")  # noqa: TRY004
         version = state.get("version")
@@ -135,7 +146,13 @@ class CommonsChatClient:
         if not isinstance(turns, list):
             raise ValueError("A chat bookmark's `turns` must be a list.")  # noqa: TRY004
 
-        self.set_turns([Turn.model_validate(turn) for turn in turns])
+        self.set_turns(turns)
+
+
+def _as_turn(turn: Turn | dict[str, Any]) -> Turn:
+    from chatlas import Turn
+
+    return turn if isinstance(turn, Turn) else Turn.model_validate(turn)
 
 
 def _serialize_turn(turn: Turn) -> dict[str, Any]:
