@@ -87,3 +87,17 @@ class CommonsChatClient:
         # Writable where the agent's is not: a client swap assigns the old
         # prompt onto the new client, and refusing would abort the swap.
         self._agent.client.system_prompt = value
+
+    # ---- conversation identity --------------------------------------------
+
+    @property
+    def conversation_id(self) -> str | None:
+        return self._agent.client.conversation_id
+
+    @conversation_id.setter
+    def conversation_id(self, value: str | None) -> None:
+        # The property this adapter exists for. shinychat assigns the id it
+        # allocated only to an object that already has the attribute, and
+        # skips it in silence otherwise, which leaves the id unset and every
+        # turn reading as its own conversation.
+        self._agent.client.conversation_id = value

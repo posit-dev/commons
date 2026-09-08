@@ -3,6 +3,7 @@
 from typing import Any
 
 import pandas as pd
+import pytest
 from chatlas import ContentToolRequest, StreamController
 from chatlas.types import ContentText
 
@@ -96,3 +97,40 @@ def test_the_agent_is_reachable_from_the_client() -> None:
     subject = agent()
 
     assert CommonsChatClient(subject).agent is subject
+
+
+# ---- the conversation id ----------------------------------------------------
+
+
+def test_conversation_id_is_visible_to_the_check_shinychat_makes() -> None:
+    """`hasattr(client, "conversation_id")` gates shinychat's assignment."""
+    client = CommonsChatClient(agent())
+
+    assert hasattr(client, "conversation_id")
+
+
+def test_conversation_id_assignment_reaches_the_composed_chat() -> None:
+    """shinychat assigns; the id has to land where chatlas reads it."""
+    subject = agent()
+    client = CommonsChatClient(subject)
+
+    client.conversation_id = "conv-1"
+
+    assert client.conversation_id == "conv-1"
+    assert subject.client.conversation_id == "conv-1"
+
+
+def test_conversation_id_accepts_none() -> None:
+    """A chat with no history controller assigns `None`."""
+    client = CommonsChatClient(agent())
+    client.conversation_id = None
+
+    assert client.conversation_id is None
+
+
+def test_conversation_id_rejects_a_non_string() -> None:
+    """chatlas validates the type, and forwarding keeps that error."""
+    client = CommonsChatClient(agent())
+
+    with pytest.raises(TypeError, match="must be a string or None"):
+        client.conversation_id = 7  # type: ignore[assignment]
