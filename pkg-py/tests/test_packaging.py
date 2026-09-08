@@ -21,6 +21,16 @@ def test_distribution_name_is_commons() -> None:
     assert version("commons")
 
 
+def test_package_ships_the_browser_assets() -> None:
+    # Synced from the root www/ by scripts/sync-shared.sh. The UI layer serves
+    # these from the installed package, so a wheel that dropped them would
+    # fail only at runtime, in the browser.
+    served = importlib.resources.files("commons") / "www" / "commons-chat"
+    assert (served / "commons-chat.js").is_file()
+    assert (served / "commons-chat.css").is_file()
+    assert (served / "figs" / "citation-mark.svg").is_file()
+
+
 def test_package_ships_type_information() -> None:
     # py.typed is what makes the annotations visible to consumers' type
     # checkers; a missing marker degrades silently to Any at the boundary.
