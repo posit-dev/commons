@@ -341,6 +341,22 @@ class DataSource:
         # names one relation, and the longest match is the one it named.
         return [max(matches, key=len)]
 
+    def ensure_loaded(self) -> None:
+        """Read every pin this source has not read yet.
+
+        A board source loads a pin when a query names it, and that recovery
+        lives on `query()`. A measure is handed the connection itself and
+        never goes through `query()`, so nothing there would trigger the
+        read and the measure would fail on a relation that does not exist
+        yet. `source_ensure_all()` in `pkg-r/R/data-source.R` is the same
+        step for the same reason. A source with nothing pending, which is
+        every source that is not board-backed, does nothing.
+        """
+        if self.pending is None or not self.pending.pins:
+            return
+        # A snapshot, because a loaded pin leaves `pins` as it goes.
+        self._load_pins(list(self.pending.pins))
+
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None
         backend = self.backend

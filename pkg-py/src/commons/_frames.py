@@ -21,9 +21,10 @@ def is_frame(value: Any) -> bool:
     ) and hasattr(value, "__len__") and hasattr(value, "__getitem__")
 
 
-# ellmer's `df_schema()` describes a frame for the R agent; this describes one
-# for the Python agent, in the same terms, for whichever frame library the
-# result came from.
+# The handle store's own description of a frame, for whichever frame library
+# the result came from. Not the one `describe_table` shows: that summary is a
+# cross-language contract and lives in `_sample_summary`, over rows rather
+# than over a frame.
 MAX_SUMMARY_COLUMNS = 50
 
 

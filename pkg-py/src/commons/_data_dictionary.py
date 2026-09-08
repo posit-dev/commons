@@ -224,7 +224,7 @@ class DataDictionary(_Permissive):
         entry = self.tables.get(table)
         if entry is None:
             return None
-        columns = self._columns_text(entry)
+        columns = self.columns_text(table)
         if columns is not None:
             columns = f"Documented columns:\n\n{columns}"
         parts = self.entry_parts(table, columns, ambient_cap_chars=ambient_cap_chars)
@@ -262,12 +262,42 @@ class DataDictionary(_Permissive):
         terms = self._terms_text("\n".join(parts), ambient_cap_chars)
         return [*parts, terms] if terms else parts
 
-    def _columns_text(self, entry: Table) -> str | None:
-        if not entry.columns:
-            return None
-        return "\n".join(
-            _column_line(name, column) for name, column in entry.columns.items()
+    def columns_text(
+        self, table: str, live: list[dict[str, Any]] | None = None
+    ) -> str | None:
+        """A table's documented columns, optionally merged with a live schema.
+
+        With `live` set, the relation's own columns lead and in its order,
+        each carrying whatever the dictionary documents about it, and a
+        documented column the relation does not have is named at the end so
+        the model does not write SQL against it. `describe_table` is what
+        has a live schema to merge.
+        """
+        entry = self.tables.get(table)
+        columns = entry.columns if entry is not None else {}
+        if live is None:
+            if not columns:
+                return None
+            return "\n".join(
+                _column_line(name, column) for name, column in columns.items()
+            )
+
+        text = "\n".join(
+            _column_line(
+                str(found["column"]),
+                columns.get(str(found["column"])),
+                live_type=found.get("type"),
+            )
+            for found in live
         )
+        present = {str(found["column"]) for found in live}
+        undocumented = [name for name in columns if name not in present]
+        if undocumented:
+            text += (
+                "\n\nDocumented in the dictionary but not present in the table: "
+                f"{', '.join(undocumented)}."
+            )
+        return text
 
     def _relationships_text(
         self, table: str, authored_name: str | None = None
@@ -365,11 +395,12 @@ def _word_pattern(word: str) -> re.Pattern[str]:
     return re.compile(rf"(?<!\w){re.escape(word)}(?!\w)", re.IGNORECASE)
 
 
-def _column_line(name: str, spec: Column) -> str:
+def _column_line(name: str, spec: Column | None = None, live_type: Any = None) -> str:
+    spec = spec if spec is not None else Column()
     qualifier = ", ".join(
         str(part)
         for part in (
-            spec.type,
+            spec.type or live_type,
             _nullability_fact(spec.nullable),
             spec.units,
             *(spec.constraints or []),

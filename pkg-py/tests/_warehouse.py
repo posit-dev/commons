@@ -84,6 +84,11 @@ class _Recorder:
     def quote(self, table_id: TableId) -> str:
         return ".".join(f'"{part}"' for part in table_id.parts)
 
+    def columns(self, table_id: TableId) -> list[dict]:
+        # A warehouse's columns come from its own reader, which asks with a
+        # DESCRIBE rather than through this.
+        raise AssertionError("a warehouse describes its own relations")
+
     def inspector(self):
         return None
 

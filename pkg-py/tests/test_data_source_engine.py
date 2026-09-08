@@ -212,3 +212,14 @@ def test_the_engine_backend_still_quotes_a_two_part_name() -> None:
     assert backend.quote(TableId(table="sales", schema="analytics")) == (
         "analytics.sales"
     )
+
+
+def test_an_engine_backend_reports_columns_from_its_inspector(
+    engine: sqlalchemy.Engine,
+) -> None:
+    source = data_source(engine, tables=["sales"])
+
+    assert source.backend.columns(source.table_ids["sales"]) == [
+        {"column": "id", "type": "INTEGER", "nullable": True, "description": None},
+        {"column": "revenue", "type": "REAL", "nullable": True, "description": None},
+    ]

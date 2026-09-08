@@ -1,0 +1,241 @@
+{
+  "description": "Which tools an agent registers for a given composition, and what each registered tool tells the model it is for. Registration is what the model can reach at all, and a tool description is prompt text it reads before choosing, so both must agree across the two packages. Cases declare only what registration and the descriptions turn on: the measures, the governed definitions, whether a source's catalog is too broad to list, and how many sources there are. Everything else about a source is each package's own business, so a runner fills it in. Tool arguments are deliberately not pinned here: a JSON Schema property and an ellmer type are different objects, and normalizing one into the other would pin the shape of the plumbing rather than what the model reads. Cases never declare a warehouse's own semantic objects or exact trusted queries, so the tools gated on them never register in either package: call_calculation, and the semantic-model half of call_metrics, wait on kata gcgj, which is deferred, and only the R package implements them today. The execution tool is left out for the same reason from the other end: it is run_r in R and run_python in Python, each built by its own owner rather than by build_commons_tools(), so a runner drops every name in execution_tools from what it enumerated before comparing.",
+  "execution_tools": ["run_r", "run_python"],
+  "shapes": {
+    "description": "The compositions the cases below are built from. `measures` and `definitions` are the pool's two halves; a definition entry with `count` stands for that many definitions with the name as a prefix and a number after it, which is how a case reaches an index too long for the prompt. `catalog_searchable` marks the sources whose catalog listing is too broad to name in the prompt.",
+    "values": {
+      "bare": {
+        "sources": ["sales_db"],
+        "measures": [],
+        "definitions": [],
+        "catalog_searchable": []
+      },
+      "measures": {
+        "sources": ["sales_db"],
+        "measures": [
+          {
+            "name": "order_count",
+            "description": "Count orders in a region."
+          }
+        ],
+        "definitions": [],
+        "catalog_searchable": []
+      },
+      "definitions_visible": {
+        "sources": ["sales_db"],
+        "measures": [],
+        "definitions": [
+          {"name": "net_revenue", "table": "sales", "kind": "metric"},
+          {"name": "emea", "table": "sales", "kind": "filter"},
+          {"name": "big", "table": "sales", "kind": "derived"}
+        ],
+        "catalog_searchable": []
+      },
+      "definitions_without_a_metric": {
+        "sources": ["sales_db"],
+        "measures": [],
+        "definitions": [
+          {"name": "emea", "table": "sales", "kind": "filter"},
+          {"name": "big", "table": "sales", "kind": "derived"}
+        ],
+        "catalog_searchable": []
+      },
+      "definitions_overflowing": {
+        "sources": ["sales_db"],
+        "measures": [],
+        "definitions": [
+          {"name": "net_revenue", "table": "sales", "kind": "metric"},
+          {"name": "filter_", "table": "sales", "kind": "filter", "count": 400}
+        ],
+        "catalog_searchable": []
+      },
+      "measures_and_definitions": {
+        "sources": ["sales_db"],
+        "measures": [
+          {
+            "name": "order_count",
+            "description": "Count orders in a region."
+          }
+        ],
+        "definitions": [
+          {"name": "net_revenue", "table": "sales", "kind": "metric"}
+        ],
+        "catalog_searchable": []
+      },
+      "broad_catalog": {
+        "sources": ["sales_db"],
+        "measures": [],
+        "definitions": [],
+        "catalog_searchable": ["sales_db"]
+      },
+      "two_sources_one_broad": {
+        "sources": ["sales_db", "warehouse"],
+        "measures": [],
+        "definitions": [],
+        "catalog_searchable": ["warehouse"]
+      }
+    }
+  },
+  "registration": {
+    "description": "The tools each composition earns, in the order they are registered. A tool absent from `tools` must not be registered: the agent's surface is what tells the model which operations exist, so offering one it cannot honour is worse than not offering it.",
+    "cases": [
+      {
+        "name": "a source alone earns only the tools every source earns",
+        "shape": "bare",
+        "tools": ["search_context", "describe_table", "run_sql"]
+      },
+      {
+        "name": "measures earn the pool and the measure call",
+        "shape": "measures",
+        "tools": [
+          "search_pool",
+          "call_measure",
+          "search_context",
+          "describe_table",
+          "run_sql"
+        ]
+      },
+      {
+        "name": "a governed metric earns call_metrics, and a visible index does not earn the pool",
+        "shape": "definitions_visible",
+        "tools": [
+          "call_metrics",
+          "search_context",
+          "describe_table",
+          "run_sql"
+        ]
+      },
+      {
+        "name": "definitions that are not metrics earn neither",
+        "shape": "definitions_without_a_metric",
+        "tools": ["search_context", "describe_table", "run_sql"]
+      },
+      {
+        "name": "an index past the prompt's cap earns the pool",
+        "shape": "definitions_overflowing",
+        "tools": [
+          "search_pool",
+          "call_metrics",
+          "search_context",
+          "describe_table",
+          "run_sql"
+        ]
+      },
+      {
+        "name": "measures and a governed metric earn all three",
+        "shape": "measures_and_definitions",
+        "tools": [
+          "search_pool",
+          "call_measure",
+          "call_metrics",
+          "search_context",
+          "describe_table",
+          "run_sql"
+        ]
+      },
+      {
+        "name": "a catalog too broad to list earns the catalog search",
+        "shape": "broad_catalog",
+        "tools": [
+          "search_catalog",
+          "search_context",
+          "describe_table",
+          "run_sql"
+        ]
+      },
+      {
+        "name": "one broad catalog among several sources is enough",
+        "shape": "two_sources_one_broad",
+        "tools": [
+          "search_catalog",
+          "search_context",
+          "describe_table",
+          "run_sql"
+        ]
+      }
+    ]
+  },
+  "descriptions": {
+    "description": "What each registered tool says it is for. Four of them vary with the composition, and the cases cover every branch: search_pool names the kinds the pool holds, call_metrics names where the model reads metric names from, run_sql names the fallbacks it is the fallback for, and the rest are fixed whatever the agent is made of.",
+    "cases": [
+      {
+        "name": "search_context",
+        "shape": "bare",
+        "tool": "search_context",
+        "text": "Search context for metric definitions, data notes, and table relationships."
+      },
+      {
+        "name": "describe_table",
+        "shape": "bare",
+        "tool": "describe_table",
+        "text": "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table."
+      },
+      {
+        "name": "run_sql with nothing to fall back from",
+        "shape": "bare",
+        "tool": "run_sql",
+        "text": "Run a read-only SELECT query against a data source."
+      },
+      {
+        "name": "run_sql beside measures",
+        "shape": "measures",
+        "tool": "run_sql",
+        "text": "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question."
+      },
+      {
+        "name": "run_sql beside governed definitions",
+        "shape": "definitions_visible",
+        "tool": "run_sql",
+        "text": "Run a read-only SELECT query against a data source. Governed definitions can be written as {{name}} tokens anywhere in the SQL (or {{table::name}} when qualification is needed); each expands to its compiled SQL before the query runs."
+      },
+      {
+        "name": "run_sql beside both",
+        "shape": "measures_and_definitions",
+        "tool": "run_sql",
+        "text": "Run a read-only SELECT query against a data source. Use this when no registered measure answers the question. Governed definitions can be written as {{name}} tokens anywhere in the SQL (or {{table::name}} when qualification is needed); each expands to its compiled SQL before the query runs."
+      },
+      {
+        "name": "search_pool over measures alone",
+        "shape": "measures",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations: measures (run with call_measure). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "search_pool over definitions alone",
+        "shape": "definitions_overflowing",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations: governed definitions (apply as {{name}} tokens in run_sql). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "search_pool over both",
+        "shape": "measures_and_definitions",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations: measures (run with call_measure) and governed definitions (apply as {{name}} tokens in run_sql). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "call_measure",
+        "shape": "measures",
+        "tool": "call_measure",
+        "text": "Run trusted calculations returned by search_pool. `arguments` is a JSON object using exactly the argument names from search_pool. Prefer a measure's own arguments when they can answer the question directly. Measure results may be displayed directly to the user. If a result says it is already visible, do not reproduce it in your reply; summarize or interpret the relevant results instead."
+      },
+      {
+        "name": "call_metrics with no pool to search",
+        "shape": "definitions_visible",
+        "tool": "call_metrics",
+        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt; commons compiles and runs the query."
+      },
+      {
+        "name": "call_metrics beside a searchable pool",
+        "shape": "measures_and_definitions",
+        "tool": "call_metrics",
+        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt or search_pool; commons compiles and runs the query."
+      },
+      {
+        "name": "search_catalog",
+        "shape": "broad_catalog",
+        "tool": "search_catalog",
+        "text": "Search a broad selected catalog by object name and description. Results are stable object names for describe_table."
+      }
+    ]
+  }
+}
