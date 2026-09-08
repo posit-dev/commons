@@ -214,6 +214,32 @@ async def test_set_state_restores_the_turns() -> None:
     assert [turn["role"] for turn in restored.get_turns()] == ["user", "assistant"]
 
 
+async def test_a_bookmark_interoperates_with_shinychats_chatlas_hooks() -> None:
+    """The interoperability claim, against the hooks upstream actually uses.
+
+    `chatlas.Chat` has no state methods of its own: shinychat builds them
+    for a chatlas client, and those are what a bookmark written before this
+    adapter existed would have gone through.
+    """
+    pytest.importorskip("shinychat")
+    from shinychat._chat_bookmark import get_chatlas_state, set_chatlas_state
+
+    subject = agent()
+    subject.set_turns([UserTurn("How much?"), AssistantTurn("1400.")])
+
+    # What shinychat would have written for the composed chatlas client,
+    # restored through the adapter.
+    from_chatlas = await get_chatlas_state(subject.client)()
+    adapter = CommonsChatClient(agent())
+    await adapter.set_state(from_chatlas)
+    assert [turn["role"] for turn in adapter.get_turns()] == ["user", "assistant"]
+
+    # And the reverse: the adapter's payload read by shinychat's own hook.
+    target = agent()
+    await set_chatlas_state(target.client)(await adapter.get_state())
+    assert [turn.role for turn in target.get_turns()] == ["user", "assistant"]
+
+
 async def test_set_state_rejects_an_unknown_version() -> None:
     """The same guard chatlas's own restore applies."""
     client = CommonsChatClient(agent())
