@@ -21,10 +21,12 @@ def test_distribution_name_is_commons() -> None:
     assert version("commons")
 
 
-def test_package_ships_the_browser_assets() -> None:
-    # Synced from the root www/ by scripts/sync-shared.sh. The UI layer serves
-    # these from the installed package, so a wheel that dropped them would
-    # fail only at runtime, in the browser.
+def test_the_browser_assets_are_where_the_ui_layer_looks() -> None:
+    # Synced from the root www/ by scripts/sync-shared.sh, and read through
+    # importlib.resources by the UI layer, so this pins the layout that code
+    # depends on. It does not prove the wheel ships them: the suite runs
+    # against an editable install, which reads src/ regardless. A step in
+    # py-check.yaml builds a wheel and checks its contents.
     served = importlib.resources.files("commons") / "www" / "commons-chat"
     assert (served / "commons-chat.js").is_file()
     assert (served / "commons-chat.css").is_file()
