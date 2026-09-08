@@ -255,7 +255,7 @@ def test_a_metric_alone_is_grouped_globally(source: DataSource) -> None:
     body = metrics(source, registry, metrics=["net_revenue"])
 
     assert "| net_revenue |" in body
-    assert "| 1700.0 |" in body
+    assert "| 1700 |" in body
 
 
 def test_a_documented_column_can_be_grouped_by(source: DataSource) -> None:
@@ -264,7 +264,7 @@ def test_a_documented_column_can_be_grouped_by(source: DataSource) -> None:
     body = metrics(source, registry, metrics=["net_revenue"], dimensions=["region"])
 
     assert "| region | net_revenue |" in body
-    assert "| EMEA | 800.0 |" in body
+    assert "| EMEA | 800 |" in body
 
 
 def test_a_derived_definition_can_be_grouped_by(source: DataSource) -> None:
@@ -292,7 +292,7 @@ def test_a_governed_filter_narrows_the_query(source: DataSource) -> None:
 
     body = metrics(source, registry, metrics=["net_revenue"], filters=["emea"])
 
-    assert "| 800.0 |" in body
+    assert "| 800 |" in body
 
 
 def test_a_where_predicate_narrows_the_query(source: DataSource) -> None:
@@ -305,7 +305,7 @@ def test_a_where_predicate_narrows_the_query(source: DataSource) -> None:
         where=[{"column": "revenue", "op": ">", "value": "400"}],
     )
 
-    assert "| 1400.0 |" in body
+    assert "| 1400 |" in body
 
 
 def test_a_string_predicate_is_quoted_for_the_dialect(source: DataSource) -> None:
@@ -320,7 +320,7 @@ def test_a_string_predicate_is_quoted_for_the_dialect(source: DataSource) -> Non
         where=[{"column": "region", "op": "=", "value": "O'Hare"}],
     )
 
-    assert body.splitlines()[:3] == ["| net_revenue |", "|---|", "|  |"]
+    assert body.splitlines()[:3] == ["| net_revenue |", "|---|", "| NA |"]
 
 
 def test_the_applied_definitions_are_reported(source: DataSource) -> None:

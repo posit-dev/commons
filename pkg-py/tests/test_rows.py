@@ -1,8 +1,10 @@
 """Rendering query results for the model."""
 
+from decimal import Decimal
+
 import pytest
 
-from commons._rows import frame_rows, rows_to_markdown
+from commons._rows import frame_rows, render_value, rows_to_markdown
 
 
 def test_rows_render_as_a_pipe_table() -> None:
@@ -20,11 +22,33 @@ def test_a_column_missing_from_one_row_still_gets_a_header() -> None:
     text = rows_to_markdown([{"a": 1}, {"a": 2, "b": 3}])
 
     assert text.splitlines()[0] == "| a | b |"
-    assert text.splitlines()[2] == "| 1 |  |"
+    assert text.splitlines()[2] == "| 1 | NA |"
 
 
-def test_a_null_reads_as_an_empty_cell() -> None:
-    assert rows_to_markdown([{"a": None}]).splitlines()[2] == "|  |"
+def test_a_null_reads_as_na() -> None:
+    assert rows_to_markdown([{"a": None}]).splitlines()[2] == "| NA |"
+
+
+def test_a_boolean_reads_as_r_spells_it() -> None:
+    text = rows_to_markdown([{"x": True}, {"x": False}])
+
+    assert text.splitlines()[2] == "| TRUE |"
+    assert text.splitlines()[3] == "| FALSE |"
+
+
+def test_a_float_is_trimmed_of_representation_noise() -> None:
+    text = rows_to_markdown([{"x": 0.1 + 0.2}, {"x": 1.0}, {"x": 1e10}])
+
+    assert text.splitlines()[2] == "| 0.3 |"
+    assert text.splitlines()[3] == "| 1 |"
+    assert text.splitlines()[4] == "| 1e+10 |"
+
+
+def test_render_value_covers_the_shared_vocabulary() -> None:
+    assert render_value(None) == "NA"
+    assert render_value(False) == "FALSE"
+    assert render_value(Decimal("2.50000001")) == "2.5"
+    assert render_value("plain") == "plain"
 
 
 def test_a_pipe_or_line_break_in_a_value_cannot_break_the_table() -> None:

@@ -40,7 +40,7 @@ from ._handles import HandleStore
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import Tag
-from ._rows import frame_rows, rows_to_markdown
+from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
 __all__ = [
@@ -56,6 +56,8 @@ __all__ = [
 
 SAMPLE_ROWS = 5
 CATALOG_SEARCH_LIMIT = 10
+# As many items of a measure's list result as the model gets to read.
+MAX_MEASURE_ITEMS = 20
 
 _READ_ONLY: ToolAnnotations = {"readOnlyHint": True}
 
@@ -286,6 +288,10 @@ def _call_measure(context: ToolContext) -> Tool:
             if source is not None:
                 source.ensure_loaded()
         value = record.func(**args, **injected)
+        # A measure that built its own tool result — a plot, a displayable
+        # table — has already said how it should look; return it untouched.
+        if isinstance(value, ContentToolResult):
+            return value
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
@@ -336,14 +342,19 @@ def _format_measure_value(value: Any) -> str:
 
     A frame becomes a table when its rows can be read out of it, and its
     column summary otherwise, since a frame library commons does not know is
-    still worth describing.
+    still worth describing. A long list is cut off rather than printed in
+    full, because a measure that returns one has a frame it could have
+    returned instead.
     """
     if is_frame(value):
         rows = frame_rows(value)
         return rows_to_markdown(rows) if rows is not None else describe_frame(value)
-    if isinstance(value, (list, tuple)) and len(value) <= 20:
-        return ", ".join(str(item) for item in value)
-    return str(value)
+    if isinstance(value, (list, tuple)):
+        rendered = [render_value(item) for item in value[:MAX_MEASURE_ITEMS]]
+        if len(value) > MAX_MEASURE_ITEMS:
+            rendered.append(f"and {len(value) - MAX_MEASURE_ITEMS} more")
+        return ", ".join(rendered)
+    return render_value(value)
 
 
 # ---- call_metrics ---------------------------------------------------------

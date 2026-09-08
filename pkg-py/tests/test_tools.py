@@ -32,7 +32,7 @@ from commons._tools import (
     run_sql_description,
     tool_description,
 )
-from tests._warehouse import FakeWarehouse
+from tests._warehouse import FakeDatabricks, FakeWarehouse
 
 DICTIONARY = """
 name: sales
@@ -441,7 +441,7 @@ def test_run_sql_expands_a_governed_token_and_reports_it(plain: DataSource) -> N
         find(tools, "run_sql"), sql="SELECT {{net_revenue}} AS total FROM sales"
     )
 
-    assert "| 1700.0 |" in body
+    assert "| 1700 |" in body
     assert "Applied governed definitions:" in body
 
 
@@ -571,6 +571,86 @@ def test_an_injected_argument_comes_from_the_agent(plain: DataSource) -> None:
     assert call(find(tools, "call_measure"), name="row_count").startswith("3")
 
 
+def test_measure_arguments_may_arrive_as_a_mapping(plain: DataSource) -> None:
+    # Some providers deliver the arguments object rather than its JSON text.
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": plain}, measures=counted())
+    )
+
+    body = call(
+        find(tools, "call_measure"),
+        name="order_count",
+        arguments={"region": "Americas"},
+    )
+
+    assert body.startswith("1")
+
+
+def test_measure_arguments_that_are_not_a_json_object_are_rejected(
+    plain: DataSource,
+) -> None:
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": plain}, measures=counted())
+    )
+
+    with pytest.raises(TypeError, match="JSON object"):
+        find(tools, "call_measure").func(name="order_count", arguments="[1, 2]")
+
+
+def test_a_measures_own_tool_result_is_returned_untouched(
+    plain: DataSource,
+) -> None:
+    @measure(description="A result already shaped for the model.")
+    def ready_made() -> ContentToolResult:
+        return ContentToolResult(value="already composed")
+
+    found = as_measure(ready_made)
+    assert found is not None
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": plain}, measures={found.name: found})
+    )
+
+    result = invoke(find(tools, "call_measure"), name="ready_made")
+
+    assert result.value == "already composed"
+
+
+def test_a_measure_float_is_trimmed_of_representation_noise(
+    plain: DataSource,
+) -> None:
+    @measure(description="A computation with float noise.")
+    def sloppy() -> float:
+        return 0.1 + 0.2
+
+    found = as_measure(sloppy)
+    assert found is not None
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": plain}, measures={found.name: found})
+    )
+
+    body = call(find(tools, "call_measure"), name="sloppy")
+
+    assert body.split("\n\n")[0] == "0.3"
+
+
+def test_a_long_measure_list_is_capped_and_reported(plain: DataSource) -> None:
+    @measure(description="More numbers than the model needs to read.")
+    def many() -> list[int]:
+        return list(range(30))
+
+    found = as_measure(many)
+    assert found is not None
+    tools = build_commons_tools(
+        ToolContext(sources={"sales_db": plain}, measures={found.name: found})
+    )
+
+    body = call(find(tools, "call_measure"), name="many")
+
+    assert body.startswith("0, 1, 2, ")
+    assert "and 10 more" in body
+    assert "19, 20" not in body
+
+
 # ---- search_catalog ---------------------------------------------------------
 
 
@@ -643,6 +723,81 @@ def test_a_probe_that_could_not_be_read_is_raised_rather_than_hidden() -> None:
         find(tools, "search_catalog").func(query="sales")
 
 
+def _warehouse_describe_source(
+    backend: Any, table_id: TableId, label: str
+) -> DataSource:
+    relation = Relation(
+        id=table_id, kind="table", description="Booked sales activity."
+    )
+    return DataSource(
+        backend=backend,
+        tables=[label],
+        table_ids={label: table_id},
+        session=session_snapshot(backend),
+        relations={label: relation},
+        manifest=Manifest(objects={label: relation}, searchable=True),
+    )
+
+
+def test_describe_table_asks_a_warehouse_for_its_own_columns() -> None:
+    backend = FakeWarehouse(columns=("ID", "AMOUNT"))
+    tools = build_commons_tools(
+        ToolContext(
+            sources={
+                "warehouse": _warehouse_describe_source(
+                    backend, TableId(catalog="ANALYTICS", schema="PUBLIC", table="SALES"), "SALES"
+                )
+            }
+        )
+    )
+
+    body = call(find(tools, "describe_table"), table="SALES")
+
+    assert any(sql.startswith("DESC TABLE") for sql in backend.queries)
+    assert "Relation type: table." in body
+    assert "Booked sales activity." in body
+    assert "| ID |" in body
+
+
+def test_a_warehouse_relation_is_described_only_once() -> None:
+    backend = FakeWarehouse()
+    tools = build_commons_tools(
+        ToolContext(
+            sources={
+                "warehouse": _warehouse_describe_source(
+                    backend, TableId(catalog="ANALYTICS", schema="PUBLIC", table="SALES"), "SALES"
+                )
+            }
+        )
+    )
+    describe = find(tools, "describe_table")
+
+    call(describe, table="SALES")
+    call(describe, table="SALES")
+
+    describes = [sql for sql in backend.queries if sql.startswith("DESC TABLE")]
+    assert len(describes) == 1
+
+
+def test_describe_table_asks_databricks_for_its_own_columns() -> None:
+    backend = FakeDatabricks(columns=("id", "amount"))
+    tools = build_commons_tools(
+        ToolContext(
+            sources={
+                "warehouse": _warehouse_describe_source(
+                    backend, TableId(catalog="main", schema="sales", table="orders"), "orders"
+                )
+            }
+        )
+    )
+
+    body = call(find(tools, "describe_table"), table="orders")
+
+    assert any(sql.startswith("DESCRIBE TABLE") for sql in backend.queries)
+    assert "Relation type: table." in body
+    assert "| id |" in body
+
+
 def test_search_pool_reaches_the_pool(plain: DataSource) -> None:
     tools = build_commons_tools(
         ToolContext(sources={"sales_db": plain}, measures=counted())
@@ -660,7 +815,7 @@ def test_call_metrics_runs_the_governed_query(documented: DataSource) -> None:
         find(tools, "call_metrics"), metrics=["net_revenue"], dimensions=["region"]
     )
 
-    assert "| EMEA | 800.0 |" in body
+    assert "| EMEA | 800 |" in body
 
 
 def test_describe_table_loads_a_pin_before_reading_its_schema(

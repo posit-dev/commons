@@ -123,6 +123,8 @@ class EngineBackend:
 
     def columns(self, table_id: TableId) -> list[dict[str, Any]]:
         inspector = sqlalchemy.inspect(self._engine)
+        # SQLAlchemy takes every level above the table as one dotted
+        # `schema`, so a catalog is joined onto it rather than dropped.
         outer = ".".join(table_id.parts[:-1])
         return [
             {

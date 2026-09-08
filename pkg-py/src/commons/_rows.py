@@ -3,14 +3,27 @@
 A source hands back rows as a list of mappings, and every tool that returns
 data renders them the same way, so the rendering lives here rather than in
 each tool body.
+
+The vocabulary is the one the sample summary and `pkg-r/R/utils.R` use — a
+null is `NA`, a boolean is `TRUE` or `FALSE`, and a float keeps seven
+significant digits — so the model meets one spelling per idea across every
+tool and both packages. Three choices deliberately differ from R's
+`knitr::kable` rather than matching it: an empty result says "No rows."
+because a list of no mappings carries no column names to head a table with,
+a line break inside a value folds to a space because kable passes it through
+and breaks its own table, and a pipe escapes as `\\|` because the model
+reads that as readily as kable's `&#124;`.
 """
 
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from typing import Any
 
-__all__ = ["MAX_MARKDOWN_ROWS", "frame_rows", "rows_to_markdown"]
+from ._sample_summary import _format_signif
+
+__all__ = ["MAX_MARKDOWN_ROWS", "frame_rows", "render_value", "rows_to_markdown"]
 
 # Enough rows to reason over, few enough that one query cannot crowd the
 # conversation out of its context window. The handle store keeps the rest.
@@ -40,6 +53,22 @@ def rows_to_markdown(
 
 _LINE_BREAK = re.compile(r"\r\n|[\r\n]")
 
+# Significant digits a rendered number keeps, matching R's format() default:
+# enough to read, few enough that a float's representation noise (0.1 + 0.2)
+# never reaches the model. Whole numbers are written out in full either way.
+VALUE_DIGITS = 7
+
+
+def render_value(value: Any) -> str:
+    """One value as the model reads it, in the shared vocabulary."""
+    if value is None:
+        return "NA"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (float, Decimal)):
+        return _format_signif(value, VALUE_DIGITS)
+    return str(value)
+
 
 def _cell(value: Any) -> str:
     """One cell, with everything that would break the table out of it.
@@ -47,9 +76,7 @@ def _cell(value: Any) -> str:
     A column name goes through this too: a query names its own aliases, so a
     header is no safer than a value.
     """
-    if value is None:
-        return ""
-    return _LINE_BREAK.sub(" ", str(value)).replace("|", "\\|")
+    return _LINE_BREAK.sub(" ", render_value(value)).replace("|", "\\|")
 
 
 def frame_rows(frame: Any) -> list[dict[str, Any]] | None:
