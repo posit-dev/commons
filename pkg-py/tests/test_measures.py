@@ -1018,11 +1018,13 @@ def test_public_api_exposes_the_semantic_layer() -> None:
     import commons
 
     assert set(commons.__all__) == {
+        "Commons",
         "ContextLayer",
         "DataSource",
         "Injected",
         "Measure",
         "SemanticLayer",
+        "Tag",
         "context_layer",
         "data_source",
         "list_tables",
