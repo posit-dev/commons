@@ -122,7 +122,11 @@ def collect_appended_tags(turns: Sequence[Turn], from_index: int) -> list[Tag]:
 
 
 def escape_attr(text: str) -> str:
-    """Escape ``&`` and ``"`` for use inside an HTML attribute value."""
+    """Escape ``&`` and ``"`` for a double-quoted HTML attribute value.
+
+    Nothing else is escaped, so the result belongs in a double-quoted
+    attribute only: never a text node, never a single-quoted attribute.
+    """
     # Ampersands first, so the entities this generates are not escaped again.
     return text.replace("&", "&amp;").replace('"', "&quot;")
 

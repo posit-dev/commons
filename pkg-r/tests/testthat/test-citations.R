@@ -75,20 +75,6 @@ test_that("citation asides leave trust copy to their markers", {
   )
 })
 
-# A measure the fixture describes: its arguments are all commons-supplied, so
-# `arguments` stays empty and every formal is an injected source.
-fixture_corpus_measure <- function(spec) {
-  injected <- as.character(unlist(spec$injected) %||% character())
-  fn <- if (length(injected) == 0) {
-    function() NULL
-  } else {
-    formals <- rep(list(rlang::missing_arg()), length(injected))
-    names(formals) <- injected
-    rlang::new_function(formals, quote(NULL))
-  }
-  measure(spec$name, spec$description, fn)
-}
-
 test_that("build_citation_corpus matches the shared fixture", {
   cases <- shared_fixture("citation-corpus")$build_citation_corpus$cases
   # An empty fixture would make the loop below vacuously succeed.
@@ -100,7 +86,7 @@ test_that("build_citation_corpus matches the shared fixture", {
     } else {
       new_context_layer(as.character(unlist(case$docs)))
     }
-    registry <- lapply(case$measures, fixture_corpus_measure)
+    registry <- lapply(case$measures, fixture_measure)
     sources <- lapply(case$sources, function(spec) {
       dictionary <- if (is.null(spec$dictionary)) {
         NULL

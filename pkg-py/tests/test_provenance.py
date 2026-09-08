@@ -111,7 +111,7 @@ def test_the_shared_fixture_covers_collection_edges() -> None:
     assert any(case["expected"] == [] for case in COLLECT_CASES)
 
 
-def test_ignores_a_tag_value_that_is_not_an_outcome() -> None:
+def test_ignores_a_tag_value_that_is_not_a_valid_tag() -> None:
     # Deliberately per-language, so the fixture does not pin it: Python drops
     # an unreadable tag at collection, so it cannot cost the exchange the
     # tags that are readable. R returns it; derive_provenance_tag ignores

@@ -58,6 +58,30 @@ test_that("collect_appended_tags matches the shared fixture", {
   }
 })
 
+test_that("collect_appended_tags keeps a tag value that is not a valid tag", {
+  # Deliberately per-language, so the fixture does not pin it: R returns an
+  # unreadable tag at collection and Python drops it; derive_provenance_tag
+  # ignores anything but A and B either way.
+  turns <- list(
+    ellmer::UserTurn(
+      contents = list(
+        ellmer::ContentToolResult(
+          value = "1",
+          request = NULL,
+          extra = list(commons_tag = "Z")
+        ),
+        ellmer::ContentToolResult(
+          value = "2",
+          request = NULL,
+          extra = list(commons_tag = "B")
+        )
+      )
+    )
+  )
+
+  expect_identical(collect_appended_tags(turns, from_index = 1L), c("Z", "B"))
+})
+
 test_that("provenance_display uses R display copy", {
   display <- shared_fixture("provenance")$provenance_display$tags
   expect_setequal(names(display), names(provenance_display))
