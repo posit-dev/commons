@@ -12,6 +12,7 @@ from commons._data_dictionary import DataDictionary
 from commons._data_source import DataSource, TableId
 from commons._definitions._registry import build_registry
 from commons._prompt import (
+    EXECUTION_TOOL,
     check_instructions,
     citation_trust_exception,
     is_claude_5_model,
@@ -27,6 +28,11 @@ from commons._prompt import (
 from ._shared import SHARED_DIR, load_shared_fixture
 
 PROMPT_DATA = load_shared_fixture("prompt-data")
+
+
+def _own_execution_tool(tool: str) -> str:
+    """Resolve the fixtures' `$execution_tool` placeholder to this package's."""
+    return EXECUTION_TOOL if tool == "$execution_tool" else tool
 
 _PAD = re.compile(r"^pad:(\d+)$")
 
@@ -85,8 +91,9 @@ def test_shared_tool_data_cases():
     assert cases
 
     for case in cases:
-        data: dict[str, object] = dict(tool_availability(case["tools"]))
-        data["citation_trust_exception"] = citation_trust_exception(case["tools"])
+        tools = [_own_execution_tool(tool) for tool in case["tools"]]
+        data: dict[str, object] = dict(tool_availability(tools))
+        data["citation_trust_exception"] = citation_trust_exception(tools)
         got = {key: data[key] for key in case["expected"]}
         assert got == case["expected"], case["name"]
 
@@ -213,11 +220,15 @@ def test_shared_prompt_data_cases(case):
         sources,
         build_registry(sources),
         instructions=case.get("instructions"),
-        tools=case.get("tools", []),
+        tools=[_own_execution_tool(tool) for tool in case.get("tools", [])],
         model=case.get("model"),
     )
 
     assert list(data) == PROMPT_DATA["fields"]
+    assert (
+        data["execution_tool"]
+        == PROMPT_DATA["substitutions"]["python"]["execution_tool"]
+    )
     assert {key: data[key] for key in case["expect"]} == case["expect"]
 
 

@@ -14,9 +14,9 @@ When no trusted calculations are available, search context for relevant tables, 
 
 When a catalog is too broad to list, find relevant catalog objects with `search_catalog` before calling `describe_table`.
 
-When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `run_r` rather than re-deriving it in SQL.
+When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `run_code` rather than re-deriving it in SQL.
 
-When a chart would communicate the answer better than text, render one with `run_r`; plots are shown to the user.
+When a chart would communicate the answer better than text, render one with `run_code`; plots are shown to the user.
 
 ## Citations
 
@@ -37,7 +37,7 @@ These parts of tool outputs are not citable:
 - Result values from `call_measure`. An answer based on that tool alone is already trusted and needs no citation.
 - Result values from `call_metrics`. An answer based on that tool alone is already trusted and needs no citation.
 - Query result rows from `run_sql`.
-- Code, measure source, plots, and textual output from `run_r`.
+- Code, measure source, plots, and textual output from `run_code`.
 
 If exact citable text you have seen supports the way you computed an answer,
 cite it using this format:

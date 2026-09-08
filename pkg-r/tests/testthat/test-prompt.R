@@ -161,6 +161,7 @@ test_that("tool availability and the trust exception follow the shared cases", {
 
   for (case in cases) {
     tools <- as.character(unlist(case$tools))
+    tools[tools == "$execution_tool"] <- execution_tool
     data <- c(
       tool_availability(tools),
       list(citation_trust_exception = citation_trust_exception(tools))
@@ -236,6 +237,15 @@ prompt_data_source <- function(spec) {
   source
 }
 
+# A tools entry of `$execution_tool` stands for the package's own execution
+# tool, so a shared case can pin the flag without the fixture picking a
+# language.
+prompt_data_tools <- function(case) {
+  tools <- as.character(unlist(case$tools))
+  tools[tools == "$execution_tool"] <- execution_tool
+  tools
+}
+
 test_that("both packages derive the same prompt data from the same sources", {
   fixture <- shared_fixture("prompt-data")
   cases <- fixture$cases
@@ -250,11 +260,16 @@ test_that("both packages derive the same prompt data from the same sources", {
       sources,
       definitions_registry(sources),
       instructions = case$instructions,
-      tools = as.character(unlist(case$tools)),
+      tools = prompt_data_tools(case),
       model = case$model
     )
 
     expect_named(data, fields, info = case$name)
+    expect_identical(
+      data$execution_tool,
+      fixture$substitutions$r$execution_tool,
+      info = case$name
+    )
     expect_equal(data[names(case$expect)], case$expect, info = case$name)
   }
 })

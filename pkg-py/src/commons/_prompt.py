@@ -32,8 +32,14 @@ _SUPPORTED_VALUE = re.compile(r"^\{\{\s*[A-Za-z_][A-Za-z0-9_]*\s*\}\}$")
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _BLANK_LINES = re.compile(r"\n[ \t]*\n(?:[ \t]*\n)+")
 
+# This package's name for its code-execution tool. The shared template and its
+# flag stay language-neutral (`{{ execution_tool }}`, `has_execution_tool`);
+# this is the tool name that earns the flag here.
+EXECUTION_TOOL = "run_python"
+
 # The trusted-calculation tools, in the order the citation sentence names them,
-# and every tool the citable and non-citable lists branch on.
+# and every tool the citable and non-citable lists branch on. The last entry is
+# the flag stem for whichever tool EXECUTION_TOOL names.
 TRUSTED_TOOLS = ("search_pool", "call_measure", "call_metrics", "call_calculation")
 CITED_TOOLS = (
     "search_pool",
@@ -43,7 +49,7 @@ CITED_TOOLS = (
     "call_measure",
     "call_metrics",
     "call_calculation",
-    "run_r",
+    "execution_tool",
 )
 
 
@@ -96,6 +102,7 @@ def system_prompt_data(
         "definition_index": definition_index,
         "citation_trust_exception": citation_trust_exception(tool_names),
         **tool_availability(tool_names),
+        "execution_tool": EXECUTION_TOOL,
         "has_instructions": bool(instructions),
         "instructions": instructions,
     }
@@ -235,7 +242,9 @@ def _template_value(name: str, data: Mapping[str, Any]) -> Any:
 
 def tool_availability(tools: Iterable[str]) -> dict[str, bool]:
     """One flag per tool the citation sections name."""
-    registered = set(tools)
+    registered = {
+        "execution_tool" if tool == EXECUTION_TOOL else tool for tool in tools
+    }
     return {f"has_{tool}": tool in registered for tool in CITED_TOOLS}
 
 

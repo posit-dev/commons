@@ -187,6 +187,11 @@ trusted_tools <- c(
   "call_calculation"
 )
 
+# This package's name for its code-execution tool. The shared template and its
+# flag stay language-neutral (`{{ execution_tool }}`, `has_execution_tool`);
+# this is the tool name that earns the flag here.
+execution_tool <- "run_r"
+
 cited_tools <- c(
   "search_pool",
   "search_context",
@@ -195,10 +200,11 @@ cited_tools <- c(
   "call_measure",
   "call_metrics",
   "call_calculation",
-  "run_r"
+  "execution_tool"
 )
 
 tool_availability <- function(tools) {
+  tools[tools == execution_tool] <- "execution_tool"
   stats::setNames(as.list(cited_tools %in% tools), paste0("has_", cited_tools))
 }
 
