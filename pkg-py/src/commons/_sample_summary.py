@@ -39,7 +39,10 @@ from typing import Any
 
 __all__ = ["SAMPLE_SUMMARY_HEADING", "sample_summary"]
 
-SAMPLE_SUMMARY_HEADING = "Sample summary:"
+# Scoped on purpose: the lines under it describe the sampled rows, and a model
+# that reads a column's value list as the table's full domain concludes a value
+# is absent when it is only unsampled.
+SAMPLE_SUMMARY_HEADING = "Sample summary (the sampled rows only, not necessarily every row):"
 
 # Past this many distinct values, or this much text, listing them costs more
 # context than it tells the model.

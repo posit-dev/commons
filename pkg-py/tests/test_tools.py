@@ -22,6 +22,7 @@ from commons._definitions import ExportRecord, Registry
 from commons._handles import HandleStore
 from commons._measures import as_measure
 from commons._provenance import TAG_EXTRA_KEY, Tag
+from commons._sample_summary import SAMPLE_SUMMARY_HEADING
 from commons._tools import (
     FirstTouch,
     ToolContext,
@@ -374,7 +375,7 @@ def test_describe_table_shows_columns_and_a_summary_of_the_sample(
 
     assert "Columns of `sales`:" in body
     assert "| revenue | DOUBLE |" in body
-    assert "Sample summary:\n\nA data frame with 3 rows and 2 columns:" in body
+    assert f"{SAMPLE_SUMMARY_HEADING}\n\nA data frame with 3 rows and 2 columns:" in body
     assert "* revenue: float with range [300, 900], and 0 NAs" in body
 
 
