@@ -180,11 +180,23 @@ def tools_run(canopy: commons.Commons) -> list[str]:
 
 
 async def ask(canopy: commons.Commons, question: str) -> None:
+    """Stream one answer, with a line naming each tool as it runs.
+
+    `content="all"` is the mode a chat UI drives an agent through. Asking for
+    text instead yields a bare "\\n\\n" per tool result, standing in for the
+    content it is not emitting, which a terminal shows as a blank gap that
+    grows with the number of tools.
+    """
     print(f"\n{'=' * 72}\n>>> {question}\n{'=' * 72}", flush=True)
-    before = len(tools_run(canopy))
-    async for chunk in await canopy.stream_async(question):
-        print(chunk, end="", flush=True)
-    print(f"\n\n[tools: {', '.join(tools_run(canopy)[before:]) or 'none'}]", flush=True)
+    async for chunk in await canopy.stream_async(question, content="all"):
+        if isinstance(chunk, chatlas.ContentToolRequest):
+            print(f"\n[{chunk.name}]", flush=True)
+        elif isinstance(chunk, str):
+            # The provenance marker and any citation arrive as their own
+            # chunks of HTML; a UI renders them, so give them their own line.
+            lead = "\n\n" if chunk.startswith("<shiny-aside") else ""
+            print(f"{lead}{chunk}", end="", flush=True)
+    print(flush=True)
 
 
 async def main() -> None:
