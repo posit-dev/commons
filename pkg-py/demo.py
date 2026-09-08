@@ -1,0 +1,197 @@
+"""A self-contained commons agent over made-up forest canopy data.
+
+    uv run --with anthropic python demo.py
+
+The R package's `inst/demo.R` puts this agent behind a Shiny front end. There
+is no Python chat UI yet, so this asks the questions from the terminal and
+prints the provenance marker that a UI would render as a badge.
+
+The client comes from `chatlas.ChatAuto`, so `CHATLAS_CHAT_PROVIDER_MODEL`
+picks a different provider without editing this file. chatlas ships no
+provider SDK and neither does commons, hence the `--with`. For Claude on
+Bedrock:
+
+    export CHATLAS_CHAT_PROVIDER_MODEL=bedrock-anthropic/us.anthropic.claude-sonnet-5
+    uv run --with 'anthropic[bedrock]' python demo.py
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from pathlib import Path
+from tempfile import mkdtemp
+from typing import Any
+
+import chatlas
+import pandas as pd
+
+import commons
+
+DEFAULT_MODEL = "anthropic/claude-sonnet-5"
+
+stands = pd.DataFrame(
+    {
+        "stand_id": range(1, 9),
+        "name": [
+            "Nehalem Bench",
+            "Saddle Mountain",
+            "Mohawk Divide",
+            "Fall Creek",
+            "Winberry Ridge",
+            "Sprague Rim",
+            "Chiloquin Flat",
+            "Antelope Draw",
+        ],
+        "county": [
+            "Clatsop",
+            "Clatsop",
+            "Lane",
+            "Lane",
+            "Lane",
+            "Klamath",
+            "Klamath",
+            "Klamath",
+        ],
+        "forest_type": [
+            "Douglas-fir",
+            "Sitka spruce",
+            "Douglas-fir",
+            "mixed conifer",
+            "Douglas-fir",
+            "ponderosa pine",
+            "ponderosa pine",
+            "lodgepole pine",
+        ],
+        "status": [
+            "established",
+            "established",
+            "established",
+            "established",
+            "regeneration",
+            "established",
+            "established",
+            "regeneration",
+        ],
+        "acres": [1240, 860, 3150, 720, 410, 2480, 1590, 640],
+    }
+)
+
+surveys = pd.DataFrame(
+    {
+        "stand_id": [stand for stand in range(1, 9) for _ in (0, 1)],
+        "survey_year": [2021, 2026] * 8,
+        "canopy_pct": [
+            78, 81,
+            84, 86,
+            71, 74,
+            62, 67,
+            18, 34,
+            45, 47,
+            52, 49,
+            12, 26,
+        ],
+    }
+)  # fmt: skip
+
+NOTES = """\
+Canopy cover is always acre-weighted. A plain average across stands treats a 400-acre unit the same as a 4,000-acre one.
+
+Baseline canopy statistics cover established stands only; regeneration units are tracked separately until they close canopy.
+
+The surveys table has one row per stand per survey year, so a query that doesn't pin a year mixes survey cycles.
+"""
+
+
+def notes_file() -> Path:
+    path = Path(mkdtemp()) / "canopy-notes.md"
+    path.write_text(NOTES)
+    return path
+
+
+@commons.measure(
+    description=(
+        "Acre-weighted canopy cover for each county, from the most recent survey."
+    )
+)
+def canopy_by_county(warehouse: commons.Injected[Any]) -> pd.DataFrame:
+    return warehouse.execute(
+        """
+        SELECT county,
+               SUM(canopy_pct * acres) / SUM(acres) AS canopy_pct,
+               SUM(acres) AS acres
+        FROM stands JOIN surveys USING (stand_id)
+        WHERE status = 'established'
+          AND survey_year = (SELECT MAX(survey_year) FROM surveys)
+        GROUP BY county ORDER BY canopy_pct DESC
+        """
+    ).fetchdf()
+
+
+@commons.measure(
+    description="Established stands with the least canopy cover today, thinnest first."
+)
+def low_canopy_stands(warehouse: commons.Injected[Any]) -> pd.DataFrame:
+    return warehouse.execute(
+        """
+        SELECT name, county, forest_type, canopy_pct, acres
+        FROM stands JOIN surveys USING (stand_id)
+        WHERE status = 'established'
+          AND survey_year = (SELECT MAX(survey_year) FROM surveys)
+        ORDER BY canopy_pct
+        """
+    ).fetchdf()
+
+
+def client() -> chatlas.Chat:
+    """A chat client, from `CHATLAS_CHAT_PROVIDER_MODEL` when it is set."""
+    return chatlas.ChatAuto(os.getenv("CHATLAS_CHAT_PROVIDER_MODEL") or DEFAULT_MODEL)
+
+
+def agent() -> commons.Commons:
+    """The canopy agent, over all three layers."""
+    return commons.Commons(
+        client(),
+        # Named, because a measure's `warehouse` argument is injected by name.
+        {"warehouse": commons.data_source(stands=stands, surveys=surveys)},
+        semantic_layer=commons.semantic_layer(canopy_by_county, low_canopy_stands),
+        context_layer=commons.context_layer(files=[notes_file()]),
+    )
+
+
+QUESTIONS = [
+    # Covered by a measure, so the answer should come back verified.
+    "Which county has the most canopy cover?",
+    "Which stands have the least canopy cover?",
+    # No measure covers a single stand's change over time, so this one has to
+    # reach run_sql, and the answer is untrusted or cited instead.
+    "How much canopy has Winberry Ridge gained since 2021?",
+]
+
+
+def tools_run(canopy: commons.Commons) -> list[str]:
+    """Which tools the conversation has run, in order."""
+    return [
+        content.name
+        for turn in canopy.get_turns()
+        for content in turn.contents
+        if isinstance(content, chatlas.ContentToolResult)
+    ]
+
+
+async def ask(canopy: commons.Commons, question: str) -> None:
+    print(f"\n{'=' * 72}\n>>> {question}\n{'=' * 72}", flush=True)
+    before = len(tools_run(canopy))
+    async for chunk in await canopy.stream_async(question):
+        print(chunk, end="", flush=True)
+    print(f"\n\n[tools: {', '.join(tools_run(canopy)[before:]) or 'none'}]", flush=True)
+
+
+async def main() -> None:
+    canopy = agent()
+    for question in QUESTIONS:
+        await ask(canopy, question)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

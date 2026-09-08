@@ -49,17 +49,17 @@ def client() -> Chat:
 # The agent builds its own chat, so what it registered and what it tells the
 # model are read off the agent rather than off the client it was given.
 def tool_names(agent: Commons) -> list[str]:
-    return [tool.name for tool in agent._client.get_tools()]
+    return [tool.name for tool in agent.get_tools() if isinstance(tool, Tool)]
 
 
 def prompt(agent: Commons) -> str:
-    system_prompt = agent._client.system_prompt
+    system_prompt = agent.system_prompt
     assert system_prompt is not None
     return system_prompt
 
 
 def agent_tool(agent: Commons, name: str) -> Tool:
-    tool = next(tool for tool in agent._client.get_tools() if tool.name == name)
+    tool = next(tool for tool in agent.get_tools() if tool.name == name)
     assert isinstance(tool, Tool)
     return tool
 
@@ -202,6 +202,75 @@ def test_get_turns_offers_chatlas_own_views(client: Chat, source: Any) -> None:
 
     assert agent.get_turns() == []
     assert agent.get_turns(include_system_prompt=True)[0].text == prompt(agent)
+
+
+# ---- reaching the chat ----------------------------------------------------
+
+
+def test_the_client_property_is_the_chat_the_agent_assembled(
+    client: Chat, source: Any
+) -> None:
+    agent = Commons(client, source)
+
+    # The chat the caller passed supplies the provider and model; what the
+    # tools and prompt hang off is the agent's own, so that is what a caller
+    # reaching past the forwarded methods has to be handed.
+    assert agent.client is not client
+    assert agent.client.get_tools()
+    assert agent.client.system_prompt is not None
+
+
+def test_the_escape_hatch_reaches_chatlas_own_surface(
+    client: Chat, source: Any
+) -> None:
+    agent = Commons(client, source)
+
+    agent.client.set_model_params(temperature=0.0)
+
+    assert agent.client.model == client.model
+
+
+def test_the_tools_it_registered_are_public(client: Chat, source: Any) -> None:
+    @measure(description="Total revenue.")
+    def total_revenue() -> float:
+        return 1700.0
+
+    agent = Commons(client, source, semantic_layer=semantic_layer(total_revenue))
+
+    names = tool_names(agent)
+
+    assert "call_measure" in names
+    assert names == [
+        tool.name for tool in agent.client.get_tools() if isinstance(tool, Tool)
+    ]
+
+
+def test_the_rendered_prompt_is_public(client: Chat, source: Any) -> None:
+    agent = Commons(client, source)
+
+    # A source-derived field, so this is the assembled prompt rather than
+    # whatever the template says on its own.
+    assert agent.system_prompt is not None
+    assert "sales" in agent.system_prompt
+
+
+def test_the_prompt_cannot_be_replaced_through_the_agent(
+    client: Chat, source: Any
+) -> None:
+    agent = Commons(client, source)
+
+    # A setter would discard the assembled prompt, which is the very thing
+    # the constructor warns about when the incoming client carries one.
+    with pytest.raises(AttributeError):
+        agent.system_prompt = "instead of all that"  # type: ignore[misc]
+
+
+def test_the_agent_still_carries_no_conversation_id(client: Chat, source: Any) -> None:
+    agent = Commons(client, source)
+
+    # shinychat assigns the id only to an object that already has the
+    # attribute (D5), so M8's adapter owns it and this object must not.
+    assert not hasattr(agent, "conversation_id")
 
 
 # ---- assembly -------------------------------------------------------------

@@ -2,8 +2,9 @@
 
 `pkg-r/R/commons.R` assembles the same agent for R, in the order this follows.
 A `chatlas.Chat` is composed rather than subclassed (D1), so the public
-surface is a choice R never had to make: what an agent needs, plus the
-chatlas methods the two turn rules have to hook.
+surface is a choice R never had to make: what an agent needs, the chatlas
+methods the two turn rules have to hook, and accessors for what R got by
+inheriting.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import warnings
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from typing import Any, Literal
 
-from chatlas import Chat, StreamController, Tool, Turn, UserTurn
+from chatlas import Chat, StreamController, Tool, ToolBuiltIn, Turn, UserTurn
 from chatlas.types import ChatResponse, Content, SubmitInputArgsT
 
 from ._backends import DuckDBBackend, EngineBackend
@@ -64,10 +65,11 @@ class Commons:
 
     The provider and the model come from `client`; the agent builds its own
     chat from them, so nothing it does reaches an object the caller still
-    holds, and nothing already on that object reaches the agent. A system
-    prompt set on it is ignored with a warning; use `instructions` to add to
-    commons' prompt instead. For best results, enable thinking where the
-    provider and model support it.
+    holds, and nothing already on that object reaches the agent. That chat
+    is the `client` property here. A system prompt set on the one passed in
+    is ignored with a warning; use `instructions` to add to commons' prompt
+    instead. For best results, enable thinking where the provider and model
+    support it.
 
     `data_sources` is a `DataSource`, or a mapping of name to `DataSource`;
     a measure can take a named source's connection as an argument named
@@ -252,6 +254,44 @@ class Commons:
         aside = provenance_aside(tag)
         if aside:
             yield aside
+
+    # ---- reaching the chat ------------------------------------------------
+
+    @property
+    def client(self) -> Chat:
+        """The chat this agent assembled, for whatever it does not forward.
+
+        Not the chat handed to the constructor: that one supplies the
+        provider and the model, and the agent builds its own around them, so
+        this is where the tools and the prompt actually live. Reach through
+        here for the rest of chatlas's surface, `set_model_params()` and
+        `list_models()` among it.
+
+        Asking this object a question skips the citation scanner and the
+        provenance tag, so `client.chat()` can answer with no marker at all.
+        Anything a person reads should go through `chat()` or
+        `stream_async()`.
+        """
+        return self._client
+
+    def get_tools(self) -> list[Tool | ToolBuiltIn]:
+        """The tools this agent's composition earned.
+
+        Typed as chatlas types it rather than as the `Tool` list commons
+        registers, because the `client` escape hatch can add a built-in tool
+        that this would then have to misreport.
+        """
+        return self._client.get_tools()
+
+    @property
+    def system_prompt(self) -> str | None:
+        """The rendered prompt this agent's model is working from.
+
+        Read-only: the constructor discards a prompt set on the incoming
+        chat, so assigning here would drop the assembled one the same way,
+        and quietly.
+        """
+        return self._client.system_prompt
 
     # ---- what the agent knows --------------------------------------------
 

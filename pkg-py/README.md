@@ -42,4 +42,8 @@ agent.chat("What is EMEA revenue?")
 
 Use `stream_async()` in place of `chat()` to stream an answer as it arrives. Its signature is chatlas's, so a chat UI can drive the agent directly.
 
+Beyond `chat()` and `stream_async()`, an agent exposes `get_tools()` and `system_prompt` for what it assembled, and `client` for the chatlas `Chat` underneath. Ask questions through the agent rather than through `client`: that one skips the citation scanner and the provenance tag, so it can answer with no marker.
+
+`demo.py` here is a fuller worked example, an agent over made-up forest canopy data with two measures and a context layer, asked from the terminal. `demo.ipynb` is the same agent in a notebook, with cells for reading what it registered and adding a measure of your own. `pkg-r/inst/demo.R` is the R package's version of it, behind a Shiny front end.
+
 Behavior that both implementations must agree on belongs in [`tests/shared/`](https://github.com/posit-dev/commons/tree/main/tests/shared) at the repository root, which that directory's README defines as the authority. The provenance tag rules and display copy, the citation dialect, and the context layer's frontmatter handling are governed that way; both suites run those cases.
