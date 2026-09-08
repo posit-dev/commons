@@ -4,7 +4,7 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from chatlas import ContentToolRequest, StreamController
+from chatlas import AssistantTurn, ContentToolRequest, StreamController, UserTurn
 from chatlas.types import ContentText
 
 from commons import data_source
@@ -134,3 +134,57 @@ def test_conversation_id_rejects_a_non_string() -> None:
 
     with pytest.raises(TypeError, match="must be a string or None"):
         client.conversation_id = 7  # type: ignore[assignment]
+
+
+# ---- bookmarking ------------------------------------------------------------
+
+
+def test_the_adapter_satisfies_shinychats_own_protocols() -> None:
+    """The two `isinstance` gates, checked against upstream's definitions."""
+    pytest.importorskip("shinychat")
+    from shinychat._chat_bookmark import ClientWithState
+    from shinychat._history_client import ClientWithTurns
+
+    client = CommonsChatClient(agent())
+
+    assert isinstance(client, ClientWithTurns)
+    assert isinstance(client, ClientWithState)
+
+
+async def test_get_state_matches_the_chatlas_bookmark_payload() -> None:
+    """A bookmark either object writes stays readable by the other."""
+    subject = agent()
+    subject.set_turns([UserTurn("How much?"), AssistantTurn("1400.")])
+    client = CommonsChatClient(subject)
+
+    state = await client.get_state()
+
+    assert state["version"] == 1
+    assert [turn["role"] for turn in state["turns"]] == ["user", "assistant"]
+
+
+async def test_set_state_restores_the_turns() -> None:
+    """Restore rebuilds chatlas turns from the saved payload."""
+    saved = CommonsChatClient(agent())
+    saved.set_turns([UserTurn("How much?"), AssistantTurn("1400.")])
+    payload = await saved.get_state()
+
+    restored = CommonsChatClient(agent())
+    await restored.set_state(payload)
+
+    assert [turn.role for turn in restored.get_turns()] == ["user", "assistant"]
+
+
+async def test_set_state_rejects_an_unknown_version() -> None:
+    """The same guard chatlas's own restore applies."""
+    client = CommonsChatClient(agent())
+
+    with pytest.raises(ValueError, match="version"):
+        await client.set_state({"version": 2, "turns": []})
+
+
+async def test_set_state_rejects_a_payload_that_is_not_a_mapping() -> None:
+    client = CommonsChatClient(agent())
+
+    with pytest.raises(ValueError):
+        await client.set_state([])

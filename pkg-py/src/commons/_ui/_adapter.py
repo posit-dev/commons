@@ -101,3 +101,49 @@ class CommonsChatClient:
         # skips it in silence otherwise, which leaves the id unset and every
         # turn reading as its own conversation.
         self._agent.client.conversation_id = value
+
+    # ---- bookmarking ------------------------------------------------------
+
+    async def get_state(self) -> dict[str, Any]:
+        """The turns, in the payload chatlas's own bookmark hook writes.
+
+        shinychat builds these for a `chatlas.Chat` and refuses to bookmark
+        any other object that lacks them, so they are implemented here rather
+        than forwarded. The format is chatlas's, so a bookmark written by
+        either object stays readable by the other.
+        """
+        return {
+            "version": 1,
+            "turns": [_serialize_turn(turn) for turn in self.get_turns()],
+        }
+
+    async def set_state(self, state: Any) -> None:
+        """Restore turns from a payload `get_state()` wrote.
+
+        A malformed payload raises `ValueError`, which is what chatlas's own
+        restore hook raises, rather than the `TypeError` a bare type check
+        would suggest.
+        """
+        from chatlas import Turn
+
+        if not isinstance(state, dict):
+            raise ValueError("A chat bookmark value must be a dictionary.")  # noqa: TRY004
+        version = state.get("version")
+        if version != 1:
+            raise ValueError(f"Unsupported chat bookmark version: {version}")
+        turns = state.get("turns")
+        if not isinstance(turns, list):
+            raise ValueError("A chat bookmark's `turns` must be a list.")  # noqa: TRY004
+
+        self.set_turns([Turn.model_validate(turn) for turn in turns])
+
+
+def _serialize_turn(turn: Turn) -> dict[str, Any]:
+    # htmltools objects reach a turn through a tool result, and only shinychat
+    # knows how to serialize them, so use its fallback where it is installed
+    # and let pydantic's own handling stand where it is not.
+    try:
+        from shinychat._htmltools_serialization import serialize_htmltools
+    except ImportError:
+        return turn.model_dump(mode="json")
+    return turn.model_dump(mode="json", fallback=serialize_htmltools)
