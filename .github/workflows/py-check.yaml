@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: pkg-py
@@ -34,6 +34,9 @@ jobs:
       - name: Lint
         run: uv run ruff check
       - name: Type check
-        run: uv run pyrefly check
+        # Explicit paths: with none, pyrefly consults the repo's git ignore
+        # files, and a worktree checked out under an ignored directory
+        # silently type-checks nothing.
+        run: uv run pyrefly check src tests
       - name: Test
         run: uv run pytest

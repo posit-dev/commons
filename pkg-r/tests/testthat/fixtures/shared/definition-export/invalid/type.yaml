@@ -1,0 +1,11 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: orders
+    columns:
+      - name: amount
+        type: number(quantity)
+        range: [0, 1000]
+    definitions:
+      - name: broken
+        expr: LOWER(amount)

@@ -44,23 +44,24 @@ PROVENANCE_DISPLAY: dict[Tag, ProvenanceDisplay] = {
     Tag.A: ProvenanceDisplay(
         label="Verified answer",
         icon="trusted-icon.svg",
-        body=(
-            "This answer comes from a governed calculation defined by your data team."
-        ),
+        body="This answer comes from a trusted calculation.",
         pill_class="trusted",
     ),
     Tag.B: ProvenanceDisplay(
         label="Cited",
         icon=None,
-        body="This answer includes supporting text verified against a trusted source.",
+        body=(
+            "This answer cites context from a trusted source that supports its "
+            "approach."
+        ),
         pill_class="cited",
     ),
     Tag.C: ProvenanceDisplay(
         label="Untrusted",
         icon="warning-icon.svg",
         body=(
-            "This answer was not produced by a governed calculation and has "
-            "no verified supporting citation. AI can be wrong."
+            "This answer was not produced by a trusted calculation and does not "
+            "cite trusted context."
         ),
         pill_class="caution",
     ),

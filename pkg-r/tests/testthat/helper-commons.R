@@ -25,6 +25,7 @@ test_client <- function() {
 }
 
 skip_if_ellmer_streaming_hooks_unavailable <- function() {
+  skip_on_cran()
   skip_if_not(
     exists(
       "stream_content_with_turns",

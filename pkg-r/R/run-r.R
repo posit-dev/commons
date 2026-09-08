@@ -279,6 +279,7 @@ new_r_worker <- function(network = "none", protection = "sandbox") {
   worker$synced <- 0L
   worker$tail <- NULL
   worker$pending <- 0L
+  worker$reap <- NULL
   worker$last_used <- Sys.time()
   worker$runtime <- worker_runtime()
   # Close the child process when the agent is garbage-collected, so a session
@@ -369,6 +370,7 @@ commons_dll_path <- function() {
 }
 
 worker_close <- function(worker) {
+  cancel_worker_reap(worker)
   if (!is.null(worker$rs)) {
     try(worker$rs$close(), silent = TRUE)
     worker$rs <- NULL
@@ -424,13 +426,16 @@ worker_call <- function(runtime, name, args) {
 }
 
 # Close the worker after a quiet stretch; it respawns lazily on the next
-# call. Stray timers are harmless: they check recency before acting.
+# call. One timer per worker, not one per call: shiny::testServer() reads its
+# outputs through shiny:::wait_for_it(), which spins until the whole later
+# queue drains, so a stray timer stalls the reader for its full delay.
 schedule_worker_reap <- function(
   worker,
   idle = getOption("commons.run_r_idle_timeout", 600)
 ) {
   worker$last_used <- Sys.time()
-  later::later(
+  cancel_worker_reap(worker)
+  worker$reap <- later::later(
     function() {
       quiet <- difftime(Sys.time(), worker$last_used, units = "secs") >= idle
       if (worker$pending == 0L && quiet) {
@@ -439,6 +444,15 @@ schedule_worker_reap <- function(
     },
     delay = idle + 1
   )
+  invisible(worker)
+}
+
+cancel_worker_reap <- function(worker) {
+  if (!is.null(worker$reap)) {
+    worker$reap()
+    worker$reap <- NULL
+  }
+  invisible(worker)
 }
 
 # Resolve when the in-flight $call() completes, without blocking: later_fd
@@ -453,9 +467,24 @@ worker_await <- function(
   promises::promise(function(resolve, reject) {
     settled <- FALSE
     timed_out <- FALSE
+    cancel_kill <- NULL
+
+    # later::later() and later::later_fd() each return their own canceller.
+    # Hand every one of them back once the call settles, so a caller that
+    # waits on later::loop_empty() is not held up by a timer for a call that
+    # already finished. Calling one after its callback ran is a safe no-op.
+    release <- function() {
+      for (cancel in list(cancel_timeout, cancel_kill, cancel_watch)) {
+        if (!is.null(cancel)) {
+          cancel()
+        }
+      }
+    }
+
     settle <- function(value) {
       if (!settled) {
         settled <<- TRUE
+        release()
         resolve(value)
       }
     }
@@ -468,14 +497,14 @@ worker_await <- function(
       settle(list(failure = reason))
     }
 
-    later::later(
+    cancel_timeout <- later::later(
       function() {
         if (settled) {
           return()
         }
         timed_out <<- TRUE
         try(rs$interrupt(), silent = TRUE)
-        later::later(
+        cancel_kill <<- later::later(
           function() {
             if (!settled) {
               kill_worker(sprintf(
@@ -499,7 +528,7 @@ worker_await <- function(
           }
           msg <- tryCatch(rs$read(), error = function(e) NULL)
           if (is.null(msg)) {
-            poll()
+            cancel_watch <<- poll()
           } else if (msg$code == 200) {
             if (timed_out) {
               settle(list(failure = sprintf(
@@ -516,12 +545,12 @@ worker_await <- function(
               "the R session crashed and was restarted. Session variables were reset."
             )
           } else {
-            poll()
+            cancel_watch <<- poll()
           }
         },
         readfds = fd
       )
     }
-    poll()
+    cancel_watch <- poll()
   })
 }

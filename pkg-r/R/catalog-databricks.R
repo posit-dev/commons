@@ -300,7 +300,7 @@ databricks_exact_relation <- function(con, id, call = rlang::caller_env()) {
   } else {
     databricks_list_unity_relations(con, complete, call = call)
   }
-  catalog_match_exact_relation(relations, id)
+  catalog_match_exact_relation(relations, id, requested = complete)
 }
 
 databricks_relations_from_information_schema <- function(
@@ -401,17 +401,40 @@ databricks_list_hive_relations <- function(
     }
   )
   names(rows) <- tolower(names(rows))
-  lapply(rows$tablename, function(table) {
+  temporary <- databricks_hive_temporary(rows)
+  lapply(seq_along(rows$tablename), function(i) {
+    table <- rows$tablename[[i]]
     list(
-      id = DBI::Id(
-        catalog = components[["catalog"]],
-        schema = components[["schema"]],
-        table = table
-      ),
+      id = if (temporary[[i]]) {
+        DBI::Id(table = table)
+      } else {
+        DBI::Id(
+          catalog = components[["catalog"]],
+          schema = components[["schema"]],
+          table = table
+        )
+      },
       kind = NULL,
       description = NULL
     )
   })
+}
+
+# `SHOW TABLES` lists the session's temporary views alongside the schema's own
+# tables, reporting them with an empty database and `isTemporary` set. A
+# temporary view belongs to no schema and answers only to its bare name, so
+# qualifying it with the listed namespace would build an id naming nothing.
+databricks_hive_temporary <- function(rows) {
+  if ("istemporary" %in% names(rows)) {
+    flag <- as.logical(rows$istemporary)
+    return(!is.na(flag) & flag)
+  }
+  column <- intersect(c("database", "namespace"), names(rows))
+  if (length(column) == 0L) {
+    return(rep(FALSE, length(rows$tablename)))
+  }
+  values <- as.character(rows[[column[[1]]]])
+  is.na(values) | !nzchar(values)
 }
 
 databricks_read_semantic_model <- function(

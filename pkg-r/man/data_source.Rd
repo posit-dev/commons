@@ -14,11 +14,11 @@ a table name the agent can query.}
 \item{tables}{Which tables to expose, used when a connection or a board is
 supplied.
 
-For a connection, a character vector of table names, schema-qualified
-strings like \code{"schema.table"}, or \code{DBI::Id} objects. Defaults to every
-table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings containing dots are
-interpreted as schema-qualified names; use \code{DBI::Id(table = "a.b")} for
-literal table names containing dots. For Snowflake and Databricks
+For a connection, a character vector of table names, qualified strings
+like \code{"schema.table"} or \code{"catalog.schema.table"}, or \code{DBI::Id} objects.
+Defaults to every table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings
+containing dots are interpreted as qualified names, at most three parts;
+use \code{DBI::Id(table = "a.b")} for literal table names containing dots. For Snowflake and Databricks
 connections, a \code{DBI::Id} ending in \code{catalog} or \code{schema} selects every
 table and view in that namespace. Leaving \code{tables} unset selects the
 current schema. A Databricks \code{hive_metastore} selection must include a
@@ -64,18 +64,17 @@ validated against the board at construction (a single listing call), but
 each pin is downloaded only when its table is first used. Parquet and
 CSV pins are then queried in place -- a DuckDB view over the downloaded
 file, with no copy into the database -- while other formats (e.g. RDS)
-are read and loaded at first use. Calling the agent's
-\code{prewarm_sources()} method (see \code{\link[=commons_prewarm]{commons_prewarm()}}) starts a background
-process that downloads the remaining pins into the local pins cache, so
-a first use typically only reads an already-downloaded file. Since the
-pins cache is on disk, \code{prewarm_sources()} can also run ahead of
-deployment to warm the cache the deployed app will read. A table
-reflects the pin version resolved at first use and is not refreshed for
-the lifetime of the data source; if the board deletes that version
-(e.g. a rewrite on a non-versioned board), the next query re-resolves
-the latest version. If a pin can't be read (e.g. a network failure),
-the error surfaces at that first use and the read is retried on the
-next one.
+are read and loaded at first use. Calling the agent's \code{prewarm()} method
+(see \code{\link[=commons]{commons()}}) starts a background process that
+downloads the remaining pins into the local pins cache, so a first use
+typically only reads an already-downloaded file. Since the pins cache is
+on disk, \code{prewarm()} can also run ahead of deployment to warm the
+cache the deployed app will read. A table reflects the pin version
+resolved at first use and is not refreshed for the lifetime of the data
+source; if the board deletes that version (e.g. a rewrite on a
+non-versioned board), the next query re-resolves the latest version. If
+a pin can't be read (e.g. a network failure), the error surfaces at that
+first use and the read is retried on the next one.
 }
 }
 \section{Data dictionaries}{
@@ -106,10 +105,11 @@ rejected before reaching the database. For the in-process DuckDB built from
 data frames, commons additionally disables extension loading and filesystem
 access. These are safeguards, not a sandbox: when you supply your own
 connection, still open it in read-only mode where the backend supports it.
-Snowflake and Databricks sources snapshot the principal, active role, and
-namespace at creation, then reject catalog access and trusted calculations
-after those values change. Authored and native semantic material is exposed
-only after a zero-row query succeeds for the current principal.
+Snowflake and Databricks sources snapshot the principal and namespace at
+creation, and Snowflake its active and secondary roles as well, then reject
+catalog access and trusted calculations after any of those change. Authored
+and native semantic material is exposed only after a zero-row query
+succeeds for the current principal.
 }
 
 \examples{

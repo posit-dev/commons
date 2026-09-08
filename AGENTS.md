@@ -1,8 +1,8 @@
-This repository is a monorepo holding two implementations of commons: the R package in `pkg-r/`, the Python package in `pkg-py/`, and cross-language spec fixtures in `tests/shared/`. Read `pkg-r/README.Rmd` to understand the goal of the project, and `README.md` for how the two packages relate.
+This repository is a monorepo holding two implementations of commons: the R package in `pkg-r/`, the Python package in `pkg-py/`, cross-language spec fixtures in `tests/shared/`, and the shared artifacts both packages ship in `prompts/`. Read `pkg-r/README.Rmd` to understand the goal of the project, and `README.md` for how the two packages relate.
 
 If you worked in this repository before the two packages were split apart, `MIGRATING.md` covers what moved and what to change in your setup.
 
-Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run pytest`, `uv run ruff check`). CI is scoped the same way.
+Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run ruff check`, `uv run pyrefly check src tests`, `uv run pytest`). CI is scoped the same way. Run all of a package's checks before pushing; the pyrefly invocation needs its explicit `src tests` paths, because with none it consults the repo's git ignore files and a worktree checked out under an ignored directory silently type-checks nothing.
 
 Neither package has been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
 
@@ -11,6 +11,8 @@ Use soft wrapping for prose in Markdown files, including skills and vignettes.
 Both packages are first-class implementations. Never describe the Python package as a port, translation, or mirror of the R one, in code comments, docstrings, documentation, commit messages, or package metadata. Where one implementation needs to point at the other, name the shared contract that governs them both, or refer to the sibling file plainly.
 
 Anything both implementations must agree on belongs in `tests/shared/` as an executable fixture read by both suites, not as prose and not as a per-language copy. A Python-only or R-only copy of a shared behavior is a review defect. See `tests/shared/README.md`.
+
+Artifacts both packages ship, rather than behavior both must implement, live at the repository root instead: `prompts/` today. Neither an R package nor a wheel can read a file outside its own directory, so `scripts/sync-shared.sh` copies each source into the packages, the copies are committed, and CI fails when one is stale. Edit the root source and re-run the script; a hand-edited copy is a review defect. See `prompts/README.md`.
 
 This governs behavior a user can observe, not implementation detail. Each package should read idiomatically in its own language, and minor differences between them are fine. Weigh how often a difference would surface and what it costs when it does: a rare one that fails safely is cheaper to accept than to engineer away. See `tests/shared/README.md` for the worked example.
 

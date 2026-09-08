@@ -45,10 +45,11 @@ write_conversation_review <- function(
   call = rlang::caller_env()
 ) {
   id <- names(trajectories)[[conversation]]
+  record <- trajectories[[conversation]]
   notes <- Filter(\(note) identical(note$conversation, id), notes)
   conversation_flags <- review_conversation_flags(
     id,
-    trajectories[[conversation]],
+    record$turns,
     flags
   )
   file <- review_document_path(review_dir, id)
@@ -79,7 +80,7 @@ write_conversation_review <- function(
 
   markdown <- review_document(
     id,
-    trajectories[[conversation]],
+    record,
     conversation_flags,
     notes
   )
@@ -163,19 +164,21 @@ review_user <- function(session) {
 
 review_document <- function(
   id,
-  turns,
+  conversation,
   flags,
   notes,
   updated_at = review_timestamp()
 ) {
-  last_active <- attr(turns, "last_active") %||% as.POSIXct(NA)
   metadata <- list(
     generated_by = "commons::trajectory_review",
     schema_version = 1L,
     conversation = id
   )
-  if (!is.na(last_active)) {
-    metadata$last_active <- format(last_active, "%Y-%m-%dT%H:%M:%S%z")
+  if (!is.na(conversation$last_active)) {
+    metadata$last_active <- format(
+      conversation$last_active,
+      "%Y-%m-%dT%H:%M:%S%z"
+    )
   }
   metadata <- c(
     metadata,
@@ -189,7 +192,7 @@ review_document <- function(
     )
   )
   frontmatter <- yaml::as.yaml(metadata, indent.mapping.sequence = TRUE)
-  body <- review_document_body(id, turns, flags, notes)
+  body <- review_document_body(id, conversation$turns, flags, notes)
 
   paste0("---\n", frontmatter, "---\n\n", body, "\n")
 }

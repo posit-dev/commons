@@ -416,3 +416,59 @@ test_that("run_sql description explains compiled tokens", {
   expect_match(run_sql_description(registry), "compiled", fixed = TRUE)
   expect_no_match(run_sql_description(empty), "tokens")
 })
+
+test_that("token expansion matches the shared contract", {
+  spec <- shared_fixture("definition-rendering")$expand_tokens
+  expect_gt(length(spec$cases), 0)
+
+  for (case in spec$cases) {
+    defs <- fixture_registry(unlist(case$records))$defs
+    if (is.null(case$expanded)) {
+      expect_error(
+        expand_definitions(case$sql, defs),
+        definition_refusal_pattern[[case$reason]],
+        info = case$name
+      )
+      next
+    }
+    expansion <- expand_definitions(case$sql, defs)
+    expect_identical(expansion$sql, case$expanded, info = case$name)
+    expect_identical(
+      as.character(expansion$applied$name),
+      as.character(unlist(case$applied)),
+      info = case$name
+    )
+  }
+})
+
+test_that("the definition gist matches the shared contract", {
+  spec <- shared_fixture("definition-rendering")$gist
+  expect_gt(length(spec$cases), 0)
+
+  for (case in spec$cases) {
+    expect_identical(
+      unname(definition_gist(list(fixture_definition(case$record)))),
+      case$expected,
+      info = case$name
+    )
+  }
+})
+
+test_that("the definition index matches the shared contract", {
+  spec <- shared_fixture("definition-rendering")$index
+  expect_gt(length(spec$cases), 0)
+
+  for (case in spec$cases) {
+    registry <- fixture_registry(unlist(case$records))
+    expect_identical(
+      definition_index_text(registry, cap_chars = case$cap_chars),
+      case$text,
+      info = case$name
+    )
+    expect_identical(
+      definitions_overflow(registry, cap_chars = case$cap_chars),
+      case$overflows,
+      info = case$name
+    )
+  }
+})

@@ -111,7 +111,7 @@ commons_server <- function(id, client, ...) {
     attributes = list("commons.server.id" = id)
   )
 
-  commons_prewarm(client)
+  prewarm_on_idle(client)
 
   chat <- shinychat::chat_server(id, client = client, ...)
   # shinychat owns the conversation identity (it sets the client's
@@ -123,96 +123,18 @@ commons_server <- function(id, client, ...) {
   chat
 }
 
-#' Pre-warm a commons agent during post-startup idle time
-#'
-#' A [commons()] agent defers two kinds of setup to first use, and exposes a
-#' `prewarm()` method for each so you can move the cost off the first
-#' question:
-#'
-#' * `agent$prewarm_context()` builds the context index (the store behind
-#'   `search_context`). The index is a persistent, content-addressed file,
-#'   so the build happens once per content version: later sessions open it
-#'   in milliseconds, and it can be built offline ahead of deployment. The
-#'   cache root resolves from the `commons.context_cache` option, the
-#'   `COMMONS_CONTEXT_CACHE` or `CONNECT_CONTENT_DATA_DIR` environment
-#'   variables, an `app_cache/commons` directory beside a Shiny app, or the
-#'   per-user cache directory, in that order. This resolution ladder (and
-#'   the content-addressed, age-pruned cache design generally) follows the
-#'   file cache in the sass package, which has run in production Shiny
-#'   deployments for years. Note that `app_cache/` is
-#'   excluded from deployed bundles (rsconnect treats it as server-side
-#'   scratch), so it is shared across the sessions of one deployment but
-#'   rebuilt after a redeploy; to ship a pre-built store with the app,
-#'   point `commons.context_cache` at a directory inside the app and run
-#'   `prewarm_context()` before deploying. The cache is capped at 256 MB
-#'   with least-recently-used eviction (option
-#'   `commons.context_cache_max_size`, in bytes; a single store larger than
-#'   the cap is kept, with a warning). Set
-#'   `options(commons.context_cache = FALSE)` (or the
-#'   `COMMONS_CONTEXT_CACHE` environment variable to `false`) to disable
-#'   persistence entirely.
-#' * `agent$prewarm_sources()` starts a background process that downloads
-#'   any uncached pins into the local pins cache (see [data_source()]).
-#'   Because the pins cache is on disk, this can also run ahead of
-#'   deployment — outside the Shiny runtime entirely — and the deployed
-#'   app reads the warmed cache.
-#'
-#' `agent$prewarm()` calls both. Call `commons_prewarm()` in a Shiny server
-#' function to defer warming to post-startup idle time, so it happens while
-#' the user reads the welcome message. Outside a running Shiny app (e.g. a
-#' pre-deploy warm-up script) there is no [later::later()] event loop, so
-#' `commons_prewarm()` warms synchronously instead. Note that
-#' `commons_prewarm()` always downgrades failures to warnings (see below),
-#' even on this synchronous path — a pre-deploy script that should fail the
-#' deploy on a cold cache must call `agent$prewarm()` directly.
-#'
-#' `prewarm()` lets failures propagate, since a direct call is typically
-#' warming caches ahead of deployment and a mere warning would sail through
-#' a deploy script. `commons_prewarm()` downgrades such failures to
-#' warnings: pre-warming is a pure optimization — everything it builds is
-#' rebuilt lazily at first use — and an error escaping the [later::later()]
-#' callback would stop the app.
-#'
-#' @param client A [commons()] agent.
-#'
-#' @return `NULL`, invisibly.
-#'
-#' @examples
-#' \dontrun{
-#' server <- function(input, output, session) {
-#'   agent <- commons(
-#'     ellmer::chat_anthropic(),
-#'     data_sources = data_source(sales = sales)
-#'   )
-#'   commons_prewarm(agent)
-#'   shinychat::chat_server("chat", client = agent)
-#' }
-#' }
-#'
-#' @export
-commons_prewarm <- function(client) {
-  check_commons_client(client)
-  # An error escaping a later::later() callback stops the Shiny app, and
-  # pre-warming is a pure optimization, so downgrade failures to warnings.
-  warm <- function() {
+# An error escaping a later::later() callback would stop the app, so
+# downgrade failures to warnings.
+prewarm_on_idle <- function(client) {
+  later::later(function() {
     tryCatch(
       client$prewarm(),
       error = function(err) {
-        # Assign first: the raw message can contain braces (DuckDB errors
-        # embed JSON), which cli would try to interpolate -- and an error
-        # escaping this handler would stop the app.
         msg <- conditionMessage(err)
         cli::cli_warn("{msg}")
       }
     )
-  }
-  # later::later() only fires while an event loop is running; outside Shiny
-  # (e.g. a pre-deploy warm-up script) the callback would never run.
-  if (is_shiny_app()) {
-    later::later(warm)
-  } else {
-    warm()
-  }
+  })
   invisible(NULL)
 }
 

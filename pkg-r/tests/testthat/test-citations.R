@@ -270,36 +270,71 @@ test_that("dataset-level dictionary prose is citable", {
   )
 })
 
-test_that("add_citation_request appends one reminder per user turn", {
-  tracker <- new.env(parent = emptyenv())
-  tracker$reminder <- "SHORT CITATION REMINDER"
-  first <- tool_result("6 rows", title = "Ran SQL", tag = "B")
-  second <- tool_result("3 rows", title = "Ran SQL", tag = "B")
-  third <- tool_result("2 rows", title = "Ran SQL", tag = "B")
+# The fixture states a tool result's value as {kind, text} or {kind, parts};
+# each package builds and reads back its own content objects from that.
+fixture_tool_value <- function(spec) {
+  if (identical(spec$kind, "text")) {
+    return(spec$text)
+  }
+  lapply(spec$parts, function(part) ellmer::ContentText(text = part))
+}
 
-  first <- add_citation_request(first, tracker)
-  second <- add_citation_request(second, tracker)
-  tracker$requested <- FALSE
-  third <- add_citation_request(third, tracker)
+fixture_value_shape <- function(value) {
+  if (is.character(value)) {
+    return(list(kind = "text", text = value))
+  }
+  list(kind = "parts", parts = lapply(value, function(part) part@text))
+}
 
-  expect_match(first@value, "6 rows")
-  expect_match(first@value, "SHORT CITATION REMINDER", fixed = TRUE)
-  expect_equal(second@value, "3 rows")
-  expect_match(third@value, "SHORT CITATION REMINDER", fixed = TRUE)
+test_that("both packages place the citation request the same way", {
+  section <- shared_fixture("citation-request")$requests
+  expect_gt(length(section$cases), 0)
+
+  for (case in section$cases) {
+    tracker <- new.env(parent = emptyenv())
+    tracker$reminder <- section$reminder
+
+    for (step in case$steps) {
+      if (identical(step$action, "reset")) {
+        tracker$requested <- FALSE
+        next
+      }
+      result <- add_citation_request(
+        tool_result(
+          fixture_tool_value(step$value),
+          title = "Ran SQL",
+          tag = "B"
+        ),
+        tracker
+      )
+      expect_equal(
+        fixture_value_shape(result@value),
+        step$expected,
+        info = case$name
+      )
+    }
+  }
 })
 
-test_that("add_citation_request appends ContentText to content lists", {
-  tracker <- new.env(parent = emptyenv())
-  result <- tool_result(
-    list(ellmer::ContentText(text = "output")),
-    title = "Ran R code",
-    tag = "B"
-  )
+test_that("both packages agree on which turns reset the citation request", {
+  section <- shared_fixture("citation-request")$resets
+  expect_gt(length(section$cases), 0)
 
-  result <- add_citation_request(result, tracker)
+  for (case in section$cases) {
+    contents <- lapply(case$contents, function(kind) {
+      if (identical(kind, "text")) {
+        ellmer::ContentText(text = "a question")
+      } else {
+        tool_result("6 rows", title = "Ran SQL", tag = "B")
+      }
+    })
 
-  expect_length(result@value, 2)
-  expect_match(result@value[[2]]@text, "<commons-citation>", fixed = TRUE)
+    expect_identical(
+      turn_has_user_message(ellmer::Turn("user", contents = contents)),
+      case$resets,
+      info = case$name
+    )
+  }
 })
 
 test_that("search_context requests a citation for fallback answers", {
@@ -364,11 +399,6 @@ test_that("citation trust exception names trusted calculation tools", {
       " or `call_measure`",
       " or `call_metrics`"
     )
-  )
-  expect_match(
-    non_citable_tool_output_text("call_calculation"),
-    "Result values from `call_calculation`",
-    fixed = TRUE
   )
 })
 

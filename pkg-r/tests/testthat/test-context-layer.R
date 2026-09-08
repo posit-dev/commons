@@ -1,3 +1,61 @@
+test_that("strip_frontmatter matches the shared cases", {
+  cases <- shared_fixture("context_layer")$strip_frontmatter$cases
+
+  for (case in cases) {
+    expect_identical(
+      strip_frontmatter(case$input),
+      case$expected,
+      info = case$name
+    )
+  }
+})
+
+test_that("dictionary_context_chunks matches the shared cases", {
+  cases <- shared_fixture("context_layer")$dictionary_context_chunks$cases
+
+  for (case in cases) {
+    dictionary <- if (is.null(case$dictionary)) {
+      NULL
+    } else {
+      new_data_dictionary(case$dictionary)
+    }
+    expect_identical(
+      dictionary_context_chunks(dictionary),
+      as.character(unlist(case$expected)),
+      info = case$name
+    )
+  }
+})
+
+test_that("augment_context_layer matches the shared cases", {
+  cases <- shared_fixture("context_layer")$augment_context_layer$cases
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    layer <- if (is.null(case$docs)) {
+      NULL
+    } else {
+      new_context_layer(as.character(unlist(case$docs)))
+    }
+    sources <- lapply(case$dictionaries, function(spec) {
+      dictionary <- if (is.null(spec)) NULL else new_data_dictionary(spec)
+      suppressMessages(data_source(sales = test_sales(), dictionary = dictionary))
+    })
+
+    augmented <- augment_context_layer(layer, sources)
+
+    if (is.null(case$expected_docs)) {
+      expect_null(augmented, info = case$name)
+    } else {
+      expect_identical(
+        context_layer_state(augmented)$docs,
+        as.character(unlist(case$expected_docs)),
+        info = case$name
+      )
+    }
+  }
+})
+
 test_that("context_layer indexes files and finds relevant chunks", {
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
@@ -90,7 +148,7 @@ test_that("the context store persists on disk and is shared across layers", {
   expect_match(context_search(layer1, "revenue")[[1]], "booked")
   expect_true(file.exists(store_path))
 
-  # A distinct layer with the same docs opens the same on-disk store
+
   layer2 <- context_layer(files = path)
   expect_identical(
     context_store_path(context_layer_state(layer2)$docs),
@@ -98,7 +156,7 @@ test_that("the context store persists on disk and is shared across layers", {
   )
   expect_match(context_search(layer2, "revenue")[[1]], "booked")
 
-  # Different docs key a different store
+
   expect_false(identical(context_store_path("other docs"), store_path))
 })
 
@@ -146,7 +204,7 @@ test_that("an unwritable cache dir warns once and falls back to a tempdir", {
     expect_match(context_search(layer, "revenue")[[1]], "booked"),
     "Falling back to a per-session temporary directory"
   )
-  # The fallback is stable within the session and warns only once
+
   expect_no_warning(context_cache_dir_safe())
   expect_identical(context_cache_dir_safe(), context_cache_state$fallback_dir)
 })
@@ -163,7 +221,7 @@ test_that("prune_context_cache() is throttled across builds", {
   prune_context_cache(dir, max_size = 1)
   expect_true(file.exists(stale))
 
-  # Twenty builds since the throttle reset forces a prune
+
   context_cache_state$n_builds <- 19
   prune_context_cache(dir, max_size = 1)
   expect_false(file.exists(stale))
@@ -185,13 +243,70 @@ test_that("prune_context_cache() evicts least-recently-used stores over the size
   local_context_cache_state()
   context_cache_state$n_builds <- 0
   context_cache_state$last_prune <- NULL
-  # Cap fits two stores; the oldest is evicted
+
   cap <- 2 * file.size(newest)
   prune_context_cache(dir, max_size = cap)
 
   expect_false(file.exists(oldest))
   expect_true(file.exists(middle))
   expect_true(file.exists(newest))
+})
+
+test_that("an unwritable cache dir surfaces only the once-per-session warning", {
+  skip_on_os("windows") # Sys.chmod() read-only bits aren't enforced there
+  skip_if(.Platform$OS.type == "unix" && Sys.info()[["user"]] == "root")
+
+  # The cache dir itself is unwritable, so the probe's file.create() fails
+  readonly <- withr::local_tempdir()
+  withr::defer(Sys.chmod(readonly, mode = "0755"))
+  Sys.chmod(readonly, mode = "0555")
+  withr::local_options(commons.context_cache = readonly)
+
+  context_cache_state$warned <- NULL
+  context_cache_state$fallback_dir <- NULL
+
+
+  warnings <- character()
+  withCallingHandlers(
+    context_cache_dir_safe(),
+    warning = function(w) {
+      warnings <<- c(warnings, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_length(warnings, 1)
+  expect_match(warnings, "Falling back to a per-session temporary directory")
+
+  warnings <- character()
+  withCallingHandlers(
+    context_cache_dir_safe(),
+    warning = function(w) {
+      warnings <<- c(warnings, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_length(warnings, 0)
+})
+
+test_that("prune_context_cache() tolerates stores vanishing mid-prune", {
+  dir <- withr::local_tempdir()
+  store <- file.path(dir, "store.duckdb")
+  writeLines(strrep("x", 1000), store)
+
+  context_cache_state$n_builds <- 0
+  context_cache_state$last_prune <- NULL
+
+  # A broken symlink is listed but stats as NA, like a store a concurrent
+  # pruner deleted mid-prune
+  skip_on_os("windows") # symlinks need elevated privileges there
+  ghost <- file.path(dir, "ghost.duckdb")
+  file.symlink(file.path(dir, "no-such-target"), ghost)
+
+  context_cache_state$warned_size <- NULL
+  expect_no_warning(
+    expect_no_error(prune_context_cache(dir, max_size = file.size(store)))
+  )
+  expect_true(file.exists(store))
 })
 
 test_that("prune_context_cache() keeps a single store larger than the cap", {
@@ -210,7 +325,7 @@ test_that("prune_context_cache() keeps a single store larger than the cap", {
   )
   expect_true(file.exists(big))
 
-  # Warns only once per session
+
   context_cache_state$n_builds <- 0
   context_cache_state$last_prune <- NULL
   expect_no_warning(
@@ -289,7 +404,7 @@ test_that("COMMONS_CONTEXT_CACHE can disable the cache", {
   withr::local_options(commons.context_cache = NULL)
   withr::local_envvar(COMMONS_CONTEXT_CACHE = "FALSE")
   expect_false(context_cache_enabled())
-  # A false-like value is never mistaken for a path
+
   withr::local_envvar(CONNECT_CONTENT_DATA_DIR = "/connect/data")
   expect_identical(context_cache_dir(), "/connect/data")
 })

@@ -45,7 +45,7 @@ test_that("trajectories rebuild ellmer turns from semconv messages", {
   trajectories <- build_trajectories(spans)
 
   expect_length(trajectories, 1)
-  turns <- trajectories[[1]]
+  turns <- trajectories[[1]]$turns
   expect_length(turns, 5)
   expect_s7_class(turns[[1]], ellmer::SystemTurn)
   expect_equal(turns[[1]]@text, "Be helpful.")
@@ -165,7 +165,7 @@ test_that("only a completed final assistant response is attachable", {
 test_that("conversations carry their last chat activity time", {
   trajectories <- build_trajectories(parse_otlp_lines(staggered_test_line()))
 
-  last_active <- attr(trajectories[[1]], "last_active")
+  last_active <- trajectories[[1]]$last_active
   expect_s3_class(last_active, "POSIXct")
   expect_equal(as.numeric(last_active), 101)
 })
@@ -176,7 +176,7 @@ test_that("rebuilt turns can be set on an ellmer chat", {
     chat_test_span("t1", "s1", input_messages = json$input)
   )))
 
-  turns <- build_trajectories(spans)[[1]]
+  turns <- build_trajectories(spans)[[1]]$turns
   chat <- test_client()
   expect_no_error(chat$set_turns(turns))
 })
@@ -207,8 +207,8 @@ test_that("chat spans group by their conversation id across traces", {
   trajectories <- build_trajectories(parse_otlp_lines(lines))
 
   expect_named(trajectories, "conv-a")
-  expect_length(trajectories[[1]], 3)
-  expect_equal(trajectories[[1]][[1]]@text, "Roll a die.")
+  expect_length(trajectories[[1]]$turns, 3)
+  expect_equal(trajectories[[1]]$turns[[1]]@text, "Roll a die.")
 })
 
 text_semconv_message <- function(role, text) {
@@ -292,7 +292,10 @@ test_that("linear calls attach records to their own final exchanges", {
     )
   )))
 
-  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+  provenance <- attr(
+    build_trajectories(spans)[["conv-a"]]$turns,
+    "provenance"
+  )
 
   expect_identical(
     vapply(provenance, `[[`, character(1), "provenance_tag"),
@@ -313,7 +316,10 @@ test_that("restored context stays unannotated when only the new call was recorde
     recorded_call_test_spans("t3", "conv-a", messages, "C", "30")
   ))
 
-  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+  provenance <- attr(
+    build_trajectories(spans)[["conv-a"]]$turns,
+    "provenance"
+  )
 
   expect_length(provenance, 3)
   expect_true(all(is.na(vapply(
@@ -351,7 +357,10 @@ test_that("calls after restore attach to their respective new exchanges", {
     recorded_call_test_spans("t4", "conv-a", q4a4, "C", "40")
   )))
 
-  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+  provenance <- attr(
+    build_trajectories(spans)[["conv-a"]]$turns,
+    "provenance"
+  )
 
   expect_true(is.na(provenance[[1]]$provenance_tag))
   expect_true(is.na(provenance[[2]]$provenance_tag))
@@ -373,7 +382,7 @@ test_that("switched conversations do not donate audit records", {
     recorded_call_test_spans("new", "conv-a", latest_path, "C", "20")
   )))
 
-  turns <- build_trajectories(spans)[["conv-a"]]
+  turns <- build_trajectories(spans)[["conv-a"]]$turns
   provenance <- attr(turns, "provenance")
 
   expect_identical(split_exchanges(turns)[[1]][[1]]@text, "New question")
@@ -402,7 +411,10 @@ test_that("edited paths retain shared-prefix records and drop abandoned records"
     recorded_call_test_spans("t3", "conv-a", edited, "C", "30")
   )))
 
-  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+  provenance <- attr(
+    build_trajectories(spans)[["conv-a"]]$turns,
+    "provenance"
+  )
 
   expect_identical(provenance[[1]]$provenance_tag, "A")
   expect_identical(provenance[[2]]$provenance_tag, "C")
@@ -518,7 +530,7 @@ test_that("the latest descendant tool-loop span contributes one call record", {
   )
 
   trajectories <- build_trajectories(parse_otlp_lines(lines))
-  turns <- trajectories[["conv-a"]]
+  turns <- trajectories[["conv-a"]]$turns
 
   exchanges <- split_exchanges(turns)
   provenance <- attr(turns, "provenance")
@@ -548,9 +560,10 @@ test_that("conflicting records fail closed with one conversation warning", {
   )))
 
   expect_warning(
-    turns <- build_trajectories(spans)[["conv-a"]],
+    conversation <- build_trajectories(spans)[["conv-a"]],
     "conflicting audit records"
   )
+  turns <- conversation$turns
   expect_true(is.na(attr(turns, "provenance")[[1]]$provenance_tag))
 })
 
@@ -564,7 +577,8 @@ test_that("identical duplicate records collapse to one claim", {
     recorded_call_test_spans("t2", "conv-a", messages, "A", "20")
   )))
 
-  expect_no_warning(turns <- build_trajectories(spans)[["conv-a"]])
+  expect_no_warning(conversation <- build_trajectories(spans)[["conv-a"]])
+  turns <- conversation$turns
   expect_identical(attr(turns, "provenance")[[1]]$provenance_tag, "A")
 })
 
@@ -583,7 +597,10 @@ test_that("an incomplete tool call does not receive provenance", {
     recorded_call_test_spans("t1", "conv-a", messages, "A", "10")
   ))
 
-  provenance <- attr(build_trajectories(spans)[["conv-a"]], "provenance")
+  provenance <- attr(
+    build_trajectories(spans)[["conv-a"]]$turns,
+    "provenance"
+  )
 
   expect_length(provenance, 1)
   expect_true(is.na(provenance[[1]]$provenance_tag))
@@ -657,7 +674,7 @@ test_that("trajectory reconstruction classifies spans a linear number of times",
   )
 
   trajectories <- build_trajectories(spans)
-  provenance <- lapply(trajectories, attr, "provenance")
+  provenance <- lapply(trajectories, function(x) attr(x$turns, "provenance"))
 
   expect_length(trajectories, 40)
   expect_lte(chat_checks, length(spans) * 3L)
@@ -712,7 +729,7 @@ test_that("provenance defaults to NA/empty with no commons_conversation_turn anc
 
   trajectories <- build_trajectories(spans)
 
-  provenance <- attr(trajectories[["lonetrace"]], "provenance")
+  provenance <- attr(trajectories[["lonetrace"]]$turns, "provenance")
   expect_length(provenance, 1)
   expect_identical(
     provenance[[1]],
@@ -743,7 +760,7 @@ test_that("generic parts and empty messages are dropped", {
     chat_test_span("t1", "s1", input_messages = input)
   )))
 
-  turns <- build_trajectories(spans)[[1]]
+  turns <- build_trajectories(spans)[[1]]$turns
 
   expect_length(turns, 1)
   expect_equal(turns[[1]]@text, "Kept.")
@@ -762,11 +779,9 @@ test_that("trajectory_read reads OTLP files from a directory", {
 
   expect_length(trajectories, 1)
   expect_length(read_local_spans(path), 1)
-  expect_s7_class(trajectories[[1]][[1]], ellmer::UserTurn)
-  expect_equal(
-    attr(trajectories, "source"),
-    list(kind = "local", path = normalizePath(path))
-  )
+  expect_named(trajectories[[1]], c("turns", "last_active"))
+  expect_s7_class(trajectories[[1]]$turns[[1]], ellmer::UserTurn)
+  expect_s3_class(trajectories[[1]]$last_active, "POSIXct")
 })
 
 test_that("local trace files can follow a custom exporter template", {
@@ -804,7 +819,8 @@ test_that("the latest chat span wins across timestamp digit counts", {
   trajectories <- build_trajectories(spans)
 
   expect_length(trajectories, 1)
-  final <- trajectories[[1]][[length(trajectories[[1]])]]
+  turns <- trajectories[[1]]$turns
+  final <- turns[[length(turns)]]
   expect_s7_class(final, ellmer::AssistantTurn)
   expect_equal(final@text, "You rolled a 4.")
 })
@@ -834,7 +850,7 @@ test_that("trajectory_read drops content-less conversations, keeping the rest", 
 
   expect_snapshot(.res <- trajectory_read(path))
   expect_length(.res, 1)
-  expect_s7_class(.res[[1]][[1]], ellmer::UserTurn)
+  expect_s7_class(.res[[1]]$turns[[1]], ellmer::UserTurn)
 })
 
 test_that("from/to filter conversations by chat-span start time", {
@@ -886,8 +902,11 @@ test_that("a conversation continuing past `to` returns history as of `to`", {
   full <- trajectory_read(path)
   as_of <- trajectory_read(path, to = .POSIXct(200, tz = "UTC"))
 
-  expect_s7_class(full[[1]][[length(full[[1]])]], ellmer::AssistantTurn)
-  expect_length(as_of[[1]], length(full[[1]]) - 1)
+  expect_s7_class(
+    full[[1]]$turns[[length(full[[1]]$turns)]],
+    ellmer::AssistantTurn
+  )
+  expect_length(as_of[[1]]$turns, length(full[[1]]$turns) - 1)
 })
 
 test_that("n keeps the most recent conversations", {
@@ -1110,14 +1129,6 @@ test_that("trajectory_read stops Connect paging after n conversations", {
 
   expect_equal(state$served, 1)
   expect_named(trajectories, "t300")
-  expect_equal(
-    attr(trajectories, "source"),
-    list(
-      kind = "connect",
-      server = "https://connect.example.com",
-      content_guid = "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
-    )
-  )
 })
 
 test_that("trajectory_read returns an empty list for a missing directory", {
@@ -1143,6 +1154,56 @@ test_that("a GUID source resolves to a Connect read", {
   expect_equal(resolved$client$server, "https://connect.example.com")
 })
 
+test_that("a GUID source infers its server from rsconnect", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+  withr::local_dir(withr::local_tempdir())
+  local_mocked_bindings(
+    registered_connect_servers = function() "https://connect.example.com"
+  )
+
+  resolved <- resolve_trajectory_source(
+    "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+  )
+
+  expect_equal(resolved$client$server, "https://connect.example.com")
+})
+
+test_that("a GUID source prefers its environment and project deployment", {
+  withr::local_envvar(CONNECT_SERVER = "https://env.example.com")
+  expect_equal(trajectory_guid_server(), "https://env.example.com")
+
+  withr::local_envvar(CONNECT_SERVER = NA)
+  dir <- withr::local_tempdir()
+  record_dir <- file.path(dir, "rsconnect", "documents", "app.R", "server")
+  dir.create(record_dir, recursive = TRUE)
+  writeLines(
+    c(
+      "name: my-agent",
+      "hostUrl: https://project.example.com/__api__",
+      "url: https://project.example.com/content/ea3c1445-cb71-42df-a2f2-bdb18874ef41/"
+    ),
+    file.path(record_dir, "my-agent.dcf")
+  )
+  withr::local_dir(dir)
+
+  expect_equal(trajectory_guid_server(), "https://project.example.com")
+})
+
+test_that("a GUID source requires an unambiguous server", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+  withr::local_dir(withr::local_tempdir())
+  local_mocked_bindings(
+    registered_connect_servers = function() {
+      c("https://one.example.com", "https://two.example.com")
+    }
+  )
+
+  expect_snapshot(
+    resolve_trajectory_source("ea3c1445-cb71-42df-a2f2-bdb18874ef41"),
+    error = TRUE
+  )
+})
+
 test_that("a content URL source carries its own server", {
   withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
 
@@ -1165,6 +1226,42 @@ test_that("a dashboard URL source carries its own server", {
   expect_equal(resolved$kind, "connect")
   expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
   expect_equal(resolved$client$server, "https://connect.example.com")
+})
+
+test_that("a vanity URL is resolved through Connect", {
+  withr::local_envvar(CONNECT_SERVER = NA, CONNECT_API_KEY = "key")
+  state <- new.env()
+  local_mocked_bindings(
+    connect_vanity_guid = function(client, url, query, ...) {
+      state$client <- client
+      state$url <- url
+      state$query <- query
+      "ea3c1445-cb71-42df-a2f2-bdb18874ef41"
+    }
+  )
+
+  url <- "https://connect.example.com/content/my-agent"
+  resolved <- resolve_trajectory_source(url)
+
+  expect_equal(resolved$guid, "ea3c1445-cb71-42df-a2f2-bdb18874ef41")
+  expect_equal(state$client$server, "https://connect.example.com")
+  expect_equal(state$url, url)
+  expect_equal(state$query, "my-agent")
+})
+
+test_that("a vanity URL resolves against a configured Connect server", {
+  url <- Sys.getenv("COMMONS_TEST_CONNECT_VANITY_URL")
+  guid <- Sys.getenv("COMMONS_TEST_CONNECT_GUID")
+  skip_if(!nzchar(url), "COMMONS_TEST_CONNECT_VANITY_URL is not set")
+  skip_if(!nzchar(guid), "COMMONS_TEST_CONNECT_GUID is not set")
+  skip_if(
+    !nzchar(Sys.getenv("CONNECT_API_KEY")),
+    "CONNECT_API_KEY is not set"
+  )
+
+  resolved <- resolve_trajectory_source(url)
+
+  expect_equal(resolved$guid, guid)
 })
 
 test_that("a URL without a recognizable GUID errors rather than reading locally", {
@@ -1262,6 +1359,18 @@ test_that("content_url_guid extracts the server and GUID", {
 
   expect_null(content_url_guid("https://connect.example.com/other"))
   expect_null(content_url_guid("plain-string"))
+})
+
+test_that("content_vanity_url extracts the server and search query", {
+  expect_equal(
+    content_vanity_url("https://connect.example.com/content/my-agent/"),
+    list(server = "https://connect.example.com", query = "my-agent")
+  )
+  expect_equal(
+    content_vanity_url("https://connect.example.com/rsc/content/my%20agent"),
+    list(server = "https://connect.example.com/rsc", query = "my agent")
+  )
+  expect_null(content_vanity_url("https://connect.example.com/other"))
 })
 
 test_that("deployment records are found in project subdirectories", {

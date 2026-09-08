@@ -226,6 +226,39 @@ test_that("content capture is enabled when unset", {
   )
 })
 
+test_that("Connect routing repairs otelsdk's cached resource", {
+  skip_on_cran()
+  skip_if_not_installed("otelsdk")
+  withr::local_envvar(
+    POSIT_PRODUCT = "CONNECT",
+    CONNECT_CONTENT_GUID = "content-guid",
+    CONNECT_CONTENT_JOB_KEY = "job-key",
+    OTEL_RESOURCE_ATTRIBUTES = "k8s.namespace.name=test"
+  )
+  the <- asNamespace("otelsdk")$the
+  old_attributes <- the$default_resource_attributes
+  withr::defer(the$default_resource_attributes <- old_attributes)
+  local_mocked_bindings(
+    reset_otel_tracer_provider = function() NULL,
+    refresh_ellmer_otel_cache = function() NULL
+  )
+
+  expect_true(repair_connect_trace_routing())
+  expect_equal(
+    Sys.getenv("OTEL_RESOURCE_ATTRIBUTES"),
+    paste(
+      "k8s.namespace.name=test",
+      "content.guid=content-guid",
+      "job.key=job-key",
+      sep = ","
+    )
+  )
+  expect_equal(
+    the$default_resource_attributes[c("content.guid", "job.key")],
+    list("content.guid" = "content-guid", "job.key" = "job-key")
+  )
+})
+
 test_that("share_with grants wait for tracing to be live", {
   skip_if_not_installed("otel")
   withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
@@ -255,6 +288,11 @@ test_that("the internals the tracing hacks rely on still exist", {
   the <- asNamespace("otel")[["the"]]
   expect_true(is.environment(the))
   expect_true(exists("tracer_provider", envir = the, inherits = FALSE))
+
+  skip_if_not_installed("otelsdk")
+  sdk_the <- asNamespace("otelsdk")[["the"]]
+  expect_true(is.environment(sdk_the))
+  expect_type(sdk_the$default_resource_attributes, "list")
 })
 
 test_that("local_commons_span is a no-op without otel", {

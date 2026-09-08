@@ -12,8 +12,10 @@
 #' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
-#'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
-#'   ignored, with a warning; use `instructions` to add to commons' prompt.
+#'   [ellmer::chat_anthropic()]. For best results, enable thinking when
+#'   supported by the selected provider and model. A system prompt already set
+#'   on the client is ignored, with a warning; use `instructions` to add to
+#'   commons' prompt.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()].
@@ -53,6 +55,37 @@
 #'   collaborators on the content. Note that users whose Connect *account*
 #'   role is viewer cannot read traces even when named here; trace readers
 #'   need at least a publisher account.
+#'
+#' @section Cache pre-warming:
+#' A commons agent builds its context search index and downloads uncached pins
+#' the first time it needs them. [commons_server()] and [commons_app()] call the
+#' agent's `prewarm()` method automatically during post-startup idle time.
+#'
+#' To warm the caches before deployment, call `agent$prewarm()` in a
+#' pre-deploy script. The context index is cached on disk once per version of 
+#' the context documents; pin downloads populate the local pins cache.
+#'
+#' To ship a pre-built context index with an app, configure a directory inside
+#' the app in both the pre-deploy script and the deployed app, then prewarm the
+#' agent before deploying:
+#'
+#' ```r
+#' options(commons.context_cache = "commons-cache")
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_sources = data_source(sales = sales)
+#' )
+#' agent$prewarm()
+#' ```
+#'
+#' Do not use `app_cache/` for this workflow because rsconnect excludes it from
+#' deployed bundles. Without explicit configuration, commons uses Connect's
+#' persistent content data directory when available, an `app_cache/` directory
+#' beside hosted apps, or the per-user cache directory. Set the cache directory
+#' with `options(commons.context_cache = "path/to/dir")` or the
+#' `COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE` to
+#' disable persistence. The cache is capped at 256 MB with least-recently-used
+#' eviction; change the cap with `options(commons.context_cache_max_size)`.
 #'
 #' @section Agent tools:
 #' Depending on its semantic layer, context layer, and data sources, a commons
@@ -177,14 +210,9 @@ commons <- function(
   )
 }
 
-ellmer_chat_class <- function() {
-  # Chat is exported in dev ellmer; use ellmer::Chat after its next release.
-  utils::getFromNamespace("Chat", "ellmer")
-}
-
 Commons <- R6::R6Class(
   "Commons",
-  inherit = ellmer_chat_class(),
+  inherit = ellmer::Chat,
   public = list(
     initialize = function(
       client,
@@ -199,7 +227,11 @@ Commons <- R6::R6Class(
       share_with = NULL
     ) {
       rlang::check_dots_empty()
-      do.call(super$initialize, ellmer_chat_initialize_args(client))
+      super$initialize(
+        provider = client$get_provider(),
+        model = client$get_model_object(),
+        echo = "none"
+      )
       semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
 
@@ -390,17 +422,15 @@ Commons <- R6::R6Class(
     },
 
     prewarm = function() {
-      # Pre-warming is a pure optimization (everything it builds is rebuilt
-      # or downloaded lazily at first use), but a direct call is typically
-      # warming caches ahead of deployment, so failures propagate: a cold
-      # cache should fail the deploy. commons_prewarm() downgrades failures
-      # to warnings for the Shiny idle-time path, where an escaping error
-      # would stop the app.
-      self$prewarm_context()
-      self$prewarm_sources()
+      # A direct call is typically warming caches ahead of deployment, so
+      # failures propagate: a cold cache should fail the deploy.
+      # prewarm_on_idle() downgrades them to warnings.
+      private$prewarm_context()
+      private$prewarm_sources()
       invisible(self)
-    },
-
+    }
+  ),
+  private = list(
     prewarm_context = function() {
       layer <- private$context_layer
       layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
@@ -434,9 +464,8 @@ Commons <- R6::R6Class(
         source_prewarm(source)
       }
       invisible(self)
-    }
-  ),
-  private = list(
+    },
+
     sources = NULL,
     context_layer = NULL,
     registry = NULL,
@@ -470,19 +499,6 @@ Commons <- R6::R6Class(
     }
   )
 )
-
-ellmer_chat_initialize_args <- function(client) {
-  args <- list(provider = client$get_provider())
-  model <- tryCatch(
-    client$get_model_object(),
-    error = function(err) NULL
-  )
-  if (!is.null(model)) {
-    args$model <- model
-  }
-  args$echo <- "none"
-  args
-}
 
 turn_has_user_message <- function(turn) {
   any(!vapply(turn@contents, is_tool_result_content, logical(1)))

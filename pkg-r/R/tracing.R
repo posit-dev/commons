@@ -102,9 +102,31 @@ repair_connect_trace_routing <- function() {
     paste0("job.key=", job_key)
   )
   Sys.setenv(OTEL_RESOURCE_ATTRIBUTES = paste(pairs, collapse = ","))
+  repair_otelsdk_resource_attributes(guid, job_key)
   reset_otel_tracer_provider()
   refresh_ellmer_otel_cache()
   invisible(TRUE)
+}
+
+# otelsdk's C++ SDK statically caches its environment-derived resource when
+# ellmer first initializes OTel. Rebuilding the provider does not refresh it.
+repair_otelsdk_resource_attributes <- function(guid, job_key) {
+  if (!is_installed("otelsdk")) {
+    return(invisible(NULL))
+  }
+  tryCatch(
+    {
+      the <- asNamespace("otelsdk")$the
+      attributes <- the$default_resource_attributes
+      if (is.environment(the) && is.list(attributes)) {
+        attributes[["content.guid"]] <- guid
+        attributes[["job.key"]] <- job_key
+        the$default_resource_attributes <- attributes
+      }
+    },
+    error = function(err) NULL
+  )
+  invisible(NULL)
 }
 
 # Start and activate a span for the calling frame's lifetime, ending when it
