@@ -13,10 +13,13 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # One line per shared source: the source directory, then every destination.
 # The Python suite reads tests/shared/ in place, so only the R package needs
-# that copy; both packages ship the prompts.
+# that copy; both packages ship the prompts and the browser assets. Nothing
+# in pkg-py reads www/ until its UI layer lands, but the destination belongs
+# with the move rather than with the first reader.
 sources=(
   "tests/shared pkg-r/tests/testthat/fixtures/shared"
   "prompts pkg-r/inst/prompts pkg-py/src/commons/prompts"
+  "www pkg-r/inst/www pkg-py/src/commons/www"
 )
 
 for entry in "${sources[@]}"; do

@@ -1,0 +1,603 @@
+/* Quiet, text-like chat styling layered over shinychat's defaults: tool
+ * calls read as muted single-line rows rather than cards, and provenance
+ * markers read as annotations rather than badges. */
+
+/* ---- Chat-level polish ---------------------------------------------- */
+
+/* Set shinychat CSS variables */
+:root {
+  --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);
+
+  /* Keep the solid stop glyph quieter than the outlined send glyph. */
+  --shiny-chat-btn-send-color-ready: var(--bs-body-color, #212529);
+  --shiny-chat-btn-send-color-cancel: var(--bs-secondary-color, #6c757d);
+  --shiny-chat-btn-send-color-empty: var(--bs-gray-400, #ced4da);
+}
+
+:root .shiny-chat-btn-send {
+  --shiny-chat-btn-send-bg: transparent;
+  --shiny-chat-btn-send-color: var(--_btn-send-state-color);
+  --shiny-chat-btn-send-border: var(--bs-border-width, 1px) solid
+    var(--bs-border-color, #dee2e6);
+  --shiny-chat-btn-send-bg-hover: var(--bs-tertiary-bg, #f8f9fa);
+  --shiny-chat-btn-send-color-hover: var(--_btn-send-state-color);
+  --shiny-chat-btn-send-border-color-hover: color-mix(
+    in srgb,
+    var(--bs-body-color, #212529) 24%,
+    transparent
+  );
+  --shiny-chat-btn-send-bg-active: var(--bs-secondary-bg, #e9ecef);
+  --shiny-chat-btn-send-color-active: var(--_btn-send-state-color);
+}
+
+shiny-chat-container .shiny-chat-input .tiptap {
+  border-color: var(--bs-border-color, #dee2e6);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+/* Shinychat owns the pending lifecycle; Commons replaces only its visuals. */
+shiny-chat-container .shiny-chat-pending-indicator {
+  gap: 0.5rem;
+}
+
+shiny-chat-container .shiny-chat-pending-indicator > svg {
+  display: none;
+}
+
+shiny-chat-container .shiny-chat-pending-indicator::before {
+  background-color: var(--bs-secondary-color, #6c757d);
+  content: "";
+  flex: none;
+  height: 0.4em;
+  margin-inline: 0.25em;
+  transform: rotate(45deg);
+  width: 0.4em;
+}
+
+shiny-chat-container .shiny-chat-pending-indicator::after {
+  animation: commons-chat-working 1.6s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    var(--bs-secondary-color, #6c757d) 25%,
+    var(--bs-body-color, #212529) 50%,
+    var(--bs-secondary-color, #6c757d) 75%
+  );
+  background-clip: text;
+  background-size: 200% 100%;
+  color: var(--bs-secondary-color, #6c757d);
+  content: "Working…";
+  font-size: 0.8em;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes commons-chat-working {
+  from {
+    background-position: 150% 0;
+  }
+
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* Debounce short reasoning bursts between response blocks. */
+shiny-chat-container .shiny-chat-thinking[data-streaming] {
+  animation: commons-chat-thinking-reveal 0s linear 200ms forwards;
+  opacity: 0;
+  visibility: hidden;
+}
+
+@keyframes commons-chat-thinking-reveal {
+  to {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  shiny-chat-container .shiny-chat-pending-indicator::after {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  shiny-chat-container .shiny-chat-pending-indicator::after {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
+}
+
+/* ---- Provenance information ------------------------------------------ */
+
+#commons-provenance-info-modal .modal-body {
+  padding-top: 0.5rem;
+}
+
+.commons-provenance-info {
+  display: inline-flex;
+  margin-left: 0.2rem;
+  vertical-align: 0.1em;
+}
+
+.commons-provenance-info-trigger {
+  align-items: center;
+  background: transparent;
+  border: 1px solid currentcolor;
+  border-radius: 50%;
+  color: var(--bs-secondary-color, #6c757d);
+  display: inline-flex;
+  font-family: inherit;
+  font-size: 0.55rem;
+  font-style: normal;
+  font-weight: 600;
+  height: 0.8rem;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  text-decoration: none;
+  width: 0.8rem;
+}
+
+.commons-provenance-info-trigger:hover {
+  background: var(--bs-tertiary-bg, #f8f9fa);
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.commons-provenance-info-trigger:focus-visible {
+  outline: 0.2rem solid var(--bs-focus-ring-color, rgba(13, 110, 253, 0.25));
+  outline-offset: 0.1rem;
+}
+
+.commons-provenance-info-body {
+  font-size: 0.875rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.commons-provenance-info-body > p {
+  margin-bottom: 0.75rem;
+}
+
+.commons-provenance-info-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1rem;
+}
+
+.commons-provenance-info-list + p {
+  margin-top: 0.75rem;
+}
+
+.commons-provenance-info-label {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.15rem;
+}
+
+.commons-provenance-info-label img {
+  height: 1.1em;
+  width: 1.1em;
+}
+
+.commons-provenance-info-label + p {
+  margin: 0;
+}
+
+.commons-provenance-info-no-marker {
+  color: var(--bs-secondary-color, #6c757d);
+  font-weight: 400;
+  text-align: center;
+  width: 1.1em;
+}
+
+/* ---- Answer provenance ----------------------------------------------- */
+
+.commons-answer-pill {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.74rem;
+  font-weight: 400;
+  gap: 0.3rem;
+  line-height: 1.2;
+  max-width: 100%;
+  padding: 0.18rem 0.45rem;
+  vertical-align: text-bottom;
+}
+
+.commons-answer-pill-icon {
+  flex: 0 0 auto;
+  height: 0.82rem;
+  width: 0.82rem;
+}
+
+.commons-answer-pill-trusted {
+  background: #f2fbf5;
+  border: 1px solid #cfeedd;
+  color: #286144;
+}
+
+.commons-answer-pill-cited {
+  background: #eef7fa;
+  border: 1px solid #c9e2e9;
+  color: #285867;
+}
+
+.commons-answer-pill-caution {
+  background: #fff8ec;
+  border: 1px solid #f2ddbb;
+  color: #6b4b1b;
+}
+
+/* Citations are labeled identity asides: shinychat accumulates those
+ * sharing a paragraph into one pill with a "+N" overflow and a carousel
+ * popover. They render icon-only like the provenance markers, in a quieter
+ * mid navy — verified support, short of a trusted calculation. */
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/citation-mark.svg"]) {
+  --shiny-chat-aside-marker-color: #2e4a6b;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #223851;
+  --shiny-chat-aside-marker-hover-bg: #e7edf4;
+}
+
+/* Temporary bridge until shinychat forwards a per-aside tone hook to the
+ * pill: the icon src is the only per-aside signal that survives to the
+ * rendered button, so it selects the tone — but styling goes only through
+ * shinychat's public --shiny-chat-aside-marker-* variables, so its own
+ * hover, focus, expanded, and compact-number rules keep working. */
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/trusted-icon.svg"]) {
+  --shiny-chat-aside-marker-color: #286144;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #204f38;
+  --shiny-chat-aside-marker-hover-bg: #e4f6ea;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(img[src$="/warning-icon.svg"]) {
+  --shiny-chat-aside-marker-color: #6b4b1b;
+  --shiny-chat-aside-marker-bg: transparent;
+  --shiny-chat-aside-marker-hover-color: #583b14;
+  --shiny-chat-aside-marker-hover-bg: #fcefd8;
+}
+
+/* Provenance and citation markers render as bare icons: the label stays in
+ * the DOM (the button's aria-label announces it) but doesn't render, and a
+ * grouped "+N" overflow count still shows. */
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
+  ) {
+  border-radius: 50%;
+  font-weight: 400;
+  gap: 0.15em;
+  padding: 0.2em;
+}
+
+/* A grouped marker carries a "+N more" count, which widens the pill: give
+ * it a stadium shape and roomier padding instead of the bare-icon circle. */
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
+  ):has(.shiny-aside-pill__overflow) {
+  border-radius: 999px;
+  gap: 0.3em;
+  padding: 0.2em 0.55em 0.2em 0.25em;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
+  )
+  .shiny-aside-pill__label {
+  display: none;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(
+      img[src$="/trusted-icon.svg"],
+      img[src$="/warning-icon.svg"],
+      img[src$="/citation-mark.svg"]
+    )
+  )
+  img {
+  height: 1.5em;
+  width: 1.5em;
+}
+
+shiny-chat-container
+  .shiny-aside-pill:has(
+    :is(img[src$="/trusted-icon.svg"], img[src$="/warning-icon.svg"])
+  )
+  img {
+  animation: commons-provenance-marker-pulse 1.6s ease-in-out 1;
+  opacity: 1;
+}
+
+@keyframes commons-provenance-marker-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.4);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  shiny-chat-container
+    .shiny-aside-pill:has(
+      :is(img[src$="/trusted-icon.svg"], img[src$="/warning-icon.svg"])
+    )
+    img {
+    animation: none;
+  }
+}
+
+/* The citation aside body carries its own title (icon + label) because
+ * shinychat only renders its popover title row for grouped asides; hide
+ * shinychat's row so grouped popovers don't name the source twice. The
+ * popover is portaled to <body>, so these rules must stay unscoped. */
+.commons-citation-title {
+  align-items: center;
+  display: flex;
+  font-weight: 600;
+  gap: 0.3em;
+  margin-bottom: 0.25rem;
+}
+
+.commons-citation-title img {
+  height: 1.1em;
+  width: 1.1em;
+}
+
+.shiny-aside-popover:has(.commons-citation-title)
+  .shiny-aside-popover__label {
+  display: none;
+}
+
+/* ---- Measure display ------------------------------------------------- */
+
+.commons-measure-display {
+  display: grid;
+  gap: 1rem;
+}
+
+.commons-measure-metadata,
+.commons-measure-metadata-item {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.commons-measure-metadata {
+  gap: 0.75rem;
+}
+
+.commons-measure-description {
+  color: var(--bs-secondary-color, #6c757d);
+  white-space: pre-wrap;
+}
+
+.commons-measure-source-link + .commons-measure-source-link {
+  margin-left: 0.75rem;
+}
+
+.commons-measure-args {
+  display: grid;
+  gap: 0.38rem;
+  line-height: 1.35;
+}
+
+.commons-measure-arg {
+  min-width: 0;
+}
+
+.commons-measure-arg-name {
+  color: var(--bs-secondary-color, #6c757d);
+  font-weight: 600;
+}
+
+.commons-measure-arg-value {
+  color: var(--bs-body-color, #212529);
+}
+
+.commons-measure-result {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.commons-measure-result-value {
+  color: var(--bs-body-color, #212529);
+  white-space: pre-wrap;
+}
+
+.commons-measure-result-value > table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  width: 100%;
+}
+
+.commons-measure-result-value > table th,
+.commons-measure-result-value > table td {
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  padding: 0.3rem 0.5rem;
+}
+
+.commons-measure-result-value > table th {
+  font-weight: 600;
+}
+
+.commons-measure-result-value > table tbody tr:nth-child(even) {
+  background: var(--bs-tertiary-bg, #f3f4f6);
+}
+
+.commons-measure-gt-table {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+.commons-measure-gt-table-error,
+.commons-measure-plot-error {
+  color: var(--bs-secondary-color, #6c757d);
+  white-space: normal;
+}
+
+.commons-measure-plot {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  display: block;
+  height: auto;
+  max-width: min(100%, 34rem);
+  white-space: normal;
+}
+
+/* ---- run_r display ---------------------------------------------------- */
+
+.commons-run-r-display {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.commons-run-r-details > summary {
+  align-items: center;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 0.45em;
+  list-style: none;
+  width: fit-content;
+}
+
+.commons-run-r-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commons-run-r-details > summary::before {
+  border-bottom: 1px solid currentColor;
+  border-right: 1px solid currentColor;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.45em;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  transition: transform 0.3s ease-in-out;
+  width: 0.45em;
+}
+
+.commons-run-r-details[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.commons-run-r-details > summary:focus-visible {
+  border-radius: var(--bs-border-radius-sm, 0.25rem);
+  outline: 2px solid var(--bs-primary, #007bc2);
+  outline-offset: 2px;
+}
+
+.commons-run-r-details[open] > .commons-run-r-code {
+  animation: commons-run-r-details-reveal 0.2s ease-out;
+}
+
+@keyframes commons-run-r-details-reveal {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .commons-run-r-details > summary::before {
+    transition: none;
+  }
+
+  .commons-run-r-details[open] > .commons-run-r-code {
+    animation: none;
+  }
+}
+
+.commons-run-r-display .commons-run-r-code {
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.commons-run-r-code .hl.com {
+  color: #a0a1a7;
+  font-style: italic;
+}
+
+.commons-run-r-code .hl.kwa {
+  color: #a626a4;
+}
+
+.commons-run-r-code .hl.kwc,
+.commons-run-r-code .hl.num {
+  color: #986801;
+}
+
+.commons-run-r-code .hl.kwd {
+  color: #4078f2;
+}
+
+.commons-run-r-code .hl.sng {
+  color: #50a14f;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.com {
+  color: #5c6370;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwa {
+  color: #c678dd;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwc,
+[data-bs-theme="dark"] .commons-run-r-code .hl.num {
+  color: #d19a66;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.kwd {
+  color: #61aeee;
+}
+
+[data-bs-theme="dark"] .commons-run-r-code .hl.sng {
+  color: #98c379;
+}
+
+.commons-run-r-details > .commons-run-r-code {
+  margin-top: 0.4rem;
+}
+
+.commons-run-r-plot {
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: 0.5rem;
+  height: auto;
+  max-width: min(100%, 34rem);
+}
