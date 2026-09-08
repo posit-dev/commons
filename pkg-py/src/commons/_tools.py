@@ -542,7 +542,9 @@ def _describe_table(context: ToolContext) -> Tool:
         describe_table,
         "describe_table",
         "Describe a table: columns, types, and sample rows. Use this before "
-        "writing SQL against an unfamiliar table.",
+        "writing SQL against an unfamiliar table. The sample summary covers the "
+        "sampled rows only, so it cannot show which values the whole table holds. "
+        "Before you report that a value is absent, query for it.",
         _parameters(
             {"table": _string("The table name, as listed in the system prompt.")},
             ["table"],

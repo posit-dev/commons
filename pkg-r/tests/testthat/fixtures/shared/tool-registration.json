@@ -168,7 +168,7 @@
         "name": "describe_table",
         "shape": "bare",
         "tool": "describe_table",
-        "text": "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table."
+        "text": "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table. The sample summary covers the sampled rows only, so it cannot show which values the whole table holds. Before you report that a value is absent, query for it."
       },
       {
         "name": "run_sql with nothing to fall back from",

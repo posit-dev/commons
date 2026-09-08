@@ -396,12 +396,18 @@ tool_describe_table <- function(private) {
       paste(
         "Describe a catalog object.",
         "For tables, return columns, types, and sample rows.",
-        "For semantic models, return public members and any verified queries."
+        "For semantic models, return public members and any verified queries.",
+        "The sample summary covers the sampled rows only, so it cannot show",
+        "which values the whole table holds.",
+        "Before you report that a value is absent, query for it."
       )
     } else {
       paste(
         "Describe a table: columns, types, and sample rows.",
-        "Use this before writing SQL against an unfamiliar table."
+        "Use this before writing SQL against an unfamiliar table.",
+        "The sample summary covers the sampled rows only, so it cannot show",
+        "which values the whole table holds.",
+        "Before you report that a value is absent, query for it."
       )
     },
     arguments = list(
@@ -805,7 +811,7 @@ describe_table_tool <- function(
   )
 
   sample <- sprintf(
-    "Sample summary:\n\n%s",
+    "Sample summary (the sampled rows only, not necessarily every row):\n\n%s",
     ellmer::df_schema(d$sample, max_cols = ncol(d$sample))
   )
   if (is.null(entry)) {
