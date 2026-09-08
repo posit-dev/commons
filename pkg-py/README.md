@@ -6,7 +6,7 @@
 
 ## Get started
 
-An agent needs a chat client and at least one data source. A semantic layer of trusted calculations and a context layer of prose are optional, and each one changes which tools the agent registers. Every parameter the model supplies to a measure needs a description, which is what the model reads to decide how to call it.
+An agent needs a chat client and at least one data source. A semantic layer of trusted calculations and a context layer of prose are both optional. The semantic layer changes which tools the agent registers, since a measure is what `call_measure` calls. The context layer does not: `search_context` is always registered, and without a layer behind it the tool reports that none is configured. Every parameter the model supplies to a measure needs a description, which is what the model reads to decide how to call it.
 
 ```python
 from typing import Annotated
