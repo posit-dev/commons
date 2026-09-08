@@ -11,6 +11,7 @@ from pydantic import Field
 from commons import Injected, context_layer, data_source, measure, semantic_layer
 from commons._agent import Commons
 from commons._citations import CorpusEntry
+from commons._reminders import RESTORED_CONVERSATION_REMINDER, ContentTurnReminder
 
 from ._provider import ScriptedProvider, scripted_chat, text
 
@@ -129,6 +130,20 @@ def test_the_clients_history_warns_and_does_not_carry_over(
     assert len(client.get_turns()) == 1
 
 
+def test_ignored_client_state_warns_before_other_arguments_fail(
+    client: Chat,
+) -> None:
+    client.system_prompt = "You are a pirate."
+
+    # pkg-r/R/commons.R warns about the ignored prompt before it checks
+    # anything else, so a bad later argument does not eat the warning.
+    with (
+        pytest.warns(UserWarning, match="system prompt"),
+        pytest.raises(TypeError, match="commons.data_source"),
+    ):
+        Commons(client, "sales")  # type: ignore[arg-type]
+
+
 # ---- the agent's own chat -------------------------------------------------
 
 
@@ -180,6 +195,13 @@ def test_the_provider_arguments_and_conversation_id_carry_over(
     assert agent._client.conversation_id == "abc123"
     # The provider carries the model, so it is shared on purpose.
     assert agent._client.provider is client.provider
+
+
+def test_get_turns_offers_chatlas_own_views(client: Chat, source: Any) -> None:
+    agent = Commons(client, source)
+
+    assert agent.get_turns() == []
+    assert agent.get_turns(include_system_prompt=True)[0].text == prompt(agent)
 
 
 # ---- assembly -------------------------------------------------------------
@@ -460,3 +482,47 @@ def test_the_scripted_provider_answers_offline(client: Chat, source: Any) -> Non
     agent = Commons(scripted_chat([text("Two orders.")]), source)
 
     assert str(agent.chat("How many orders?", echo="none")) == "Two orders."
+
+
+# ---- the turn rules, asked over chat() -------------------------------------
+
+
+def test_a_chat_turn_carries_the_models_reminder(source: Any) -> None:
+    agent = Commons(scripted_chat([text("Answer.")], model="claude-opus-5"), source)
+
+    agent.chat("How many orders?", echo="none")
+
+    reminders = [
+        content
+        for content in agent.get_turns()[0].contents
+        if isinstance(content, ContentTurnReminder)
+    ]
+    assert len(reminders) == 1
+
+
+def test_a_successful_chat_spends_the_queued_restore_reminder(source: Any) -> None:
+    agent = Commons(scripted_chat([text("First."), text("Second.")]), source)
+    agent.queue_restore_reminder()
+
+    agent.chat("First question.", echo="none")
+
+    first = agent.get_turns()[0].contents
+    assert [
+        content.text for content in first if isinstance(content, ContentTurnReminder)
+    ] == [RESTORED_CONVERSATION_REMINDER]
+    assert not agent._restore_reminder_pending
+
+    agent.chat("Second question.", echo="none")
+    second = agent.get_turns()[2].contents
+    assert not [
+        content for content in second if isinstance(content, ContentTurnReminder)
+    ]
+
+
+def test_a_chat_starts_a_new_citation_request(source: Any) -> None:
+    agent = Commons(scripted_chat([text("Answer.")]), source)
+    agent._citation_request.requested = True
+
+    agent.chat("How many orders?", echo="none")
+
+    assert not agent._citation_request.requested

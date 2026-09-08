@@ -1,5 +1,6 @@
 """Asking an agent something: the streamed projection, the marker, the reminders."""
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 
@@ -286,6 +287,27 @@ async def test_a_controller_stops_the_stream(source: Any) -> None:
     assert "".join(streamed) == "First. "
 
 
+async def test_walking_away_early_closes_the_stream_it_wraps(source: Any) -> None:
+    closed = False
+
+    async def raw() -> AsyncGenerator[str, None]:
+        nonlocal closed
+        try:
+            yield "First. "
+            yield "Second."
+        finally:
+            closed = True
+
+    agent = Commons(scripted_chat(), source)
+    stream = agent._projected(raw(), 0, False)
+
+    assert await anext(stream) == "First. "
+    # No cancel, no exhaustion: the consumer just leaves.
+    await stream.aclose()
+
+    assert closed
+
+
 async def test_structured_provider_content_passes_through(source: Any) -> None:
     thinking = ContentToolRequest(id="t", name="run_sql", arguments={"sql": "SELECT 1"})
     agent = Commons(scripted_chat([[thinking], text("Done.")]), source)
@@ -370,6 +392,22 @@ def test_replacing_the_history_drops_its_queued_reminder(source: Any) -> None:
     agent.set_turns([])
 
     assert not agent._restore_reminder_pending
+
+
+def test_replacing_the_history_replaces_the_conversation(source: Any) -> None:
+    agent = Commons(scripted_chat(), source)
+
+    agent.set_turns(
+        [
+            UserTurn("An earlier question."),
+            AssistantTurn([ContentText(text="An earlier answer.")]),
+        ]
+    )
+
+    assert [turn.text for turn in agent.get_turns()] == [
+        "An earlier question.",
+        "An earlier answer.",
+    ]
 
 
 # ---- the citation request --------------------------------------------------

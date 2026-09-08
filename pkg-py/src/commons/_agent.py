@@ -1,9 +1,9 @@
 """The agent: its layers, the tools they earn, and the rules a turn follows.
 
 `pkg-r/R/commons.R` assembles the same agent for R, in the order this follows.
-A `chatlas.Chat` is composed rather than subclassed (decision D1 in the port
-plan), so the public surface is a choice R never had to make: what an agent
-needs, plus the chatlas methods the two turn rules have to hook.
+A `chatlas.Chat` is composed rather than subclassed (D1), so the public
+surface is a choice R never had to make: what an agent needs, plus the
+chatlas methods the two turn rules have to hook.
 """
 
 from __future__ import annotations
@@ -66,24 +66,20 @@ class Commons:
     chat from them, so nothing it does reaches an object the caller still
     holds, and nothing already on that object reaches the agent. A system
     prompt set on it is ignored with a warning; use `instructions` to add to
-    commons' prompt instead.
+    commons' prompt instead. For best results, enable thinking where the
+    provider and model support it.
 
-    Parameters
-    ----------
-    client
-        A `chatlas.Chat` giving the provider and model to use. For best
-        results, enable thinking where the provider and model support it.
-    data_sources
-        A `DataSource`, or a mapping of name to `DataSource`. A measure can
-        take a named source's connection as an argument named after it.
-    semantic_layer
-        An optional `SemanticLayer` of measures.
-    context_layer
-        An optional `ContextLayer` of prose.
-    instructions
-        Extra instructions placed under an `## Additional instructions`
-        heading at the end of commons' built-in system prompt, as a string or
-        the path to a text or Markdown file.
+    `data_sources` is a `DataSource`, or a mapping of name to `DataSource`;
+    a measure can take a named source's connection as an argument named
+    after it. `instructions` is extra text placed under an
+    `## Additional instructions` heading at the end of commons' built-in
+    system prompt, as a string or the path to a text or Markdown file.
+
+    Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
+    an entry of `data_sources` is not a `DataSource`, or if a layer is not
+    the layer its argument claims; a ValueError if `data_sources` names no
+    source or a measure asks for an injection no named source can fill; and
+    a FileNotFoundError if `instructions` names a file that does not exist.
     """
 
     def __init__(
@@ -100,6 +96,10 @@ class Commons:
                 "client must be a chatlas.Chat, e.g. from chatlas.ChatAnthropic(), "
                 f"not {type(client).__name__}."
             )
+        # What the client carried is warned about before any other argument
+        # is checked, as pkg-r/R/commons.R does, so a bad later argument
+        # does not eat the warning.
+        _warn_ignored_client_state(client)
         sources = _as_data_sources(data_sources)
         if context_layer is not None and not isinstance(context_layer, ContextLayer):
             raise TypeError(
@@ -170,7 +170,11 @@ class Commons:
         stream: bool = True,
         kwargs: SubmitInputArgsT | None = None,
     ) -> ChatResponse:
-        """Ask a question and wait for the whole answer."""
+        """Ask a question and wait for the whole answer.
+
+        A reminder queued with `queue_restore_reminder()` rides this turn,
+        and a turn that fails leaves it queued for the next one.
+        """
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
         self._citation_request.reset()
@@ -220,15 +224,20 @@ class Commons:
         was_pending: bool,
     ) -> AsyncGenerator[str | Content, None]:
         scanner = CitationScanner(self._corpus)
-        async for chunk in raw:
-            # A provider's structured content passes through untouched; only
-            # the model's own text can carry the reserved dialect.
-            if not isinstance(chunk, str):
-                yield chunk
-                continue
-            projected = scanner.feed(chunk)
-            if projected:
-                yield projected
+        try:
+            async for chunk in raw:
+                # A provider's structured content passes through untouched;
+                # only the model's own text can carry the reserved dialect.
+                if not isinstance(chunk, str):
+                    yield chunk
+                    continue
+                projected = scanner.feed(chunk)
+                if projected:
+                    yield projected
+        finally:
+            # A consumer that walks away early without cancelling still
+            # closes the provider's stream.
+            await raw.aclose()
 
         self._consume_restore_reminder(was_pending)
 
@@ -273,9 +282,17 @@ class Commons:
             self._citation_request.reset()
         self._client.add_turn(turn)
 
-    def get_turns(self) -> list[Turn]:
-        """The conversation so far."""
-        return self._client.get_turns()
+    def get_turns(
+        self,
+        *,
+        include_system_prompt: bool = False,
+        tool_result_role: Literal["assistant", "user"] = "user",
+    ) -> list[Turn]:
+        """The conversation so far, through chatlas's own view options."""
+        return self._client.get_turns(
+            include_system_prompt=include_system_prompt,
+            tool_result_role=tool_result_role,
+        )
 
     def set_turns(self, turns: Sequence[Turn]) -> None:
         """Replace the conversation, dropping any reminder queued for it."""
@@ -307,14 +324,8 @@ class Commons:
 _CALLER = 3
 
 
-def _agent_client(client: Chat) -> Chat:
-    """A chat of the caller's provider and model, holding none of its state.
-
-    The provider and the model come from `client`, and commons brings its own
-    system prompt and tools, as `pkg-r/R/commons.R` does when it initializes
-    from the client's provider. Building a chat rather than taking the given
-    one over means an agent never changes an object its caller still holds.
-    """
+def _warn_ignored_client_state(client: Chat) -> None:
+    """Warn about whatever the agent's own chat will not carry over."""
     if client.system_prompt is not None:
         warnings.warn(
             "The system prompt set on client is ignored; commons builds its "
@@ -328,6 +339,15 @@ def _agent_client(client: Chat) -> Chat:
             stacklevel=_CALLER,
         )
 
+
+def _agent_client(client: Chat) -> Chat:
+    """A chat of the caller's provider and model, holding none of its state.
+
+    The provider and the model come from `client`, and commons brings its own
+    system prompt and tools, as `pkg-r/R/commons.R` does when it initializes
+    from the client's provider. Building a chat rather than taking the given
+    one over means an agent never changes an object its caller still holds.
+    """
     # The provider is shared rather than copied, because it is what carries
     # the model the caller chose. Its arguments are copied one level deep, so
     # adding or dropping one later does not cross between the two chats; a
