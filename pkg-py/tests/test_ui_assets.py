@@ -10,7 +10,6 @@ import pytest
 # shinychat brings shiny and htmltools with it, so it stands for the extra.
 pytest.importorskip("shinychat", reason="commons[shiny] is not installed")
 
-from commons._ui import _missing_extra_packages, _require_extra
 from commons._ui._assets import (
     asset_base_url,
     commons_chat_dependency,
@@ -74,10 +73,32 @@ def test_the_base_url_is_where_htmltools_serves_the_assets() -> None:
 
 
 def test_a_missing_extra_names_the_package_and_the_install() -> None:
-    missing = _missing_extra_packages(("htmltools", "not_a_real_package"))
-    assert missing == ["not_a_real_package"]
-    with pytest.raises(ImportError, match="not_a_real_package"):
-        _require_extra(missing)
+    # Make shinychat fail to import the way an uninstalled one does, then
+    # import commons.ui in a fresh interpreter and read what it says.
+    code = """
+import sys
+
+
+class Absent:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] == "shinychat":
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return None
+
+
+sys.meta_path.insert(0, Absent())
+try:
+    import commons.ui
+except ImportError as err:
+    print(err)
+else:
+    print("commons.ui imported anyway")
+"""
+    done = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert "shinychat" in done.stdout
+    assert 'pip install "commons[shiny]"' in done.stdout
 
 
 def test_the_ui_module_is_only_imported_on_demand() -> None:

@@ -2,33 +2,14 @@
 
 from __future__ import annotations
 
-import importlib.util
-from collections.abc import Sequence
-
-_EXTRA_PACKAGES = ("htmltools", "shiny", "shinychat")
-
-
-def _missing_extra_packages(
-    packages: Sequence[str] = _EXTRA_PACKAGES,
-) -> list[str]:
-    return [name for name in packages if importlib.util.find_spec(name) is None]
-
-
-def _require_extra(missing: Sequence[str] | None = None) -> None:
-    missing = _missing_extra_packages() if missing is None else missing
-    if not missing:
-        return
-    names = ", ".join(missing)
-    verb = "is" if len(missing) == 1 else "are"
+try:
+    from ._assets import asset_base_url, commons_chat_dependency
+    from ._theme import theme
+except ModuleNotFoundError as err:
+    # shiny, shinychat and htmltools arrive with the `shiny` extra.
     raise ImportError(
-        f"commons.ui needs {names}, which {verb} not installed. "
-        'Install them with: pip install "commons[shiny]"'
-    )
-
-
-_require_extra()
-
-from ._assets import asset_base_url, commons_chat_dependency
-from ._theme import theme
+        f"commons.ui needs {err.name}, which is not installed. "
+        'Install it with: pip install "commons[shiny]"'
+    ) from err
 
 __all__ = ["asset_base_url", "commons_chat_dependency", "theme"]
