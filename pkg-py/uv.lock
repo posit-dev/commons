@@ -364,7 +364,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
-    { name = "shinychat", specifier = ">=0.7" },
+    { name = "shinychat", specifier = ">=0.7,<0.8" },
 ]
 
 [[package]]

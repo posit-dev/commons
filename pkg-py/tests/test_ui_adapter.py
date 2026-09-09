@@ -74,6 +74,30 @@ def test_tool_and_prompt_members_reach_the_agent() -> None:
     assert client.system_prompt == subject.system_prompt
 
 
+def test_set_tools_through_the_client_reaches_the_agents_chat() -> None:
+    """A client swap calls `set_tools(old.get_tools())` on the new client."""
+    subject = agent()
+    client = CommonsChatClient(subject)
+
+    client.set_tools([])
+
+    assert subject.get_tools() == []
+
+
+def test_register_tool_through_the_client_reaches_the_agents_chat() -> None:
+    subject = agent()
+    client = CommonsChatClient(subject)
+    registered = len(client.get_tools())
+
+    def add(a: int, b: int) -> int:
+        """Add two numbers."""
+        return a + b
+
+    client.register_tool(add)
+
+    assert len(subject.get_tools()) == registered + 1
+
+
 def test_get_turns_returns_dictionaries_a_chat_ui_can_subscript() -> None:
     """shinychat serializes turns itself only for a real chatlas client."""
     subject = agent()
@@ -103,6 +127,29 @@ def test_set_turns_round_trips_through_the_agent() -> None:
     client.set_turns([])
 
     assert subject.get_turns() == []
+
+
+def test_set_turns_accepts_turns_and_dictionaries_in_one_list() -> None:
+    """A partial restore can mix the two shapes."""
+    subject = agent()
+    client = CommonsChatClient(subject)
+    client.set_turns([UserTurn("How much?"), AssistantTurn("1400.")])
+    as_dicts = client.get_turns()
+
+    client.set_turns([UserTurn("Again."), as_dicts[1]])
+
+    assert [turn.role for turn in subject.get_turns()] == ["user", "assistant"]
+
+
+def test_add_turn_accepts_dictionaries_and_turns_alike() -> None:
+    """The same two shapes `set_turns()` takes, one turn at a time."""
+    subject = agent()
+    client = CommonsChatClient(subject)
+
+    client.add_turn(UserTurn("How much?"))
+    client.add_turn(client.get_turns()[0])
+
+    assert [turn.role for turn in subject.get_turns()] == ["user", "user"]
 
 
 def test_shinychat_can_derive_a_title_from_the_adapters_turns() -> None:
@@ -253,3 +300,10 @@ async def test_set_state_rejects_a_payload_that_is_not_a_mapping() -> None:
 
     with pytest.raises(ValueError):
         await client.set_state([])
+
+
+async def test_set_state_rejects_turns_that_are_not_a_list() -> None:
+    client = CommonsChatClient(agent())
+
+    with pytest.raises(ValueError, match="list"):
+        await client.set_state({"version": 1, "turns": "not-a-list"})

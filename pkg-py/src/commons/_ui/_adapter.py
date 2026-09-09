@@ -19,6 +19,16 @@ if TYPE_CHECKING:
 
     from .._agent import Commons
 
+try:
+    # htmltools objects reach a turn through a tool result, and only
+    # shinychat knows how to serialize them. Where it is installed, use the
+    # serializer its own bookmark hook uses, so a bookmark written by this
+    # adapter matches one written for a plain `chatlas.Chat`; where it is
+    # not, pydantic's own handling stands.
+    from shinychat._chat_bookmark import serialize_chatlas_turn
+except ImportError:
+    serialize_chatlas_turn = None
+
 __all__ = ["CommonsChatClient"]
 
 
@@ -26,8 +36,8 @@ class CommonsChatClient:
     """A `Commons` agent behind the client surface a chat UI drives.
 
     A commons agent composes a `chatlas.Chat` object, rather than inheriting
-    directly from that class, so shinychat cannot handle it it directly
-    on its ``client=`` parameter. Most methods of this adapter hand off to the 
+    directly from that class, so shinychat cannot handle it directly
+    on its ``client=`` parameter. Most methods of this adapter hand off to the
     `Commons` agent, or to the `chatlas.Chat` inside it.
 
     `stream_async()` must reach the `Commons` agent. The citation scanner and the
@@ -84,24 +94,34 @@ class CommonsChatClient:
         ]
 
     def set_turns(self, turns: Sequence[Turn | dict[str, Any]]) -> None:
+        """Replace the conversation, taking turns as objects or dicts."""
         self._agent.set_turns([_as_turn(turn) for turn in turns])
 
     def add_turn(self, turn: Turn | dict[str, Any]) -> None:
+        """Add a turn, as an object or a dict."""
         self._agent.add_turn(_as_turn(turn))
 
     # ---- tools and prompt -------------------------------------------------
 
     def get_tools(self) -> list[Tool | ToolBuiltIn]:
+        """The tools the agent's chat has registered."""
         return self._agent.get_tools()
 
-    def set_tools(self, tools: Sequence[Tool | Callable[..., Any]]) -> None:
+    def set_tools(
+        self, tools: Sequence[Tool | ToolBuiltIn | Callable[..., Any]]
+    ) -> None:
+        """Replace the tools on the agent's chat."""
+        # chatlas takes a `list`, so the invariant parameter cannot see that
+        # a sequence of these is safe to hand over.
         self._agent.client.set_tools(tools)  # type: ignore[arg-type]
 
     def register_tool(self, *args: Any, **kwargs: Any) -> None:
+        """Register one more tool on the agent's chat."""
         self._agent.client.register_tool(*args, **kwargs)
 
     @property
     def system_prompt(self) -> str | None:
+        """The prompt the agent's model is working from."""
         return self._agent.system_prompt
 
     @system_prompt.setter
@@ -114,6 +134,7 @@ class CommonsChatClient:
 
     @property
     def conversation_id(self) -> str | None:
+        """The id shinychat allocated for the conversation under way."""
         return self._agent.client.conversation_id
 
     @conversation_id.setter
@@ -162,11 +183,6 @@ def _as_turn(turn: Turn | dict[str, Any]) -> Turn:
 
 
 def _serialize_turn(turn: Turn) -> dict[str, Any]:
-    # htmltools objects reach a turn through a tool result, and only shinychat
-    # knows how to serialize them, so use its fallback where it is installed
-    # and let pydantic's own handling stand where it is not.
-    try:
-        from shinychat._htmltools_serialization import serialize_htmltools
-    except ImportError:
+    if serialize_chatlas_turn is None:
         return turn.model_dump(mode="json")
-    return turn.model_dump(mode="json", fallback=serialize_htmltools)
+    return serialize_chatlas_turn(turn)
