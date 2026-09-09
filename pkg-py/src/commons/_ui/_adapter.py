@@ -1,9 +1,9 @@
 """The object a chat UI is handed in place of the agent.
 
-`Commons` composes a `chatlas.Chat` (D1), so it is not one, and shinychat
-hands its `client=` to code that expects chatlas's surface. This adapter is
-that surface. The R package inherits from `ellmer::Chat` and needs no
-equivalent; the Python side accepts the divergence and pays for it here.
+`Commons` composes on top of a `chatlas.Chat` rather than inheriting from
+it directly. shinychat expects a `Chat` object on its `client=` parameter,
+so this adapter provides an object that can serve that purpose.
+The R package inherits from `ellmer::Chat` and needs no equivalent adapter.
 """
 
 from __future__ import annotations
@@ -25,9 +25,15 @@ __all__ = ["CommonsChatClient"]
 class CommonsChatClient:
     """A `Commons` agent behind the client surface a chat UI drives.
 
-    Only `stream_async()` is the agent's own: the citation scanner and the
-    provenance tag live in the agent, so a UI that streamed the composed
-    chatlas client directly would render an answer with no marker.
+    A commons agent composes a `chatlas.Chat` object, rather than inheriting
+    directly from that class, so shinychat cannot handle it it directly
+    on its ``client=`` parameter. Most methods of this adapter hand off to the 
+    `Commons` agent, or to the `chatlas.Chat` inside it.
+
+    `stream_async()` must reach the `Commons` agent. The citation scanner and the
+    provenance tag are applied there, so an answer streamed from the
+    `chatlas.Chat` instead would not receive any of the special Commons treatment
+    (provenance, trajectory, marking, etc.).
     """
 
     def __init__(self, agent: Commons) -> None:
@@ -41,7 +47,7 @@ class CommonsChatClient:
         """The agent this client speaks for."""
         return self._agent
 
-    # ---- the one that must not forward ------------------------------------
+    # ---- the member that has to reach the agent ----------------------------
 
     async def stream_async(
         self,
