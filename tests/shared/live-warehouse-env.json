@@ -1,0 +1,69 @@
+{
+  "note": "The environment both suites read to reach a real warehouse. Held here so the two harnesses cannot drift on a variable name. Connection variables are the vendor's own, which is what the Databricks and Snowflake client libraries read in Python and what odbc::databricks() and odbc::snowflake() read in R, so one export block serves both languages and the vendor CLIs. Fixture variables carry one dotted identifier each. A backend whose required variables are unset skips; an optional fixture skips only the tests that need it.",
+  "backends": {
+    "databricks": {
+      "connection": {
+        "required": ["DATABRICKS_HOST", "DATABRICKS_HTTP_PATH"],
+        "token": "DATABRICKS_TOKEN"
+      },
+      "fixtures": {
+        "schema": {
+          "variable": "COMMONS_TEST_DATABRICKS_SCHEMA",
+          "required": true,
+          "arity": 2,
+          "description": "Catalog and schema holding the provisioned tables, as `catalog.schema`. The table names themselves come from live-warehouse-rows.json."
+        },
+        "denied_table": {
+          "variable": "COMMONS_TEST_DATABRICKS_DENIED_TABLE",
+          "required": false,
+          "arity": 3,
+          "description": "A relation the test principal genuinely cannot read. Needs an owner other than the test principal, so provisioning cannot finish it."
+        },
+        "metric_view": {
+          "variable": "COMMONS_TEST_DATABRICKS_METRIC_VIEW",
+          "required": false,
+          "arity": 3,
+          "description": "A parameterized metric view. Read by the R suite only: pkg-py has no semantic-model surface (commons kata gcgj)."
+        }
+      }
+    },
+    "snowflake": {
+      "connection": {
+        "required": ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE"],
+        "token": "SNOWFLAKE_PASSWORD"
+      },
+      "fixtures": {
+        "schema": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_SCHEMA",
+          "required": true,
+          "arity": 2,
+          "description": "Database and schema holding the provisioned tables, as `database.schema`."
+        },
+        "denied_table": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_DENIED_TABLE",
+          "required": false,
+          "arity": 3,
+          "description": "A relation the test role genuinely cannot read."
+        },
+        "alternate_role": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE",
+          "required": false,
+          "arity": 1,
+          "description": "A second usable role, for the active-role change test."
+        },
+        "semantic_view": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_SEMANTIC_VIEW",
+          "required": false,
+          "arity": 3,
+          "description": "A semantic view. Read by the R suite only, as with the Databricks metric view."
+        },
+        "verified_query_view": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_VERIFIED_QUERY_VIEW",
+          "required": false,
+          "arity": 3,
+          "description": "A semantic view carrying a verified query. Read by the R suite only."
+        }
+      }
+    }
+  }
+}
