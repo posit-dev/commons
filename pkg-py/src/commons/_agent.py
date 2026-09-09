@@ -1,10 +1,10 @@
 """The agent: its layers, the tools they earn, and the rules a turn follows.
 
 `pkg-r/R/commons.R` assembles the same agent for R, in the order this follows.
-A `chatlas.Chat` is composed rather than subclassed (D1), so the public
-surface is a choice R never had to make: what an agent needs, the chatlas
-methods the two turn rules have to hook, and accessors for what R got by
-inheriting.
+A `Commons` agent inherits directly from `chatlas.Chat`,
+in the same way it inherits from `ellmer::Chat` in R. A `Commons` agent
+will reject `Chat` methods it does not explicitly support to prevent
+interaction without provenance and citation tracking.
 """
 
 from __future__ import annotations
@@ -12,10 +12,11 @@ from __future__ import annotations
 import copy
 import warnings
 from collections.abc import AsyncGenerator, Mapping, Sequence
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
-from chatlas import Chat, StreamController, Tool, ToolBuiltIn, Turn, UserTurn
+from chatlas import Chat, StreamController, Tool, Turn, UserTurn
 from chatlas.types import ChatResponse, Content, SubmitInputArgsT
+from pydantic import BaseModel
 
 from ._backends import DuckDBBackend, EngineBackend
 from ._citation_scan import CitationScanner
@@ -54,22 +55,28 @@ SOLE_SOURCE = "data"
 _NO_MEASURES = semantic_layer()
 
 
-class Commons:
-    """An agent that answers questions about its data.
+class Commons(Chat[Any, Any]):
+    """A trustworthy agent that answers questions about its data.
 
-    Give it a `chatlas.Chat` for the provider and model, the data sources it
+    Given a `chatlas.Chat` for the provider and model, the data sources it
     can query, and optionally a semantic layer of trusted calculations and a
-    context layer of prose. It registers the tools its composition earns and
-    sets its own system prompt, so an answer can be classified by how it was
-    produced.
+    context layer of prose, a `Commons` agent will allow for agent interactions
+    with answers classified by how they were produced.
 
-    The provider and the model come from `client`; the agent builds its own
-    chat from them, so nothing it does reaches an object the caller still
-    holds, and nothing already on that object reaches the agent. That chat
-    is the `client` property here. A system prompt set on the one passed in
-    is ignored with a warning; use `instructions` to add to commons' prompt
-    instead. For best results, enable thinking where the provider and model
-    support it.
+    A `Commons` agent inherits directly from `chatlas.Chat` and relies on the
+    chatlas infrastructure to set up the LLM provider and model. `Commons`
+    initializes its own chat state and system prompt to ensure provenance
+    and citation tracking. Passing a custom system prompt in the `Commons`
+    constructor is ignored with a warning; use `instructions` to add to
+    commons' prompt instead. For best results, enable thinking where the
+    provider and model support it.
+
+    `chat()` and `stream_async()` are the currently supported ways to
+    interact with a `Commons` agent. The other entry points chatlas offers
+    (`chat_async()`, `stream()`, `chat_structured()`, etc.)
+    are disabled and raise `NotImplementedError`s because they are not (yet)
+    tied in to the commons framework. The rest of chatlas's surface works as
+    it does on any chat.
 
     `data_sources` is a `DataSource`, or a mapping of name to `DataSource`;
     a measure can take a named source's connection as an argument named
@@ -118,7 +125,15 @@ class Commons:
             )
         check_instructions(instructions)
 
-        self._client = _agent_client(client)
+        # Share the provider, which carries the chosen model; shallow-copy
+        # the chat kwargs so later changes don't cross between the two.
+        super().__init__(
+            provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
+        )
+        # chatlas never generates one, so an id the caller chose is explicitly kept
+        self.conversation_id = client.conversation_id
+        _carry_model_params(self, client)
+
         self._sources = sources
         self._context_layer = augment_context_layer(context_layer, sources.values())
         self._definitions = build_registry(sources)
@@ -149,19 +164,28 @@ class Commons:
                 first_touch=self._first_touch,
             )
         )
-        self._client.set_tools(list(tools))
-        self._client.system_prompt = _system_prompt(
+        self.set_tools(list(tools))
+        self.system_prompt = _system_prompt(
             sources,
             self._definitions,
             instructions=instructions,
             tools=tools,
-            model=self._client.model,
+            model=self.model,
         )
 
     def __repr__(self) -> str:
         count = len(self._sources)
         plural = "" if count == 1 else "s"
         return f"A commons agent over {count} data source{plural}."
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> NoReturn:
+        # chatlas Chat objects can be deep-copied to fork a conversation,
+        # Because a Commons agent may have database connections (which can't be copied)
+        # we explicitly forbid deep copying with a clear error.
+        raise NotImplementedError(
+            "A commons agent cannot be copied: it holds database connections "
+            "that copying cannot reach. Build a second agent instead."
+        )
 
     # ---- asking it something ---------------------------------------------
 
@@ -180,7 +204,7 @@ class Commons:
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
         self._citation_request.reset()
-        response = self._client.chat(*inputs, echo=echo, stream=stream, kwargs=kwargs)
+        response = super().chat(*inputs, echo=echo, stream=stream, kwargs=kwargs)
         self._consume_restore_reminder(was_pending)
         return response
 
@@ -189,26 +213,33 @@ class Commons:
         *args: Content | str,
         content: Literal["text", "all"] = "text",
         echo: EchoOptions = "none",
+        data_model: type[BaseModel] | None = None,
         kwargs: SubmitInputArgsT | None = None,
         controller: StreamController | None = None,
-    ) -> AsyncGenerator[str | Content, None]:
+    ) -> AsyncGenerator[Any, None]:
         """Ask a question and stream the answer as it arrives.
 
-        The signature is chatlas's, less `data_model`, so a chat UI can drive
-        this agent directly: shinychat calls
-        `stream_async(input, *contents, content="all", controller=controller)`
-        and needs the attachment content, the mode, and the controller its
+        The signature is identical to chatlas's, so a chat UI can drive this agent
+        directly and needs the attachment content, the mode, and the controller its
         stop button cancels through.
 
-        Structured output is left out rather than passed through: its chunks
-        are JSON to be parsed whole, and the provenance marker this appends
-        would make that JSON unparseable.
+        The Commons agent does not accept `data_model`. If you pass it, this
+        method raises NotImplementedError. In chatlas, using `data_model` means
+        the chunks are JSON that the caller parses as one document. Commons adds
+        provenance markers and citations to the stream that are not compatible with
+        `data_model`, so it is explicitly forbidden.
         """
-        from_index = len(self._client.get_turns())
+        if data_model is not None:
+            raise NotImplementedError(
+                "stream_async(data_model=...) is not available on a commons "
+                "agent: the provenance marker and citations it appends would leave the "
+                "streamed JSON unparseable."
+            )
+        from_index = len(self.get_turns())
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
         self._citation_request.reset()
-        raw = await self._client.stream_async(
+        raw = await super().stream_async(
             *inputs,
             content=content,
             echo=echo,
@@ -248,50 +279,40 @@ class Commons:
             yield tail
 
         tag = derive_provenance_tag(
-            collect_appended_tags(self._client.get_turns(), from_index),
+            collect_appended_tags(self.get_turns(), from_index),
             scanner.any_verified,
         )
         aside = provenance_aside(tag)
         if aside:
             yield aside
 
-    # ---- reaching the chat ------------------------------------------------
+    # ---- chatlas.Chat entry points a Commons agent does not support ----------------
 
-    @property
-    def client(self) -> Chat:
-        """The chat this agent assembled, for whatever it does not forward.
+    def chat_async(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError(_unrouted("chat_async"))
 
-        Not the chat handed to the constructor: that one supplies the
-        provider and the model, and the agent builds its own around them, so
-        this is where the tools and the prompt actually live. Reach through
-        here for the rest of chatlas's surface, `set_model_params()` and
-        `list_models()` among it.
+    def stream(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError(_unrouted("stream"))
 
-        Asking this object a question skips the citation scanner and the
-        provenance tag, so `client.chat()` can answer with no marker at all.
-        Anything a person reads should go through `chat()` or
-        `stream_async()`.
-        """
-        return self._client
+    def chat_structured(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError(_unrouted("chat_structured"))
 
-    def get_tools(self) -> list[Tool | ToolBuiltIn]:
-        """The tools this agent's composition earned.
+    def chat_structured_async(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError(_unrouted("chat_structured_async"))
 
-        Typed as chatlas types it rather than as the `Tool` list commons
-        registers, because the `client` escape hatch can add a built-in tool
-        that this would then have to misreport.
-        """
-        return self._client.get_tools()
+    def extract_data(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError(_unrouted("extract_data"))
 
-    @property
-    def system_prompt(self) -> str | None:
-        """The rendered prompt this agent's model is working from.
+    def extract_data_async(self, *args: Any, **kwargs: Any) -> NoReturn:
+        raise NotImplementedError(_unrouted("extract_data_async"))
 
-        Read-only: the constructor discards a prompt set on the incoming
-        chat, so assigning here would drop the assembled one the same way,
-        and quietly.
-        """
-        return self._client.system_prompt
+    def to_solver(self, *args: Any, **kwargs: Any) -> NoReturn:
+        # chatlas's solver answers each eval sample through `chat_async()` or
+        # `chat_structured_async()`, so it would raise mid-eval anyway.
+        raise NotImplementedError(
+            "A commons agent has no to_solver(): the solver it returns "
+            "answers through chat_async(), which an agent does not provide."
+        )
 
     # ---- what the agent knows --------------------------------------------
 
@@ -320,24 +341,12 @@ class Commons:
         """
         if isinstance(turn, UserTurn) and turn_has_user_message(turn):
             self._citation_request.reset()
-        self._client.add_turn(turn)
-
-    def get_turns(
-        self,
-        *,
-        include_system_prompt: bool = False,
-        tool_result_role: Literal["assistant", "user"] = "user",
-    ) -> list[Turn]:
-        """The conversation so far, through chatlas's own view options."""
-        return self._client.get_turns(
-            include_system_prompt=include_system_prompt,
-            tool_result_role=tool_result_role,
-        )
+        super().add_turn(turn)
 
     def set_turns(self, turns: Sequence[Turn]) -> None:
         """Replace the conversation, dropping any reminder queued for it."""
         self._restore_reminder_pending = False
-        self._client.set_turns(turns)
+        super().set_turns(turns)
 
     def queue_restore_reminder(self) -> None:
         """Tell the next turn that the session behind its history is gone."""
@@ -346,7 +355,7 @@ class Commons:
     def _prepare_turn_inputs(
         self, inputs: Sequence[Content | str]
     ) -> list[Content | str]:
-        prepared = append_turn_reminder(inputs, self._client.model)
+        prepared = append_turn_reminder(inputs, self.model)
         if self._restore_reminder_pending:
             prepared = append_restored_conversation_reminder(prepared)
         return prepared
@@ -380,25 +389,23 @@ def _warn_ignored_client_state(client: Chat) -> None:
         )
 
 
-def _agent_client(client: Chat) -> Chat:
-    """A chat of the caller's provider and model, holding none of its state.
-
-    The provider and the model come from `client`, and commons brings its own
-    system prompt and tools, as `pkg-r/R/commons.R` does when it initializes
-    from the client's provider. Building a chat rather than taking the given
-    one over means an agent never changes an object its caller still holds.
-    """
-    # The provider is shared rather than copied, because it is what carries
-    # the model the caller chose. Its arguments are copied one level deep, so
-    # adding or dropping one later does not cross between the two chats; a
-    # value inside one is left alone, since it can be anything a provider
-    # takes and copying it could fail.
-    agent_client = Chat(
-        provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
+def _unrouted(name: str) -> str:
+    """Why an inherited entry point is closed, and what to ask instead."""
+    return (
+        f"A commons agent has no {name}(): it would submit a turn outside "
+        "commons' turn handling, and the answer would carry neither the "
+        "citation scanner's work nor a provenance marker. Ask the agent "
+        "with chat() or stream_async()."
     )
-    # chatlas never generates one, so an id the caller chose is theirs to keep.
-    agent_client.conversation_id = client.conversation_id
 
+
+def _carry_model_params(agent: Chat, client: Chat) -> None:
+    """Move whatever `set_model_params()` put on the caller's chat.
+
+    The agent brings its own system prompt and tools and starts an empty
+    conversation, as `pkg-r/R/commons.R` does when it initializes from the
+    client's provider, so the model parameters are all there is to carry.
+    """
     # chatlas has the setter for these and no getter, so they are read off the
     # attribute behind it and written back through the public setter, which
     # checks them against the provider again. An attribute that is missing, or
@@ -414,8 +421,7 @@ def _agent_client(client: Chat) -> Chat:
             stacklevel=_CALLER,
         )
     elif params:
-        agent_client.set_model_params(**dict(params))
-    return agent_client
+        agent.set_model_params(**dict(params))
 
 
 def _as_data_sources(

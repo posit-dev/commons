@@ -42,7 +42,7 @@ agent.chat("What is EMEA revenue?")
 
 Use `stream_async()` in place of `chat()` to stream an answer as it arrives. Its signature is chatlas's, so a chat UI can drive the agent directly.
 
-Beyond `chat()` and `stream_async()`, an agent exposes `get_tools()` and `system_prompt` for what it assembled, and `client` for the chatlas `Chat` underneath. Ask questions through the agent rather than through `client`: that one skips the citation scanner and the provenance tag, so it can answer with no marker.
+An agent is a chatlas `Chat`, so `get_tools()`, `system_prompt`, `set_model_params()` and the rest of that surface work on it directly. `chat()` and `stream_async()` are the only ways to ask it something. The other entry points chatlas offers would answer without the citation scanner and the provenance tag, so each of them raises `NotImplementedError`.
 
 `demo.py` here is a fuller worked example, an agent over made-up forest canopy data with two measures and a context layer, asked from the terminal. `demo.ipynb` is the same agent in a notebook, with cells for reading what it registered and adding a measure of your own. `pkg-r/inst/demo.R` is the R package's version of it, behind a Shiny front end.
 

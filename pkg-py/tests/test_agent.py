@@ -1,12 +1,13 @@
 """Building an agent: what it validates, what it assembles, and what it warms."""
 
+import copy
 from pathlib import Path
 from typing import Annotated, Any
 
 import pandas as pd
 import pytest
 from chatlas import Chat, ContentToolResult, Tool, UserTurn
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 from commons import Injected, context_layer, data_source, measure, semantic_layer
 from commons._agent import Commons
@@ -147,6 +148,14 @@ def test_ignored_client_state_warns_before_other_arguments_fail(
 # ---- the agent's own chat -------------------------------------------------
 
 
+def test_an_agent_is_a_chatlas_chat(client: Chat, source: Any) -> None:
+    agent = Commons(client, source)
+
+    # Everything that hands a chat client to shinychat, chatlas, or anything
+    # else gates on this type rather than on a duck-typed surface.
+    assert isinstance(agent, Chat)
+
+
 def test_the_client_it_was_given_is_left_alone(client: Chat, source: Any) -> None:
     agent = Commons(client, source)
 
@@ -155,7 +164,7 @@ def test_the_client_it_was_given_is_left_alone(client: Chat, source: Any) -> Non
     assert client.get_tools() == []
     assert client.system_prompt is None
     assert tool_names(agent)
-    assert agent._client is not client
+    assert agent is not client
 
 
 def test_model_parameters_carry_onto_the_agents_chat(client: Chat, source: Any) -> None:
@@ -166,7 +175,7 @@ def test_model_parameters_carry_onto_the_agents_chat(client: Chat, source: Any) 
     # Reading chatlas' own attribute is the only way to see these, and doing
     # it here on purpose means a chatlas that renames it fails loudly rather
     # than leaving the warning path as the only thing still exercised.
-    assert agent._client._standard_model_params == {"temperature": 0.0, "seed": 7}
+    assert agent._standard_model_params == {"temperature": 0.0, "seed": 7}
 
 
 def test_model_parameters_that_cannot_be_read_are_reported(
@@ -191,10 +200,10 @@ def test_the_provider_arguments_and_conversation_id_carry_over(
     agent = Commons(client, source)
     client.kwargs_chat["max_tokens"] = 8  # type: ignore[typeddict-unknown-key]
 
-    assert agent._client.kwargs_chat == {"max_tokens": 2048}
-    assert agent._client.conversation_id == "abc123"
+    assert agent.kwargs_chat == {"max_tokens": 2048}
+    assert agent.conversation_id == "abc123"
     # The provider carries the model, so it is shared on purpose.
-    assert agent._client.provider is client.provider
+    assert agent.provider is client.provider
 
 
 def test_get_turns_offers_chatlas_own_views(client: Chat, source: Any) -> None:
@@ -204,30 +213,18 @@ def test_get_turns_offers_chatlas_own_views(client: Chat, source: Any) -> None:
     assert agent.get_turns(include_system_prompt=True)[0].text == prompt(agent)
 
 
-# ---- reaching the chat ----------------------------------------------------
+# ---- the chat surface an agent inherits -----------------------------------
 
 
-def test_the_client_property_is_the_chat_the_agent_assembled(
+def test_the_rest_of_chatlas_surface_works_on_the_agent(
     client: Chat, source: Any
 ) -> None:
     agent = Commons(client, source)
 
-    # The chat the caller passed supplies the provider and model; what the
-    # tools and prompt hang off is the agent's own, so that is what a caller
-    # reaching past the forwarded methods has to be handed.
-    assert agent.client is not client
-    assert agent.client.get_tools()
-    assert agent.client.system_prompt is not None
+    agent.set_model_params(temperature=0.0)
 
-
-def test_the_escape_hatch_reaches_chatlas_own_surface(
-    client: Chat, source: Any
-) -> None:
-    agent = Commons(client, source)
-
-    agent.client.set_model_params(temperature=0.0)
-
-    assert agent.client.model == client.model
+    assert agent.model == client.model
+    assert agent._standard_model_params == {"temperature": 0.0}
 
 
 def test_the_tools_it_registered_are_public(client: Chat, source: Any) -> None:
@@ -241,7 +238,7 @@ def test_the_tools_it_registered_are_public(client: Chat, source: Any) -> None:
 
     assert "call_measure" in names
     assert names == [
-        tool.name for tool in agent.client.get_tools() if isinstance(tool, Tool)
+        tool.name for tool in agent.get_tools() if isinstance(tool, Tool)
     ]
 
 
@@ -254,23 +251,82 @@ def test_the_rendered_prompt_is_public(client: Chat, source: Any) -> None:
     assert "sales" in agent.system_prompt
 
 
-def test_the_prompt_cannot_be_replaced_through_the_agent(
+def test_the_prompt_is_writable_as_it_is_on_any_chat(
     client: Chat, source: Any
 ) -> None:
     agent = Commons(client, source)
 
-    # A setter would discard the assembled prompt, which is the very thing
-    # the constructor warns about when the incoming client carries one.
-    with pytest.raises(AttributeError):
-        agent.system_prompt = "instead of all that"  # type: ignore[misc]
+    # chatlas's own setter, kept rather than closed off, because a chat UI
+    # swapping clients assigns the previous client's prompt onto the new one.
+    agent.system_prompt = "instead of all that"
+
+    assert agent.system_prompt == "instead of all that"
 
 
-def test_the_agent_still_carries_no_conversation_id(client: Chat, source: Any) -> None:
+def test_the_conversation_id_is_readable_and_writable(
+    client: Chat, source: Any
+) -> None:
     agent = Commons(client, source)
 
-    # shinychat assigns the id only to an object that already has the
-    # attribute (D5), so M8's adapter owns it and this object must not.
-    assert not hasattr(agent, "conversation_id")
+    # shinychat assigns the id it allocated behind
+    # `hasattr(client, "conversation_id")`, and skips it in silence
+    # otherwise, which would leave every turn reading as its own
+    # conversation (kata cyyz).
+    agent.conversation_id = "conv-1"
+
+    assert agent.conversation_id == "conv-1"
+
+
+# ---- the entry points Commons does not support --------------------
+
+
+# chatlas's answer-producing surface. An agent implements the first two and
+# refuses the rest, so a chatlas that grows another one fails here rather
+# than shipping an unmarked way to ask a question.
+ENTRY_POINTS = [
+    "chat",
+    "stream_async",
+    "chat_async",
+    "stream",
+    "chat_structured",
+    "chat_structured_async",
+    "extract_data",
+    "extract_data_async",
+    "to_solver",
+]
+
+
+def test_no_answer_producing_method_is_left_inherited() -> None:
+    assert [name for name in ENTRY_POINTS if name not in vars(Commons)] == []
+
+
+@pytest.mark.parametrize("name", ENTRY_POINTS[2:])
+def test_an_entry_point_that_skips_commons_refuses(
+    client: Chat, source: Any, name: str
+) -> None:
+    agent = Commons(client, source)
+
+    with pytest.raises(NotImplementedError, match=name):
+        getattr(agent, name)()
+
+
+async def test_a_structured_stream_refuses(client: Chat, source: Any) -> None:
+    class Revenue(BaseModel):
+        total: float
+
+    agent = Commons(client, source)
+
+    with pytest.raises(NotImplementedError, match="data_model"):
+        await agent.stream_async("How much?", data_model=Revenue)
+
+
+def test_an_agent_cannot_be_copied(client: Chat, source: Any) -> None:
+    # chatlas forks a chat by copying it, and so does a chat UI asking a
+    # throwaway question; a source's connection does not survive that.
+    agent = Commons(client, source)
+
+    with pytest.raises(NotImplementedError, match="cannot be copied"):
+        copy.deepcopy(agent)
 
 
 # ---- assembly -------------------------------------------------------------
@@ -535,8 +591,8 @@ def test_the_agent_asks_the_clients_own_provider(client: Chat, source: Any) -> N
 
     # The provider carries the model, so taking it is how the agent ends up
     # talking to what the caller chose.
-    assert agent._client.provider is client.provider
-    assert isinstance(agent._client.provider, ScriptedProvider)
+    assert agent.provider is client.provider
+    assert isinstance(agent.provider, ScriptedProvider)
 
 
 def test_an_agent_says_how_many_sources_it_has(client: Chat, source: Any) -> None:
