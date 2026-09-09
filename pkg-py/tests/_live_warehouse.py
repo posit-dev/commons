@@ -27,6 +27,9 @@ from typing import Any
 import pytest
 import sqlalchemy
 
+from commons._backends import EngineBackend
+from commons._catalog import _databricks, _snowflake
+from commons._data_source import TableId
 from tests._shared import load_shared_fixture
 
 __all__ = [
@@ -39,6 +42,11 @@ __all__ = [
 
 _ENV = load_shared_fixture("live-warehouse-env")
 _ROWS = load_shared_fixture("live-warehouse-rows")
+
+_READER_QUOTING = {
+    "databricks": _databricks._quote_path,
+    "snowflake": _snowflake._quote_path,
+}
 
 # Doubles JSON cannot spell. The fixture carries them as strings.
 _SPECIAL_DOUBLES = {"NaN": math.nan, "Infinity": math.inf, "-Infinity": -math.inf}
@@ -53,11 +61,45 @@ class LiveWarehouse:
     namespace: tuple[str, ...]
     fixtures: dict[str, str]
 
-    def table_id(self, table: str) -> tuple[str, ...]:
-        return (*self.namespace, table)
+    @property
+    def engine_backend(self) -> EngineBackend:
+        return EngineBackend(self.engine)
 
-    def dotted(self, table: str) -> str:
-        return ".".join(self.table_id(table))
+    def table_id(self, table: str) -> TableId:
+        catalog, schema = self.namespace
+        return TableId(table=table, schema=schema, catalog=catalog)
+
+    def quoted(self, table: str) -> str:
+        """A fixture table, quoted the way the backend's own reader quotes it.
+
+        Joining the parts raw is wrong on both backends for different reasons:
+        `values` is a reserved word on Databricks, and Snowflake folds an
+        unquoted identifier to upper case while the fixture tables are created
+        under the authored spelling. SQLAlchemy's preparer does not solve
+        either, because it quotes only when it judges quoting necessary, and
+        it judged `main.commons_live.values` safe on Databricks and lowercase
+        Snowflake names safe as well. The readers quote unconditionally, and
+        they are what production uses.
+        """
+        return _READER_QUOTING[self.backend](self.table_id(table).parts)
+
+    def quoted_namespace(self) -> str:
+        return _READER_QUOTING[self.backend](list(self.namespace))
+
+    def fixture_table_id(self, name: str) -> TableId:
+        """A fixture variable's dotted value as a TableId.
+
+        Spelled out rather than passed positionally: TableId takes the table
+        first and the catalog last, so `TableId(*value.split("."))` reverses a
+        `catalog.schema.table` value and probes something else entirely.
+        """
+        parts = self.fixtures[name].split(".")
+        if len(parts) != 3:
+            raise ValueError(
+                f"{name} must name catalog.schema.table, got {self.fixtures[name]!r}."
+            )
+        catalog, schema, table = parts
+        return TableId(table=table, schema=schema, catalog=catalog)
 
 
 def _missing(names: list[str]) -> list[str]:
