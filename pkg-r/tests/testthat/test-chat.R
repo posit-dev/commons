@@ -53,6 +53,8 @@ test_that("commons_server queues a restore reminder when history is restored", {
       chat <- commons_server("chat", client = agent)
     },
     {
+      # shinychat has no public hook to fire a restore under testServer, so
+      # drive the history controller it stashes on the session.
       controller <- shinychat:::get_session_chat_bookmark_info(
         session,
         "chat.history-controller"
@@ -60,11 +62,7 @@ test_that("commons_server queues a restore reminder when history is restored", {
       controller$restore_app_state(list())
       expect_true(agent$.__enclos_env__$private$restore_reminder_pending)
 
-      chat$clear()
-      expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
-
-      controller$restore_app_state(list())
-      controller$new_chat()
+      chat$new_chat()
       expect_false(agent$.__enclos_env__$private$restore_reminder_pending)
     }
   )
