@@ -25,6 +25,8 @@ class _CommonsTheme(Theme):
     """A theme that also serves the commons chat assets."""
 
     def _html_dependencies(self) -> list[HTMLDependency]:
+        # `Theme._html_dependencies()` returns a list precisely so that a subclass can
+        # extend it with further dependencies
         return [*super()._html_dependencies(), commons_chat_dependency()]
 
 
@@ -53,8 +55,7 @@ def theme(
     merged.update({name.replace("_", "-"): value for name, value in variables.items()})
 
     built = shinychat.page_chat_theme(preset=preset, **merged)
-    # `_html_dependencies()` returns a list precisely so that a subclass can
-    # attach more; it is the seam py-shiny offers. page_chat_theme() builds a
-    # plain Theme, so the class is rebound on the instance it hands back.
+    # page_chat_theme() builds a plain Theme, (not _CommonsTheme) so
+    # we rebound the class definition on the instance it returns
     built.__class__ = _CommonsTheme
     return built
