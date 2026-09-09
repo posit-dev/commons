@@ -9,18 +9,24 @@ on:
     paths:
       - tests/shared/**
       - prompts/**
+      - www/**
       - pkg-r/tests/testthat/fixtures/shared/**
       - pkg-r/inst/prompts/**
+      - pkg-r/inst/www/**
       - pkg-py/src/commons/prompts/**
+      - pkg-py/src/commons/www/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
   pull_request:
     paths:
       - tests/shared/**
       - prompts/**
+      - www/**
       - pkg-r/tests/testthat/fixtures/shared/**
       - pkg-r/inst/prompts/**
+      - pkg-r/inst/www/**
       - pkg-py/src/commons/prompts/**
+      - pkg-py/src/commons/www/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
   workflow_dispatch:
