@@ -30,6 +30,8 @@ Feel free to write more thorough descriptions inside of default-closed markdown 
 
 Consider the prose in issues and PR descriptions to be as important to refine as the code itself. Be _very_ concise, yet clear. Before you file issues and PRs, think for a while and iterate on the prose several times until you're confident you've phrased your writing naturally and understandably.
 
+Use the "simple-english" skill, if available.
+
 ## Issue tracking with kata (optional)
 
 Work on the Python implementation is tracked in [kata](https://www.katatracker.com/), a local-first issue ledger. `.kata.toml` binds this repository to the `commons` project; the ledger itself is machine-local, so adopting kata is per-developer and entirely optional.
