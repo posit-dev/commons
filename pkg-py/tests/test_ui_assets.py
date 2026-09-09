@@ -10,6 +10,7 @@ import pytest
 # shinychat brings shiny and htmltools with it, so it stands for the extra.
 pytest.importorskip("shinychat", reason="commons[shiny] is not installed")
 
+from commons._icons import get_asset_base_url
 from commons._ui._assets import (
     asset_base_url,
     commons_chat_dependency,
@@ -19,7 +20,7 @@ from commons._ui._assets import (
 def test_the_dependency_serves_the_chat_script_and_stylesheet() -> None:
     dep = commons_chat_dependency()
     assert dep.name == "commons-chat"
-    rendered = dep.as_dict(lib_prefix=None)
+    rendered = dep.as_dict()
     base = asset_base_url()
     assert rendered["script"] == [{"src": f"{base}/commons-chat.js"}]
     assert rendered["stylesheet"][0]["href"] == f"{base}/commons-chat.css"
@@ -66,10 +67,44 @@ def test_the_ui_module_imports_like_any_other_submodule() -> None:
     assert imported is commons_chat_dependency
 
 
-def test_the_base_url_is_where_htmltools_serves_the_assets() -> None:
+def test_the_base_url_carries_the_library_prefix() -> None:
+    # htmltools renders a dependency's hrefs under a library prefix, so the
+    # bare directory name is not a URL that resolves in a page.
     dep = commons_chat_dependency()
-    href = dep.as_dict()["stylesheet"][0]["href"]
-    assert href == f"lib/{asset_base_url()}/commons-chat.css"
+    directory = f"{dep.name}-{dep.version}"
+
+    assert asset_base_url() != directory
+    assert asset_base_url().endswith(f"/{directory}")
+
+
+def test_building_the_dependency_tells_the_asides_where_it_is_served() -> None:
+    # The asides resolve their icon URLs as they stream, before any page has
+    # rendered, so registering the bundle is what hands them its URL.
+    assert get_asset_base_url() is None
+
+    commons_chat_dependency()
+
+    assert get_asset_base_url() == asset_base_url()
+
+
+async def test_the_icon_urls_the_asides_emit_resolve_on_a_real_page() -> None:
+    # The whole seam, end to end: a page carrying the theme serves the bundle
+    # at the URL the asides built their icon links from.
+    httpx = pytest.importorskip("httpx")
+    from shiny import App, ui
+
+    from commons._citations import citation_icon_url
+    from commons._icons import icon_url
+    from commons.ui import theme
+
+    app = App(ui.page_fluid(ui.h1("commons"), theme=theme()), lambda i, o, s: None)
+    urls = [citation_icon_url("prose"), icon_url("trusted-icon.svg")]
+    assert all(url is not None for url in urls)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://page") as client:
+        for url in urls:
+            assert (await client.get(f"/{url}")).status_code == 200, url
 
 
 def test_a_missing_extra_names_the_package_and_the_install() -> None:

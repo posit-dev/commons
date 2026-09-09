@@ -159,8 +159,27 @@ def test_the_marker_carries_the_info_control() -> None:
     )
 
 
-def test_the_marker_names_no_icon_yet() -> None:
-    # The icon URL comes from the served asset bundle, which arrives with the
-    # Python UI. R emits one; a bare filename here would 404.
+def test_the_marker_names_no_icon_without_a_served_bundle() -> None:
+    # An icon URL is only knowable once a bundle is being served, and a bare
+    # filename in the page would 404.
     assert "icon=" not in provenance_aside(Tag.A)
     assert "data:image" not in provenance_aside(Tag.A)
+
+
+@pytest.mark.parametrize("tag", [Tag.A, Tag.C])
+def test_a_served_bundle_puts_the_outcome_icon_on_the_marker(
+    tag: Tag, served_bundle: str
+) -> None:
+    icon = PROVENANCE_DISPLAY[tag].icon
+
+    assert icon is not None
+    assert f'icon="{served_bundle}/figs/{icon}"' in provenance_aside(tag)
+
+
+def test_the_outcome_with_no_icon_of_its_own_renders_without_one(
+    served_bundle: str,
+) -> None:
+    marker = provenance_aside(Tag.B, include_cited=True)
+
+    assert marker
+    assert "icon=" not in marker

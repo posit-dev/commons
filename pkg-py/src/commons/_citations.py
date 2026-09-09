@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args
 from chatlas import ContentToolResult, Turn
 from chatlas.types import ContentText
 
+from ._icons import icon_url
 from ._measures import Measure, measure_schema_text
 from ._prompt import read_prompt
 from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
@@ -32,6 +33,7 @@ __all__ = [
     "ParsedCitation",
     "build_citation_corpus",
     "citation_aside_html",
+    "citation_icon_url",
     "citation_reminder_text",
     "match_citation",
     "normalize_citation",
@@ -55,7 +57,17 @@ _DOUBLE_QUOTES = re.compile("[\u201c\u201d]")
 _DASHES = re.compile("[\u2013\u2014]")
 
 CitationKind = Literal["prose", "definition", "schema"]
+
 CitationStatus = Literal["accepted", "rejected", "malformed"]
+
+# The uniform quote mark on every citation pill, whatever the source's kind.
+_CITATION_MARK = "citation-mark.svg"
+
+_KIND_ICONS: dict[str, str] = {
+    "prose": "citation-prose.svg",
+    "definition": "citation-definition.svg",
+    "schema": "citation-schema.svg",
+}
 
 
 @dataclass(frozen=True)
@@ -242,23 +254,40 @@ def build_citation_corpus(
 def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> str:
     """Render a verified citation as the aside shinychat displays.
 
-    ``kind`` selects the icon the UI layer draws beside the label. No icon is
-    emitted yet: the URL comes from the served asset bundle, which arrives with
-    the Python UI (D10).
+    The pill carries the uniform quote mark and ``kind`` selects the icon in
+    the body title. Both are omitted when no asset bundle serves them.
     """
+    mark = icon_url(_CITATION_MARK)
+    icon_attr = "" if mark is None else f' icon="{escape_attr(mark)}"'
+    kind_icon = citation_icon_url(kind)
+    kind_img = (
+        "" if kind_icon is None else f'<img src="{escape_attr(kind_icon)}" alt="">'
+    )
     reason = f"{explanation}\n\n" if explanation else ""
     blockquote = "> " + quote.strip().replace("\n", "\n> ")
     # shinychat only renders the popover's title row for grouped asides, so the
     # body carries its own title to keep the source named for a lone citation.
+    # commons-chat.css hides shinychat's row, which is why the kind's icon goes
+    # here and the aside's own icon attribute only styles the pill.
     title = (
         '<span class="commons-citation-title">'
+        f"{kind_img}"
         '<span class="commons-citation-title-label">'
         f"{html.escape(label, quote=False)}</span></span>\n\n"
     )
     return (
-        f'<shiny-aside label="{escape_attr(label)}">'
+        f'<shiny-aside label="{escape_attr(label)}"{icon_attr}>'
         f"{title}{reason}{blockquote}</shiny-aside>"
     )
+
+
+def citation_icon_url(kind: str) -> str | None:
+    """The served URL of the icon for one citation kind, or None.
+
+    A kind with no icon of its own renders the aside without one rather than
+    falling back to another kind's.
+    """
+    return icon_url(_KIND_ICONS.get(kind))
 
 
 def tool_result(value: Any, tag: Tag | None = None) -> ContentToolResult:
