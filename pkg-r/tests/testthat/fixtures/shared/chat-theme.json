@@ -1,0 +1,17 @@
+{
+  "chat_theme": {
+    "description": "The Sass variables the commons chat theme layers over shinychat's page chat theme, the preset it starts from, and that a caller's own variable wins over one of those defaults.",
+    "preset": "shiny",
+    "variables": {
+      "border-radius": "1rem",
+      "border-radius-sm": "1rem",
+      "shiny-chat-page-title-font-weight": "300",
+      "shiny-chat-user-message-border-radius": "0.75rem",
+      "shiny-chat-user-message-padding": "0.5rem 1.5rem"
+    },
+    "override": {
+      "variable": "border-radius",
+      "value": "2rem"
+    }
+  }
+}

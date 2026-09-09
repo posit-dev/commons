@@ -29,5 +29,6 @@ def _require_extra(missing: Sequence[str] | None = None) -> None:
 _require_extra()
 
 from ._assets import asset_base_url, commons_chat_dependency
+from ._theme import theme
 
-__all__ = ["asset_base_url", "commons_chat_dependency"]
+__all__ = ["asset_base_url", "commons_chat_dependency", "theme"]
