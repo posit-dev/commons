@@ -45,17 +45,26 @@ def test_the_version_carries_the_package_version() -> None:
 
 
 def test_the_version_changes_when_an_asset_changes() -> None:
-    # Without this the browser keeps serving an edited asset from cache.
+    # Without this the browser keeps serving an edited asset from cache. The
+    # bump is a single nanosecond, so an edit landing in the same second as
+    # the last render is caught too.
     source = Path(commons_chat_dependency().source_path_map(lib_prefix=None)["source"])
-    asset = source / "commons-chat.js"
+    assets = [p for p in source.rglob("*") if p.is_file()]
+    asset = max(assets, key=lambda p: p.stat().st_mtime_ns)
     before = commons_chat_dependency().version
     stat = asset.stat()
     try:
-        os.utime(asset, (stat.st_atime, stat.st_mtime + 3600))
+        os.utime(asset, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1))
         assert commons_chat_dependency().version != before
     finally:
-        os.utime(asset, (stat.st_atime, stat.st_mtime))
+        os.utime(asset, ns=(stat.st_atime_ns, stat.st_mtime_ns))
     assert commons_chat_dependency().version == before
+
+
+def test_the_ui_module_imports_like_any_other_submodule() -> None:
+    from commons.ui import commons_chat_dependency as imported
+
+    assert imported is commons_chat_dependency
 
 
 def test_the_base_url_is_where_htmltools_serves_the_assets() -> None:

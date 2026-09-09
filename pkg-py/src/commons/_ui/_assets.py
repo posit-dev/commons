@@ -24,11 +24,12 @@ def _asset_version() -> str:
     Folding the newest asset mtime into the version is what makes a browser
     refetch an edited asset. htmltools puts the string straight into the
     served path, so a PEP 440 local version and its `+` are ruled out; the
-    package's release segments and the stamp are both path-safe.
+    package's release segments and the stamp are both path-safe. The stamp
+    is nanoseconds, so an edit within a second of the last render counts.
     """
-    stamp = max(p.stat().st_mtime for p in _asset_dir().rglob("*") if p.is_file())
+    stamp = max(p.stat().st_mtime_ns for p in _asset_dir().rglob("*") if p.is_file())
     base = Version(distribution_version("commons")).base_version
-    return f"{base}.{int(stamp)}"
+    return f"{base}.{stamp}"
 
 
 def commons_chat_dependency() -> HTMLDependency:

@@ -5,6 +5,7 @@ querying them, and A/B/C provenance semantics so every answer carries a
 classification as to how much it can be trusted.
 """
 
+import importlib
 from typing import Any
 
 from ._agent import Commons
@@ -33,9 +34,7 @@ def __getattr__(name: str) -> Any:
     # `commons.ui` is resolved on first use so that importing commons does
     # not import shiny for the many users who never build a UI.
     if name == "ui":
-        from . import _ui
-
-        return _ui
+        return importlib.import_module(f"{__name__}.ui")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
