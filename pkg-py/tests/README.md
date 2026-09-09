@@ -13,7 +13,7 @@ Install the drivers, which are deliberately outside the `dev` group so an
 ordinary contributor does not install a warehouse client:
 
 ```
-uv sync --extra live-warehouse
+uv sync --group live-warehouse
 ```
 
 Point at a warehouse. The connection variables are the vendor's own, so one
