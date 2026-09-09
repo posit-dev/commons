@@ -32,7 +32,7 @@ __all__: list[str] = [
 
 def __getattr__(name: str) -> Any:
     # `commons.ui` is resolved on first use so that importing commons does
-    # not import shiny for the many users who never build a UI.
+    # not import shiny for users who may never build a UI.
     if name == "ui":
         return importlib.import_module(f"{__name__}.ui")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
