@@ -4,7 +4,13 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from chatlas import AssistantTurn, ContentToolRequest, StreamController, UserTurn
+from chatlas import (
+    AssistantTurn,
+    ContentToolRequest,
+    ContentToolResult,
+    StreamController,
+    UserTurn,
+)
 from chatlas.types import ContentText
 
 from commons import data_source
@@ -285,6 +291,35 @@ async def test_a_bookmark_interoperates_with_shinychats_chatlas_hooks() -> None:
     target = agent()
     await set_chatlas_state(target.client)(await adapter.get_state())
     assert [turn.role for turn in target.get_turns()] == ["user", "assistant"]
+
+
+async def test_an_htmltools_tool_result_serializes_the_way_shinychat_does() -> None:
+    """Why the serializer is shinychat's rather than pydantic's own.
+
+    A tool result can carry an htmltools object, which pydantic cannot
+    serialize by itself. shinychat's serializer renders it to HTML and lists
+    the dependencies it needs, which is the shape a restored bookmark can
+    put back on the page.
+    """
+    pytest.importorskip("shinychat")
+    import htmltools
+
+    request = ContentToolRequest(id="call-measure", name="measure", arguments={})
+    result = ContentToolResult(
+        id="call-measure", value=htmltools.div("1400."), request=request
+    )
+    subject = agent()
+    subject.set_turns([UserTurn("How much?"), AssistantTurn([result])])
+    client = CommonsChatClient(subject)
+
+    _, answer = client.get_turns()
+    assert answer["contents"][0]["value"] == {
+        "html": "<div>1400.</div>",
+        "dependencies": [],
+    }
+
+    saved = await client.get_state()
+    assert saved["turns"][1]["contents"][0]["value"]["html"] == "<div>1400.</div>"
 
 
 async def test_set_state_rejects_an_unknown_version() -> None:
