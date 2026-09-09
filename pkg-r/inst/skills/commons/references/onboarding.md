@@ -116,7 +116,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
    source("agent.R", local = TRUE)
 
    ui <- shinychat::page_chat(
-     "Assistant",
+     "commons agent",
      id = "chat",
      theme = commons::commons_theme()
    )
