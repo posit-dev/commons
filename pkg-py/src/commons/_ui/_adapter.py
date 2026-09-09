@@ -1,4 +1,4 @@
-"""The object a chat UI is handed in place of the agent.
+"""An adapter to allow a Commons agent to be used in a shinychat UI.
 
 `Commons` composes on top of a `chatlas.Chat` rather than inheriting from
 it directly. shinychat expects a `Chat` object on its `client=` parameter,
