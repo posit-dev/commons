@@ -1,7 +1,5 @@
 This repository is a monorepo holding two implementations of commons: the R package in `pkg-r/`, the Python package in `pkg-py/`, cross-language spec fixtures in `tests/shared/`, and the shared artifacts both packages ship in `prompts/`. Read `pkg-r/README.Rmd` to understand the goal of the project, and `README.md` for how the two packages relate.
 
-If you worked in this repository before the two packages were split apart, `MIGRATING.md` covers what moved and what to change in your setup.
-
 Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run ruff check`, `uv run pyrefly check src tests`, `uv run pytest`). CI is scoped the same way. Run all of a package's checks before pushing; the pyrefly invocation needs its explicit `src tests` paths, because with none it consults the repo's git ignore files and a worktree checked out under an ignored directory silently type-checks nothing.
 
 Neither package has been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
@@ -23,6 +21,14 @@ When writing about provenance, use "provenance tag" for the internal A/B/C code,
 When writing tests for either package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn't available. Broadly, refrain from `expect_match()` for text that is unconditionally included in a prompt or tool description, and `expect_no_match()` for text that has no feasible path to end up in the prompt or tool descriptions.
 
 Release tags are prefixed per package: `r-v*` for the R package, `py-v*` for the Python package.
+
+## GitHub etiquette
+
+**When you write GitHub issues and PR descriptions, be extraordinarily brief.** Simple changes can be accompanied by a single sentence PR description, preceded by a "Closes #n" tag if relevant. More complex sentences should be described in a few sentences at most. For the PR descriptions of more complex changes, feel free to keep the PR description itself to a sentence or two and then self-review after filing, leaving (at most 3) comments inline where they're relevant (in a sentence at most).
+
+Feel free to write more thorough descriptions inside of default-closed markdown collapsibles with a title that clearly notes that the contents are agent-written.
+
+Consider the prose in issues and PR descriptions to be as important to refine as the code itself. Be _very_ concise, yet clear. Before you file issues and PRs, think for a while and iterate on the prose several times until you're confident you've phrased your writing naturally and understandably.
 
 ## Issue tracking with kata (optional)
 
