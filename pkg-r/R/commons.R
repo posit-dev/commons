@@ -43,11 +43,10 @@
 #'   OpenTelemetry (default `FALSE`). When `TRUE`, commons checks the tracing
 #'   setup and warns with setup steps when it is incomplete. 
 #'   Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` before R
-#'   starts so \pkg{ellmer} includes message content. On Posit Connect,
-#'   traces land in Connect's observability store (browsable in its Trace
-#'   Viewer); commons switches on the content's *Content Observability*
-#'   setting itself when needed, though capture only starts once the content
-#'   restarts. Read trajectories back with [trajectory_read()].
+#'   starts so \pkg{ellmer} includes message content. On Posit Connect, a server
+#'   administrator must set `OpenTelemetry.Enabled = true` and
+#'   `OpenTelemetry.AllowContentInstrumentation = true`. Read trajectories back
+#'   with [trajectory_read()].
 #' @param share_with An optional character vector of Connect usernames granted
 #'   access to this content's trajectories when running on Posit Connect.
 #'   Reading traces requires editor-level access, so named users are added as

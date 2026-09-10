@@ -17,6 +17,42 @@ test_that("log = TRUE warns without the otel package", {
   expect_false(.res)
 })
 
+test_that("the content instrumentation warning reflects Connect's setting", {
+  skip_on_cran()
+  withr::local_envvar(
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "key",
+    CONNECT_CONTENT_GUID = "guid"
+  )
+  settings <- list(allow_content_instrumentation = FALSE)
+  httr2::local_mocked_responses(function(req) {
+    expect_equal(httr2::url_parse(req$url)$path, "/__api__/server_settings")
+    if (inherits(settings, "condition")) {
+      return(httr2::new_response(
+        "GET", req$url, 500L, list(), raw(), request = req
+      ))
+    }
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(settings, auto_unbox = TRUE)),
+      request = req
+    )
+  })
+
+  expect_snapshot(warn_if_content_instrumentation_disabled())
+  settings <- list(allow_content_instrumentation = TRUE)
+  expect_no_warning(warn_if_content_instrumentation_disabled())
+
+  settings <- list()
+  expect_no_warning(warn_if_content_instrumentation_disabled())
+
+  settings <- rlang::error_cnd("unavailable")
+  expect_no_warning(warn_if_content_instrumentation_disabled())
+})
+
 test_that("log = TRUE warns when tracing stays disabled locally", {
   skip_if_not_installed("otel")
   withr::local_envvar(
