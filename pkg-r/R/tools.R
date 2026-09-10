@@ -1109,9 +1109,21 @@ measure_display_with_custom_html <- function(args, result_html, metadata) {
 }
 
 measure_metadata <- function(td) {
+  display <- measure_display_metadata(td)
+  description <- display$description %||% ""
+  extra <- display$details %||% ""
+  # Roughly three lines at chat-card width; CSS supplies the exact clamp.
+  has_details <- nchar(description) > 200L
+  parts <- c(description, extra)
+  details <- if (has_details) {
+    paste(parts[nzchar(parts)], collapse = "\n\n")
+  } else {
+    ""
+  }
   data.frame(
     title = tool_title(td),
-    description = tool_description(td),
+    description = description,
+    details = details,
     stringsAsFactors = FALSE
   )
 }
@@ -1120,6 +1132,8 @@ measure_metadata_html <- function(metadata) {
   if (is.null(metadata) || nrow(metadata) == 0L) {
     return("")
   }
+  metadata_details <- metadata$details %||% rep("", nrow(metadata))
+  metadata_details[is.na(metadata_details)] <- ""
   items <- vapply(
     seq_len(nrow(metadata)),
     function(i) {
@@ -1127,18 +1141,42 @@ measure_metadata_html <- function(metadata) {
       description <- if (is.na(description) || !nzchar(description)) {
         ""
       } else {
+        summary_class <- if (nzchar(metadata_details[[i]])) {
+          " commons-measure-description-summary"
+        } else {
+          ""
+        }
         sprintf(
-          "<div class=\"commons-measure-description\">%s</div>",
+          "<div class=\"commons-measure-description%s\">%s</div>",
+          summary_class,
           html_escape(description)
+        )
+      }
+      details <- metadata_details[[i]]
+      details <- if (!nzchar(details)) {
+        ""
+      } else {
+        sprintf(
+          paste0(
+            "<details class=\"commons-measure-details\">",
+            "<summary>",
+            "<span class=\"commons-measure-details-more\">See more</span>",
+            "<span class=\"commons-measure-details-less\">See less</span>",
+            "</summary>",
+            "<div class=\"commons-measure-details-body\">%s</div>",
+            "</details>"
+          ),
+          html_escape(details)
         )
       }
       sprintf(
         paste0(
           "<div class=\"commons-measure-metadata-item\">",
-          "<strong class=\"commons-measure-title\">%s</strong>%s</div>"
+          "<strong class=\"commons-measure-title\">%s</strong>%s%s</div>"
         ),
         html_escape(metadata$title[[i]]),
-        description
+        description,
+        details
       )
     },
     character(1)

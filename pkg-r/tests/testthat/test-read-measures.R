@@ -29,6 +29,17 @@ test_that("read_measures derives a measure from a documented function", {
   expect_match(tool_description(td), "Count orders")
   expect_match(tool_description(td), "Total orders")
   expect_match(tool_description(td), "Returns: An integer count")
+  expect_equal(tool_title(td), "Count orders")
+  metadata <- measure_metadata(td)
+  expect_equal(metadata$description, "Total orders, optionally by region.")
+  expect_equal(metadata$details, "")
+  expect_match(
+    measure_display_metadata(td)$details,
+    "Returns: An integer count",
+    fixed = TRUE
+  )
+  display <- measure_metadata_html(metadata)
+  expect_no_match(display, "commons-measure-details", fixed = TRUE)
   expect_equal(do.call(td, list()), 2026L)
 })
 

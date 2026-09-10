@@ -187,13 +187,29 @@ measure <- function(name, description, fn, arguments = list(), title = NULL) {
   rlang::check_string(description)
   rlang::check_string(title, allow_null = TRUE)
   title <- title %||% humanize_name(name)
-  ellmer::tool(
+  td <- ellmer::tool(
     fn,
     description,
     arguments = fill_injected_arguments(arguments, fn),
     name = name,
     annotations = ellmer::tool_annotations(title = title)
   )
+  set_measure_display_metadata(td, description)
+}
+
+measure_display_metadata <- function(td) {
+  attr(td, "commons_measure_display") %||% list(
+    description = tool_description(td),
+    details = NULL
+  )
+}
+
+set_measure_display_metadata <- function(td, description, details = NULL) {
+  attr(td, "commons_measure_display") <- list(
+    description = description,
+    details = details
+  )
+  td
 }
 
 # Arguments of `fn` not described in `arguments` are supplied by commons(),

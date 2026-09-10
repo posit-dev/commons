@@ -143,6 +143,7 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
   expect_match(rendered, "commons-measure-display", fixed = TRUE)
   expect_match(rendered, "Adverse events &amp; outcomes", fixed = TRUE)
   expect_match(rendered, "Summarize adverse events.", fixed = TRUE)
+  expect_no_match(rendered, "commons-measure-details", fixed = TRUE)
   expect_match(rendered, "Population:", fixed = TRUE)
   expect_match(rendered, "ITT", fixed = TRUE)
   expect_match(rendered, "<strong>Result</strong>", fixed = TRUE)
@@ -169,6 +170,26 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
     "Ran a trusted calculation"
   )
   expect_equal(res@extra$commons_tag, "A")
+})
+
+test_that("long measure descriptions can be expanded", {
+  description <- paste(
+    rep("A detailed description of the measure.", 8),
+    collapse = " "
+  )
+  td <- measure("orders", description, function() 1L)
+  td <- set_measure_display_metadata(
+    td,
+    description,
+    "Returns: The number of orders."
+  )
+
+  display <- measure_metadata_html(measure_metadata(td))
+
+  expect_match(display, "commons-measure-description-summary", fixed = TRUE)
+  expect_match(display, "commons-measure-details-more", fixed = TRUE)
+  expect_match(display, "commons-measure-details-less", fixed = TRUE)
+  expect_match(display, "Returns: The number of orders.", fixed = TRUE)
 })
 
 test_that("call_measure_tool preserves image content in ContentToolResult", {

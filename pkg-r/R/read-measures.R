@@ -116,9 +116,22 @@ block_to_measure <- function(block, env) {
 
   description <- block_description(block)
   arguments <- block_arguments(block, fn)
+  display <- block_display_metadata(block)
+  td <- measure(
+    name,
+    description,
+    fn,
+    arguments = arguments,
+    title = display$title
+  )
+  td <- set_measure_display_metadata(
+    td,
+    display$description,
+    display$details
+  )
 
   list(
-    measure = measure(name, description, fn, arguments = arguments),
+    measure = td,
     provenance = block_provenance(block)
   )
 }
@@ -133,6 +146,15 @@ block_description <- function(block) {
     }
   )
   paste(parts, collapse = "\n\n")
+}
+
+block_display_metadata <- function(block) {
+  ret <- roxygen2::block_get_tag_value(block, "return")
+  list(
+    title = roxygen2::block_get_tag_value(block, "title"),
+    description = roxygen2::block_get_tag_value(block, "description") %||% "",
+    details = if (!is.null(ret)) paste0("Returns: ", ret)
+  )
 }
 
 block_provenance <- function(block) {
