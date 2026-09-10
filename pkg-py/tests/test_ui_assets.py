@@ -1,6 +1,7 @@
 """The HTML dependency that serves the browser assets to a page."""
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -134,6 +135,39 @@ else:
     )
     assert "shinychat" in done.stdout
     assert 'pip install "commons[shiny]"' in done.stdout
+
+
+def test_a_missing_extra_names_every_package_it_is_short() -> None:
+    # R's `check_chat_packages()` lists all of them, so one install fixes the
+    # import instead of one round trip per package.
+    code = """
+import sys
+
+
+class Absent:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in ("shiny", "shinychat"):
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+        return None
+
+
+sys.meta_path.insert(0, Absent())
+try:
+    import commons.ui
+except ImportError as err:
+    print(err)
+else:
+    print("commons.ui imported anyway")
+"""
+    done = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    # Read only the sentence that lists them: "shinychat" contains "shiny",
+    # and the install hint says `commons[shiny]`, so either would satisfy a
+    # naive substring test on the whole message.
+    listed = done.stdout.split("Install")[0]
+    assert re.search(r"\bshiny\b", listed), done.stdout
+    assert "shinychat" in listed
 
 
 def test_the_ui_module_is_only_imported_on_demand() -> None:
