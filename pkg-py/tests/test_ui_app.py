@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 # shinychat brings shiny and htmltools with it, so it stands for the extra.
@@ -71,3 +73,36 @@ def test_the_client_has_to_be_a_commons_agent() -> None:
     # `commons_app()` does.
     with pytest.raises(TypeError, match="client"):
         commons.ui.app(scripted_chat())  # type: ignore[arg-type]
+
+
+def test_kwargs_reach_shiny_app(tmp_path: Path) -> None:
+    built = commons.ui.app(agent(), static_assets={"/assets": tmp_path})
+
+    assert built._static_assets == {"/assets": tmp_path}
+
+
+def test_the_app_warms_the_agent_once_it_serves_its_first_page(
+    tmp_path: Path,
+) -> None:
+    notes = tmp_path / "notes.md"
+    notes.write_text("# Revenue\n\nRevenue means booked revenue.", encoding="utf-8")
+    the_agent = Commons(
+        scripted_chat(),
+        commons.data_source(
+            sales=pd.DataFrame({"revenue": [500.0], "region": ["EMEA"]})
+        ),
+        context_layer=commons.context_layer(files=[notes]),
+    )
+    layer = the_agent._context_layer
+    assert layer is not None
+    built = commons.ui.app(the_agent)
+    session = IdleSession()
+
+    with session_context(session):
+        built.server(session.input, session.output, session)
+
+    # server() prewarms on idle; this guards the wiring through app(), and
+    # test_ui_server.py covers the mechanism itself.
+    assert layer._store_cache is None
+    session.go_idle()
+    assert layer._store_cache is not None

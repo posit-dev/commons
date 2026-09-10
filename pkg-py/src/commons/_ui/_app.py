@@ -19,12 +19,12 @@ __all__ = ["app"]
 def app(client: Commons, *, toolbar: bool = True, **kwargs: Any) -> shiny.App:
     """Build a complete app around a commons agent.
 
-    This is the app for local development and a demo. Every session it
-    serves shares the one agent passed here, so a second visitor joins the
-    first one's conversation state. A deployed app assembles the page and
-    the server itself, with `commons.ui.theme()` and `commons.ui.server()`,
-    and builds the agent inside the server function so that each session
-    gets its own.
+    Every session the app serves shares the one agent passed here via ``client``:
+    a second visitor joins the first one's conversation, and two questions
+    answered at once interleave the agent's citation and provenance state, so
+    neither answer can be trusted. To give each session its own agent, assemble
+    the page and the server yourself with `commons.ui.theme()` and
+    `commons.ui.server()`, building the agent inside the server function.
 
     Parameters
     ----------

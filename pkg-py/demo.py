@@ -4,9 +4,15 @@
     uv run --with anthropic python demo.py      # the same questions, in the terminal
 
 The chat is assembled here rather than through `commons.ui.app()`, because
-this is the shape a deployed app takes: one agent per session, built inside
-the server function. `pkg-r/inst/demo.R` is the same app. The terminal path
-is what `demo.ipynb` drives, through `ask()`.
+`app()` shares one agent across sessions; a deployed app should instead build
+one agent per session, inside the server function. The assembly is three pieces,
+at the bottom of this file: the page from `shinychat.page_chat()` with
+`theme=commons.ui.theme()`, a server function passing a fresh agent to
+`commons.ui.server()`, and `shiny.App()` joining the two.
+
+This demo is analogous to `pkg-r/inst/demo.R` in the R implmentation. You
+can also play around with the demo interactively in a notebook by using
+`demo.ipynb` (without a shiny UI, in that case).
 
 The client comes from `chatlas.ChatAuto`, so `CHATLAS_CHAT_PROVIDER_MODEL`
 picks a different provider without editing this file. chatlas ships no
@@ -21,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from functools import cache
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
@@ -113,8 +120,11 @@ def notes_file() -> Path:
     return path
 
 
-# Written once, then read by every session's context layer.
-NOTES_FILE = notes_file()
+# Written once per process, then read by every session's context layer. Not
+# written at import, so `shiny run --reload` re-imports don't pile up files.
+@cache
+def shared_notes_file() -> Path:
+    return notes_file()
 
 
 @commons.measure(
@@ -163,7 +173,7 @@ def agent() -> commons.Commons:
         # Named, because a measure's `warehouse` argument is injected by name.
         {"warehouse": commons.data_source(stands=stands, surveys=surveys)},
         semantic_layer=commons.semantic_layer(canopy_by_county, low_canopy_stands),
-        context_layer=commons.context_layer(files=[NOTES_FILE]),
+        context_layer=commons.context_layer(files=[shared_notes_file()]),
     )
 
 

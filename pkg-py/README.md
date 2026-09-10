@@ -46,7 +46,7 @@ agent.chat("What is EMEA revenue?")
 
 Use `stream_async()` in place of `chat()` to stream an answer as it arrives. Its signature is chatlas's, so a chat UI can drive the agent directly.
 
-`commons.ui` puts the agent behind a py-shiny chat, which needs the `shiny` extra: `pip install "commons[shiny]"`. `commons.ui.app(agent)` is a complete app for local development, and it shares its one agent across every session. A deployed app builds the page with `commons.ui.theme()`, calls `commons.ui.server("chat", agent)` in its server function, and constructs the agent there so each session gets its own.
+`commons.ui` puts the agent behind a py-shiny chat, which needs the `shiny` extra: `pip install "commons[shiny]"`. `commons.ui.app(agent)` is a complete app for local development. It shares its one agent across every session, so it suits one visitor at a time: two questions answered at once interleave the agent's citation and provenance state, and neither answer can be trusted. A deployed app builds the page with `commons.ui.theme()`, calls `commons.ui.server("chat", agent)` in its server function, and constructs the agent there so each session gets its own.
 
 An agent is a chatlas `Chat`, so `get_tools()`, `system_prompt`, `set_model_params()` and the rest of that surface work on it directly. `chat()` and `stream_async()` are the only ways to ask it something. The other entry points chatlas offers would answer without the citation scanner and the provenance tag, so each of them raises `NotImplementedError`.
 
