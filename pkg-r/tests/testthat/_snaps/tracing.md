@@ -39,10 +39,7 @@
     Condition
       Warning:
       Trajectory logging is enabled but OpenTelemetry tracing is not active.
-      i Configure an exporter before R starts, e.g. in '.Renviron':
-        `OTEL_TRACES_EXPORTER=otlp/file`
-        `OTEL_EXPORTER_OTLP_TRACES_FILE=/tmp/commons-traces/trace-%N.jsonl`
-        `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`
+      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
 
 # log = TRUE points at Content Observability on Connect
 

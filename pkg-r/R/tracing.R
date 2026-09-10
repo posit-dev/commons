@@ -190,11 +190,15 @@ content_capture_enabled <- function() {
 
   cli::cli_warn(c(
     "Trajectory logging requires additional setup.",
-    i = "Set the environment variable
-         {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true},
-         perhaps by pasting it into {.file ~/.Renviron}, and restart R."
+    i = content_capture_hint()
   ))
   refreshed
+}
+
+content_capture_hint <- function() {
+  "Set the environment variable
+   {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true}, perhaps by
+   pasting it into {.file ~/.Renviron}, and restart R."
 }
 
 refresh_ellmer_otel_cache <- function() {
@@ -265,10 +269,7 @@ warn_tracing_disabled <- function() {
   } else {
     cli::cli_warn(c(
       "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
-      i = "Configure an exporter before R starts, e.g. in {.file .Renviron}:",
-      " " = "{.code OTEL_TRACES_EXPORTER=otlp/file}",
-      " " = "{.code OTEL_EXPORTER_OTLP_TRACES_FILE={file.path(commons_traces_dir(), 'trace-%N.jsonl')}}",
-      " " = "{.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true}"
+      i = content_capture_hint()
     ))
   }
   invisible(NULL)
