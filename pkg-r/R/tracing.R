@@ -152,20 +152,46 @@ local_conversation_turn_span <- function(envir = parent.frame()) {
   invisible(span)
 }
 
-# ellmer reads this semconv setting when its namespace loads, so changing it
-# while constructing an agent would be too late for the current process.
+# ellmer reads this semconv setting when its namespace loads. Refresh its cache
+# as a compatibility fallback, while still directing users to persistent setup.
 content_capture_enabled <- function() {
   current <- Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
   if (tolower(current) %in% c("true", "1")) {
     return(TRUE)
   }
+
+  if (!nzchar(current)) {
+    Sys.setenv(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
+    refreshed <- refresh_ellmer_otel_cache()
+    if (!refreshed) {
+      Sys.unsetenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
+    }
+  } else {
+    refreshed <- FALSE
+  }
+
   cli::cli_warn(c(
     "Trajectory logging requires GenAI message-content capture.",
+    i = if (refreshed) {
+      "commons enabled it for this R process as a compatibility fallback."
+    } else {
+      "It is not enabled for this R process."
+    },
     i = "Set
          {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true}
          in your {.file ~/.Renviron} and restart R."
   ))
-  FALSE
+  refreshed
+}
+
+refresh_ellmer_otel_cache <- function() {
+  tryCatch(
+    {
+      utils::getFromNamespace("otel_cache_tracer", "ellmer")()
+      TRUE
+    },
+    error = function(err) FALSE
+  )
 }
 
 # Tracing is off on Connect either because this content's Content

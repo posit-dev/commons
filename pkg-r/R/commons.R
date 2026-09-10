@@ -37,9 +37,9 @@
 #'   best-effort R guardrails with
 #'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
 #'   are not a security boundary.
-#' @param log Whether to capture conversation trajectories with OpenTelemetry
-#'   (default `FALSE`). When `TRUE`, commons tags each turn's spans with a
-#'   conversation id; the spans go wherever OTel is configured to export.
+#' @param log Whether to request conversation trajectory capture with
+#'   OpenTelemetry (default `FALSE`). When `TRUE`, commons checks the tracing
+#'   setup and warns with setup steps when it is incomplete. 
 #'   Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` before R
 #'   starts so \pkg{ellmer} includes message content. On Posit Connect,
 #'   traces land in Connect's observability store (browsable in its Trace

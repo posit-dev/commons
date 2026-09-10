@@ -156,13 +156,49 @@ test_that("share_trajectory_access warns rather than errors on failure", {
   expect_snapshot(share_trajectory_access("jdoe"))
 })
 
-test_that("content capture must be configured before R starts", {
+test_that("an explicit content-capture opt-out is respected", {
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false")
   expect_snapshot(.res <- content_capture_enabled())
   expect_false(.res)
 
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
   expect_true(content_capture_enabled())
+})
+
+test_that("missing content capture warns and uses the ellmer fallback", {
+  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
+  refreshed <- FALSE
+  local_mocked_bindings(
+    refresh_ellmer_otel_cache = function() {
+      refreshed <<- TRUE
+      TRUE
+    }
+  )
+
+  expect_snapshot(.res <- content_capture_enabled())
+  expect_true(.res)
+  expect_true(refreshed)
+  expect_equal(
+    Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
+    "true"
+  )
+})
+
+test_that("a missing ellmer fallback leaves content capture disabled", {
+  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
+  local_mocked_bindings(refresh_ellmer_otel_cache = function() FALSE)
+
+  expect_snapshot(.res <- content_capture_enabled())
+  expect_false(.res)
+  expect_identical(
+    Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
+    ""
+  )
+})
+
+test_that("the ellmer content-capture fallback still exists", {
+  skip_on_cran()
+  expect_true(is.function(asNamespace("ellmer")[["otel_cache_tracer"]]))
 })
 
 test_that("share_with grants wait for tracing to be live", {
