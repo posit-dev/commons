@@ -756,7 +756,7 @@ build_trajectories <- function(spans) {
   )
   parsed <- parse_chat_spans_once(
     selected,
-    by_trace = chat_spans_by_trace(chat_spans),
+    by_conversation = chat_spans_by_conversation(chat_spans),
     index = index
   )
   candidates <- recorded_call_candidates(calls, parsed)
@@ -874,26 +874,30 @@ latest_recorded_call_spans <- function(
   latest
 }
 
-parse_chat_spans_once <- function(spans, by_trace = NULL, index = NULL) {
+parse_chat_spans_once <- function(
+  spans,
+  by_conversation = NULL,
+  index = NULL
+) {
   keys <- vapply(spans, exchange_key, character(1))
   spans <- spans[!duplicated(keys)]
   turns <- lapply(spans, trajectory_turns)
-  if (!is.null(by_trace) && !is.null(index)) {
+  if (!is.null(by_conversation) && !is.null(index)) {
     turns <- Map(recover_missing_input, spans, turns, MoreArgs = list(
-      by_trace = by_trace,
+      by_conversation = by_conversation,
       index = index
     ))
   }
   rlang::set_names(turns, keys[!duplicated(keys)])
 }
 
-chat_spans_by_trace <- function(spans) {
-  split(spans, vapply(spans, `[[`, character(1), "trace_id"))
+chat_spans_by_conversation <- function(spans) {
+  split(spans, vapply(spans, span_conversation_id, character(1)))
 }
 
 # ellmer omits the full input attribute when rich content cannot be serialized.
-# Recover what the trace still records, but only within the same agent turn.
-recover_missing_input <- function(span, turns, by_trace, index) {
+# Recover what the conversation still records from its latest valid snapshot.
+recover_missing_input <- function(span, turns, by_conversation, index) {
   if (!is.null(parse_semconv_json(
     span$attributes[["gen_ai.input.messages"]]
   ))) {
@@ -904,33 +908,32 @@ recover_missing_input <- function(span, turns, by_trace, index) {
   if (is.null(turn_span)) {
     return(turns)
   }
-  turn_key <- exchange_key(turn_span)
-  trace_spans <- by_trace[[span$trace_id]]
-  if (is.null(trace_spans)) {
+  id <- span_conversation_id(span)
+  conversation_spans <- by_conversation[[id]]
+  if (is.null(conversation_spans)) {
     return(turns)
   }
-  id <- span_conversation_id(span)
-  trace_spans <- Filter(
+  conversation_spans <- Filter(
     function(candidate) {
       candidate_turn <- conversation_turn_ancestor(candidate, index)
       identical(span_conversation_id(candidate), id) &&
         !is.null(candidate_turn) &&
-        identical(exchange_key(candidate_turn), turn_key)
+        !is_conversation_title_span(candidate)
     },
-    trace_spans
+    conversation_spans
   )
-  trace_spans <- trace_spans[order(vapply(
-    trace_spans,
+  conversation_spans <- conversation_spans[order(vapply(
+    conversation_spans,
     span_time,
     character(1)
   ))]
-  keys <- vapply(trace_spans, exchange_key, character(1))
+  keys <- vapply(conversation_spans, exchange_key, character(1))
   target <- match(exchange_key(span), keys)
   if (is.na(target)) {
     return(turns)
   }
 
-  prior <- trace_spans[seq_len(target - 1L)]
+  prior <- conversation_spans[seq_len(target - 1L)]
   valid <- vapply(
     prior,
     function(candidate) {
@@ -948,11 +951,11 @@ recover_missing_input <- function(span, turns, by_trace, index) {
     history <- NULL
   }
 
-  output_spans <- trace_spans[seq.int(history_index, target)]
-  recovered_trajectory_turns(span, history, output_spans)
+  output_spans <- conversation_spans[seq.int(history_index, target)]
+  recovered_trajectory_turns(span, history, output_spans, index)
 }
 
-recovered_trajectory_turns <- function(latest, history, output_spans) {
+recovered_trajectory_turns <- function(latest, history, output_spans, index) {
   requests <- new.env(parent = emptyenv())
   system <- semconv_system_turns(
     latest$attributes[["gen_ai.system_instructions"]]
@@ -963,7 +966,7 @@ recovered_trajectory_turns <- function(latest, history, output_spans) {
     )
   }
   input <- if (is.null(history)) {
-    ellmer::UserTurn("(Input content was not captured.)")
+    missing_input_turn()
   } else {
     semconv_message_turns(
       history$attributes[["gen_ai.input.messages"]],
@@ -971,20 +974,34 @@ recovered_trajectory_turns <- function(latest, history, output_spans) {
     )
   }
   output <- list()
+  previous_turns <- NULL
+  previous_turn_key <- NULL
   for (i in seq_along(output_spans)) {
+    turn_span <- conversation_turn_ancestor(output_spans[[i]], index)
+    turn_key <- exchange_key(turn_span)
+    if (!is.null(previous_turn_key)) {
+      if (identical(turn_key, previous_turn_key)) {
+        missing <- missing_tool_results(previous_turns)
+        if (!is.null(missing)) {
+          output[[length(output) + 1L]] <- missing
+        }
+      } else {
+        output[[length(output) + 1L]] <- missing_input_turn()
+      }
+    }
     turns <- semconv_message_turns(
       output_spans[[i]]$attributes[["gen_ai.output.messages"]],
       requests
     )
     output <- c(output, turns)
-    if (i < length(output_spans)) {
-      missing <- missing_tool_results(turns)
-      if (!is.null(missing)) {
-        output[[length(output) + 1L]] <- missing
-      }
-    }
+    previous_turns <- turns
+    previous_turn_key <- turn_key
   }
   unname(c(system, input, output))
+}
+
+missing_input_turn <- function() {
+  ellmer::UserTurn("(Input content was not captured.)")
 }
 
 missing_tool_results <- function(turns) {

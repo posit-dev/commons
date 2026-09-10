@@ -334,6 +334,72 @@ test_that("missing latest input recovers history and subsequent outputs", {
   expect_length(split_exchanges(turns), 1)
 })
 
+test_that("missing input in a later agent turn preserves earlier exchanges", {
+  question <- text_semconv_message("user", "Make a plot.")
+  plot_request <- list(
+    role = "assistant",
+    parts = list(list(
+      type = "tool_call",
+      id = "plot-1",
+      name = "run_r",
+      arguments = list(code = "plot(1:10)")
+    ))
+  )
+  plot_answer <- text_semconv_message(
+    "assistant",
+    "The plot is shown above."
+  )
+  followup_answer <- text_semconv_message(
+    "assistant",
+    "The result is unchanged."
+  )
+  spans <- parse_otlp_lines(otlp_test_line(list(
+    conversation_test_span("first-trace", "root1"),
+    chat_test_span(
+      "first-trace",
+      "chat1",
+      parent_span_id = "root1",
+      conversation_id = "conv-a",
+      input_messages = semconv_messages_json(list(question)),
+      output_messages = semconv_messages_json(list(plot_request)),
+      end_time = "10"
+    ),
+    chat_test_span(
+      "first-trace",
+      "chat2",
+      parent_span_id = "root1",
+      conversation_id = "conv-a",
+      output_messages = semconv_messages_json(list(plot_answer)),
+      end_time = "20"
+    ),
+    conversation_test_span("second-trace", "root2"),
+    chat_test_span(
+      "second-trace",
+      "chat3",
+      parent_span_id = "root2",
+      conversation_id = "conv-a",
+      output_messages = semconv_messages_json(list(followup_answer)),
+      end_time = "30"
+    )
+  )))
+
+  turns <- build_trajectories(spans)[["conv-a"]]$turns
+
+  expect_identical(
+    vapply(turns, function(turn) turn@role, character(1)),
+    c("user", "assistant", "user", "assistant", "user", "assistant")
+  )
+  expect_equal(turns[[1]]@text, "Make a plot.")
+  expect_equal(
+    turns[[3]]@contents[[1]]@value,
+    "(Tool result was not captured.)"
+  )
+  expect_equal(turns[[4]]@text, "The plot is shown above.")
+  expect_equal(turns[[5]]@text, "(Input content was not captured.)")
+  expect_equal(turns[[6]]@text, "The result is unchanged.")
+  expect_length(split_exchanges(turns), 2)
+})
+
 test_that("missing initial rich input is represented explicitly", {
   spans <- parse_otlp_lines(otlp_test_line(list(
     conversation_test_span("t1", "root"),
