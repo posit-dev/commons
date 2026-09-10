@@ -38,15 +38,18 @@ from ._definitions import Registry, applied_text, expand_tokens, index_overflows
 from ._display import (
     CONTEXT_SEARCH,
     DATA_RETRIEVAL,
+    DISPLAY_EXTRA_KEY,
     TABLE_INSPECTION,
     TRUSTED_CALL,
     TRUSTED_SEARCH,
+    tool_display,
+    visible_result_note,
 )
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
-from ._provenance import Tag
+from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
@@ -301,9 +304,10 @@ def _call_measure(context: ToolContext) -> Tool:
                 source.ensure_loaded()
         value = record.func(**args, **injected)
         # A measure that built its own tool result — a plot, a displayable
-        # table — has already said how it should look; return it untouched.
+        # table — has already said how it should look; commons only fills in
+        # what it alone knows.
         if isinstance(value, ContentToolResult):
-            return value
+            return _finish_measure_result(value, context)
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
@@ -330,6 +334,57 @@ def _call_measure(context: ToolContext) -> Tool:
         ),
         TRUSTED_CALL.running,
     )
+
+
+def _finish_measure_result(
+    result: ContentToolResult, context: ToolContext
+) -> ContentToolResult:
+    """Fill in what commons knows about a result a measure built for itself.
+
+    That is the trusted tag, a default title, the handle the values behind
+    the display are reachable by, and the note that stops the model repeating
+    a result the reader can already see. An errored result gets none of it:
+    the model is sent the error rather than the value, so anything added to
+    the value would never arrive.
+    """
+    extra = dict(result.extra or {})
+    data = extra.pop("data", None)
+    display = _titled(extra.get(DISPLAY_EXTRA_KEY))
+    extra[DISPLAY_EXTRA_KEY] = display
+    extra[TAG_EXTRA_KEY] = Tag.A
+    result.extra = extra
+
+    if result.error is None:
+        parts = [_format_measure_value(result.value), context.handles.register(data)]
+        if any(_display_field(display, name) is not None for name in _SHOWN_FIELDS):
+            parts.insert(0, visible_result_note("measure result"))
+        result.value = "\n\n".join(part for part in parts if part)
+    return result
+
+
+# The fields that put the result itself in front of the reader, rather than
+# only a row saying the tool ran.
+_SHOWN_FIELDS = ("html", "markdown", "text")
+
+
+def _display_field(display: Any, name: str) -> Any:
+    """Read one field off a display, however the measure chose to build it."""
+    if isinstance(display, Mapping):
+        return display.get(name)
+    return getattr(display, name, None)
+
+
+def _titled(display: Any) -> Any:
+    """Give a display the default title, unless the measure chose its own."""
+    if display is None:
+        return tool_display(TRUSTED_CALL.settled)
+    if isinstance(display, Mapping):
+        return {"title": TRUSTED_CALL.settled, **display}
+    if getattr(display, "title", None) is None:
+        # A shinychat ToolResultDisplay, which its own documentation
+        # recommends over the mapping commons builds.
+        display.title = TRUSTED_CALL.settled
+    return display
 
 
 def _parse_json_arguments(arguments: Any) -> dict[str, Any]:

@@ -165,3 +165,78 @@ def test_a_metrics_result_says_the_calculation_was_trusted() -> None:
     display = ran(built, "call_metrics", metrics=["net_revenue"])
 
     assert display.title == "Ran a trusted calculation"
+
+
+# ---- a measure that builds its own result ---------------------------------
+
+
+def displaying(display: dict[str, Any], value: Any = "41", data: Any = None) -> Any:
+    """A measure that returns a finished tool result, as a measure may."""
+
+    @measure(description="Revenue, already drawn.")
+    def revenue() -> ContentToolResult:
+        return ContentToolResult(
+            value=value, extra={"display": display, "data": data}
+        )
+
+    found = as_measure(revenue)
+    assert found is not None
+    return {found.name: found}
+
+
+def measure_result(**kwargs: Any) -> ContentToolResult:
+    built = tools(measures=displaying(**kwargs))
+    result = find(built, "call_measure").func(name="revenue", arguments="{}")
+    assert isinstance(result, ContentToolResult)
+    return result
+
+
+def test_a_measures_own_result_still_carries_the_a_tag() -> None:
+    result = measure_result(display={"markdown": "**41**"})
+
+    assert result.extra[TAG_EXTRA_KEY] is Tag.A
+
+
+def test_a_measures_own_result_gets_the_default_title() -> None:
+    result = measure_result(display={"markdown": "**41**"})
+
+    assert shown(result).title == "Ran a trusted calculation"
+
+
+def test_a_measure_keeps_the_title_it_chose() -> None:
+    result = measure_result(display={"title": "Drew the revenue curve"})
+
+    assert shown(result).title == "Drew the revenue curve"
+
+
+def test_a_visible_result_tells_the_model_not_to_repeat_it() -> None:
+    result = measure_result(display={"markdown": "**41**"})
+
+    assert "already visible to the user" in str(result.value)
+
+
+def test_a_result_the_user_cannot_see_carries_no_such_note() -> None:
+    result = measure_result(display={"title": "Counted the orders"})
+
+    assert "already visible" not in str(result.value)
+
+
+def test_a_measures_data_is_reachable_as_a_handle() -> None:
+    result = measure_result(display={"title": "Counted"}, data=[1, 2, 3])
+
+    assert "r1" in str(result.value)
+
+
+def test_the_data_does_not_travel_to_the_model_as_metadata() -> None:
+    """`data` is how a measure hands commons the values behind its display."""
+    result = measure_result(display={"title": "Counted"}, data=[1, 2, 3])
+
+    assert "data" not in result.extra
+
+
+def test_a_measure_may_use_shinychats_own_display_class() -> None:
+    """shinychat's docs tell tool authors to build a `ToolResultDisplay`."""
+    result = measure_result(display=ToolResultDisplay(markdown="**41**"))
+
+    assert shown(result).title == "Ran a trusted calculation"
+    assert "already visible to the user" in str(result.value)
