@@ -1,11 +1,11 @@
 """OpenTelemetry spans for commons.
 
-Setup spans cover product setup, building a data source or constructing an
-agent, rather than conversation content, so they are not gated behind an
-agent's ``log`` argument. That is affordable because the OpenTelemetry API is
-inert until an SDK provider is configured: without one, a span is a
-non-recording stand-in and costs almost nothing. commons therefore requires
-the API outright and leaves the SDK and the exporters to the ``tracing``
+Setup spans record product setup, such as building a data source or
+constructing an agent, and not conversation content. An agent's ``log``
+argument does not gate them. Until an SDK provider is configured, the
+OpenTelemetry API is inert: a span does not record and costs almost
+nothing. This makes the API safe as a hard dependency, so commons
+requires it and leaves the SDK and the exporters to the ``tracing``
 extra. ``pkg-r/R/tracing.R`` holds the R counterparts.
 """
 
@@ -36,9 +36,10 @@ def commons_span(
 ) -> Iterator[Span]:
     """Open a span, current for the duration of the block, and end it on exit.
 
-    Set what is already known through ``attributes``: samplers see only those,
-    and Connect snapshots a span's attributes when it opens. Values that the
-    covered work produces, a row count for instance, go on the yielded span.
+    Pass the values known up front in ``attributes``: samplers see only
+    those, and Connect snapshots a span's attributes when it opens. Set
+    values that the work produces, such as a row count, on the yielded
+    span.
     """
     with _TRACER.start_as_current_span(name, attributes=attributes) as span:
         yield span
