@@ -25,7 +25,7 @@ import platform
 from dataclasses import dataclass
 from typing import Literal
 
-from ._runtime import _seccomp
+from ._runtime import _landlock, _seccomp
 
 __all__ = [
     "ALLOW_UNSAFE_FALLBACK",
@@ -95,14 +95,15 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Seatbelt support is a symbol lookup in libSystem. The seccomp probe
-    installs a filter in a child process, so its answer is computed once
-    and cached. Landlock and user namespaces have no implementation
-    yet and report unavailable, so ``protection_mode()`` will still refuse
-    every Linux host.
+    Seatbelt support is a symbol lookup in libSystem, and the Landlock
+    ABI version is a read-only syscall. The seccomp probe installs a
+    filter in a child process, so its answer is computed once and
+    cached. Only user namespaces have no implementation yet and report
+    unavailable, which costs nothing on a kernel that offers Landlock
+    and is the safe direction to be wrong in on one that does not.
     """
     return SandboxCapabilities(
-        landlock_abi=-1,
+        landlock_abi=_landlock.abi_version(),
         seccomp=_seccomp.seccomp_available(),
         seatbelt=_seatbelt_present(),
         userns=False,
