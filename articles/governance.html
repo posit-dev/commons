@@ -233,8 +233,11 @@ tool results. Treat them as another copy of the data available to the
 agent.</p>
 <p>On Connect, both the server administrator and application author must
 opt in for the data to flow. The administrator must enable OpenTelemetry
-and allow content instrumentation; the application author sets
-<code>commons(log = TRUE)</code>. commons enables <a href="https://docs.posit.co/connect/user/content-settings/#content-observability" class="external-link">Content
+and allow content instrumentation. The application author sets
+<code>commons(log = TRUE)</code> and includes
+<code>"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"</code> in the
+<code>envVars</code> argument to <code><a href="https://rstudio.github.io/rsconnect/reference/deployApp.html" class="external-link">rsconnect::deployApp()</a></code>.
+commons enables <a href="https://docs.posit.co/connect/user/content-settings/#content-observability" class="external-link">Content
 Observability</a> for the content item when needed, although capture
 begins only after the content process restarts.</p>
 <p>Content owners and collaborators can read Connect trajectories with
