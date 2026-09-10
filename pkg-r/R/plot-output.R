@@ -54,7 +54,8 @@ model_plot_image <- function(path, width, height) {
   } else {
     magick::image_read(path, strip = TRUE)
   }
-  image <- magick::image_resize(image, sprintf("%dx%d>", width, height))
+  # SVG density varies by renderer, so normalize rather than shrink only.
+  image <- magick::image_resize(image, sprintf("%dx%d!", width, height))
   data <- magick::image_write(image, format = "png")
   ellmer::ContentImageInline("image/png", plot_base64_data(data))
 }

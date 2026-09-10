@@ -256,6 +256,19 @@ test_that("call_measure_tool falls back to a high-resolution PNG", {
   )
 })
 
+test_that("model plot images have consistent dimensions", {
+  path <- withr::local_tempfile(fileext = ".png")
+  magick::image_write(
+    magick::image_blank(576, 384),
+    path = path,
+    format = "png"
+  )
+
+  image <- model_plot_image(path, 768, 512)
+
+  expect_identical(inline_image_dimensions(image), c(768L, 512L))
+})
+
 test_that("call_measure_tool shows gt tables to the model and user", {
   skip_if_not_installed("gt")
   table_data <- data.frame(term = "Headache", count = 7)
