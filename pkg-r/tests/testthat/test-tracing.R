@@ -3,6 +3,10 @@ test_that("new_trajectory_tracing validates its inputs", {
 })
 
 test_that("log = FALSE disables tracing", {
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "guid",
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA
+  )
   expect_false(new_trajectory_tracing(FALSE))
 })
 
@@ -51,6 +55,23 @@ test_that("the content instrumentation warning reflects Connect's setting", {
 
   settings <- rlang::error_cnd("unavailable")
   expect_no_warning(warn_if_content_instrumentation_disabled())
+})
+
+test_that("the content-capture deployment warning is limited to Connect", {
+  withr::local_envvar(
+    POSIT_PRODUCT = NA,
+    CONNECT_CONTENT_GUID = NA,
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA
+  )
+  expect_no_warning(warn_if_content_capture_not_deployed())
+
+  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  expect_snapshot(warn_if_content_capture_not_deployed())
+
+  withr::local_envvar(
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
+  expect_no_warning(warn_if_content_capture_not_deployed())
 })
 
 test_that("log = TRUE warns when tracing stays disabled locally", {
@@ -194,14 +215,14 @@ test_that("share_trajectory_access warns rather than errors on failure", {
 
 test_that("an explicit content-capture opt-out is respected", {
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false")
-  expect_snapshot(.res <- content_capture_enabled())
+  expect_no_warning(.res <- content_capture_enabled())
   expect_false(.res)
 
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
   expect_true(content_capture_enabled())
 })
 
-test_that("missing content capture warns and uses the ellmer fallback", {
+test_that("missing content capture uses the ellmer fallback", {
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
   refreshed <- FALSE
   local_mocked_bindings(
@@ -211,7 +232,7 @@ test_that("missing content capture warns and uses the ellmer fallback", {
     }
   )
 
-  expect_snapshot(.res <- content_capture_enabled())
+  expect_no_warning(.res <- content_capture_enabled())
   expect_true(.res)
   expect_true(refreshed)
   expect_equal(
@@ -224,7 +245,7 @@ test_that("a missing ellmer fallback leaves content capture disabled", {
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
   local_mocked_bindings(refresh_ellmer_otel_cache = function() FALSE)
 
-  expect_snapshot(.res <- content_capture_enabled())
+  expect_no_warning(.res <- content_capture_enabled())
   expect_false(.res)
   expect_identical(
     Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),

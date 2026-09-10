@@ -32,6 +32,15 @@
       Trajectory logging is disabled by this Posit Connect server's configuration.
       i Ask your server administrator to set `OpenTelemetry.Enabled = true` and `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration, then restart Connect.
 
+# the content-capture deployment warning is limited to Connect
+
+    Code
+      warn_if_content_capture_not_deployed()
+    Condition
+      Warning:
+      Trajectory logging requires additional deployment setup.
+      i Include `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` in the `envVars` argument to `rsconnect::deployApp()`, then redeploy.
+
 # log = TRUE warns when tracing stays disabled locally
 
     Code
@@ -39,7 +48,6 @@
     Condition
       Warning:
       Trajectory logging is enabled but OpenTelemetry tracing is not active.
-      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
 
 # log = TRUE points at Content Observability on Connect
 
@@ -85,31 +93,4 @@
       Warning:
       Could not share trajectory access with `share_with`.
       i no api key
-
-# an explicit content-capture opt-out is respected
-
-    Code
-      .res <- content_capture_enabled()
-    Condition
-      Warning:
-      Trajectory logging requires additional setup.
-      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
-
-# missing content capture warns and uses the ellmer fallback
-
-    Code
-      .res <- content_capture_enabled()
-    Condition
-      Warning:
-      Trajectory logging requires additional setup.
-      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
-
-# a missing ellmer fallback leaves content capture disabled
-
-    Code
-      .res <- content_capture_enabled()
-    Condition
-      Warning:
-      Trajectory logging requires additional setup.
-      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
 

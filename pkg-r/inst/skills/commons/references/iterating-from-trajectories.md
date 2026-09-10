@@ -50,7 +50,9 @@ turns <- trajectories[[1]][["turns"]]
 print(turns)
 ```
 
-If traces are absent, confirm that the agent runs with `log = TRUE` while OpenTelemetry tracing is active.
+If traces are absent, confirm that the agent runs with `log = TRUE`, that
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` was passed through
+`rsconnect::deployApp(envVars = ...)`, and that OpenTelemetry tracing is active.
 
 ### Set up trajectory review
 

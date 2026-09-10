@@ -30,6 +30,7 @@ new_trajectory_tracing <- function(
   }
 
   warn_if_content_instrumentation_disabled()
+  warn_if_content_capture_not_deployed()
 
   if (!is_installed("otel")) {
     cli::cli_warn(c(
@@ -82,6 +83,26 @@ warn_if_content_instrumentation_disabled <- function() {
       i = connect_server_tracing_hint()
     ))
   }
+  invisible(NULL)
+}
+
+# Check before the compatibility fallback mutates this process's environment.
+warn_if_content_capture_not_deployed <- function() {
+  if (!is_connect_runtime()) {
+    return(invisible(NULL))
+  }
+
+  current <- Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
+  if (tolower(current) %in% c("true", "1")) {
+    return(invisible(NULL))
+  }
+
+  cli::cli_warn(c(
+    "Trajectory logging requires additional deployment setup.",
+    i = "Include
+         {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT} in the
+         {.arg envVars} argument to {.fn rsconnect::deployApp}, then redeploy."
+  ))
   invisible(NULL)
 }
 
@@ -188,17 +209,7 @@ content_capture_enabled <- function() {
     refreshed <- FALSE
   }
 
-  cli::cli_warn(c(
-    "Trajectory logging requires additional setup.",
-    i = content_capture_hint()
-  ))
   refreshed
-}
-
-content_capture_hint <- function() {
-  "Set the environment variable
-   {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true}, perhaps by
-   pasting it into {.file ~/.Renviron}, and restart R."
 }
 
 refresh_ellmer_otel_cache <- function() {
@@ -267,10 +278,9 @@ warn_tracing_disabled <- function() {
       i = connect_content_tracing_hint()
     ))
   } else {
-    cli::cli_warn(c(
-      "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
-      i = content_capture_hint()
-    ))
+    cli::cli_warn(
+      "Trajectory logging is enabled but OpenTelemetry tracing is not active."
+    )
   }
   invisible(NULL)
 }

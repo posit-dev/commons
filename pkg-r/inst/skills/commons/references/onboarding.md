@@ -159,11 +159,18 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
    rsconnect::deployApp(
      appDir = ".",
      appFiles = app_files,
-     appPrimaryDoc = "app.R"
+     appPrimaryDoc = "app.R",
+     envVars = "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"
    )
    ```
 
    Adapt `build_agent()` and the rest of `app_files` to the project. The cache must be built before `app_files` is collected, and explicit file lists must include `commons-cache/`. Git-ignore the generated directory, but do not use `app_cache/`: rsconnect excludes that directory from bundles. Keep this deployment-only agent separate from the fresh agent constructed for each Shiny session.
+
+   When the agent uses `commons(log = TRUE)`, keep
+   `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in the local
+   deployment environment and include its name in `deployApp(envVars = ...)`,
+   as above. This passes the value to the deployed content; setting it locally
+   without including it in `envVars` does not.
 
    `agent$prewarm()` finishes building the context index before it returns. It also starts pin downloads in a background process; do not claim that pins are bundled unless the board cache is project-local and those downloads are known to have finished before deployment.
 

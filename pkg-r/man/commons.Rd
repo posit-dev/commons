@@ -53,10 +53,12 @@ are not a security boundary.}
 
 \item{log}{Whether to request conversation trajectory capture with
 OpenTelemetry (default \code{FALSE}). When \code{TRUE}, commons checks the tracing
-setup and warns with setup steps when it is incomplete.
-Set \code{OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true} before R
-starts so \pkg{ellmer} includes message content. On Posit Connect, a server
-administrator must set \code{OpenTelemetry.Enabled = true} and
+setup and warns with setup steps when it is incomplete. When deploying to
+Posit Connect, include
+\code{"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"} in the \code{envVars}
+argument to \code{\link[rsconnect:deployApp]{rsconnect::deployApp()}} so \pkg{ellmer} includes message
+content. A server administrator must also set \code{OpenTelemetry.Enabled = true}
+and
 \code{OpenTelemetry.AllowContentInstrumentation = true}. Read trajectories back
 with \code{\link[=trajectory_read]{trajectory_read()}}.}
 
