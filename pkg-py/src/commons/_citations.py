@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, get_args
 from chatlas import ContentToolResult, Turn
 from chatlas.types import ContentText
 
+from ._display import DISPLAY_EXTRA_KEY, tool_display
 from ._icons import icon_url
 from ._measures import Measure, measure_schema_text
 from ._prompt import read_prompt
@@ -290,13 +291,34 @@ def citation_icon_url(kind: str) -> str | None:
     return icon_url(_KIND_ICONS.get(kind))
 
 
-def tool_result(value: Any, tag: Tag | None = None) -> ContentToolResult:
+def tool_result(
+    value: Any,
+    tag: Tag | None = None,
+    *,
+    title: str | None = None,
+    html: Any = None,
+    markdown: str | None = None,
+    footer: Any = None,
+    open: bool = False,
+) -> ContentToolResult:
     """A tool result carrying the provenance tag of the output it holds.
 
     The tag is read back off ``extra`` when the turn is classified, so it is
     set here rather than at the point a result is added to the conversation.
+    It stays out of the title: it is what the reader classifies an answer by,
+    not a caption for the row that produced it.
+
+    The remaining arguments are the display envelope; see ``_display``.
     """
-    return ContentToolResult(value=value, extra={TAG_EXTRA_KEY: tag})
+    return ContentToolResult(
+        value=value,
+        extra={
+            TAG_EXTRA_KEY: tag,
+            DISPLAY_EXTRA_KEY: tool_display(
+                title, html=html, markdown=markdown, footer=footer, open=open
+            ),
+        },
+    )
 
 
 def citation_reminder_text() -> str:
