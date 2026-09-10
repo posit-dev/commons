@@ -49,12 +49,13 @@ Two return types receive special display handling: ggplots and
 [`gt::gt()`](https://gt.rstudio.com/reference/gt.html) tables are shown
 directly to the user in the opened measure result.
 
-For full control over a result, `fn` can return an
+For custom result content, `fn` can return an
 [ellmer::ContentToolResult](https://ellmer.tidyverse.org/reference/Content.html).
-Its `value` is sent to the model and its `extra$display` controls the
-shinychat display. An optional `extra$data` value is made available in
-the agent's R session and removed from the result before it is returned
-to ellmer.
+Its `value` is sent to the model and its `extra$display` supplies the
+shinychat body and card options. Custom HTML is presented inside the
+standard measure display, after its metadata and arguments. An optional
+`extra$data` value is made available in the agent's R session and
+removed from the result before it is returned to ellmer.
 
 ## See also
 
