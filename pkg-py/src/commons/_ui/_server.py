@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import warnings
+import logging
 from typing import Any
 
 import shinychat
@@ -12,6 +12,8 @@ from .._agent import Commons
 from .._tracing import commons_span
 
 __all__ = ["server"]
+
+logger = logging.getLogger(__name__)
 
 
 def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
@@ -30,6 +32,10 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
         A commons agent.
     **kwargs
         Passed to `shinychat.Chat()`.
+
+    A `client` that is not a commons agent raises `TypeError`: a plain
+    chatlas chat has none of the citation or provenance handling the chat
+    surface renders.
     """
     if not isinstance(client, Commons):
         raise TypeError(
@@ -56,10 +62,12 @@ def _prewarm_on_idle(client: Commons, session: Session) -> None:
     def prewarm() -> None:
         try:
             client.prewarm()
-        except Exception as err:  # noqa: BLE001 - any failure must warn, not abort
-            # `prewarm()` fails a deployment when it is called directly, but
-            # here a cold cache only costs the first question some time, and
-            # an error escaping the callback would take the app down.
-            warnings.warn(str(err), stacklevel=1)
+        except Exception as err:  # any failure must warn, not abort
+            # A cold cache only costs the first question some time, and an
+            # error escaping the callback would take the app down. Log rather
+            # than warn: the warnings module shows an identical message only
+            # once per process, which would hide a failure that recurs every
+            # session.
+            logger.warning("prewarm failed: %s", err, exc_info=True)
 
     session.on_flushed(prewarm, once=True)

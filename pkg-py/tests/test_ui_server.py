@@ -7,6 +7,7 @@ are registered, and what each one does when it runs.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
@@ -63,17 +64,21 @@ class _IdleSession(ExpressStubSession):
 
     def __init__(self) -> None:
         super().__init__()
-        self.idle_callbacks: list[Callable[[], None]] = []
+        self.idle_callbacks: list[tuple[Callable[[], Any], bool]] = []
 
     def on_flushed(
         self, fn: Callable[[], Any], once: bool = True
     ) -> Callable[[], None]:
-        self.idle_callbacks.append(fn)
+        self.idle_callbacks.append((fn, once))
         return lambda: None
 
     def go_idle(self) -> None:
-        for callback in self.idle_callbacks:
-            callback()
+        # A `once` callback deregisters when it fires; the rest run each flush.
+        callbacks, self.idle_callbacks = self.idle_callbacks, []
+        for fn, once in callbacks:
+            fn()
+            if not once:
+                self.idle_callbacks.append((fn, once))
 
 
 def frame() -> pd.DataFrame:
@@ -104,7 +109,7 @@ def test_the_chat_is_wired_to_the_agent() -> None:
     # shinychat wraps the client it was handed rather than holding it directly.
     wrapper = chat.client
     assert wrapper is not None
-    assert wrapper._client is agent
+    assert wrapper.value is agent
 
 
 def test_restoring_a_conversation_queues_the_restore_reminder() -> None:
@@ -142,11 +147,16 @@ def test_prewarm_runs_when_the_session_first_goes_idle(tmp_path: Path) -> None:
     # Warming is what the first question would otherwise pay for, so nothing
     # is built until the app has served its first page.
     assert layer._store_cache is None
+    # once=True: warming fires on the first idle only, not on every flush.
+    assert [once for _, once in session.idle_callbacks] == [True]
     session.go_idle()
     assert layer._store_cache is not None
+    assert session.idle_callbacks == []
 
 
-def test_a_failed_prewarm_warns_rather_than_stopping_the_app(tmp_path: Path) -> None:
+def test_a_failed_prewarm_is_logged_rather_than_stopping_the_app(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     pins = pytest.importorskip("pins")
     board = pins.board_folder(str(tmp_path))
     board.pin_write({"not": "a frame"}, "sales-pin", type="json")
@@ -157,10 +167,21 @@ def test_a_failed_prewarm_warns_rather_than_stopping_the_app(tmp_path: Path) -> 
     with session_context(session):
         commons.ui.server("chat", agent)
 
-    # A cold cache is worth a warning; an error escaping the callback would
+    # A cold cache is worth a log entry; an error escaping the callback would
     # take the app down with it.
-    with pytest.warns(UserWarning, match="not a data frame"):
+    with caplog.at_level(logging.WARNING, logger="commons._ui._server"):
         session.go_idle()
+    assert "not a data frame" in caplog.text
+
+
+def test_extra_kwargs_are_passed_to_shinychat() -> None:
+    agent = agent_with(scripted_chat())
+    session = _IdleSession()
+
+    with session_context(session):
+        chat = commons.ui.server("chat", agent, on_error="unhandled")
+
+    assert chat.on_error == "unhandled"
 
 
 def test_the_setup_span_records_the_chat_element_id(
