@@ -30,11 +30,12 @@ import os
 from functools import cache
 from pathlib import Path
 from tempfile import mkdtemp
-from typing import Any
+from typing import Annotated, Any
 
 import chatlas
 import pandas as pd
 import shinychat
+from pydantic import Field
 from shiny import App, Inputs, Outputs, Session
 
 import commons
@@ -128,8 +129,15 @@ def shared_notes_file() -> Path:
 
 
 @commons.measure(
+    # Past the card's clamp length on purpose: the chat UI collapses a long
+    # description like this behind a "See more" disclosure.
     description=(
-        "Acre-weighted canopy cover for each county, from the most recent survey."
+        "Acre-weighted canopy cover for each county, from the most recent "
+        "survey. Each stand counts in proportion to its acreage, so a "
+        "400-acre unit does not move the figure the way a 4,000-acre one "
+        "does. Established stands only: regeneration units are tracked "
+        "separately until they close canopy. When several survey years are "
+        "present, only the most recent one enters."
     )
 )
 def canopy_by_county(warehouse: commons.Injected[Any]) -> pd.DataFrame:
@@ -161,6 +169,50 @@ def low_canopy_stands(warehouse: commons.Injected[Any]) -> pd.DataFrame:
     ).fetchdf()
 
 
+@commons.measure(
+    description=(
+        "A county's current canopy cover as one headline figure, drawn as a "
+        "card. Use when someone asks for a headline, big number, or summary "
+        "readout for a single county."
+    ),
+    title="Canopy headline",
+)
+def canopy_headline(
+    county: Annotated[str, Field(description="The county to summarize.")],
+    warehouse: commons.Injected[Any],
+) -> chatlas.ContentToolResult:
+    # A measure returning a ContentToolResult authors its own HTML; commons
+    # frames it inside the standard card, after the metadata and arguments.
+    pct, acres = warehouse.execute(
+        """
+        SELECT SUM(canopy_pct * acres) / SUM(acres) AS canopy_pct,
+               SUM(acres) AS acres
+        FROM stands JOIN surveys USING (stand_id)
+        WHERE county = ? AND status = 'established'
+          AND survey_year = (SELECT MAX(survey_year) FROM surveys)
+        """,
+        [county],
+    ).fetchone()
+    return chatlas.ContentToolResult(
+        value=(
+            f"{county} County: {pct:.1f}% canopy cover across "
+            f"{acres:,.0f} established acres, 2026 survey."
+        ),
+        extra={
+            "display": {
+                "html": (
+                    "<div style='text-align: center; padding: 0.5rem 0'>"
+                    f"<div style='font-size: 2.5rem; font-weight: 300'>"
+                    f"{pct:.0f}%</div>"
+                    f"<div>canopy cover across {acres:,.0f} "
+                    "established acres</div>"
+                    "</div>"
+                )
+            }
+        },
+    )
+
+
 def client() -> chatlas.Chat:
     """A chat client, from `CHATLAS_CHAT_PROVIDER_MODEL` when it is set."""
     return chatlas.ChatAuto(os.getenv("CHATLAS_CHAT_PROVIDER_MODEL") or DEFAULT_MODEL)
@@ -172,7 +224,9 @@ def agent() -> commons.Commons:
         client(),
         # Named, because a measure's `warehouse` argument is injected by name.
         {"warehouse": commons.data_source(stands=stands, surveys=surveys)},
-        semantic_layer=commons.semantic_layer(canopy_by_county, low_canopy_stands),
+        semantic_layer=commons.semantic_layer(
+            canopy_by_county, low_canopy_stands, canopy_headline
+        ),
         context_layer=commons.context_layer(files=[shared_notes_file()]),
     )
 
@@ -181,6 +235,8 @@ QUESTIONS = [
     # Covered by a measure, so the answer should come back verified.
     "Which county has the most canopy cover?",
     "Which stands have the least canopy cover?",
+    # Covered by a measure that draws its own card.
+    "Draw a canopy headline for Lane County.",
     # No measure covers a single stand's change over time, so this one has to
     # reach run_sql, and the answer is untrusted or cited instead.
     "How much canopy has Winberry Ridge gained since 2021?",

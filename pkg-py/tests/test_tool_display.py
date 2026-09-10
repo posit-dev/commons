@@ -249,6 +249,99 @@ def test_a_measure_may_use_shinychats_own_display_class() -> None:
     assert "already visible to the user" in str(result.value)
 
 
+def test_a_measure_cannot_turn_the_request_back_on() -> None:
+    """The arguments commons sends a tool are its own plumbing."""
+    result = measure_result(display={"markdown": "**41**", "show_request": True})
+
+    assert shown(result).show_request is False
+
+
+def test_authored_html_is_framed_inside_the_measure_card() -> None:
+    """Custom HTML sits in the standard card, after metadata and arguments."""
+
+    @measure(description="Summarize adverse events.", title="Adverse events")
+    def events(
+        population: Annotated[str, Field(description="Analysis population.")],
+    ) -> ContentToolResult:
+        return ContentToolResult(
+            value="Headache: 7",
+            extra={
+                "display": {
+                    "html": "<table><tr><td>Headache</td></tr></table>",
+                    "open": True,
+                    "full_screen": True,
+                }
+            },
+        )
+
+    found = as_measure(events)
+    assert found is not None
+    built = tools(measures={found.name: found})
+
+    result = find(built, "call_measure").func(
+        name="events", arguments='{"population": "ITT"}'
+    )
+    assert isinstance(result, ContentToolResult)
+    display = shown(result)
+    html = markup(display.html)
+
+    assert "commons-measure-display" in html
+    assert "Adverse events" in html
+    assert "Summarize adverse events." in html
+    assert "Population:" in html
+    assert "ITT" in html
+    assert "<strong>Result</strong>" in html
+    assert "commons-measure-result-value-authored" in html
+    # Authored markup is rendered, not escaped.
+    assert "<table>" in html
+    assert display.open is True
+    assert display.full_screen is True
+    assert display.show_request is False
+
+
+def test_authored_html_keeps_the_dependencies_attached_to_it() -> None:
+    from htmltools import HTMLDependency, TagList, tags
+    from htmltools import Tag as HtmlTag
+
+    dependency = HTMLDependency(
+        "measure-table",
+        "1.0.0",
+        source={"href": "measure-table"},
+        stylesheet={"href": "table.css"},
+    )
+    table = TagList(tags.table(tags.tr(tags.td("Headache"))), dependency)
+
+    display = shown(measure_result(display={"html": table}))
+
+    assert isinstance(display.html, HtmlTag)
+    assert [d.name for d in display.html.get_dependencies()] == ["measure-table"]
+
+
+def test_authored_html_on_shinychats_display_class_is_framed() -> None:
+    result = measure_result(display=ToolResultDisplay(html="<p>custom</p>"))
+
+    display = shown(result)
+
+    assert "commons-measure-result-value-authored" in markup(display.html)
+    assert display.show_request is False
+
+
+def test_a_long_measure_description_can_be_expanded() -> None:
+    @measure(description="A detailed description of the measure. " * 8)
+    def orders() -> int:
+        return 1
+
+    found = as_measure(orders)
+    assert found is not None
+    built = tools(measures={found.name: found})
+
+    html = markup(ran(built, "call_measure", name="orders", arguments="{}").html)
+
+    assert "commons-measure-description-summary" in html
+    assert "commons-measure-details-more" in html
+    assert "commons-measure-details-less" in html
+
+
 # ---- the card behind a trusted calculation --------------------------------
 
 

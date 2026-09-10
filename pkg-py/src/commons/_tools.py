@@ -43,6 +43,7 @@ from ._display import (
     TRUSTED_CALL,
     TRUSTED_SEARCH,
     measure_display_html,
+    measure_display_with_custom_html,
     measure_source_footer,
     tool_display,
     visible_result_note,
@@ -309,7 +310,7 @@ def _call_measure(context: ToolContext) -> Tool:
         # table — has already said how it should look; commons only fills in
         # what it alone knows.
         if isinstance(value, ContentToolResult):
-            return _finish_measure_result(value, record, context)
+            return _finish_measure_result(value, record, context, args)
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
@@ -347,7 +348,10 @@ def _call_measure(context: ToolContext) -> Tool:
 
 
 def _finish_measure_result(
-    result: ContentToolResult, record: Measure, context: ToolContext
+    result: ContentToolResult,
+    record: Measure,
+    context: ToolContext,
+    args: Mapping[str, Any],
 ) -> ContentToolResult:
     """Fill in what commons knows about a result a measure built for itself.
 
@@ -363,7 +367,10 @@ def _finish_measure_result(
     extra = dict(result.extra or {})
     data = extra.pop("data", None)
     display = _defaulted(
-        extra.get(DISPLAY_EXTRA_KEY), measure_source_footer(record.provenance)
+        extra.get(DISPLAY_EXTRA_KEY),
+        measure_source_footer(record.provenance),
+        args,
+        record,
     )
     extra[DISPLAY_EXTRA_KEY] = display
     # The tag is commons' to set, so a measure never keeps one it supplied.
@@ -392,8 +399,15 @@ def _display_field(display: Any, name: str) -> Any:
     return getattr(display, name, None)
 
 
-def _defaulted(display: Any, footer: Any) -> Any:
-    """Fill a display's title and footer, unless the measure chose its own."""
+def _defaulted(
+    display: Any, footer: Any, args: Mapping[str, Any], record: Measure
+) -> Any:
+    """Fill a display's title and footer, unless the measure chose its own.
+
+    The request is never shown -- the arguments commons sends a tool are its
+    own plumbing -- and HTML the measure authored is framed inside the
+    standard measure card, after the measure's metadata and arguments.
+    """
     defaults = {"title": TRUSTED_CALL.settled, "footer": footer}
     if display is None:
         return tool_display(TRUSTED_CALL.settled, footer=footer)
@@ -402,13 +416,25 @@ def _defaulted(display: Any, footer: Any) -> Any:
         for name, default in defaults.items():
             if filled.get(name) is None:
                 filled[name] = default
+        filled["show_request"] = False
+        if filled.get("html") is not None:
+            filled["html"] = _framed_html(args, filled["html"], record)
         return filled
     # A shinychat ToolResultDisplay, which its own documentation recommends
     # over the mapping commons builds.
     for name, default in defaults.items():
         if getattr(display, name, None) is None:
             setattr(display, name, default)
+    display.show_request = False
+    if getattr(display, "html", None) is not None:
+        display.html = _framed_html(args, display.html, record)
     return display
+
+
+def _framed_html(args: Mapping[str, Any], html: Any, record: Measure) -> Any:
+    return measure_display_with_custom_html(
+        args, html, title=record.title, description=record.description
+    )
 
 
 def _parse_json_arguments(arguments: Any) -> dict[str, Any]:
