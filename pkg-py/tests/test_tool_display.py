@@ -357,3 +357,36 @@ def test_a_display_that_names_no_title_still_gets_the_default() -> None:
     result = measure_result(display={"title": None, "markdown": "**41**"})
 
     assert shown(result).title == "Ran a trusted calculation"
+
+
+def displaying_sourced(display: dict[str, Any]) -> Any:
+    """A measure that draws its own result and records where it came from."""
+
+    @measure(
+        description="Revenue, already drawn.",
+        provenance=["https://example.com/handbook"],
+    )
+    def revenue() -> ContentToolResult:
+        return ContentToolResult(value="41", extra={"display": display})
+
+    found = as_measure(revenue)
+    assert found is not None
+    return {found.name: found}
+
+
+def test_a_measures_own_result_still_links_back_to_its_source() -> None:
+    built = tools(measures=displaying_sourced({"markdown": "**41**"}))
+
+    result = find(built, "call_measure").func(name="revenue", arguments="{}")
+
+    assert isinstance(result, ContentToolResult)
+    assert "https://example.com/handbook" in markup(shown(result).footer)
+
+
+def test_a_measure_keeps_the_footer_it_chose() -> None:
+    built = tools(measures=displaying_sourced({"footer": "Ask the finance team."}))
+
+    result = find(built, "call_measure").func(name="revenue", arguments="{}")
+
+    assert isinstance(result, ContentToolResult)
+    assert "Ask the finance team." in markup(shown(result).footer)

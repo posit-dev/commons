@@ -309,7 +309,7 @@ def _call_measure(context: ToolContext) -> Tool:
         # table — has already said how it should look; commons only fills in
         # what it alone knows.
         if isinstance(value, ContentToolResult):
-            return _finish_measure_result(value, context)
+            return _finish_measure_result(value, record, context)
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
@@ -347,7 +347,7 @@ def _call_measure(context: ToolContext) -> Tool:
 
 
 def _finish_measure_result(
-    result: ContentToolResult, context: ToolContext
+    result: ContentToolResult, record: Measure, context: ToolContext
 ) -> ContentToolResult:
     """Fill in what commons knows about a result a measure built for itself.
 
@@ -362,7 +362,9 @@ def _finish_measure_result(
     """
     extra = dict(result.extra or {})
     data = extra.pop("data", None)
-    display = _titled(extra.get(DISPLAY_EXTRA_KEY))
+    display = _defaulted(
+        extra.get(DISPLAY_EXTRA_KEY), measure_source_footer(record.provenance)
+    )
     extra[DISPLAY_EXTRA_KEY] = display
     result.extra = extra
     if result.error is not None:
@@ -388,19 +390,22 @@ def _display_field(display: Any, name: str) -> Any:
     return getattr(display, name, None)
 
 
-def _titled(display: Any) -> Any:
-    """Give a display the default title, unless the measure chose its own."""
+def _defaulted(display: Any, footer: Any) -> Any:
+    """Fill a display's title and footer, unless the measure chose its own."""
+    defaults = {"title": TRUSTED_CALL.settled, "footer": footer}
     if display is None:
-        return tool_display(TRUSTED_CALL.settled)
+        return tool_display(TRUSTED_CALL.settled, footer=footer)
     if isinstance(display, Mapping):
-        titled = dict(display)
-        if titled.get("title") is None:
-            titled["title"] = TRUSTED_CALL.settled
-        return titled
-    if getattr(display, "title", None) is None:
-        # A shinychat ToolResultDisplay, which its own documentation
-        # recommends over the mapping commons builds.
-        display.title = TRUSTED_CALL.settled
+        filled = dict(display)
+        for name, default in defaults.items():
+            if filled.get(name) is None:
+                filled[name] = default
+        return filled
+    # A shinychat ToolResultDisplay, which its own documentation recommends
+    # over the mapping commons builds.
+    for name, default in defaults.items():
+        if getattr(display, name, None) is None:
+            setattr(display, name, default)
     return display
 
 

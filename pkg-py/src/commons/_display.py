@@ -14,12 +14,12 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from htmltools import Tag, TagChild, TagList, div, tags
 
 from ._frames import is_frame
-from ._rows import frame_rows, render_value
+from ._rows import MAX_MARKDOWN_ROWS, frame_rows, render_value
 
 _URL = re.compile(r"https?://", re.IGNORECASE)
 
@@ -158,7 +158,9 @@ def _metadata_html(title: str | None, description: str | None) -> Tag | None:
 
 
 def _args_html(args: Mapping[str, Any]) -> Tag | None:
-    if not args:
+    # An argument the caller left out is not an argument the measure ran with.
+    given = {name: value for name, value in args.items() if value is not None}
+    if not given:
         return None
     return div(
         *(
@@ -168,23 +170,48 @@ def _args_html(args: Mapping[str, Any]) -> Tag | None:
                 tags.span(_format_arg(value), class_="commons-measure-arg-value"),
                 class_="commons-measure-arg",
             )
-            for name, value in args.items()
+            for name, value in given.items()
         ),
         class_="commons-measure-args",
     )
 
 
 def _value_html(value: Any) -> TagChild:
-    rows = frame_rows(value) if is_frame(value) else None
+    rows = _as_rows(value)
     if rows is None:
         return render_value(value)
-    columns = list(rows[0]) if rows else []
-    return tags.table(
-        tags.thead(tags.tr(*(tags.th(column) for column in columns))),
-        tags.tbody(
-            *(tags.tr(*(tags.td(render_value(row[c])) for c in columns)) for row in rows)
+    # Union rather than the first row's keys: a driver may omit a null column.
+    columns = list(dict.fromkeys(key for row in rows for key in row))
+    shown = rows[:MAX_MARKDOWN_ROWS]
+    return TagList(
+        tags.table(
+            tags.thead(tags.tr(*(tags.th(column) for column in columns))),
+            tags.tbody(
+                *(
+                    tags.tr(
+                        *(tags.td(render_value(row.get(c))) for c in columns)
+                    )
+                    for row in shown
+                )
+            ),
         ),
+        tags.p(f"{len(rows) - len(shown)} more rows not shown")
+        if len(rows) > len(shown)
+        else None,
     )
+
+
+def _as_rows(value: Any) -> list[Mapping[str, Any]] | None:
+    """The rows behind a value, whether it arrived as a frame or as rows.
+
+    A data source answers a query with rows, while a measure is more likely
+    to return a frame, and both reach this card.
+    """
+    if is_frame(value):
+        return cast("list[Mapping[str, Any]] | None", frame_rows(value))
+    if isinstance(value, list) and value and all(isinstance(r, Mapping) for r in value):
+        return value
+    return None
 
 
 def _label(name: str) -> str:

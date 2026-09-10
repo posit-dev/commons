@@ -11,6 +11,7 @@ from typing import Any
 import pandas as pd
 
 from commons._display import measure_display_html, measure_source_footer
+from commons._rows import MAX_MARKDOWN_ROWS
 
 
 def rendered(tag: Any) -> str:
@@ -99,3 +100,35 @@ def test_a_link_opens_away_from_the_app() -> None:
 
     assert 'target="_blank"' in html
     assert "noopener" in html
+
+
+def test_query_rows_are_drawn_as_a_table() -> None:
+    """`call_metrics` hands its result over as rows, not as a frame."""
+    rows = [{"region": "EMEA", "revenue": 500.0}]
+
+    html = rendered(measure_display_html({}, rows))
+
+    assert "<table" in html
+    assert "EMEA" in html
+
+
+def test_a_long_table_is_capped_and_says_so() -> None:
+    rows = [{"n": n} for n in range(MAX_MARKDOWN_ROWS + 5)]
+
+    html = rendered(measure_display_html({}, rows))
+
+    assert html.count("<tr") == MAX_MARKDOWN_ROWS + 1
+    assert "5 more rows not shown" in html
+
+
+def test_a_column_a_row_omits_is_still_a_column() -> None:
+    """A driver may leave a null column out of a row it returns."""
+    html = rendered(measure_display_html({}, [{"a": 1}, {"a": 2, "b": 3}]))
+
+    assert "<th>b</th>" in html
+
+
+def test_an_argument_that_was_not_given_is_left_out() -> None:
+    html = rendered(measure_display_html({"metrics": ["revenue"], "filters": None}, 41))
+
+    assert "Filters" not in html
