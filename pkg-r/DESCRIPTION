@@ -43,7 +43,7 @@ Imports:
     roxygen2,
     S7,
     sass,
-    shinychat (> 0.4.0),
+    shinychat (>= 0.5.0),
     utils
 Suggests:
     bit64,
@@ -70,8 +70,6 @@ Suggests:
     withr,
     yaml
 VignetteBuilder: knitr
-Remotes:
-    posit-dev/shinychat/pkg-r
 Config/testthat/edition: 3
 Config/testthat/parallel: true
 Config/testthat/start-first: run-r, citation-scan, citation-browser, commons,
