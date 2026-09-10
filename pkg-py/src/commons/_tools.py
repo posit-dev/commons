@@ -353,22 +353,26 @@ def _finish_measure_result(
 
     That is the trusted tag, a default title, the handle the values behind
     the display are reachable by, and the note that stops the model repeating
-    a result the reader can already see. An errored result gets none of it:
-    the model is sent the error rather than the value, so anything added to
-    the value would never arrive.
+    a result the reader can already see.
+
+    An errored result keeps only the title. The model is sent the error
+    rather than the value, so anything added to the value would never arrive,
+    and the tag would let a calculation that failed promote the answer that
+    follows it to a verified one.
     """
     extra = dict(result.extra or {})
     data = extra.pop("data", None)
     display = _titled(extra.get(DISPLAY_EXTRA_KEY))
     extra[DISPLAY_EXTRA_KEY] = display
-    extra[TAG_EXTRA_KEY] = Tag.A
     result.extra = extra
+    if result.error is not None:
+        return result
 
-    if result.error is None:
-        parts = [_format_measure_value(result.value), context.handles.register(data)]
-        if any(_display_field(display, name) is not None for name in _SHOWN_FIELDS):
-            parts.insert(0, visible_result_note("measure result"))
-        result.value = "\n\n".join(part for part in parts if part)
+    extra[TAG_EXTRA_KEY] = Tag.A
+    parts = [_format_measure_value(result.value), context.handles.register(data)]
+    if any(_display_field(display, name) is not None for name in _SHOWN_FIELDS):
+        parts.insert(0, visible_result_note("measure result"))
+    result.value = "\n\n".join(part for part in parts if part)
     return result
 
 
@@ -389,7 +393,10 @@ def _titled(display: Any) -> Any:
     if display is None:
         return tool_display(TRUSTED_CALL.settled)
     if isinstance(display, Mapping):
-        return {"title": TRUSTED_CALL.settled, **display}
+        titled = dict(display)
+        if titled.get("title") is None:
+            titled["title"] = TRUSTED_CALL.settled
+        return titled
     if getattr(display, "title", None) is None:
         # A shinychat ToolResultDisplay, which its own documentation
         # recommends over the mapping commons builds.

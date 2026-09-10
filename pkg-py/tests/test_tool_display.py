@@ -318,3 +318,42 @@ def test_a_metrics_result_shows_the_query_it_ran() -> None:
 
     assert display.markdown is not None
     assert display.markdown.startswith("```sql\n")
+
+
+def failing(display: dict[str, Any]) -> Any:
+    """A measure whose own result reports that the calculation failed."""
+
+    @measure(description="Revenue, when it can be had.")
+    def revenue() -> ContentToolResult:
+        return ContentToolResult(
+            value=None, error=RuntimeError("no rows"), extra={"display": display}
+        )
+
+    found = as_measure(revenue)
+    assert found is not None
+    return {found.name: found}
+
+
+def test_a_failed_calculation_is_not_trusted() -> None:
+    """A tag here would let a failure promote the answer that follows it."""
+    built = tools(measures=failing({"markdown": "**no rows**"}))
+
+    result = find(built, "call_measure").func(name="revenue", arguments="{}")
+
+    assert isinstance(result, ContentToolResult)
+    assert TAG_EXTRA_KEY not in (result.extra or {})
+
+
+def test_a_failed_calculation_keeps_the_error_the_measure_reported() -> None:
+    built = tools(measures=failing({"markdown": "**no rows**"}))
+
+    result = find(built, "call_measure").func(name="revenue", arguments="{}")
+
+    assert isinstance(result, ContentToolResult)
+    assert result.value is None
+
+
+def test_a_display_that_names_no_title_still_gets_the_default() -> None:
+    result = measure_result(display={"title": None, "markdown": "**41**"})
+
+    assert shown(result).title == "Ran a trusted calculation"
