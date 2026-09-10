@@ -108,7 +108,6 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
               plot_width = dims$width,
               plot_height = dims$height,
               plot_pixel_ratio = dims$pixel_ratio,
-              plot_svg_inline_limit = plot_svg_inline_limit(),
               evaluate = evaluate::evaluate,
               new_output_handler = evaluate::new_output_handler
             )
@@ -232,10 +231,9 @@ run_r_html <- function(code, segments) {
       dims <- plot_dimensions()
       plot_html <- c(plot_html, sprintf(
         paste0(
-          "<img class=\"commons-run-r-plot\" src=\"data:%s;base64,%s\" ",
+          "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
         ),
-        plot_image_type(seg$path),
         plot_image_data(seg$path),
         dims$width,
         dims$height

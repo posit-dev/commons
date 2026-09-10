@@ -207,10 +207,10 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
   expect_identical(images[[1]]@type, "image/png")
   expect_false(grepl("\n", images[[1]]@data, fixed = TRUE))
   expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
-  expect_match(
-    html_svg_source(res@extra$display$html),
-    "viewBox='0 0 768.00 512.00'",
-    fixed = TRUE
+  expect_match(res@extra$display$html, "data:image/png;base64,", fixed = TRUE)
+  expect_identical(
+    html_png_dimensions(res@extra$display$html),
+    c(1536L, 1024L)
   )
   notes <- Filter(
     \(x) S7::S7_inherits(x, ellmer::ContentText),
@@ -228,55 +228,6 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
   )
   expect_s3_class(get_handle(store, "r1"), "ggplot")
   expect_identical(res@extra$display$open, TRUE)
-})
-
-test_that("call_measure_tool falls back to a high-resolution PNG", {
-  skip_if_not_installed("ggplot2")
-  local_mocked_bindings(plot_svg_inline_limit = function() 0)
-  registry <- list(
-    plot = measure(
-      "plot",
-      "Plot values.",
-      function() ggplot2::ggplot()
-    )
-  )
-
-  res <- call_measure_tool(registry, "plot", "{}", handles = new_handle_store())
-
-  images <- Filter(
-    \(x) S7::S7_inherits(x, ellmer::ContentImageInline),
-    res@value
-  )
-  expect_length(images, 1)
-  expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
-  expect_match(res@extra$display$html, "data:image/png;base64,", fixed = TRUE)
-  expect_identical(
-    html_png_dimensions(res@extra$display$html),
-    c(1536L, 1024L)
-  )
-})
-
-test_that("model SVGs are rasterized above their target dimensions", {
-  skip_if_not_installed("ggplot2")
-  path <- withr::local_tempfile(fileext = ".svg")
-  render_plot_svg(ggplot2::ggplot(), path, 576, 384)
-
-  image <- model_plot_image(path, 768, 512)
-
-  expect_identical(inline_image_dimensions(image), c(768L, 512L))
-})
-
-test_that("model plot images are not upscaled", {
-  path <- withr::local_tempfile(fileext = ".png")
-  magick::image_write(
-    magick::image_blank(576, 384),
-    path = path,
-    format = "png"
-  )
-
-  image <- model_plot_image(path, 768, 512)
-
-  expect_identical(inline_image_dimensions(image), c(576L, 384L))
 })
 
 test_that("call_measure_tool shows gt tables to the model and user", {

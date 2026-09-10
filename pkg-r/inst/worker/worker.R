@@ -485,7 +485,6 @@ worker_run_code <- function(
   plot_width,
   plot_height,
   plot_pixel_ratio,
-  plot_svg_inline_limit,
   evaluate,
   new_output_handler
 ) {
@@ -511,35 +510,21 @@ worker_run_code <- function(
     if (is.null(last_plot)) {
       return()
     }
-    svg_path <- tempfile("plot-", fileext = ".svg")
-    # Match the parent process's point-sized SVG device.
-    svglite::svglite(
-      svg_path,
-      width = plot_width / 72,
-      height = plot_height / 72,
+    path <- tempfile("plot-", fileext = ".png")
+    # HTML displays this 2x image at half its pixel dimensions, giving browsers
+    # two image pixels per CSS pixel. Scaling resolution too preserves text and
+    # point sizes at the logical display size.
+    ragg::agg_png(
+      path,
+      width = plot_width * plot_pixel_ratio,
+      height = plot_height * plot_pixel_ratio,
+      res = 72 * plot_pixel_ratio,
       scaling = 1.5
     )
     tryCatch(
       grDevices::replayPlot(last_plot),
       finally = grDevices::dev.off()
     )
-    path <- svg_path
-    # SVG size grows per mark, so bound dense plots with a 2x UI PNG.
-    if (file.size(svg_path) > plot_svg_inline_limit) {
-      path <- tempfile("plot-", fileext = ".png")
-      ragg::agg_png(
-        path,
-        width = plot_width * plot_pixel_ratio,
-        height = plot_height * plot_pixel_ratio,
-        res = 72 * plot_pixel_ratio,
-        scaling = 1.5
-      )
-      tryCatch(
-        grDevices::replayPlot(last_plot),
-        finally = grDevices::dev.off()
-      )
-      unlink(svg_path)
-    }
     add("plot", path = path)
     last_plot <<- NULL
   }

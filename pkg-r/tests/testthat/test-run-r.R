@@ -125,10 +125,9 @@ test_that("run_r returns plots as images and opens the display", {
   expect_identical(images[[1]]@type, "image/png")
   expect_false(grepl("\n", images[[1]]@data, fixed = TRUE))
   expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
-  expect_match(
-    html_svg_source(res@extra$display$html),
-    "viewBox='0 0 768.00 512.00'",
-    fixed = TRUE
+  expect_identical(
+    html_png_dimensions(res@extra$display$html),
+    c(1536L, 1024L)
   )
   notes <- Filter(
     \(x) S7::S7_inherits(x, ellmer::ContentText),
@@ -142,32 +141,12 @@ test_that("run_r returns plots as images and opens the display", {
   expect_identical(res@extra$display$open, TRUE)
   expect_match(
     res@extra$display$html,
-    "data:image/svg+xml;base64,",
+    "data:image/png;base64,",
     fixed = TRUE
   )
   expect_match(res@extra$display$html, "commons-run-r-details")
   expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
   expect_match(res@extra$display$html, "<summary>Details</summary>", fixed = TRUE)
-})
-
-test_that("run_r falls back to a high-resolution PNG for large SVGs", {
-  local_mocked_bindings(plot_svg_inline_limit = function() 0)
-  worker <- local_worker()
-  store <- new_handle_store()
-
-  res <- sync_promise(run_r_tool(worker, store, "plot(1:10)"))
-
-  images <- Filter(
-    \(x) S7::S7_inherits(x, ellmer::ContentImageInline),
-    res@value
-  )
-  expect_length(images, 1)
-  expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
-  expect_match(res@extra$display$html, "data:image/png;base64,", fixed = TRUE)
-  expect_identical(
-    html_png_dimensions(res@extra$display$html),
-    c(1536L, 1024L)
-  )
 })
 
 test_that("run_r collapses code and output above plots", {
@@ -193,13 +172,13 @@ test_that("run_r collapses code and output above plots", {
   expect_match(res@extra$display$html, "#&gt; private warning", fixed = TRUE)
   expect_match(
     res@extra$display$html,
-    "data:image/svg+xml;base64,",
+    "data:image/png;base64,",
     fixed = TRUE
   )
   expect_lt(
     as.integer(regexpr("commons-run-r-details", res@extra$display$html)),
     as.integer(regexpr(
-      "data:image/svg+xml;base64,",
+      "data:image/png;base64,",
       res@extra$display$html,
       fixed = TRUE
     ))

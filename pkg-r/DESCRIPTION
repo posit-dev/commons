@@ -46,7 +46,6 @@ Imports:
     S7,
     sass,
     shinychat (> 0.4.0),
-    svglite,
     utils
 Suggests:
     bit64,
