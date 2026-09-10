@@ -32,7 +32,7 @@ tracing = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "shinychat>=0.7,<0.8"]
 
 [build-system]
 requires = ["hatchling"]
