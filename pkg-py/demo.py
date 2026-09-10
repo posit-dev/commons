@@ -21,6 +21,9 @@ Bedrock:
 
     export CHATLAS_CHAT_PROVIDER_MODEL=bedrock-anthropic/us.anthropic.claude-sonnet-5
     uv run --with 'anthropic[bedrock]' shiny run demo.py
+
+The `bedrock` extra carries botocore, which signs the requests; either entry
+point fails without it, under `ModuleNotFoundError: No module named 'botocore'`.
 """
 
 from __future__ import annotations

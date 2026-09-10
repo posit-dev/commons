@@ -53,7 +53,7 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
 
 
 def check_commons_client(client: Commons) -> None:
-    """Refuse anything but a commons agent, which the surface needs."""
+    """Raise `TypeError` unless `client` is a commons agent."""
     if not isinstance(client, Commons):
         raise TypeError(
             "client must be a commons agent, e.g. from commons.Commons(), "
