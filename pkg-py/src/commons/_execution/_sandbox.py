@@ -21,6 +21,8 @@ import platform
 from dataclasses import dataclass
 from typing import Literal
 
+from ._runtime import _seccomp
+
 __all__ = [
     "ALLOW_UNSAFE_FALLBACK",
     "ProtectionMode",
@@ -68,7 +70,8 @@ def _seatbelt_present() -> bool:
     The symbol is looked up on the running host, so a macOS that ever drops
     these entry points reports no seatbelt. Inferring from the platform would
     promise a sandbox the worker cannot engage. The worker repeats this check
-    for itself; the parent must not import the module that engages it.
+    for itself; the parent's copy stays here because a symbol lookup is cheap
+    enough that repeating it beats importing the module that engages it.
 
     Note: ``sandbox_init`` has been officially deprecated (though still working)
     since macOS 10.8 (July 2012), with no replacement offered to unentitled
@@ -88,15 +91,21 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is probed here rather than by the module that engages the
-    mechanism, because the parent must not import the engaging module. The
-    Linux fields have no implementation yet and report unavailable until
-    they do, so ``protection_mode()`` still refuses every Linux host: the
-    safe direction to be wrong in while those sandboxes are being built.
+    Where a probe lives depends on its cost. Seatbelt's is a symbol
+    lookup, repeated here rather than imported. Seccomp's answers by
+    installing a filter in a child process, too much to repeat, so it is
+    imported from the module that implements the mechanism; importing is
+    safe because nothing in ``_runtime`` acts on the importing process
+    until one of its engaging functions is called. Landlock and user
+    namespaces have no implementation yet and report unavailable until
+    they do, so ``protection_mode()`` still refuses every Linux host:
+    seccomp alone is not enough without a filesystem sandbox beside it,
+    which is the safe direction to be wrong in while those are being
+    built.
     """
     return SandboxCapabilities(
         landlock_abi=-1,
-        seccomp=False,
+        seccomp=_seccomp.seccomp_available(),
         seatbelt=_seatbelt_present(),
         userns=False,
     )
