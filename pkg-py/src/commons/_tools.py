@@ -366,6 +366,8 @@ def _finish_measure_result(
         extra.get(DISPLAY_EXTRA_KEY), measure_source_footer(record.provenance)
     )
     extra[DISPLAY_EXTRA_KEY] = display
+    # The tag is commons' to set, so a measure never keeps one it supplied.
+    extra.pop(TAG_EXTRA_KEY, None)
     result.extra = extra
     if result.error is not None:
         return result

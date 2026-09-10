@@ -390,3 +390,24 @@ def test_a_measure_keeps_the_footer_it_chose() -> None:
 
     assert isinstance(result, ContentToolResult)
     assert "Ask the finance team." in markup(shown(result).footer)
+
+
+def test_a_failed_calculation_cannot_claim_the_trusted_tag_itself() -> None:
+    """The tag is commons' to set, so a measure does not get to keep one."""
+
+    @measure(description="Revenue, when it can be had.")
+    def revenue() -> ContentToolResult:
+        return ContentToolResult(
+            value=None,
+            error=RuntimeError("no rows"),
+            extra={TAG_EXTRA_KEY: Tag.A, "display": {"markdown": "**no rows**"}},
+        )
+
+    found = as_measure(revenue)
+    assert found is not None
+    built = tools(measures={found.name: found})
+
+    result = find(built, "call_measure").func(name="revenue", arguments="{}")
+
+    assert isinstance(result, ContentToolResult)
+    assert TAG_EXTRA_KEY not in (result.extra or {})
