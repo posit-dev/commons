@@ -12,6 +12,7 @@ The same decision is made by ``run_r_protection_mode()`` in
 
 from __future__ import annotations
 
+import ctypes
 import os
 import platform
 from dataclasses import dataclass
@@ -54,16 +55,35 @@ class SandboxCapabilities:
     userns: bool
 
 
+def _seatbelt_present() -> bool:
+    """Whether libSystem here exports seatbelt's entry point.
+
+    The symbol is looked up rather than inferred from the platform, so a
+    macOS that ever drops these deprecated entry points reports no seatbelt
+    instead of promising one the worker cannot engage. The worker repeats this
+    check for itself; the parent must not import the module that engages it.
+    """
+    if platform.system() != "Darwin":
+        return False
+    try:
+        return hasattr(ctypes.CDLL(None), "sandbox_init")
+    except OSError:
+        return False
+
+
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is filled in by the ctypes module that implements its
-    mechanism, none of which exist yet. Until they do this reports every
-    mechanism unavailable, so ``protection_mode()`` refuses every host: the
-    safe direction to be wrong in while the sandbox is being built.
+    Each field is filled in by the module that implements its mechanism. The
+    Linux fields have no implementation yet and report unavailable until they
+    do, so ``protection_mode()`` still refuses every Linux host: the safe
+    direction to be wrong in while those sandboxes are being built.
     """
     return SandboxCapabilities(
-        landlock_abi=-1, seccomp=False, seatbelt=False, userns=False
+        landlock_abi=-1,
+        seccomp=False,
+        seatbelt=_seatbelt_present(),
+        userns=False,
     )
 
 
