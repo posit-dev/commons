@@ -303,3 +303,30 @@ def test_a_value_payload_that_is_not_a_payload_is_refused():
 def test_handles_that_are_not_a_mapping_are_refused():
     with pytest.raises(ProtocolError, match="malformed call message"):
         decode_message(b'{"type": "call", "id": "c1", "code": "x", "handles": "no"}\n')
+
+
+def test_a_message_field_of_the_wrong_type_is_refused():
+    # A driver keys its in-flight call on the id, so an id that is not a
+    # string fails later, somewhere with no idea where the value came from.
+    with pytest.raises(ProtocolError, match="malformed result message"):
+        decode_message(b'{"type": "result", "id": {}}\n')
+
+
+def test_a_line_that_is_not_utf_8_is_refused():
+    with pytest.raises(ProtocolError, match="not a protocol message"):
+        decode_message(b'{"type": "ready\xff"}\n')
+
+
+def test_a_frame_arrow_cannot_hold_crosses_as_its_repr():
+    # The fallback is the whole codec's contract, and a frame is not exempt:
+    # one unconvertible column should cost the value, not the call.
+    pd = pytest.importorskip("pandas")
+
+    class Unconvertible:
+        def __repr__(self):
+            return "<unconvertible>"
+
+    frame = pd.DataFrame({"o": [Unconvertible(), Unconvertible()]})
+    crossed = decode_value(encode_value(frame))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "DataFrame"
