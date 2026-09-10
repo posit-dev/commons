@@ -18,6 +18,8 @@ import platform
 from dataclasses import dataclass
 from typing import Literal
 
+from ._runtime import _seccomp
+
 __all__ = [
     "ALLOW_UNSAFE_FALLBACK",
     "ProtectionMode",
@@ -74,14 +76,16 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is filled in by the module that implements its mechanism. The
-    Linux fields have no implementation yet and report unavailable until they
-    do, so ``protection_mode()`` still refuses every Linux host: the safe
-    direction to be wrong in while those sandboxes are being built.
+    Each field is filled in by the module that implements its mechanism.
+    Landlock and user namespaces have no implementation yet and report
+    unavailable until they do, so ``protection_mode()`` still refuses every
+    Linux host: seccomp alone is not enough without a filesystem sandbox
+    beside it, which is the safe direction to be wrong in while those are
+    being built.
     """
     return SandboxCapabilities(
         landlock_abi=-1,
-        seccomp=False,
+        seccomp=_seccomp.seccomp_available(),
         seatbelt=_seatbelt_present(),
         userns=False,
     )
@@ -142,6 +146,5 @@ def protection_mode(
             f"a container, its seccomp profile. {_OPT_IN}"
         )
     raise RuntimeError(
-        "commons cannot sandbox the code execution worker on "
-        f"{sysname}. {_OPT_IN}"
+        f"commons cannot sandbox the code execution worker on {sysname}. {_OPT_IN}"
     )

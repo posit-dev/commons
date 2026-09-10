@@ -12,6 +12,7 @@ import platform
 import pytest
 
 from commons._execution import _sandbox
+from commons._execution._runtime import _seccomp
 from commons._execution._sandbox import (
     SandboxCapabilities,
     protection_mode,
@@ -109,7 +110,6 @@ def test_only_an_affirmative_opt_in_counts(monkeypatch, value) -> None:
         protection_mode(NOTHING, sysname="Windows")
 
 
-
 def test_a_host_that_is_not_a_mac_reports_no_seatbelt(monkeypatch) -> None:
     # The probe is called directly rather than through
     # sandbox_capabilities(). Claiming to be Linux patches the shared
@@ -142,3 +142,13 @@ def test_this_mac_reports_seatbelt() -> None:
 def test_a_mac_can_be_sandboxed_without_the_opt_in(monkeypatch) -> None:
     monkeypatch.delenv("COMMONS_ALLOW_UNSAFE_FALLBACK", raising=False)
     assert protection_mode() == "sandbox"
+
+
+def test_the_probe_takes_its_seccomp_answer_from_the_seccomp_module() -> None:
+    """Which is where that answer is worked out, and separately tested.
+
+    Not an assertion that every Linux host has seccomp: a host whose profile
+    permits the query but refuses the filter is one the probe is meant to
+    report False for, and the suite has to pass there too.
+    """
+    assert sandbox_capabilities().seccomp is _seccomp.seccomp_available()
