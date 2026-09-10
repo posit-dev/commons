@@ -64,3 +64,10 @@ def test_the_toolbar_can_be_turned_off_for_anyone_else() -> None:
 
     assert "bslib-input-dark-mode" not in html
     assert 'id="chat"' in html
+
+
+def test_the_client_has_to_be_a_commons_agent() -> None:
+    # Refused when the app is built, not when the first visitor arrives, as
+    # `commons_app()` does.
+    with pytest.raises(TypeError, match="client"):
+        commons.ui.app(scripted_chat())  # type: ignore[arg-type]

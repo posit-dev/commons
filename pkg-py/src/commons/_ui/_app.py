@@ -10,7 +10,7 @@ from shiny import ui as shiny_ui
 from shinychat.types import HistoryOptions
 
 from .._agent import Commons
-from ._server import server
+from ._server import check_commons_client, server
 from ._theme import theme
 
 __all__ = ["app"]
@@ -19,21 +19,24 @@ __all__ = ["app"]
 def app(client: Commons, *, toolbar: bool = True, **kwargs: Any) -> shiny.App:
     """Build a complete app around a commons agent.
 
-    This is the app for local development and a demo. A deployed app
-    assembles the page and the server itself, with `commons.ui.theme()` and
-    `commons.ui.server()`, and builds the agent inside the server function so
-    that each session gets its own.
+    This is the app for local development and a demo. Every session it
+    serves shares the one agent passed here, so a second visitor joins the
+    first one's conversation state. A deployed app assembles the page and
+    the server itself, with `commons.ui.theme()` and `commons.ui.server()`,
+    and builds the agent inside the server function so that each session
+    gets its own.
 
     Parameters
     ----------
     client
         A commons agent.
     toolbar
-        Whether to show the development toolbar, a dark-mode switch. Turn it
-        off when serving this app to anyone else.
+        Whether to show the development toolbar, a dark-mode switch.
     **kwargs
         Passed to `shiny.App()`.
     """
+    check_commons_client(client)
+
     page = shinychat.page_chat(
         "commons",
         id="chat",
