@@ -404,6 +404,79 @@ shiny-chat-container
   white-space: pre-wrap;
 }
 
+.commons-measure-description-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.commons-measure-metadata-item:has(.commons-measure-details[open])
+  > .commons-measure-description-summary {
+  display: none;
+}
+
+.commons-measure-details {
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.commons-measure-details > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  list-style: none;
+}
+
+.commons-measure-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.commons-measure-details > summary:focus-visible {
+  border-radius: var(--bs-border-radius-sm, 0.25rem);
+  outline: 2px solid var(--bs-primary, #007bc2);
+  outline-offset: 2px;
+}
+
+.commons-measure-details:not([open]) {
+  margin-top: -1.5rem;
+  position: relative;
+}
+
+.commons-measure-details:not([open]) > summary {
+  min-height: 1.5rem;
+  padding-top: 0.75rem;
+}
+
+.commons-measure-details > summary > span {
+  background: var(--bs-body-bg, #fff);
+  font-size: 0.85em;
+  padding-inline: 0.5rem;
+}
+
+.commons-measure-details-less {
+  display: none;
+}
+
+.commons-measure-details[open] {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.commons-measure-details[open] .commons-measure-details-more {
+  display: none;
+}
+
+.commons-measure-details[open] .commons-measure-details-less {
+  display: inline;
+}
+
+.commons-measure-details-body {
+  white-space: pre-wrap;
+}
+
 .commons-measure-source-link + .commons-measure-source-link {
   margin-left: 0.75rem;
 }
@@ -435,6 +508,11 @@ shiny-chat-container
 .commons-measure-result-value {
   color: var(--bs-body-color, #212529);
   white-space: pre-wrap;
+}
+
+/* Tag trees serialize with indentation that pre-wrap would render. */
+.commons-measure-result-value-authored {
+  white-space: normal;
 }
 
 .commons-measure-result-value > table {

@@ -323,7 +323,8 @@ tool_call_measure <- function(private) {
         injections = private$injections,
         handles = private$handles,
         sources = private$sources,
-        measure_provenance = private$measure_provenance
+        measure_provenance = private$measure_provenance,
+        measure_display = private$measure_display
       )
     },
     paste(
@@ -501,7 +502,8 @@ call_measure_tool <- function(
   injections = list(),
   handles = NULL,
   sources = list(),
-  measure_provenance = list()
+  measure_provenance = list(),
+  measure_display = list()
 ) {
   td <- registry[[name]]
   if (is.null(td)) {
@@ -515,6 +517,7 @@ call_measure_tool <- function(
   footer <- measure_source_footer(
     measure_provenance[[name]] %||% character()
   )
+  metadata <- measure_metadata(td, measure_display[[name]])
   args <- validate_measure_args(td, parse_json_args(arguments))
   # A measure takes a source's connection by the source's name; a board source
   # must have its pins loaded before that connection can answer a query.
@@ -523,23 +526,36 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
-    return(measure_content_tool_result(td, value, handles, footer))
+    return(measure_content_tool_result(
+      args,
+      value,
+      handles,
+      footer,
+      metadata
+    ))
   }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
     advert <- register_handle(handles, value)
-    return(measure_plot_tool_result(td, args, value, advert, footer))
+    return(measure_plot_tool_result(
+      td,
+      args,
+      value,
+      advert,
+      footer,
+      metadata
+    ))
   }
   if (is_gt_table(value)) {
     data <- recover_gt_table_data(value)
     advert <- register_handle(handles, data)
     return(measure_gt_table_tool_result(
-      td,
       args,
       value,
       data,
       advert,
-      footer
+      footer,
+      metadata
     ))
   }
   advert <- register_handle(handles, value)
@@ -547,14 +563,20 @@ call_measure_tool <- function(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
-    html = measure_display_html(args, value, measure_metadata(td)),
+    html = measure_display_html(args, value, metadata),
     footer = footer,
     tag = "A",
     show_tag = FALSE
   )
 }
 
-measure_content_tool_result <- function(td, result, handles, footer) {
+measure_content_tool_result <- function(
+  args,
+  result,
+  handles,
+  footer,
+  metadata
+) {
   data <- result@extra$data
   result@extra$data <- NULL
   display <- result@extra$display
@@ -577,12 +599,21 @@ measure_content_tool_result <- function(td, result, handles, footer) {
     display <- shinychat::tool_result_display(
       title = title,
       icon = icon,
-      footer = footer
+      footer = footer,
+      show_request = FALSE
     )
   } else if (is.list(display)) {
     display$title <- display$title %||% title
     display$icon <- display$icon %||% icon
     display$footer <- display$footer %||% footer
+    display$show_request <- FALSE
+    if (!is.null(display$html)) {
+      display$html <- measure_display_with_custom_html(
+        args,
+        display$html,
+        metadata
+      )
+    }
   }
   result@extra$display <- display
   result@extra$commons_tag <- "A"
@@ -630,7 +661,14 @@ append_handle_advert <- function(value, advert) {
   paste(c(format_measure_value(value), advert), collapse = "\n\n")
 }
 
-measure_plot_tool_result <- function(td, args, value, advert, footer) {
+measure_plot_tool_result <- function(
+  td,
+  args,
+  value,
+  advert,
+  footer,
+  metadata
+) {
   title <- tool_title(td)
   rendered <- tryCatch(
     render_plot_image(value, sprintf("Plot returned by %s", title)),
@@ -638,13 +676,13 @@ measure_plot_tool_result <- function(td, args, value, advert, footer) {
   )
   if (inherits(rendered, "error")) {
     return(measure_failure_result(
-      td,
       args,
       advert,
       conditionMessage(rendered),
       "a plot",
       "commons-measure-plot-error",
-      footer = footer
+      footer = footer,
+      metadata = metadata
     ))
   }
 
@@ -662,7 +700,7 @@ measure_plot_tool_result <- function(td, args, value, advert, footer) {
     html = measure_display_with_result_html(
       args,
       measure_result_html(rendered$html),
-      measure_metadata(td)
+      metadata
     ),
     footer = footer,
     tag = "A",
@@ -672,13 +710,13 @@ measure_plot_tool_result <- function(td, args, value, advert, footer) {
 }
 
 measure_failure_result <- function(
-  td,
   args,
   advert,
   message,
   result_type,
   class,
   footer,
+  metadata,
   model_content = NULL
 ) {
   note <- sprintf(
@@ -693,7 +731,7 @@ measure_failure_result <- function(
     html = measure_display_with_result_html(
       args,
       measure_result_html(html_escape(note), class),
-      measure_metadata(td)
+      metadata
     ),
     footer = footer,
     tag = "A",
@@ -703,12 +741,12 @@ measure_failure_result <- function(
 }
 
 measure_gt_table_tool_result <- function(
-  td,
   args,
   value,
   data,
   advert,
-  footer
+  footer,
+  metadata
 ) {
   rendered <- tryCatch(
     render_gt_table(value),
@@ -717,13 +755,13 @@ measure_gt_table_tool_result <- function(
   model_content <- df_to_markdown(data)
   if (inherits(rendered, "error")) {
     return(measure_failure_result(
-      td,
       args,
       advert,
       conditionMessage(rendered),
       "a gt table",
       "commons-measure-gt-table-error",
       footer = footer,
+      metadata = metadata,
       model_content = model_content
     ))
   }
@@ -740,7 +778,7 @@ measure_gt_table_tool_result <- function(
   display_html <- measure_display_with_result_html(
     args,
     measure_result_html(rendered$html, "commons-measure-gt-table"),
-    measure_metadata(td)
+    metadata
   )
   if (length(rendered$dependencies) > 0) {
     display_html <- htmltools::attachDependencies(
@@ -1077,10 +1115,43 @@ measure_display_with_result_html <- function(
   )
 }
 
-measure_metadata <- function(td) {
+measure_display_with_custom_html <- function(args, result_html, metadata) {
+  if (is.character(result_html)) {
+    result_html <- htmltools::HTML(result_html)
+  }
+  htmltools::div(
+    class = "commons-measure-display",
+    htmltools::HTML(measure_metadata_html(metadata)),
+    htmltools::HTML(measure_args_html(args)),
+    htmltools::div(
+      class = "commons-measure-result",
+      htmltools::tags$strong("Result"),
+      htmltools::div(
+        class = paste(
+          "commons-measure-result-value",
+          "commons-measure-result-value-authored"
+        ),
+        result_html
+      )
+    )
+  )
+}
+
+measure_metadata <- function(td, display = NULL) {
+  description <- display$description %||% tool_description(td)
+  extra <- display$details %||% ""
+  # Roughly three lines at chat-card width; CSS supplies the exact clamp.
+  has_details <- nchar(description) > 200L
+  parts <- c(description, extra)
+  details <- if (has_details) {
+    paste(parts[nzchar(parts)], collapse = "\n\n")
+  } else {
+    ""
+  }
   data.frame(
     title = tool_title(td),
-    description = tool_description(td),
+    description = description,
+    details = details,
     stringsAsFactors = FALSE
   )
 }
@@ -1089,6 +1160,8 @@ measure_metadata_html <- function(metadata) {
   if (is.null(metadata) || nrow(metadata) == 0L) {
     return("")
   }
+  metadata_details <- metadata$details %||% rep("", nrow(metadata))
+  metadata_details[is.na(metadata_details)] <- ""
   items <- vapply(
     seq_len(nrow(metadata)),
     function(i) {
@@ -1096,18 +1169,48 @@ measure_metadata_html <- function(metadata) {
       description <- if (is.na(description) || !nzchar(description)) {
         ""
       } else {
+        summary_class <- if (nzchar(metadata_details[[i]])) {
+          " commons-measure-description-summary"
+        } else {
+          ""
+        }
         sprintf(
-          "<div class=\"commons-measure-description\">%s</div>",
+          "<div class=\"commons-measure-description%s\">%s</div>",
+          summary_class,
           html_escape(description)
+        )
+      }
+      details <- metadata_details[[i]]
+      details <- if (!nzchar(details)) {
+        ""
+      } else {
+        sprintf(
+          paste0(
+            "<details class=\"commons-measure-details\">",
+            "<summary>",
+            "<span class=\"commons-measure-details-more\">",
+            "See more<span class=\"visually-hidden\"> details for %s</span>",
+            "</span>",
+            "<span class=\"commons-measure-details-less\">",
+            "See less<span class=\"visually-hidden\"> details for %s</span>",
+            "</span>",
+            "</summary>",
+            "<div class=\"commons-measure-details-body\">%s</div>",
+            "</details>"
+          ),
+          html_escape(metadata$title[[i]]),
+          html_escape(metadata$title[[i]]),
+          html_escape(details)
         )
       }
       sprintf(
         paste0(
           "<div class=\"commons-measure-metadata-item\">",
-          "<strong class=\"commons-measure-title\">%s</strong>%s</div>"
+          "<strong class=\"commons-measure-title\">%s</strong>%s%s</div>"
         ),
         html_escape(metadata$title[[i]]),
-        description
+        description,
+        details
       )
     },
     character(1)

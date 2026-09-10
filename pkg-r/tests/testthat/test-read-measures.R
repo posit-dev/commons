@@ -25,10 +25,22 @@ test_that("read_measures derives a measure from a documented function", {
 
   expect_length(measures$measures, 1)
   td <- measures$measures[[1]]
+  display_metadata <- measures$measure_display[[1]]
   expect_equal(tool_name(td), "order_count")
   expect_match(tool_description(td), "Count orders")
   expect_match(tool_description(td), "Total orders")
   expect_match(tool_description(td), "Returns: An integer count")
+  expect_equal(tool_title(td), "Count orders")
+  metadata <- measure_metadata(td, display_metadata)
+  expect_equal(metadata$description, "Total orders, optionally by region.")
+  expect_equal(metadata$details, "")
+  expect_match(
+    display_metadata$details,
+    "Returns: An integer count",
+    fixed = TRUE
+  )
+  display <- measure_metadata_html(metadata)
+  expect_no_match(display, "commons-measure-details", fixed = TRUE)
   expect_equal(do.call(td, list()), 2026L)
 })
 
@@ -262,9 +274,15 @@ test_that("read_measures produces measures usable in a semantic_layer", {
   ))
 
   layer <- semantic_layer(read_measures(path))
+  state <- semantic_layer_state(layer)
 
   expect_s3_class(layer, "commons_semantic_layer")
-  expect_named(semantic_layer_state(layer)$measures, "order_count")
+  expect_named(state$measures, "order_count")
+  expect_named(state$measure_display, "order_count")
+  expect_equal(
+    state$measure_display$order_count$description,
+    "Counts orders."
+  )
 })
 
 test_that("read_measures harvests measure and helper sources, comments included", {
