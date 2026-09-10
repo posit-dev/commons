@@ -35,11 +35,23 @@ from ._citations import CitationRequest, tool_result
 from ._context_layer import ContextLayer
 from ._data_source import DataSource, TableId
 from ._definitions import Registry, applied_text, expand_tokens, index_overflows
+from ._display import (
+    CONTEXT_SEARCH,
+    DATA_RETRIEVAL,
+    DISPLAY_EXTRA_KEY,
+    TABLE_INSPECTION,
+    TRUSTED_CALL,
+    TRUSTED_SEARCH,
+    measure_display_html,
+    measure_source_footer,
+    tool_display,
+    visible_result_note,
+)
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
-from ._provenance import Tag
+from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
@@ -197,13 +209,14 @@ def _tool(
     name: str,
     description: str,
     parameters: dict[str, Any],
+    title: str,
 ) -> Tool:
     return Tool(
         func=func,
         name=name,
         description=description,
         parameters=parameters,
-        annotations=_READ_ONLY,
+        annotations={**_READ_ONLY, "title": title},
     )
 
 
@@ -248,7 +261,10 @@ def _search_pool(context: ToolContext) -> Tool:
 
     def search_pool(query: str) -> ContentToolResult:
         return tool_result(
-            search_pool_text(context.measures, context.definitions, query, source_names)
+            search_pool_text(
+                context.measures, context.definitions, query, source_names
+            ),
+            title=TRUSTED_SEARCH.settled,
         )
 
     return _tool(
@@ -261,6 +277,7 @@ def _search_pool(context: ToolContext) -> Tool:
             {"query": _string("What you want to compute, in plain language.")},
             ["query"],
         ),
+        TRUSTED_SEARCH.running,
     )
 
 
@@ -289,14 +306,23 @@ def _call_measure(context: ToolContext) -> Tool:
                 source.ensure_loaded()
         value = record.func(**args, **injected)
         # A measure that built its own tool result — a plot, a displayable
-        # table — has already said how it should look; return it untouched.
+        # table — has already said how it should look; commons only fills in
+        # what it alone knows.
         if isinstance(value, ContentToolResult):
-            return value
+            return _finish_measure_result(value, record, context)
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
         )
-        return tool_result(body, tag=Tag.A)
+        return tool_result(
+            body,
+            tag=Tag.A,
+            title=TRUSTED_CALL.settled,
+            html=measure_display_html(
+                args, value, title=record.title, description=record.description
+            ),
+            footer=measure_source_footer(record.provenance),
+        )
 
     return _tool(
         call_measure,
@@ -316,7 +342,73 @@ def _call_measure(context: ToolContext) -> Tool:
             },
             ["name", "arguments"],
         ),
+        TRUSTED_CALL.running,
     )
+
+
+def _finish_measure_result(
+    result: ContentToolResult, record: Measure, context: ToolContext
+) -> ContentToolResult:
+    """Fill in what commons knows about a result a measure built for itself.
+
+    That is the trusted tag, a default title, the handle the values behind
+    the display are reachable by, and the note that stops the model repeating
+    a result the reader can already see.
+
+    An errored result keeps only the title. The model is sent the error
+    rather than the value, so anything added to the value would never arrive,
+    and the tag would let a calculation that failed promote the answer that
+    follows it to a verified one.
+    """
+    extra = dict(result.extra or {})
+    data = extra.pop("data", None)
+    display = _defaulted(
+        extra.get(DISPLAY_EXTRA_KEY), measure_source_footer(record.provenance)
+    )
+    extra[DISPLAY_EXTRA_KEY] = display
+    # The tag is commons' to set, so a measure never keeps one it supplied.
+    extra.pop(TAG_EXTRA_KEY, None)
+    result.extra = extra
+    if result.error is not None:
+        return result
+
+    extra[TAG_EXTRA_KEY] = Tag.A
+    parts = [_format_measure_value(result.value), context.handles.register(data)]
+    if any(_display_field(display, name) is not None for name in _SHOWN_FIELDS):
+        parts.insert(0, visible_result_note("measure result"))
+    result.value = "\n\n".join(part for part in parts if part)
+    return result
+
+
+# The fields that put the result itself in front of the reader, rather than
+# only a row saying the tool ran.
+_SHOWN_FIELDS = ("html", "markdown", "text")
+
+
+def _display_field(display: Any, name: str) -> Any:
+    """Read one field off a display, however the measure chose to build it."""
+    if isinstance(display, Mapping):
+        return display.get(name)
+    return getattr(display, name, None)
+
+
+def _defaulted(display: Any, footer: Any) -> Any:
+    """Fill a display's title and footer, unless the measure chose its own."""
+    defaults = {"title": TRUSTED_CALL.settled, "footer": footer}
+    if display is None:
+        return tool_display(TRUSTED_CALL.settled, footer=footer)
+    if isinstance(display, Mapping):
+        filled = dict(display)
+        for name, default in defaults.items():
+            if filled.get(name) is None:
+                filled[name] = default
+        return filled
+    # A shinychat ToolResultDisplay, which its own documentation recommends
+    # over the mapping commons builds.
+    for name, default in defaults.items():
+        if getattr(display, name, None) is None:
+            setattr(display, name, default)
+    return display
 
 
 def _parse_json_arguments(arguments: Any) -> dict[str, Any]:
@@ -428,6 +520,7 @@ def _call_metrics(context: ToolContext) -> Tool:
             ["metrics"],
             context.sources,
         ),
+        TRUSTED_CALL.running,
     )
 
 
@@ -440,16 +533,22 @@ def _search_catalog(context: ToolContext) -> Tool:
     ) -> ContentToolResult:
         _, resolved = _resolve_source(context.sources, source)
         if not catalog_searchable(resolved):
-            return tool_result("This data source does not have a searchable catalog.")
+            return tool_result(
+                "This data source does not have a searchable catalog.",
+                title=TRUSTED_SEARCH.settled,
+            )
         results = _catalog_search(resolved, query, kinds)
         if not results:
-            return tool_result(f'No catalog objects found for "{query}".')
+            return tool_result(
+                f'No catalog objects found for "{query}".',
+                title=TRUSTED_SEARCH.settled,
+            )
         lines = [
             f"- `{label}` ({relation.kind or 'unknown kind'}): "
             f"{relation.description or 'No description.'}"
             for label, relation in results.items()
         ]
-        return tool_result("\n".join(lines))
+        return tool_result("\n".join(lines), title=TRUSTED_SEARCH.settled)
 
     return _tool(
         search_catalog,
@@ -464,6 +563,7 @@ def _search_catalog(context: ToolContext) -> Tool:
             ["query"],
             context.sources,
         ),
+        TRUSTED_SEARCH.running,
     )
 
 
@@ -504,10 +604,15 @@ def _queryable(source: DataSource, manifest: Manifest) -> Callable[[str], bool]:
 def _search_context(context: ToolContext) -> Tool:
     def search_context(query: str) -> ContentToolResult:
         if context.context_layer is None:
-            return tool_result("No context layer is configured for this agent.")
+            return tool_result(
+                "No context layer is configured for this agent.",
+                title=CONTEXT_SEARCH.settled,
+            )
         hits = context.context_layer.search(query)
         body = "\n\n---\n\n".join(hits) if hits else f'No context found for "{query}".'
-        return _with_citation_request(tool_result(body), context)
+        return _with_citation_request(
+            tool_result(body, title=CONTEXT_SEARCH.settled), context
+        )
 
     return _tool(
         search_context,
@@ -517,6 +622,7 @@ def _search_context(context: ToolContext) -> Tool:
             {"query": _string("What you need context about, in plain language.")},
             ["query"],
         ),
+        CONTEXT_SEARCH.running,
     )
 
 
@@ -535,7 +641,8 @@ def _describe_table(context: ToolContext) -> Tool:
     def describe_table(table: str, source: str | None = None) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
         return tool_result(
-            _describe_table_text(resolved, label, table, context.first_touch)
+            _describe_table_text(resolved, label, table, context.first_touch),
+            title=TABLE_INSPECTION.settled,
         )
 
     return _tool(
@@ -550,6 +657,7 @@ def _describe_table(context: ToolContext) -> Tool:
             ["table"],
             context.sources,
         ),
+        TABLE_INSPECTION.running,
     )
 
 
@@ -656,7 +764,9 @@ def _run_sql(context: ToolContext) -> Tool:
             )
             if part
         )
-        return _with_citation_request(tool_result(body, tag=Tag.B), context)
+        return _with_citation_request(
+            tool_result(body, tag=Tag.B, title=DATA_RETRIEVAL.settled), context
+        )
 
     return _tool(
         run_sql,
@@ -671,6 +781,7 @@ def _run_sql(context: ToolContext) -> Tool:
             ["sql"],
             context.sources,
         ),
+        DATA_RETRIEVAL.running,
     )
 
 

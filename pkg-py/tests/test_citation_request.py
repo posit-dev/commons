@@ -29,7 +29,7 @@ def test_tool_result_carries_its_provenance_tag():
 
     assert isinstance(result, ContentToolResult)
     assert result.value == "6 rows"
-    assert result.extra == {"commons_tag": Tag.B}
+    assert result.extra["commons_tag"] == Tag.B
 
 
 def test_shared_citation_request_cases():

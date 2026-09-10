@@ -309,6 +309,7 @@ dependencies = [
     { name = "chatlas" },
     { name = "duckdb" },
     { name = "google-re2" },
+    { name = "htmltools" },
     { name = "jinja2" },
     { name = "pyarrow" },
     { name = "pydantic" },
@@ -320,7 +321,6 @@ dependencies = [
 
 [package.optional-dependencies]
 shiny = [
-    { name = "htmltools" },
     { name = "packaging" },
     { name = "shiny" },
     { name = "shinychat" },
@@ -348,7 +348,7 @@ requires-dist = [
     { name = "chatlas", specifier = ">=0.22.0" },
     { name = "duckdb", specifier = ">=1.0" },
     { name = "google-re2", specifier = ">=1.1.20251105" },
-    { name = "htmltools", marker = "extra == 'shiny'", specifier = ">=0.6" },
+    { name = "htmltools", specifier = ">=0.6" },
     { name = "httpx", marker = "extra == 'tracing'", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3" },
     { name = "opentelemetry-exporter-otlp-json-file", marker = "extra == 'tracing'" },

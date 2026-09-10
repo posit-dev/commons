@@ -6,7 +6,7 @@ try:
     from ._assets import asset_base_url, commons_chat_dependency
     from ._theme import theme
 except ModuleNotFoundError as err:
-    # shiny, shinychat and htmltools arrive with the `shiny` extra.
+    # shiny and shinychat arrive with the `shiny` extra.
     raise ImportError(
         f"commons.ui needs {err.name}, which is not installed. "
         'Install it with: pip install "commons[shiny]"'

@@ -17,6 +17,7 @@ from sqlglot import expressions as exp
 
 from ._citations import tool_result
 from ._definitions import ExportRecord, applied_text
+from ._display import TRUSTED_CALL, measure_display_html
 from ._measures import Measure, measure_schema_text
 from ._provenance import Tag
 from ._rows import rows_to_markdown
@@ -278,7 +279,27 @@ def call_metrics(
     body = "\n\n".join(
         part for part in (rows_to_markdown(rows), applied_text(applied), advert) if part
     )
-    return tool_result(body, tag=Tag.A)
+    return tool_result(
+        body,
+        tag=Tag.A,
+        title=TRUSTED_CALL.settled,
+        markdown=f"```sql\n{sql}\n```\n\n{rows_to_markdown(rows)}",
+        # Only the arguments the caller gave: an omitted one is not how the
+        # query ran, unlike a measure argument explicitly set to null.
+        html=measure_display_html(
+            {
+                name: value
+                for name, value in (
+                    ("metrics", metrics),
+                    ("dimensions", dimensions),
+                    ("filters", filters),
+                )
+                if value is not None
+            },
+            rows,
+            from_query=True,
+        ),
+    )
 
 
 def _resolve_names(
