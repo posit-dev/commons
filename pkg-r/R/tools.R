@@ -1098,7 +1098,10 @@ measure_display_with_custom_html <- function(args, result_html, metadata) {
       class = "commons-measure-result",
       htmltools::tags$strong("Result"),
       htmltools::div(
-        class = "commons-measure-result-value",
+        class = paste(
+          "commons-measure-result-value",
+          "commons-measure-result-value-authored"
+        ),
         result_html
       )
     )

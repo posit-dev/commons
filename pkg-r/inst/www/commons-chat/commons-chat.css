@@ -437,6 +437,11 @@ shiny-chat-container
   white-space: pre-wrap;
 }
 
+/* Tag trees serialize with indentation that pre-wrap would render. */
+.commons-measure-result-value-authored {
+  white-space: normal;
+}
+
 .commons-measure-result-value > table {
   border-collapse: collapse;
   font-size: 0.85rem;

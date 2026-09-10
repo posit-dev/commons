@@ -146,6 +146,11 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
   expect_match(rendered, "Population:", fixed = TRUE)
   expect_match(rendered, "ITT", fixed = TRUE)
   expect_match(rendered, "<strong>Result</strong>", fixed = TRUE)
+  expect_match(
+    rendered,
+    "commons-measure-result-value-authored",
+    fixed = TRUE
+  )
   expect_match(rendered, "Headache", fixed = TRUE)
   expect_identical(
     vapply(
