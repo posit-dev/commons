@@ -97,6 +97,7 @@ ui <- page_chat(
 server <- function(input, output, session) {
   agent <- commons(
     ellmer::chat_anthropic(),
+    log = TRUE,
     data_sources = list(
       warehouse = data_source(
         observations = observations,

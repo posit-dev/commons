@@ -83,12 +83,30 @@
       Could not share trajectory access with `share_with`.
       i no api key
 
-# an explicit content-capture setting is respected
+# an explicit content-capture opt-out is respected
 
     Code
-      .res <- enable_content_capture()
+      .res <- content_capture_enabled()
     Condition
       Warning:
-      `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` is set to "false", so logged trajectories will not include message content.
-      i Unset it or set it to "true" to capture full trajectories.
+      Trajectory logging requires additional setup.
+      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
+
+# missing content capture warns and uses the ellmer fallback
+
+    Code
+      .res <- content_capture_enabled()
+    Condition
+      Warning:
+      Trajectory logging requires additional setup.
+      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
+
+# a missing ellmer fallback leaves content capture disabled
+
+    Code
+      .res <- content_capture_enabled()
+    Condition
+      Warning:
+      Trajectory logging requires additional setup.
+      i Set the environment variable `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`, perhaps by pasting it into '~/.Renviron', and restart R.
 

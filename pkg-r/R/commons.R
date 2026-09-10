@@ -39,16 +39,15 @@
 #'   best-effort R guardrails with
 #'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
 #'   are not a security boundary.
-#' @param log Whether to capture conversation trajectories with OpenTelemetry
-#'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
-#'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
-#'   id; the spans go wherever OTel is configured to export. On Posit Connect,
+#' @param log Whether to request conversation trajectory capture with
+#'   OpenTelemetry (default `FALSE`). When `TRUE`, commons checks the tracing
+#'   setup and warns with setup steps when it is incomplete. 
+#'   Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` before R
+#'   starts so \pkg{ellmer} includes message content. On Posit Connect,
 #'   traces land in Connect's observability store (browsable in its Trace
 #'   Viewer); commons switches on the content's *Content Observability*
 #'   setting itself when needed, though capture only starts once the content
-#'   restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
-#'   automatically when no exporter is set up. Read trajectories back with
-#'   [trajectory_read()].
+#'   restarts. Read trajectories back with [trajectory_read()].
 #' @param share_with An optional character vector of Connect usernames granted
 #'   access to this content's trajectories when running on Posit Connect.
 #'   Reading traces requires editor-level access, so named users are added as
@@ -253,9 +252,6 @@ Commons <- R6::R6Class(
       )
       private$tracing <- new_trajectory_tracing(log, share_with)
 
-      # Created after new_trajectory_tracing() so a fresh `log = TRUE` local
-      # exporter is already configured; otherwise otel::get_tracer() below
-      # would resolve and cache a no-op provider before tracing turns on.
       local_commons_span(
         "commons_agent_create",
         attributes = list(
