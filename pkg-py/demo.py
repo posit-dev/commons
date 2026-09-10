@@ -1,10 +1,12 @@
 """A self-contained commons agent over made-up forest canopy data.
 
-    uv run --with anthropic python demo.py
+    uv run --with anthropic shiny run demo.py   # the chat
+    uv run --with anthropic python demo.py      # the same questions, in the terminal
 
-The R package's `inst/demo.R` puts this agent behind a Shiny front end. There
-is no Python chat UI yet, so this asks the questions from the terminal and
-prints the provenance marker that a UI would render as a badge.
+The chat is assembled here rather than through `commons.ui.app()`, because
+this is the shape a deployed app takes: one agent per session, built inside
+the server function. `pkg-r/inst/demo.R` is the same app. The terminal path
+is what `demo.ipynb` drives, through `ask()`.
 
 The client comes from `chatlas.ChatAuto`, so `CHATLAS_CHAT_PROVIDER_MODEL`
 picks a different provider without editing this file. chatlas ships no
@@ -12,7 +14,7 @@ provider SDK and neither does commons, hence the `--with`. For Claude on
 Bedrock:
 
     export CHATLAS_CHAT_PROVIDER_MODEL=bedrock-anthropic/us.anthropic.claude-sonnet-5
-    uv run --with 'anthropic[bedrock]' python demo.py
+    uv run --with 'anthropic[bedrock]' shiny run demo.py
 """
 
 from __future__ import annotations
@@ -25,6 +27,8 @@ from typing import Any
 
 import chatlas
 import pandas as pd
+import shinychat
+from shiny import App, Inputs, Outputs, Session
 
 import commons
 
@@ -109,6 +113,10 @@ def notes_file() -> Path:
     return path
 
 
+# Written once, then read by every session's context layer.
+NOTES_FILE = notes_file()
+
+
 @commons.measure(
     description=(
         "Acre-weighted canopy cover for each county, from the most recent survey."
@@ -155,7 +163,7 @@ def agent() -> commons.Commons:
         # Named, because a measure's `warehouse` argument is injected by name.
         {"warehouse": commons.data_source(stands=stands, surveys=surveys)},
         semantic_layer=commons.semantic_layer(canopy_by_county, low_canopy_stands),
-        context_layer=commons.context_layer(files=[notes_file()]),
+        context_layer=commons.context_layer(files=[NOTES_FILE]),
     )
 
 
@@ -203,6 +211,30 @@ async def main() -> None:
     canopy = agent()
     for question in QUESTIONS:
         await ask(canopy, question)
+
+
+# Derived from QUESTIONS, so the chat suggests what the terminal run asks.
+GREETING = (
+    "Chat with this agent to learn about canopy cover in Oregon's forests."
+    "\n\nHere are some example questions:\n\n"
+) + "".join(
+    f"- <span class='suggestion'>{question}</span>\n" for question in QUESTIONS
+)
+
+app_ui = shinychat.page_chat(
+    "Canopy cover explorer",
+    id="chat",
+    greeting=GREETING,
+    theme=commons.ui.theme(),
+)
+
+
+def app_server(input: Inputs, output: Outputs, session: Session) -> None:
+    # One agent per session, so each visitor gets their own agent state.
+    commons.ui.server("chat", agent())
+
+
+app = App(app_ui, app_server)
 
 
 if __name__ == "__main__":
