@@ -9,8 +9,6 @@ license-files = ["LICENSE.md"]
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
     "chatlas>=0.22.0",
-    # A tool result's display fields are htmltools tag children, and a plain
-    # string is escaped rather than rendered, so building one is not optional.
     "htmltools>=0.6",
     "pydantic>=2",
     "duckdb>=1.0",
@@ -33,8 +31,7 @@ tracing = [
     "opentelemetry-exporter-otlp-json-file",
     "httpx>=0.27",
 ]
-# Everything `commons.ui` needs beyond the core dependencies. shiny arrives
-# with shinychat, but the UI layer imports it directly, so it is named here.
+# Everything `commons.ui` needs beyond the core dependencies.
 shiny = [
     "packaging>=23",
     "shiny>=1.7",
