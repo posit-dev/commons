@@ -74,19 +74,12 @@ warn_if_content_instrumentation_disabled <- function() {
     return(invisible(NULL))
   }
 
-  # This endpoint is internal, so any failure or missing field means unknown.
-  allowed <- tryCatch(
-    connect_server_settings(connect_client())$allow_content_instrumentation,
-    error = function(err) NULL
-  )
+  allowed <- connect_content_instrumentation_allowed()
   if (identical(allowed, FALSE)) {
     cli::cli_warn(c(
       "Trajectory logging is disabled by this Posit Connect server's
        configuration.",
-      i = "Ask your server administrator to set
-           {.code OpenTelemetry.Enabled = true} and
-           {.code OpenTelemetry.AllowContentInstrumentation = true} in the
-           Connect configuration, then restart Connect."
+      i = connect_server_tracing_hint()
     ))
   }
   invisible(NULL)
@@ -267,9 +260,7 @@ warn_tracing_disabled <- function() {
   if (is_connect_runtime()) {
     cli::cli_warn(c(
       "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
-      i = "In this content's {.emph Settings > Monitoring > Traces} panel on
-           Posit Connect, select {.emph Enabled}, then redeploy or restart the
-           content."
+      i = connect_content_tracing_hint()
     ))
   } else {
     cli::cli_warn(c(
@@ -281,6 +272,28 @@ warn_tracing_disabled <- function() {
     ))
   }
   invisible(NULL)
+}
+
+connect_content_instrumentation_allowed <- function(client = NULL) {
+  # This endpoint is internal, so any failure or missing field means unknown.
+  tryCatch(
+    {
+      client <- client %||% connect_client()
+      connect_server_settings(client)$allow_content_instrumentation
+    },
+    error = function(err) NULL
+  )
+}
+
+connect_content_tracing_hint <- function() {
+  "In this content's {.emph Settings > Monitoring > Traces} panel on Posit
+   Connect, select {.emph Enabled}, then redeploy or restart the content."
+}
+
+connect_server_tracing_hint <- function() {
+  "Ask your server administrator to set {.code OpenTelemetry.Enabled = true}
+   and {.code OpenTelemetry.AllowContentInstrumentation = true} in the Connect
+   configuration, then restart Connect."
 }
 
 commons_traces_dir <- function() {

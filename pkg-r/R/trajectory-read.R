@@ -90,28 +90,14 @@ warn_if_connect_tracing_disabled <- function(client, guid) {
     connect_content(client, guid)$otel_enabled,
     error = function(err) NULL
   )
-  instrumentation_allowed <- tryCatch(
-    connect_server_settings(client)$allow_content_instrumentation,
-    error = function(err) NULL
-  )
+  instrumentation_allowed <- connect_content_instrumentation_allowed(client)
 
   message <- "No traces were found for this content."
   if (identical(content_enabled, FALSE)) {
-    message <- c(
-      message,
-      i = "In this content's {.emph Settings > Monitoring > Traces} panel on
-           Posit Connect, select {.emph Enabled}, then redeploy or restart the
-           content."
-    )
+    message <- c(message, i = connect_content_tracing_hint())
   }
   if (identical(instrumentation_allowed, FALSE)) {
-    message <- c(
-      message,
-      i = "Ask your server administrator to set
-           {.code OpenTelemetry.Enabled = true} and
-           {.code OpenTelemetry.AllowContentInstrumentation = true} in the
-           Connect configuration, then restart Connect."
-    )
+    message <- c(message, i = connect_server_tracing_hint())
   }
   if (length(message) > 1) {
     cli::cli_warn(message)
