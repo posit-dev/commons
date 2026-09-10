@@ -15,6 +15,8 @@ from typing import Final
 
 from chatlas import ContentToolResult, Turn
 
+from ._icons import icon_url
+
 __all__ = [
     "PROVENANCE_DISPLAY",
     "TAG_EXTRA_KEY",
@@ -146,13 +148,14 @@ def provenance_aside(tag: Tag | None, *, include_cited: bool = False) -> str:
     because the verified citation's own aside already says as much; a review
     context passes ``include_cited`` to see every outcome.
 
-    No icon: its URL comes from the served asset bundle, which arrives with
-    the Python UI (see ``citation_aside_html``).
+    The outcome's icon is omitted when no asset bundle serves it.
     """
     if tag is None or (tag is Tag.B and not include_cited):
         return ""
     display = PROVENANCE_DISPLAY[tag]
+    icon = icon_url(display.icon)
+    icon_attr = "" if icon is None else f' icon="{escape_attr(icon)}"'
     return (
-        f'<shiny-aside label="{escape_attr(display.label)}">'
+        f'<shiny-aside label="{escape_attr(display.label)}"{icon_attr}>'
         f"{display.body} {_INFO_CONTROL}</shiny-aside>"
     )

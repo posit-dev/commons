@@ -155,3 +155,38 @@ def test_the_aside_omits_the_explanation_when_the_model_gave_none() -> None:
     html = citation_aside_html(SAMPLE_QUOTE, "", "documentation", "prose")
 
     assert html.endswith(f"</span>\n\n> {SAMPLE_QUOTE}</shiny-aside>")
+
+
+def test_the_aside_names_no_icon_without_a_served_bundle() -> None:
+    # An icon URL is only knowable once a bundle is being served, and a bare
+    # filename in the page would 404.
+    html = citation_aside_html(SAMPLE_QUOTE, "why", "documentation", "prose")
+
+    assert "icon=" not in html
+    assert "<img" not in html
+
+
+def test_a_served_bundle_marks_the_pill_and_titles_the_body(
+    served_bundle: str,
+) -> None:
+    # commons-chat.css hides shinychat's own popover title row, so the pill
+    # carries the uniform quote mark and the body title carries the per-kind
+    # icon the reader actually sees.
+    html = citation_aside_html(SAMPLE_QUOTE, "why", "documentation", "prose")
+
+    assert html.startswith(
+        '<shiny-aside label="documentation" '
+        f'icon="{served_bundle}/figs/citation-mark.svg">'
+        '<span class="commons-citation-title">'
+        f'<img src="{served_bundle}/figs/citation-prose.svg" alt="">'
+    )
+
+
+def test_a_kind_with_no_icon_still_renders_the_titled_aside(
+    served_bundle: str,
+) -> None:
+    html = citation_aside_html(SAMPLE_QUOTE, "why", "documentation", "unknown")
+
+    assert f'icon="{served_bundle}/figs/citation-mark.svg"' in html
+    assert "<img" not in html
+    assert '<span class="commons-citation-title-label">documentation</span>' in html

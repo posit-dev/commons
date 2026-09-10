@@ -9,6 +9,8 @@ from pathlib import Path
 from htmltools import HTMLDependency
 from packaging.version import Version
 
+from .._icons import set_asset_base_url
+
 __all__ = ["asset_base_url", "commons_chat_dependency"]
 
 _SUBDIR = "www/commons-chat"
@@ -27,7 +29,7 @@ def _asset_version() -> str:
 
 def commons_chat_dependency() -> HTMLDependency:
     """The dependency serving the chat script, stylesheet and icons."""
-    return HTMLDependency(
+    dep = HTMLDependency(
         name="commons-chat",
         version=_asset_version(),
         source={"package": "commons", "subdir": _SUBDIR},
@@ -35,9 +37,16 @@ def commons_chat_dependency() -> HTMLDependency:
         stylesheet={"href": "commons-chat.css"},
         all_files=True,
     )
+    # Asides resolve icon URLs against this base; see _icons.py. Set per
+    # build, not once: the URL embeds the assets' newest mtime.
+    set_asset_base_url(_base_url(dep))
+    return dep
 
 
 def asset_base_url() -> str:
-    """The directory the assets are served under, relative to the library."""
-    dep = commons_chat_dependency()
-    return f"{dep.name}-{dep.version}"
+    """The URL the assets are served under on a page."""
+    return _base_url(commons_chat_dependency())
+
+
+def _base_url(dep: HTMLDependency) -> str:
+    return dep.source_path_map()["href"]
