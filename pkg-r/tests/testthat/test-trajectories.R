@@ -951,6 +951,39 @@ test_that("window bound strings must parse completely", {
   expect_error(check_window_bound("2026-07-22 14:30:00Z"), "must be")
 })
 
+test_that("an empty Connect read diagnoses disabled tracing settings", {
+  skip_on_cran()
+  client <- list(server = "https://connect.example.com", api_key = "key")
+  content_enabled <- FALSE
+  instrumentation_allowed <- TRUE
+  httr2::local_mocked_responses(function(req) {
+    path <- httr2::url_parse(req$url)$path
+    body <- if (path == "/__api__/server_settings") {
+      list(allow_content_instrumentation = instrumentation_allowed)
+    } else {
+      expect_equal(path, "/__api__/v1/content/guid")
+      list(otel_enabled = content_enabled)
+    }
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(body, auto_unbox = TRUE)),
+      request = req
+    )
+  })
+
+  expect_snapshot(warn_if_connect_tracing_disabled(client, "guid"))
+
+  content_enabled <- TRUE
+  instrumentation_allowed <- FALSE
+  expect_snapshot(warn_if_connect_tracing_disabled(client, "guid"))
+
+  instrumentation_allowed <- TRUE
+  expect_no_warning(warn_if_connect_tracing_disabled(client, "guid"))
+})
+
 test_that("a Connect read recovers a wrapper the `from` pushdown dropped", {
   withr::local_envvar(
     CONNECT_SERVER = "https://connect.example.com",

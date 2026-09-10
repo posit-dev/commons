@@ -57,6 +57,24 @@
       * ..1 = 5
       i Did you forget to name an argument?
 
+# an empty Connect read diagnoses disabled tracing settings
+
+    Code
+      warn_if_connect_tracing_disabled(client, "guid")
+    Condition
+      Warning:
+      No traces were found for this content.
+      i In this content's Settings > Monitoring > Traces panel on Posit Connect, select Enabled, then redeploy or restart the content.
+
+---
+
+    Code
+      warn_if_connect_tracing_disabled(client, "guid")
+    Condition
+      Warning:
+      No traces were found for this content.
+      i Ask your server administrator to set `OpenTelemetry.Enabled = true` and `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration, then restart Connect.
+
 # trajectory_read validates source
 
     Code

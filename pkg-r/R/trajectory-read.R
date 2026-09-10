@@ -74,12 +74,35 @@ trajectory_read <- function(
     local = read_local_spans(resolved$path),
     connect = read_connect_spans(resolved$client, resolved$guid, n, from, to)
   )
+  if (resolved$kind == "connect" && length(spans) == 0) {
+    warn_if_connect_tracing_disabled(resolved$client, resolved$guid)
+  }
   spans <- filter_chat_spans(spans, from, to)
   trajectories <- drop_contentless(build_trajectories(spans))
   if (!is.null(n)) {
     trajectories <- utils::tail(trajectories, n)
   }
   trajectories
+}
+
+warn_if_connect_tracing_disabled <- function(client, guid) {
+  content_enabled <- tryCatch(
+    connect_content(client, guid)$otel_enabled,
+    error = function(err) NULL
+  )
+  instrumentation_allowed <- connect_content_instrumentation_allowed(client)
+
+  message <- "No traces were found for this content."
+  if (identical(content_enabled, FALSE)) {
+    message <- c(message, i = connect_content_tracing_hint())
+  }
+  if (identical(instrumentation_allowed, FALSE)) {
+    message <- c(message, i = connect_server_tracing_hint())
+  }
+  if (length(message) > 1) {
+    cli::cli_warn(message)
+  }
+  invisible(NULL)
 }
 
 # Dates and date strings both resolve to local midnight; as.POSIXct() alone
