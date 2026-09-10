@@ -21,7 +21,6 @@ import pandas as pd
 import shinychat
 from chatlas import Chat
 from shiny.session import session_context
-from shinychat.types import HistoryOptions
 
 import commons
 from commons._agent import Commons
@@ -71,18 +70,6 @@ def test_the_client_has_to_be_a_commons_agent() -> None:
     # surface renders, so it is refused rather than half-served.
     with pytest.raises(TypeError, match="client"):
         commons.ui.server("chat", scripted_chat())  # type: ignore[arg-type]
-
-
-def test_kwargs_reach_the_chat() -> None:
-    agent = agent_with(scripted_chat())
-    session = IdleSession()
-
-    with session_context(session):
-        chat = commons.ui.server(
-            "chat", agent, history=HistoryOptions(restore_mode="none")
-        )
-
-    assert chat.history._restore_mode == "none"
 
 
 def test_the_chat_is_wired_to_the_agent() -> None:
@@ -163,7 +150,7 @@ def test_a_failed_prewarm_is_logged_rather_than_stopping_the_app(
 
 def test_extra_kwargs_are_passed_to_shinychat() -> None:
     agent = agent_with(scripted_chat())
-    session = _IdleSession()
+    session = IdleSession()
 
     with session_context(session):
         chat = commons.ui.server("chat", agent, on_error="unhandled")
