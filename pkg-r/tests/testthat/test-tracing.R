@@ -88,7 +88,10 @@ test_that("log = TRUE stays quiet when tracing is disabled locally", {
 
 test_that("log = TRUE points at Content Observability on Connect", {
   skip_if_not_installed("otel")
-  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "guid",
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
   clear_observability_attempted()
   local_mocked_bindings(
     connect_client = function(...) rlang::abort("no api key")
@@ -100,7 +103,10 @@ test_that("log = TRUE points at Content Observability on Connect", {
 
 test_that("tracing disabled on Connect flips the observability setting on", {
   skip_if_not_installed("otel")
-  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "guid",
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
   clear_observability_attempted()
   state <- new.env()
   state$patched <- 0
@@ -124,7 +130,10 @@ test_that("tracing disabled on Connect flips the observability setting on", {
 
 test_that("an already-on observability setting warns about the restart", {
   skip_if_not_installed("otel")
-  withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
+  withr::local_envvar(
+    CONNECT_CONTENT_GUID = "guid",
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
   clear_observability_attempted()
   state <- new.env()
   state$patched <- 0
