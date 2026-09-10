@@ -1,7 +1,7 @@
 """A self-contained commons agent over made-up forest canopy data.
 
-    uv run shiny run demo.py   # the chat
-    uv run python demo.py      # the same questions, in the terminal
+    uv run --with anthropic shiny run demo.py   # the chat
+    uv run --with anthropic python demo.py      # the same questions, in the terminal
 
 The chat is assembled here rather than through `commons.ui.app()`, because
 `app()` shares one agent across sessions; a deployed app should instead build
@@ -10,7 +10,7 @@ at the bottom of this file: the page from `shinychat.page_chat()` with
 `theme=commons.ui.theme()`, a server function passing a fresh agent to
 `commons.ui.server()`, and `shiny.App()` joining the two.
 
-This demo is analogous to `pkg-r/inst/demo.R` in the R implmentation. You
+This demo is analogous to `pkg-r/inst/demo.R` in the R implementation. You
 can also play around with the demo interactively in a notebook by using
 `demo.ipynb` (without a shiny UI, in that case).
 
