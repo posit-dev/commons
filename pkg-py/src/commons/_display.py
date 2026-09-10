@@ -98,6 +98,7 @@ def measure_display_html(
     args: Mapping[str, Any],
     value: Any,
     *,
+    from_query: bool = False,
     title: str | None = None,
     description: str | None = None,
 ) -> Tag:
@@ -105,13 +106,20 @@ def measure_display_html(
 
     Built as tags rather than assembled text, so every value a measure or the
     model supplied is escaped by htmltools on the way in.
+
+    ``from_query`` says the value is rows a data source answered with. It
+    cannot be guessed: an empty list is an empty result to a query and an
+    empty answer to a measure, and the two read differently.
     """
     return div(
         _metadata_html(title, description),
         _args_html(args),
         div(
             tags.strong("Result"),
-            div(_value_html(value), class_="commons-measure-result-value"),
+            div(
+                _value_html(value, from_query),
+                class_="commons-measure-result-value",
+            ),
             class_="commons-measure-result",
         ),
         class_="commons-measure-display",
@@ -174,8 +182,8 @@ def _args_html(args: Mapping[str, Any]) -> Tag | None:
     )
 
 
-def _value_html(value: Any) -> TagChild:
-    rows = _as_rows(value)
+def _value_html(value: Any, from_query: bool) -> TagChild:
+    rows = _as_rows(value, from_query)
     if rows is None:
         return render_value(value)
     if not rows:
@@ -202,15 +210,11 @@ def _value_html(value: Any) -> TagChild:
     )
 
 
-def _as_rows(value: Any) -> list[Mapping[str, Any]] | None:
-    """The rows behind a value, whether it arrived as a frame or as rows.
-
-    A data source answers a query with rows, while a measure is more likely
-    to return a frame, and both reach this card.
-    """
+def _as_rows(value: Any, from_query: bool) -> list[Mapping[str, Any]] | None:
+    """The rows behind a value, whether it arrived as a frame or as rows."""
     if is_frame(value):
         return cast("list[Mapping[str, Any]] | None", frame_rows(value))
-    if isinstance(value, list) and all(isinstance(row, Mapping) for row in value):
+    if from_query and isinstance(value, list):
         return value
     return None
 

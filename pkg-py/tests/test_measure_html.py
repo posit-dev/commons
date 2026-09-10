@@ -106,7 +106,7 @@ def test_query_rows_are_drawn_as_a_table() -> None:
     """`call_metrics` hands its result over as rows, not as a frame."""
     rows = [{"region": "EMEA", "revenue": 500.0}]
 
-    html = rendered(measure_display_html({}, rows))
+    html = rendered(measure_display_html({}, rows, from_query=True))
 
     assert "<table" in html
     assert "EMEA" in html
@@ -115,7 +115,7 @@ def test_query_rows_are_drawn_as_a_table() -> None:
 def test_a_long_table_is_capped_and_says_so() -> None:
     rows = [{"n": n} for n in range(MAX_MARKDOWN_ROWS + 5)]
 
-    html = rendered(measure_display_html({}, rows))
+    html = rendered(measure_display_html({}, rows, from_query=True))
 
     assert html.count("<tr") == MAX_MARKDOWN_ROWS + 1
     assert "5 more rows not shown" in html
@@ -123,7 +123,9 @@ def test_a_long_table_is_capped_and_says_so() -> None:
 
 def test_a_column_a_row_omits_is_still_a_column() -> None:
     """A driver may leave a null column out of a row it returns."""
-    html = rendered(measure_display_html({}, [{"a": 1}, {"a": 2, "b": 3}]))
+    html = rendered(
+        measure_display_html({}, [{"a": 1}, {"a": 2, "b": 3}], from_query=True)
+    )
 
     assert "<th>b</th>" in html
 
@@ -131,7 +133,12 @@ def test_a_column_a_row_omits_is_still_a_column() -> None:
 
 def test_a_query_that_matched_nothing_says_so() -> None:
     """The card and the markdown the model reads must not disagree."""
-    assert "No rows." in rendered(measure_display_html({}, []))
+    assert "No rows." in rendered(measure_display_html({}, [], from_query=True))
+
+
+def test_a_measure_that_returned_an_empty_list_is_not_a_query() -> None:
+    """An empty list is an empty result to a query, an empty answer to a measure."""
+    assert "No rows." not in rendered(measure_display_html({}, []))
 
 
 def test_an_argument_explicitly_set_to_null_is_still_shown() -> None:

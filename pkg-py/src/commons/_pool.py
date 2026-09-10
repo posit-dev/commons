@@ -297,6 +297,7 @@ def call_metrics(
                 if value is not None
             },
             rows,
+            from_query=True,
         ),
     )
 
