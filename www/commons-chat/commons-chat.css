@@ -434,6 +434,12 @@ shiny-chat-container
   display: none;
 }
 
+.commons-measure-details > summary:focus-visible {
+  border-radius: var(--bs-border-radius-sm, 0.25rem);
+  outline: 2px solid var(--bs-primary, #007bc2);
+  outline-offset: 2px;
+}
+
 .commons-measure-details:not([open]) {
   margin-top: -1.5rem;
   position: relative;

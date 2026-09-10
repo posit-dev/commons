@@ -1188,12 +1188,18 @@ measure_metadata_html <- function(metadata) {
           paste0(
             "<details class=\"commons-measure-details\">",
             "<summary>",
-            "<span class=\"commons-measure-details-more\">See more</span>",
-            "<span class=\"commons-measure-details-less\">See less</span>",
+            "<span class=\"commons-measure-details-more\">",
+            "See more<span class=\"visually-hidden\"> details for %s</span>",
+            "</span>",
+            "<span class=\"commons-measure-details-less\">",
+            "See less<span class=\"visually-hidden\"> details for %s</span>",
+            "</span>",
             "</summary>",
             "<div class=\"commons-measure-details-body\">%s</div>",
             "</details>"
           ),
+          html_escape(metadata$title[[i]]),
+          html_escape(metadata$title[[i]]),
           html_escape(details)
         )
       }

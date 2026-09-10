@@ -177,7 +177,12 @@ test_that("long measure descriptions can be expanded", {
     rep("A detailed description of the measure.", 8),
     collapse = " "
   )
-  td <- measure("orders", description, function() 1L)
+  td <- measure(
+    "orders",
+    description,
+    function() 1L,
+    title = "Orders & returns"
+  )
   display_metadata <- list(
     description = description,
     details = "Returns: The number of orders."
@@ -194,6 +199,16 @@ test_that("long measure descriptions can be expanded", {
   expect_match(display, "commons-measure-description-summary", fixed = TRUE)
   expect_match(display, "commons-measure-details-more", fixed = TRUE)
   expect_match(display, "commons-measure-details-less", fixed = TRUE)
+  expect_match(
+    display,
+    "See more<span class=\"visually-hidden\"> details for Orders &amp; returns",
+    fixed = TRUE
+  )
+  expect_match(
+    display,
+    "See less<span class=\"visually-hidden\"> details for Orders &amp; returns",
+    fixed = TRUE
+  )
   expect_match(display, "Returns: The number of orders.", fixed = TRUE)
 })
 
