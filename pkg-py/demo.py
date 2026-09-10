@@ -1,7 +1,7 @@
 """A self-contained commons agent over made-up forest canopy data.
 
-    uv run --with anthropic shiny run demo.py   # the chat
-    uv run --with anthropic python demo.py      # the same questions, in the terminal
+    uv run shiny run demo.py   # the chat
+    uv run python demo.py      # the same questions, in the terminal
 
 The chat is assembled here rather than through `commons.ui.app()`, because
 `app()` shares one agent across sessions; a deployed app should instead build
@@ -16,14 +16,11 @@ can also play around with the demo interactively in a notebook by using
 
 The client comes from `chatlas.ChatAuto`, so `CHATLAS_CHAT_PROVIDER_MODEL`
 picks a different provider without editing this file. chatlas ships no
-provider SDK and neither does commons, hence the `--with`. For Claude on
-Bedrock:
+provider SDK and neither does commons, hence the `uv run --with`. For example, to
+use Claude sonnet on Bedrock:
 
     export CHATLAS_CHAT_PROVIDER_MODEL=bedrock-anthropic/us.anthropic.claude-sonnet-5
     uv run --with 'anthropic[bedrock]' shiny run demo.py
-
-The `bedrock` extra carries botocore, which signs the requests; either entry
-point fails without it, under `ModuleNotFoundError: No module named 'botocore'`.
 """
 
 from __future__ import annotations
