@@ -2,7 +2,11 @@
 
 `commons` is a constructor for trustworthy data agents. It gives an LLM data, semantic, and context layers to work with, tools for querying them, and A/B/C provenance tags so every answer carries a classification as to its trustworthiness.
 
-**Status: pre-alpha.** The agent and all three layers are implemented; the chat UI is not, so answers come back as text and server-rendered HTML rather than through a Shiny front end. Python 3.11 or later is required.
+**Status: alpha.** The agent, the three layers (data, semantics, and context), and the chat UI are implemented: `commons.ui.server()` wires an agent to a chat element in a py-shiny app, and outside one, answers come back as text and server-rendered HTML. Python 3.11 or later is required.
+
+## Optional extras
+
+The core dependencies will allow you to build and query an agent. Installing the `shiny` group (via `pip install commons[shiny]`) will additionally install everything `commons.ui` needs to serve a full chat UI; importing `commons.ui` without it raises an `ImportError` that names the missing packages and the install command. Nothing in commons currently needs the `tracing` group (it is a placeholder for future functionality).
 
 ## Get started
 
