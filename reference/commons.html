@@ -122,11 +122,10 @@ are not a security boundary.</p></dd>
 OpenTelemetry (default <code>FALSE</code>). When <code>TRUE</code>, commons checks the tracing
 setup and warns with setup steps when it is incomplete.
 Set <code>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true</code> before R
-starts so <span class="pkg">ellmer</span> includes message content. On Posit Connect,
-traces land in Connect's observability store (browsable in its Trace
-Viewer); commons switches on the content's <em>Content Observability</em>
-setting itself when needed, though capture only starts once the content
-restarts. Read trajectories back with <code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
+starts so <span class="pkg">ellmer</span> includes message content. On Posit Connect, a server
+administrator must set <code>OpenTelemetry.Enabled = true</code> and
+<code>OpenTelemetry.AllowContentInstrumentation = true</code>. Read trajectories back
+with <code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
 
 
 <dt id="arg-share-with">share_with<a class="anchor" aria-label="anchor" href="#arg-share-with"></a></dt>
