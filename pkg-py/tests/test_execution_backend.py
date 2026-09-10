@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 from typing import Any, cast
 
@@ -16,6 +17,8 @@ import pytest
 
 from commons._execution import _backend as backend_module
 from commons._execution._backend import (
+    DEFAULT_OUTPUT_LIMIT,
+    TERMINATE_GRACE,
     ExecBackend,
     ExecTimeoutError,
     LocalBackend,
@@ -171,19 +174,20 @@ class _NeverReaped:
     def __init__(self) -> None:
         self.signals: list[str] = []
 
-    def terminate(self) -> None:
-        self.signals.append("term")
-
-    def kill(self) -> None:
-        self.signals.append("kill")
-
     async def wait(self) -> int:
         await asyncio.sleep(3600)
         return 0
 
 
-async def test_terminate_gives_up_when_the_exit_is_never_reaped() -> None:
+async def test_terminate_gives_up_when_the_exit_is_never_reaped(
+    monkeypatch,
+) -> None:
     process = _NeverReaped()
+
+    def record_signals(process: Any, sig: signal.Signals) -> None:
+        process.signals.append("term" if sig == signal.SIGTERM else "kill")
+
+    monkeypatch.setattr(backend_module, "_signal_tree", record_signals)
 
     # The bound is two grace periods (SIGTERM, then SIGKILL), so 0.5s leaves
     # generous margin over the real 0.1s while still failing if the waits
@@ -299,14 +303,18 @@ async def test_a_second_cancellation_cannot_abort_the_shutdown(tmp_path) -> None
     # grace period is being awaited would otherwise skip SIGKILL and leave a
     # SIGTERM-ignoring child running.
     sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=0.3)
+    backend = LocalBackend(terminate_grace=1.0)
     call = asyncio.create_task(
         backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
     )
     await asyncio.sleep(0.1)
 
     call.cancel()
-    await asyncio.sleep(0.05)
+    # The SIGTERM grace runs for 1.0s from the first cancel, so the second
+    # cancel at ~0.3s lands mid-shutdown with margin on both sides — the
+    # race this test exists for must actually happen, or it quietly
+    # degenerates into the plain cancellation test above.
+    await asyncio.sleep(0.2)
     call.cancel()
     with pytest.raises(asyncio.CancelledError):
         await call
@@ -398,16 +406,18 @@ async def test_cancellation_during_the_timeout_shutdown_cannot_abort_it(
     # skip SIGKILL. The shutdown runs in its own task precisely so that it
     # outlives the call that started it.
     sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=0.3)
+    backend = LocalBackend(terminate_grace=1.0)
     call = asyncio.create_task(
         backend.exec(
             [sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)],
             timeout=0.1,
         )
     )
-    # The timeout fires at ~0.1s and the SIGTERM grace then runs for 0.3s,
-    # so a cancel at 0.3s lands in the middle of the shutdown.
-    await asyncio.sleep(0.3)
+    # The timeout fires at ~0.1s and the SIGTERM grace then runs for 1.0s,
+    # so a cancel at 0.5s lands in the middle of the shutdown with margin on
+    # both sides — the race this test exists for must actually happen, or it
+    # quietly degenerates into the plain timeout test above.
+    await asyncio.sleep(0.5)
 
     call.cancel()
     with pytest.raises((asyncio.CancelledError, ExecTimeoutError)):
@@ -415,3 +425,105 @@ async def test_cancellation_during_the_timeout_shutdown_cannot_abort_it(
 
     await asyncio.sleep(1.8)
     assert not sentinel.exists()
+
+
+async def test_reading_the_tail_of_a_missing_stream_is_empty() -> None:
+    # exec always pipes both streams, so this guard is defensive; pin it so
+    # it cannot be broken or deleted unnoticed.
+    assert await backend_module._read_tail(None, 10) == (b"", False)
+
+
+def test_the_defaults_are_the_documented_constants() -> None:
+    # Every other test overrides these; pin the wiring itself.
+    backend = LocalBackend()
+
+    assert backend._output_limit == DEFAULT_OUTPUT_LIMIT
+    assert backend._terminate_grace == TERMINATE_GRACE
+
+
+async def test_concurrent_calls_on_one_backend_do_not_interfere(tmp_path) -> None:
+    # The backend's one piece of shared state is the set of in-flight
+    # shutdowns; one call timing out must not disturb another's result.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=0.1)
+    slow = asyncio.create_task(
+        backend.exec([sys.executable, "-c", _sleeper(sentinel)], timeout=0.15)
+    )
+    fast = asyncio.create_task(backend.exec([sys.executable, "-c", "print('ok')"]))
+
+    with pytest.raises(ExecTimeoutError):
+        await slow
+    assert (await fast).stdout == "ok\n"
+
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+async def test_aclose_waits_for_shutdowns_still_in_flight(tmp_path) -> None:
+    # The escalation guarantee only holds while the event loop is running;
+    # aclose is how a driver honours it while tearing down. A second cancel
+    # is what leaves a shutdown running detached after the call has ended.
+    sentinel = tmp_path / "survived"
+    backend = LocalBackend(terminate_grace=1.0)
+    call = asyncio.create_task(
+        backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
+    )
+    await asyncio.sleep(0.1)
+
+    call.cancel()
+    await asyncio.sleep(0.1)
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+
+    assert backend._shutdowns
+    await backend.aclose()
+    assert not backend._shutdowns
+
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="os.fork is POSIX-only")
+async def test_a_workers_own_children_do_not_survive_the_shutdown(tmp_path) -> None:
+    # The escalation signals the worker's whole process group: code that
+    # forks a child of its own cannot strand it, and cannot hold the output
+    # pipes open past the worker's own exit.
+    sentinel = tmp_path / "survived"
+    code = (
+        "import os, time\n"
+        "if os.fork() == 0:\n"
+        f"    time.sleep(1.5); open({str(sentinel)!r}, 'w').close(); os._exit(0)\n"
+        "time.sleep(5)\n"
+    )
+    backend = LocalBackend(terminate_grace=0.1)
+
+    with pytest.raises(ExecTimeoutError):
+        await backend.exec([sys.executable, "-c", code], timeout=0.15)
+
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+async def test_both_streams_past_the_cap_are_capped_independently() -> None:
+    # The two streams keep separate buffers and flags even when both blow
+    # past the cap in the same call.
+    backend = LocalBackend(output_limit=2000)
+    code = (
+        "import sys\n"
+        "for i in range(200):\n"
+        "    sys.stdout.write(f'o-{i}:' + 'x' * 1000 + '\\n')\n"
+        "    sys.stderr.write(f'e-{i}:' + 'y' * 1000 + '\\n')\n"
+    )
+
+    result = await backend.exec([sys.executable, "-c", code])
+
+    assert result.returncode == 0
+    assert result.stdout_truncated
+    assert result.stderr_truncated
+    assert len(result.stdout) <= 2000
+    assert len(result.stderr) <= 2000
+    assert "o-199:" in result.stdout
+    assert "o-0:" not in result.stdout
+    assert "e-199:" in result.stderr
+    assert "e-0:" not in result.stderr

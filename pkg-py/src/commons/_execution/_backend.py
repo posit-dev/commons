@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
+import signal
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
@@ -65,6 +67,9 @@ class ExecBackend(Protocol):
         invalid bytes replaced. Both are the contract every backend
         implements, not a local choice.
 
+        ``input`` is buffered whole in the calling process until the child
+        reads it, so bounding its size is the caller's responsibility.
+
         Raises ``ExecTimeoutError`` if ``timeout`` passes before the command
         finishes, having first made sure the process is gone. A command that
         cannot be started at all raises the underlying ``OSError`` (usually
@@ -86,18 +91,31 @@ async def _read_tail(
         return b"", False
     kept = bytearray()
     truncated = False
-    while True:
-        chunk = await stream.read(64 * 1024)
-        if not chunk:
-            return bytes(kept), truncated
+    while chunk := await stream.read(64 * 1024):
         kept += chunk
-        if len(kept) > limit:
+        # Trim only once the buffer is well past the cap, so staying under
+        # it costs no per-chunk copying; the trim after the loop restores
+        # the exact "last limit bytes" boundary.
+        if len(kept) > 2 * limit:
             del kept[: len(kept) - limit]
             truncated = True
+    if len(kept) > limit:
+        del kept[: len(kept) - limit]
+        truncated = True
+    return bytes(kept), truncated
 
 
 class LocalBackend:
-    """Runs the worker as a child of this process, with no isolation."""
+    """Runs the worker as a child of this process, with no isolation.
+
+    The lifecycle below is POSIX-shaped. On Windows ``terminate()`` and
+    ``kill()`` are both ``TerminateProcess`` — the grace window does not
+    exist — and an empty environment can keep the child from spawning at
+    all (``SystemRoot`` is required). What Windows should do instead —
+    refuse, or run with weaker guarantees and a warning — is the sandbox
+    unit's decision, not this class's; ``sandbox_capabilities()`` in
+    ``pkg-r`` is the existing template for reporting "not sandboxable".
+    """
 
     def __init__(
         self,
@@ -151,6 +169,9 @@ class LocalBackend:
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
             env={} if env is None else dict(env),
+            # Session leader, so shutdown signals can take the worker's whole
+            # process group rather than just the worker (see _signal_tree).
+            start_new_session=True,
         )
         try:
             if process.stdin is not None:
@@ -164,11 +185,8 @@ class LocalBackend:
                 f"the command exceeded its {timeout}-second time limit"
             ) from None
         except BaseException:
-            # Whoever started the process ends it. Timeout and cancellation
-            # are not the only ways out of a call: input can fail to encode,
-            # a pipe can fail mid-read. Any exit that left the worker running
-            # would keep holding the parent's file descriptors and go on
-            # burning CPU with nobody waiting on it.
+            # an escape hatch to make sure we properly shutdown the process
+            # regardless of how it exits
             await self._shutdown(process)
             raise
         # _collect awaited wait(), so the return code is known here; if that
@@ -182,13 +200,24 @@ class LocalBackend:
             stderr_truncated=stderr[1],
         )
 
+    async def aclose(self) -> None:
+        """Wait for any shutdowns still in flight.
+
+        The escalation guarantee — that a cancelled call cannot leave a
+        SIGTERM-ignoring child alive — holds only while the event loop is
+        running. A driver that is tearing down should call this before the
+        loop closes, so a last-minute cancellation does not strand a
+        shutdown mid-escalation. Each shutdown is bounded by two grace
+        periods, so this returns in bounded time.
+        """
+        await asyncio.gather(*list(self._shutdowns), return_exceptions=True)
+
     async def _shutdown(self, process: asyncio.subprocess.Process) -> None:
         """Terminate ``process``, outliving cancellation of the caller.
 
-        Shutdown runs in its own task so that a cancellation landing while it
-        is in flight — a caller cancelling twice, or cancelling while the
-        post-timeout escalation is still waiting — stops us waiting on it
-        without stopping the escalation itself. It must not be possible to
+        Shutdown runs in its own task to ensure it is actually performed 
+        (e.g. cancellation arriving while a shutdown is already in process
+        doesn't stop the shutdown itself). It must not be possible to
         leave a SIGTERM-ignoring child alive by cancelling at the wrong
         moment.
         """
@@ -199,17 +228,42 @@ class LocalBackend:
             await asyncio.shield(shutdown)
 
 
+def _signal_tree(process: asyncio.subprocess.Process, sig: signal.Signals) -> None:
+    """Signal the child's whole process group, falling back to the child alone.
+
+    The child is spawned as a session leader, so its process group is its own
+    PID and everything it forked along the way comes with it: a worker that
+    spawned children of its own cannot strand them, or keep the output pipes
+    open past its own exit. Off POSIX there are no process groups, so only
+    the direct child is signalled.
+    """
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, sig)
+            return
+        except ProcessLookupError:
+            pass  # The group is gone or never had a session; signal directly.
+    if sig == signal.SIGTERM:
+        process.terminate()
+    else:
+        process.kill()
+
+
 async def _terminate(process: asyncio.subprocess.Process, grace: float) -> None:
-    """Ask the process to exit, then insist."""
+    """Ask the process to exit, then insist.
+
+    Signals go to the child's process group (see ``_signal_tree``), so the
+    escalation covers everything the worker spawned, not just the worker.
+    """
     if process.returncode is not None:
         return
-    process.terminate()
+    _signal_tree(process, signal.SIGTERM)
     try:
         await asyncio.wait_for(asyncio.shield(process.wait()), grace)
         return
     except TimeoutError:
         pass
-    process.kill()
+    _signal_tree(process, signal.SIGKILL)
     # The exit can go unobserved if the child watcher misses it, and a killed
     # process is gone whether or not we see it go. Wait, but not forever.
     try:
