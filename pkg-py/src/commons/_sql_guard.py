@@ -20,7 +20,7 @@ import sqlglot
 import sqlglot.errors
 from sqlglot import expressions as exp
 
-__all__ = ["check_query"]
+__all__ = ["check_query", "sqlglot_dialect"]
 
 # Statement forms that only read. A set operation carries its branches, and
 # sqlglot parses a leading CTE list onto the statement it belongs to, so
@@ -66,7 +66,7 @@ _DIALECTS = {
 def check_query(sql: str, dialect: str | None = None) -> None:
     """Raise `ValueError` unless `sql` is one read-only statement."""
     try:
-        parsed = sqlglot.parse(sql, dialect=_sqlglot_dialect(dialect))
+        parsed = sqlglot.parse(sql, dialect=sqlglot_dialect(dialect))
     except sqlglot.errors.SqlglotError as error:
         raise ValueError(
             f"The query could not be parsed as {dialect or 'SQL'}: {error}. "
@@ -75,7 +75,9 @@ def check_query(sql: str, dialect: str | None = None) -> None:
 
     statements = [statement for statement in parsed if statement is not None]
     if not statements:
-        raise ValueError("The query is empty. Only read-only SELECT queries are allowed.")
+        raise ValueError(
+            "The query is empty. Only read-only SELECT queries are allowed."
+        )
     if len(statements) > 1:
         raise ValueError(
             "The query contains a disallowed semicolon. "
@@ -121,7 +123,8 @@ def check_query(sql: str, dialect: str | None = None) -> None:
     )
 
 
-def _sqlglot_dialect(dialect: str | None) -> str | None:
+def sqlglot_dialect(dialect: str | None) -> str | None:
+    """The sqlglot name for a backend's dialect, or None when it has none."""
     if dialect is None:
         return None
     name = _DIALECTS.get(dialect.lower(), dialect.lower())

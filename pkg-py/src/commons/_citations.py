@@ -1,26 +1,46 @@
-"""Parsing a citation block and verifying its quote against a trusted corpus.
+"""Citations: verifying a quote against a trusted corpus, and asking for one.
 
 The normalization rules and the matching verdicts are a cross-language contract
-pinned by ``tests/shared/citations.json``; change that fixture, not just this
-file. ``pkg-r/R/citations.R`` implements the same contract for R.
+pinned by ``tests/shared/citations.json``, and where the citation request lands
+by ``tests/shared/citation-request.json``; change those fixtures, not just this
+file. ``pkg-r/R/citations.R`` implements the same contracts for R.
 """
 
 from __future__ import annotations
 
 import html
 import re
-from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Any, Literal, get_args
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Literal, get_args
+
+from chatlas import ContentToolResult, Turn
+from chatlas.types import ContentText
+
+from ._display import DISPLAY_EXTRA_KEY, tool_display
+from ._icons import icon_url
+from ._measures import Measure, measure_schema_text
+from ._prompt import read_prompt
+from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
+
+if TYPE_CHECKING:
+    from ._context_layer import ContextLayer
+    from ._data_source import DataSource
 
 __all__ = [
     "CitationDecision",
+    "CitationRequest",
     "CorpusEntry",
     "ParsedCitation",
+    "build_citation_corpus",
     "citation_aside_html",
+    "citation_icon_url",
+    "citation_reminder_text",
     "match_citation",
     "normalize_citation",
     "parse_commons_citation",
+    "tool_result",
+    "turn_has_user_message",
 ]
 
 # The minimum length is a guard, not a tuning knob: a fragment this short can
@@ -38,7 +58,17 @@ _DOUBLE_QUOTES = re.compile("[\u201c\u201d]")
 _DASHES = re.compile("[\u2013\u2014]")
 
 CitationKind = Literal["prose", "definition", "schema"]
+
 CitationStatus = Literal["accepted", "rejected", "malformed"]
+
+# The uniform quote mark on every citation pill, whatever the source's kind.
+_CITATION_MARK = "citation-mark.svg"
+
+_KIND_ICONS: dict[str, str] = {
+    "prose": "citation-prose.svg",
+    "definition": "citation-definition.svg",
+    "schema": "citation-schema.svg",
+}
 
 
 @dataclass(frozen=True)
@@ -176,28 +206,170 @@ def match_citation(quote: str, corpus: Sequence[CorpusEntry]) -> CorpusEntry | N
     )
 
 
+def build_citation_corpus(
+    context_layer: ContextLayer | None,
+    measures: Iterable[Measure],
+    sources: Mapping[str, DataSource],
+) -> list[CorpusEntry]:
+    """Collect the trusted text an answer's citations are verified against.
+
+    Which text is citable and under which label is a cross-language contract
+    pinned by ``tests/shared/citation-corpus.json``. Matching returns the
+    first entry containing the quote, so the specific sources are added ahead
+    of the general documentation corpus.
+    """
+    entries: list[CorpusEntry] = []
+
+    def add(label: str, kind: CitationKind, texts: Iterable[str | None]) -> None:
+        entries.extend(
+            CorpusEntry(label=label, kind=kind, text=text) for text in texts if text
+        )
+
+    # A measure block names its sources only for an agent that has several, so
+    # the corpus holds the block search_pool actually presented.
+    source_names = tuple(sources) if len(sources) > 1 else ()
+    for record in measures:
+        add(
+            f"{record.name} definition",
+            "definition",
+            [measure_schema_text(record, source_names=source_names)],
+        )
+
+    for name, source in sources.items():
+        dictionary = source.dictionary
+        if dictionary is None:
+            continue
+        add(
+            f"{name} dictionary",
+            "schema",
+            [dictionary.description, dictionary.details],
+        )
+        for table in dictionary.tables:
+            add(f"{table} table", "schema", [dictionary.entry_text(table)])
+
+    docs = context_layer.docs if context_layer is not None else ()
+    add("documentation", "prose", docs)
+    return entries
+
+
 def citation_aside_html(quote: str, explanation: str, label: str, kind: str) -> str:
     """Render a verified citation as the aside shinychat displays.
 
-    ``kind`` selects the icon the UI layer draws beside the label. No icon is
-    emitted yet: the URL comes from the served asset bundle, which arrives with
-    the Python UI (see decision D10 in the port plan).
+    The pill carries the uniform quote mark and ``kind`` selects the icon in
+    the body title. Both are omitted when no asset bundle serves them.
     """
+    mark = icon_url(_CITATION_MARK)
+    icon_attr = "" if mark is None else f' icon="{escape_attr(mark)}"'
+    kind_icon = citation_icon_url(kind)
+    kind_img = (
+        "" if kind_icon is None else f'<img src="{escape_attr(kind_icon)}" alt="">'
+    )
     reason = f"{explanation}\n\n" if explanation else ""
     blockquote = "> " + quote.strip().replace("\n", "\n> ")
     # shinychat only renders the popover's title row for grouped asides, so the
     # body carries its own title to keep the source named for a lone citation.
+    # commons-chat.css hides shinychat's row, which is why the kind's icon goes
+    # here and the aside's own icon attribute only styles the pill.
     title = (
         '<span class="commons-citation-title">'
+        f"{kind_img}"
         '<span class="commons-citation-title-label">'
         f"{html.escape(label, quote=False)}</span></span>\n\n"
     )
     return (
-        f'<shiny-aside label="{_escape_attr(label)}">'
+        f'<shiny-aside label="{escape_attr(label)}"{icon_attr}>'
         f"{title}{reason}{blockquote}</shiny-aside>"
     )
 
 
-# Ampersands first, so the entities this generates are not escaped again.
-def _escape_attr(text: str) -> str:
-    return text.replace("&", "&amp;").replace('"', "&quot;")
+def citation_icon_url(kind: str) -> str | None:
+    """The served URL of the icon for one citation kind, or None.
+
+    A kind with no icon of its own renders the aside without one rather than
+    falling back to another kind's.
+    """
+    return icon_url(_KIND_ICONS.get(kind))
+
+
+def tool_result(
+    value: Any,
+    tag: Tag | None = None,
+    *,
+    title: str | None = None,
+    html: Any = None,
+    markdown: str | None = None,
+    footer: Any = None,
+    open: bool = False,
+) -> ContentToolResult:
+    """A tool result carrying the provenance tag of the output it holds.
+
+    The tag is read back off ``extra`` when the turn is classified, so it is
+    set here rather than at the point a result is added to the conversation.
+    It stays out of the title: it is what the reader classifies an answer by,
+    not a caption for the row that produced it.
+
+    The remaining arguments are the display envelope; see ``_display``.
+    """
+    return ContentToolResult(
+        value=value,
+        extra={
+            TAG_EXTRA_KEY: tag,
+            DISPLAY_EXTRA_KEY: tool_display(
+                title, html=html, markdown=markdown, footer=footer, open=open
+            ),
+        },
+    )
+
+
+def citation_reminder_text() -> str:
+    """The reminder text, from the prompt file both packages ship."""
+    return read_prompt("citation-request.md")
+
+
+@dataclass
+class CitationRequest:
+    """Whether this user turn has carried the citation reminder yet.
+
+    The citation contract lives in the system prompt; this is the nudge that
+    rides on the first tool result of a turn whose output has to be cited.
+    """
+
+    reminder: str = field(default_factory=citation_reminder_text)
+    requested: bool = False
+
+    def add_request(self, result: ContentToolResult) -> ContentToolResult:
+        """Add the reminder to ``result``, unless this turn has asked already.
+
+        An errored result passes through without spending the request: the
+        model is sent the error rather than the value, so a reminder added to
+        the value would never arrive.
+        """
+        if self.requested or result.error is not None:
+            return result
+        self.requested = True
+        result.value = _with_reminder(result.value, self.reminder)
+        return result
+
+    def reset(self) -> None:
+        """Start a new user turn, so the next eligible result asks again."""
+        self.requested = False
+
+
+def _with_reminder(value: Any, reminder: str) -> Any:
+    if isinstance(value, str):
+        return f"{value}\n\n{reminder}"
+    part = ContentText(text=reminder)
+    if isinstance(value, list):
+        return [*value, part]
+    # A tool result can hold something that is neither: it becomes the first
+    # part rather than being reformatted to make room for the reminder.
+    return [value, part]
+
+
+def turn_has_user_message(turn: Turn) -> bool:
+    """Whether a turn asks something new, rather than continuing the tool loop.
+
+    A turn of nothing but tool results is the same question still running, so
+    the reminder stays spent until the person says something.
+    """
+    return any(not isinstance(content, ContentToolResult) for content in turn.contents)

@@ -30,6 +30,14 @@ class Backend(Protocol):
 
     def quote(self, table_id: TableId) -> str: ...
 
+    def columns(self, table_id: TableId) -> list[dict[str, Any]]:
+        """A relation's columns, in the shape a catalog listing reports them.
+
+        For the backends a warehouse catalog never describes, since there the
+        listing itself already carries the columns.
+        """
+        ...
+
     def dialect(self) -> str: ...
 
     def inspector(self) -> Callable[[TableId], bool] | None:
@@ -65,8 +73,14 @@ class DuckDBBackend:
         return [row[0] for row in rows]
 
     def quote(self, table_id: TableId) -> str:
-        parts = [table_id.schema, table_id.table] if table_id.schema else [table_id.table]
-        return ".".join(quote_identifier(part) for part in parts)
+        return ".".join(quote_identifier(part) for part in table_id.parts)
+
+    def columns(self, table_id: TableId) -> list[dict[str, Any]]:
+        # A zero-row select, because the cursor description carries DuckDB's
+        # own type names and no round trip to a metadata table is needed.
+        cursor = self._con.execute(f"SELECT * FROM {self.quote(table_id)} LIMIT 0")
+        description = cursor.description or ()
+        return [{"column": name, "type": str(kind)} for name, kind, *_ in description]
 
     def dialect(self) -> str:
         return "duckdb"
@@ -96,9 +110,31 @@ class EngineBackend:
     def quote(self, table_id: TableId) -> str:
         preparer = self._engine.dialect.identifier_preparer
         quoted = preparer.quote(table_id.table)
-        if table_id.schema:
-            return f"{preparer.quote_schema(table_id.schema)}.{quoted}"
-        return quoted
+        if table_id.schema is None:
+            return quoted
+        # quote_schema() is given one component at a time: handed
+        # "ANALYTICS.PUBLIC" it produces one identifier containing a dot.
+        outer = ".".join(
+            preparer.quote_schema(part)
+            for part in (table_id.catalog, table_id.schema)
+            if part is not None
+        )
+        return f"{outer}.{quoted}"
+
+    def columns(self, table_id: TableId) -> list[dict[str, Any]]:
+        inspector = sqlalchemy.inspect(self._engine)
+        # SQLAlchemy takes every level above the table as one dotted
+        # `schema`, so a catalog is joined onto it rather than dropped.
+        outer = ".".join(table_id.parts[:-1])
+        return [
+            {
+                "column": column["name"],
+                "type": str(column["type"]),
+                "nullable": column.get("nullable"),
+                "description": column.get("comment"),
+            }
+            for column in inspector.get_columns(table_id.table, schema=outer or None)
+        ]
 
     def dialect(self) -> str:
         return self._engine.dialect.name
@@ -107,6 +143,9 @@ class EngineBackend:
         inspector = sqlalchemy.inspect(self._engine)
 
         def exists(table_id: TableId) -> bool:
-            return inspector.has_table(table_id.table, schema=table_id.schema)
+            # SQLAlchemy takes every level above the table as one dotted
+            # `schema`, so a catalog is joined onto it rather than dropped.
+            outer = ".".join(table_id.parts[:-1])
+            return inspector.has_table(table_id.table, schema=outer or None)
 
         return exists

@@ -24,16 +24,66 @@ test_that("derive_provenance_tag matches the shared truth table", {
   }
 })
 
+test_that("collect_appended_tags matches the shared fixture", {
+  cases <- shared_fixture("provenance")$collect_appended_tags$cases
+  # An empty fixture would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    turns <- lapply(case$turns, function(turn) {
+      contents <- lapply(turn$contents, function(content) {
+        if (content$type == "text") {
+          return(ellmer::ContentText(text = content$text))
+        }
+        ellmer::ContentToolResult(
+          value = "42",
+          request = NULL,
+          extra = drop_nulls(list(commons_tag = content$tag))
+        )
+      })
+      if (turn$role == "assistant") {
+        ellmer::AssistantTurn(contents = contents)
+      } else {
+        ellmer::UserTurn(contents = contents)
+      }
+    })
+
+    # `skip` counts the turns present when the exchange began; from_index is
+    # 1-based here and 0-based in Python.
+    expect_identical(
+      collect_appended_tags(turns, from_index = case$skip + 1),
+      as.character(unlist(case$expected)),
+      info = case$name
+    )
+  }
+})
+
+test_that("collect_appended_tags keeps a tag value that is not a valid tag", {
+  # Deliberately per-language, so the fixture does not pin it: R returns an
+  # unreadable tag at collection and Python drops it; derive_provenance_tag
+  # ignores anything but A and B either way.
+  turns <- list(
+    ellmer::UserTurn(
+      contents = list(
+        ellmer::ContentToolResult(
+          value = "1",
+          request = NULL,
+          extra = list(commons_tag = "Z")
+        ),
+        ellmer::ContentToolResult(
+          value = "2",
+          request = NULL,
+          extra = list(commons_tag = "B")
+        )
+      )
+    )
+  )
+
+  expect_identical(collect_appended_tags(turns, from_index = 1L), c("Z", "B"))
+})
+
 test_that("provenance_display uses R display copy", {
   display <- shared_fixture("provenance")$provenance_display$tags
-  display$A$body <- paste(
-    "This answer comes from a trusted calculation defined by",
-    "your data team."
-  )
-  display$C$body <- paste(
-    "This answer was not produced by a trusted calculation and has",
-    "no verified supporting citation. AI can be wrong."
-  )
   expect_setequal(names(display), names(provenance_display))
 
   for (tag in names(display)) {
@@ -46,31 +96,47 @@ test_that("provenance_display uses R display copy", {
   }
 })
 
-test_that("provenance_aside renders A and C, nothing for B/NA", {
+test_that("provenance_aside matches the shared fixture", {
+  cases <- shared_fixture("provenance")$provenance_aside$cases
+  # An empty fixture would make the loop below vacuously succeed.
+  expect_gt(length(cases), 0)
+
+  for (case in cases) {
+    tag <- case$tag %||% NA_character_
+    aside <- provenance_aside(tag, include_cited = case$include_cited)
+
+    if (!isTRUE(case$emits)) {
+      expect_identical(aside, "", info = case$name)
+      next
+    }
+    entry <- provenance_display[[tag]]
+    expect_match(
+      aside,
+      paste0('^<shiny-aside label="', entry$label, '"'),
+      info = case$name
+    )
+    expect_match(aside, entry$body, fixed = TRUE, info = case$name)
+  }
+})
+
+test_that("the rendered marker carries its icon from the asset bundle", {
+  # Per-package, so out of the shared fixture: the URL is served by this
+  # package's own dependency, and the Python renderer omits it until its UI
+  # ships one.
   trusted <- provenance_aside("A")
   untrusted <- provenance_aside("C")
 
-  expect_match(trusted, '^<shiny-aside label="Verified answer"')
   expect_match(
     trusted,
     paste0('icon="', commons_icon_url("trusted-icon.svg"), '"'),
     fixed = TRUE
   )
-  expect_no_match(trusted, "data:image", fixed = TRUE)
-  expect_match(trusted, "<commons-provenance-info", fixed = TRUE)
-
-  expect_match(untrusted, '^<shiny-aside label="Untrusted"')
   expect_match(
     untrusted,
     paste0('icon="', commons_icon_url("warning-icon.svg"), '"'),
     fixed = TRUE
   )
+  expect_no_match(trusted, "data:image", fixed = TRUE)
   expect_no_match(untrusted, "data:image", fixed = TRUE)
-
-  expect_identical(provenance_aside("B"), "")
-  expect_identical(provenance_aside(NA_character_), "")
-
-  cited <- provenance_aside("B", include_cited = TRUE)
-  expect_match(cited, '^<shiny-aside label="Cited"')
-  expect_match(cited, "verified against a trusted source", fixed = TRUE)
+  expect_match(trusted, "<commons-provenance-info", fixed = TRUE)
 })

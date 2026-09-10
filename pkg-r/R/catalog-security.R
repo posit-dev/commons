@@ -111,16 +111,60 @@ catalog_check_session_snapshot <- function(
 ) {
   current <- catalog_session_snapshot(con, call = call)
   if (!identical(current, snapshot)) {
+    fields <- catalog_session_changed_fields(current, snapshot)
+    # cli reads a character vector out as a list, commas and "and" included.
+    changed <- unname(catalog_session_field_names[fields])
+    if (length(changed) == 0L) {
+      changed <- "identity"
+    }
     cli::cli_abort(
       paste(
-        "The connection principal, active role, or namespace changed after",
-        "catalog discovery; rebuild the data source."
+        "The connection {changed} changed after catalog discovery;",
+        "rebuild the data source."
       ),
       class = "commons_catalog_session_changed",
       call = call
     )
   }
   invisible(snapshot)
+}
+
+# How each snapshot field is worded in the refusal.
+catalog_session_field_names <- c(
+  principal = "principal",
+  role = "active role",
+  secondary_roles = "secondary roles",
+  catalog = "catalog",
+  schema = "schema"
+)
+
+# Name what moved rather than everything the snapshot compares: Databricks
+# has no role, so a fixed list would name a field that backend never had.
+catalog_session_changed_fields <- function(current, snapshot) {
+  # A connection reporting no session at all has no field that moved, and
+  # naming all of them would be the same mistake as naming a role Databricks
+  # never had. The refusal falls back to the identity as a whole.
+  if (is.null(current)) {
+    return(character())
+  }
+  fields <- names(catalog_session_field_names)
+  fields[vapply(
+    fields,
+    function(field) {
+      !identical(
+        catalog_session_field(current, field),
+        catalog_session_field(snapshot, field)
+      )
+    },
+    logical(1)
+  )]
+}
+
+catalog_session_field <- function(snapshot, field) {
+  if (field %in% c("catalog", "schema")) {
+    return(snapshot$namespace[[field]])
+  }
+  snapshot[[field]]
 }
 
 catalog_probe_relation <- function(con, id) {
@@ -150,13 +194,28 @@ catalog_probe_sql <- function(con, sql, bindings = list()) {
   )
 }
 
+# What the driver complained about, without the statement that caused it.
+# The probe names the relation, so classifying the whole message would let a
+# table decide its own answer: a permission_denied_events that is merely
+# absent would read as a refusal, and be cached as one. odbc appends the
+# statement on a <SQL> line.
+catalog_driver_message <- function(err) {
+  driver <- err$parent %||% err
+  sub("\n?<SQL> '.*", "", conditionMessage(driver))
+}
+
 catalog_access_error_kind <- function(err) {
   sqlstate <- toupper(as.character(
-    err$sqlstate %||% err$state %||% err$parent$sqlstate %||% ""
+    err$sqlstate %||%
+      err$state %||%
+      err$parent$sqlstate %||%
+      err$parent$state %||%
+      ""
   ))
   if (length(sqlstate) != 1L || is.na(sqlstate)) {
     sqlstate <- ""
   }
+  message <- catalog_driver_message(err)
   if (
     startsWith(sqlstate, "28") ||
       identical(sqlstate, "42501") ||
@@ -164,10 +223,10 @@ catalog_access_error_kind <- function(err) {
         paste(
           "not authorized|insufficient privilege|permission denied|",
           "access denied|does not have.*privilege|not permitted|",
-          "permission_denied|sql access control error",
+          "permission_denied|sql access control error|not allowed to access",
           sep = ""
         ),
-        conditionMessage(err),
+        message,
         ignore.case = TRUE
       )
   ) {
@@ -183,7 +242,7 @@ catalog_access_error_kind <- function(err) {
           "network|socket|http (429|503)|unexpected eof",
           sep = ""
         ),
-        conditionMessage(err),
+        message,
         ignore.case = TRUE
       )
   ) {
@@ -220,10 +279,16 @@ catalog_require_queryable_relations <- function(
       logical(1)
     )]
   }
-  if (length(missing)) {
-    catalog_abort_missing_relations(missing, call = call)
-  }
+  # Every relation the listing did report is probed before anything is
+  # raised, so a name the caller got wrong and a relation they cannot read
+  # are found in one pass rather than one round trip each.
+  # Only the first refusal is raised, so only the first is kept: a selection
+  # may run to thousands of relations.
+  refused <- NULL
   for (i in seq_along(registry$ids)) {
+    if (registry$labels[[i]] %in% missing) {
+      next
+    }
     probe <- catalog_probe_relation(con, registry$ids[[i]])
     if (identical(probe$state, "queryable")) {
       next
@@ -235,10 +300,15 @@ catalog_require_queryable_relations <- function(
       missing <- c(missing, registry$labels[[i]])
       next
     }
-    catalog_abort_access(probe, registry$labels[[i]], call = call)
+    if (is.null(refused)) {
+      refused <- list(probe = probe, label = registry$labels[[i]])
+    }
   }
   if (length(missing)) {
     catalog_abort_missing_relations(missing, call = call)
+  }
+  if (!is.null(refused)) {
+    catalog_abort_access(refused$probe, refused$label, call = call)
   }
   invisible(registry)
 }

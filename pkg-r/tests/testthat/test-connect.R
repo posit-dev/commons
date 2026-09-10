@@ -28,6 +28,74 @@ test_that("is_connect_runtime detects Connect env vars", {
   expect_true(is_connect_runtime())
 })
 
+test_that("connect_vanity_guid matches the full vanity URL", {
+  httr2::local_mocked_responses(function(req) {
+    url <- httr2::url_parse(req$url)
+    expect_equal(url$path, "/__api__/v1/search/content")
+    expect_equal(url$query$q, "my-agent")
+    expect_equal(url$query$include, "vanity_url")
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(
+        list(
+          results = list(
+            list(
+              guid = "wrong-guid",
+              vanity_url = "https://connect.example.com/my-agent-test/"
+            ),
+            list(
+              guid = "right-guid",
+              vanity_url = "https://connect.example.com/my-agent/"
+            )
+          ),
+          total = 1L
+        ),
+        auto_unbox = TRUE
+      )),
+      request = req
+    )
+  })
+
+  guid <- connect_vanity_guid(
+    list(server = "https://connect.example.com", api_key = "key"),
+    "https://connect.example.com/content/my-agent",
+    "my-agent"
+  )
+
+  expect_equal(guid, "right-guid")
+})
+
+test_that("connect_vanity_guid explains an inaccessible URL", {
+  httr2::local_mocked_responses(function(req) {
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(
+        list(
+          results = list(),
+          total = 1L
+        ),
+        auto_unbox = TRUE
+      )),
+      request = req
+    )
+  })
+
+  expect_snapshot(
+    connect_vanity_guid(
+      list(server = "https://connect.example.com", api_key = "key"),
+      "https://connect.example.com/content/missing",
+      "missing"
+    ),
+    error = TRUE
+  )
+})
+
 test_that("connect_trace_lines pages until the total is exhausted", {
   pages <- list(
     c("line1", "line2"),

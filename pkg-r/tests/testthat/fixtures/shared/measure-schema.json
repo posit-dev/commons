@@ -1,0 +1,179 @@
+{
+  "description": "The block search_pool shows the model for one measure: a heading, the description, an optional sources line naming the data sources the measure takes, and the model-visible arguments with their type, requiredness, and description. Both packages must emit the same bytes, because this text is part of what the agent reads. Each case builds a measure from `measure` and renders it with `source_names`; `heading` overrides the default heading when present.",
+  "measure_schema_text": {
+    "cases": [
+      {
+        "name": "a measure without arguments renders heading and description only",
+        "measure": {
+          "name": "order_count",
+          "description": "Count of orders.",
+          "arguments": [],
+          "injected": []
+        },
+        "source_names": [],
+        "expected": "### order_count\nCount of orders."
+      },
+      {
+        "name": "arguments render with type, requiredness, and description",
+        "measure": {
+          "name": "order_count",
+          "description": "Count of orders.",
+          "arguments": [
+            {
+              "name": "region",
+              "type": "enum",
+              "values": ["EMEA", "AMER"],
+              "required": true,
+              "description": "The sales region."
+            },
+            {
+              "name": "revenue_under",
+              "type": "number",
+              "required": false,
+              "default": 0,
+              "description": "Cap."
+            }
+          ],
+          "injected": []
+        },
+        "source_names": [],
+        "expected": "### order_count\nCount of orders.\n\narguments:\n  - region (one of {EMEA, AMER}, required) The sales region.\n  - revenue_under (number, optional) Cap."
+      },
+      {
+        "name": "the sources line names only injected arguments that match a source",
+        "measure": {
+          "name": "region_revenue",
+          "description": "Total revenue for a region.",
+          "arguments": [
+            {
+              "name": "region",
+              "type": "string",
+              "required": true,
+              "description": "The sales region."
+            }
+          ],
+          "injected": ["warehouse", "cache"]
+        },
+        "source_names": ["warehouse", "finance"],
+        "expected": "### region_revenue\nTotal revenue for a region.\n\nsources: warehouse\narguments:\n  - region (string, required) The sales region."
+      },
+      {
+        "name": "no sources line when the agent has a single unnamed source",
+        "measure": {
+          "name": "region_revenue",
+          "description": "Total revenue for a region.",
+          "arguments": [
+            {
+              "name": "region",
+              "type": "string",
+              "required": true,
+              "description": "The sales region."
+            }
+          ],
+          "injected": ["warehouse", "cache"]
+        },
+        "source_names": [],
+        "expected": "### region_revenue\nTotal revenue for a region.\n\narguments:\n  - region (string, required) The sales region."
+      },
+      {
+        "name": "a sources line without arguments",
+        "measure": {
+          "name": "warehouse_health",
+          "description": "Warehouse status.",
+          "arguments": [],
+          "injected": ["warehouse"]
+        },
+        "source_names": ["warehouse", "finance"],
+        "expected": "### warehouse_health\nWarehouse status.\n\nsources: warehouse"
+      },
+      {
+        "name": "a string array names its item type",
+        "measure": {
+          "name": "tagged_orders",
+          "description": "Orders by tag.",
+          "arguments": [
+            {
+              "name": "tags",
+              "type": "array",
+              "items": {"type": "string"},
+              "required": true,
+              "description": "Tags to match."
+            }
+          ],
+          "injected": []
+        },
+        "source_names": [],
+        "expected": "### tagged_orders\nOrders by tag.\n\narguments:\n  - tags (array of {string}, required) Tags to match."
+      },
+      {
+        "name": "an enum array lists its vocabulary",
+        "measure": {
+          "name": "regional_orders",
+          "description": "Orders by region.",
+          "arguments": [
+            {
+              "name": "regions",
+              "type": "array",
+              "items": {"type": "enum", "values": ["EMEA", "AMER"]},
+              "required": false,
+              "default": [],
+              "description": "Regions to include."
+            }
+          ],
+          "injected": []
+        },
+        "source_names": [],
+        "expected": "### regional_orders\nOrders by region.\n\narguments:\n  - regions (array of {EMEA, AMER}, optional) Regions to include."
+      },
+      {
+        "name": "integer and boolean arguments name their type",
+        "measure": {
+          "name": "recent_orders",
+          "description": "Recent orders.",
+          "arguments": [
+            {
+              "name": "days",
+              "type": "integer",
+              "required": true,
+              "description": "How many days back."
+            },
+            {
+              "name": "include_cancelled",
+              "type": "boolean",
+              "required": false,
+              "default": false,
+              "description": "Include cancelled orders."
+            }
+          ],
+          "injected": []
+        },
+        "source_names": [],
+        "expected": "### recent_orders\nRecent orders.\n\narguments:\n  - days (integer, required) How many days back.\n  - include_cancelled (boolean, optional) Include cancelled orders."
+      },
+      {
+        "name": "an explicit heading replaces the measure name",
+        "measure": {
+          "name": "order_count",
+          "description": "Count of orders.",
+          "arguments": [],
+          "injected": []
+        },
+        "source_names": [],
+        "heading": "order_count (measure)",
+        "expected": "### order_count (measure)\nCount of orders."
+      },
+      {
+        "name": "an explicit empty heading is rendered verbatim, not treated as absent",
+        "measure": {
+          "name": "order_count",
+          "description": "Count of orders.",
+          "arguments": [],
+          "injected": []
+        },
+        "source_names": [],
+        "heading": "",
+        "expected": "### \nCount of orders."
+      }
+    ]
+  }
+}

@@ -18,8 +18,10 @@ commons(
 }
 \arguments{
 \item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
-\code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}. A system prompt already set on the client is
-ignored, with a warning; use \code{instructions} to add to commons' prompt.}
+\code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}. For best results, enable thinking when
+supported by the selected provider and model. A system prompt already set
+on the client is ignored, with a warning; use \code{instructions} to add to
+commons' prompt.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
@@ -49,16 +51,14 @@ best-effort R guardrails with
 \code{options(commons.allow_unsafe_fallback = TRUE)}. These guardrails
 are not a security boundary.}
 
-\item{log}{Whether to capture conversation trajectories with OpenTelemetry
-(default \code{FALSE}). When \code{TRUE}, commons enables GenAI message-content
-capture in \pkg{ellmer} and tags each turn's spans with a conversation
-id; the spans go wherever OTel is configured to export. On Posit Connect,
-traces land in Connect's observability store (browsable in its Trace
-Viewer); commons switches on the content's \emph{Content Observability}
-setting itself when needed, though capture only starts once the content
-restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
-automatically when no exporter is set up. Read trajectories back with
-\code{\link[=trajectory_read]{trajectory_read()}}.}
+\item{log}{Whether to request conversation trajectory capture with
+OpenTelemetry (default \code{FALSE}). When \code{TRUE}, commons checks the tracing
+setup and warns with setup steps when it is incomplete.
+Set \code{OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true} before R
+starts so \pkg{ellmer} includes message content. On Posit Connect, a server
+administrator must set \code{OpenTelemetry.Enabled = true} and
+\code{OpenTelemetry.AllowContentInstrumentation = true}. Read trajectories back
+with \code{\link[=trajectory_read]{trajectory_read()}}.}
 
 \item{share_with}{An optional character vector of Connect usernames granted
 access to this content's trajectories when running on Posit Connect.
@@ -83,6 +83,38 @@ and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_theme]
 \code{\link[=commons_server]{commons_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
 to use the agent as a vitals solver.
 }
+\section{Cache pre-warming}{
+
+A commons agent builds its context search index and downloads uncached pins
+the first time it needs them. \code{\link[=commons_server]{commons_server()}} and \code{\link[=commons_app]{commons_app()}} call the
+agent's \code{prewarm()} method automatically during post-startup idle time.
+
+To warm the caches before deployment, call \code{agent$prewarm()} in a
+pre-deploy script. The context index is cached on disk once per version of
+the context documents; pin downloads populate the local pins cache.
+
+To ship a pre-built context index with an app, configure a directory inside
+the app in both the pre-deploy script and the deployed app, then prewarm the
+agent before deploying:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{options(commons.context_cache = "commons-cache")
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_sources = data_source(sales = sales)
+)
+agent$prewarm()
+}\if{html}{\out{</div>}}
+
+Do not use \verb{app_cache/} for this workflow because rsconnect excludes it from
+deployed bundles. Without explicit configuration, commons uses Connect's
+persistent content data directory when available, an \verb{app_cache/} directory
+beside hosted apps, or the per-user cache directory. Set the cache directory
+with \code{options(commons.context_cache = "path/to/dir")} or the
+\code{COMMONS_CONTEXT_CACHE} environment variable. Set the option to \code{FALSE} to
+disable persistence. The cache is capped at 256 MB with least-recently-used
+eviction; change the cap with \code{options(commons.context_cache_max_size)}.
+}
+
 \section{Agent tools}{
 
 Depending on its semantic layer, context layer, and data sources, a commons

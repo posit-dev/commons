@@ -12,13 +12,16 @@
 #' * A `pins` board, e.g. [pins::board_connect()], is read into the same
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
-#'   each pin is downloaded only when its table is first used.
-#'   [commons_server()] starts a background process right after startup that
-#'   downloads the remaining pins into the local pins cache, so a first use
-#'   typically only reads an already-downloaded file. A table reflects the pin's
-#'   value at first use and is not refreshed for the lifetime of the data
-#'   source; if a pin can't be read (e.g. a network failure), the error surfaces
-#'   at that first use and the read is retried on the next one.
+#'   each pin is downloaded only when its table is first used. Calling the
+#'   agent's `prewarm()` method (see [commons()]) starts a background process
+#'   that downloads the remaining pins into the local
+#'   pins cache, so a first use typically only reads an already-downloaded
+#'   file. Since the pins cache is on disk, `prewarm()` can also run
+#'   ahead of deployment to warm the cache the deployed app will read. A
+#'   table reflects the pin's value at first use and is not refreshed for
+#'   the lifetime of the data source; if a pin can't be read (e.g. a network
+#'   failure), the error surfaces at that first use and the read is retried
+#'   on the next one.
 #'
 #' @param ... A single DBI connection, a single `pins` board, or named data
 #'   frames to register as tables. When passing data frames, each name becomes
@@ -26,11 +29,11 @@
 #' @param tables Which tables to expose, used when a connection or a board is
 #'   supplied.
 #'
-#'   For a connection, a character vector of table names, schema-qualified
-#'   strings like `"schema.table"`, or `DBI::Id` objects. Defaults to every
-#'   table returned by [DBI::dbListTables()]. Strings containing dots are
-#'   interpreted as schema-qualified names; use `DBI::Id(table = "a.b")` for
-#'   literal table names containing dots. For Snowflake and Databricks
+#'   For a connection, a character vector of table names, qualified strings
+#'   like `"schema.table"` or `"catalog.schema.table"`, or `DBI::Id` objects.
+#'   Defaults to every table returned by [DBI::dbListTables()]. Strings
+#'   containing dots are interpreted as qualified names, at most three parts;
+#'   use `DBI::Id(table = "a.b")` for literal table names containing dots. For Snowflake and Databricks
 #'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
 #'   table and view in that namespace. Leaving `tables` unset selects the
 #'   current schema. A Databricks `hive_metastore` selection must include a
@@ -78,10 +81,11 @@
 #' data frames, commons additionally disables extension loading and filesystem
 #' access. These are safeguards, not a sandbox: when you supply your own
 #' connection, still open it in read-only mode where the backend supports it.
-#' Snowflake and Databricks sources snapshot the principal, active role, and
-#' namespace at creation, then reject catalog access and trusted calculations
-#' after those values change. Authored and native semantic material is exposed
-#' only after a zero-row query succeeds for the current principal.
+#' Snowflake and Databricks sources snapshot the principal and namespace at
+#' creation, and Snowflake its active and secondary roles as well, then reject
+#' catalog access and trusted calculations after any of those change. Authored
+#' and native semantic material is exposed only after a zero-row query
+#' succeeds for the current principal.
 #'
 #' @return A `commons_data_source` R6 object. Its internals are private and may
 #'   change without notice.
@@ -455,7 +459,7 @@ source_ensure_tables <- function(source, tables, call = rlang::caller_env()) {
   for (table in todo) {
     pin <- pending$pins[[table]]
     value <- tryCatch(
-      pins::pin_read(pending$board, pin),
+      with_pin_lock(pending$board, pin, pins::pin_read(pending$board, pin)),
       error = function(err) {
         cli::cli_abort(
           "Failed to read pin {.val {pin}} for table {.val {table}}.",
@@ -484,6 +488,30 @@ source_ensure_all <- function(source, call = rlang::caller_env()) {
   source_ensure_tables(source, state$tables, call = call)
 }
 
+# pins has no cache locking, so a background prewarm downloading a pin can
+# race a first-use pin_read() of the same pin and leave a truncated cache
+# entry. Both sides take an exclusive lock keyed by the board's cache path
+# and pin name, so the reader waits out an in-flight download instead of
+# duplicating it.
+with_pin_lock <- function(board, pin, expr) {
+  # `cache` is a pins implementation detail (verified against pins 1.4.x);
+  # the guards below fail open to an unlocked read if it ever goes away.
+  cache <- board$cache
+  # Boards without a download cache (e.g. board_folder) never download, so
+  # there is no race to guard against.
+  if (is.null(cache) || is.na(cache) || !nzchar(cache)) {
+    return(force(expr))
+  }
+  # Sanitized names can collide ("a/b" vs "a_b"), which merely serializes
+  # two pins on one lock. Lock files are never removed, but they're empty
+  # and there is at most one per pin.
+  name <- gsub("[^A-Za-z0-9._-]", "_", pin)
+  dir.create(cache, recursive = TRUE, showWarnings = FALSE)
+  lock <- filelock::lock(file.path(cache, paste0("commons-", name, ".lock")))
+  on.exit(filelock::unlock(lock), add = TRUE)
+  force(expr)
+}
+
 # Warm the pins on-disk cache in a background process rather than loading into
 # DuckDB: dbWriteTable() must run in this process (where the DuckDB lives) and
 # would block every question asked during the load. The board is serialized to
@@ -509,7 +537,11 @@ source_prewarm <- function(source) {
   pending$process <- tryCatch(
     callr::r_bg(
       prewarm_downloads,
-      args = list(board = pending$board, pins = unique(unname(pending$pins))),
+      args = list(
+        board = pending$board,
+        pins = unique(unname(pending$pins)),
+        lock = with_pin_lock
+      ),
       supervise = TRUE
     ),
     error = function(err) NULL
@@ -522,13 +554,13 @@ source_prewarm <- function(source) {
 # functions in run-r.R). Best-effort: a failing pin is skipped so it can't
 # stop the rest from warming. The per-pin result is unused in production but
 # makes tests deterministic.
-prewarm_downloads <- function(board, pins) {
+prewarm_downloads <- function(board, pins, lock = with_pin_lock) {
   vapply(
     pins,
     function(pin) {
       tryCatch(
         {
-          pins::pin_download(board, pin)
+          lock(board, pin, pins::pin_download(board, pin))
           TRUE
         },
         error = function(err) FALSE
@@ -870,22 +902,33 @@ table_entry_id <- function(table, call = rlang::caller_env()) {
     )
   }
 
+  # strsplit() drops a trailing empty piece, so "orders." splits to "orders";
+  # check the trailing dot separately rather than accept it as a bare name.
   parts <- strsplit(table, ".", fixed = TRUE)[[1]]
-  if (any(parts == "")) {
+  if (any(parts == "") || endsWith(table, ".")) {
     cli::cli_abort(
       "Schema-qualified entries in {.arg tables} must not contain empty name components.",
       call = call
     )
   }
 
+  if (length(parts) > 3) {
+    cli::cli_abort(
+      c(
+        "A table name has at most three parts, catalog.schema.table: {.val {table}}.",
+        i = "Spell a name containing a dot as a {.cls DBI::Id}."
+      ),
+      call = call
+    )
+  }
   if (length(parts) == 1) {
     return(DBI::Id(table = table))
   }
+  if (length(parts) == 2) {
+    return(DBI::Id(schema = parts[[1]], table = parts[[2]]))
+  }
 
-  DBI::Id(
-    schema = paste(parts[-length(parts)], collapse = "."),
-    table = parts[[length(parts)]]
-  )
+  DBI::Id(catalog = parts[[1]], schema = parts[[2]], table = parts[[3]])
 }
 
 table_id_label <- function(id, call = rlang::caller_env()) {
@@ -940,7 +983,7 @@ check_table_ids_exist <- function(con, table_registry, call = rlang::caller_env(
 
   exists <- vapply(
     table_registry$ids,
-    function(id) isTRUE(DBI::dbExistsTable(con, id)),
+    function(id) isTRUE(suppressMessages(DBI::dbExistsTable(con, id))),
     logical(1)
   )
   missing <- table_registry$labels[!exists]

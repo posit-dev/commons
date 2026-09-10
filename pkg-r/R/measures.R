@@ -336,14 +336,21 @@ arg_schema_line <- function(name, type) {
   detail <- switch(
     kind,
     enum = sprintf("one of {%s}", paste(type_values(type), collapse = ", ")),
-    array = sprintf(
-      "array of {%s}",
-      paste(type_values(S7::prop(type, "items")), collapse = ", ")
-    ),
+    array = sprintf("array of {%s}", array_items_label(S7::prop(type, "items"))),
     kind
   )
   desc <- S7::prop(type, "description") %||% ""
   sprintf("  - %s (%s, %s) %s", name, detail, required, desc)
+}
+
+# An array's items can be an enum, whose vocabulary is worth listing, or a
+# basic type, which has no `values` property to read.
+array_items_label <- function(items) {
+  if (identical(type_kind(items), "enum")) {
+    paste(type_values(items), collapse = ", ")
+  } else {
+    type_kind(items)
+  }
 }
 
 # The provider sees only `call_measure`, so measure arguments are checked here.

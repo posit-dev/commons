@@ -17,16 +17,48 @@ test_that("log = TRUE warns without the otel package", {
   expect_false(.res)
 })
 
+test_that("the content instrumentation warning reflects Connect's setting", {
+  skip_on_cran()
+  withr::local_envvar(
+    CONNECT_SERVER = "https://connect.example.com",
+    CONNECT_API_KEY = "key",
+    CONNECT_CONTENT_GUID = "guid"
+  )
+  settings <- list(allow_content_instrumentation = FALSE)
+  httr2::local_mocked_responses(function(req) {
+    expect_equal(httr2::url_parse(req$url)$path, "/__api__/server_settings")
+    if (inherits(settings, "condition")) {
+      return(httr2::new_response(
+        "GET", req$url, 500L, list(), raw(), request = req
+      ))
+    }
+    httr2::new_response(
+      "GET",
+      req$url,
+      200L,
+      list(`Content-Type` = "application/json"),
+      charToRaw(jsonlite::toJSON(settings, auto_unbox = TRUE)),
+      request = req
+    )
+  })
+
+  expect_snapshot(warn_if_content_instrumentation_disabled())
+  settings <- list(allow_content_instrumentation = TRUE)
+  expect_no_warning(warn_if_content_instrumentation_disabled())
+
+  settings <- list()
+  expect_no_warning(warn_if_content_instrumentation_disabled())
+
+  settings <- rlang::error_cnd("unavailable")
+  expect_no_warning(warn_if_content_instrumentation_disabled())
+})
+
 test_that("log = TRUE warns when tracing stays disabled locally", {
   skip_if_not_installed("otel")
   withr::local_envvar(
     POSIT_PRODUCT = NA,
     CONNECT_CONTENT_GUID = NA,
     COMMONS_TRACES_DIR = "/tmp/commons-traces"
-  )
-  local_mocked_bindings(
-    enable_content_capture = function() NULL,
-    enable_local_tracing = function() invisible(FALSE)
   )
 
   expect_snapshot(.res <- new_trajectory_tracing(TRUE))
@@ -37,17 +69,12 @@ test_that("log = TRUE points at Content Observability on Connect", {
   skip_if_not_installed("otel")
   withr::local_envvar(CONNECT_CONTENT_GUID = "guid")
   clear_observability_attempted()
-  state <- new.env()
-  state$local_enabled <- FALSE
   local_mocked_bindings(
-    enable_content_capture = function() NULL,
-    enable_local_tracing = function() state$local_enabled <- TRUE,
     connect_client = function(...) rlang::abort("no api key")
   )
 
   expect_snapshot(.res <- new_trajectory_tracing(TRUE))
   expect_false(.res)
-  expect_false(state$local_enabled)
 })
 
 test_that("tracing disabled on Connect flips the observability setting on", {
@@ -57,7 +84,6 @@ test_that("tracing disabled on Connect flips the observability setting on", {
   state <- new.env()
   state$patched <- 0
   local_mocked_bindings(
-    enable_content_capture = function() NULL,
     connect_client = function(...) list(server = "s", api_key = "k"),
     connect_content = function(client, guid) list(otel_enabled = FALSE),
     connect_enable_otel = function(client, guid) {
@@ -82,7 +108,6 @@ test_that("an already-on observability setting warns about the restart", {
   state <- new.env()
   state$patched <- 0
   local_mocked_bindings(
-    enable_content_capture = function() NULL,
     connect_client = function(...) list(server = "s", api_key = "k"),
     connect_content = function(client, guid) list(otel_enabled = TRUE),
     connect_enable_otel = function(client, guid) {
@@ -94,40 +119,6 @@ test_that("an already-on observability setting warns about the restart", {
   expect_snapshot(.res <- new_trajectory_tracing(TRUE))
   expect_false(.res)
   expect_equal(state$patched, 0)
-})
-
-test_that("enable_local_tracing configures the file exporter when unset", {
-  skip_if_not_installed("otelsdk")
-  dir <- withr::local_tempdir()
-  withr::local_envvar(
-    OTEL_TRACES_EXPORTER = NA,
-    OTEL_EXPORTER_OTLP_TRACES_FILE = NA,
-    COMMONS_TRACES_DIR = dir
-  )
-  local_mocked_bindings(
-    reset_otel_tracer_provider = function() NULL,
-    refresh_ellmer_otel_cache = function() NULL
-  )
-
-  enable_local_tracing()
-
-  expect_equal(Sys.getenv("OTEL_TRACES_EXPORTER"), "otlp/file")
-  expect_equal(
-    Sys.getenv("OTEL_EXPORTER_OTLP_TRACES_FILE"),
-    file.path(dir, "trace-%N.jsonl")
-  )
-})
-
-test_that("enable_local_tracing respects an explicit exporter", {
-  withr::local_envvar(OTEL_TRACES_EXPORTER = "none")
-  reset <- FALSE
-  local_mocked_bindings(
-    reset_otel_tracer_provider = function() reset <<- TRUE
-  )
-
-  expect_false(enable_local_tracing())
-  expect_false(reset)
-  expect_equal(Sys.getenv("OTEL_TRACES_EXPORTER"), "none")
 })
 
 test_that("traces directory can come from COMMONS_TRACES_DIR", {
@@ -201,29 +192,49 @@ test_that("share_trajectory_access warns rather than errors on failure", {
   expect_snapshot(share_trajectory_access("jdoe"))
 })
 
-test_that("an explicit content-capture setting is respected", {
+test_that("an explicit content-capture opt-out is respected", {
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false")
-  expect_snapshot(.res <- enable_content_capture())
+  expect_snapshot(.res <- content_capture_enabled())
   expect_false(.res)
-  expect_equal(
-    Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
-    "false"
-  )
 
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
-  expect_no_warning(.res <- enable_content_capture())
-  expect_false(.res)
+  expect_true(content_capture_enabled())
 })
 
-test_that("content capture is enabled when unset", {
+test_that("missing content capture warns and uses the ellmer fallback", {
   withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
-  local_mocked_bindings(refresh_ellmer_otel_cache = function() NULL)
+  refreshed <- FALSE
+  local_mocked_bindings(
+    refresh_ellmer_otel_cache = function() {
+      refreshed <<- TRUE
+      TRUE
+    }
+  )
 
-  expect_true(enable_content_capture())
+  expect_snapshot(.res <- content_capture_enabled())
+  expect_true(.res)
+  expect_true(refreshed)
   expect_equal(
     Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
     "true"
   )
+})
+
+test_that("a missing ellmer fallback leaves content capture disabled", {
+  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA)
+  local_mocked_bindings(refresh_ellmer_otel_cache = function() FALSE)
+
+  expect_snapshot(.res <- content_capture_enabled())
+  expect_false(.res)
+  expect_identical(
+    Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"),
+    ""
+  )
+})
+
+test_that("the ellmer content-capture fallback still exists", {
+  skip_on_cran()
+  expect_true(is.function(asNamespace("ellmer")[["otel_cache_tracer"]]))
 })
 
 test_that("share_with grants wait for tracing to be live", {
@@ -232,7 +243,6 @@ test_that("share_with grants wait for tracing to be live", {
   state <- new.env()
   state$shared <- FALSE
   local_mocked_bindings(
-    enable_content_capture = function() NULL,
     enable_content_observability = function() NULL,
     share_trajectory_access = function(share_with) state$shared <- TRUE
   )
@@ -241,20 +251,6 @@ test_that("share_with grants wait for tracing to be live", {
 
   expect_false(.res)
   expect_false(state$shared)
-})
-
-# The tracing hacks reach into ellmer and otel internals and are written to
-# degrade silently if those internals change; fail loudly here instead so an
-# upgrade can't quietly stop trajectory capture.
-test_that("the internals the tracing hacks rely on still exist", {
-  skip_on_cran()
-  skip_if_not_installed("otel")
-
-  expect_true(is.function(asNamespace("ellmer")[["otel_cache_tracer"]]))
-
-  the <- asNamespace("otel")[["the"]]
-  expect_true(is.environment(the))
-  expect_true(exists("tracer_provider", envir = the, inherits = FALSE))
 })
 
 test_that("local_commons_span is a no-op without otel", {

@@ -1,0 +1,51 @@
+name: verify-shared-synced
+
+# The repository root holds the source for everything both packages share; each
+# package reads a committed copy, because neither can reach outside its own
+# directory. Fail when a copy no longer matches what the sync script produces.
+on:
+  push:
+    branches: [main]
+    paths:
+      - tests/shared/**
+      - prompts/**
+      - www/**
+      - pkg-r/tests/testthat/fixtures/shared/**
+      - pkg-r/inst/prompts/**
+      - pkg-r/inst/www/**
+      - pkg-py/src/commons/prompts/**
+      - pkg-py/src/commons/www/**
+      - scripts/sync-shared.sh
+      - .github/workflows/verify-shared-synced.yaml
+  pull_request:
+    paths:
+      - tests/shared/**
+      - prompts/**
+      - www/**
+      - pkg-r/tests/testthat/fixtures/shared/**
+      - pkg-r/inst/prompts/**
+      - pkg-r/inst/www/**
+      - pkg-py/src/commons/prompts/**
+      - pkg-py/src/commons/www/**
+      - scripts/sync-shared.sh
+      - .github/workflows/verify-shared-synced.yaml
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Re-run the sync
+        run: scripts/sync-shared.sh
+      - name: Fail when a committed copy is stale
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The synced copies do not match their sources at the repository root." >&2
+            echo "Run scripts/sync-shared.sh and commit the result." >&2
+            git --no-pager status --short
+            git --no-pager diff
+            exit 1
+          fi

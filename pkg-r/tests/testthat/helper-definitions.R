@@ -65,3 +65,42 @@ metrics_caller <- function(src = definitions_source(), store = NULL) {
     call_metrics_impl(registry, list(sales_db = src), store, ...)
   }
 }
+
+# Records from the shared definition-rendering fixture, in the two shapes
+# this package uses: a registry row and a table's definition list.
+fixture_definition <- function(key) {
+  record <- shared_fixture("definition-rendering")$records$values[[key]]
+  record <- record[!vapply(record, is.null, logical(1))]
+  for (field in intersect(definition_list_fields, names(record))) {
+    record[[field]] <- as.character(unlist(record[[field]]))
+  }
+  record
+}
+
+fixture_registry <- function(keys) {
+  rows <- lapply(keys, function(key) {
+    record <- fixture_definition(key)
+    row <- data.frame(
+      name = record$name,
+      table = record$table,
+      source = record$source,
+      stringsAsFactors = FALSE
+    )
+    for (field in definition_scalar_fields) {
+      row[[field]] <- record[[field]] %||% NA_character_
+    }
+    row$mixed_grain <- record$mixed_grain
+    for (field in definition_list_fields) {
+      row[[field]] <- I(list(record[[field]] %||% character()))
+    }
+    row
+  })
+  list(defs = do.call(rbind, rows))
+}
+
+# The fixture names why a query must be refused; the wording is this package's.
+definition_refusal_pattern <- c(
+  table_not_in_query = "does not appear in this query",
+  unknown_token = "No governed definition matches",
+  ambiguous_token = "is ambiguous here"
+)

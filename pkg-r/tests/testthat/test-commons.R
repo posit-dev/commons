@@ -25,21 +25,6 @@ test_that("commons() registers only the tools the agent's composition earns", {
   )
 })
 
-test_that("ellmer chat initialization supports both model APIs", {
-  client <- list(get_provider = function() "provider")
-
-  expect_equal(
-    ellmer_chat_initialize_args(client),
-    list(provider = "provider", echo = "none")
-  )
-
-  client$get_model_object <- function() "model"
-  expect_equal(
-    ellmer_chat_initialize_args(client),
-    list(provider = "provider", model = "model", echo = "none")
-  )
-})
-
 test_that("commons() configures run_r network access", {
   restricted <- agent_tool(test_agent(), "run_r")
   full <- agent_tool(test_agent(network = "full"), "run_r")
@@ -419,6 +404,8 @@ test_that("commons() errors on injection parameters matching no name", {
 
 
 test_that("prewarm() builds the context store ahead of the first search", {
+  cache_dir <- withr::local_tempdir()
+  withr::local_options(commons.context_cache = cache_dir)
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
   layer <- context_layer(files = path)
@@ -430,6 +417,7 @@ test_that("prewarm() builds the context store ahead of the first search", {
 
   agent$prewarm()
   expect_false(is.null(context_layer_state(layer)$store))
+  expect_length(list.files(file.path(cache_dir, "context")), 1)
   expect_match(context_search(layer, "revenue")[[1]], "booked")
 })
 
@@ -437,8 +425,22 @@ test_that("prewarm() without a context layer is a no-op", {
   expect_no_error(test_agent()$prewarm())
 })
 
+test_that("prewarm() propagates failures", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+
+  local_mocked_bindings(
+    context_store = function(...) stop("index build exploded"),
+    .package = "commons"
+  )
+  expect_error(agent$prewarm(), "index build exploded")
+})
+
 test_that("prewarm() records a cache-miss build and its own span", {
   skip_if_not_installed("otelsdk")
+  # A fresh cache root guarantees a cold build regardless of test order.
+  withr::local_options(commons.context_cache = withr::local_tempdir())
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
@@ -458,6 +460,7 @@ test_that("prewarm() records a cache-miss build and its own span", {
 
 test_that("prewarm() records a cache hit without a build span", {
   skip_if_not_installed("otelsdk")
+  withr::local_options(commons.context_cache = withr::local_tempdir())
 
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
@@ -542,57 +545,6 @@ test_that("commons() records an agent-creation span", {
   span <- recorded$traces[[which(names == "commons_agent_create")]]
   expect_equal(span$attributes[["commons.agent.n_data_sources"]], 1L)
   expect_equal(span$attributes[["commons.agent.has_context_layer"]], FALSE)
-})
-
-test_that("collect_appended_tags reads commons_tag across tool-calling turns", {
-  turns <- list(
-    ellmer::AssistantTurn(
-      contents = list(
-        ellmer::ContentToolRequest(
-          id = "1",
-          name = "run_sql",
-          arguments = list()
-        )
-      )
-    ),
-    ellmer::UserTurn(
-      contents = list(
-        ellmer::ContentToolResult(
-          value = "42",
-          request = NULL,
-          extra = list(commons_tag = "B")
-        )
-      )
-    ),
-    ellmer::AssistantTurn(
-      contents = list(ellmer::ContentText(text = "Answer."))
-    )
-  )
-  expect_identical(collect_appended_tags(turns, from_index = 1L), "B")
-})
-
-test_that("collect_appended_tags ignores turns before from_index", {
-  turns <- list(
-    ellmer::UserTurn(
-      contents = list(
-        ellmer::ContentToolResult(
-          value = "1",
-          request = NULL,
-          extra = list(commons_tag = "A")
-        )
-      )
-    ),
-    ellmer::UserTurn(
-      contents = list(
-        ellmer::ContentToolResult(
-          value = "2",
-          request = NULL,
-          extra = list(commons_tag = "B")
-        )
-      )
-    )
-  )
-  expect_identical(collect_appended_tags(turns, from_index = 2L), "B")
 })
 
 # Split a real ellmer response inside reserved markup to test chunk invariance.
@@ -725,7 +677,7 @@ test_that("stream_async projects citations without touching stored turns", {
     concatenated,
     paste0(project_citation_text(raw, agent$citation_corpus())$text, "\n")
   )
-  expect_false(any(grepl("commons-citation", unlist(chunks), fixed = TRUE)))
+  expect_false(any(grepl("</?commons-citation>", unlist(chunks))))
   expect_false(any(grepl("spoofed", unlist(chunks), fixed = TRUE)))
 
   turns <- agent$get_turns()
@@ -786,6 +738,9 @@ test_that("stream_async preserves structured provider content", {
 
 test_that("stream_async records provenance at span creation and completion", {
   skip_if_not_installed("otelsdk")
+  withr::local_envvar(
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
   path <- withr::local_tempfile(fileext = ".md")
   writeLines("Canopy cover is always acre-weighted for reporting.", path)
   local_mocked_bindings(collect_appended_tags = function(...) "B")

@@ -8,7 +8,7 @@ the parser cannot vouch for fails closed.
 
 import pytest
 
-from commons._sql_guard import check_query
+from commons._sql_guard import check_query, sqlglot_dialect
 
 # Writes sqlglot models as a statement type, so the guard can name the
 # operation back to the model.
@@ -241,3 +241,10 @@ def test_input_the_tokenizer_chokes_on_raises_value_error(sql: str) -> None:
     # exception. Callers catch ValueError, so neither may escape.
     with pytest.raises(ValueError):
         check_query(sql, dialect="duckdb")
+
+
+def test_a_dialect_maps_to_the_name_sqlglot_knows_it_by() -> None:
+    assert sqlglot_dialect("postgresql") == "postgres"
+    assert sqlglot_dialect("duckdb") == "duckdb"
+    assert sqlglot_dialect("not-a-dialect") is None
+    assert sqlglot_dialect(None) is None

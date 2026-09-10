@@ -18,6 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Both steps deploy the same directory, and rsconnect keeps a deployment
+      # record for it in the user config directory, which the two steps share.
+      # The dev step's record names a server whose credential is dropped when
+      # that step exits, so staging must name its target rather than let
+      # rsconnect infer one from the record. "connect-actions" is the nickname
+      # the action logs in under.
       - name: Deploy to Connect (dev)
         uses: posit-dev/connect-actions/deploy@main
         with:
@@ -25,7 +31,7 @@ jobs:
           content-guid: d7a36cae-8f27-448b-a478-61b81fbe3942
           path: pkg-r/inst
           github-token: ${{ github.token }}
-          rsconnect-args: --title biodiversity-explorer
+          rsconnect-args: --name connect-actions --title biodiversity-explorer
 
       - name: Deploy to Connect (staging)
         uses: posit-dev/connect-actions/deploy@main
@@ -34,4 +40,4 @@ jobs:
           content-guid: ad662e1b-5048-4acc-9ad7-f9478c92274e
           path: pkg-r/inst
           github-token: ${{ github.token }}
-          rsconnect-args: --title biodiversity-explorer
+          rsconnect-args: --name connect-actions --title biodiversity-explorer

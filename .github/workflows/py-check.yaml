@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     defaults:
       run:
         working-directory: pkg-py
@@ -40,3 +40,25 @@ jobs:
         run: uv run pyrefly check src tests
       - name: Test
         run: uv run pytest
+      - name: Verify the built wheel ships the browser assets
+        # The suite runs against an editable install, which reads src/ and so
+        # passes whatever the wheel contains. Only the release workflow built
+        # a wheel before this, so a dropped asset would have surfaced at
+        # publish time, in a browser.
+        run: |
+          uv build --wheel -o dist
+          uv run python -c "
+          import glob, sys, zipfile
+          wheel = glob.glob('dist/*.whl')[0]
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+          required = {
+              'commons/www/commons-chat/commons-chat.js',
+              'commons/www/commons-chat/commons-chat.css',
+              'commons/www/commons-chat/figs/citation-mark.svg',
+          }
+          missing = sorted(required - names)
+          if missing:
+              sys.exit(f'{wheel} is missing: {missing}')
+          print(f'{wheel} ships the browser assets')
+          "

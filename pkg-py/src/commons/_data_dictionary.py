@@ -8,6 +8,10 @@ because nothing reads that range.
 
 Prose fields stay as authored markdown, because they reach the model verbatim.
 
+Reading a dictionary also type-checks any ``definitions:`` blocks against
+data-dict's expression language, so an unusable definition raises here,
+before any source exists. Only the lowering to SQL waits for a dialect.
+
 The three channels are methods rather than separate structures.
 ``pkg-r`` spreads the same rendering across ``R/data-dictionary.R``,
 ``R/prompt.R`` and ``R/context-layer.R``; here the dictionary owns it and the
@@ -97,8 +101,19 @@ class Definition(_Permissive):
 class Table(_Permissive):
     description: str | None = None
     details: str | None = None
+    # The warehouse's object kind (table, view, ...), filled by a catalog
+    # merge; an authored value survives when the warehouse has none.
+    kind: str | None = None
     columns: dict[str, Column] = {}
     definitions: dict[str, Definition] = {}
+    # Attached by _definitions at data-source construction; empty until then,
+    # so the registry can be exercised without the compiler. Elements are
+    # ExportRecord, typed Any so this model need not import _definitions.
+    compiled_definitions: list[Any] = []
+    # The name the author wrote, kept when a catalog import re-keys this
+    # table to the warehouse label, so first touch and relationship matching
+    # can still find it.
+    authored_name: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -124,6 +139,12 @@ class DataDictionary(_Permissive):
     tables: dict[str, Table] = {}
     relationships: list[Relationship] = []
     glossary: dict[str, str] = {}
+    # Phase 1 of the compiler, keyed by table name. Source-independent, so it
+    # is produced here; the SQL needs a dialect and waits for `data_source()`.
+    # Values map each definition name to its
+    # `_definitions._export.DefinitionExport`, typed loosely so this module
+    # need not import the compiler's types.
+    definition_exports: dict[str, Any] = {}
 
     @model_validator(mode="before")
     @classmethod
@@ -132,6 +153,14 @@ class DataDictionary(_Permissive):
             return data
         data = dict(data)
         data["tables"] = _key_by_name(data.get("tables"), "table")
+        # Type-checked here rather than at `data_source()` so an unusable
+        # definition is reported when the dictionary is read, before any
+        # source exists. Only the lowering to SQL needs a dialect.
+        from ._definitions._export import export_spec
+
+        data["definition_exports"] = {
+            name: table.definitions for name, table in export_spec(data).items()
+        }
         for field in ("name", "description", "details"):
             data[field] = _prose(data.get(field))
         relationships = data.get("relationships") or []
@@ -173,6 +202,19 @@ class DataDictionary(_Permissive):
             terms.append(term)
         return terms
 
+    def ambient_glossary_lines(
+        self, cap_chars: int = AMBIENT_GLOSSARY_CAP_CHARS
+    ) -> list[str]:
+        """Each ambient term and its definition, one per line and unbulleted.
+
+        The caller adds the bullet, because a prompt covering several sources
+        names the source between the bullet and the term.
+        """
+        return [
+            f"{term}: {_flatten_inline(self.glossary[term])}"
+            for term in self.ambient_glossary_terms(cap_chars)
+        ]
+
     # ---- channel 2: first touch ------------------------------------------
 
     def entry_text(
@@ -182,7 +224,7 @@ class DataDictionary(_Permissive):
         entry = self.tables.get(table)
         if entry is None:
             return None
-        columns = self._columns_text(entry)
+        columns = self.columns_text(table)
         if columns is not None:
             columns = f"Documented columns:\n\n{columns}"
         parts = self.entry_parts(table, columns, ambient_cap_chars=ambient_cap_chars)
@@ -202,39 +244,77 @@ class DataDictionary(_Permissive):
         entry = self.tables.get(table)
         if entry is None:
             return []
-        # Governed definitions belong between the columns and the
-        # relationships, and are added once the compiler can supply them.
-        # They render as compiled SQL, never as the authored expression, so
-        # there is nothing correct to show before compilation happens.
+        # Imported here because _definitions does not import this module and
+        # this keeps it that way.
+        from ._definitions import entry_text as definitions_entry_text
+
         parts = [
             part
             for part in (
                 entry.description,
                 entry.details,
                 columns_text,
-                self._relationships_text(table),
+                definitions_entry_text(entry.compiled_definitions),
+                self._relationships_text(table, entry.authored_name),
             )
             if part
         ]
         terms = self._terms_text("\n".join(parts), ambient_cap_chars)
         return [*parts, terms] if terms else parts
 
-    def _columns_text(self, entry: Table) -> str | None:
-        if not entry.columns:
-            return None
-        return "\n".join(
-            _column_line(name, column) for name, column in entry.columns.items()
-        )
+    def columns_text(
+        self, table: str, live: list[dict[str, Any]] | None = None
+    ) -> str | None:
+        """A table's documented columns, optionally merged with a live schema.
 
-    def _relationships_text(self, table: str) -> str | None:
+        With `live` set, the relation's own columns lead and in its order,
+        each carrying whatever the dictionary documents about it, and a
+        documented column the relation does not have is named at the end so
+        the model does not write SQL against it. `describe_table` is what
+        has a live schema to merge.
+        """
+        entry = self.tables.get(table)
+        columns = entry.columns if entry is not None else {}
+        if live is None:
+            if not columns:
+                return None
+            return "\n".join(
+                _column_line(name, column) for name, column in columns.items()
+            )
+
+        text = "\n".join(
+            _column_line(
+                str(found["column"]),
+                columns.get(str(found["column"])),
+                live_type=found.get("type"),
+            )
+            for found in live
+        )
+        present = {str(found["column"]) for found in live}
+        undocumented = [name for name in columns if name not in present]
+        if undocumented:
+            text += (
+                "\n\nDocumented in the dictionary but not present in the table: "
+                f"{', '.join(undocumented)}."
+            )
+        return text
+
+    def _relationships_text(
+        self, table: str, authored_name: str | None = None
+    ) -> str | None:
+        """Relationships mentioning this table, under either of its names.
+
+        A catalog import re-keys a table to its warehouse label, while the
+        relationship prose still says what the author wrote, so both names
+        have to match or the join disappears from the entry.
+        """
+        names = [table, authored_name] if authored_name else [table]
         lines = []
         for relationship in self.relationships:
             text = " ".join(
-                part
-                for part in (relationship.join, relationship.description)
-                if part
+                part for part in (relationship.join, relationship.description) if part
             )
-            if not _word_pattern(table).search(text):
+            if not any(_word_pattern(name).search(text) for name in names):
                 continue
             head = " ".join(
                 part
@@ -288,8 +368,10 @@ class DataDictionary(_Permissive):
             if prose:
                 chunks.append(f"Table `{name}`: {prose}")
         chunks.extend(f"{term}: {body}" for term, body in self.glossary.items())
-        # One chunk per governed definition joins these once the compiler can
-        # supply them, for the same reason as the first-touch entry.
+        from ._definitions import context_chunks as definitions_context_chunks
+
+        for entry in self.tables.values():
+            chunks.extend(definitions_context_chunks(entry.compiled_definitions))
         return [chunk for chunk in chunks if chunk]
 
 
@@ -304,18 +386,21 @@ def as_data_dictionary(x: Any) -> DataDictionary | None:
 
 
 def _flatten_inline(text: str) -> str:
-    return re.sub(r"\s+", " ", text).strip()
+    # Collapse each newline and the whitespace around it; other whitespace
+    # stays as authored.
+    return re.sub(r"\s*\n\s*", " ", text).strip()
 
 
 def _word_pattern(word: str) -> re.Pattern[str]:
     return re.compile(rf"(?<!\w){re.escape(word)}(?!\w)", re.IGNORECASE)
 
 
-def _column_line(name: str, spec: Column) -> str:
+def _column_line(name: str, spec: Column | None = None, live_type: Any = None) -> str:
+    spec = spec if spec is not None else Column()
     qualifier = ", ".join(
         str(part)
         for part in (
-            spec.type,
+            spec.type or live_type,
             _nullability_fact(spec.nullable),
             spec.units,
             *(spec.constraints or []),

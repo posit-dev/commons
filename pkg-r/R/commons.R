@@ -12,8 +12,10 @@
 #' to use the agent as a vitals solver.
 #'
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
-#'   [ellmer::chat_anthropic()]. A system prompt already set on the client is
-#'   ignored, with a warning; use `instructions` to add to commons' prompt.
+#'   [ellmer::chat_anthropic()]. For best results, enable thinking when
+#'   supported by the selected provider and model. A system prompt already set
+#'   on the client is ignored, with a warning; use `instructions` to add to
+#'   commons' prompt.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
 #'   [semantic_layer()].
@@ -37,22 +39,51 @@
 #'   best-effort R guardrails with
 #'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
 #'   are not a security boundary.
-#' @param log Whether to capture conversation trajectories with OpenTelemetry
-#'   (default `FALSE`). When `TRUE`, commons enables GenAI message-content
-#'   capture in \pkg{ellmer} and tags each turn's spans with a conversation
-#'   id; the spans go wherever OTel is configured to export. On Posit Connect,
-#'   traces land in Connect's observability store (browsable in its Trace
-#'   Viewer); commons switches on the content's *Content Observability*
-#'   setting itself when needed, though capture only starts once the content
-#'   restarts. Locally, commons configures \pkg{otelsdk}'s file exporter
-#'   automatically when no exporter is set up. Read trajectories back with
-#'   [trajectory_read()].
+#' @param log Whether to request conversation trajectory capture with
+#'   OpenTelemetry (default `FALSE`). When `TRUE`, commons checks the tracing
+#'   setup and warns with setup steps when it is incomplete. 
+#'   Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` before R
+#'   starts so \pkg{ellmer} includes message content. On Posit Connect, a server
+#'   administrator must set `OpenTelemetry.Enabled = true` and
+#'   `OpenTelemetry.AllowContentInstrumentation = true`. Read trajectories back
+#'   with [trajectory_read()].
 #' @param share_with An optional character vector of Connect usernames granted
 #'   access to this content's trajectories when running on Posit Connect.
 #'   Reading traces requires editor-level access, so named users are added as
 #'   collaborators on the content. Note that users whose Connect *account*
 #'   role is viewer cannot read traces even when named here; trace readers
 #'   need at least a publisher account.
+#'
+#' @section Cache pre-warming:
+#' A commons agent builds its context search index and downloads uncached pins
+#' the first time it needs them. [commons_server()] and [commons_app()] call the
+#' agent's `prewarm()` method automatically during post-startup idle time.
+#'
+#' To warm the caches before deployment, call `agent$prewarm()` in a
+#' pre-deploy script. The context index is cached on disk once per version of 
+#' the context documents; pin downloads populate the local pins cache.
+#'
+#' To ship a pre-built context index with an app, configure a directory inside
+#' the app in both the pre-deploy script and the deployed app, then prewarm the
+#' agent before deploying:
+#'
+#' ```r
+#' options(commons.context_cache = "commons-cache")
+#' agent <- commons(
+#'   ellmer::chat_anthropic(),
+#'   data_sources = data_source(sales = sales)
+#' )
+#' agent$prewarm()
+#' ```
+#'
+#' Do not use `app_cache/` for this workflow because rsconnect excludes it from
+#' deployed bundles. Without explicit configuration, commons uses Connect's
+#' persistent content data directory when available, an `app_cache/` directory
+#' beside hosted apps, or the per-user cache directory. Set the cache directory
+#' with `options(commons.context_cache = "path/to/dir")` or the
+#' `COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE` to
+#' disable persistence. The cache is capped at 256 MB with least-recently-used
+#' eviction; change the cap with `options(commons.context_cache_max_size)`.
 #'
 #' @section Agent tools:
 #' Depending on its semantic layer, context layer, and data sources, a commons
@@ -177,14 +208,9 @@ commons <- function(
   )
 }
 
-ellmer_chat_class <- function() {
-  # Chat is exported in dev ellmer; use ellmer::Chat after its next release.
-  utils::getFromNamespace("Chat", "ellmer")
-}
-
 Commons <- R6::R6Class(
   "Commons",
-  inherit = ellmer_chat_class(),
+  inherit = ellmer::Chat,
   public = list(
     initialize = function(
       client,
@@ -199,7 +225,11 @@ Commons <- R6::R6Class(
       share_with = NULL
     ) {
       rlang::check_dots_empty()
-      do.call(super$initialize, ellmer_chat_initialize_args(client))
+      super$initialize(
+        provider = client$get_provider(),
+        model = client$get_model_object(),
+        echo = "none"
+      )
       semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
 
@@ -221,9 +251,6 @@ Commons <- R6::R6Class(
       )
       private$tracing <- new_trajectory_tracing(log, share_with)
 
-      # Created after new_trajectory_tracing() so a fresh `log = TRUE` local
-      # exporter is already configured; otherwise otel::get_tracer() below
-      # would resolve and cache a no-op provider before tracing turns on.
       local_commons_span(
         "commons_agent_create",
         attributes = list(
@@ -390,6 +417,16 @@ Commons <- R6::R6Class(
     },
 
     prewarm = function() {
+      # A direct call is typically warming caches ahead of deployment, so
+      # failures propagate: a cold cache should fail the deploy.
+      # prewarm_on_idle() downgrades them to warnings.
+      private$prewarm_context()
+      private$prewarm_sources()
+      invisible(self)
+    }
+  ),
+  private = list(
+    prewarm_context = function() {
       layer <- private$context_layer
       layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
       if (!is.null(layer_state) && length(layer_state$docs) > 0) {
@@ -397,18 +434,29 @@ Commons <- R6::R6Class(
           "commons_context_prewarm",
           attributes = list(
             "commons.context.n_docs" = length(layer_state$docs),
-            "commons.context.cache_hit" = !is.null(layer_state$store)
+            # tryCatch: telemetry must not abort prewarming (resolving the
+            # cache dir can fail or warn on an unwritable root).
+            "commons.context.cache_hit" =
+              !is.null(layer_state$store) ||
+              isTRUE(tryCatch(
+                context_cache_enabled() &&
+                  file.exists(context_store_path(layer_state$docs)),
+                error = function(err) FALSE
+              ))
           )
         )
         context_store(layer)
       }
+      invisible(self)
+    },
+
+    prewarm_sources = function() {
       for (source in private$sources) {
         source_prewarm(source)
       }
       invisible(self)
-    }
-  ),
-  private = list(
+    },
+
     sources = NULL,
     context_layer = NULL,
     registry = NULL,
@@ -442,19 +490,6 @@ Commons <- R6::R6Class(
     }
   )
 )
-
-ellmer_chat_initialize_args <- function(client) {
-  args <- list(provider = client$get_provider())
-  model <- tryCatch(
-    client$get_model_object(),
-    error = function(err) NULL
-  )
-  if (!is.null(model)) {
-    args$model <- model
-  }
-  args$echo <- "none"
-  args
-}
 
 turn_has_user_message <- function(turn) {
   any(!vapply(turn@contents, is_tool_result_content, logical(1)))

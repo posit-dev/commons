@@ -3,21 +3,25 @@ name = "commons"
 version = "0.1.0.dev1"
 description = "AI Agents for Data Analysis"
 readme = "README.md"
-# Upper bound tracks raghilda, which caps at <3.14 (posit-dev/raghilda#93).
-requires-python = ">=3.11,<3.14"
+requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE.md"]
 classifiers = ["Development Status :: 2 - Pre-Alpha"]
 dependencies = [
     "chatlas>=0.22.0",
+    "htmltools>=0.6",
+    # The API only. The SDK, which turns spans into exported data, is optional
+    # and lives in the `tracing` extra.
+    "opentelemetry-api>=1.0",
     "pydantic>=2",
     "duckdb>=1.0",
-    "raghilda>=0.2",
+    "raghilda>=0.2.1",
     "sqlalchemy>=2.0",
     "pyyaml>=6",
     "jinja2>=3",
     "pyarrow>=17",
     "sqlglot>=25",
+    "google-re2>=1.1.20251105",
 ]
 
 [project.urls]
@@ -30,9 +34,15 @@ tracing = [
     "opentelemetry-exporter-otlp-json-file",
     "httpx>=0.27",
 ]
+# Everything `commons.ui` needs beyond the core dependencies.
+shiny = [
+    "packaging>=23",
+    "shiny>=1.7",
+    "shinychat>=0.7,<0.8",
+]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]"]
 
 [build-system]
 requires = ["hatchling"]

@@ -1,0 +1,11 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: messages
+    columns:
+      - name: text
+        type: string
+        examples: [a, b]
+    definitions:
+      - name: broken
+        expr: "text SIMILAR TO '(?>a)'"

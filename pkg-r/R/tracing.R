@@ -19,7 +19,6 @@ new_trajectory_tracing <- function(
 ) {
   rlang::check_bool(log, call = call)
   check_share_with(share_with, call = call)
-  repair_connect_trace_routing()
 
   if (!log) {
     if (!is.null(share_with)) {
@@ -29,6 +28,8 @@ new_trajectory_tracing <- function(
     }
     return(FALSE)
   }
+
+  warn_if_content_instrumentation_disabled()
 
   if (!is_installed("otel")) {
     cli::cli_warn(c(
@@ -48,18 +49,16 @@ new_trajectory_tracing <- function(
     ))
   }
 
-  enable_content_capture()
-
-  if (!otel::is_tracing_enabled() && !is_connect_runtime()) {
-    enable_local_tracing()
-  }
-
   if (!otel::is_tracing_enabled()) {
     if (is_connect_runtime()) {
       enable_content_observability()
     } else {
       warn_tracing_disabled()
     }
+    return(FALSE)
+  }
+
+  if (!content_capture_enabled()) {
     return(FALSE)
   }
 
@@ -70,41 +69,27 @@ new_trajectory_tracing <- function(
   TRUE
 }
 
-# Connect 2026.07 can overwrite content routing with its server attributes.
-repair_connect_trace_routing <- function() {
-  if (!is_connect_runtime() || !is_installed("otel")) {
-    return(invisible(FALSE))
+warn_if_content_instrumentation_disabled <- function() {
+  if (!is_connect_runtime()) {
+    return(invisible(NULL))
   }
 
-  guid <- Sys.getenv("CONNECT_CONTENT_GUID")
-  job_key <- Sys.getenv("CONNECT_CONTENT_JOB_KEY")
-  if (!nzchar(guid) || !nzchar(job_key)) {
-    return(invisible(FALSE))
-  }
-
-  current <- Sys.getenv("OTEL_RESOURCE_ATTRIBUTES")
-  pairs <- strsplit(current, ",", fixed = TRUE)[[1]]
-  pairs <- pairs[nzchar(pairs)]
-  names <- sub("=.*$", "", pairs)
-  values <- sub("^[^=]*=", "", pairs)
-
-  correctly_routed <-
-    any(names == "content.guid" & values == guid) &&
-    any(names == "job.key" & values == job_key)
-  if (correctly_routed) {
-    return(invisible(FALSE))
-  }
-
-  pairs <- pairs[!names %in% c("content.guid", "job.key")]
-  pairs <- c(
-    pairs,
-    paste0("content.guid=", guid),
-    paste0("job.key=", job_key)
+  # This endpoint is internal, so any failure or missing field means unknown.
+  allowed <- tryCatch(
+    connect_server_settings(connect_client())$allow_content_instrumentation,
+    error = function(err) NULL
   )
-  Sys.setenv(OTEL_RESOURCE_ATTRIBUTES = paste(pairs, collapse = ","))
-  reset_otel_tracer_provider()
-  refresh_ellmer_otel_cache()
-  invisible(TRUE)
+  if (identical(allowed, FALSE)) {
+    cli::cli_warn(c(
+      "Trajectory logging is disabled by this Posit Connect server's
+       configuration.",
+      i = "Ask your server administrator to set
+           {.code OpenTelemetry.Enabled = true} and
+           {.code OpenTelemetry.AllowContentInstrumentation = true} in the
+           Connect configuration, then restart Connect."
+    ))
+  }
+  invisible(NULL)
 }
 
 # Start and activate a span for the calling frame's lifetime, ending when it
@@ -192,92 +177,41 @@ local_conversation_turn_span <- function(envir = parent.frame()) {
   invisible(span)
 }
 
-# HACK: ellmer snapshots its tracer and the GenAI content-capture flag once,
-# in its .onLoad (`otel_cache_tracer()` in ellmer's R/otel.R). Because ellmer
-# loads as a commons dependency, that snapshot is always taken before any
-# commons code runs, and ellmer exports no way to refresh it. So after
-# changing the OTEL_* environment, reach into ellmer and re-run its caching
-# function. If ellmer's internals change, capture silently stays off for the
-# session; setting the env vars before R starts (as `warn_tracing_disabled()`
-# suggests) remains the manual path.
+# ellmer reads this semconv setting when its namespace loads. Refresh its cache
+# as a compatibility fallback, while still directing users to persistent setup.
+content_capture_enabled <- function() {
+  current <- Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
+  if (tolower(current) %in% c("true", "1")) {
+    return(TRUE)
+  }
+
+  if (!nzchar(current)) {
+    Sys.setenv(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
+    refreshed <- refresh_ellmer_otel_cache()
+    if (!refreshed) {
+      Sys.unsetenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
+    }
+  } else {
+    refreshed <- FALSE
+  }
+
+  cli::cli_warn(c(
+    "Trajectory logging requires additional setup.",
+    i = "Set the environment variable
+         {.code OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true},
+         perhaps by pasting it into {.file ~/.Renviron}, and restart R."
+  ))
+  refreshed
+}
+
 refresh_ellmer_otel_cache <- function() {
   tryCatch(
-    utils::getFromNamespace("otel_cache_tracer", "ellmer")(),
-    error = function(err) NULL
-  )
-  invisible(NULL)
-}
-
-# ellmer captures message content only when this semconv env var is truthy
-# ("true"/"1", matching ellmer's parsing). An explicit pre-set value is
-# respected -- a deliberate opt-out must not be flipped process-wide -- like
-# enable_local_tracing() respects an explicit OTEL_TRACES_EXPORTER.
-enable_content_capture <- function() {
-  current <- Sys.getenv("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT")
-  if (nzchar(current)) {
-    if (!tolower(current) %in% c("true", "1")) {
-      cli::cli_warn(c(
-        "{.envvar OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT} is set
-         to {.val {current}}, so logged trajectories will not include message
-         content.",
-        i = "Unset it or set it to {.val true} to capture full trajectories."
-      ))
-    }
-    return(invisible(FALSE))
-  }
-  Sys.setenv(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
-  refresh_ellmer_otel_cache()
-  invisible(TRUE)
-}
-
-# Configure otelsdk's file exporter for a local session that hasn't set up
-# OTel itself. Only steps in when no exporter is configured at all: a user's
-# explicit OTEL_TRACES_EXPORTER (even "none") is respected.
-enable_local_tracing <- function() {
-  if (nzchar(Sys.getenv("OTEL_TRACES_EXPORTER"))) {
-    return(invisible(FALSE))
-  }
-  if (!is_installed("otelsdk")) {
-    cli::cli_warn(c(
-      "Local trajectory logging requires the {.pkg otelsdk} package.",
-      i = "Install {.pkg otelsdk} to enable it."
-    ))
-    return(invisible(FALSE))
-  }
-
-  dir <- commons_traces_dir()
-  if (!dir.exists(dir)) {
-    dir.create(dir, recursive = TRUE)
-  }
-  Sys.setenv(
-    OTEL_TRACES_EXPORTER = "otlp/file",
-    OTEL_EXPORTER_OTLP_TRACES_FILE = file.path(dir, "trace-%N.jsonl")
-  )
-  reset_otel_tracer_provider()
-  refresh_ellmer_otel_cache()
-  invisible(TRUE)
-}
-
-# HACK: the otel package builds its default tracer provider from the OTEL_*
-# environment on the first `otel::get_tracer()` call -- which ellmer's .onLoad
-# triggers, before any commons code can run -- and caches it in the internal
-# `otel:::the` environment. There is no public API to reconfigure it, so to
-# honor env vars set after load, clear the cached provider and let the next
-# `get_tracer()` rebuild it. Ordering matters: set the env vars first, then
-# reset here, then refresh ellmer's snapshot (which calls `get_tracer()`).
-# If otel's internals change, this quietly does nothing and
-# `warn_tracing_disabled()` tells the user to configure `.Renviron` instead.
-reset_otel_tracer_provider <- function() {
-  tryCatch(
     {
-      the <- asNamespace("otel")$the
-      if (is.environment(the)) {
-        the$tracer_provider <- NULL
-      }
+      utils::getFromNamespace("otel_cache_tracer", "ellmer")()
+      TRUE
     },
-    error = function(err) NULL
+    error = function(err) FALSE
   )
-  invisible(NULL)
 }
 
 # Tracing is off on Connect either because this content's Content
@@ -322,10 +256,7 @@ enable_content_observability <- function() {
       "{.emph Content Observability} is enabled for this content, but this
        process started without OpenTelemetry tracing."
     },
-    i = "Trajectory logging will begin once the content restarts.",
-    i = "If it doesn't, a server administrator may need to set
-         {.code OpenTelemetry.AllowContentInstrumentation = true} in the
-         Connect configuration."
+    i = "Trajectory logging will begin once the content restarts."
   ))
   invisible(NULL)
 }
@@ -336,12 +267,9 @@ warn_tracing_disabled <- function() {
   if (is_connect_runtime()) {
     cli::cli_warn(c(
       "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
-      i = "Enable {.emph Content Observability} in this content's
-           {.emph Settings > Advanced} panel on Posit Connect, then redeploy
-           or restart the content.",
-      i = "A server administrator may first need to set
-           {.code OpenTelemetry.AllowContentInstrumentation = true} in the
-           Connect configuration."
+      i = "In this content's {.emph Settings > Monitoring > Traces} panel on
+           Posit Connect, select {.emph Enabled}, then redeploy or restart the
+           content."
     ))
   } else {
     cli::cli_warn(c(
