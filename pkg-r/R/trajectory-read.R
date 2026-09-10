@@ -796,12 +796,30 @@ latest_chat_spans <- function(chat_spans) {
   for (span in chat_spans) {
     id <- span_conversation_id(span)
     prev <- latest[[id]]
-    if (is.null(prev) || span_time(span) > span_time(prev)) {
+    if (is.null(prev) || chat_span_is_preferred(span, prev)) {
       latest[[id]] <- span
     }
   }
 
   latest[order(vapply(latest, span_time, character(1)))]
+}
+
+chat_span_is_preferred <- function(candidate, current) {
+  candidate_is_title <- is_conversation_title_span(candidate)
+  current_is_title <- is_conversation_title_span(current)
+  if (!identical(candidate_is_title, current_is_title)) {
+    return(!candidate_is_title)
+  }
+  span_time(candidate) > span_time(current)
+}
+
+shinychat_title_prompt <- "You title chat conversations."
+
+is_conversation_title_span <- function(span) {
+  system <- semconv_system_turns(
+    span$attributes[["gen_ai.system_instructions"]]
+  )
+  length(system) > 0 && startsWith(system[[1]]@text, shinychat_title_prompt)
 }
 
 empty_turn_provenance <- function() {

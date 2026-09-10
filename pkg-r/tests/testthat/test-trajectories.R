@@ -219,6 +219,67 @@ semconv_messages_json <- function(messages) {
   jsonlite::toJSON(messages, auto_unbox = TRUE)
 }
 
+test_that("title generation does not replace the conversation it titles", {
+  image_question <- list(
+    role = "user",
+    parts = list(
+      list(type = "text", content = "What do you see?"),
+      list(type = "generic", class = "ContentImageInline")
+    )
+  )
+  first_answer <- text_semconv_message("assistant", "I see a chart.")
+  followup <- text_semconv_message("user", "Can you verify it?")
+  final_answer <- text_semconv_message("assistant", "Yes, it is accurate.")
+  title_prompt <- semconv_messages_json(list(list(
+    type = "text",
+    content = paste(shinychat_title_prompt, "Reply with ONLY a title.")
+  )))
+  spans <- parse_otlp_lines(otlp_test_line(list(
+    chat_test_span(
+      "first-trace",
+      "chat1",
+      conversation_id = "conv-a",
+      input_messages = semconv_messages_json(list(image_question)),
+      output_messages = semconv_messages_json(list(first_answer)),
+      end_time = "10"
+    ),
+    chat_test_span(
+      "second-trace",
+      "chat2",
+      conversation_id = "conv-a",
+      input_messages = semconv_messages_json(list(
+        image_question,
+        first_answer,
+        followup
+      )),
+      output_messages = semconv_messages_json(list(final_answer)),
+      end_time = "20"
+    ),
+    chat_test_span(
+      "second-trace",
+      "title",
+      conversation_id = "conv-a",
+      system_instructions = title_prompt,
+      input_messages = semconv_messages_json(list(
+        text_semconv_message("user", "user: What do you see?")
+      )),
+      output_messages = semconv_messages_json(list(
+        text_semconv_message("assistant", "Chart verification")
+      )),
+      end_time = "30"
+    )
+  )))
+
+  turns <- build_trajectories(spans)[["conv-a"]]$turns
+
+  expect_identical(
+    vapply(turns, function(turn) turn@role, character(1)),
+    c("user", "assistant", "user", "assistant")
+  )
+  expect_equal(turns[[1]]@text, "What do you see?")
+  expect_equal(turns[[4]]@text, "Yes, it is accurate.")
+})
+
 test_that("missing latest input recovers history and subsequent outputs", {
   question <- text_semconv_message("user", "Make a plot.")
   plot_request <- list(
