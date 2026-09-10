@@ -35,6 +35,13 @@ from ._citations import CitationRequest, tool_result
 from ._context_layer import ContextLayer
 from ._data_source import DataSource, TableId
 from ._definitions import Registry, applied_text, expand_tokens, index_overflows
+from ._display import (
+    CONTEXT_SEARCH,
+    DATA_RETRIEVAL,
+    TABLE_INSPECTION,
+    TRUSTED_CALL,
+    TRUSTED_SEARCH,
+)
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
 from ._measures import Measure
@@ -197,13 +204,14 @@ def _tool(
     name: str,
     description: str,
     parameters: dict[str, Any],
+    title: str,
 ) -> Tool:
     return Tool(
         func=func,
         name=name,
         description=description,
         parameters=parameters,
-        annotations=_READ_ONLY,
+        annotations={**_READ_ONLY, "title": title},
     )
 
 
@@ -248,7 +256,10 @@ def _search_pool(context: ToolContext) -> Tool:
 
     def search_pool(query: str) -> ContentToolResult:
         return tool_result(
-            search_pool_text(context.measures, context.definitions, query, source_names)
+            search_pool_text(
+                context.measures, context.definitions, query, source_names
+            ),
+            title=TRUSTED_SEARCH.settled,
         )
 
     return _tool(
@@ -261,6 +272,7 @@ def _search_pool(context: ToolContext) -> Tool:
             {"query": _string("What you want to compute, in plain language.")},
             ["query"],
         ),
+        TRUSTED_SEARCH.running,
     )
 
 
@@ -296,7 +308,7 @@ def _call_measure(context: ToolContext) -> Tool:
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
         )
-        return tool_result(body, tag=Tag.A)
+        return tool_result(body, tag=Tag.A, title=TRUSTED_CALL.settled)
 
     return _tool(
         call_measure,
@@ -316,6 +328,7 @@ def _call_measure(context: ToolContext) -> Tool:
             },
             ["name", "arguments"],
         ),
+        TRUSTED_CALL.running,
     )
 
 
@@ -428,6 +441,7 @@ def _call_metrics(context: ToolContext) -> Tool:
             ["metrics"],
             context.sources,
         ),
+        TRUSTED_CALL.running,
     )
 
 
@@ -440,16 +454,22 @@ def _search_catalog(context: ToolContext) -> Tool:
     ) -> ContentToolResult:
         _, resolved = _resolve_source(context.sources, source)
         if not catalog_searchable(resolved):
-            return tool_result("This data source does not have a searchable catalog.")
+            return tool_result(
+                "This data source does not have a searchable catalog.",
+                title=TRUSTED_SEARCH.settled,
+            )
         results = _catalog_search(resolved, query, kinds)
         if not results:
-            return tool_result(f'No catalog objects found for "{query}".')
+            return tool_result(
+                f'No catalog objects found for "{query}".',
+                title=TRUSTED_SEARCH.settled,
+            )
         lines = [
             f"- `{label}` ({relation.kind or 'unknown kind'}): "
             f"{relation.description or 'No description.'}"
             for label, relation in results.items()
         ]
-        return tool_result("\n".join(lines))
+        return tool_result("\n".join(lines), title=TRUSTED_SEARCH.settled)
 
     return _tool(
         search_catalog,
@@ -464,6 +484,7 @@ def _search_catalog(context: ToolContext) -> Tool:
             ["query"],
             context.sources,
         ),
+        TRUSTED_SEARCH.running,
     )
 
 
@@ -504,10 +525,15 @@ def _queryable(source: DataSource, manifest: Manifest) -> Callable[[str], bool]:
 def _search_context(context: ToolContext) -> Tool:
     def search_context(query: str) -> ContentToolResult:
         if context.context_layer is None:
-            return tool_result("No context layer is configured for this agent.")
+            return tool_result(
+                "No context layer is configured for this agent.",
+                title=CONTEXT_SEARCH.settled,
+            )
         hits = context.context_layer.search(query)
         body = "\n\n---\n\n".join(hits) if hits else f'No context found for "{query}".'
-        return _with_citation_request(tool_result(body), context)
+        return _with_citation_request(
+            tool_result(body, title=CONTEXT_SEARCH.settled), context
+        )
 
     return _tool(
         search_context,
@@ -517,6 +543,7 @@ def _search_context(context: ToolContext) -> Tool:
             {"query": _string("What you need context about, in plain language.")},
             ["query"],
         ),
+        CONTEXT_SEARCH.running,
     )
 
 
@@ -535,7 +562,8 @@ def _describe_table(context: ToolContext) -> Tool:
     def describe_table(table: str, source: str | None = None) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
         return tool_result(
-            _describe_table_text(resolved, label, table, context.first_touch)
+            _describe_table_text(resolved, label, table, context.first_touch),
+            title=TABLE_INSPECTION.settled,
         )
 
     return _tool(
@@ -550,6 +578,7 @@ def _describe_table(context: ToolContext) -> Tool:
             ["table"],
             context.sources,
         ),
+        TABLE_INSPECTION.running,
     )
 
 
@@ -656,7 +685,9 @@ def _run_sql(context: ToolContext) -> Tool:
             )
             if part
         )
-        return _with_citation_request(tool_result(body, tag=Tag.B), context)
+        return _with_citation_request(
+            tool_result(body, tag=Tag.B, title=DATA_RETRIEVAL.settled), context
+        )
 
     return _tool(
         run_sql,
@@ -671,6 +702,7 @@ def _run_sql(context: ToolContext) -> Tool:
             ["sql"],
             context.sources,
         ),
+        DATA_RETRIEVAL.running,
     )
 
 

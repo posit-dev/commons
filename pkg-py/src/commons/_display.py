@@ -11,11 +11,43 @@ one when bsicons is absent, so an iconless row is a branch R already has.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["DISPLAY_EXTRA_KEY", "tool_display", "visible_result_note"]
+__all__ = [
+    "CONTEXT_SEARCH",
+    "DATA_RETRIEVAL",
+    "DISPLAY_EXTRA_KEY",
+    "TABLE_INSPECTION",
+    "TRUSTED_CALL",
+    "TRUSTED_SEARCH",
+    "Title",
+    "tool_display",
+    "visible_result_note",
+]
 
 DISPLAY_EXTRA_KEY = "display"
+
+
+@dataclass(frozen=True)
+class Title:
+    """What a tool row says while it runs, and once its result arrives.
+
+    shinychat shows the tool definition's title until the result carries one
+    of its own, and conjugates neither, so both tenses are written out.
+    """
+
+    running: str
+    settled: str
+
+
+TRUSTED_SEARCH = Title(
+    "Searching for a trusted calculation", "Searched for a trusted calculation"
+)
+TRUSTED_CALL = Title("Running a trusted calculation", "Ran a trusted calculation")
+CONTEXT_SEARCH = Title("Searching context", "Searched context")
+TABLE_INSPECTION = Title("Inspecting a table", "Inspected a table")
+DATA_RETRIEVAL = Title("Retrieving data", "Retrieved data")
 
 
 def tool_display(

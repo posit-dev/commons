@@ -314,7 +314,10 @@ def test_every_tool_is_declared_read_only(plain: DataSource) -> None:
         )
     )
 
-    assert all(tool.annotations == {"readOnlyHint": True} for tool in tools)
+    assert all(
+        tool.annotations is not None and tool.annotations["readOnlyHint"]
+        for tool in tools
+    )
 
 
 # ---- search_context --------------------------------------------------------
