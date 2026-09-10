@@ -110,6 +110,29 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    A commons chat app must list `bsicons`, `htmltools`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
 
+   Use or adapt this basic structure for `app.R`, adapting the title and agent construction as needed. In this example `build_agent()` (from `agent.R`) constructs and returns the complete commons agent.
+
+   ```r
+   source("agent.R", local = TRUE)
+
+   ui <- shinychat::page_chat(
+     "commons agent",
+     id = "chat",
+     theme = commons::commons_theme()
+   )
+
+   server <- function(input, output, session) {
+     agent <- build_agent() # from agent.R
+     commons::commons_server("chat", agent)
+   }
+
+   shiny::shinyApp(ui, server)
+   ```
+
+   Keep `build_agent()` inside `server()` so that each session gets its own agent.
+
+   If you make suggested questions to go in the greeting, each question should be a real, complete question that the agent can actually answer. Choose questions that represent the confirmed scope and exercise the agent's most important data, calculations, and context.
+
    commons owns the base system prompt; a system prompt set on the client is ignored. Decide whether the agent needs additional `instructions`. Use them only for concise, durable guidance that every conversation must have before using tools, such as the meaning of an agent-specific name or acronym or an organization-wide convention. Do not restate the commons agent's role or add generic domain framing such as "You answer pharmaceutical questions." Keep data knowledge, calculations, and longer reference material in their appropriate layers. Because instructions consume tokens in every session, omit them when nothing genuinely needs to be ambient. If instructions are needed, place them in a short `instructions.md` file and ask the user to confirm them.
 
    Connect the selected data sources, dictionaries, semantic layer, remaining context, and any additional instructions.
