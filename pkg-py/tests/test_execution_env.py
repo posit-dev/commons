@@ -169,17 +169,42 @@ def test_an_interpreter_outside_any_virtual_environment_is_flagged() -> None:
 
 def test_the_worker_keeps_what_it_needs_to_run(tmp_path, monkeypatch) -> None:
     # An allowlist that is too narrow fails differently but just as badly: the
-    # worker cannot find an interpreter or mangles non-ASCII output.
+    # worker cannot find an interpreter or mangles non-ASCII output. Two LC_*
+    # variables, because a single one cannot tell prefix matching apart from
+    # a hardcoded entry.
     monkeypatch.setenv("LANG", "en_US.UTF-8")
     monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
+    monkeypatch.setenv("LC_CTYPE", "en_US.UTF-8")
     monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/lib")
+    monkeypatch.setenv("DYLD_LIBRARY_PATH", "/opt/lib")
 
     env = worker_env(str(tmp_path))
 
     assert env["PATH"] == os.environ["PATH"]
     assert env["LANG"] == "en_US.UTF-8"
     assert env["LC_ALL"] == "en_US.UTF-8"
+    assert env["LC_CTYPE"] == "en_US.UTF-8"
     assert env["LD_LIBRARY_PATH"] == "/opt/lib"
+    assert env["DYLD_LIBRARY_PATH"] == "/opt/lib"
+
+
+def test_variables_missing_from_the_parent_are_omitted(tmp_path, monkeypatch) -> None:
+    # A variable the parent does not have is left out, not replaced with a
+    # placeholder: the worker must not gain a value the parent never held.
+    monkeypatch.setattr(os, "environ", {})
+
+    env = worker_env(str(tmp_path))
+
+    assert env == {"HOME": str(tmp_path), "TMPDIR": str(tmp_path)}
+
+
+@pytest.mark.parametrize("scratch", ["", "scratch", "scratch/nested"])
+def test_a_scratch_directory_that_is_not_absolute_is_refused(scratch) -> None:
+    # HOME and TMPDIR are all that keep pre-sandbox code out of the user's
+    # dot files, so a scratch directory they cannot point at reliably is an
+    # error here rather than a surprise inside the worker.
+    with pytest.raises(ValueError, match="absolute"):
+        worker_env(scratch)
 
 
 def test_a_container_image_is_accepted_even_outside_a_virtual_environment() -> None:
@@ -214,27 +239,35 @@ def test_the_launch_command_uses_the_given_interpreter() -> None:
     ]
 
 
-def test_container_detection_follows_the_marker_files(tmp_path, monkeypatch) -> None:
-    marker = tmp_path / ".dockerenv"
-    monkeypatch.setattr(_env, "_CONTAINER_MARKERS", (str(marker),))
+@pytest.mark.parametrize("present", [0, 1])
+def test_container_detection_follows_the_marker_files(
+    tmp_path, monkeypatch, present
+) -> None:
+    # Either marker alone must be enough; a single-element tuple could not
+    # tell that apart from checking only the first, or requiring all.
+    markers = (tmp_path / ".dockerenv", tmp_path / ".containerenv")
+    monkeypatch.setattr(_env, "_CONTAINER_MARKERS", tuple(str(m) for m in markers))
 
     assert in_container() is False
-    marker.touch()
+    markers[present].touch()
     assert in_container() is True
 
 
-def test_an_inferred_container_suppresses_the_warning(tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize("present", [0, 1])
+def test_an_inferred_container_suppresses_the_warning(
+    tmp_path, monkeypatch, present
+) -> None:
     # With containerised left to inference, the marker files are what stand
     # between a shared machine and a silenced warning, so both outcomes need
     # to be reachable from the default call.
     executable = getattr(sys, "_base_executable", None)
     if executable is None:
         pytest.skip("no non-virtual-environment interpreter to test against")
-    marker = tmp_path / ".containerenv"
-    monkeypatch.setattr(_env, "_CONTAINER_MARKERS", (str(marker),))
+    markers = (tmp_path / ".dockerenv", tmp_path / ".containerenv")
+    monkeypatch.setattr(_env, "_CONTAINER_MARKERS", tuple(str(m) for m in markers))
 
     assert interpreter_warning(executable) is not None
-    marker.touch()
+    markers[present].touch()
     assert interpreter_warning(executable) is None
 
 

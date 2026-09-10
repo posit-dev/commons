@@ -16,12 +16,21 @@ from pathlib import Path
 
 __all__ = ["in_container", "interpreter_warning", "worker_command", "worker_env"]
 
-# Enough to find an interpreter and produce readable text, and nothing else.
-_KEEP = ("PATH", "LANG", "LD_LIBRARY_PATH")
+# Enough to find an interpreter, load its libraries, and produce readable
+# text, and nothing else. LD_LIBRARY_PATH and DYLD_LIBRARY_PATH are the
+# Linux and macOS spellings of the same dynamic-linker search path.
+_KEEP = ("PATH", "LANG", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
 
 
 def worker_env(scratch_dir: str) -> dict[str, str]:
-    """Build the worker's environment from an allowlist of the parent's."""
+    """Build the worker's environment from an allowlist of the parent's.
+
+    ``scratch_dir`` must be an absolute path; it becomes the worker's
+    ``HOME`` and ``TMPDIR``, and a relative or empty value would silently
+    weaken the guarantee those two provide.
+    """
+    if not os.path.isabs(scratch_dir):
+        raise ValueError(f"scratch_dir must be an absolute path, got {scratch_dir!r}")
     env = {name: os.environ[name] for name in _KEEP if name in os.environ}
     env.update(
         {name: value for name, value in os.environ.items() if name.startswith("LC_")}
@@ -42,7 +51,10 @@ def worker_command(
     ``-I`` is not a hardening extra to be traded off; it belongs with the
     allowlist. Without it ``site`` imports ``usercustomize`` from the user site
     directory, which runs before the worker and can write excluded variables
-    back into ``os.environ``. ``-u`` keeps the protocol channel unbuffered.
+    back into ``os.environ``. It does not reach the global site-packages,
+    where a ``sitecustomize`` module or ``.pth`` file still runs;
+    ``interpreter_warning()`` covers that residual. ``-u`` keeps the protocol
+    channel unbuffered.
 
     ``executable`` defaults to the interpreter running commons, which is what
     makes the worker's installed packages match the host's.
@@ -106,7 +118,7 @@ def interpreter_warning(
     reason = (
         "is a virtual environment built with --system-site-packages"
         if includes_system_site
-        else "is not a virtual environment"
+        else "is not a virtual environment, or its pyvenv.cfg cannot be read"
     )
     return (
         f"the code execution worker would run on {executable}, which {reason}, "
