@@ -28,6 +28,12 @@ html_svg_source <- function(html) {
   rawToChar(jsonlite::base64_dec(data))
 }
 
+html_png_dimensions <- function(html) {
+  data <- sub('.*data:image/png;base64,([^"]+)".*', "\\1", html)
+  info <- magick::image_info(magick::image_read(jsonlite::base64_dec(data)))
+  unname(as.integer(info[1, c("width", "height")]))
+}
+
 test_source <- function() {
   suppressMessages(data_source(sales = test_sales()))
 }

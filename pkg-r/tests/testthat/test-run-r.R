@@ -150,6 +150,26 @@ test_that("run_r returns plots as images and opens the display", {
   expect_match(res@extra$display$html, "<summary>Details</summary>", fixed = TRUE)
 })
 
+test_that("run_r falls back to a high-resolution PNG for large SVGs", {
+  local_mocked_bindings(plot_svg_inline_limit = function() 0)
+  worker <- local_worker()
+  store <- new_handle_store()
+
+  res <- sync_promise(run_r_tool(worker, store, "plot(1:10)"))
+
+  images <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentImageInline),
+    res@value
+  )
+  expect_length(images, 1)
+  expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
+  expect_match(res@extra$display$html, "data:image/png;base64,", fixed = TRUE)
+  expect_identical(
+    html_png_dimensions(res@extra$display$html),
+    c(1536L, 1024L)
+  )
+})
+
 test_that("run_r collapses code and output above plots", {
   worker <- local_worker()
   store <- new_handle_store()

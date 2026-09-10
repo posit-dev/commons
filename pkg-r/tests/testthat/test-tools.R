@@ -230,6 +230,32 @@ test_that("call_measure_tool shows ggplot results to the model and user", {
   expect_identical(res@extra$display$open, TRUE)
 })
 
+test_that("call_measure_tool falls back to a high-resolution PNG", {
+  skip_if_not_installed("ggplot2")
+  local_mocked_bindings(plot_svg_inline_limit = function() 0)
+  registry <- list(
+    plot = measure(
+      "plot",
+      "Plot values.",
+      function() ggplot2::ggplot()
+    )
+  )
+
+  res <- call_measure_tool(registry, "plot", "{}", handles = new_handle_store())
+
+  images <- Filter(
+    \(x) S7::S7_inherits(x, ellmer::ContentImageInline),
+    res@value
+  )
+  expect_length(images, 1)
+  expect_identical(inline_image_dimensions(images[[1]]), c(768L, 512L))
+  expect_match(res@extra$display$html, "data:image/png;base64,", fixed = TRUE)
+  expect_identical(
+    html_png_dimensions(res@extra$display$html),
+    c(1536L, 1024L)
+  )
+})
+
 test_that("call_measure_tool shows gt tables to the model and user", {
   skip_if_not_installed("gt")
   table_data <- data.frame(term = "Headache", count = 7)

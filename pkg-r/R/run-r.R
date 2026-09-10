@@ -107,6 +107,8 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
               new_handles = new_handles,
               plot_width = dims$width,
               plot_height = dims$height,
+              plot_pixel_ratio = dims$pixel_ratio,
+              plot_svg_inline_limit = plot_svg_inline_limit(),
               evaluate = evaluate::evaluate,
               new_output_handler = evaluate::new_output_handler
             )
@@ -227,9 +229,16 @@ run_r_html <- function(code, segments) {
       next
     }
     if (seg$type == "plot") {
+      dims <- plot_dimensions()
       plot_html <- c(plot_html, sprintf(
-        "<img class=\"commons-run-r-plot\" src=\"data:image/svg+xml;base64,%s\" alt=\"Plot produced by R code\"/>",
-        plot_image_data(seg$path)
+        paste0(
+          "<img class=\"commons-run-r-plot\" src=\"data:%s;base64,%s\" ",
+          "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
+        ),
+        plot_image_type(seg$path),
+        plot_image_data(seg$path),
+        dims$width,
+        dims$height
       ))
     } else {
       output <- c(
