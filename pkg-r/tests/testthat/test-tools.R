@@ -256,7 +256,17 @@ test_that("call_measure_tool falls back to a high-resolution PNG", {
   )
 })
 
-test_that("model plot images have consistent dimensions", {
+test_that("model SVGs are rasterized above their target dimensions", {
+  skip_if_not_installed("ggplot2")
+  path <- withr::local_tempfile(fileext = ".svg")
+  render_plot_svg(ggplot2::ggplot(), path, 576, 384)
+
+  image <- model_plot_image(path, 768, 512)
+
+  expect_identical(inline_image_dimensions(image), c(768L, 512L))
+})
+
+test_that("model plot images are not upscaled", {
   path <- withr::local_tempfile(fileext = ".png")
   magick::image_write(
     magick::image_blank(576, 384),
@@ -266,7 +276,7 @@ test_that("model plot images have consistent dimensions", {
 
   image <- model_plot_image(path, 768, 512)
 
-  expect_identical(inline_image_dimensions(image), c(768L, 512L))
+  expect_identical(inline_image_dimensions(image), c(576L, 384L))
 })
 
 test_that("call_measure_tool shows gt tables to the model and user", {

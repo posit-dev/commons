@@ -49,13 +49,12 @@ plot_svg_inline_limit <- function() {
 
 model_plot_image <- function(path, width, height) {
   image <- if (identical(plot_image_type(path), "image/svg+xml")) {
-    # At 72 DPI, the SVG's points map one-to-one to model image pixels.
-    magick::image_read(path, density = 72, strip = TRUE)
+    # Rasterize vectors above the target size so resizing never invents pixels.
+    magick::image_read(path, density = 144, strip = TRUE)
   } else {
     magick::image_read(path, strip = TRUE)
   }
-  # SVG density varies by renderer, so normalize rather than shrink only.
-  image <- magick::image_resize(image, sprintf("%dx%d!", width, height))
+  image <- magick::image_resize(image, sprintf("%dx%d>", width, height))
   data <- magick::image_write(image, format = "png")
   ellmer::ContentImageInline("image/png", plot_base64_data(data))
 }
