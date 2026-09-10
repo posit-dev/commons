@@ -22,12 +22,16 @@ __all__ = ["in_container", "interpreter_warning", "worker_command", "worker_env"
 _KEEP = ("PATH", "LANG", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")
 
 
-def worker_env(scratch_dir: str) -> dict[str, str]:
+def worker_env(scratch_dir: str, *, single_thread: bool = False) -> dict[str, str]:
     """Build the worker's environment from an allowlist of the parent's.
 
     ``scratch_dir`` must be an absolute path; it becomes the worker's
     ``HOME`` and ``TMPDIR``, and a relative or empty value would silently
     weaken the guarantee those two provide.
+
+    ``single_thread`` pins the numerical thread pools, which the
+    user-namespace sandbox needs because it cannot be engaged by a process
+    that has already started one. ``needs_single_thread()`` decides.
     """
     if not os.path.isabs(scratch_dir):
         raise ValueError(f"scratch_dir must be an absolute path, got {scratch_dir!r}")
@@ -40,6 +44,11 @@ def worker_env(scratch_dir: str) -> dict[str, str]:
     # of the user's dot files.
     env["HOME"] = scratch_dir
     env["TMPDIR"] = scratch_dir
+    if single_thread:
+        # Values commons chooses rather than parent variables it passes on,
+        # so they are set here rather than added to the allowlist.
+        env["OPENBLAS_NUM_THREADS"] = "1"
+        env["OMP_NUM_THREADS"] = "1"
     return env
 
 

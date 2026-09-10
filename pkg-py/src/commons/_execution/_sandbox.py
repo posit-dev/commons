@@ -18,12 +18,13 @@ import platform
 from dataclasses import dataclass
 from typing import Literal
 
-from ._runtime import _landlock, _seccomp
+from ._runtime import _landlock, _seccomp, _userns
 
 __all__ = [
     "ALLOW_UNSAFE_FALLBACK",
     "ProtectionMode",
     "SandboxCapabilities",
+    "needs_single_thread",
     "protection_mode",
     "sandbox_capabilities",
 ]
@@ -76,17 +77,16 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is answered by the module that implements its mechanism. Only
-    user namespaces have no implementation yet and report unavailable until
-    they do, which costs nothing on a kernel that offers Landlock and is the
-    safe direction to be wrong in on one that does not. Probing is read-only,
-    so this leaves the calling process as unrestricted as it found it.
+    Every field is now answered by the module that implements its
+    mechanism, so this reports what the host really offers rather than a
+    placeholder. Probing is read-only, so it leaves the calling process as
+    unrestricted as it found it.
     """
     return SandboxCapabilities(
         landlock_abi=_landlock.abi_version(),
         seccomp=_seccomp.seccomp_available(),
         seatbelt=_seatbelt_present(),
-        userns=False,
+        userns=_userns.available(),
     )
 
 
@@ -146,4 +146,34 @@ def protection_mode(
         )
     raise RuntimeError(
         f"commons cannot sandbox the code execution worker on {sysname}. {_OPT_IN}"
+    )
+
+
+def needs_single_thread(
+    capabilities: SandboxCapabilities | None = None,
+    *,
+    sysname: str | None = None,
+) -> bool:
+    """Whether the worker has to be started with its thread pools pinned.
+
+    ``unshare(CLONE_NEWUSER)`` refuses a multi-threaded process, so the
+    user-namespace sandbox can only be engaged by a worker that never started
+    a BLAS pool. That costs the worker its parallelism, so it is asked for
+    only where that sandbox is the one that will be used: not where Landlock
+    will be, and not where ``protection_mode()`` refuses the host outright,
+    which it does without seccomp however good the filesystem sandbox is.
+
+    ``worker_single_thread()`` in pkg-r/R/run-r.R answers the same question
+    from the Landlock check alone. The two extra conditions here only narrow
+    it further, to the hosts that will really engage this sandbox.
+    """
+    if capabilities is None:
+        capabilities = sandbox_capabilities()
+    if sysname is None:
+        sysname = platform.system()
+    return (
+        sysname == "Linux"
+        and capabilities.seccomp
+        and capabilities.landlock_abi < 1
+        and capabilities.userns
     )
