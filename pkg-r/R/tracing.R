@@ -29,6 +29,8 @@ new_trajectory_tracing <- function(
     return(FALSE)
   }
 
+  warn_if_content_instrumentation_disabled()
+
   if (!is_installed("otel")) {
     cli::cli_warn(c(
       "Trajectory logging requires the {.pkg otel} package.",
@@ -65,6 +67,27 @@ new_trajectory_tracing <- function(
   }
 
   TRUE
+}
+
+warn_if_content_instrumentation_disabled <- function() {
+  if (!is_connect_runtime()) {
+    return(invisible(NULL))
+  }
+
+  # This endpoint is internal, so any failure or missing field means unknown.
+  allowed <- tryCatch(
+    connect_server_settings(connect_client())$allow_content_instrumentation,
+    error = function(err) NULL
+  )
+  if (identical(allowed, FALSE)) {
+    cli::cli_warn(c(
+      "Trajectory logging is disabled by this Posit Connect server's
+       configuration.",
+      i = "Ask your server administrator to enable content instrumentation
+           for traces to flow."
+    ))
+  }
+  invisible(NULL)
 }
 
 # Start and activate a span for the calling frame's lifetime, ending when it
@@ -231,10 +254,7 @@ enable_content_observability <- function() {
       "{.emph Content Observability} is enabled for this content, but this
        process started without OpenTelemetry tracing."
     },
-    i = "Trajectory logging will begin once the content restarts.",
-    i = "If it doesn't, a server administrator may need to set
-         {.code OpenTelemetry.AllowContentInstrumentation = true} in the
-         Connect configuration."
+    i = "Trajectory logging will begin once the content restarts."
   ))
   invisible(NULL)
 }
@@ -247,10 +267,7 @@ warn_tracing_disabled <- function() {
       "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
       i = "Enable {.emph Content Observability} in this content's
            {.emph Settings > Advanced} panel on Posit Connect, then redeploy
-           or restart the content.",
-      i = "A server administrator may first need to set
-           {.code OpenTelemetry.AllowContentInstrumentation = true} in the
-           Connect configuration."
+           or restart the content."
     ))
   } else {
     cli::cli_warn(c(

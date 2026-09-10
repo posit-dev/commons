@@ -1,5 +1,4 @@
-# A minimal Posit Connect API client for the two things commons needs from
-# Connect: reading content traces and granting collaborator access.
+# A minimal Posit Connect API client for the operations commons needs.
 
 is_connect_runtime <- function() {
   identical(Sys.getenv("POSIT_PRODUCT"), "CONNECT") ||
@@ -40,6 +39,16 @@ connect_req <- function(client, ...) {
   httr2::request(client$server) |>
     httr2::req_url_path_append("__api__", "v1", ...) |>
     httr2::req_headers_redacted(Authorization = paste("Key", client$api_key))
+}
+
+connect_server_settings <- function(client) {
+  httr2::request(client$server) |>
+    httr2::req_url_path_append("__api__", "server_settings") |>
+    httr2::req_headers_redacted(
+      Authorization = paste("Key", client$api_key)
+    ) |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
 }
 
 # Search exposes vanity URLs to content viewers without requiring the
