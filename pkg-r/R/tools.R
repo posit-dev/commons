@@ -523,7 +523,7 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
-    return(measure_content_tool_result(td, value, handles, footer))
+    return(measure_content_tool_result(td, args, value, handles, footer))
   }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
@@ -554,7 +554,7 @@ call_measure_tool <- function(
   )
 }
 
-measure_content_tool_result <- function(td, result, handles, footer) {
+measure_content_tool_result <- function(td, args, result, handles, footer) {
   data <- result@extra$data
   result@extra$data <- NULL
   display <- result@extra$display
@@ -577,12 +577,21 @@ measure_content_tool_result <- function(td, result, handles, footer) {
     display <- shinychat::tool_result_display(
       title = title,
       icon = icon,
-      footer = footer
+      footer = footer,
+      show_request = FALSE
     )
   } else if (is.list(display)) {
     display$title <- display$title %||% title
     display$icon <- display$icon %||% icon
     display$footer <- display$footer %||% footer
+    display$show_request <- FALSE
+    if (!is.null(display$html)) {
+      display$html <- measure_display_with_custom_html(
+        args,
+        display$html,
+        measure_metadata(td)
+      )
+    }
   }
   result@extra$display <- display
   result@extra$commons_tag <- "A"
@@ -1074,6 +1083,25 @@ measure_display_with_result_html <- function(
     measure_metadata_html(metadata),
     measure_args_html(args),
     result_html
+  )
+}
+
+measure_display_with_custom_html <- function(args, result_html, metadata) {
+  if (is.character(result_html)) {
+    result_html <- htmltools::HTML(result_html)
+  }
+  htmltools::div(
+    class = "commons-measure-display",
+    htmltools::HTML(measure_metadata_html(metadata)),
+    htmltools::HTML(measure_args_html(args)),
+    htmltools::div(
+      class = "commons-measure-result",
+      htmltools::tags$strong("Result"),
+      htmltools::div(
+        class = "commons-measure-result-value",
+        result_html
+      )
+    )
   )
 }
 

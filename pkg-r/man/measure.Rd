@@ -33,9 +33,10 @@ supply.
 Two return types receive special display handling: ggplots and \code{\link[gt:gt]{gt::gt()}}
 tables are shown directly to the user in the opened measure result.
 
-For full control over a result, \code{fn} can return an
-\link[ellmer:ContentToolResult]{ellmer::ContentToolResult}. Its \code{value} is sent to the model and its
-\code{extra$display} controls the shinychat display. An optional \code{extra$data}
+For custom result content, \code{fn} can return an \link[ellmer:ContentToolResult]{ellmer::ContentToolResult}.
+Its \code{value} is sent to the model and its \code{extra$display} supplies the
+shinychat body and card options. Custom HTML is presented inside the standard
+measure display, after its metadata and arguments. An optional \code{extra$data}
 value is made available in the agent's R session and removed from the result
 before it is returned to ellmer.
 }

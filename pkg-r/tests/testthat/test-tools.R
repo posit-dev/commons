@@ -79,20 +79,31 @@ test_that("call_measure_tool registers scalar output as a handle", {
 
 test_that("call_measure_tool supports custom ContentToolResult values", {
   table <- data.frame(term = "Headache", count = 7)
-  display <- shinychat::tool_result_display(
-    html = htmltools::tags$table(
+  dependency <- htmltools::htmlDependency(
+    "measure-table",
+    "1.0.0",
+    src = c(href = "measure-table"),
+    stylesheet = "table.css"
+  )
+  table_html <- htmltools::attachDependencies(
+    htmltools::tags$table(
       htmltools::tags$tr(
         htmltools::tags$td("Headache"),
         htmltools::tags$td("7")
       )
     ),
-    open = TRUE
+    dependency
+  )
+  display <- shinychat::tool_result_display(
+    html = table_html,
+    open = TRUE,
+    full_screen = TRUE
   )
   registry <- list(
     table = measure(
       "table",
       "Summarize adverse events.",
-      function() {
+      function(population) {
         ellmer::ContentToolResult(
           value = "Headache: 7",
           extra = list(
@@ -102,12 +113,20 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
           )
         )
       },
+      arguments = list(
+        population = ellmer::type_string("Analysis population.")
+      ),
       title = "Adverse events & outcomes"
     )
   )
   store <- new_handle_store()
 
-  res <- call_measure_tool(registry, "table", "{}", handles = store)
+  res <- call_measure_tool(
+    registry,
+    "table",
+    '{"population":"ITT"}',
+    handles = store
+  )
 
   expect_match(
     res@value,
@@ -120,8 +139,26 @@ test_that("call_measure_tool supports custom ContentToolResult values", {
   expect_identical(get_handle(store, "r1"), table)
   expect_null(res@extra$data)
   expect_identical(res@extra$custom, "preserved")
-  expect_identical(res@extra$display$html, display$html)
+  rendered <- as.character(res@extra$display$html)
+  expect_match(rendered, "commons-measure-display", fixed = TRUE)
+  expect_match(rendered, "Adverse events &amp; outcomes", fixed = TRUE)
+  expect_match(rendered, "Summarize adverse events.", fixed = TRUE)
+  expect_match(rendered, "Population:", fixed = TRUE)
+  expect_match(rendered, "ITT", fixed = TRUE)
+  expect_match(rendered, "<strong>Result</strong>", fixed = TRUE)
+  expect_match(rendered, "Headache", fixed = TRUE)
+  expect_identical(
+    vapply(
+      htmltools::findDependencies(res@extra$display$html),
+      `[[`,
+      character(1),
+      "name"
+    ),
+    "measure-table"
+  )
   expect_identical(res@extra$display$open, TRUE)
+  expect_identical(res@extra$display$full_screen, TRUE)
+  expect_identical(res@extra$display$show_request, FALSE)
   expect_identical(
     res@extra$display$title,
     "Ran a trusted calculation"
@@ -159,6 +196,7 @@ test_that("call_measure_tool preserves image content in ContentToolResult", {
   expect_identical(get_handle(store, "r1"), data)
   expect_null(res@extra$data)
   expect_identical(res@extra$display$title, "Ran a trusted calculation")
+  expect_identical(res@extra$display$show_request, FALSE)
 })
 
 test_that("call_measure_tool preserves custom ContentToolResult errors", {
