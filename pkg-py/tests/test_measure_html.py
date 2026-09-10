@@ -128,7 +128,14 @@ def test_a_column_a_row_omits_is_still_a_column() -> None:
     assert "<th>b</th>" in html
 
 
-def test_an_argument_that_was_not_given_is_left_out() -> None:
-    html = rendered(measure_display_html({"metrics": ["revenue"], "filters": None}, 41))
 
-    assert "Filters" not in html
+def test_a_query_that_matched_nothing_says_so() -> None:
+    """The card and the markdown the model reads must not disagree."""
+    assert "No rows." in rendered(measure_display_html({}, []))
+
+
+def test_an_argument_explicitly_set_to_null_is_still_shown() -> None:
+    """A null argument can override a non-null default, so it is how it ran."""
+    html = rendered(measure_display_html({"region": None}, 41))
+
+    assert "Region" in html

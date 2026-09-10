@@ -411,3 +411,15 @@ def test_a_failed_calculation_cannot_claim_the_trusted_tag_itself() -> None:
 
     assert isinstance(result, ContentToolResult)
     assert TAG_EXTRA_KEY not in (result.extra or {})
+
+
+def test_a_metrics_card_shows_only_the_arguments_the_model_gave() -> None:
+    built = build_commons_tools(
+        ToolContext(
+            sources={"sales_db": source()}, definitions=Registry([_net_revenue()])
+        )
+    )
+
+    display = ran(built, "call_metrics", metrics=["net_revenue"])
+
+    assert "Dimensions" not in markup(display.html)

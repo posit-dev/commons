@@ -284,8 +284,19 @@ def call_metrics(
         tag=Tag.A,
         title=TRUSTED_CALL.settled,
         markdown=f"```sql\n{sql}\n```\n\n{rows_to_markdown(rows)}",
+        # Only the arguments the caller gave: an omitted one is not how the
+        # query ran, unlike a measure argument explicitly set to null.
         html=measure_display_html(
-            {"metrics": metrics, "dimensions": dimensions, "filters": filters}, rows
+            {
+                name: value
+                for name, value in (
+                    ("metrics", metrics),
+                    ("dimensions", dimensions),
+                    ("filters", filters),
+                )
+                if value is not None
+            },
+            rows,
         ),
     )
 
