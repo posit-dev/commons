@@ -484,6 +484,7 @@ worker_run_code <- function(
   new_handles,
   plot_width,
   plot_height,
+  plot_pixel_ratio,
   evaluate,
   new_output_handler
 ) {
@@ -510,11 +511,16 @@ worker_run_code <- function(
       return()
     }
     path <- tempfile("plot-", fileext = ".png")
-    if (requireNamespace("ragg", quietly = TRUE)) {
-      ragg::agg_png(path, width = plot_width, height = plot_height, scaling = 1.5)
-    } else {
-      grDevices::png(path, width = plot_width, height = plot_height)
-    }
+    # HTML displays this 2x image at half its pixel dimensions, giving browsers
+    # two image pixels per CSS pixel. Scaling resolution too preserves text and
+    # point sizes at the logical display size.
+    ragg::agg_png(
+      path,
+      width = plot_width * plot_pixel_ratio,
+      height = plot_height * plot_pixel_ratio,
+      res = 72 * plot_pixel_ratio,
+      scaling = 1.5
+    )
     tryCatch(
       grDevices::replayPlot(last_plot),
       finally = grDevices::dev.off()
