@@ -21,7 +21,12 @@ def run_in_fresh_interpreter(body: str) -> str:
         check=False,
     )
     assert result.returncode == 0, result.stderr
-    assert result.stderr == ""
+    # Native code writes to stderr outside Python's warnings system:
+    # onnxruntime (a magika dependency) logs a device-probe warning on the
+    # Linux CI runners. Assert only that commons and OpenTelemetry stay
+    # quiet; total silence is not commons' to guarantee.
+    assert "opentelemetry" not in result.stderr
+    assert "commons" not in result.stderr
     return result.stdout
 
 
