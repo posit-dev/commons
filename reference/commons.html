@@ -118,16 +118,15 @@ are not a security boundary.</p></dd>
 
 
 <dt id="arg-log">log<a class="anchor" aria-label="anchor" href="#arg-log"></a></dt>
-<dd><p>Whether to capture conversation trajectories with OpenTelemetry
-(default <code>FALSE</code>). When <code>TRUE</code>, commons enables GenAI message-content
-capture in <span class="pkg">ellmer</span> and tags each turn's spans with a conversation
-id; the spans go wherever OTel is configured to export. On Posit Connect,
+<dd><p>Whether to request conversation trajectory capture with
+OpenTelemetry (default <code>FALSE</code>). When <code>TRUE</code>, commons checks the tracing
+setup and warns with setup steps when it is incomplete.
+Set <code>OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true</code> before R
+starts so <span class="pkg">ellmer</span> includes message content. On Posit Connect,
 traces land in Connect's observability store (browsable in its Trace
 Viewer); commons switches on the content's <em>Content Observability</em>
 setting itself when needed, though capture only starts once the content
-restarts. Locally, commons configures <span class="pkg">otelsdk</span>'s file exporter
-automatically when no exporter is set up. Read trajectories back with
-<code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
+restarts. Read trajectories back with <code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
 
 
 <dt id="arg-share-with">share_with<a class="anchor" aria-label="anchor" href="#arg-share-with"></a></dt>

@@ -78,15 +78,15 @@ commons(
 
 - log:
 
-  Whether to capture conversation trajectories with OpenTelemetry
-  (default `FALSE`). When `TRUE`, commons enables GenAI message-content
-  capture in ellmer and tags each turn's spans with a conversation id;
-  the spans go wherever OTel is configured to export. On Posit Connect,
-  traces land in Connect's observability store (browsable in its Trace
-  Viewer); commons switches on the content's *Content Observability*
-  setting itself when needed, though capture only starts once the
-  content restarts. Locally, commons configures otelsdk's file exporter
-  automatically when no exporter is set up. Read trajectories back with
+  Whether to request conversation trajectory capture with OpenTelemetry
+  (default `FALSE`). When `TRUE`, commons checks the tracing setup and
+  warns with setup steps when it is incomplete. Set
+  `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` before R
+  starts so ellmer includes message content. On Posit Connect, traces
+  land in Connect's observability store (browsable in its Trace Viewer);
+  commons switches on the content's *Content Observability* setting
+  itself when needed, though capture only starts once the content
+  restarts. Read trajectories back with
   [`trajectory_read()`](https://posit-dev.github.io/commons/reference/trajectory_read.md).
 
 - share_with:
