@@ -90,7 +90,6 @@
     Condition
       Warning:
       Trajectory logging requires GenAI message-content capture.
-      i It is not enabled for this R process.
       i Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in your '~/.Renviron' and restart R.
 
 # missing content capture warns and uses the ellmer fallback
@@ -100,7 +99,6 @@
     Condition
       Warning:
       Trajectory logging requires GenAI message-content capture.
-      i commons enabled it for this R process as a compatibility fallback.
       i Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in your '~/.Renviron' and restart R.
 
 # a missing ellmer fallback leaves content capture disabled
@@ -110,6 +108,5 @@
     Condition
       Warning:
       Trajectory logging requires GenAI message-content capture.
-      i It is not enabled for this R process.
       i Set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in your '~/.Renviron' and restart R.
 
