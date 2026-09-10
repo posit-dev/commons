@@ -8,16 +8,18 @@ import importlib.util
 _EXTRA_PACKAGES = ("packaging", "shiny", "shinychat")
 
 
+def _present(name: str) -> bool:
+    # find_spec consults every finder on sys.meta_path, and a finder may
+    # raise ModuleNotFoundError for a top-level name rather than return
+    # None. A name no finder will resolve is not installed either way.
+    try:
+        return importlib.util.find_spec(name) is not None
+    except ImportError:
+        return False
+
+
 def _missing_packages() -> list[str]:
-    missing: list[str] = []
-    for name in _EXTRA_PACKAGES:
-        try:
-            found = importlib.util.find_spec(name) is not None
-        except ImportError:
-            found = False
-        if not found:
-            missing.append(name)
-    return missing
+    return [name for name in _EXTRA_PACKAGES if not _present(name)]
 
 
 def _listed(names: list[str]) -> str:
