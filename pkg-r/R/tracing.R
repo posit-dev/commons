@@ -53,8 +53,6 @@ new_trajectory_tracing <- function(
   if (!otel::is_tracing_enabled()) {
     if (is_connect_runtime()) {
       enable_content_observability()
-    } else {
-      warn_tracing_disabled()
     }
     return(FALSE)
   }
@@ -272,16 +270,13 @@ enable_content_observability <- function() {
 observability <- new.env(parent = emptyenv())
 
 warn_tracing_disabled <- function() {
-  if (is_connect_runtime()) {
-    cli::cli_warn(c(
-      "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
-      i = connect_content_tracing_hint()
-    ))
-  } else {
-    cli::cli_warn(
-      "Trajectory logging is enabled but OpenTelemetry tracing is not active."
-    )
+  if (!is_connect_runtime()) {
+    return(invisible(NULL))
   }
+  cli::cli_warn(c(
+    "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
+    i = connect_content_tracing_hint()
+  ))
   invisible(NULL)
 }
 

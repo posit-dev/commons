@@ -74,7 +74,7 @@ test_that("the content-capture deployment warning is limited to Connect", {
   expect_no_warning(warn_if_content_capture_not_deployed())
 })
 
-test_that("log = TRUE warns when tracing stays disabled locally", {
+test_that("log = TRUE stays quiet when tracing is disabled locally", {
   skip_if_not_installed("otel")
   withr::local_envvar(
     POSIT_PRODUCT = NA,
@@ -82,7 +82,7 @@ test_that("log = TRUE warns when tracing stays disabled locally", {
     COMMONS_TRACES_DIR = "/tmp/commons-traces"
   )
 
-  expect_snapshot(.res <- new_trajectory_tracing(TRUE))
+  expect_no_warning(.res <- new_trajectory_tracing(TRUE))
   expect_false(.res)
 })
 

@@ -41,14 +41,6 @@
       Trajectory logging requires additional deployment setup.
       i Include `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` in the `envVars` argument to `rsconnect::deployApp()`, then redeploy.
 
-# log = TRUE warns when tracing stays disabled locally
-
-    Code
-      .res <- new_trajectory_tracing(TRUE)
-    Condition
-      Warning:
-      Trajectory logging is enabled but OpenTelemetry tracing is not active.
-
 # log = TRUE points at Content Observability on Connect
 
     Code
