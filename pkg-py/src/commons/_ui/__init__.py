@@ -29,6 +29,7 @@ def _listed(names: list[str]) -> str:
 
 
 try:
+    from ._app import app
     from ._assets import asset_base_url, commons_chat_dependency
     from ._server import server
     from ._theme import theme
@@ -42,4 +43,4 @@ except ModuleNotFoundError as err:
         'Install with: pip install "commons[shiny]"'
     ) from err
 
-__all__ = ["asset_base_url", "commons_chat_dependency", "server", "theme"]
+__all__ = ["app", "asset_base_url", "commons_chat_dependency", "server", "theme"]

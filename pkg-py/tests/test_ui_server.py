@@ -20,7 +20,6 @@ pytest.importorskip("shinychat", reason="commons[shiny] is not installed")
 import pandas as pd
 import shinychat
 from chatlas import Chat
-from shiny.express._stub_session import ExpressStubSession
 from shiny.session import session_context
 
 import commons
@@ -28,6 +27,7 @@ from commons._agent import Commons
 from commons._reminders import RESTORED_CONVERSATION_REMINDER, ContentTurnReminder
 
 from ._provider import scripted_chat, text
+from ._session import IdleSession
 
 
 @pytest.fixture(scope="module")
@@ -55,32 +55,6 @@ def exported_spans() -> Iterator[Callable[[], tuple[Any, ...]]]:
     exporter.clear()
 
 
-class _IdleSession(ExpressStubSession):
-    """A shiny session that keeps the idle callbacks so a test can run them.
-
-    The stub session shiny uses to render express UI discards what
-    `on_flushed()` registers, because nothing ever flushes it.
-    """
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.idle_callbacks: list[tuple[Callable[[], Any], bool]] = []
-
-    def on_flushed(
-        self, fn: Callable[[], Any], once: bool = True
-    ) -> Callable[[], None]:
-        self.idle_callbacks.append((fn, once))
-        return lambda: None
-
-    def go_idle(self) -> None:
-        # A `once` callback deregisters when it fires; the rest run each flush.
-        callbacks, self.idle_callbacks = self.idle_callbacks, []
-        for fn, once in callbacks:
-            fn()
-            if not once:
-                self.idle_callbacks.append((fn, once))
-
-
 def frame() -> pd.DataFrame:
     return pd.DataFrame(
         {"revenue": [500.0, 900.0, 300.0], "region": ["EMEA", "Americas", "EMEA"]}
@@ -100,7 +74,7 @@ def test_the_client_has_to_be_a_commons_agent() -> None:
 
 def test_the_chat_is_wired_to_the_agent() -> None:
     agent = agent_with(scripted_chat())
-    session = _IdleSession()
+    session = IdleSession()
 
     with session_context(session):
         chat = commons.ui.server("chat", agent)
@@ -114,7 +88,7 @@ def test_the_chat_is_wired_to_the_agent() -> None:
 
 def test_restoring_a_conversation_queues_the_restore_reminder() -> None:
     agent = agent_with(scripted_chat([text("An answer.")]))
-    session = _IdleSession()
+    session = IdleSession()
     with session_context(session):
         chat = commons.ui.server("chat", agent)
 
@@ -139,7 +113,7 @@ def test_prewarm_runs_when_the_session_first_goes_idle(tmp_path: Path) -> None:
     )
     layer = agent._context_layer
     assert layer is not None
-    session = _IdleSession()
+    session = IdleSession()
 
     with session_context(session):
         commons.ui.server("chat", agent)
@@ -163,7 +137,7 @@ def test_a_failed_prewarm_is_logged_rather_than_stopping_the_app(
     agent = Commons(
         scripted_chat(), commons.data_source(board, tables={"sales": "sales-pin"})
     )
-    session = _IdleSession()
+    session = IdleSession()
     with session_context(session):
         commons.ui.server("chat", agent)
 
@@ -176,7 +150,7 @@ def test_a_failed_prewarm_is_logged_rather_than_stopping_the_app(
 
 def test_extra_kwargs_are_passed_to_shinychat() -> None:
     agent = agent_with(scripted_chat())
-    session = _IdleSession()
+    session = IdleSession()
 
     with session_context(session):
         chat = commons.ui.server("chat", agent, on_error="unhandled")
@@ -189,7 +163,7 @@ def test_the_setup_span_records_the_chat_element_id(
 ) -> None:
     agent = agent_with(scripted_chat())
 
-    with session_context(_IdleSession()):
+    with session_context(IdleSession()):
         commons.ui.server("chat", agent)
 
     (span,) = [span for span in exported_spans() if span.name == "commons_server_start"]

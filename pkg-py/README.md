@@ -46,8 +46,10 @@ agent.chat("What is EMEA revenue?")
 
 Use `stream_async()` in place of `chat()` to stream an answer as it arrives. Its signature is chatlas's, so a chat UI can drive the agent directly.
 
+`commons.ui` puts the agent behind a py-shiny chat, which needs the `shiny` extra: `pip install "commons[shiny]"`. `commons.ui.app(agent)` is a complete app for local development. It shares its one agent across every session, so it suits one visitor at a time: two questions answered at once interleave the agent's citation and provenance state, and neither answer can be trusted. A deployed app builds the page with `commons.ui.theme()`, calls `commons.ui.server("chat", agent)` in its server function, and constructs the agent there so each session gets its own.
+
 An agent is a chatlas `Chat`, so `get_tools()`, `system_prompt`, `set_model_params()` and the rest of that surface work on it directly. `chat()` and `stream_async()` are the only ways to ask it something. The other entry points chatlas offers would answer without the citation scanner and the provenance tag, so each of them raises `NotImplementedError`.
 
-`demo.py` here is a fuller worked example, an agent over made-up forest canopy data with two measures and a context layer, asked from the terminal. `demo.ipynb` is the same agent in a notebook, with cells for reading what it registered and adding a measure of your own. `pkg-r/inst/demo.R` is the R package's version of it, behind a Shiny front end.
+`demo.py` here is a fuller worked example, an agent over made-up forest canopy data with two measures and a context layer. Run it with `shiny run demo.py` for the chat, or `python demo.py` to ask the same questions from the terminal. `demo.ipynb` is the same agent in a notebook, with cells for reading what it registered and adding a measure of your own. `pkg-r/inst/demo.R` is the R package's version of it.
 
 Behavior that both implementations must agree on belongs in [`tests/shared/`](https://github.com/posit-dev/commons/tree/main/tests/shared) at the repository root, which that directory's README defines as the authority. The provenance tag rules and display copy, the citation dialect, and the context layer's frontmatter handling are governed that way; both suites run those cases.

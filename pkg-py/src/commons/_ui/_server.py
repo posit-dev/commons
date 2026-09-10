@@ -11,7 +11,7 @@ from shiny.session import Session, require_active_session
 from .._agent import Commons
 from .._tracing import commons_span
 
-__all__ = ["server"]
+__all__ = ["check_commons_client", "server"]
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +37,7 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
     chatlas chat has none of the citation or provenance handling the chat
     surface renders.
     """
-    if not isinstance(client, Commons):
-        raise TypeError(
-            "client must be a commons agent, e.g. from commons.Commons(), "
-            f"not {type(client).__name__}."
-        )
+    check_commons_client(client)
 
     with commons_span("commons_server_start", {"commons.server.id": id}):
         _prewarm_on_idle(client, require_active_session(None))
@@ -54,6 +50,15 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
             client.queue_restore_reminder()
 
     return chat
+
+
+def check_commons_client(client: Commons) -> None:
+    """Raise `TypeError` unless `client` is a commons agent."""
+    if not isinstance(client, Commons):
+        raise TypeError(
+            "client must be a commons agent, e.g. from commons.Commons(), "
+            f"not {type(client).__name__}."
+        )
 
 
 def _prewarm_on_idle(client: Commons, session: Session) -> None:

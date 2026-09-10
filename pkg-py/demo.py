@@ -1,30 +1,41 @@
 """A self-contained commons agent over made-up forest canopy data.
 
-    uv run --with anthropic python demo.py
+    uv run --with anthropic shiny run demo.py   # the chat
+    uv run --with anthropic python demo.py      # the same questions, in the terminal
 
-The R package's `inst/demo.R` puts this agent behind a Shiny front end. There
-is no Python chat UI yet, so this asks the questions from the terminal and
-prints the provenance marker that a UI would render as a badge.
+The chat is assembled here rather than through `commons.ui.app()`, because
+`app()` shares one agent across sessions; a deployed app should instead build
+one agent per session, inside the server function. The assembly is three pieces,
+at the bottom of this file: the page from `shinychat.page_chat()` with
+`theme=commons.ui.theme()`, a server function passing a fresh agent to
+`commons.ui.server()`, and `shiny.App()` joining the two.
+
+This demo is analogous to `pkg-r/inst/demo.R` in the R implementation. You
+can also play around with the demo interactively in a notebook by using
+`demo.ipynb` (without a shiny UI, in that case).
 
 The client comes from `chatlas.ChatAuto`, so `CHATLAS_CHAT_PROVIDER_MODEL`
 picks a different provider without editing this file. chatlas ships no
-provider SDK and neither does commons, hence the `--with`. For Claude on
-Bedrock:
+provider SDK and neither does commons, hence the `uv run --with`. For example, to
+use Claude sonnet on Bedrock:
 
     export CHATLAS_CHAT_PROVIDER_MODEL=bedrock-anthropic/us.anthropic.claude-sonnet-5
-    uv run --with 'anthropic[bedrock]' python demo.py
+    uv run --with 'anthropic[bedrock]' shiny run demo.py
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
+from functools import cache
 from pathlib import Path
 from tempfile import mkdtemp
 from typing import Any
 
 import chatlas
 import pandas as pd
+import shinychat
+from shiny import App, Inputs, Outputs, Session
 
 import commons
 
@@ -109,6 +120,13 @@ def notes_file() -> Path:
     return path
 
 
+# Written once per process, then read by every session's context layer. Not
+# written at import, so `shiny run --reload` re-imports don't pile up files.
+@cache
+def shared_notes_file() -> Path:
+    return notes_file()
+
+
 @commons.measure(
     description=(
         "Acre-weighted canopy cover for each county, from the most recent survey."
@@ -155,7 +173,7 @@ def agent() -> commons.Commons:
         # Named, because a measure's `warehouse` argument is injected by name.
         {"warehouse": commons.data_source(stands=stands, surveys=surveys)},
         semantic_layer=commons.semantic_layer(canopy_by_county, low_canopy_stands),
-        context_layer=commons.context_layer(files=[notes_file()]),
+        context_layer=commons.context_layer(files=[shared_notes_file()]),
     )
 
 
@@ -203,6 +221,30 @@ async def main() -> None:
     canopy = agent()
     for question in QUESTIONS:
         await ask(canopy, question)
+
+
+# Derived from QUESTIONS, so the chat suggests what the terminal run asks.
+GREETING = (
+    "Chat with this agent to learn about canopy cover in Oregon's forests."
+    "\n\nHere are some example questions:\n\n"
+) + "".join(
+    f"- <span class='suggestion'>{question}</span>\n" for question in QUESTIONS
+)
+
+app_ui = shinychat.page_chat(
+    "Canopy cover explorer",
+    id="chat",
+    greeting=GREETING,
+    theme=commons.ui.theme(),
+)
+
+
+def app_server(input: Inputs, output: Outputs, session: Session) -> None:
+    # One agent per session, so each visitor gets their own agent state.
+    commons.ui.server("chat", agent())
+
+
+app = App(app_ui, app_server)
 
 
 if __name__ == "__main__":
