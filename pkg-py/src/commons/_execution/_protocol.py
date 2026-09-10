@@ -138,12 +138,11 @@ def encode_value(value: Any) -> dict[str, Any]:
     """
     library = _frame_library(value)
     if library is not None:
-        try:
-            data = _to_arrow_ipc(value, library)
-        except (TypeError, ValueError):
-            # A column Arrow cannot hold — objects in a pandas `object`
-            # column, say. Being a frame is no reason to be exempt from the
-            # fallback: one bad column should cost the value, not the call.
+        data = _to_arrow_ipc(value, library)
+        # A column Arrow cannot hold — objects in a pandas `object` column,
+        # or complex numbers. Being a frame is no reason to be exempt from
+        # the fallback: one bad column should cost the value, not the call.
+        if data is None:
             return _repr_payload(value)
         return {
             "encoding": "arrow",
@@ -194,17 +193,24 @@ def _frame_library(value: Any) -> str | None:
     return None
 
 
-def _to_arrow_ipc(frame: Any, library: str) -> bytes:
+# `None` for a frame Arrow will not carry, rather than an exception, because
+# the caller's answer to that is a fallback rather than a failure. Arrow
+# reports its refusals across several exception types, only some of which are
+# `ValueError` or `TypeError`, so the whole family is named here.
+def _to_arrow_ipc(frame: Any, library: str) -> bytes | None:
     pyarrow = importlib.import_module("pyarrow")
-    if library == "pandas":
-        table = pyarrow.Table.from_pandas(frame)
-    elif library == "polars":
-        table = frame.to_arrow()
-    else:
-        table = frame
-    sink = pyarrow.BufferOutputStream()
-    with pyarrow.ipc.new_stream(sink, table.schema) as writer:
-        writer.write_table(table)
+    try:
+        if library == "pandas":
+            table = pyarrow.Table.from_pandas(frame)
+        elif library == "polars":
+            table = frame.to_arrow()
+        else:
+            table = frame
+        sink = pyarrow.BufferOutputStream()
+        with pyarrow.ipc.new_stream(sink, table.schema) as writer:
+            writer.write_table(table)
+    except _arrow_refusals(pyarrow):
+        return None
     return sink.getvalue().to_pybytes()
 
 
@@ -212,12 +218,23 @@ def _from_arrow_ipc(data: bytes, library: str) -> Any:
     if library not in _FRAME_TYPES:
         raise ProtocolError(f"unknown frame library: {library!r}")
     pyarrow = importlib.import_module("pyarrow")
-    table = pyarrow.ipc.open_stream(pyarrow.py_buffer(data)).read_all()
-    if library == "pandas":
-        return table.to_pandas()
-    if library == "polars":
-        return importlib.import_module("polars").from_arrow(table)
-    return table
+    try:
+        table = pyarrow.ipc.open_stream(pyarrow.py_buffer(data)).read_all()
+        if library == "pandas":
+            return table.to_pandas()
+        if library == "polars":
+            return importlib.import_module("polars").from_arrow(table)
+        return table
+    except _arrow_refusals(pyarrow) as error:
+        raise ProtocolError(f"malformed value payload: {error}") from error
+
+
+# `ArrowInvalid` and `ArrowTypeError` are `ValueError` and `TypeError`, but
+# `ArrowNotImplementedError` and several others are not, so catching the
+# builtin types alone lets a real refusal through. `ArrowIOError` is named
+# separately because it does not descend from `ArrowException`.
+def _arrow_refusals(pyarrow: Any) -> tuple[type[BaseException], ...]:
+    return (TypeError, ValueError, pyarrow.ArrowException, pyarrow.ArrowIOError)
 
 
 def encode_message(message: Message) -> bytes:

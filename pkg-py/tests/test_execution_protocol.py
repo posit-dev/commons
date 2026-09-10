@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import subprocess
@@ -330,3 +331,24 @@ def test_a_frame_arrow_cannot_hold_crosses_as_its_repr():
     crossed = decode_value(encode_value(frame))
     assert isinstance(crossed, OpaqueValue)
     assert crossed.type_name == "DataFrame"
+
+
+def test_a_frame_of_a_type_arrow_has_no_mapping_for_crosses_as_its_repr():
+    # Arrow says "invalid" for a value it cannot infer a type for and "not
+    # implemented" for a type it knows and does not carry. Complex numbers
+    # are the second kind, and the fallback owes them the same treatment.
+    pd = pytest.importorskip("pandas")
+    frame = pd.DataFrame({"z": [1 + 2j, 3 + 4j]})
+    crossed = decode_value(encode_value(frame))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "DataFrame"
+
+
+@pytest.mark.parametrize(
+    "data",
+    ["!!!!", base64.b64encode(b"not an arrow stream").decode()],
+    ids=["not base64", "not arrow"],
+)
+def test_a_malformed_arrow_payload_is_refused(data):
+    with pytest.raises(ProtocolError, match="malformed value payload"):
+        decode_value({"encoding": "arrow", "library": "pandas", "data": data})
