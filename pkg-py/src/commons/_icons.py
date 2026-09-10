@@ -1,11 +1,15 @@
-"""Where the browser serves the icons the asides reference.
+"""Where the browser serves the icons referenced by the asides.
 
-The asides are rendered mid-stream by ``_citations.py`` and ``_provenance.py``,
-neither of which may import shiny, so an icon URL has to be resolvable at scan
-time rather than patched into finished HTML. The UI layer records the URL its
-asset bundle is served under and the asides resolve against it. With no bundle
-recorded, no icon is emitted. ``pkg-r/R/citations.R`` reads the dependency
-directly, which it can because R's asides and its UI ship in one package.
+``_citations.py`` and ``_provenance.py`` build asides as finished HTML
+strings while the model's response streams, with no post-processing pass,
+so an icon URL must be complete the moment an aside is written. In the Python
+package, they are core modules while shiny is an optional extra, so it is not
+guaranteed they would be able to ask the UI layer where its assets are served;
+the UI layer instead records the served URL through this module's
+``set_asset_base_url()`` when it builds the ``HTMLDependency`` carrying
+the assets. If no URL is recorded, no icon is emitted. This differs from the
+R implementation, which ships the commons core, asides, and UI in one package, so
+``pkg-r/R/citations.R`` reads the dependency directly.
 """
 
 from __future__ import annotations
@@ -23,9 +27,9 @@ _asset_base_url: str | None = None
 def set_asset_base_url(base: str | None) -> None:
     """Record the URL the asset bundle is served under, or None for no bundle.
 
-    Process-wide, which costs nothing across concurrent sessions: the URL
-    carries the installed package's version and its assets' newest mtime, so
-    every session in one process derives the same string.
+    Process-wide, which is safe across concurrent sessions: the URL
+    carries the package version and the assets' newest mtime, so every
+    session in a process derives the same string.
     """
     global _asset_base_url
     _asset_base_url = base
@@ -39,9 +43,9 @@ def get_asset_base_url() -> str | None:
 def icon_url(file: str | None) -> str | None:
     """The served URL of one icon in ``figs/``.
 
-    None when no bundle is being served, when the caller names no icon, or
-    when the bundle does not ship the file, since a URL nothing backs renders
-    as a broken image rather than as no icon at all.
+    None when no bundle is served, when ``file`` is None, or when the
+    bundle does not ship the file: an unbacked URL renders as a broken
+    image rather than no icon.
     """
     if file is None or _asset_base_url is None or not _figs_path(file).is_file():
         return None

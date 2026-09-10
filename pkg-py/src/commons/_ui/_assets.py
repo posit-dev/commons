@@ -37,20 +37,14 @@ def commons_chat_dependency() -> HTMLDependency:
         stylesheet={"href": "commons-chat.css"},
         all_files=True,
     )
-    # The asides build icon URLs as they stream and cannot import shiny, so
-    # this is where they learn where the icons are. Told on every build rather
-    # than once, because the version carries an asset mtime.
+    # Asides resolve icon URLs against this base; see _icons.py. Set per
+    # build, not once: the URL embeds the assets' newest mtime.
     set_asset_base_url(_base_url(dep))
     return dep
 
 
 def asset_base_url() -> str:
-    """The URL the assets are served under on a page.
-
-    Includes the library prefix htmltools renders a dependency's own hrefs
-    under, so the result is a URL that resolves rather than the name of the
-    directory holding the assets.
-    """
+    """The URL the assets are served under on a page."""
     return _base_url(commons_chat_dependency())
 
 
