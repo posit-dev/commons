@@ -130,8 +130,8 @@
 #'
 #' # A measure takes a connection as an argument named after a data source.
 #' # `warehouse` isn't in `arguments`, so the model never sees it; commons
-#' # supplies it when the measure runs. Interpolate model-supplied arguments
-#' # with glue::glue_sql() so they're quoted safely.
+#' # supplies it when the measure runs. Bind model-supplied arguments through
+#' # DBI so they're quoted safely.
 #' con <- DBI::dbConnect(duckdb::duckdb())
 #' sem <- semantic_layer(
 #'   measure(
@@ -140,10 +140,8 @@
 #'     function(region, warehouse) {
 #'       DBI::dbGetQuery(
 #'         warehouse,
-#'         glue::glue_sql(
-#'           "SELECT sum(revenue) AS revenue FROM sales WHERE region = {region}",
-#'           .con = warehouse
-#'         )
+#'         "SELECT sum(revenue) AS revenue FROM sales WHERE region = ?",
+#'         params = list(region)
 #'       )
 #'     },
 #'     arguments = list(region = ellmer::type_string("Sales region."))
