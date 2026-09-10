@@ -7,8 +7,11 @@ from any host. The cases match pkg-r/tests/testthat/test-sandbox.R.
 
 from __future__ import annotations
 
+import platform
+
 import pytest
 
+from commons._execution import _sandbox
 from commons._execution._sandbox import (
     SandboxCapabilities,
     protection_mode,
@@ -99,15 +102,6 @@ def test_an_affirmative_opt_in_downgrades_a_refusal_to_guardrails(
     assert protection_mode(NOTHING, sysname="Windows") == "guardrails"
 
 
-def test_the_gate_reads_this_host_when_given_nothing() -> None:
-    # The capability probe reports every mechanism unavailable until the
-    # ctypes modules exist, so the gate refuses every host it reads for
-    # itself: the safe direction to be wrong in while the sandbox is being
-    # built.
-    with pytest.raises(RuntimeError):
-        protection_mode()
-
-
 def test_the_opt_in_does_not_downgrade_a_host_that_can_be_sandboxed(
     monkeypatch,
 ) -> None:
@@ -123,3 +117,38 @@ def test_only_an_affirmative_opt_in_counts(monkeypatch, value) -> None:
     monkeypatch.setenv("COMMONS_ALLOW_UNSAFE_FALLBACK", value)
     with pytest.raises(RuntimeError):
         protection_mode(NOTHING, sysname="Windows")
+
+
+
+def test_a_host_that_is_not_a_mac_reports_no_seatbelt(monkeypatch) -> None:
+    # The probe is called directly rather than through
+    # sandbox_capabilities(). Claiming to be Linux patches the shared
+    # platform module, so the aggregate would send the other probes down
+    # their Linux paths on a host that has none of those interfaces.
+    monkeypatch.setattr(_sandbox.platform, "system", lambda: "Linux")
+    assert _sandbox._seatbelt_present() is False
+
+
+def test_a_mac_without_the_symbol_reports_no_seatbelt(monkeypatch) -> None:
+    # sandbox_init has been deprecated since 10.8. A macOS that finally drops
+    # it must report no seatbelt rather than promise one the worker cannot
+    # engage, so the probe looks the symbol up instead of trusting the
+    # platform name.
+    monkeypatch.setattr(_sandbox.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(_sandbox.ctypes, "CDLL", lambda name: object())
+    assert _sandbox._seatbelt_present() is False
+
+
+@pytest.mark.skipif(
+    platform.system() != "Darwin", reason="seatbelt is a macOS interface"
+)
+def test_this_mac_reports_seatbelt() -> None:
+    assert sandbox_capabilities().seatbelt is True
+
+
+@pytest.mark.skipif(
+    platform.system() != "Darwin", reason="seatbelt is a macOS interface"
+)
+def test_a_mac_can_be_sandboxed_without_the_opt_in(monkeypatch) -> None:
+    monkeypatch.delenv("COMMONS_ALLOW_UNSAFE_FALLBACK", raising=False)
+    assert protection_mode() == "sandbox"
