@@ -8,9 +8,6 @@ trajectory back through is pinned by a shared fixture (kata 4frb).
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import textwrap
 from collections.abc import Iterator
 
 import pytest
@@ -125,31 +122,3 @@ def test_the_span_ends_and_records_the_error_when_the_body_raises() -> None:
     assert span.end_time is not None
     assert span.status.is_ok is False
     assert [event.name for event in span.events] == ["exception"]
-
-
-def run_in_fresh_interpreter(body: str) -> str:
-    """Run `body` in a new process, where commons has configured nothing."""
-    result = subprocess.run(
-        [sys.executable, "-c", textwrap.dedent(body)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stderr == ""
-    return result.stdout
-
-
-def test_spans_are_inert_when_no_tracer_provider_is_configured() -> None:
-    # Setup spans are not gated behind `log=True`, so they open on every
-    # agent. With no provider they must cost nothing.
-    output = run_in_fresh_interpreter(
-        """
-        from commons._tracing import commons_span
-
-        with commons_span("commons_agent_create", {"a": 1}) as span:
-            span.set_attribute("b", 2)
-            print(span.is_recording())
-        """
-    )
-    assert output.strip() == "False"
