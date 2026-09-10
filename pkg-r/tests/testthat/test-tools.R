@@ -178,13 +178,18 @@ test_that("long measure descriptions can be expanded", {
     collapse = " "
   )
   td <- measure("orders", description, function() 1L)
-  td <- set_measure_display_metadata(
-    td,
-    description,
-    "Returns: The number of orders."
+  display_metadata <- list(
+    description = description,
+    details = "Returns: The number of orders."
   )
 
-  display <- measure_metadata_html(measure_metadata(td))
+  result <- call_measure_tool(
+    list(orders = td),
+    "orders",
+    "{}",
+    measure_display = list(orders = display_metadata)
+  )
+  display <- as.character(result@extra$display$html)
 
   expect_match(display, "commons-measure-description-summary", fixed = TRUE)
   expect_match(display, "commons-measure-details-more", fixed = TRUE)

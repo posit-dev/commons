@@ -37,20 +37,24 @@ read_measures <- function(paths, env = globalenv()) {
   new_measure_files(
     measures = lapply(records, `[[`, "measure"),
     fn_sources = env_fn_sources(measure_env),
-    provenance = lapply(records, `[[`, "provenance")
+    provenance = lapply(records, `[[`, "provenance"),
+    measure_display = lapply(records, `[[`, "measure_display")
   )
 }
 
 new_measure_files <- function(
   measures = list(),
   fn_sources = character(),
-  provenance = rep(list(character()), length(measures))
+  provenance = rep(list(character()), length(measures)),
+  measure_display = NULL
 ) {
+  measure_display <- measure_display %||% rep(list(NULL), length(measures))
   structure(
     list(
       measures = measures,
       fn_sources = fn_sources,
-      provenance = provenance
+      provenance = provenance,
+      measure_display = measure_display
     ),
     class = "commons_measure_files"
   )
@@ -117,22 +121,17 @@ block_to_measure <- function(block, env) {
   description <- block_description(block)
   arguments <- block_arguments(block, fn)
   display <- block_display_metadata(block)
-  td <- measure(
-    name,
-    description,
-    fn,
-    arguments = arguments,
-    title = display$title
-  )
-  td <- set_measure_display_metadata(
-    td,
-    display$description,
-    display$details
-  )
 
   list(
-    measure = td,
-    provenance = block_provenance(block)
+    measure = measure(
+      name,
+      description,
+      fn,
+      arguments = arguments,
+      title = display$title
+    ),
+    provenance = block_provenance(block),
+    measure_display = display[c("description", "details")]
   )
 }
 

@@ -323,7 +323,8 @@ tool_call_measure <- function(private) {
         injections = private$injections,
         handles = private$handles,
         sources = private$sources,
-        measure_provenance = private$measure_provenance
+        measure_provenance = private$measure_provenance,
+        measure_display = private$measure_display
       )
     },
     paste(
@@ -501,7 +502,8 @@ call_measure_tool <- function(
   injections = list(),
   handles = NULL,
   sources = list(),
-  measure_provenance = list()
+  measure_provenance = list(),
+  measure_display = list()
 ) {
   td <- registry[[name]]
   if (is.null(td)) {
@@ -515,6 +517,7 @@ call_measure_tool <- function(
   footer <- measure_source_footer(
     measure_provenance[[name]] %||% character()
   )
+  metadata <- measure_metadata(td, measure_display[[name]])
   args <- validate_measure_args(td, parse_json_args(arguments))
   # A measure takes a source's connection by the source's name; a board source
   # must have its pins loaded before that connection can answer a query.
@@ -523,23 +526,36 @@ call_measure_tool <- function(
   }
   value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
-    return(measure_content_tool_result(td, args, value, handles, footer))
+    return(measure_content_tool_result(
+      args,
+      value,
+      handles,
+      footer,
+      metadata
+    ))
   }
   value <- collect_lazy_table(value)
   if (is_ggplot(value)) {
     advert <- register_handle(handles, value)
-    return(measure_plot_tool_result(td, args, value, advert, footer))
+    return(measure_plot_tool_result(
+      td,
+      args,
+      value,
+      advert,
+      footer,
+      metadata
+    ))
   }
   if (is_gt_table(value)) {
     data <- recover_gt_table_data(value)
     advert <- register_handle(handles, data)
     return(measure_gt_table_tool_result(
-      td,
       args,
       value,
       data,
       advert,
-      footer
+      footer,
+      metadata
     ))
   }
   advert <- register_handle(handles, value)
@@ -547,14 +563,20 @@ call_measure_tool <- function(
     paste(c(format_measure_value(value), advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
-    html = measure_display_html(args, value, measure_metadata(td)),
+    html = measure_display_html(args, value, metadata),
     footer = footer,
     tag = "A",
     show_tag = FALSE
   )
 }
 
-measure_content_tool_result <- function(td, args, result, handles, footer) {
+measure_content_tool_result <- function(
+  args,
+  result,
+  handles,
+  footer,
+  metadata
+) {
   data <- result@extra$data
   result@extra$data <- NULL
   display <- result@extra$display
@@ -589,7 +611,7 @@ measure_content_tool_result <- function(td, args, result, handles, footer) {
       display$html <- measure_display_with_custom_html(
         args,
         display$html,
-        measure_metadata(td)
+        metadata
       )
     }
   }
@@ -639,7 +661,14 @@ append_handle_advert <- function(value, advert) {
   paste(c(format_measure_value(value), advert), collapse = "\n\n")
 }
 
-measure_plot_tool_result <- function(td, args, value, advert, footer) {
+measure_plot_tool_result <- function(
+  td,
+  args,
+  value,
+  advert,
+  footer,
+  metadata
+) {
   title <- tool_title(td)
   rendered <- tryCatch(
     render_plot_image(value, sprintf("Plot returned by %s", title)),
@@ -647,13 +676,13 @@ measure_plot_tool_result <- function(td, args, value, advert, footer) {
   )
   if (inherits(rendered, "error")) {
     return(measure_failure_result(
-      td,
       args,
       advert,
       conditionMessage(rendered),
       "a plot",
       "commons-measure-plot-error",
-      footer = footer
+      footer = footer,
+      metadata = metadata
     ))
   }
 
@@ -671,7 +700,7 @@ measure_plot_tool_result <- function(td, args, value, advert, footer) {
     html = measure_display_with_result_html(
       args,
       measure_result_html(rendered$html),
-      measure_metadata(td)
+      metadata
     ),
     footer = footer,
     tag = "A",
@@ -681,13 +710,13 @@ measure_plot_tool_result <- function(td, args, value, advert, footer) {
 }
 
 measure_failure_result <- function(
-  td,
   args,
   advert,
   message,
   result_type,
   class,
   footer,
+  metadata,
   model_content = NULL
 ) {
   note <- sprintf(
@@ -702,7 +731,7 @@ measure_failure_result <- function(
     html = measure_display_with_result_html(
       args,
       measure_result_html(html_escape(note), class),
-      measure_metadata(td)
+      metadata
     ),
     footer = footer,
     tag = "A",
@@ -712,12 +741,12 @@ measure_failure_result <- function(
 }
 
 measure_gt_table_tool_result <- function(
-  td,
   args,
   value,
   data,
   advert,
-  footer
+  footer,
+  metadata
 ) {
   rendered <- tryCatch(
     render_gt_table(value),
@@ -726,13 +755,13 @@ measure_gt_table_tool_result <- function(
   model_content <- df_to_markdown(data)
   if (inherits(rendered, "error")) {
     return(measure_failure_result(
-      td,
       args,
       advert,
       conditionMessage(rendered),
       "a gt table",
       "commons-measure-gt-table-error",
       footer = footer,
+      metadata = metadata,
       model_content = model_content
     ))
   }
@@ -749,7 +778,7 @@ measure_gt_table_tool_result <- function(
   display_html <- measure_display_with_result_html(
     args,
     measure_result_html(rendered$html, "commons-measure-gt-table"),
-    measure_metadata(td)
+    metadata
   )
   if (length(rendered$dependencies) > 0) {
     display_html <- htmltools::attachDependencies(
@@ -1108,9 +1137,8 @@ measure_display_with_custom_html <- function(args, result_html, metadata) {
   )
 }
 
-measure_metadata <- function(td) {
-  display <- measure_display_metadata(td)
-  description <- display$description %||% ""
+measure_metadata <- function(td, display = NULL) {
+  description <- display$description %||% tool_description(td)
   extra <- display$details %||% ""
   # Roughly three lines at chat-card width; CSS supplies the exact clamp.
   has_details <- nchar(description) > 200L

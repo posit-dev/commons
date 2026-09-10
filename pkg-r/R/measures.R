@@ -92,6 +92,12 @@ semantic_layer <- function(...) {
 
   measure_provenance <- expanded$provenance
   names(measure_provenance) <- names(measures)
+  measure_display <- Map(
+    measure_display_or_default,
+    measures,
+    expanded$measure_display
+  )
+  names(measure_display) <- names(measures)
 
   # Measures that didn't come from files (so no harvested source) still get a
   # readable, if comment-free, deparse.
@@ -100,15 +106,20 @@ semantic_layer <- function(...) {
     fn_sources[[nm]] <- fn_source_text(tool_fn(measures[[nm]]))
   }
 
-  new_semantic_layer(measures, fn_sources, measure_provenance)
+  new_semantic_layer(
+    measures,
+    fn_sources,
+    measure_provenance,
+    measure_display
+  )
 }
 
 # Expand each `...` element into measures: character vectors are read from disk,
 # lists of measures are spliced in, and a lone measure is kept as is. `env` is
 # the caller of semantic_layer(), so measures read from disk close over the data
 # the user defined there rather than only the global environment. Function
-# sources and provenance harvested by read_measures() ride alongside their
-# measures in an internal bundle.
+# sources, display metadata, and provenance harvested by read_measures() ride
+# alongside their measures in an internal bundle.
 expand_measures <- function(args, env = rlang::caller_env()) {
   expanded <- lapply(args, function(arg) {
     if (is.character(arg)) {
@@ -126,7 +137,11 @@ expand_measures <- function(args, env = rlang::caller_env()) {
   list(
     measures = do.call(c, lapply(expanded, `[[`, "measures")) %||% list(),
     fn_sources = fn_sources,
-    provenance = do.call(c, lapply(expanded, `[[`, "provenance")) %||% list()
+    provenance = do.call(c, lapply(expanded, `[[`, "provenance")) %||% list(),
+    measure_display = do.call(
+      c,
+      lapply(expanded, `[[`, "measure_display")
+    ) %||% list()
   )
 }
 
@@ -187,29 +202,24 @@ measure <- function(name, description, fn, arguments = list(), title = NULL) {
   rlang::check_string(description)
   rlang::check_string(title, allow_null = TRUE)
   title <- title %||% humanize_name(name)
-  td <- ellmer::tool(
+  ellmer::tool(
     fn,
     description,
     arguments = fill_injected_arguments(arguments, fn),
     name = name,
     annotations = ellmer::tool_annotations(title = title)
   )
-  set_measure_display_metadata(td, description)
 }
 
-measure_display_metadata <- function(td) {
-  attr(td, "commons_measure_display") %||% list(
+measure_default_display <- function(td) {
+  list(
     description = tool_description(td),
     details = NULL
   )
 }
 
-set_measure_display_metadata <- function(td, description, details = NULL) {
-  attr(td, "commons_measure_display") <- list(
-    description = description,
-    details = details
-  )
-  td
+measure_display_or_default <- function(td, display) {
+  display %||% measure_default_display(td)
 }
 
 # Arguments of `fn` not described in `arguments` are supplied by commons(),
@@ -265,12 +275,14 @@ resolve_injections <- function(
 new_semantic_layer <- function(
   measures = list(),
   fn_sources = character(),
-  measure_provenance = list()
+  measure_provenance = list(),
+  measure_display = list()
 ) {
   SemanticLayer$new(
     measures = measures,
     fn_sources = fn_sources,
-    measure_provenance = measure_provenance
+    measure_provenance = measure_provenance,
+    measure_display = measure_display
   )
 }
 

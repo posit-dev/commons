@@ -459,10 +459,6 @@ shiny-chat-container
   gap: 0.5rem;
 }
 
-.commons-measure-details[open] > summary {
-  order: 2;
-}
-
 .commons-measure-details[open] .commons-measure-details-more {
   display: none;
 }
@@ -472,7 +468,6 @@ shiny-chat-container
 }
 
 .commons-measure-details-body {
-  order: 1;
   white-space: pre-wrap;
 }
 

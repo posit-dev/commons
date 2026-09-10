@@ -1,8 +1,14 @@
 test_that("semantic_layer stores measures by name", {
   layer <- semantic_layer(count_measure_tool())
+  state <- semantic_layer_state(layer)
 
   expect_s3_class(layer, "commons_semantic_layer")
-  expect_named(semantic_layer_state(layer)$measures, "order_count")
+  expect_named(state$measures, "order_count")
+  expect_named(state$measure_display, "order_count")
+  expect_equal(
+    state$measure_display$order_count$description,
+    tool_description(state$measures$order_count)
+  )
 })
 
 test_that("semantic_layer accepts a list of measures", {
