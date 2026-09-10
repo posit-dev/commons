@@ -42,6 +42,8 @@ from ._display import (
     TABLE_INSPECTION,
     TRUSTED_CALL,
     TRUSTED_SEARCH,
+    measure_display_html,
+    measure_source_footer,
     tool_display,
     visible_result_note,
 )
@@ -312,7 +314,15 @@ def _call_measure(context: ToolContext) -> Tool:
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
         )
-        return tool_result(body, tag=Tag.A, title=TRUSTED_CALL.settled)
+        return tool_result(
+            body,
+            tag=Tag.A,
+            title=TRUSTED_CALL.settled,
+            html=measure_display_html(
+                args, value, title=record.title, description=record.description
+            ),
+            footer=measure_source_footer(record.provenance),
+        )
 
     return _tool(
         call_measure,

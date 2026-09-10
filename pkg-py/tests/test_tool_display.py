@@ -6,11 +6,13 @@ shinychat. These tests read it back through `get_tool_result_display()`,
 which is the code that consumes it, rather than asserting on the dictionary.
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 import pandas as pd
 import pytest
 from chatlas import ContentToolRequest, ContentToolResult, Tool
+from htmltools import TagList
+from pydantic import Field
 
 from commons import DataSource, data_source, measure
 from commons._citations import tool_result
@@ -27,6 +29,11 @@ from shinychat._chat_normalize_chatlas import (
     ToolResultDisplay,
     get_tool_result_display,
 )
+
+
+def markup(child: Any) -> str:
+    """Any tag child rendered, since a display field may be either shape."""
+    return TagList(child).get_html_string()
 
 
 def shown(result: ContentToolResult) -> ToolResultDisplay:
@@ -240,3 +247,74 @@ def test_a_measure_may_use_shinychats_own_display_class() -> None:
 
     assert shown(result).title == "Ran a trusted calculation"
     assert "already visible to the user" in str(result.value)
+
+
+# ---- the card behind a trusted calculation --------------------------------
+
+
+def sourced() -> dict[str, Any]:
+    @measure(
+        description="Count orders in a region.",
+        provenance=["https://example.com/handbook"],
+    )
+    def order_count(
+        region: Annotated[str, Field(description="Which region.")] = "EMEA",
+    ) -> int:
+        return 2
+
+    found = as_measure(order_count)
+    assert found is not None
+    return {found.name: found}
+
+
+def test_a_measure_result_draws_the_arguments_it_ran_with() -> None:
+    built = tools(measures=sourced())
+
+    display = ran(built, "call_measure", name="order_count", arguments='{"region": "AMER"}')
+
+    assert display.html is not None
+    assert "AMER" in markup(display.html)
+
+
+def test_a_measure_result_names_the_measure_that_ran() -> None:
+    built = tools(measures=sourced())
+
+    display = ran(built, "call_measure", name="order_count", arguments="{}")
+
+    assert display.html is not None
+    assert "Count orders in a region." in markup(display.html)
+
+
+def test_a_measures_provenance_becomes_a_source_link() -> None:
+    built = tools(measures=sourced())
+
+    display = ran(built, "call_measure", name="order_count", arguments="{}")
+
+    assert display.footer is not None
+    assert "https://example.com/handbook" in markup(display.footer)
+
+
+def test_a_metrics_result_draws_the_metrics_it_computed() -> None:
+    built = build_commons_tools(
+        ToolContext(
+            sources={"sales_db": source()}, definitions=Registry([_net_revenue()])
+        )
+    )
+
+    display = ran(built, "call_metrics", metrics=["net_revenue"])
+
+    assert display.html is not None
+    assert "net_revenue" in markup(display.html)
+
+
+def test_a_metrics_result_shows_the_query_it_ran() -> None:
+    built = build_commons_tools(
+        ToolContext(
+            sources={"sales_db": source()}, definitions=Registry([_net_revenue()])
+        )
+    )
+
+    display = ran(built, "call_metrics", metrics=["net_revenue"])
+
+    assert display.markdown is not None
+    assert display.markdown.startswith("```sql\n")

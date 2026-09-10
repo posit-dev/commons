@@ -143,6 +143,6 @@ def test_the_ui_module_is_only_imported_on_demand() -> None:
         "import sys, commons\n"
         "assert 'shiny' not in sys.modules, 'importing commons imported shiny'\n"
         "commons.ui.commons_chat_dependency()\n"
-        "assert 'htmltools' in sys.modules, 'commons.ui imported no extra'\n"
+        "assert 'shiny' in sys.modules, 'commons.ui imported no extra'\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
