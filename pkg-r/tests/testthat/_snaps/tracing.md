@@ -30,7 +30,7 @@
     Condition
       Warning:
       Trajectory logging is disabled by this Posit Connect server's configuration.
-      i Ask your server administrator to enable content instrumentation for traces to flow.
+      i Ask your server administrator to set `OpenTelemetry.Enabled = true` and `OpenTelemetry.AllowContentInstrumentation = true` in the Connect configuration, then restart Connect.
 
 # log = TRUE warns when tracing stays disabled locally
 
@@ -51,7 +51,7 @@
     Condition
       Warning:
       Trajectory logging is enabled but OpenTelemetry tracing is not active.
-      i Enable Content Observability in this content's Settings > Advanced panel on Posit Connect, then redeploy or restart the content.
+      i In this content's Settings > Monitoring > Traces panel on Posit Connect, select Enabled, then redeploy or restart the content.
 
 # tracing disabled on Connect flips the observability setting on
 

@@ -83,8 +83,10 @@ warn_if_content_instrumentation_disabled <- function() {
     cli::cli_warn(c(
       "Trajectory logging is disabled by this Posit Connect server's
        configuration.",
-      i = "Ask your server administrator to enable content instrumentation
-           for traces to flow."
+      i = "Ask your server administrator to set
+           {.code OpenTelemetry.Enabled = true} and
+           {.code OpenTelemetry.AllowContentInstrumentation = true} in the
+           Connect configuration, then restart Connect."
     ))
   }
   invisible(NULL)
@@ -265,9 +267,9 @@ warn_tracing_disabled <- function() {
   if (is_connect_runtime()) {
     cli::cli_warn(c(
       "Trajectory logging is enabled but OpenTelemetry tracing is not active.",
-      i = "Enable {.emph Content Observability} in this content's
-           {.emph Settings > Advanced} panel on Posit Connect, then redeploy
-           or restart the content."
+      i = "In this content's {.emph Settings > Monitoring > Traces} panel on
+           Posit Connect, select {.emph Enabled}, then redeploy or restart the
+           content."
     ))
   } else {
     cli::cli_warn(c(
