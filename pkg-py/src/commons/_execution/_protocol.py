@@ -14,7 +14,7 @@ import base64
 import importlib
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 __all__ = [
@@ -118,6 +118,14 @@ _NAMES = {cls: name for name, cls in _TYPES.items()}
 _VALUE_FIELDS: dict[type, tuple[str, ...]] = {Result: ("value",)}
 _VALUE_MAPS: dict[type, tuple[str, ...]] = {Call: ("handles",)}
 
+# The rest are declared `str` and have to actually be one. JSON's types do not
+# line up with the dataclass's, so nothing else checks this: an id that
+# arrives as an object constructs a message that fails much later, in a
+# driver that keys its in-flight call on it.
+_TEXT_FIELDS: dict[type, tuple[str, ...]] = {
+    cls: tuple(f.name for f in fields(cls) if f.type == "str") for cls in _NAMES
+}
+
 
 def encode_value(value: Any) -> dict[str, Any]:
     """Render ``value`` as the JSON-shaped payload that carries it.
@@ -130,15 +138,29 @@ def encode_value(value: Any) -> dict[str, Any]:
     """
     library = _frame_library(value)
     if library is not None:
-        payload = base64.b64encode(_to_arrow_ipc(value, library)).decode("ascii")
-        return {"encoding": "arrow", "library": library, "data": payload}
+        try:
+            data = _to_arrow_ipc(value, library)
+        except (TypeError, ValueError):
+            # A column Arrow cannot hold — objects in a pandas `object`
+            # column, say. Being a frame is no reason to be exempt from the
+            # fallback: one bad column should cost the value, not the call.
+            return _repr_payload(value)
+        return {
+            "encoding": "arrow",
+            "library": library,
+            "data": base64.b64encode(data).decode("ascii"),
+        }
     try:
         json.dumps(value)
     except (TypeError, ValueError):
         # `repr`, never `pickle`: a pickle stream is a program, and this one
         # would have been written by whatever the worker just ran.
-        return {"encoding": "repr", "type": type(value).__name__, "text": repr(value)}
+        return _repr_payload(value)
     return {"encoding": "json", "data": value}
+
+
+def _repr_payload(value: Any) -> dict[str, Any]:
+    return {"encoding": "repr", "type": type(value).__name__, "text": repr(value)}
 
 
 # Annotated `Any` rather than `dict`, because the argument arrives off the
@@ -214,7 +236,7 @@ def decode_message(line: bytes | str) -> Message:
     """Read back a line written by ``encode_message``."""
     try:
         body = json.loads(line)
-    except json.JSONDecodeError as error:
+    except ValueError as error:  # bad JSON, and bad UTF-8 under it
         raise ProtocolError(f"not a protocol message: {line!r}") from error
     if not isinstance(body, dict):
         raise ProtocolError(f"not a protocol message: {line!r}")
@@ -226,6 +248,9 @@ def decode_message(line: bytes | str) -> Message:
     # guaranteed: a wrong type has to arrive as a protocol error rather than
     # as whatever the codec happens to raise first.
     try:
+        for name in _TEXT_FIELDS.get(cls, ()):
+            if name in body and not isinstance(body[name], str):
+                raise TypeError(f"{name} must be a string")
         for name in _VALUE_FIELDS.get(cls, ()):
             if name in body:
                 body[name] = decode_value(body[name])
