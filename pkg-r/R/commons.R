@@ -45,8 +45,7 @@
 #'   traces land in Connect's observability store (browsable in its Trace
 #'   Viewer); commons switches on the content's *Content Observability*
 #'   setting itself when needed, though capture only starts once the content
-#'   restarts. Configure an exporter before starting R for local capture. Read
-#'   trajectories back with [trajectory_read()].
+#'   restarts. Read trajectories back with [trajectory_read()].
 #' @param share_with An optional character vector of Connect usernames granted
 #'   access to this content's trajectories when running on Posit Connect.
 #'   Reading traces requires editor-level access, so named users are added as

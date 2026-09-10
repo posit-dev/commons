@@ -57,8 +57,8 @@ starts so \pkg{ellmer} includes message content. On Posit Connect,
 traces land in Connect's observability store (browsable in its Trace
 Viewer); commons switches on the content's \emph{Content Observability}
 setting itself when needed, though capture only starts once the content
-restarts. Configure an exporter before starting R for local capture. Read
-trajectories back with \code{\link[=trajectory_read]{trajectory_read()}}.}
+restarts. Read trajectories back with
+\code{\link[=trajectory_read]{trajectory_read()}}.}
 
 \item{share_with}{An optional character vector of Connect usernames granted
 access to this content's trajectories when running on Posit Connect.
