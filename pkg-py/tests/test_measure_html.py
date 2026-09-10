@@ -60,6 +60,28 @@ def test_a_measures_title_and_description_head_the_card() -> None:
     assert "After refunds." in html
 
 
+def test_a_long_description_collapses_behind_a_disclosure() -> None:
+    description = "A detailed description of the measure. " * 8
+
+    html = rendered(
+        measure_display_html({}, 41, title="Net revenue", description=description)
+    )
+
+    assert "commons-measure-description-summary" in html
+    assert "commons-measure-details-more" in html
+    assert "commons-measure-details-less" in html
+    assert "commons-measure-details-body" in html
+    assert "See more" in html
+
+
+def test_a_short_description_needs_no_disclosure() -> None:
+    html = rendered(
+        measure_display_html({}, 41, title="Net revenue", description="After refunds.")
+    )
+
+    assert "commons-measure-details" not in html
+
+
 def test_markup_in_a_value_is_shown_rather_than_rendered() -> None:
     html = rendered(measure_display_html({}, "<script>alert(1)</script>"))
 

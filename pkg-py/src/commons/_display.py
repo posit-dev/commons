@@ -16,7 +16,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
-from htmltools import Tag, TagChild, TagList, div, tags
+from htmltools import HTML, Tag, TagChild, TagList, div, tags
 
 from ._frames import is_frame
 from ._rows import MAX_MARKDOWN_ROWS, frame_rows, render_value
@@ -32,6 +32,7 @@ __all__ = [
     "TRUSTED_SEARCH",
     "Title",
     "measure_display_html",
+    "measure_display_with_custom_html",
     "measure_source_footer",
     "tool_display",
     "visible_result_note",
@@ -126,6 +127,38 @@ def measure_display_html(
     )
 
 
+def measure_display_with_custom_html(
+    args: Mapping[str, Any],
+    html: Any,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+) -> Tag:
+    """The standard measure card around HTML a measure authored for itself.
+
+    What commons knows heads the card -- the measure's metadata and the
+    arguments it ran with -- and the authored markup is the result. A string
+    is markup the measure wrote, not text to escape; a tag tree keeps the
+    dependencies attached to it.
+    """
+    if isinstance(html, str):
+        html = HTML(html)
+    return div(
+        _metadata_html(title, description),
+        _args_html(args),
+        div(
+            tags.strong("Result"),
+            div(
+                html,
+                class_="commons-measure-result-value "
+                "commons-measure-result-value-authored",
+            ),
+            class_="commons-measure-result",
+        ),
+        class_="commons-measure-display",
+    )
+
+
 def measure_source_footer(provenance: Iterable[str]) -> TagList | None:
     """Links back to wherever the measure's definition came from.
 
@@ -150,18 +183,43 @@ def measure_source_footer(provenance: Iterable[str]) -> TagList | None:
     )
 
 
+# Roughly three lines at chat-card width; the stylesheet supplies the exact
+# clamp, so a description longer than this is repeated behind a disclosure.
+_DETAILS_THRESHOLD = 200
+
+
 def _metadata_html(title: str | None, description: str | None) -> Tag | None:
     if not title:
         return None
+    details = (
+        description if description and len(description) > _DETAILS_THRESHOLD else None
+    )
     return div(
         div(
             tags.strong(title, class_="commons-measure-title"),
-            div(description, class_="commons-measure-description")
+            div(
+                description,
+                class_="commons-measure-description"
+                + (" commons-measure-description-summary" if details else ""),
+            )
             if description
             else None,
+            _details_html(details) if details else None,
             class_="commons-measure-metadata-item",
         ),
         class_="commons-measure-metadata",
+    )
+
+
+def _details_html(details: str) -> Tag:
+    """A long description behind a See more disclosure the stylesheet fades in."""
+    return tags.details(
+        tags.summary(
+            tags.span("See more", class_="commons-measure-details-more"),
+            tags.span("See less", class_="commons-measure-details-less"),
+        ),
+        div(details, class_="commons-measure-details-body"),
+        class_="commons-measure-details",
     )
 
 
