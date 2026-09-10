@@ -738,9 +738,9 @@ posixct_nanos <- function(time) {
   sprintf("%.0f", as.numeric(time) * 1e9)
 }
 
-# ellmer's chat spans repeat the full message history, so the latest chat
-# span in a conversation carries the whole trajectory: group chat spans by
-# conversation, keep the last one, and parse its GenAI-semconv messages.
+# ellmer's chat spans usually repeat the full message history. Group them by
+# conversation and keep the last one, recovering when rich content causes its
+# input history to be omitted.
 build_trajectories <- function(spans) {
   index <- span_index(spans)
   chat_spans <- Filter(is_chat_span, spans)
@@ -754,7 +754,11 @@ build_trajectories <- function(spans) {
     unname(latest),
     lapply(calls, function(call) call$chat_span)
   )
-  parsed <- parse_chat_spans_once(selected)
+  parsed <- parse_chat_spans_once(
+    selected,
+    by_conversation = chat_spans_by_conversation(chat_spans),
+    index = index
+  )
   candidates <- recorded_call_candidates(calls, parsed)
 
   Map(
@@ -792,12 +796,30 @@ latest_chat_spans <- function(chat_spans) {
   for (span in chat_spans) {
     id <- span_conversation_id(span)
     prev <- latest[[id]]
-    if (is.null(prev) || span_time(span) > span_time(prev)) {
+    if (is.null(prev) || chat_span_is_preferred(span, prev)) {
       latest[[id]] <- span
     }
   }
 
   latest[order(vapply(latest, span_time, character(1)))]
+}
+
+chat_span_is_preferred <- function(candidate, current) {
+  candidate_is_title <- is_conversation_title_span(candidate)
+  current_is_title <- is_conversation_title_span(current)
+  if (!identical(candidate_is_title, current_is_title)) {
+    return(!candidate_is_title)
+  }
+  span_time(candidate) > span_time(current)
+}
+
+shinychat_title_prompt <- "You title chat conversations."
+
+is_conversation_title_span <- function(span) {
+  system <- semconv_system_turns(
+    span$attributes[["gen_ai.system_instructions"]]
+  )
+  length(system) > 0 && startsWith(system[[1]]@text, shinychat_title_prompt)
 }
 
 empty_turn_provenance <- function() {
@@ -852,10 +874,154 @@ latest_recorded_call_spans <- function(
   latest
 }
 
-parse_chat_spans_once <- function(spans) {
+parse_chat_spans_once <- function(
+  spans,
+  by_conversation = NULL,
+  index = NULL
+) {
   keys <- vapply(spans, exchange_key, character(1))
   spans <- spans[!duplicated(keys)]
-  rlang::set_names(lapply(spans, trajectory_turns), keys[!duplicated(keys)])
+  turns <- lapply(spans, trajectory_turns)
+  if (!is.null(by_conversation) && !is.null(index)) {
+    turns <- Map(recover_missing_input, spans, turns, MoreArgs = list(
+      by_conversation = by_conversation,
+      index = index
+    ))
+  }
+  rlang::set_names(turns, keys[!duplicated(keys)])
+}
+
+chat_spans_by_conversation <- function(spans) {
+  split(spans, vapply(spans, span_conversation_id, character(1)))
+}
+
+# ellmer omits the full input attribute when rich content cannot be serialized.
+# Recover what the conversation still records from its latest valid snapshot.
+recover_missing_input <- function(span, turns, by_conversation, index) {
+  if (!is.null(parse_semconv_json(
+    span$attributes[["gen_ai.input.messages"]]
+  ))) {
+    return(turns)
+  }
+
+  turn_span <- conversation_turn_ancestor(span, index)
+  if (is.null(turn_span)) {
+    return(turns)
+  }
+  id <- span_conversation_id(span)
+  conversation_spans <- by_conversation[[id]]
+  if (is.null(conversation_spans)) {
+    return(turns)
+  }
+  conversation_spans <- Filter(
+    function(candidate) {
+      candidate_turn <- conversation_turn_ancestor(candidate, index)
+      identical(span_conversation_id(candidate), id) &&
+        !is.null(candidate_turn) &&
+        !is_conversation_title_span(candidate)
+    },
+    conversation_spans
+  )
+  conversation_spans <- conversation_spans[order(vapply(
+    conversation_spans,
+    span_time,
+    character(1)
+  ))]
+  keys <- vapply(conversation_spans, exchange_key, character(1))
+  target <- match(exchange_key(span), keys)
+  if (is.na(target)) {
+    return(turns)
+  }
+
+  prior <- conversation_spans[seq_len(target - 1L)]
+  valid <- vapply(
+    prior,
+    function(candidate) {
+      !is.null(parse_semconv_json(
+        candidate$attributes[["gen_ai.input.messages"]]
+      ))
+    },
+    logical(1)
+  )
+  if (any(valid)) {
+    history_index <- utils::tail(which(valid), 1L)
+    history <- prior[[history_index]]
+  } else {
+    history_index <- 1L
+    history <- NULL
+  }
+
+  output_spans <- conversation_spans[seq.int(history_index, target)]
+  recovered_trajectory_turns(span, history, output_spans, index)
+}
+
+recovered_trajectory_turns <- function(latest, history, output_spans, index) {
+  requests <- new.env(parent = emptyenv())
+  system <- semconv_system_turns(
+    latest$attributes[["gen_ai.system_instructions"]]
+  )
+  if (length(system) == 0 && !is.null(history)) {
+    system <- semconv_system_turns(
+      history$attributes[["gen_ai.system_instructions"]]
+    )
+  }
+  input <- if (is.null(history)) {
+    missing_input_turn()
+  } else {
+    semconv_message_turns(
+      history$attributes[["gen_ai.input.messages"]],
+      requests
+    )
+  }
+  output <- list()
+  previous_turns <- NULL
+  previous_turn_key <- NULL
+  for (i in seq_along(output_spans)) {
+    turn_span <- conversation_turn_ancestor(output_spans[[i]], index)
+    turn_key <- exchange_key(turn_span)
+    if (!is.null(previous_turn_key)) {
+      if (identical(turn_key, previous_turn_key)) {
+        missing <- missing_tool_results(previous_turns)
+        if (!is.null(missing)) {
+          output[[length(output) + 1L]] <- missing
+        }
+      } else {
+        output[[length(output) + 1L]] <- missing_input_turn()
+      }
+    }
+    turns <- semconv_message_turns(
+      output_spans[[i]]$attributes[["gen_ai.output.messages"]],
+      requests
+    )
+    output <- c(output, turns)
+    previous_turns <- turns
+    previous_turn_key <- turn_key
+  }
+  unname(c(system, input, output))
+}
+
+missing_input_turn <- function() {
+  ellmer::UserTurn("(Input content was not captured.)")
+}
+
+missing_tool_results <- function(turns) {
+  requests <- unlist(lapply(turns, function(turn) {
+    Filter(
+      function(content) {
+        S7::S7_inherits(content, ellmer::ContentToolRequest)
+      },
+      turn@contents
+    )
+  }), recursive = FALSE)
+  if (length(requests) == 0) {
+    return(NULL)
+  }
+  ellmer::UserTurn(lapply(requests, function(request) {
+    ellmer::ContentToolResult(
+      value = "(Tool result was not captured.)",
+      request = request
+    )
+  }))
 }
 
 recorded_call_candidates <- function(call_spans, parsed_turns) {

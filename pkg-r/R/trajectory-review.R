@@ -172,8 +172,6 @@ drop_side_conversations <- function(trajectories) {
 
 # Title generation shares the agent's client, so its calls enter the trace
 # store.
-shinychat_title_prompt <- "You title chat conversations."
-
 is_side_conversation <- function(turns) {
   if (length(split_exchanges(turns)) == 0) {
     return(TRUE)
