@@ -16,12 +16,12 @@ Source:
 [`DESCRIPTION`](https://github.com/posit-dev/commons/blob/main/DESCRIPTION)
 
 Couch S, Altman S (2026). *commons: AI Agents for Data Analysis*. R
-package version 0.1.0, <https://github.com/posit-dev/commons>.
+package version 0.1.0.9000, <https://github.com/posit-dev/commons>.
 
     @Manual{,
       title = {commons: AI Agents for Data Analysis},
       author = {Simon Couch and Sara Altman},
       year = {2026},
-      note = {R package version 0.1.0},
+      note = {R package version 0.1.0.9000},
       url = {https://github.com/posit-dev/commons},
     }
