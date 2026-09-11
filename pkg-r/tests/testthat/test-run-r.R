@@ -393,6 +393,8 @@ test_that("guardrails deny external filesystem access and subprocesses", {
 })
 
 test_that("guardrails resolve symlinks and nonexistent descendants", {
+  # R cannot unlink directory symlinks there
+  skip_on_os("windows")
   worker <- local_guardrail_worker()
   store <- new_handle_store()
   worker_ensure(worker)
