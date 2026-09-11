@@ -1,0 +1,135 @@
+# Create a data source
+
+A data source is the set of tables available to a
+[`commons()`](https://posit-dev.github.io/commons/dev/reference/commons.md)
+agent.
+
+## Usage
+
+``` r
+data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
+```
+
+## Arguments
+
+- ...:
+
+  A single DBI connection, a single `pins` board, or named data frames
+  to register as tables. When passing data frames, each name becomes a
+  table name the agent can query.
+
+- tables:
+
+  Which tables to expose, used when a connection or a board is supplied.
+
+  For a connection, a character vector of table names, qualified strings
+  like `"schema.table"` or `"catalog.schema.table"`, or
+  [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) objects. Defaults
+  to every table returned by
+  [`DBI::dbListTables()`](https://dbi.r-dbi.org/reference/dbListTables.html).
+  Strings containing dots are interpreted as qualified names, at most
+  three parts; use `DBI::Id(table = "a.b")` for literal table names
+  containing dots. For Snowflake and Databricks connections, a
+  [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) ending in
+  `catalog` or `schema` selects every table and view in that namespace.
+  Leaving `tables` unset selects the current schema. A Databricks
+  `hive_metastore` selection must include a schema. Snowflake selections
+  import semantic views, and Databricks selections import metric views,
+  as native trusted metrics and dimensions. Namespace selections read
+  model definitions lazily. Explicitly selected models are read and
+  validated when the data source is created. Databricks wildcard members
+  require concrete column metadata from the warehouse. An exact
+  physical-table selection also imports associated models when every
+  physical dependency is selected. Only public relationships, facts,
+  filters, and instructions are exposed to the agent.
+
+  For a board, a named character vector of pins to read: the names
+  become table names, and the values are pin names passed to
+  [`pins::pin_read()`](https://pins.rstudio.com/reference/pin_read.html).
+
+- exclude:
+
+  For Snowflake and Databricks namespace selections, optional
+  unqualified object-name globs to omit, such as `"TMP_*"`.
+
+- dictionary:
+
+  An optional path to a data dictionary describing the source's tables
+  and columns, in the [data-dict.yaml](https://data-dict.tidyverse.org/)
+  format. See the `Data dictionaries` section.
+
+## Value
+
+A `commons_data_source` R6 object. Its internals are private and may
+change without notice.
+
+## Details
+
+`data_source()` accepts data in several forms, picked by the class of
+what you pass:
+
+- A DBI connection is queried as-is. Nothing is copied; the agent
+  queries the database directly.
+
+- Named data frames are loaded into an in-process DuckDB database. Use
+  this when the data isn't already in a database.
+
+- A `pins` board, e.g.
+  [`pins::board_connect()`](https://pins.rstudio.com/reference/board_connect.html),
+  is read into the same in-process database: each pin in `tables`
+  becomes a table. Pin names are validated against the board at
+  construction (a single listing call), but each pin is downloaded only
+  when its table is first used. Calling the agent's `prewarm()` method
+  (see
+  [`commons()`](https://posit-dev.github.io/commons/dev/reference/commons.md))
+  starts a background process that downloads the remaining pins into the
+  local pins cache, so a first use typically only reads an
+  already-downloaded file. Since the pins cache is on disk, `prewarm()`
+  can also run ahead of deployment to warm the cache the deployed app
+  will read. A table reflects the pin's value at first use and is not
+  refreshed for the lifetime of the data source; if a pin can't be read
+  (e.g. a network failure), the error surfaces at that first use and the
+  read is retried on the next one.
+
+## Data dictionaries
+
+A data dictionary describes a data source's tables and columns: what
+each table's rows represent, what its columns mean, allowed values and
+units, how tables join, and definitions of domain terms. commons uses it
+to provide business context and governed definitions to the agent. See
+[`vignette("commons", package = "commons")`](https://posit-dev.github.io/commons/dev/articles/commons.md)
+for guidance on writing one.
+
+For Snowflake and Databricks sources, a fully qualified dictionary table
+name matches the same selected relation. A relative name is accepted
+when it matches only one selected relation. Authored prose takes
+precedence, while warehouse column types remain authoritative.
+
+A table's entry can also declare `definitions`: named expressions in the
+[data-dict expression
+language](https://data-dict.tidyverse.org/expressions.html). commons
+validates their inferred types and references, compiles them for the
+source's SQL backend, and makes them available to trusted metric
+calculations and custom SQL.
+
+## Trust
+
+The agent runs only read-only `SELECT` queries; statements that would
+modify data or schema (`INSERT`, `UPDATE`, `DROP`, and similar) are
+rejected before reaching the database. For the in-process DuckDB built
+from data frames, commons additionally disables extension loading and
+filesystem access. These are safeguards, not a sandbox: when you supply
+your own connection, still open it in read-only mode where the backend
+supports it. Snowflake and Databricks sources snapshot the principal and
+namespace at creation, and Snowflake its active and secondary roles as
+well, then reject catalog access and trusted calculations after any of
+those change. Authored and native semantic material is exposed only
+after a zero-row query succeeds for the current principal.
+
+## Examples
+
+``` r
+src <- data_source(
+  sales = data.frame(id = 1:2, revenue = c(100, 200))
+)
+```

@@ -1,0 +1,162 @@
+# commons
+
+commons helps data scientists build trustworthy data agents.
+
+Data teams typically have trusted code that they use to analyze their
+data and build reports and apps. commons leverages their expertise,
+situating that information in a series of prompts and tools designed to
+create an accurate, fast, and cost-effective agent.
+
+Trusted calculations can come from R code (as *measures*), [data
+dictionary](https://data-dict.tidyverse.org/) definitions, Snowflake
+semantic views, or Databricks metric views.
+
+![A screencast of a commons biodiversity agent. It identifies the site
+with the greatest biodiversity using a trusted calculation and shows the
+green marker for the Verified answer outcome. It then lists the species
+observed there using a direct data query and shows the yellow marker for
+the Untrusted
+outcome.](https://github.com/user-attachments/assets/3a22c3cd-ae73-4177-a9c2-241f497b430d)
+
+## Installation
+
+To install the package, run:
+
+``` r
+
+install.packages("commons")
+```
+
+Or, for the development version:
+
+``` r
+
+# install.packages("pak")
+pak::pak("posit-dev/commons/pkg-r")
+```
+
+## Get started
+
+commons uses [ellmer](https://ellmer.tidyverse.org/) to access LLMs, so
+you will need access to one of ellmer’s supported providers.
+
+We recommend building commons agents with the help of the [agent
+skill](https://agentskills.io/) that ships with the package. The skill
+helps coding agents build, evaluate, and improve commons agents.
+
+To make the skill available to Posit Assistant or Codex, copy the skill
+and its references to `.agents/skills`:
+
+``` r
+
+skill <- system.file("skills", "commons", package = "commons")
+dir.create(".agents/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".agents/skills", recursive = TRUE)
+```
+
+For Claude Code, copy the skill and its references to `.claude/skills`:
+
+``` r
+
+skill <- system.file("skills", "commons", package = "commons")
+dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
+file.copy(skill, ".claude/skills", recursive = TRUE)
+```
+
+The [Introduction to
+commons](https://posit-dev.github.io/commons/articles/commons.html)
+vignette also explains the structure of a commons agent and the creation
+process.
+
+## Trusted answers
+
+There are two provenance paths available to a commons agent: when users
+ask questions for which there is trusted code, the agent follows the
+“happy path,” running that code and reporting the result. If the user
+asks a question for which trusted code is not available, the agent
+writes custom R or SQL code, leaning on additional context provided to
+the agent.
+
+Answers display provenance according to the analysis path followed, so
+users can determine how much trust to put in a given answer.
+
+For more information, see the [Introduction to
+commons](https://posit-dev.github.io/commons/articles/commons.html)
+vignette.
+
+![Flow diagram. A question first searches trusted calculations. The
+high-trust path runs a relevant trusted calculation and ends with a
+green check-shield marker for the Verified answer outcome. The
+lower-trust path searches context and writes custom SQL or R, ending
+with either a blue quote-mark citation marker for the Cited outcome or a
+yellow exclamation marker for the Untrusted
+outcome.](reference/figures/README-trust-flow.png)
+
+## Evaluation
+
+The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an
+example commons agent that answers questions about adoption, engagement,
+and growth across Posit’s open-source projects. The DevRel agent
+repository contains an
+[evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals)
+that compares performance between the commons agent and Claude Code.
+Both have access to the same underlying data.
+
+In this evaluation, the commons agent had higher mean accuracy (86.3%
+vs. 83.5%), took less time to answer questions (a median of 31.0
+vs. 60.5 seconds), and cost less (\$5.64 vs. \$13.76 total).
+
+![Three bar charts compare commons with Claude Code. commons has higher
+mean accuracy, lower median solver time, and lower total
+cost.](reference/figures/README-eval-plot-1.png)
+
+In the evaluation, both harnesses use Claude Sonnet 5 at medium effort.
+The evaluation runs each of 32 questions three times. Questions require
+either a numeric answer, a table, a nuanced response, or recognition
+that the available data cannot answer them.
+
+# Package index
+
+## Main functions
+
+The main agent constructor, plus the building blocks for a commons
+agent.
+
+- [`commons()`](https://posit-dev.github.io/commons/dev/reference/commons.md)
+  : Create a commons agent
+- [`data_source()`](https://posit-dev.github.io/commons/dev/reference/data_source.md)
+  : Create a data source
+- [`semantic_layer()`](https://posit-dev.github.io/commons/dev/reference/semantic_layer.md)
+  : Create a semantic layer
+- [`measure()`](https://posit-dev.github.io/commons/dev/reference/measure.md)
+  : Create a measure
+- [`context_layer()`](https://posit-dev.github.io/commons/dev/reference/context_layer.md)
+  : Create a context layer
+
+## Shiny UI and server
+
+Put a commons agent inside of an interactive chat app.
+
+- [`commons_app()`](https://posit-dev.github.io/commons/dev/reference/commons_app.md)
+  : Shiny chat app for a commons agent
+- [`commons_server()`](https://posit-dev.github.io/commons/dev/reference/commons_server.md)
+  [`commons_theme()`](https://posit-dev.github.io/commons/dev/reference/commons_server.md)
+  : Chat server and theme for custom commons apps
+
+## Trajectories
+
+Read and annotate conversation histories.
+
+- [`trajectory_read()`](https://posit-dev.github.io/commons/dev/reference/trajectory_read.md)
+  : Read commons trajectories
+- [`trajectory_review()`](https://posit-dev.github.io/commons/dev/reference/trajectory_review.md)
+  : Review commons trajectories
+
+# Articles
+
+### All vignettes
+
+- [Introduction to
+  commons](https://posit-dev.github.io/commons/dev/articles/commons.md):
+- [Security and governance for commons
+  agents](https://posit-dev.github.io/commons/dev/articles/governance.md):

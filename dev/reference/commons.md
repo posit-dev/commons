@@ -1,0 +1,238 @@
+# Create a commons agent
+
+`commons()` creates an
+[ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+subclass with tools and prompting that allow the agent to navigate its
+data sources, semantic layer, and context layer. Depending on the
+agent's choice of tools, responses can be deterministically classified
+as based on a trusted calculation, cited, or untrusted.
+
+## Usage
+
+``` r
+commons(
+  client,
+  data_sources,
+  semantic_layer = NULL,
+  context_layer = NULL,
+  ...,
+  instructions = NULL,
+  network = c("none", "full"),
+  log = FALSE,
+  share_with = NULL
+)
+```
+
+## Arguments
+
+- client:
+
+  An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+  giving the provider and model to use, e.g.
+  [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
+  For best results, enable thinking when supported by the selected
+  provider and model. A system prompt already set on the client is
+  ignored, with a warning; use `instructions` to add to commons' prompt.
+
+- data_sources:
+
+  A
+  [`data_source()`](https://posit-dev.github.io/commons/dev/reference/data_source.md),
+  or a named list of them. Measures can take a source's connection as an
+  argument named after the source; see
+  [`semantic_layer()`](https://posit-dev.github.io/commons/dev/reference/semantic_layer.md).
+
+- semantic_layer:
+
+  An optional
+  [`semantic_layer()`](https://posit-dev.github.io/commons/dev/reference/semantic_layer.md).
+
+- context_layer:
+
+  An optional
+  [`context_layer()`](https://posit-dev.github.io/commons/dev/reference/context_layer.md).
+
+- ...:
+
+  These dots are for future extensions and must be empty.
+
+- instructions:
+
+  Optional instructions placed under an `## Additional instructions`
+  heading at the end of commons' built-in system prompt, as a single
+  string or the path to a text or Markdown file.
+
+      commons(
+        # ...
+        instructions = "Use the organization's fiscal-year conventions."
+      )
+
+- network:
+
+  Whether the agent's R session has network access. One of `"none"` (the
+  default) or `"full"`. The session uses OS sandboxing on Linux and
+  macOS. On unsupported hosts, local development can opt in to
+  best-effort R guardrails with
+  `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails are
+  not a security boundary.
+
+- log:
+
+  Whether to request conversation trajectory capture with OpenTelemetry
+  (default `FALSE`). When `TRUE`, commons checks the tracing setup and
+  warns with setup steps when it is incomplete. This feature requires
+  Connect \>= 2026.09.0.
+
+  When deploying to Posit Connect, include
+  `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the
+  `envVars` argument to
+  [`rsconnect::deployApp()`](https://rstudio.github.io/rsconnect/reference/deployApp.html)
+  so ellmer includes message content. A server administrator must also
+  set `OpenTelemetry.Enabled = true` and
+  `OpenTelemetry.AllowContentInstrumentation = true`.
+
+  Once the agent is deployed and serving traffic, you can read
+  conversation histories back into R with
+  [`trajectory_read()`](https://posit-dev.github.io/commons/dev/reference/trajectory_read.md).
+
+- share_with:
+
+  An optional character vector of Connect usernames granted access to
+  this content's trajectories when running on Posit Connect. Reading
+  traces requires editor-level access, so named users are added as
+  collaborators on the content. Note that users whose Connect *account*
+  role is viewer cannot read traces even when named here; trace readers
+  need at least a publisher account.
+
+## Value
+
+An [ellmer::Chat](https://ellmer.tidyverse.org/reference/Chat.html)
+subclass.
+
+## Details
+
+The provider and model come from `client`; commons sets its own system
+prompt and tools. Use `agent$chat()` to ask questions,
+[`commons_theme()`](https://posit-dev.github.io/commons/dev/reference/commons_server.md)
+and
+[`commons_server()`](https://posit-dev.github.io/commons/dev/reference/commons_server.md)
+to embed the agent in Shiny, and
+[`vitals::generate()`](https://vitals.tidyverse.org/reference/generate.html)
+to use the agent as a vitals solver.
+
+## Cache pre-warming
+
+A commons agent builds its context search index and downloads uncached
+pins the first time it needs them.
+[`commons_server()`](https://posit-dev.github.io/commons/dev/reference/commons_server.md)
+and
+[`commons_app()`](https://posit-dev.github.io/commons/dev/reference/commons_app.md)
+call the agent's `prewarm()` method automatically during post-startup
+idle time.
+
+To warm the caches before deployment, call `agent$prewarm()` in a
+pre-deploy script. The context index is cached on disk once per version
+of the context documents; pin downloads populate the local pins cache.
+
+To ship a pre-built context index with an app, configure a directory
+inside the app in both the pre-deploy script and the deployed app, then
+prewarm the agent before deploying:
+
+    options(commons.context_cache = "commons-cache")
+    agent <- commons(
+      ellmer::chat_anthropic(),
+      data_sources = data_source(sales = sales)
+    )
+    agent$prewarm()
+
+Do not use `app_cache/` for this workflow because rsconnect excludes it
+from deployed bundles. Without explicit configuration, commons uses
+Connect's persistent content data directory when available, an
+`app_cache/` directory beside hosted apps, or the per-user cache
+directory. Set the cache directory with
+`options(commons.context_cache = "path/to/dir")` or the
+`COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE`
+to disable persistence. The cache is capped at 256 MB with
+least-recently-used eviction; change the cap with
+`options(commons.context_cache_max_size)`.
+
+## Agent tools
+
+Depending on its semantic layer, context layer, and data sources, a
+commons agent receives some combination of these tools:
+
+- `search_pool` searches trusted calculations and semantic models.
+
+- `search_catalog` searches a warehouse catalog.
+
+- `call_measure` invokes an R measure.
+
+- `call_metrics` invokes governed or warehouse-native metrics.
+
+- `call_calculation` invokes an exact trusted query.
+
+- `search_context` retrieves relevant business context.
+
+- `describe_table` inspects a table or semantic model.
+
+- `run_sql` executes a read-only SQL query.
+
+- `run_r` executes R code to analyze results and render plots in the
+  agent's R session.
+
+These model-facing tools should be considered private. Their
+constructors are intentionally not exported, and their names, arguments,
+availability, and behavior may change without notice. Application code
+should configure an agent through `commons()` and its layer constructors
+rather than depend on individual tools.
+
+## Examples
+
+``` r
+if (FALSE) { # \dontrun{
+# A measure over local data computes directly in R.
+sem <- semantic_layer(
+  measure(
+    "order_count",
+    "Count of orders.",
+    function() nrow(my_sales),
+    arguments = list()
+  )
+)
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_sources = data_source(sales = my_sales),
+  semantic_layer = sem
+)
+agent$chat("How many orders are there?")
+
+# A measure takes a connection as an argument named after a data source.
+# `warehouse` isn't in `arguments`, so the model never sees it; commons
+# supplies it when the measure runs. Bind model-supplied arguments through
+# DBI so they're quoted safely.
+con <- DBI::dbConnect(duckdb::duckdb())
+sem <- semantic_layer(
+  measure(
+    "revenue_by_region",
+    "Total revenue for a region.",
+    function(region, warehouse) {
+      DBI::dbGetQuery(
+        warehouse,
+        "SELECT sum(revenue) AS revenue FROM sales WHERE region = ?",
+        params = list(region)
+      )
+    },
+    arguments = list(region = ellmer::type_string("Sales region."))
+  )
+)
+agent <- commons(
+  ellmer::chat_anthropic(),
+  data_sources = list(warehouse = data_source(con)),
+  semantic_layer = sem
+)
+
+# Objects that aren't data sources (a pins board, an API client) come from
+# argument defaults in the measure, e.g. `board = pins::board_connect()`.
+# See ?semantic_layer.
+} # }
+```
