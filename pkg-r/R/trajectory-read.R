@@ -8,7 +8,7 @@
 #' from local trace files.
 #'
 #' This feature requires Connect >= 2026.09.0.
-#' 
+#'
 #' @param source Where to read trajectories from:
 #'
 #'   * `NULL` (the default) resolves automatically: on Posit Connect, this
@@ -93,13 +93,13 @@ warn_if_connect_tracing_disabled <- function(client, guid) {
     connect_content(client, guid)$otel_enabled,
     error = function(err) NULL
   )
-  instrumentation_allowed <- connect_content_instrumentation_allowed(client)
+  settings <- connect_tracing_server_settings(client)
 
   message <- "No traces were found for this content."
   if (identical(content_enabled, FALSE)) {
     message <- c(message, i = connect_content_tracing_hint())
   }
-  if (identical(instrumentation_allowed, FALSE)) {
+  if (identical(settings$allow_content_instrumentation, FALSE)) {
     message <- c(message, i = connect_server_tracing_hint())
   }
   if (length(message) > 1) {

@@ -140,7 +140,7 @@ connect_trace_lines <- function(
         client, guid, from, page_size, call
       ))
     }
-    version <- version %||% connect_server_version(
+    version <- version %||% parse_connect_version(
       httr2::resp_header(resp, "Server")
     )
     page <- resp_trace_lines(resp)
@@ -264,12 +264,12 @@ resp_trace_lines <- function(resp) {
   page[nzchar(page)]
 }
 
-connect_server_version <- function(server) {
-  if (is.null(server)) {
+parse_connect_version <- function(x) {
+  if (!is.character(x) || length(x) != 1 || is.na(x)) {
     return(NULL)
   }
-  match <- regexec("Posit Connect v([0-9]+(?:\\.[0-9]+){1,2})", server)
-  version <- regmatches(server, match)[[1]]
+  match <- regexec("([0-9]+(?:\\.[0-9]+){1,2})", x)
+  version <- regmatches(x, match)[[1]]
   if (length(version) == 0) {
     return(NULL)
   }

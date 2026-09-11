@@ -176,12 +176,17 @@ test_that("connect_trace_lines falls back when the content endpoint is absent", 
   expect_equal(lines, "legacy")
 })
 
-test_that("connect_server_version parses Connect response headers", {
+test_that("parse_connect_version parses Connect version strings", {
   expect_equal(
-    connect_server_version("Posit Connect v2026.07.0"),
+    parse_connect_version("Posit Connect v2026.07.0"),
     numeric_version("2026.07.0")
   )
-  expect_null(connect_server_version("nginx"))
+  expect_equal(
+    parse_connect_version("2026.09.0"),
+    numeric_version("2026.09.0")
+  )
+  expect_null(parse_connect_version("nginx"))
+  expect_null(parse_connect_version(list()))
 })
 
 test_that("connect_trace_lines explains auth failures on the traces endpoint", {

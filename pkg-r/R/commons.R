@@ -43,13 +43,13 @@
 #'   OpenTelemetry (default `FALSE`). When `TRUE`, commons checks the tracing
 #'   setup and warns with setup steps when it is incomplete. This feature
 #'   requires Connect >= 2026.09.0.
-#' 
+#'
 #'   When deploying to Posit Connect, include
 #'   `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the `envVars`
 #'   argument to [rsconnect::deployApp()] so \pkg{ellmer} includes message
 #'   content. A server administrator must also set `OpenTelemetry.Enabled = true`
-#'   and `OpenTelemetry.AllowContentInstrumentation = true`. 
-#'   
+#'   and `OpenTelemetry.AllowContentInstrumentation = true`.
+#'
 #'   Once the agent is deployed and serving traffic, you can read conversation
 #'   histories back into R with [trajectory_read()].
 #' @param share_with An optional character vector of Connect usernames granted
