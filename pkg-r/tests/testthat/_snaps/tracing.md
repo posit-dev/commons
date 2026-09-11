@@ -23,10 +23,19 @@
       Trajectory logging requires the otel package.
       i Install otel (and otelsdk) to enable it.
 
-# the content instrumentation warning reflects Connect's setting
+# the Connect tracing warning checks version before settings
 
     Code
-      warn_if_content_instrumentation_disabled()
+      warn_if_connect_tracing_unsupported()
+    Condition
+      Warning:
+      This server is running Connect 2026.08.0, but trajectory logging requires Connect >= 2026.09.0.
+      i Please ask your server administration to upgrade.
+
+---
+
+    Code
+      warn_if_connect_tracing_unsupported()
     Condition
       Warning:
       Trajectory logging is disabled by this Posit Connect server's configuration.

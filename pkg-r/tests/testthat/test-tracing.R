@@ -7,7 +7,14 @@ test_that("log = FALSE disables tracing", {
     CONNECT_CONTENT_GUID = "guid",
     OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = NA
   )
+  checked_connect <- FALSE
+  local_mocked_bindings(
+    warn_if_connect_tracing_unsupported = function() {
+      checked_connect <<- TRUE
+    }
+  )
   expect_false(new_trajectory_tracing(FALSE))
+  expect_false(checked_connect)
 })
 
 test_that("share_with warns and is ignored when log = FALSE", {
@@ -21,14 +28,17 @@ test_that("log = TRUE warns without the otel package", {
   expect_false(.res)
 })
 
-test_that("the content instrumentation warning reflects Connect's setting", {
+test_that("the Connect tracing warning checks version before settings", {
   skip_on_cran()
   withr::local_envvar(
     CONNECT_SERVER = "https://connect.example.com",
     CONNECT_API_KEY = "key",
     CONNECT_CONTENT_GUID = "guid"
   )
-  settings <- list(allow_content_instrumentation = FALSE)
+  settings <- list(
+    version = "2026.08.0",
+    allow_content_instrumentation = FALSE
+  )
   httr2::local_mocked_responses(function(req) {
     expect_equal(httr2::url_parse(req$url)$path, "/__api__/server_settings")
     if (inherits(settings, "condition")) {
@@ -46,15 +56,21 @@ test_that("the content instrumentation warning reflects Connect's setting", {
     )
   })
 
-  expect_snapshot(warn_if_content_instrumentation_disabled())
-  settings <- list(allow_content_instrumentation = TRUE)
-  expect_no_warning(warn_if_content_instrumentation_disabled())
+  expect_snapshot(warn_if_connect_tracing_unsupported())
+  settings$version <- "2026.09.0"
+  expect_snapshot(warn_if_connect_tracing_unsupported())
+
+  settings$allow_content_instrumentation <- TRUE
+  expect_no_warning(warn_if_connect_tracing_unsupported())
 
   settings <- list()
-  expect_no_warning(warn_if_content_instrumentation_disabled())
+  expect_no_warning(warn_if_connect_tracing_unsupported())
+
+  settings <- "unexpected response"
+  expect_no_warning(warn_if_connect_tracing_unsupported())
 
   settings <- rlang::error_cnd("unavailable")
-  expect_no_warning(warn_if_content_instrumentation_disabled())
+  expect_no_warning(warn_if_connect_tracing_unsupported())
 })
 
 test_that("the content-capture deployment warning is limited to Connect", {

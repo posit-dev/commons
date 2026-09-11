@@ -29,7 +29,7 @@ new_trajectory_tracing <- function(
     return(FALSE)
   }
 
-  warn_if_content_instrumentation_disabled()
+  warn_if_connect_tracing_unsupported()
   warn_if_content_capture_not_deployed()
 
   if (!is_installed("otel")) {
@@ -68,13 +68,22 @@ new_trajectory_tracing <- function(
   TRUE
 }
 
-warn_if_content_instrumentation_disabled <- function() {
+warn_if_connect_tracing_unsupported <- function() {
   if (!is_connect_runtime()) {
     return(invisible(NULL))
   }
 
-  allowed <- connect_content_instrumentation_allowed()
-  if (identical(allowed, FALSE)) {
+  settings <- connect_tracing_server_settings()
+  version <- parse_connect_version(settings$version)
+  if (!is.null(version) && version < numeric_version("2026.09.0")) {
+    cli::cli_warn(c(
+      paste0(
+        "This server is running Connect ", settings$version,
+        ", but trajectory logging requires Connect >= 2026.09.0."
+      ),
+      i = "Please ask your server administration to upgrade."
+    ))
+  } else if (identical(settings$allow_content_instrumentation, FALSE)) {
     cli::cli_warn(c(
       "Trajectory logging is disabled by this Posit Connect server's
        configuration.",
@@ -280,15 +289,19 @@ warn_tracing_disabled <- function() {
   invisible(NULL)
 }
 
-connect_content_instrumentation_allowed <- function(client = NULL) {
+connect_tracing_server_settings <- function(client = NULL) {
   # This endpoint is internal, so any failure or missing field means unknown.
-  tryCatch(
+  settings <- tryCatch(
     {
       client <- client %||% connect_client()
-      connect_server_settings(client)$allow_content_instrumentation
+      connect_server_settings(client)
     },
     error = function(err) NULL
   )
+  if (!is.list(settings)) {
+    return(NULL)
+  }
+  settings
 }
 
 connect_content_tracing_hint <- function() {
