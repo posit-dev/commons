@@ -43,13 +43,16 @@ a list of \link[ellmer:Turn]{ellmer::Turn}s and a \code{last_active} field conta
 spans—see the \code{log} argument of \code{\link[=commons]{commons()}} for how capture is
 enabled—and read back from Posit Connect's content observability store or
 from local trace files.
+
+This feature requires Connect >= 2026.09.0.
 }
 \details{
 Reading traces from Connect requires the \code{CONNECT_API_KEY} environment
 variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
 URL, the project's deployment record, or the sole Connect server registered
 with rsconnect), and editor-level access to the content: you must own it or
-be a collaborator. See the \code{share_with} argument of \code{\link[=commons]{commons()}}.
+be a collaborator. See the \code{share_with} argument of
+\code{\link[=commons]{commons()}}.
 }
 \examples{
 \dontrun{

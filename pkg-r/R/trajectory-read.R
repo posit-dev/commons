@@ -7,6 +7,8 @@
 #' enabled—and read back from Posit Connect's content observability store or
 #' from local trace files.
 #'
+#' This feature requires Connect >= 2026.09.0.
+#' 
 #' @param source Where to read trajectories from:
 #'
 #'   * `NULL` (the default) resolves automatically: on Posit Connect, this
@@ -32,7 +34,8 @@
 #' variable (and `CONNECT_SERVER`, when the server can't be inferred from the
 #' URL, the project's deployment record, or the sole Connect server registered
 #' with rsconnect), and editor-level access to the content: you must own it or
-#' be a collaborator. See the `share_with` argument of [commons()].
+#' be a collaborator. See the `share_with` argument of
+#' [commons()].
 #'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list with a `turns` field containing
