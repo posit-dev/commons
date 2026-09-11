@@ -9,8 +9,6 @@
 experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-> This package is highly experimental.
-
 commons helps data scientists build trustworthy data agents.
 
 Data teams typically have trusted code that they use to analyze their
