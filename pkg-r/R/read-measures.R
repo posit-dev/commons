@@ -196,7 +196,7 @@ block_param_text <- function(block) {
 # span (e.g. `enum[a, b]`) when present and otherwise inferring from the
 # formal's default.
 param_type <- function(text, default, required) {
-  re <- "^\\s*`([a-zA-Z]+)(\\[[^]]*\\])?`\\s*(.*)$"
+  re <- "(?s)^\\s*`([a-zA-Z]+)(\\[[^]]*\\])?`\\s*(.*)$"
   m <- regmatches(text, regexec(re, text, perl = TRUE))[[1]]
 
   if (length(m) == 0) {
