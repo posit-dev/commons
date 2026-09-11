@@ -120,14 +120,15 @@ are not a security boundary.</p></dd>
 <dt id="arg-log">log<a class="anchor" aria-label="anchor" href="#arg-log"></a></dt>
 <dd><p>Whether to request conversation trajectory capture with
 OpenTelemetry (default <code>FALSE</code>). When <code>TRUE</code>, commons checks the tracing
-setup and warns with setup steps when it is incomplete. When deploying to
-Posit Connect, include
+setup and warns with setup steps when it is incomplete. This feature
+requires Connect &gt;= 2026.09.0.</p>
+<p>When deploying to Posit Connect, include
 <code>"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"</code> in the <code>envVars</code>
 argument to <code><a href="https://rstudio.github.io/rsconnect/reference/deployApp.html" class="external-link">rsconnect::deployApp()</a></code> so <span class="pkg">ellmer</span> includes message
 content. A server administrator must also set <code>OpenTelemetry.Enabled = true</code>
-and
-<code>OpenTelemetry.AllowContentInstrumentation = true</code>. Read trajectories back
-with <code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
+and <code>OpenTelemetry.AllowContentInstrumentation = true</code>.</p>
+<p>Once the agent is deployed and serving traffic, you can read conversation
+histories back into R with <code><a href="trajectory_read.html">trajectory_read()</a></code>.</p></dd>
 
 
 <dt id="arg-share-with">share_with<a class="anchor" aria-label="anchor" href="#arg-share-with"></a></dt>

@@ -3,11 +3,13 @@
 commons() when log = TRUE. Trajectories are recorded as OpenTelemetry
 spans—see the log argument of commons() for how capture is
 enabled—and read back from Posit Connect's content observability store or
-from local trace files."><meta property="og:description" content="trajectory_read() reads conversation trajectories captured by
+from local trace files.
+This feature requires Connect &amp;gt;= 2026.09.0."><meta property="og:description" content="trajectory_read() reads conversation trajectories captured by
 commons() when log = TRUE. Trajectories are recorded as OpenTelemetry
 spans—see the log argument of commons() for how capture is
 enabled—and read back from Posit Connect's content observability store or
-from local trace files."><meta property="og:image" content="https://posit-dev.github.io/commons/logo.png"></head><body>
+from local trace files.
+This feature requires Connect &amp;gt;= 2026.09.0."><meta property="og:image" content="https://posit-dev.github.io/commons/logo.png"></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -50,6 +52,7 @@ from local trace files."><meta property="og:image" content="https://posit-dev.gi
 spans—see the <code>log</code> argument of <code><a href="commons.html">commons()</a></code> for how capture is
 enabled—and read back from Posit Connect's content observability store or
 from local trace files.</p>
+<p>This feature requires Connect &gt;= 2026.09.0.</p>
     </div>
 
     <div class="section level2">
@@ -104,7 +107,8 @@ a list of <a href="https://ellmer.tidyverse.org/reference/Turn.html" class="exte
 variable (and <code>CONNECT_SERVER</code>, when the server can't be inferred from the
 URL, the project's deployment record, or the sole Connect server registered
 with rsconnect), and editor-level access to the content: you must own it or
-be a collaborator. See the <code>share_with</code> argument of <code><a href="commons.html">commons()</a></code>.</p>
+be a collaborator. See the <code>share_with</code> argument of
+<code><a href="commons.html">commons()</a></code>.</p>
     </div>
 
     <div class="section level2">

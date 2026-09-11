@@ -80,15 +80,19 @@ commons(
 
   Whether to request conversation trajectory capture with OpenTelemetry
   (default `FALSE`). When `TRUE`, commons checks the tracing setup and
-  warns with setup steps when it is incomplete. When deploying to Posit
-  Connect, include
+  warns with setup steps when it is incomplete. This feature requires
+  Connect \>= 2026.09.0.
+
+  When deploying to Posit Connect, include
   `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the
   `envVars` argument to
   [`rsconnect::deployApp()`](https://rstudio.github.io/rsconnect/reference/deployApp.html)
   so ellmer includes message content. A server administrator must also
   set `OpenTelemetry.Enabled = true` and
-  `OpenTelemetry.AllowContentInstrumentation = true`. Read trajectories
-  back with
+  `OpenTelemetry.AllowContentInstrumentation = true`.
+
+  Once the agent is deployed and serving traffic, you can read
+  conversation histories back into R with
   [`trajectory_read()`](https://posit-dev.github.io/commons/reference/trajectory_read.md).
 
 - share_with:

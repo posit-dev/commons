@@ -8,6 +8,8 @@ the `log` argument of
 for how capture is enabled—and read back from Posit Connect's content
 observability store or from local trace files.
 
+This feature requires Connect \>= 2026.09.0.
+
 ## Usage
 
 ``` r
