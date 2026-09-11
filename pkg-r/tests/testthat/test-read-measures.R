@@ -72,6 +72,23 @@ test_that("read_measures maps param type code spans to ellmer types", {
   expect_equal(type_kind(S7::prop(props$f, "items")), "string")
 })
 
+test_that("read_measures maps wrapped param type code spans", {
+  skip_if_not_installed("roxygen2")
+
+  path <- measures_script(c(
+    "#' Measure",
+    "#' @param x `enum[a, b]` Description that",
+    "#'   wraps onto a second line.",
+    "#' @measure",
+    "m <- function(x = \"a\") x"
+  ))
+
+  type <- tool_properties(read_measures(path)$measures[[1]])$x
+
+  expect_equal(type_kind(type), "enum")
+  expect_equal(type_values(type), c("a", "b"))
+})
+
 test_that("read_measures derives required from the signature, not the type", {
   skip_if_not_installed("roxygen2")
 
