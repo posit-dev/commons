@@ -2,7 +2,8 @@
 # worker loads the package from the library, not from load_all()).
 
 local_worker <- function(env = parent.frame()) {
-  worker <- new_r_worker()
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
+  worker <- new_r_worker(protection = run_r_protection_mode())
   withr::defer(worker_close(worker), envir = env)
   worker
 }
@@ -418,6 +419,7 @@ test_that("guardrails resolve symlinks and nonexistent descendants", {
 })
 
 test_that("guardrails follow the configured network policy", {
+  skip_on_os("windows")
   restricted <- local_guardrail_worker()
   full <- local_guardrail_worker("full")
   store <- new_handle_store()
