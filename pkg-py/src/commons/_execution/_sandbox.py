@@ -18,7 +18,7 @@ import platform
 from dataclasses import dataclass
 from typing import Literal
 
-from ._runtime import _seccomp
+from ._runtime import _landlock, _seccomp
 
 __all__ = [
     "ALLOW_UNSAFE_FALLBACK",
@@ -76,15 +76,14 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is filled in by the module that implements its mechanism.
-    Landlock and user namespaces have no implementation yet and report
-    unavailable until they do, so ``protection_mode()`` still refuses every
-    Linux host: seccomp alone is not enough without a filesystem sandbox
-    beside it, which is the safe direction to be wrong in while those are
-    being built.
+    Each field is answered by the module that implements its mechanism. Only
+    user namespaces have no implementation yet and report unavailable until
+    they do, which costs nothing on a kernel that offers Landlock and is the
+    safe direction to be wrong in on one that does not. Probing is read-only,
+    so this leaves the calling process as unrestricted as it found it.
     """
     return SandboxCapabilities(
-        landlock_abi=-1,
+        landlock_abi=_landlock.abi_version(),
         seccomp=_seccomp.seccomp_available(),
         seatbelt=_seatbelt_present(),
         userns=False,

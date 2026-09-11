@@ -12,7 +12,7 @@ import platform
 import pytest
 
 from commons._execution import _sandbox
-from commons._execution._runtime import _seccomp
+from commons._execution._runtime import _landlock, _seccomp
 from commons._execution._sandbox import (
     SandboxCapabilities,
     protection_mode,
@@ -152,3 +152,23 @@ def test_the_probe_takes_its_seccomp_answer_from_the_seccomp_module() -> None:
     report False for, and the suite has to pass there too.
     """
     assert sandbox_capabilities().seccomp is _seccomp.seccomp_available()
+
+
+def test_the_probe_reports_no_landlock_where_the_host_cannot_have_it() -> None:
+    """Landlock is a Linux facility, so everywhere else must report none."""
+    if platform.system() == "Linux":
+        pytest.skip("this host may legitimately have Landlock")
+    assert sandbox_capabilities().landlock_abi == -1
+
+
+@pytest.mark.skipif(
+    _landlock.abi_version() < 1, reason="this kernel has no Landlock to report"
+)
+def test_the_probe_reports_the_landlock_a_capable_kernel_has() -> None:
+    """The gate reads the running kernel rather than a fixed answer.
+
+    A Linux host without Landlock reports -1 legitimately, which is the
+    signal to fall back, so the assertion is guarded by the kernel actually
+    having some.
+    """
+    assert sandbox_capabilities().landlock_abi >= 1
