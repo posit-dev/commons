@@ -1,7 +1,5 @@
 # commons
 
-> This package is highly experimental.
-
 commons helps data scientists build trustworthy data agents.
 
 Data teams typically have trusted code that they use to analyze their
@@ -23,6 +21,13 @@ outcome.](https://github.com/user-attachments/assets/3a22c3cd-ae73-4177-a9c2-241
 ## Installation
 
 To install the package, run:
+
+``` r
+
+install.packages("commons")
+```
+
+Or, for the development version:
 
 ``` r
 
