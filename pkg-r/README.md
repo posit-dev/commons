@@ -29,6 +29,12 @@ semantic views, or Databricks metric views.
 To install the package, run:
 
 ``` r
+install.packages("commons")
+```
+
+Or, for the development version:
+
+``` r
 # install.packages("pak")
 pak::pak("posit-dev/commons/pkg-r")
 ```
