@@ -98,6 +98,7 @@ test_that("instructions can be read from a file", {
 })
 
 test_that("a system prompt already set on the client warns", {
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   client <- test_client()
   client$set_system_prompt("You are a pirate.")
 
@@ -120,6 +121,7 @@ test_that("instructions are validated", {
 })
 
 test_that("the system prompt includes schema-qualified table labels", {
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbExecute(con, "CREATE SCHEMA crm")
@@ -158,6 +160,7 @@ test_that("commons() accepts an empty semantic layer", {
 })
 
 test_that("commons() validates its inputs", {
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   expect_error(test_agent(network = "partial"), "network")
   expect_error(
     commons(test_client(), test_source(), NULL, NULL, "prompt"),
@@ -375,6 +378,7 @@ test_that("an entry match wins over an undocumented argument's default", {
 })
 
 test_that("commons() errors on injection parameters matching no name", {
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   layer <- semantic_layer(
     measure(
       "region_revenue",
@@ -589,6 +593,7 @@ stream_citations_fixture <- function(agent, raw, split_at) {
 }
 
 test_that("Claude 5 user turns contain one hidden reminder", {
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   agent <- commons(
     ellmer::chat_anthropic(model = "claude-sonnet-5"),
     data_sources = list(sales_db = test_source())

@@ -388,6 +388,10 @@ worker_init <- function(
     stop("unknown run_r protection mode: ", protection)
   }
   if (identical(protection, "guardrails")) {
+    # Initialize trusted worker dependencies before guardrails replace base
+    # bindings; package startup may legitimately inspect system resources.
+    loadNamespace("evaluate")
+    loadNamespace("ragg")
     requireNamespace("bit64", quietly = TRUE)
     return(invisible(TRUE))
   }

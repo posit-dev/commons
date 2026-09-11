@@ -77,6 +77,8 @@ test_agent <- function(
   log = FALSE,
   ...
 ) {
+  # On Windows, this would error without setting this option.
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
   commons(
     test_client(),
     data_sources = data_sources,

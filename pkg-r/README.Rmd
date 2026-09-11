@@ -21,8 +21,6 @@ library(ggplot2)
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-> This package is highly experimental.
-
 commons helps data scientists build trustworthy data agents.
 
 Data teams typically have trusted code that they use to analyze their data and build reports and apps. commons leverages their expertise, situating that information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
@@ -40,6 +38,12 @@ knitr::include_graphics(
 ## Installation
 
 To install the package, run:
+
+```r
+install.packages("commons")
+```
+
+Or, for the development version:
 
 ```r
 # install.packages("pak")

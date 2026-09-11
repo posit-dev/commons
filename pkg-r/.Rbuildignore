@@ -21,3 +21,4 @@ inst/manifest.json
 ^sandbox$
 inst/pkgs/
 .shinychat/
+inst/rsconnect/
