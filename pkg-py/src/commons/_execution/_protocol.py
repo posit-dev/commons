@@ -20,6 +20,7 @@ import importlib
 import json
 import numbers
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -245,27 +246,34 @@ def _safe_repr(value: Any) -> str:
 def _exceeds_json_depth(value: Any, limit: int = _JSON_DEPTH_LIMIT) -> bool:
     """Whether ``value`` nests JSON containers deeper than ``limit``.
 
-    Iterative, and only containers are pushed: the inputs this exists for
-    are exactly the ones a recursive walk could not survive, and a wide
-    flat list pays one ``isinstance`` per element rather than a stack entry.
+    A stack of iterators, one per level: the inputs this exists for are
+    exactly the ones a recursive walk could not survive, and auxiliary
+    memory stays proportional to nesting depth — a wide hostile value pays
+    one ``isinstance`` per element, never a stack entry per child.
     """
-    stack = [(value, 1)]
+    stack = [(_container_children(value), 1)]
     while stack:
-        node, depth = stack.pop()
-        if depth > limit:
-            return True
-        if isinstance(node, dict):
-            children = node.values()
-        elif isinstance(node, (list, tuple)):
-            children = node
-        else:
+        children, depth = stack[-1]
+        # Only containers are ever yielded, so None is a safe sentinel.
+        child = next(children, None)
+        if child is None:
+            stack.pop()
             continue
-        stack.extend(
-            (child, depth + 1)
-            for child in children
-            if isinstance(child, (dict, list, tuple))
-        )
+        if depth >= limit:
+            return True
+        stack.append((_container_children(child), depth + 1))
     return False
+
+
+def _container_children(node: Any) -> Iterator[Any]:
+    """The JSON-container children of ``node``, as a lazy iterator."""
+    if isinstance(node, dict):
+        children: Any = node.values()
+    elif isinstance(node, (list, tuple)):
+        children = node
+    else:
+        return iter(())
+    return (child for child in children if isinstance(child, (dict, list, tuple)))
 
 
 def _coerce_scalar(value: Any) -> Any:
@@ -290,6 +298,10 @@ def _coerce_scalar(value: Any) -> Any:
         except Exception:  # noqa: BLE001 - any failure means the repr fallback
             return _FALL_BACK
     try:
+        # An object array's tolist can hide arbitrarily deep nesting; the
+        # depth limit applies to what crosses, not to what was asked for.
+        if _exceeds_json_depth(candidate):
+            return _FALL_BACK
         json.dumps(candidate)
     except Exception:  # noqa: BLE001 - any failure means the repr fallback
         # An int past the interpreter's digit limit, a complex array's
