@@ -17,6 +17,7 @@ import sys
 TAG = '<meta name="robots" content="noindex, nofollow">'
 HEAD = re.compile(r"<head[^>]*>", re.IGNORECASE)
 HTML = re.compile(r"<html[^>]*>", re.IGNORECASE)
+DOCTYPE = re.compile(r"^\s*<!doctype[^>]*>", re.IGNORECASE)
 
 
 def main(root: str) -> int:
@@ -39,11 +40,18 @@ def main(root: str) -> int:
             # stray fragment block every preview, which is the worse trade
             # for a file that is usually not a page at all.
             print(f"No <head> in {path}, inserting one", file=sys.stderr)
-            patched, count = HTML.subn(
-                lambda m: m.group(0) + f"<head>{TAG}</head>", text, count=1
-            )
+            head = f"<head>{TAG}</head>"
+            # After <html> where there is one, otherwise after a leading
+            # doctype. A doctype has to come first in the document: put the
+            # head above it and the browser drops into quirks mode, which
+            # would make the preview render unlike the real page.
+            patched, count = HTML.subn(lambda m: m.group(0) + head, text, count=1)
             if not count:
-                patched = f"<head>{TAG}</head>" + text
+                patched, count = DOCTYPE.subn(
+                    lambda m: m.group(0) + head, text, count=1
+                )
+            if not count:
+                patched = head + text
         path.write_text(patched, encoding="utf-8", errors="surrogateescape")
         marked += 1
 
