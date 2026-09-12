@@ -16,16 +16,18 @@ import sys
 
 TAG = '<meta name="robots" content="noindex, nofollow">'
 HEAD = re.compile(r"<head[^>]*>", re.IGNORECASE)
-# A byte order mark may precede the doctype, and the doctype only counts as
-# one if nothing but that precedes it. Inserting above either drops the
-# browser into quirks mode, so the preview would render unlike the real page.
-DOCUMENT = re.compile(r"﻿?\s*<!doctype[^>]*>|<html[^>]*>", re.IGNORECASE)
+HTML = re.compile(r"<html[^>]*>", re.IGNORECASE)
+# Anchored, and tolerant of a leading byte order mark, because a doctype
+# counts as one only when nothing but that precedes it. The anchor is also
+# what keeps a fragment that merely quotes a doctype from passing as a
+# document. Written as an escape: a literal mark here would be invisible.
+DOCTYPE = re.compile("\\A\\ufeff?\\s*<!doctype[^>]*>", re.IGNORECASE)
 
 
 def mark(text: str) -> str | None:
     """Return `text` with the tag added, or None if it needs no change.
 
-    A file with neither a head, an html tag, nor a doctype is a fragment
+    A file with no head, no html tag, and no leading doctype is a fragment
     rather than a page. Nothing indexes it on its own, and giving it a head
     would only corrupt whatever embeds it.
     """
@@ -36,10 +38,15 @@ def mark(text: str) -> str | None:
     if count:
         return patched
 
-    patched, count = DOCUMENT.subn(
-        lambda m: m.group(0) + f"<head>{TAG}</head>", text, count=1
-    )
-    return patched if count else None
+    # The html tag is tried before the doctype because a head belongs inside
+    # html. Taking whichever appears first in the text would put the head
+    # between the two on every page that has both.
+    head = f"<head>{TAG}</head>"
+    for pattern in (HTML, DOCTYPE):
+        patched, count = pattern.subn(lambda m: m.group(0) + head, text, count=1)
+        if count:
+            return patched
+    return None
 
 
 def main(root: str) -> int:
