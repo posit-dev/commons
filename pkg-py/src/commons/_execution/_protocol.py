@@ -165,15 +165,20 @@ def encode_value(value: Any) -> dict[str, Any]:
     channel, arrives as its repr, so a bad value costs the value, never
     the call.
     """
-    if isinstance(value, OpaqueValue):
-        # Already crossed once: pass it through rather than wrapping its
-        # repr in a second OpaqueValue.
-        return {
-            "encoding": "repr",
-            "type": _clip(value.type_name),
-            "text": _clip(value.text),
-        }
-    frame = _as_frame(value)
+    try:
+        if isinstance(value, OpaqueValue):
+            # Already crossed once: pass it through rather than wrapping
+            # its repr in a second OpaqueValue.
+            return {
+                "encoding": "repr",
+                "type": _clip(value.type_name),
+                "text": _clip(value.text),
+            }
+        frame = _as_frame(value)
+    except Exception:  # noqa: BLE001 - a spoofed __class__ must not escape
+        # `isinstance` is model-controlled input (`__class__` is
+        # assignable), so classification itself sits inside the fallback.
+        return _repr_payload(value)
     if frame is not None:
         library, frame_value = frame
         data = _to_arrow_ipc(frame_value, library)
@@ -370,7 +375,10 @@ def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int) -> Any:
 
     pyarrow decompresses IPC bodies without being asked, so the size on the
     wire says nothing about the size in memory. Batches are counted as they
-    decode so the cap fires before the allocation, not after.
+    decode so the cap fires before the table is assembled. One batch over
+    the cap is materialized before it is rejected; that exposure is bounded,
+    because the worker had to hold the same batch to compress it, and a
+    worker with that much memory needs no protocol to exhaust the machine.
     """
     batches = []
     decoded = 0
@@ -468,7 +476,11 @@ def _shrink_text(message: Message) -> Message:
                 stderr=_clip(message.stderr),
             )
         case Error():
-            return replace(message, traceback=_clip(message.traceback))
+            return replace(
+                message,
+                message=_clip(message.message),
+                traceback=_clip(message.traceback),
+            )
         case _:
             return message
 
