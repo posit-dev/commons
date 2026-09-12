@@ -1,0 +1,55 @@
+---
+title: "Security and governance for commons agents"
+---
+
+commons lets you build and deploy agents that run SQL queries against live databases. This raises security and governance questions. How do you make sure that an agent cannot delete production data? Can an agent show users tables, rows, or business context that they are not allowed to see?
+
+This page explains the boundaries that commons provides and the responsibilities that remain with the application author and server administrator.
+
+## commons' harness
+
+A commons agent is a chatlas chat with a system prompt and a set of tools. The system prompt lists the available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, or run a SQL query.
+
+We assume that a model can make any request that its tools allow. Application security must therefore not depend on the model obeying an instruction such as "never reveal sensitive data." Instead, give an agent access only to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results also go to the model provider. The agent must not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
+
+## SQL code execution
+
+### Destructive actions
+
+The agent can run one read-only statement at a time. commons parses each statement with [sqlglot](https://github.com/tobymao/sqlglot) and checks its structure, not its text. The check is an allowlist of statement forms that only read, such as `SELECT` and the set operations. commons refuses every other form, stacked statements, and statements that sqlglot cannot parse. A form that nobody thought of therefore fails closed.
+
+The check also catches a write hidden inside a read. `WITH t AS (SELECT 1) DELETE FROM sales` arrives as a `DELETE`, `WITH d AS (DELETE ... RETURNING *) SELECT * FROM d` deletes rows through its CTE, and `SELECT ... INTO t` creates a table. The guard refuses a statement with a write, DDL, or session-changing node anywhere in its tree, such as `DROP`, `ATTACH`, `GRANT`, `SET`, or `USE`. It also refuses locking reads such as `SELECT ... FOR UPDATE`, because they block other writers.
+
+For data frames and pins, which commons loads into its own DuckDB database, it also hardens the connection. It disables community and unsigned extensions, automatic extension install and load, external access, and the local filesystem. Then it sets `lock_configuration`, so a query cannot turn those settings back on. The lock freezes settings only, not tables, which is how commons can still load a pin's rows on first use.
+
+These checks provide defense in depth, but they are not a database sandbox. When you supply a SQLAlchemy engine, commons queries it as-is, and a statement that the parser accepts runs with all the permissions of that connection. The primary safeguard against destructive SQL is therefore database-enforced read-only access. Open the connection as a read-only user or role.
+
+### Data access
+
+The `tables` argument to `data_source()` controls which tables commons describes to the model. It is not an authorization boundary. SQL written by the agent can query any object that the connection can reach.
+
+On Posit Connect, [viewer OAuth integrations](https://docs.posit.co/connect/admin/access-controls/) can give an interactive application the current viewer's Snowflake or Databricks credentials. If the application creates its engine from those credentials, the warehouse continues to enforce that viewer's existing access policies, including row-level and column-level security.
+
+For a Snowflake or Databricks source, commons records the connection identity when it builds the data source. It records the current user, catalog (database), and schema. On Snowflake it also records the active role and the secondary roles. Before every query and every table description, commons reads the identity again and compares it with the record. If any field changed, commons raises an error, and the application must rebuild the data source. For any other backend, commons records no identity.
+
+Viewer credentials are not automatic. commons uses the engine that the application supplies. When you use viewer credentials, create the engine and the commons agent inside the Shiny server function. Then each session has the correct database identity.
+
+When viewer credentials are not available, use a service account with access only to the data that the application needs. Every viewer then has the same database permissions, so share the application only with users who are allowed that access.
+
+## No code execution
+
+The Python agent has no tool that runs code written by the model. Its tools search context, describe tables, call trusted calculations, and run SQL. commons creates no subprocess, and no Python code from the model runs in the application process or anywhere else. The questions about sandboxing a model's code, such as filesystem, network, and system-call limits, do not arise for this package. The SQL checks above, and the permissions of the connection, are the whole boundary.
+
+## Permissioning facts
+
+The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.
+
+Only include facts that you can share with both the application's viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Do not ask the model to hide the fact from that audience.
+
+## Telemetry
+
+The Python package has no option to log conversations. The `Commons` constructor has no `log` argument, and there is no API to read or review trajectories. Conversation logging and review are features of the R package today.
+
+commons emits [OpenTelemetry](https://opentelemetry.io/) spans under the tracer name `co.posit.python-package.commons`. Today the only span is `commons_server_start`, which `commons.ui.server()` opens when it wires an agent to a chat element. The span carries the id of the chat element and no message content. The OpenTelemetry API records nothing until the application configures an SDK provider and an exporter.
+
+Other libraries in the process, such as chatlas, can emit spans of their own. Their content is governed by those libraries and by your OpenTelemetry configuration, not by commons.
