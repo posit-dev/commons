@@ -443,30 +443,36 @@ def _ipc_batch_size(metadata: bytes, batch: int, body: bytes) -> int:
     rows_at = _table_field(metadata, batch, 0)
     rows = _i64(metadata, rows_at) if rows_at is not None else 0
     buffers_at = _table_field(metadata, batch, 2)
-    buffers = []
-    if buffers_at is not None:
-        start, count = _vector(metadata, buffers_at)
-        buffers = [
-            (_i64(metadata, start + 16 * i), _i64(metadata, start + 16 * i + 8))
-            for i in range(count)
-        ]
     compressed = _table_field(metadata, batch, 3) is not None
     size = 0
-    for offset, length in buffers:
-        if offset < 0 or length < 0 or offset + length > len(body):
-            raise ProtocolError("malformed value payload: IPC buffer outside its body")
-        if length == 0:
-            continue
-        if not compressed:
-            size += length
-            continue
-        prefix = _i64(body, offset)
-        if prefix < -1:
-            raise ProtocolError("malformed value payload: bad IPC buffer prefix")
-        # A compressed buffer starts with its uncompressed length; -1 marks
-        # a buffer stored uncompressed, which cost it the prefix.
-        size += length - 8 if prefix == -1 else prefix
-    if not buffers and rows > 0:
+    count = 0
+    if buffers_at is not None:
+        start, count = _vector(metadata, buffers_at)
+        # A lying count would churn allocations until the reads ran out of
+        # message; the entries are 16 bytes each and must fit inside it.
+        if count > (len(metadata) - start) // 16:
+            raise ProtocolError(
+                "malformed value payload: IPC buffer count overruns its message"
+            )
+        for i in range(count):
+            offset = _i64(metadata, start + 16 * i)
+            length = _i64(metadata, start + 16 * i + 8)
+            if offset < 0 or length < 0 or offset + length > len(body):
+                raise ProtocolError("malformed value payload: IPC buffer outside its body")
+            if length == 0:
+                continue
+            if not compressed:
+                size += length
+                continue
+            prefix = _i64(body, offset)
+            if prefix < -1:
+                raise ProtocolError("malformed value payload: bad IPC buffer prefix")
+            # A compressed buffer starts with its uncompressed length; -1
+            # marks a buffer stored uncompressed, which cost it the prefix.
+            size += length - 8 if prefix == -1 else prefix
+    if count == 0 and rows > 0:
+        # No buffers at all: rows of nothing but null columns, which pandas
+        # conversion prices at a pointer per row.
         size += 8 * rows
     return size
 

@@ -464,6 +464,30 @@ def test_a_crafted_uncompressed_length_is_refused_before_decompression():
         decode_value({**payload, "data": base64.b64encode(crafted).decode("ascii")})
 
 
+def test_a_lying_buffer_count_is_refused():
+    # The buffers vector's count is attacker-controlled; it must be
+    # validated against the message it lives in before it is iterated,
+    # or a stream-sized payload can force allocations far past itself.
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos = 0
+    meta = b""
+    batch = None
+    while batch is None:
+        assert _protocol._u32(data, pos) == 0xFFFFFFFF
+        mlen = _protocol._u32(data, pos + 4)
+        meta = data[pos + 8 : pos + 8 + mlen]
+        body_length, batch = _protocol._ipc_message(meta)
+        if batch is None:
+            pos += 8 + mlen + body_length
+    buffers_at = _protocol._table_field(meta, batch, 2)
+    assert buffers_at is not None
+    count_at = pos + 8 + buffers_at + _protocol._u32(meta, buffers_at)
+    patched = data[:count_at] + (2**31).to_bytes(4, "little") + data[count_at + 4 :]
+    with pytest.raises(ProtocolError, match="overruns"):
+        decode_value({**payload, "data": base64.b64encode(patched).decode("ascii")})
+
+
 def test_a_compressed_stream_with_incompressible_buffers_crosses():
     # pyarrow keeps a buffer that does not compress as raw blocks inside a
     # valid frame; a stream built that way must still cross.
