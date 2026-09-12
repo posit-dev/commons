@@ -13,7 +13,7 @@ Implements trustworthy large language model agents. Connect raw data sources, a 
 Useful links:
 \itemize{
   \item \url{https://github.com/posit-dev/commons}
-  \item \url{https://posit-dev.github.io/commons/}
+  \item \url{https://posit-dev.github.io/commons/r/}
   \item Report bugs at \url{https://github.com/posit-dev/commons/issues}
 }
 

@@ -5,8 +5,8 @@
 # in the package's own .gitignore (see pkg-r/.gitignore).
 .Rproj.user
 .Rprofile
+/docs/r/
 plans/
-docs
 rsconnect/
 CLAUDE.local.md
 AGENTS.override.md
