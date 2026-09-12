@@ -32,12 +32,12 @@ permissions: read-all
 jobs:
   cleanup:
     runs-on: ubuntu-latest
-    # The same group the two site workflows deploy under, so this job queues
-    # behind a build that is already running rather than deleting a folder
-    # that build is about to write. If the two still interleave, the schedule
-    # collects the folder on its next run.
+    # Only against other cleanup runs. This job cannot be serialized against
+    # the deploys: Actions keeps one pending run per group, so sharing theirs
+    # would cancel a queued preview. It rebases onto a concurrent deploy
+    # below, and the schedule collects anything the two still interleave.
     concurrency:
-      group: gh-pages
+      group: preview-cleanup
     permissions:
       contents: write
       pull-requests: read
@@ -109,4 +109,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Remove preview folders:$removed"
-          git push origin gh-pages
+
+          # A deploy may have landed on gh-pages while this job ran. Rebase
+          # onto it and try again rather than forcing, which would drop it.
+          for attempt in 1 2 3 4 5; do
+            if git push origin gh-pages; then
+              exit 0
+            fi
+            echo "Push rejected, rebasing (attempt $attempt)"
+            git pull --rebase origin gh-pages
+          done
+
+          echo "Could not push after 5 attempts." >&2
+          exit 1

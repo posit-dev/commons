@@ -18,12 +18,14 @@ jobs:
     defaults:
       run:
         working-directory: pkg-py
-    # Every run that can push to gh-pages shares one group, including pull
-    # request previews. Two pushes to one branch race, and the cleanup
-    # workflow joins this group so a closing PR's build cannot recreate the
-    # folder the cleanup just removed.
+    # Per workflow and per pull request, so a run supersedes an older pending
+    # run of the same site. Serializing every gh-pages push in one group would
+    # be wrong: Actions keeps only one pending run per group, so a third
+    # arrival cancels the queued one outright and its preview never publishes.
+    # Races between the two sites are handled at the push instead, by the
+    # deploy action's rebase.
     concurrency:
-      group: gh-pages
+      group: quartodoc-${{ github.event.number || github.ref }}
     permissions:
       contents: write
       pull-requests: write
@@ -64,11 +66,23 @@ jobs:
           clean: false
           branch: gh-pages
           folder: docs
+          # Both sites and the preview deploys push to this one branch, so a
+          # deploy has to rebase onto whatever landed while it was building.
+          # Forcing would silently drop that other deploy.
+          force: false
+          attempt-limit: 10
 
       # A fork's GITHUB_TOKEN is read-only, so the deploy and the comment both
       # fail there. Fork previews are not worth the alternative: publishing
       # fork-authored HTML to posit-dev.github.io means serving unreviewed
       # content from our own origin.
+      - name: Mark the preview noindex
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork != true
+        working-directory: .
+        run: python3 .github/scripts/noindex-preview.py docs
+
       - name: Deploy the pull request preview 🔎
         if: >
           github.event_name == 'pull_request' &&
@@ -79,6 +93,8 @@ jobs:
           branch: gh-pages
           folder: docs
           target-folder: pr-${{ github.event.number }}
+          force: false
+          attempt-limit: 10
 
       - name: Comment the preview link
         if: >
