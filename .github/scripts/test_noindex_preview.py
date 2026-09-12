@@ -58,6 +58,20 @@ class MarkTest(unittest.TestCase):
     def test_leaves_a_fragment_alone(self):
         self.assertIsNone(mark("<div>bare fragment</div>\n"))
 
+    def test_leaves_a_fragment_that_merely_quotes_a_doctype(self):
+        # Only a doctype at the very start makes the file a document. An
+        # unanchored match treated this snippet as one and rewrote it.
+        self.assertIsNone(mark("<p>Start a page with &lt;!DOCTYPE html&gt;</p>"))
+        self.assertIsNone(mark("<pre>example: <!DOCTYPE html></pre>"))
+
+    def test_puts_the_head_inside_html_when_a_doctype_precedes_it(self):
+        # The head belongs inside html. Matching whichever token came first
+        # put it between the doctype and the html tag.
+        out = mark("<!DOCTYPE html>\n<html lang=\"en\"><body>x</body></html>")
+        assert out is not None
+        self.assertIn(f'<html lang="en"><head>{TAG}</head>', out)
+        self.assertTrue(out.startswith("<!DOCTYPE html>"))
+
     def test_is_idempotent(self):
         once = mark("<html><head></head></html>")
         assert once is not None

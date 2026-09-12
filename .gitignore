@@ -5,6 +5,7 @@
 # in the package's own .gitignore (see pkg-r/.gitignore).
 .Rproj.user
 .Rprofile
+__pycache__/
 /docs/r/
 /docs/py/
 plans/
