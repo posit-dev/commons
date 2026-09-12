@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import math
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -17,6 +19,7 @@ from commons._execution._env import worker_command, worker_env
 from commons._execution._protocol import (
     STREAM_LIMIT,
     Call,
+    ChannelError,
     Error,
     OpaqueValue,
     ProtocolError,
@@ -85,6 +88,19 @@ def test_a_line_that_is_not_an_object_is_refused():
         decode_message(b"[1, 2, 3]\n")
 
 
+def test_a_refusal_does_not_carry_the_whole_line():
+    # The line is adversary-chosen and can be megabytes long; it has no
+    # business landing whole in a log, a trace, or a model's context.
+    with pytest.raises(ProtocolError) as excinfo:
+        decode_message(b"!" * (2 * 1024 * 1024) + b"\n")
+    assert len(str(excinfo.value)) < 1000
+
+
+def test_something_that_is_not_a_message_is_refused():
+    with pytest.raises(ProtocolError, match="not a message this protocol defines"):
+        encode_message("hello")  # pyrefly: ignore[bad-argument-type]
+
+
 # --- values -----------------------------------------------------------------
 
 
@@ -94,6 +110,25 @@ def test_a_line_that_is_not_an_object_is_refused():
 )
 def test_a_json_shaped_value_crosses_unchanged(value):
     assert decode_value(encode_value(value)) == value
+
+
+def test_containers_arrive_in_their_json_shape():
+    # `encode_value` alone stores the live object; the documented coercions
+    # only happen once JSON actually carries the value, so this goes over
+    # the wire.
+    result = Result(id="c1", value={"pair": (1, 2), 1: "one"})
+    crossed = decode_message(encode_message(result))
+    assert isinstance(crossed, Result)
+    assert crossed.value == {"pair": [1, 2], "1": "one"}
+
+
+def test_a_dict_holding_a_frame_crosses_as_its_repr():
+    # Containers cross as JSON only when JSON can hold the whole of them; a
+    # frame inside a dict costs the dict, not the call.
+    pd = pytest.importorskip("pandas")
+    crossed = decode_value(encode_value({"frame": pd.DataFrame({"n": [1]})}))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "dict"
 
 
 def test_a_pandas_frame_arrives_as_a_pandas_frame():
@@ -112,6 +147,14 @@ def test_a_polars_frame_arrives_as_a_polars_frame():
     assert crossed.equals(frame)
 
 
+def test_a_pyarrow_table_arrives_as_a_pyarrow_table():
+    pa = pytest.importorskip("pyarrow")
+    table = pa.table({"n": [1, 2, 3], "s": ["a", "b", "c"]})
+    crossed = decode_value(encode_value(table))
+    assert isinstance(crossed, pa.Table)
+    assert crossed.equals(table)
+
+
 def test_a_frame_keeps_its_column_types():
     pd = pytest.importorskip("pandas")
     frame = pd.DataFrame(
@@ -126,6 +169,56 @@ def test_a_frame_keeps_its_column_types():
     assert list(crossed.dtypes) == list(frame.dtypes)
 
 
+def test_a_frame_with_duplicate_column_names_keeps_its_data():
+    # `pd.concat(axis=1)` output is too ordinary to lose: Arrow can hold
+    # duplicate field names, so the columns are renamed the way pandas
+    # itself would rename them.
+    pd = pytest.importorskip("pandas")
+    frame = pd.DataFrame([[1, 2]], columns=["a", "a"])
+    crossed = decode_value(encode_value(frame))
+    assert isinstance(crossed, pd.DataFrame)
+    assert crossed.iloc[0].tolist() == [1, 2]
+    assert len(set(crossed.columns)) == 2
+
+
+def test_a_pandas_series_arrives_as_a_one_column_frame():
+    pd = pytest.importorskip("pandas")
+    crossed = decode_value(encode_value(pd.Series([1, 2, 3], name="n")))
+    assert isinstance(crossed, pd.DataFrame)
+    assert list(crossed.columns) == ["n"]
+    assert crossed["n"].tolist() == [1, 2, 3]
+
+
+def test_a_polars_series_arrives_as_a_one_column_frame():
+    pl = pytest.importorskip("polars")
+    crossed = decode_value(encode_value(pl.Series("n", [1, 2, 3])))
+    assert isinstance(crossed, pl.DataFrame)
+    assert crossed.columns == ["n"]
+    assert crossed["n"].to_list() == [1, 2, 3]
+
+
+def test_a_numpy_integer_result_crosses_as_a_json_number():
+    # `df["a"].sum()` is an int64: a JSON number in every respect but its
+    # class, and the commonest scalar result in data work.
+    np = pytest.importorskip("numpy")
+    crossed = decode_value(encode_value(np.int64(6)))
+    assert crossed == 6
+    assert type(crossed) is int
+
+
+def test_a_numpy_float_crosses_as_a_json_number():
+    np = pytest.importorskip("numpy")
+    crossed = decode_value(encode_value(np.float32(2.5)))
+    assert crossed == 2.5
+    assert type(crossed) is float
+
+
+def test_a_numpy_array_crosses_as_a_json_list():
+    np = pytest.importorskip("numpy")
+    crossed = decode_value(encode_value(np.array([[1, 2], [3, 4]])))
+    assert crossed == [[1, 2], [3, 4]]
+
+
 def test_a_value_that_cannot_cross_arrives_as_its_repr():
     # A REPL shows you the repr of a thing it cannot hand you, and that is
     # what is useful to the model too. Crossing it by reference is what the
@@ -135,6 +228,56 @@ def test_a_value_that_cannot_cross_arrives_as_its_repr():
     assert isinstance(crossed, OpaqueValue)
     assert crossed.type_name == "object"
     assert crossed.text.startswith("<object object at")
+
+
+def test_a_value_whose_repr_raises_still_crosses():
+    class Hostile:
+        def __repr__(self):
+            raise RuntimeError("no repr for you")
+
+    crossed = decode_value(encode_value(Hostile()))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "Hostile"
+    assert "repr raised" in crossed.text
+
+
+def test_an_impossibly_large_integer_crosses_as_text():
+    # `json.dumps` refuses an int past the interpreter's digit limit, and
+    # `repr` refuses it too; neither may cost the call.
+    crossed = decode_value(encode_value(math.factorial(2000)))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "int"
+
+
+def test_a_deeply_nested_container_crosses_as_text():
+    # Built iteratively: `json.dumps` answers deep nesting with
+    # `RecursionError`, not `ValueError`, and so does `repr` — neither may
+    # cost the call.
+    value = []
+    for _ in range(60000):
+        value = [value]
+    crossed = decode_value(encode_value(value))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "list"
+
+
+def test_a_value_pretending_to_be_a_frame_crosses_as_its_repr():
+    # `__class__` is assignable, so `isinstance` is model-controlled input,
+    # not proof: the failure has to land in the fallback, not escape it.
+    pd = pytest.importorskip("pandas")
+
+    class Fake:
+        __class__ = pd.DataFrame
+
+    crossed = decode_value(encode_value(Fake()))
+    assert isinstance(crossed, OpaqueValue)
+
+
+def test_an_opaque_value_sent_again_crosses_unchanged():
+    # A driver hands earlier results back as handles; a second pass over an
+    # OpaqueValue must not wrap its repr in another OpaqueValue.
+    opaque = OpaqueValue(type_name="object", text="<object object at 0x0>")
+    assert decode_value(encode_value(opaque)) == opaque
 
 
 def test_encoding_a_value_never_asks_it_how_to_pickle_itself():
@@ -162,10 +305,32 @@ def test_a_payload_with_an_unrecognized_encoding_is_refused():
         decode_value({"encoding": "pickle", "data": "gASVAA=="})
 
 
-def test_a_frame_from_a_library_this_process_lacks_is_refused():
+def test_a_frame_from_a_library_the_protocol_does_not_know_is_refused():
     payload = encode_value(pytest.importorskip("pandas").DataFrame({"n": [1]}))
     with pytest.raises(ProtocolError, match="nosuchframelib"):
         decode_value({**payload, "library": "nosuchframelib"})
+
+
+def test_a_frame_naming_a_library_the_process_cannot_import_is_refused():
+    # `pandas` and `polars` are not runtime dependencies, so a payload
+    # naming one can reach a driver that lacks it; that has to be a
+    # protocol error, not a `ModuleNotFoundError` escaping the codec.
+    pl = pytest.importorskip("polars")
+    payload = encode_value(pl.DataFrame({"n": [1]}))
+
+    class BlockPolars:
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname == "polars":
+                raise ModuleNotFoundError("No module named 'polars'")
+
+    removed = sys.modules.pop("polars")
+    sys.meta_path.insert(0, BlockPolars())
+    try:
+        with pytest.raises(ProtocolError, match="malformed value payload"):
+            decode_value(payload)
+    finally:
+        sys.meta_path.pop(0)
+        sys.modules["polars"] = removed
 
 
 def test_handles_ride_across_on_the_call_that_needs_them():
@@ -182,6 +347,101 @@ def test_a_frame_comes_back_as_the_result_of_a_call():
     crossed = decode_message(encode_message(result))
     assert isinstance(crossed, Result)
     pd.testing.assert_frame_equal(crossed.value, result.value)
+
+
+# --- the channel's size limits ----------------------------------------------
+
+
+def test_a_frame_too_large_for_the_channel_crosses_as_its_repr():
+    pd = pytest.importorskip("pandas")
+    frame = pd.DataFrame({"n": range(10_000_000)})  # ~80 MB as Arrow
+    crossed = decode_message(encode_message(Result(id="c1", value=frame, stdout="kept\n")))
+    assert isinstance(crossed, Result)
+    assert isinstance(crossed.value, OpaqueValue)
+    assert crossed.value.type_name == "DataFrame"
+    assert crossed.stdout == "kept\n"
+
+
+def test_output_too_large_for_the_channel_is_clipped():
+    # stdout holds unbounded model output, so this is reachable without any
+    # adversary. The value survives; the output is clipped, and says so.
+    result = Result(id="c1", value=42, stdout="x" * (STREAM_LIMIT + 1000))
+    line = encode_message(result)
+    assert len(line) <= STREAM_LIMIT
+    crossed = decode_message(line)
+    assert isinstance(crossed, Result)
+    assert crossed.value == 42
+    assert crossed.stdout.endswith("channel limit]")
+
+
+def test_a_handle_too_large_for_the_channel_crosses_as_its_repr():
+    call = Call(id="c1", code="r1", handles={"r1": "x" * (STREAM_LIMIT + 1000)})
+    crossed = decode_message(encode_message(call))
+    assert isinstance(crossed, Call)
+    assert isinstance(crossed.handles["r1"], OpaqueValue)
+    assert crossed.handles["r1"].type_name == "str"
+
+
+def test_a_call_carrying_too_much_code_is_refused():
+    # Code is never clipped — a truncated program is worse than an unsent
+    # one — so a message with nothing left to shrink is an error.
+    with pytest.raises(ProtocolError, match="longer than the channel allows"):
+        encode_message(Call(id="c1", code="x" * (STREAM_LIMIT + 1000)))
+
+
+def _compressed_frame_payload(rows=12_000_000):
+    pa = pytest.importorskip("pyarrow")
+    table = pa.table({"z": pa.array([0] * rows, type=pa.int64())})
+    sink = pa.BufferOutputStream()
+    options = pa.ipc.IpcWriteOptions(compression="zstd")
+    with pa.ipc.new_stream(sink, table.schema, options=options) as writer:
+        writer.write_table(table)
+    return {
+        "encoding": "arrow",
+        "library": "pyarrow",
+        "data": base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii"),
+    }
+
+
+def test_a_compressed_frame_decodes_within_the_default_limit():
+    payload = _compressed_frame_payload()
+    crossed = decode_value(payload)
+    assert crossed.num_rows == 12_000_000
+
+
+def test_a_compressed_frame_cannot_expand_past_the_decode_limit():
+    # A line well under STREAM_LIMIT can decode to orders of magnitude
+    # more, and the far end chooses the bytes; the cap has to fire before
+    # the allocation, not after.
+    payload = _compressed_frame_payload()
+    assert len(json.dumps(payload)) < 64 * 1024
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        decode_value(payload, max_frame_bytes=1024 * 1024)
+
+
+async def test_the_frame_limit_applies_to_lines_read_from_the_channel():
+    pa = pytest.importorskip("pyarrow")
+    table = pa.table({"z": pa.array([0] * 12_000_000, type=pa.int64())})
+    sink = pa.BufferOutputStream()
+    options = pa.ipc.IpcWriteOptions(compression="zstd")
+    with pa.ipc.new_stream(sink, table.schema, options=options) as writer:
+        writer.write_table(table)
+    line = json.dumps(
+        {
+            "type": "result",
+            "id": "c1",
+            "value": {
+                "encoding": "arrow",
+                "library": "pyarrow",
+                "data": base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii"),
+            },
+        }
+    ).encode() + b"\n"
+    reader = asyncio.StreamReader(limit=STREAM_LIMIT)
+    reader.feed_data(line)
+    reader.feed_eof()
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        await read_message(reader, max_frame_bytes=1024 * 1024)
 
 
 # --- the channel ------------------------------------------------------------
@@ -218,10 +478,28 @@ async def test_a_frame_larger_than_a_default_stream_buffer_still_crosses():
     pd.testing.assert_frame_equal(crossed.value, frame)
 
 
-async def test_a_message_past_the_channel_limit_says_so():
-    reader = reader_for(Call(id="c1", code="x" * 4096), limit=1024)
-    with pytest.raises(ProtocolError, match="longer than the channel allows"):
+async def test_a_message_past_the_channel_limit_breaks_the_channel():
+    # An overrun is not a junk line: the reader has discarded bytes up to an
+    # offset the far end chose, so no later message boundary can be trusted.
+    reader = asyncio.StreamReader(limit=1024)
+    reader.feed_data(b"x" * 4096 + b"\n")
+    reader.feed_data(encode_message(Result(id="attacker-chosen", value="resync")))
+    reader.feed_eof()
+    with pytest.raises(ChannelError, match="longer than the channel allows"):
         await read_message(reader)
+    with pytest.raises(ChannelError, match="must be abandoned"):
+        await read_message(reader)
+
+
+async def test_a_junk_line_does_not_break_the_channel():
+    # The recoverable counterpart: only the bad message is lost.
+    reader = asyncio.StreamReader(limit=STREAM_LIMIT)
+    reader.feed_data(b"print() leaked onto the channel\n")
+    reader.feed_data(encode_message(Ready()))
+    reader.feed_eof()
+    with pytest.raises(ProtocolError, match="not a protocol message"):
+        await read_message(reader)
+    assert await read_message(reader) == Ready()
 
 
 async def open_channel(limit=STREAM_LIMIT):
@@ -229,22 +507,35 @@ async def open_channel(limit=STREAM_LIMIT):
     read_fd, write_fd = os.pipe()
     loop = asyncio.get_running_loop()
     reader = asyncio.StreamReader(limit=limit)
-    await loop.connect_read_pipe(
+    read_transport, _ = await loop.connect_read_pipe(
         lambda: asyncio.StreamReaderProtocol(reader), os.fdopen(read_fd, "rb")
     )
-    transport, protocol = await loop.connect_write_pipe(
+    write_transport, protocol = await loop.connect_write_pipe(
         asyncio.streams.FlowControlMixin, os.fdopen(write_fd, "wb")
     )
-    return reader, asyncio.StreamWriter(transport, protocol, None, loop)
+    writer = asyncio.StreamWriter(write_transport, protocol, None, loop)
+    return reader, writer, read_transport
 
 
 async def test_a_message_written_to_a_pipe_is_read_back_from_it():
-    reader, writer = await open_channel()
+    reader, writer, read_transport = await open_channel()
     await write_message(writer, Call(id="c1", code="x = 1"))
     await write_message(writer, Ready())
     assert await read_message(reader) == Call(id="c1", code="x = 1")
     assert await read_message(reader) == Ready()
     writer.close()
+    read_transport.close()
+
+
+async def test_writing_after_the_far_end_is_gone_fails():
+    # The worker dying mid-call is the ordinary way this happens; the write
+    # has to say so, not hang or succeed into the void.
+    _reader, writer, read_transport = await open_channel()
+    read_transport.close()
+    with pytest.raises(ConnectionError):
+        for _ in range(10):
+            await write_message(writer, Ready())
+            await asyncio.sleep(0)
 
 
 def test_the_protocol_module_speaks_for_itself_without_commons():
@@ -316,6 +607,19 @@ def test_a_message_field_of_the_wrong_type_is_refused():
 def test_a_line_that_is_not_utf_8_is_refused():
     with pytest.raises(ProtocolError, match="not a protocol message"):
         decode_message(b'{"type": "ready\xff"}\n')
+
+
+def test_a_deeply_nested_line_is_refused():
+    # `json.loads` answers hostile nesting with `RecursionError`, not
+    # `ValueError`; it is still a bad line, not an escape from the codec.
+    line = (
+        b'{"type": "result", "id": "c1", "value": {"encoding": "json", "data": '
+        + b"[" * 120000
+        + b"]" * 120000
+        + b"}}"
+    )
+    with pytest.raises(ProtocolError, match="not a protocol message"):
+        decode_message(line)
 
 
 def test_a_frame_arrow_cannot_hold_crosses_as_its_repr():
