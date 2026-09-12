@@ -182,7 +182,7 @@ commons infers the kind from the expression. An aggregate or constant expression
 
 See the [DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 
-When you construct a data source, commons validates each definition and compiles it to the SQL dialect of the source. A definition on a table that the source does not expose is a construction error.
+When you construct a data source, commons validates each definition and compiles it for DuckDB, Snowflake, or Databricks, whichever the source uses. Construction fails for another dialect, a definition on a table the source does not expose, or a metric of mixed row and aggregate grain.
 
 ## Project directory organization
 
