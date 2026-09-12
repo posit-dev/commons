@@ -1,0 +1,6 @@
+/reference/
+/_site/
+/.quarto/
+/objects.json
+
+**/*.quarto_ipynb
