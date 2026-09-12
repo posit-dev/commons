@@ -273,6 +273,25 @@ def test_a_value_pretending_to_be_a_frame_crosses_as_its_repr():
     assert isinstance(crossed, OpaqueValue)
 
 
+def test_a_value_pretending_to_be_a_series_crosses_as_its_repr():
+    pd = pytest.importorskip("pandas")
+
+    class Fake:
+        __class__ = pd.Series
+
+    crossed = decode_value(encode_value(Fake()))
+    assert isinstance(crossed, OpaqueValue)
+
+
+def test_a_value_pretending_to_be_opaque_crosses_as_its_repr():
+    class Fake:
+        __class__ = OpaqueValue  # pyrefly: ignore[bad-override]
+
+    crossed = decode_value(encode_value(Fake()))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "Fake"
+
+
 def test_an_opaque_value_sent_again_crosses_unchanged():
     # A driver hands earlier results back as handles; a second pass over an
     # OpaqueValue must not wrap its repr in another OpaqueValue.
@@ -387,6 +406,17 @@ def test_a_call_carrying_too_much_code_is_refused():
     # one — so a message with nothing left to shrink is an error.
     with pytest.raises(ProtocolError, match="longer than the channel allows"):
         encode_message(Call(id="c1", code="x" * (STREAM_LIMIT + 1000)))
+
+
+def test_an_error_message_too_large_for_the_channel_is_clipped():
+    # `raise RuntimeError("x" * BIG)` in the worker must not cost the error
+    # response itself.
+    error = Error(id="c1", message="x" * (STREAM_LIMIT + 1000))
+    line = encode_message(error)
+    assert len(line) <= STREAM_LIMIT
+    crossed = decode_message(line)
+    assert isinstance(crossed, Error)
+    assert crossed.message.endswith("channel limit]")
 
 
 def _compressed_frame_payload(rows=12_000_000):
