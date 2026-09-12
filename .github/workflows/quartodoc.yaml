@@ -18,12 +18,15 @@ jobs:
     defaults:
       run:
         working-directory: pkg-py
-    # Shared with the sibling site's workflow: both deploy to gh-pages, and
-    # two pushes to one branch race.
+    # Every run that can push to gh-pages shares one group, including pull
+    # request previews. Two pushes to one branch race, and the cleanup
+    # workflow joins this group so a closing PR's build cannot recreate the
+    # folder the cleanup just removed.
     concurrency:
-      group: gh-pages-${{ github.event_name != 'pull_request' || github.run_id }}
+      group: gh-pages
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v6
 
@@ -61,3 +64,30 @@ jobs:
           clean: false
           branch: gh-pages
           folder: docs
+
+      # A fork's GITHUB_TOKEN is read-only, so the deploy and the comment both
+      # fail there. Fork previews are not worth the alternative: publishing
+      # fork-authored HTML to posit-dev.github.io means serving unreviewed
+      # content from our own origin.
+      - name: Deploy the pull request preview 🔎
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork != true
+        uses: JamesIves/github-pages-deploy-action@d92aa235d04922e8f08b40ce78cc5442fcfbfa2f # v4.8.0
+        with:
+          clean: false
+          branch: gh-pages
+          folder: docs
+          target-folder: pr-${{ github.event.number }}
+
+      - name: Comment the preview link
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork != true
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: preview-py
+          message: |
+            **Python site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/py/](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/py/)
+
+            Built from the latest commit on this branch. The landing page's R link resolves inside the preview only if this pull request also rebuilt the R site.
