@@ -103,6 +103,19 @@ h2 {
   line-height: 1.25;
 }
 
+.content-section > .section-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 560ms ease-out var(--reveal-delay, 0ms),
+    transform 560ms cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay, 0ms);
+}
+
+.content-section.section-visible > .section-reveal {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 p {
   margin: 1rem 0;
 }
@@ -203,5 +216,13 @@ pre {
   .demo {
     width: calc(100vw - 16px);
     margin: 2rem 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-section > .section-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
   }
 }

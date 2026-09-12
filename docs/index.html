@@ -13,6 +13,7 @@
   <link rel="icon" href="assets/commons-logo.png" type="image/png">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="styles.css">
+  <script src="site.js" defer></script>
 </head>
 <body>
   <main>
@@ -47,6 +48,7 @@
 
     <p>The Python package is currently in a pre-release beta stage, but you can install and play around with it today, with more features arriving over the next few weeks.</p>
 
+    <section class="content-section">
     <h2>Design philosophy</h2>
 
     <p>AI agents for data analysis can range from overly cautious and narrowly correct to wildly and confidently incorrect. commons provides a framework for you to design more trustworthy analysis agents by providing them with access to existing <strong>trusted code</strong>, while still allowing them enough flexibility to answer novel, realistic questions.</p>
@@ -61,11 +63,15 @@
 
     <p>Notably, the agent itself does not decide how to label a response. commons instead labels answers deterministically, based on the path the agent takes to get it to its answer.</p>
 
+    </section>
+
+    <section class="content-section">
     <h2>Get started</h2>
 
     <p>To get started with the R package, check out the <a href="r/articles/commons.html">introductory vignette</a>. The package ships with an <a href="r/articles/commons.html#working-with-the-agent-skill">agent skill</a> to help you hook your trusted code and context up to the agent.</p>
 
     <p>The Python package is based on the same ideas, so the linked vignette from the R package will give you a sense of where the package is going. (The resulting apps will look <em>very</em> similar regardless of whether you use R or Python—they literally share the same CSS!) Check out the <a href="https://github.com/posit-dev/commons/tree/main/pkg-py">package README</a> to learn more.</p>
+    </section>
   </main>
 </body>
 </html>
