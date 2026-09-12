@@ -16,6 +16,7 @@ import sys
 
 TAG = '<meta name="robots" content="noindex, nofollow">'
 HEAD = re.compile(r"<head[^>]*>", re.IGNORECASE)
+HTML = re.compile(r"<html[^>]*>", re.IGNORECASE)
 
 
 def main(root: str) -> int:
@@ -31,14 +32,20 @@ def main(root: str) -> int:
             skipped += 1
             continue
         patched, count = HEAD.subn(lambda m: m.group(0) + TAG, text, count=1)
-        if count:
-            path.write_text(patched, encoding="utf-8", errors="surrogateescape")
-            marked += 1
-        else:
-            # A page with no <head> cannot carry the tag. Report it rather
-            # than pass silently, since it stays indexable.
-            print(f"No <head> in {path}", file=sys.stderr)
-            skipped += 1
+        if not count:
+            # The head start tag is optional in HTML, and neither generator
+            # omits it today. Synthesize one anyway rather than deploy a page
+            # that is still indexable. Failing the run instead would let one
+            # stray fragment block every preview, which is the worse trade
+            # for a file that is usually not a page at all.
+            print(f"No <head> in {path}, inserting one", file=sys.stderr)
+            patched, count = HTML.subn(
+                lambda m: m.group(0) + f"<head>{TAG}</head>", text, count=1
+            )
+            if not count:
+                patched = f"<head>{TAG}</head>" + text
+        path.write_text(patched, encoding="utf-8", errors="surrogateescape")
+        marked += 1
 
     print(f"Marked {marked} page(s) noindex, skipped {skipped}.")
     return 0
