@@ -99,6 +99,9 @@ build_r() {
   # Matches .github/workflows/pkgdown.yaml. The destination comes from
   # pkg-r/_pkgdown.yml, so it lands in docs/r without being named here.
   (cd "$root/pkg-r" && Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)')
+  # So the landing page's link to r/ works here. The published site keeps the
+  # released documentation there, which is why this is not part of the build.
+  "$root/.github/scripts/link-r-dev.sh" "$root/docs"
 }
 
 build_py() {

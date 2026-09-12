@@ -67,6 +67,15 @@ jobs:
       # fail there. Fork previews are not worth the alternative: publishing
       # fork-authored HTML to posit-dev.github.io means serving unreviewed
       # content from our own origin.
+      # Preview only. The production deploy above publishes r/ as the released
+      # documentation, and this would replace its index with a redirect.
+      - name: Point r/ at the development site
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork != true
+        working-directory: .
+        run: .github/scripts/link-r-dev.sh docs
+
       # pkgdown's automatic development mode puts a released version's site at
       # the root of destination and a development version's in dev/ below it,
       # so the entry point moves with the version in DESCRIPTION. Linking to
