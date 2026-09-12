@@ -250,9 +250,18 @@ def test_an_impossibly_large_integer_crosses_as_text():
     assert crossed.type_name == "int"
 
 
+def test_nesting_at_the_depth_limit_still_crosses():
+    # The envelope adds a few levels above the value, so stay well under
+    # the limit: this far down, a container crosses as JSON as always.
+    value = []
+    for _ in range(_protocol._JSON_DEPTH_LIMIT - 10):
+        value = [value]
+    assert decode_value(encode_value(value)) == value
+
+
 def test_a_deeply_nested_container_crosses_as_text():
-    # Built iteratively: `json.dumps` answers deep nesting with
-    # `RecursionError`, not `ValueError`, and so does `repr` — neither may
+    # Built iteratively. Past the protocol's depth limit a container cannot
+    # cross as JSON, and `repr` of one this deep raises too — neither may
     # cost the call.
     value = []
     for _ in range(60000):
@@ -716,8 +725,9 @@ def test_a_line_that_is_not_utf_8_is_refused():
 
 
 def test_a_deeply_nested_line_is_refused():
-    # `json.loads` answers hostile nesting with `RecursionError`, not
-    # `ValueError`; it is still a bad line, not an escape from the codec.
+    # Hostile nesting is a bad line, not an escape from the codec. Before
+    # 3.14 `json.loads` itself raised `RecursionError` for this; now that
+    # its parser is iterative, the protocol's own depth limit refuses it.
     line = (
         b'{"type": "result", "id": "c1", "value": {"encoding": "json", "data": '
         + b"[" * 120000
