@@ -1,0 +1,22 @@
+# The CI helpers under .github/scripts/ have no package to be tested by, so
+# they are tested here.
+name: scripts-check.yaml
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/scripts/**, .github/workflows/scripts-check.yaml]
+  pull_request:
+    paths: [.github/scripts/**, .github/workflows/scripts-check.yaml]
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Test noindex-preview.py
+        run: python3 .github/scripts/test_noindex_preview.py
