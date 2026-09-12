@@ -2,11 +2,10 @@
 # Build the documentation sites and serve them the way they are deployed.
 #
 # The sites are published as one tree: the landing page at the root, the R
-# site under r/, and the Python site under py/. Their links to each other are
-# relative, so opening a built file directly resolves none of them. This
-# script assembles that same tree in docs/ and serves it, which is also the
-# layout a pull request preview publishes, so what you see here is what a
-# reviewer sees there.
+# site under r/, and the Python site under py/, which mirrors the deployment
+# arrangement. This script assembles the documentation page in docs/ and 
+# serves it in the same layout a pull request preview publishes, so it
+# should match what a PR reviewer will see.
 #
 # Usage:
 #   scripts/preview-docs.sh            build both sites and serve
@@ -37,23 +36,37 @@ done
 [ -n "$sites" ] || sites="r py"
 
 # Collected rather than printed as they happen, so the reason a site is
-# missing is still on screen once a build has scrolled past.
+# missing is still on screen once a build has scrolled past. Each entry is a
+# reason followed by a command to paste: naming a package leaves the reader to
+# work out where to type it, and the answer differs between the shell and the
+# R console.
 skipped=()
+
+skip() {
+  skipped+=("$1
+    $2")
+}
 
 build_r() {
   if ! command -v Rscript >/dev/null 2>&1; then
-    skipped+=("r: Rscript is not on PATH")
+    skip "the R site: Rscript is not on PATH." \
+      "See https://cloud.r-project.org/ to install R."
     return
   fi
   if ! Rscript -e 'quit(status = !requireNamespace("pkgdown", quietly = TRUE))' 2>/dev/null; then
-    skipped+=("r: the pkgdown package is not installed (install.packages(\"pkgdown\"))")
+    skip "the R site: pkgdown is not installed." \
+      "Rscript -e 'install.packages(\"pkgdown\", repos = \"https://cloud.r-project.org\")'"
     return
   fi
   # pkgdown runs the examples, so it needs commons itself installed, exactly
   # as the workflow does through setup-r-dependencies. Checking here turns
   # what is otherwise a long build ending in an R stack trace into one line.
+  #
+  # The snippet installs pak first if it has to, and runs from $root, so it
+  # works whatever directory the reader pasted it into.
   if ! Rscript -e 'quit(status = !requireNamespace("commons", quietly = TRUE))' 2>/dev/null; then
-    skipped+=("r: commons is not installed (pak::local_install_deps(\"pkg-r\"), then pak::local_install(\"pkg-r\"))")
+    skip "the R site: commons is not installed, and pkgdown runs its examples." \
+      "(cd $root && Rscript -e 'if (!requireNamespace(\"pak\", quietly = TRUE)) install.packages(\"pak\", repos = \"https://cloud.r-project.org\"); pak::local_install_deps(\"pkg-r\"); pak::local_install(\"pkg-r\")')"
     return
   fi
   echo "==> Building the R site into docs/r"
@@ -64,11 +77,13 @@ build_r() {
 
 build_py() {
   if ! command -v uv >/dev/null 2>&1; then
-    skipped+=("py: uv is not on PATH (https://docs.astral.sh/uv/)")
+    skip "the Python site: uv is not on PATH." \
+      "curl -LsSf https://astral.sh/uv/install.sh | sh"
     return
   fi
   if ! command -v quarto >/dev/null 2>&1; then
-    skipped+=("py: quarto is not on PATH (https://quarto.org/docs/get-started/)")
+    skip "the Python site: quarto is not on PATH." \
+      "See https://quarto.org/docs/get-started/ for your platform."
     return
   fi
   echo "==> Building the Python site into docs/py"
@@ -86,7 +101,7 @@ for site in $sites; do
 done
 
 for note in "${skipped[@]+"${skipped[@]}"}"; do
-  echo "Skipped $note" >&2
+  printf '\nSkipped %s\n' "$note" >&2
 done
 
 # Naming what is absent beats letting someone click a dead link and wonder
