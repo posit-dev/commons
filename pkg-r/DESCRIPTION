@@ -14,7 +14,7 @@ Description: Implements trustworthy large language model agents.
     Then, deploy data agents that answer questions, log interactions, and
     can be evaluated and improved over time.
 License: MIT + file LICENSE
-URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/
+URL: https://github.com/posit-dev/commons, https://posit-dev.github.io/commons/r/
 BugReports: https://github.com/posit-dev/commons/issues
 Depends:
     R (>= 4.1.0)

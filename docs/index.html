@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>commons</title>
+  <meta name="description" content="commons helps data scientists build trustworthy data agents.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="commons">
+  <meta property="og:description" content="commons helps data scientists build trustworthy data agents.">
+  <meta property="og:url" content="https://posit-dev.github.io/commons/">
+  <meta property="og:image" content="https://posit-dev.github.io/commons/assets/commons-logo.png">
+  <link rel="icon" href="assets/commons-logo.png" type="image/png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header class="title-block">
+      <img class="logo" src="assets/commons-logo.png" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space." width="120" height="139">
+      <h1>commons</h1>
+      <p class="subtitle">An R and Python package that helps data scientists build trustworthy data analysis agents.</p>
+    </header>
+
+    <nav class="package-links" aria-label="Package documentation">
+      <a href="r/"><i class="fa-brands fa-r-project" aria-hidden="true"></i> R</a>
+      <a href="https://github.com/posit-dev/commons/tree/main/pkg-py"><i class="fa-brands fa-python" aria-hidden="true"></i> Python</a>
+      <a href="https://github.com/posit-dev/commons"><i class="fa-brands fa-github" aria-hidden="true"></i> GitHub</a>
+    </nav>
+
+    <div class="media-card demo">
+      <video autoplay muted loop playsinline controls preload="metadata" aria-label="A screencast of a commons agent answering a data question.">
+        <source src="assets/commons-demo.mp4" type="video/mp4">
+        <p>Your browser does not support embedded video. <a href="assets/commons-demo.mp4">Download the demo</a>.</p>
+      </video>
+    </div>
+
+    <p>The package is built on <a href="https://ellmer.tidyverse.org/">ellmer</a>, <a href="https://posit-dev.github.io/chatlas/">chatlas</a>, and <a href="https://github.com/posit-dev/shinychat/">shinychat</a>, Posit's open source LLM stack. You can use whatever model you want from any of the providers supported by those packages with it.</p>
+
+    <p>To install the R package, run:</p>
+
+    <pre><code>install.packages("commons")</code></pre>
+
+    <p>To install the Python package from PyPI, run:</p>
+
+    <pre><code>pip install commons</code></pre>
+
+    <p>The Python package is currently in a pre-release beta stage, but you can install and play around with it today, with more features arriving over the next few weeks.</p>
+
+    <h2>Design philosophy</h2>
+
+    <p>AI agents for data analysis can range from overly cautious and narrowly correct to wildly and confidently incorrect. commons provides a framework for you to design more trustworthy analysis agents by providing them with access to existing <strong>trusted code</strong>, while still allowing them enough flexibility to answer novel, realistic questions.</p>
+
+    <p>If you are a data analyst, data scientist, statistical programmer, or other data practitioner, you likely have a deep understanding of your problem domain and a collection of trusted code you depend on for your analyses and use to create apps, reports, and packages. The core idea behind commons is that we can improve an agent's correctness by giving it the right access and documentation to run this code that you have already vetted.</p>
+
+    <p>When answering questions, commons agents first search through a pool of trusted code. If the agent finds an appropriate piece of trusted code, it can invoke it directly, and its response displays a green shield provenance marker <img src="assets/trusted-icon.svg" class="commons-inline-icon" alt="">. If it doesn't, it will search through relevant context before writing its own SQL, R, or Python. If the agent can find trusted context that justifies its approach, it can provide a citation to it at the end of its answer, displayed with a blue provenance marker <img src="assets/citation-mark.svg" class="commons-inline-icon" alt="">, which will be deterministically checked by commons. Otherwise, the answer displays a yellow warning provenance marker <img src="assets/warning-icon.svg" class="commons-inline-icon" alt="">.</p>
+
+    <div class="media-card figure-card trust-flow">
+      <img src="assets/trust-flow.svg" alt="Flow diagram. A commons agent searches trusted calculations. If it finds a relevant calculation, it runs the trusted calculation and returns a verified answer. Otherwise, it searches context, writes SQL or R, and returns either a cited or untrusted answer." loading="lazy">
+    </div>
+
+    <p>Notably, the agent itself does not decide how to label a response. commons instead labels answers deterministically, based on the path the agent takes to get it to its answer.</p>
+
+    <h2>Get started</h2>
+
+    <p>To get started with the R package, check out the <a href="r/articles/commons.html">introductory vignette</a>. The package ships with an <a href="r/articles/commons.html#working-with-the-agent-skill">agent skill</a> to help you hook your trusted code and context up to the agent.</p>
+
+    <p>The Python package is based on the same ideas, so the linked vignette from the R package will give you a sense of where the package is going. (The resulting apps will look <em>very</em> similar regardless of whether you use R or Python—they literally share the same CSS!) Check out the <a href="https://github.com/posit-dev/commons/tree/main/pkg-py">package README</a> to learn more.</p>
+  </main>
+</body>
+</html>
