@@ -130,13 +130,39 @@ for note in "${skipped[@]+"${skipped[@]}"}"; do
 done
 [ ${#skipped[@]} -eq 0 ] || echo >&2
 
-# Naming what is absent beats letting someone click a dead link and wonder
-# whether they broke the build.
+# pkgdown's automatic development mode decides where a site lands from the
+# version in DESCRIPTION: a released version goes to the root of destination,
+# a development version to dev/ below it. So the R entry point moves, and
+# pointing at r/ on a development version serves a directory listing. The
+# landing page links to r/, which is right for the deployed site and wrong
+# here, so the addresses below are worth reading rather than guessing.
+entry_point() {
+  if [ -f "$root/docs/$1/index.html" ]; then
+    echo "$1/"
+  elif [ -f "$root/docs/$1/dev/index.html" ]; then
+    echo "$1/dev/"
+  fi
+}
+
+echo
+echo "Pages:"
+printf '  %-14s http://localhost:%s/\n' "landing page" "$port"
 for site in r py; do
-  [ -d "$root/docs/$site" ] || echo "Note: docs/$site is not built, so links to it will 404." >&2
+  case "$site" in
+    r) label="R site" ;;
+    py) label="Python site" ;;
+  esac
+  path="$(entry_point "$site")"
+  if [ -n "$path" ]; then
+    printf '  %-14s http://localhost:%s/%s\n' "$label" "$port" "$path"
+  else
+    # Named rather than omitted: a missing row reads as a broken build.
+    printf '  %-14s not built, so links to it will 404\n' "$label"
+  fi
 done
+echo
 
 if [ "$serve" = true ]; then
-  echo "==> Serving $root/docs at http://localhost:$port/ (Ctrl-C to stop)"
+  echo "==> Serving $root/docs (Ctrl-C to stop)"
   cd "$root/docs" && python3 -m http.server "$port"
 fi

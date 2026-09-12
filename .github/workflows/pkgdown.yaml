@@ -67,6 +67,26 @@ jobs:
       # fail there. Fork previews are not worth the alternative: publishing
       # fork-authored HTML to posit-dev.github.io means serving unreviewed
       # content from our own origin.
+      # pkgdown's automatic development mode puts a released version's site at
+      # the root of destination and a development version's in dev/ below it,
+      # so the entry point moves with the version in DESCRIPTION. Linking to
+      # r/ unconditionally hands the reviewer a directory listing.
+      - name: Find the built site's entry point
+        id: entry
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork != true
+        working-directory: .
+        run: |
+          if [ -f docs/r/index.html ]; then
+            echo "path=r/" >> "$GITHUB_OUTPUT"
+          elif [ -f docs/r/dev/index.html ]; then
+            echo "path=r/dev/" >> "$GITHUB_OUTPUT"
+          else
+            echo "The R site has no index.html to link to." >&2
+            exit 1
+          fi
+
       - name: Mark the preview noindex
         if: >
           github.event_name == 'pull_request' &&
@@ -95,6 +115,6 @@ jobs:
         with:
           header: preview-r
           message: |
-            **R site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/r/](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/r/)
+            **R site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/${{ steps.entry.outputs.path }}](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/${{ steps.entry.outputs.path }})
 
-            Built from the latest commit on this branch. The landing page's Python link resolves inside the preview only if this pull request also rebuilt the Python site.
+            Built from the latest commit on this branch. Use the link above rather than the landing page's, which points at the released site. The landing page's Python link resolves only if this pull request also rebuilt the Python site.
