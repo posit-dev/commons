@@ -53,6 +53,19 @@ STREAM_LIMIT = 64 * 1024 * 1024
 # the driver allocate.
 FRAME_BYTES_LIMIT = 1024**3
 
+# The deepest a JSON-shaped value may nest and still cross as JSON. `json`
+# itself used to bound this by raising `RecursionError`; as of 3.14 its
+# parser and encoder are iterative and never will, while everything a value
+# meets after the codec — `repr`, re-serialization, display — still
+# recurses. A value past the limit crosses as its repr, and a line past it
+# is refused: the codec stays the one chokepoint for pathological nesting.
+_JSON_DEPTH_LIMIT = 100
+
+# The message envelope wraps a value in a few container levels of its own
+# (`value`, the payload object, `data`), so a line is allowed slightly more
+# depth than the value it carries.
+_ENVELOPE_DEPTH = 8
+
 # Frames cross as Arrow IPC and arrive as whatever library sent them; driver
 # and worker share an interpreter, so the sending library is always
 # importable at the far end.
@@ -193,6 +206,12 @@ def encode_value(value: Any) -> dict[str, Any]:
             }
         return _repr_payload(value)
     try:
+        too_deep = _exceeds_json_depth(value)
+    except Exception:  # noqa: BLE001 - a spoofed __class__ must not escape
+        return _repr_payload(value)
+    if too_deep:
+        return _repr_payload(value)
+    try:
         json.dumps(value)
     except Exception:  # noqa: BLE001 - any failure means the repr fallback
         coerced = _coerce_scalar(value)
@@ -221,6 +240,32 @@ def _safe_repr(value: Any) -> str:
     if len(text) > _REPR_TEXT_LIMIT:
         return f"{text[:_REPR_TEXT_LIMIT]}… [{len(text):,} characters in full]"
     return text
+
+
+def _exceeds_json_depth(value: Any, limit: int = _JSON_DEPTH_LIMIT) -> bool:
+    """Whether ``value`` nests JSON containers deeper than ``limit``.
+
+    Iterative, and only containers are pushed: the inputs this exists for
+    are exactly the ones a recursive walk could not survive, and a wide
+    flat list pays one ``isinstance`` per element rather than a stack entry.
+    """
+    stack = [(value, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > limit:
+            return True
+        if isinstance(node, dict):
+            children = node.values()
+        elif isinstance(node, (list, tuple)):
+            children = node
+        else:
+            continue
+        stack.extend(
+            (child, depth + 1)
+            for child in children
+            if isinstance(child, (dict, list, tuple))
+        )
+    return False
 
 
 def _coerce_scalar(value: Any) -> Any:
@@ -672,9 +717,11 @@ def decode_message(line: bytes | str, *, max_frame_bytes: int = FRAME_BYTES_LIMI
     """
     try:
         body = json.loads(line)
-    except (ValueError, RecursionError) as error:  # bad JSON, bad UTF-8, hostile nesting
+    except (ValueError, RecursionError) as error:  # bad JSON, bad UTF-8
         raise ProtocolError(f"not a protocol message: {_abbrev(line)}") from error
-    if not isinstance(body, dict):
+    if not isinstance(body, dict) or _exceeds_json_depth(
+        body, _JSON_DEPTH_LIMIT + _ENVELOPE_DEPTH
+    ):
         raise ProtocolError(f"not a protocol message: {_abbrev(line)}")
     kind = body.get("type")
     match kind:
