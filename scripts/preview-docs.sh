@@ -42,19 +42,36 @@ done
 # R console.
 skipped=()
 
+# skip <what> <reason> [command...]
+#
+# Commands are printed one per line, indented and with nothing in front of
+# them, so a block can be selected and pasted as-is. No box drawing, because
+# the border characters come along with the copy.
 skip() {
-  skipped+=("$1
-    $2")
+  local what="$1" reason="$2"
+  shift 2
+  local block="Skipped $what: $reason"
+  if [ $# -gt 0 ]; then
+    block="$block
+
+  To fix it, run:
+"
+    local command
+    for command in "$@"; do
+      block="$block
+    $command"
+    done
+  fi
+  skipped+=("$block")
 }
 
 build_r() {
   if ! command -v Rscript >/dev/null 2>&1; then
-    skip "the R site: Rscript is not on PATH." \
-      "See https://cloud.r-project.org/ to install R."
+    skip "the R site" "Rscript is not on PATH. Install R from https://cloud.r-project.org/."
     return
   fi
   if ! Rscript -e 'quit(status = !requireNamespace("pkgdown", quietly = TRUE))' 2>/dev/null; then
-    skip "the R site: pkgdown is not installed." \
+    skip "the R site" "pkgdown is not installed." \
       "Rscript -e 'install.packages(\"pkgdown\", repos = \"https://cloud.r-project.org\")'"
     return
   fi
@@ -65,8 +82,17 @@ build_r() {
   # The snippet installs pak first if it has to, and runs from $root, so it
   # works whatever directory the reader pasted it into.
   if ! Rscript -e 'quit(status = !requireNamespace("commons", quietly = TRUE))' 2>/dev/null; then
-    skip "the R site: commons is not installed, and pkgdown runs its examples." \
-      "(cd $root && Rscript -e 'if (!requireNamespace(\"pak\", quietly = TRUE)) install.packages(\"pak\", repos = \"https://cloud.r-project.org\"); pak::local_install_deps(\"pkg-r\"); pak::local_install(\"pkg-r\")')"
+    # Absolute paths, so no cd is needed and pasting these does not move the
+    # reader's shell. The pak line appears only when pak is actually absent,
+    # rather than as a conditional the reader has to evaluate.
+    local install=()
+    if ! Rscript -e 'quit(status = !requireNamespace("pak", quietly = TRUE))' 2>/dev/null; then
+      install+=("Rscript -e 'install.packages(\"pak\", repos = \"https://cloud.r-project.org\")'")
+    fi
+    install+=("Rscript -e 'pak::local_install_deps(\"$root/pkg-r\")'")
+    install+=("Rscript -e 'pak::local_install(\"$root/pkg-r\")'")
+    skip "the R site" "commons is not installed, and pkgdown runs its examples." \
+      "${install[@]}"
     return
   fi
   echo "==> Building the R site into docs/r"
@@ -77,13 +103,12 @@ build_r() {
 
 build_py() {
   if ! command -v uv >/dev/null 2>&1; then
-    skip "the Python site: uv is not on PATH." \
+    skip "the Python site" "uv is not on PATH." \
       "curl -LsSf https://astral.sh/uv/install.sh | sh"
     return
   fi
   if ! command -v quarto >/dev/null 2>&1; then
-    skip "the Python site: quarto is not on PATH." \
-      "See https://quarto.org/docs/get-started/ for your platform."
+    skip "the Python site" "quarto is not on PATH. Install it from https://quarto.org/docs/get-started/."
     return
   fi
   echo "==> Building the Python site into docs/py"
@@ -101,8 +126,9 @@ for site in $sites; do
 done
 
 for note in "${skipped[@]+"${skipped[@]}"}"; do
-  printf '\nSkipped %s\n' "$note" >&2
+  printf '\n%s\n' "$note" >&2
 done
+[ ${#skipped[@]} -eq 0 ] || echo >&2
 
 # Naming what is absent beats letting someone click a dead link and wonder
 # whether they broke the build.
