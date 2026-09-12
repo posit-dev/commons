@@ -1,0 +1,84 @@
+project:
+  type: website
+  # Renders in place, because Quarto warns when its output directory sits
+  # outside the project. The deploy workflow copies _site into docs/py.
+  output-dir: _site
+  # Explicit, so the design notes under notes/ stay out of the site.
+  render:
+    - index.qmd
+    - governance.qmd
+    - reference/*.qmd
+
+website:
+  title: "commons for Python"
+  site-url: https://posit-dev.github.io/commons/py/
+  repo-url: https://github.com/posit-dev/commons
+  repo-subdir: pkg-py
+  navbar:
+    left:
+      - href: index.qmd
+        text: Get started
+      - href: governance.qmd
+        text: Security and governance
+      - href: reference/index.qmd
+        text: Reference
+    right:
+      - text: R
+        href: ../r/
+      - icon: github
+        href: https://github.com/posit-dev/commons
+  sidebar:
+    - id: reference
+      contents: reference/_sidebar.yml
+
+format:
+  html:
+    theme: cosmo
+    toc: true
+    css: styles.css
+
+metadata-files:
+  - reference/_sidebar.yml
+
+quartodoc:
+  package: commons
+  title: Reference
+  style: pkgdown
+  dir: reference
+  sidebar: reference/_sidebar.yml
+  render_interlinks: false
+  renderer:
+    style: markdown
+    table_style: description-list
+  sections:
+    - title: Main functions
+      desc: |
+        The main agent constructor, plus the building blocks for a commons agent.
+      contents:
+        - Commons
+        - data_source
+        - semantic_layer
+        - measure
+        - context_layer
+    - title: Supporting types
+      desc: |
+        The objects the constructors return, and the values they carry.
+      contents:
+        - DataSource
+        - SemanticLayer
+        - ContextLayer
+        - Measure
+        - Injected
+        - Tag
+        - list_tables
+    - title: Shiny UI and server
+      desc: |
+        Put a commons agent inside of an interactive chat app. Needs the
+        `shiny` extra.
+      package: commons.ui
+      contents:
+        - app
+        - server
+        - theme
+        - commons_chat_dependency
+        - asset_base_url

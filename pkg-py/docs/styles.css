@@ -1,0 +1,32 @@
+/* Palette shared with the landing page at docs/styles.css. */
+:root {
+  --commons-background: #fbfbfb;
+  --commons-foreground: #212529;
+  --commons-muted: #5f6368;
+  --commons-link: #256b58;
+  --commons-border: #dee2e6;
+}
+
+body {
+  color: var(--commons-foreground);
+  background: var(--commons-background);
+}
+
+a {
+  color: var(--commons-link);
+}
+
+.navbar {
+  border-bottom: 1px solid var(--commons-border);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Keep the reference tables readable when a signature is long. */
+.doc-signature code {
+  overflow-wrap: anywhere;
+}
