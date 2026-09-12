@@ -359,6 +359,7 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
     except ImportError as error:
         raise ProtocolError(f"cannot decode a frame without pyarrow: {error}") from error
     try:
+        _check_ipc_size(data, max_frame_bytes)
         reader = pyarrow.ipc.open_stream(pyarrow.py_buffer(data))
         table = _read_capped(reader, pyarrow, max_frame_bytes)
         if library == "pandas":
@@ -370,15 +371,151 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
         raise ProtocolError(f"malformed value payload: {error}") from error
 
 
+# --- the size cap, enforced before decompression ----------------------------
+
+
+def _check_ipc_size(data: bytes, max_frame_bytes: int) -> None:
+    """Refuse a stream that declares more than ``max_frame_bytes`` decoded.
+
+    Reads only the IPC framing and flatbuffer metadata: nothing is
+    decompressed and no Arrow structure is built. Each record batch or
+    dictionary delta is charged the sum of its buffers — the uncompressed
+    length prefix for a compressed buffer, the declared length otherwise —
+    and a batch declaring no buffers is rows of nothing but null columns,
+    which pandas conversion prices at a pointer per row. Anything that does
+    not parse as the layout pyarrow's writer emits is refused, which honest
+    traffic never trips because every stream on this channel came from
+    ``_to_arrow_ipc``.
+    """
+    pos = 0
+    decoded = 0
+    while pos < len(data):
+        marker = _u32(data, pos)
+        pos += 4
+        if marker == 0xFFFFFFFF:  # the continuation token
+            metadata_length = _u32(data, pos)
+            pos += 4
+        else:  # streams from before IPC format 0.15 go straight to the length
+            metadata_length = marker
+        if metadata_length == 0:
+            return
+        if pos + metadata_length > len(data):
+            raise ProtocolError("malformed value payload: truncated Arrow IPC metadata")
+        metadata = data[pos : pos + metadata_length]
+        pos += metadata_length
+        body_length, batch = _ipc_message(metadata)
+        if body_length < 0 or pos + body_length > len(data):
+            raise ProtocolError("malformed value payload: truncated Arrow IPC body")
+        body = data[pos : pos + body_length]
+        pos += body_length
+        if batch is not None:
+            decoded += _ipc_batch_size(metadata, batch, body)
+            if decoded > max_frame_bytes:
+                raise ProtocolError(
+                    "a frame decodes to more than the channel allows "
+                    f"({decoded:,} bytes declared, limit {max_frame_bytes:,})"
+                )
+
+
+def _ipc_message(metadata: bytes) -> tuple[int, int | None]:
+    """The (body length, batch table offset) declared by one message."""
+    root = _u32(metadata, 0)
+    type_at = _table_field(metadata, root, 1)
+    header_type = _u8(metadata, type_at) if type_at is not None else 0
+    length_at = _table_field(metadata, root, 3)
+    body_length = _i64(metadata, length_at) if length_at is not None else 0
+    if header_type not in (2, 3):  # not a DictionaryBatch or RecordBatch
+        return body_length, None
+    header_at = _table_field(metadata, root, 2)
+    if header_at is None:
+        raise ProtocolError("malformed value payload: IPC message with no header")
+    header = header_at + _u32(metadata, header_at)
+    if header_type == 2:  # a DictionaryBatch wraps the RecordBatch it carries
+        data_at = _table_field(metadata, header, 1)
+        if data_at is None:
+            raise ProtocolError("malformed value payload: dictionary batch with no data")
+        header = data_at + _u32(metadata, data_at)
+    return body_length, header
+
+
+def _ipc_batch_size(metadata: bytes, batch: int, body: bytes) -> int:
+    """The decoded size one record batch declares, in bytes."""
+    rows_at = _table_field(metadata, batch, 0)
+    rows = _i64(metadata, rows_at) if rows_at is not None else 0
+    buffers_at = _table_field(metadata, batch, 2)
+    buffers = []
+    if buffers_at is not None:
+        start, count = _vector(metadata, buffers_at)
+        buffers = [
+            (_i64(metadata, start + 16 * i), _i64(metadata, start + 16 * i + 8))
+            for i in range(count)
+        ]
+    compressed = _table_field(metadata, batch, 3) is not None
+    size = 0
+    for offset, length in buffers:
+        if offset < 0 or length < 0 or offset + length > len(body):
+            raise ProtocolError("malformed value payload: IPC buffer outside its body")
+        if length == 0:
+            continue
+        if not compressed:
+            size += length
+            continue
+        prefix = _i64(body, offset)
+        if prefix < -1:
+            raise ProtocolError("malformed value payload: bad IPC buffer prefix")
+        # A compressed buffer starts with its uncompressed length; -1 marks
+        # a buffer stored uncompressed, which cost it the prefix.
+        size += length - 8 if prefix == -1 else prefix
+    if not buffers and rows > 0:
+        size += 8 * rows
+    return size
+
+
+def _table_field(buf: bytes, table: int, index: int) -> int | None:
+    """Where field ``index`` lives in the flatbuffer table, or None if absent."""
+    vtable = table - _read_int(buf, table, 4, signed=True)
+    entry = 4 + 2 * index
+    if entry + 2 > _u16(buf, vtable):
+        return None
+    offset = _u16(buf, vtable + entry)
+    return table + offset if offset else None
+
+
+def _vector(buf: bytes, loc: int) -> tuple[int, int]:
+    """(first element, count) of the flatbuffer vector whose offset is at ``loc``."""
+    start = loc + _u32(buf, loc)
+    return start + 4, _u32(buf, start)
+
+
+def _read_int(buf: bytes, off: int, size: int, signed: bool = False) -> int:
+    if off < 0 or off + size > len(buf):
+        raise ProtocolError("malformed value payload: truncated Arrow IPC metadata")
+    return int.from_bytes(buf[off : off + size], "little", signed=signed)
+
+
+def _u8(buf: bytes, off: int) -> int:
+    return _read_int(buf, off, 1)
+
+
+def _u16(buf: bytes, off: int) -> int:
+    return _read_int(buf, off, 2)
+
+
+def _u32(buf: bytes, off: int) -> int:
+    return _read_int(buf, off, 4)
+
+
+def _i64(buf: bytes, off: int) -> int:
+    return _read_int(buf, off, 8, signed=True)
+
+
 def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int) -> Any:
     """Read the stream, refusing to decode past ``max_frame_bytes``.
 
-    pyarrow decompresses IPC bodies without being asked, so the size on the
-    wire says nothing about the size in memory. Batches are counted as they
-    decode so the cap fires before the table is assembled. One batch over
-    the cap is materialized before it is rejected; that exposure is bounded,
-    because the worker had to hold the same batch to compress it, and a
-    worker with that much memory needs no protocol to exhaust the machine.
+    The runtime backstop to ``_check_ipc_size``, which enforces the cap from
+    the stream's declared metadata before anything decompresses. The two
+    should agree; if a crafted stream ever divides them, counting batches as
+    they materialize bounds the damage to one batch past the cap.
     """
     batches = []
     decoded = 0

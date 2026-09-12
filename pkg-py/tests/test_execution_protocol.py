@@ -7,6 +7,7 @@ import base64
 import json
 import math
 import os
+import random
 import subprocess
 import sys
 import tempfile
@@ -447,6 +448,57 @@ def test_a_compressed_frame_cannot_expand_past_the_decode_limit():
     assert len(json.dumps(payload)) < 64 * 1024
     with pytest.raises(ProtocolError, match="more than the channel allows"):
         decode_value(payload, max_frame_bytes=1024 * 1024)
+
+
+def test_a_crafted_uncompressed_length_is_refused_before_decompression():
+    # The uncompressed-length prefix is attacker-controlled, and a hostile
+    # worker can write a huge one without ever holding the bytes. Rewrite
+    # the bomb's prefix to claim a petabyte: the cap must hold anyway, from
+    # the stream's own metadata, before pyarrow sees it.
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    needle = (96_000_000).to_bytes(8, "little")
+    at = data.index(needle)
+    crafted = data[:at] + (1 << 50).to_bytes(8, "little") + data[at + 8 :]
+    with pytest.raises(ProtocolError, match="declared"):
+        decode_value({**payload, "data": base64.b64encode(crafted).decode("ascii")})
+
+
+def test_a_compressed_stream_with_incompressible_buffers_crosses():
+    # pyarrow keeps a buffer that does not compress as raw blocks inside a
+    # valid frame; a stream built that way must still cross.
+    pa = pytest.importorskip("pyarrow")
+    blob = random.Random(0).randbytes(100_000)
+    table = pa.table({"b": pa.array([blob] * 4, type=pa.binary())})
+    sink = pa.BufferOutputStream()
+    options = pa.ipc.IpcWriteOptions(compression="zstd")
+    with pa.ipc.new_stream(sink, table.schema, options=options) as writer:
+        writer.write_table(table)
+    payload = {
+        "encoding": "arrow",
+        "library": "pyarrow",
+        "data": base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii"),
+    }
+    crossed = decode_value(payload)
+    assert crossed.equals(table)
+
+
+def test_a_dictionary_encoded_frame_round_trips():
+    # Categoricals cross as dictionary batches, which wrap a record batch
+    # the pre-flight must still account.
+    pd = pytest.importorskip("pandas")
+    frame = pd.DataFrame({"c": pd.Categorical(["x", "y", "x", "z"])})
+    crossed = decode_value(encode_value(frame))
+    pd.testing.assert_frame_equal(crossed, frame)
+
+
+def test_a_frame_of_nothing_but_none_round_trips():
+    # An all-None column crosses as a batch with no buffers at all; the
+    # pre-flight prices it at a pointer per row.
+    pd = pytest.importorskip("pandas")
+    frame = pd.DataFrame({"x": [None] * 1000})
+    crossed = decode_value(encode_value(frame))
+    pd.testing.assert_frame_equal(crossed, frame)
 
 
 async def test_the_frame_limit_applies_to_lines_read_from_the_channel():
