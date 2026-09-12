@@ -220,6 +220,20 @@ def test_a_numpy_array_crosses_as_a_json_list():
     assert crossed == [[1, 2], [3, 4]]
 
 
+def test_an_object_array_holding_a_deep_value_crosses_as_text():
+    # A 0-d object array's `tolist` hands back the object it holds, so the
+    # depth check must look at the coerced value, not just the array.
+    np = pytest.importorskip("numpy")
+    value = []
+    for _ in range(60000):
+        value = [value]
+    array = np.empty((), dtype=object)
+    array[()] = value
+    crossed = decode_value(encode_value(array))
+    assert isinstance(crossed, OpaqueValue)
+    assert crossed.type_name == "ndarray"
+
+
 def test_a_value_that_cannot_cross_arrives_as_its_repr():
     # A REPL shows you the repr of a thing it cannot hand you, and that is
     # what is useful to the model too. Crossing it by reference is what the
@@ -256,6 +270,13 @@ def test_nesting_at_the_depth_limit_still_crosses():
     value = []
     for _ in range(_protocol._JSON_DEPTH_LIMIT - 10):
         value = [value]
+    assert decode_value(encode_value(value)) == value
+
+
+def test_a_wide_flat_value_crosses_unchanged():
+    # The depth walk is one lazy pass: breadth costs an isinstance per
+    # element, never a stack entry per child.
+    value = [[] for _ in range(1_000_000)]
     assert decode_value(encode_value(value)) == value
 
 
