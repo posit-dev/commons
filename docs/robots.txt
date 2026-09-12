@@ -1,4 +1,0 @@
-# Pull request previews are published under /pr-<number>/ and are
-# unreviewed drafts. Keep them out of search results.
-User-agent: *
-Disallow: /pr-
