@@ -1,4 +1,5 @@
-url: https://posit-dev.github.io/commons/
+url: https://posit-dev.github.io/commons/r/
+destination: ../docs/r
 development:
   mode: auto
 template:

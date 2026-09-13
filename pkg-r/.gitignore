@@ -8,3 +8,4 @@ src/*.so
 src/*.dll
 *.Rcheck/
 *.tar.gz
+/docs/

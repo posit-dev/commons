@@ -72,7 +72,7 @@ dir.create(".claude/skills", recursive = TRUE, showWarnings = FALSE)
 file.copy(skill, ".claude/skills", recursive = TRUE)
 ```
 
-The [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette also explains the structure of a commons agent and the creation process.
+The [Introduction to commons](https://posit-dev.github.io/commons/r/articles/commons.html) vignette also explains the structure of a commons agent and the creation process.
 
 ## Trusted answers
 
@@ -80,7 +80,7 @@ There are two provenance paths available to a commons agent: when users ask ques
 
 Answers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.
 
-For more information, see the [Introduction to commons](https://posit-dev.github.io/commons/articles/commons.html) vignette.
+For more information, see the [Introduction to commons](https://posit-dev.github.io/commons/r/articles/commons.html) vignette.
 
 <!-- Diagram source: Introduction to commons vignette. Update it there, then save the image. https://github.com/posit-dev/commons/blob/a29ac09c39c8edb99f2a9ea0ecc1836e6538bb25/vignettes/commons.Rmd#L76 -->
 
