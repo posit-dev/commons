@@ -32,6 +32,9 @@ website:
   sidebar:
     - id: reference
       contents: reference/_sidebar.yml
+  page-footer:
+    left: "Developed by Josh Taillon, Posit Software, PBC."
+    right: "Site built with [Quarto](https://quarto.org/)."
 
 format:
   html:
