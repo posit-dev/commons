@@ -16,14 +16,15 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # that copy; both packages ship the prompts and the browser assets. Nothing
 # in pkg-py reads www/ until its UI layer lands, but the destination belongs
 # with the move rather than with the first reader. The logos go to the two
-# documentation sites, and the provenance-marker figs to the Python one, which
-# serve them as they stand.
+# documentation sites, the provenance-marker figs to the Python one, and the
+# hex to the Python site and the landing page, which serve them as they stand.
 sources=(
   "tests/shared pkg-r/tests/testthat/fixtures/shared"
   "prompts pkg-r/inst/prompts pkg-py/src/commons/prompts"
   "www pkg-r/inst/www pkg-py/src/commons/www"
   "logos pkg-py/docs/assets/logos:bare pkg-r/pkgdown/assets/logos:bare"
   "www/commons-chat/figs pkg-py/docs/assets/figs:bare"
+  "hex docs/assets/hex:bare pkg-py/docs/assets/hex:bare"
 )
 
 for entry in "${sources[@]}"; do
