@@ -265,17 +265,24 @@ agent.chat("How many species were observed at Oak Bluff?")
 
 `data_sources` is one `DataSource` or a mapping of name to `DataSource`. Name the sources when a measure takes an injected connection, because commons injects by name. `semantic_layer()` accepts measures, modules, or paths to `.py` files and directories. `context_layer()` accepts a list of file paths.
 
-A `Commons` agent is a chatlas `Chat`. It builds its own system prompt and tools, so it does not carry over the system prompt or the turns on `client`. `chat()` and `stream_async()` are the two ways to ask a question. The other chatlas entry points, such as `chat_async()`, `stream()`, and `chat_structured()`, raise `NotImplementedError`, because an answer through them carries no citations and no provenance marker.
+Underneath, a `Commons` agent inherits from a `chatlas.Chat` object, but builds its own system prompt and tools. As such, it follows the `Chat` API and provides the `chat()` and `stream_async()` methods as ways to ask a question. The other `chatlas` entry points, such as `chat_async()`, `stream()`, and `chat_structured()`, are not supported and will raise `NotImplementedError` at this moment.
 
 ### Chat UI
 
-`commons.ui` puts the agent behind a py-shiny chat. It needs the `shiny` extra. For local development, `commons.ui.app(agent)` returns a complete Shiny app:
+The above examples will build a terminal-based agent without any UI attached. If you want to
+use the agent in an interactive web UI, the `commons.ui` module will put the agent behind a 
+[Shiny](https://shiny.posit.co/py/) chat. This requires installing the `shiny` extra group.
+
+When developing locally, you can use `commons.ui.app(agent)` to return a complete Shiny app:
 
 ```python
 app = commons.ui.app(agent)
 ```
 
-`commons.ui.app()` shares one agent across every session, so it suits one visitor at a time. For a deployed app, build the page with `commons.ui.theme()`, and construct the agent inside the server function. Then pass it to `commons.ui.server()`, so each session gets its own agent:
+`commons.ui.app()` shares one agent across every session, so it suits one visitor at a time.
+For a deployed app, you should instead build the page with `commons.ui.theme()`, and construct
+the agent inside the Shiny server function, then pass it to `commons.ui.server()`,
+so each session gets its own agent:
 
 ```python
 import shinychat
@@ -290,7 +297,3 @@ def app_server(input, output, session):
 
 app = App(app_ui, app_server)
 ```
-
-`commons.ui.server()` warms the agent once the session is idle after its first page. `agent.prewarm()` builds the context index and reads pending pins before a deployment. This example assumes that `observations` and `site_area` are data frames loaded when the app starts.
-
-The commons agent skill for coding agents, and the tools that review logged conversations, ship with the R package today.
