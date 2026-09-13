@@ -14,7 +14,7 @@ Trusted calculations can come from Python functions (as _measures_) or [data dic
 
 ## Installation
 
-`commons` requires Python 3.11 or later. To install the package, run:
+`commons` requires Python 3.11 or later. To install [the package from PyPI](https://pypi.org/project/commons/), run:
 
 ```bash
 # create a virtual environment with `uv venv` if you need first, then run:
