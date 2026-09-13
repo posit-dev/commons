@@ -22,25 +22,25 @@ The agent searches for a trusted calculation that answers the question. If it fi
 
 > At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt="Verified answer">
 
-The agent had to decide which trusted calculation to run. It did not have to decide what code to write. This removes degrees of freedom and lets the agent use code that you already vetted.
+Although the agent had to decide *which* trusted calculation to run. It did not have to decide *what code to write*, reducing degrees of freedom and allowing the agent to use code that you already vetted.
 
-Users also ask questions that leave the high-trust path. For those, the agent searches for context and writes custom SQL. Answers from this path show blue quote-mark citation markers, or the yellow exclamation provenance marker for the `Untrusted` outcome.
+However, we also expect users to ask questions that stray from the “happy path.” For those, the agent searches for additional context and writes custom code (currently SQL, but soon custom Python code as well). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 ## Trust flow
 
-A commons agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Verified answer` outcome.
+A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Verified answer` outcome.
 
-If no relevant trusted calculation exists, the agent takes the lower-trust path. It searches the context layer for information, inspects the tables it needs, and writes a read-only SQL query. These answers show blue quote-mark citation markers that open the details of a verified source, or the yellow exclamation provenance marker for the `Untrusted` outcome.
+If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user’s question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
-The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL, it can also quote supporting text from a trusted source. If commons finds the quoted text in that source, the provenance outcome is `Cited`, and the answer shows blue quote-mark citation markers. If no citation verifies, the provenance outcome is `Untrusted`, and the answer shows the yellow exclamation provenance marker.
+The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker
 
 The table below lists how each provenance outcome can occur:
 
 | How the answer is produced | Provenance outcome |
 |---|---|
-| A trusted Python [measure](#semantic-layer) | `Verified answer` |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Verified answer` |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` or `Untrusted` |
+| A trusted Python [measure](#semantic-layer) | `Verified answer` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Verified answer` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> or `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
 
 The agent does not decide the provenance outcome. commons derives it from the tools the agent called and the citations it made.
