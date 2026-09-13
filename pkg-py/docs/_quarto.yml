@@ -10,11 +10,12 @@ project:
     - reference/*.qmd
 
 website:
-  title: "commons for Python"
+  title: "commons"
   site-url: https://posit-dev.github.io/commons/py/
   repo-url: https://github.com/posit-dev/commons
   repo-subdir: pkg-py
   navbar:
+    logo: python-logo.svg
     left:
       - href: index.qmd
         text: Get started
