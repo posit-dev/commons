@@ -10,6 +10,10 @@ project:
     - governance.qmd
     - feature-parity.qmd
     - reference/*.qmd
+  # Copied whole: Quarto follows the <link> tags in favicon.html, but not the
+  # icons site.webmanifest names inside itself.
+  resources:
+    - favicon/**
 
 website:
   title: "commons"
@@ -47,6 +51,7 @@ format:
     theme: cosmo
     toc: true
     css: assets/styles.css
+    include-in-header: favicon.html
 
 metadata-files:
   - reference/_sidebar.yml
