@@ -30,3 +30,15 @@ h3 {
 .doc-signature code {
   overflow-wrap: anywhere;
 }
+
+/* Show the R logo in place of the "R" navbar link text. The url() resolves
+   relative to this stylesheet at the site root, so it works from any page
+   depth (unlike an img src written into the navbar HTML). */
+.navbar a[href$="/r/"] .menu-text {
+  font-size: 0;
+  display: inline-block;
+  background: url("r-logo.svg") no-repeat center / contain;
+  width: 1.42rem;
+  height: 1.1rem;
+  vertical-align: -0.2em;
+}
