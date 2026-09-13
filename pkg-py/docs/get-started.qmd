@@ -280,9 +280,8 @@ app = commons.ui.app(agent)
 ```
 
 `commons.ui.app()` shares one agent across every session, so it suits one visitor at a time.
-For a deployed app, you should instead build the page with `commons.ui.theme()`, and construct
-the agent inside the Shiny server function, then pass it to `commons.ui.server()`,
-so each session gets its own agent:
+For a deployed app, you should instead build the page with `commons.ui.theme()` and construct
+the agent inside the Shiny server function, so each session gets its own agent:
 
 ```python
 import shinychat
@@ -292,7 +291,18 @@ app_ui = shinychat.page_chat("Biodiversity", id="chat", theme=commons.ui.theme()
 
 
 def app_server(input, output, session):
-    commons.ui.server("chat", make_agent())
+    # The same construction as above; building it per session keeps each
+    # session's citation and provenance state separate.
+    commons.ui.server(
+        "chat",
+        commons.Commons(
+            client=chatlas.ChatAnthropic(model="claude-sonnet-5"),
+            data_sources={"biodiversity": biodiversity},
+            semantic_layer=commons.semantic_layer("measures"),
+            context_layer=commons.context_layer(files=["context/context.md"]),
+            instructions="instructions.md",
+        ),
+    )
 
 
 app = App(app_ui, app_server)
