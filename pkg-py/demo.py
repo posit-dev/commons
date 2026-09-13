@@ -221,9 +221,9 @@ def client() -> chatlas.Chat:
 def agent() -> commons.Commons:
     """The canopy agent, over all three layers."""
     return commons.Commons(
-        client(),
+        client=client(),
         # Named, because a measure's `warehouse` argument is injected by name.
-        {"warehouse": commons.data_source(stands=stands, surveys=surveys)},
+        data_sources={"warehouse": commons.data_source(stands=stands, surveys=surveys)},
         semantic_layer=commons.semantic_layer(
             canopy_by_county, low_canopy_stands, canopy_headline
         ),

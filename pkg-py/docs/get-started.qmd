@@ -240,7 +240,7 @@ A `commons` agent is easiest to maintain when each piece has its own file:
 
 ## Constructing the agent
 
-Use `commons.Commons()` to construct an agent. Pass it a ``chatlas.Chat` and one or more data sources, plus any semantic and context layers. You can also optionally append information to the `commons` agent system prompt using the `instructions` argument.
+Use `commons.Commons()` to construct an agent. Pass it a `chatlas.Chat` and one or more data sources, plus any semantic and context layers. You can also optionally append information to the `commons` agent system prompt using the `instructions` argument.
 
 ```python
 import chatlas
@@ -253,8 +253,8 @@ biodiversity = commons.data_source(
 )
 
 agent = commons.Commons(
-    chatlas.ChatAnthropic(model="claude-sonnet-5"),
-    {"biodiversity": biodiversity},
+    client=chatlas.ChatAnthropic(model="claude-sonnet-5"),
+    data_sources={"biodiversity": biodiversity},
     semantic_layer=commons.semantic_layer("measures"),
     context_layer=commons.context_layer(files=["context/context.md"]),
     instructions="instructions.md",

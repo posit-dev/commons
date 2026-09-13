@@ -33,8 +33,8 @@ def region_revenue(
 
 
 agent = commons.Commons(
-    chatlas.ChatAnthropic(model="claude-sonnet-5"),
-    commons.data_source(sales=sales, dictionary="data-dict.yaml"),
+    client=chatlas.ChatAnthropic(model="claude-sonnet-5"),
+    data_sources=commons.data_source(sales=sales, dictionary="data-dict.yaml"),
     semantic_layer=commons.semantic_layer(region_revenue),
     context_layer=commons.context_layer(files=["reporting-policy.md"]),
 )
