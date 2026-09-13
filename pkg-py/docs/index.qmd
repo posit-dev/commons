@@ -13,6 +13,7 @@ Trusted calculations can come from Python functions (as _measures_) or [data dic
 commons requires Python 3.11 or later. To install the package, run:
 
 ```bash
+# create a virtual environment with `uv venv` if you need first, then run:
 uv pip install commons
 ```
 
