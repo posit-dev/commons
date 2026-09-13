@@ -72,3 +72,22 @@ h3 {
      lighter than the blue R), so nudge it up from the geometric center. */
   margin-top: -2px;
 }
+
+/* The hex sticker on the home page, floated beside the opening prose the way
+   pkgdown places it on the R site. It drops to full width on a narrow screen,
+   where a float would leave the text in a column too thin to read. */
+.commons-hex {
+  float: right;
+  width: 180px;
+  max-width: 40%;
+  margin: 0 0 1rem 1.5rem;
+}
+
+@media (max-width: 575.98px) {
+  .commons-hex {
+    float: none;
+    display: block;
+    max-width: 60%;
+    margin: 0 auto 1.5rem;
+  }
+}
