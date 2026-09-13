@@ -124,6 +124,8 @@ jobs:
         with:
           header: preview-r
           message: |
+            **Preview root:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/)
+
             **R site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/${{ steps.entry.outputs.path }}](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/${{ steps.entry.outputs.path }})
 
             Built from the latest commit on this branch. Use the link above rather than the landing page's, which points at the released site. The landing page's Python link resolves only if this pull request also rebuilt the Python site.
