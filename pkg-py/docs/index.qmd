@@ -37,7 +37,7 @@ uv pip install "commons[shiny] @ git+https://github.com/posit-dev/commons#subdir
 
 commons uses [chatlas](https://posit-dev.github.io/chatlas/) to access LLMs, so you will need access to one of chatlas's supported providers.
 
-The [Introduction to commons](get-started.qmd) page explains the structure of a commons agent and the creation process.
+The [Introduction to commons](get-started.qmd) page explains the structure of a commons agent and the creation process. For a complete example application, see [`demo.py`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py) in the repository.
 
 ## Trusted answers
 

@@ -307,3 +307,7 @@ def app_server(input, output, session):
 
 app = App(app_ui, app_server)
 ```
+
+## Example application
+
+[`demo.py`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py), in the Python package's directory, is a fuller worked example: an agent over made-up forest canopy data with a semantic layer of measures and a context layer. Run it with `uv run shiny run demo.py` for the chat UI, or `uv run python demo.py` to ask the same questions from the terminal. [`demo.ipynb`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.ipynb) is the same agent in a notebook, with cells for reading what the agent registered and adding a measure of your own.

@@ -26,7 +26,7 @@ website:
       - href: feature-parity.qmd
         text: Feature parity
       - href: reference/index.qmd
-        text: Reference
+        text: API Reference
     right:
       - text: '<span class="r-logo" title="R Documentation">R Documentation</span>'
         href: ../r/
