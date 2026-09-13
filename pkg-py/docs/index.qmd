@@ -13,26 +13,30 @@ Trusted calculations can come from Python functions (as _measures_) or [data dic
 commons requires Python 3.11 or later. To install the package, run:
 
 ```bash
-pip install commons
+uv pip install commons
 ```
 
-If you want the chat UI, install the `shiny` extra:
+If you want the chat UI, install the `shiny` extra, as well:
 
 ```bash
-pip install "commons[shiny]"
+uv pip install "commons[shiny]"
 ```
 
 Or, for the development version:
 
 ```bash
-pip install "git+https://github.com/posit-dev/commons#subdirectory=pkg-py"
+# just the core package:
+uv pip install "commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"
+
+# with the shiny UI dependencies:
+uv pip install "commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"
 ```
 
 ## Get started
 
 commons uses [chatlas](https://posit-dev.github.io/chatlas/) to access LLMs, so you will need access to one of chatlas's supported providers.
 
-[Introduction to commons](get-started.qmd) explains the structure of a commons agent and the creation process.
+The [Introduction to commons](get-started.qmd) page explains the structure of a commons agent and the creation process.
 
 ## Trusted answers
 
@@ -40,8 +44,8 @@ There are two provenance paths available to a commons agent. When a user asks a 
 
 Answers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.
 
-For more information, see [Introduction to commons](get-started.qmd).
+For more information, see the [Introduction to commons](get-started.qmd) page.
 
 ## Evaluation
 
-The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an example commons agent that answers questions about adoption, engagement, and growth across Posit's open-source projects. Its repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) comparing the commons agent with Claude Code on the same data; the [R documentation](../r/#evaluation) presents the results.
+The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an example commons agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit's open-source projects. Its repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) comparing the commons agent with Claude Code on the same data; the [R documentation](../r/#evaluation) presents the results.
