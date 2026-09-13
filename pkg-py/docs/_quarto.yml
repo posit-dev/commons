@@ -15,7 +15,7 @@ website:
   repo-url: https://github.com/posit-dev/commons
   repo-subdir: pkg-py
   navbar:
-    logo: python-logo.svg
+    logo: assets/logos/python-logo.svg
     left:
       - href: index.qmd
         text: Get started

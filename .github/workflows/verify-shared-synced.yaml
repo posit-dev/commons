@@ -10,11 +10,14 @@ on:
       - tests/shared/**
       - prompts/**
       - www/**
+      - logos/**
       - pkg-r/tests/testthat/fixtures/shared/**
       - pkg-r/inst/prompts/**
       - pkg-r/inst/www/**
       - pkg-py/src/commons/prompts/**
       - pkg-py/src/commons/www/**
+      - pkg-py/docs/assets/logos/**
+      - pkg-r/pkgdown/assets/logos/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
   pull_request:
@@ -22,11 +25,14 @@ on:
       - tests/shared/**
       - prompts/**
       - www/**
+      - logos/**
       - pkg-r/tests/testthat/fixtures/shared/**
       - pkg-r/inst/prompts/**
       - pkg-r/inst/www/**
       - pkg-py/src/commons/prompts/**
       - pkg-py/src/commons/www/**
+      - pkg-py/docs/assets/logos/**
+      - pkg-r/pkgdown/assets/logos/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
   workflow_dispatch:
