@@ -1,0 +1,15 @@
+---
+title: "Feature parity with the R package"
+---
+
+While both packages are first-class implementations of `commons`, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.
+
+| R-only feature | What a Python agent does instead |
+|---|---|
+| Snowflake semantic views and Databricks metric views as trusted calculations, answered `Verified answer` | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
+| Custom R code from the agent, run in a sandboxed worker process | Writes custom SQL only |
+| gt tables and ggplot figures returned by measures, rendered in the chat | Renders data-frame results as tables |
+| `trajectory_read()` and `trajectory_review()`, for reading and annotating logged conversations | No equivalent yet |
+| The commons agent skill for coding agents | Ships with the R package only |
+
+This page will shrink (and eventually disappear) as the Python package matures.

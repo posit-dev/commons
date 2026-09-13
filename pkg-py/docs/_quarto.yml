@@ -8,6 +8,7 @@ project:
     - index.qmd
     - get-started.qmd
     - governance.qmd
+    - feature-parity.qmd
     - reference/*.qmd
 
 website:
@@ -22,6 +23,8 @@ website:
         text: Get started
       - href: governance.qmd
         text: Security and governance
+      - href: feature-parity.qmd
+        text: Feature parity
       - href: reference/index.qmd
         text: Reference
     right:
