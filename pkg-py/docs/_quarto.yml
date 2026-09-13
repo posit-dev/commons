@@ -36,7 +36,7 @@ format:
   html:
     theme: cosmo
     toc: true
-    css: styles.css
+    css: assets/styles.css
 
 metadata-files:
   - reference/_sidebar.yml

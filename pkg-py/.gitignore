@@ -14,3 +14,6 @@ dist/
 
 # Jupyter writes these beside a notebook; they carry outputs and local paths.
 .ipynb_checkpoints/
+
+/.quarto/
+**/*.quarto_ipynb
