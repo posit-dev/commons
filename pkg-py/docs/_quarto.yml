@@ -6,6 +6,7 @@ project:
   # Explicit, so the design notes under notes/ stay out of the site.
   render:
     - index.qmd
+    - get-started.qmd
     - governance.qmd
     - reference/*.qmd
 
@@ -17,7 +18,7 @@ website:
   navbar:
     logo: assets/logos/python-logo.svg
     left:
-      - href: index.qmd
+      - href: get-started.qmd
         text: Get started
       - href: governance.qmd
         text: Security and governance
