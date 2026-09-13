@@ -10,12 +10,16 @@ on:
       - tests/shared/**
       - prompts/**
       - www/**
+      - favicon/**
       - logos/**
       - pkg-r/tests/testthat/fixtures/shared/**
       - pkg-r/inst/prompts/**
       - pkg-r/inst/www/**
       - pkg-py/src/commons/prompts/**
       - pkg-py/src/commons/www/**
+      - pkg-r/pkgdown/favicon/**
+      - pkg-py/docs/favicon/**
+      - docs/favicon/**
       - pkg-py/docs/assets/logos/**
       - pkg-py/docs/assets/figs/**
       - pkg-r/pkgdown/assets/logos/**
@@ -26,12 +30,16 @@ on:
       - tests/shared/**
       - prompts/**
       - www/**
+      - favicon/**
       - logos/**
       - pkg-r/tests/testthat/fixtures/shared/**
       - pkg-r/inst/prompts/**
       - pkg-r/inst/www/**
       - pkg-py/src/commons/prompts/**
       - pkg-py/src/commons/www/**
+      - pkg-r/pkgdown/favicon/**
+      - pkg-py/docs/favicon/**
+      - docs/favicon/**
       - pkg-py/docs/assets/logos/**
       - pkg-py/docs/assets/figs/**
       - pkg-r/pkgdown/assets/logos/**

@@ -15,13 +15,15 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # The Python suite reads tests/shared/ in place, so only the R package needs
 # that copy; both packages ship the prompts and the browser assets. Nothing
 # in pkg-py reads www/ until its UI layer lands, but the destination belongs
-# with the move rather than with the first reader. The logos go to the two
-# documentation sites, and the provenance-marker figs to the Python one, which
-# serve them as they stand.
+# with the move rather than with the first reader. The icons go to three
+# places, because the landing page is a site of its own. The logos go to the
+# two documentation sites, and the provenance-marker figs to the Python one,
+# which serve them as they stand.
 sources=(
   "tests/shared pkg-r/tests/testthat/fixtures/shared"
   "prompts pkg-r/inst/prompts pkg-py/src/commons/prompts"
   "www pkg-r/inst/www pkg-py/src/commons/www"
+  "favicon pkg-r/pkgdown/favicon:bare pkg-py/docs/favicon:bare docs/favicon:bare"
   "logos pkg-py/docs/assets/logos:bare pkg-r/pkgdown/assets/logos:bare"
   "www/commons-chat/figs pkg-py/docs/assets/figs:bare"
 )
