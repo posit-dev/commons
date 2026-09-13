@@ -26,6 +26,19 @@ h3 {
   letter-spacing: -0.02em;
 }
 
+/* Inline provenance markers, sized to sit in running text. The same rule
+   styles the markers in the R package's vignettes. */
+.commons-documentation-marker {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  height: 1.5em;
+  margin: 0;
+  padding: 0;
+  vertical-align: text-bottom;
+  width: 1.5em;
+}
+
 /* Keep the reference tables readable when a signature is long. */
 .doc-signature code {
   overflow-wrap: anywhere;

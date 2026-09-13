@@ -10,17 +10,17 @@ import commons
 
 ## Design philosophy
 
-AI agents for data analysis range from cautious and narrowly correct to wildly untrustworthy. commons increases the chance of a correct answer by giving the agent access to trusted code that you already have. The agent keeps enough freedom to answer new, realistic questions. commons also derives a provenance outcome from the path the agent took, so a user can decide how much to trust each answer.
+AI agents for data analysis range from cautious and narrowly correct to wildly untrustworthy. `commons` increases the chance of a correct answer by giving the agent access to trusted code that you already have, while the agent keeps enough freedom to answer new, realistic questions. `commons` also derives a provenance outcome from the path the agent took, so a user can decide how much to trust each answer.
 
-If you are a data analyst, data scientist, or other data practitioner, you probably have a collection of trusted code. This is the code you depend on for your analyses, apps, and reports. The core idea of commons is that an agent gives more correct answers when it can run this code and read its documentation.
+If you are a data analyst, data scientist, or other data practitioner, you probably have a collection of trusted code. This is the code you depend on for your analyses, apps, and reports. The core idea of `commons` is that an agent gives more correct answers when it can run this code and read its documentation.
 
-The high-trust path occurs when a question matches one of these **trusted calculations**. For example, a commons agent can analyze biodiversity data, and a user asks:
+The high-trust path occurs when a question matches one of these **trusted calculations**. For example, a `commons` agent can analyze biodiversity data, and a user asks:
 
 > How many total animals were observed at Oak Bluff?
 
 The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the `Verified answer` outcome.
 
-> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site.
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt="Verified answer">
 
 The agent had to decide which trusted calculation to run. It did not have to decide what code to write. This removes degrees of freedom and lets the agent use code that you already vetted.
 
