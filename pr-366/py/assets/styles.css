@@ -1,0 +1,74 @@
+/* Palette shared with the landing page at docs/styles.css. */
+:root {
+  --commons-background: #fbfbfb;
+  --commons-foreground: #212529;
+  --commons-muted: #5f6368;
+  --commons-link: #256b58;
+  --commons-border: #dee2e6;
+}
+
+body {
+  color: var(--commons-foreground);
+  background: var(--commons-background);
+}
+
+a {
+  color: var(--commons-link);
+}
+
+.navbar {
+  border-bottom: 1px solid var(--commons-border);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Inline provenance markers, sized to sit in running text. The same rule
+   styles the markers in the R package's vignettes. */
+.commons-documentation-marker {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  height: 1.5em;
+  margin: 0;
+  padding: 0;
+  vertical-align: text-bottom;
+  width: 1.5em;
+}
+
+/* Keep the reference tables readable when a signature is long. */
+.doc-signature code {
+  overflow-wrap: anywhere;
+}
+
+/* Show the R logo in place of the "R" navbar link text. The url() resolves
+   relative to this stylesheet, so it works from any page depth (unlike an
+   img src written into the navbar HTML). Both files live under assets/
+   because quarto preview (1.10) fails to copy a CSS url() resource located
+   at the project root: "Cannot copy ... to a subdirectory of itself". */
+.navbar a[href$="/r/"] {
+  display: flex;
+  align-items: center;
+  /* Fill the stretched nav item, so the centered logo matches the line-box
+     center of the neighboring icon links. */
+  height: 100%;
+}
+
+/* The span carrying the hover title is sized to the logo, so the tooltip
+   appears anywhere over the image. */
+.navbar a[href$="/r/"] .menu-text {
+  display: flex;
+}
+
+.navbar a[href$="/r/"] .r-logo {
+  font-size: 0;
+  background: url("logos/r-logo.svg") no-repeat center / contain;
+  width: 1.29rem;
+  height: 1rem;
+  /* Optical alignment: the logo's visual weight sits low (the gray oval is
+     lighter than the blue R), so nudge it up from the geometric center. */
+  margin-top: -2px;
+}
