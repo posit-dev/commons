@@ -32,7 +32,7 @@ A `commons` agent uses trusted calculations when it can. When the user asks a qu
 
 If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user’s question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
-The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker
+The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If `commons` verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker
 
 The table below lists how each provenance outcome can occur:
 
@@ -43,11 +43,11 @@ The table below lists how each provenance outcome can occur:
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> or `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
 
-The agent does not decide the provenance outcome. commons derives it from the tools the agent called and the citations it made.
+The agent does not decide the provenance outcome. `commons` derives it from the tools the agent called and the citations it made.
 
 ## Information layers
 
-commons has two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer holds trusted calculations, ideally lifted from reliable code that you already use. The context layer holds background information. The agent uses this information to decide what custom SQL to write and how to interpret results. Data dictionaries span the two layers.
+`commons` has two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer holds trusted calculations, ideally lifted from reliable code that you already use. The context layer holds background information. The agent uses this information to decide what custom SQL to write and how to interpret results. Data dictionaries span the two layers.
 
 | Layer | Sources | Role |
 |---|---|---|
@@ -58,7 +58,20 @@ commons has two primary layers of information: the **semantic layer** and the **
 
 The most direct way to add a trusted calculation is a **measure**. A measure is a Python function decorated with `@commons.measure`. The decorator needs a description, from its `description` argument or from the docstring of the function. When measures exist, the agent searches for a measure that matches the question. If it finds one, it calls that measure, with arguments if the measure takes any.
 
-A measure can take two kinds of parameter. A parameter annotated `Annotated[T, Field(description=...)]` is supplied by the model, and the model reads the description to decide how to call it. A parameter annotated `commons.Injected[T]` is supplied by commons and never reaches the model. commons injects the connection of the data source that has the same name as the parameter. A parameter with no description and no `Injected` annotation is a construction error.
+A measure can take two kinds of parameter in its signature. A parameter declared as `Annotated[T, Field(description=...)]` gets its value from the model, which reads the description to decide what value to pass. A parameter declared as `commons.Injected[T]` gets its value from `commons`. The model never sees this parameter: `commons` passes the connection of the data source that has the same name as the parameter. A parameter with no description and no `Injected` annotation will result in an error.
+
+As an example, in this measure, `commons` passes `biodiversity` and the model passes `site`:
+
+```python
+@commons.measure(description="Species observed at one site.")
+def species_at_site(
+    biodiversity: commons.Injected[Any],  # commons passes the connection
+    site: Annotated[str, Field(description="Site name.")],  # the model passes a value
+) -> Any:
+    ...
+```
+
+When a user asks "Which species were observed at Oak Bluff?", the model reads the description of `site` and passes `"Oak Bluff"`. `commons` passes the connection of the data source named `biodiversity`, and the measure runs with both.
 
 `data-dict.yaml` files also add to the semantic layer through [`definitions`](#definitions).
 
