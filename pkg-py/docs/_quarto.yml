@@ -30,6 +30,9 @@ website:
     right:
       - text: '<span class="r-logo" title="R Documentation">R Documentation</span>'
         href: ../r/
+      - icon: box-seam
+        href: https://pypi.org/project/commons/
+        aria-label: commons on PyPI
       - icon: github
         href: https://github.com/posit-dev/commons
   sidebar:
