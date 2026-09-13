@@ -24,7 +24,7 @@ website:
       - href: reference/index.qmd
         text: Reference
     right:
-      - text: R
+      - text: '<span class="r-logo" title="R Documentation">R Documentation</span>'
         href: ../r/
       - icon: github
         href: https://github.com/posit-dev/commons
