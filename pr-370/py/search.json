@@ -237,7 +237,7 @@
     "href": "index.html#installation",
     "title": "commons",
     "section": "Installation",
-    "text": "Installation\ncommons requires Python 3.11 or later. To install the package, run:\n# create a virtual environment with `uv venv` if you need first, then run:\nuv pip install commons\nIf you want the chat UI, install the shiny extra, as well:\nuv pip install \"commons[shiny]\"\nOr, for the development version:\n# just the core package:\nuv pip install \"commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\"\n\n# with the shiny UI dependencies:\nuv pip install \"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\""
+    "text": "Installation\ncommons requires Python 3.11 or later. To install the package from PyPI, run:\n# create a virtual environment with `uv venv` if you need first, then run:\nuv pip install commons\nIf you want the chat UI, install the shiny extra, as well:\nuv pip install \"commons[shiny]\"\nOr, for the development version:\n# just the core package:\nuv pip install \"commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\"\n\n# with the shiny UI dependencies:\nuv pip install \"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\""
   },
   {
     "objectID": "index.html#get-started",
