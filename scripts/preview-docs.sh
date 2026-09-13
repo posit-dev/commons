@@ -98,7 +98,15 @@ build_r() {
   echo "==> Building the R site into docs/r"
   # Matches .github/workflows/pkgdown.yaml. The destination comes from
   # pkg-r/_pkgdown.yml, so it lands in docs/r without being named here.
-  (cd "$root/pkg-r" && Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)')
+  #
+  # pkgdown and rmarkdown ask pandoc for math with the --mathml and --mathjax
+  # spellings pandoc 3.11 deprecated, once per topic and per vignette, and
+  # neither flag is ours to set. Drop those lines from stderr and leave
+  # everything else, including the exit status, alone.
+  {
+    (cd "$root/pkg-r" && Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)') \
+      2>&1 1>&3 | sed '/^\[WARNING\] Deprecated: --math/d' >&2
+  } 3>&1
   # So the landing page's link to r/ works here. The published site keeps the
   # released documentation there, which is why this is not part of the build.
   "$root/.github/scripts/link-r-dev.sh" "$root/docs"
@@ -149,7 +157,7 @@ entry_point() {
 
 echo
 echo "Pages:"
-printf '  %-14s http://localhost:%s/\n' "landing page" "$port"
+printf '  %-14s http://localhost:%s/ \n' "landing page" "$port"
 for site in r py; do
   case "$site" in
     r) label="R site" ;;
@@ -157,7 +165,7 @@ for site in r py; do
   esac
   path="$(entry_point "$site")"
   if [ -n "$path" ]; then
-    printf '  %-14s http://localhost:%s/%s\n' "$label" "$port" "$path"
+    printf '  %-14s http://localhost:%s/%s \n' "$label" "$port" "$path"
   else
     # Named rather than omitted: a missing row reads as a broken build.
     printf '  %-14s not built, so links to it will 404\n' "$label"
