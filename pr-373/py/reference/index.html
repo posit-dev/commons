@@ -114,7 +114,15 @@ ul.task-list li input[type="checkbox"] {
     if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
     var off = document.querySelector('meta[name="quarto:offset"]');
     var prefix = (off ? off.getAttribute("content") || "./" : "./");
-    link.setAttribute("href", prefix.replace(/\/?$/, "/") + raw);
+    var fixed = prefix.replace(/\/?$/, "/") + raw;
+    link.setAttribute("href", fixed);
+    // Quarto stashes the pre-rewrite href here and its external-link
+    // pass restores it, which would undo the line above. That pass
+    // treats this link as external whenever the served prefix differs
+    // from site_url, which is the case in every pull request preview,
+    // so both the opt-out class and the stashed value are set.
+    link.classList.add("no-external");
+    link.dataset.originalHref = fixed;
     link.dataset.commonsOffsetApplied = "1";
   }
   if (document.readyState === "loading") {
