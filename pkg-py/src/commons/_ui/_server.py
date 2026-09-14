@@ -24,6 +24,10 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
     inside the server function and pass it here, so each session gets its
     own agent state.
 
+    A `client` that is not a commons agent raises `TypeError`: a plain
+    chatlas chat has none of the citation or provenance handling the chat
+    surface renders.
+
     Parameters
     ----------
     id
@@ -32,10 +36,6 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
         A commons agent.
     **kwargs
         Passed to `shinychat.Chat()`.
-
-    A `client` that is not a commons agent raises `TypeError`: a plain
-    chatlas chat has none of the citation or provenance handling the chat
-    surface renders.
     """
     check_commons_client(client)
 

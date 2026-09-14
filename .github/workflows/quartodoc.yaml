@@ -1,0 +1,63 @@
+on:
+  push:
+    branches: [main]
+    paths: [pkg-py/**, docs/**, .github/workflows/quartodoc.yaml]
+  pull_request:
+    paths: [pkg-py/**, docs/**, .github/workflows/quartodoc.yaml]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+name: quartodoc.yaml
+
+permissions: read-all
+
+jobs:
+  quartodoc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkg-py
+    # Shared with the sibling site's workflow: both deploy to gh-pages, and
+    # two pushes to one branch race.
+    concurrency:
+      group: gh-pages-${{ github.event_name != 'pull_request' || github.run_id }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install the package and its docs dependencies
+        run: uv sync --extra shiny --group docs
+
+      - name: Build the reference pages
+        working-directory: pkg-py/docs
+        run: uv run quartodoc build
+
+      - name: Render the site
+        working-directory: pkg-py/docs
+        run: uv run quarto render
+
+      # The deploy publishes the whole of docs/, so the rendered site has to
+      # sit at the path it is served from.
+      - name: Move the site into place
+        working-directory: .
+        run: |
+          rm -rf docs/py
+          cp -r pkg-py/docs/_site docs/py
+
+      # `clean: false` so this and the pkgdown deploy can each own a
+      # subdirectory of the same branch without erasing the other.
+      - name: Deploy to GitHub pages 🚀
+        if: github.event_name != 'pull_request'
+        uses: JamesIves/github-pages-deploy-action@d92aa235d04922e8f08b40ce78cc5442fcfbfa2f # v4.8.0
+        with:
+          clean: false
+          branch: gh-pages
+          folder: docs

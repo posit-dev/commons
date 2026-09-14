@@ -1,0 +1,56 @@
+---
+title: "commons"
+---
+
+```{=html}
+<img src="assets/hex/commons-hex.png" class="commons-hex" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space.">
+```
+
+`commons` helps data scientists build trustworthy data agents.
+
+Data teams typically have trusted code that they use to analyze their data and build reports and apps. `commons` leverages that expertise, situating the information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
+
+Trusted calculations can come from Python functions (as _measures_) or [data dictionary](https://data-dict.tidyverse.org/) definitions.
+
+## Installation
+
+`commons` requires Python 3.11 or later. To install [the package from PyPI](https://pypi.org/project/commons/), run:
+
+```bash
+# create a virtual environment with `uv venv` if you need first, then run:
+uv pip install commons
+```
+
+If you want the chat UI, install the `shiny` extra, as well:
+
+```bash
+uv pip install "commons[shiny]"
+```
+
+Or, for the development version:
+
+```bash
+# just the core package:
+uv pip install "commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"
+
+# with the shiny UI dependencies:
+uv pip install "commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"
+```
+
+## Get started
+
+`commons` uses [`chatlas`](https://posit-dev.github.io/chatlas/) to access LLMs, so you will need access to one of chatlas's supported providers.
+
+The [Introduction to commons](get-started.qmd) page explains the structure of a `commons` agent and the creation process. For a complete example application, see [`demo.py`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py) in the repository.
+
+## Trusted answers
+
+There are two provenance paths available to a `commons` agent. When a user asks a question for which there is trusted code, the agent runs that code and reports the result. When no trusted code covers the question, the agent writes custom SQL, leaning on additional context provided to the agent.
+
+Answers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.
+
+For more information, see the [Introduction to `commons`](get-started.qmd) page.
+
+## Evaluation
+
+The [DevRel agent](https://github.com/posit-dev/devrel-agent) is an example `commons` agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit's open-source projects. Its repository contains an [evaluation](https://github.com/posit-dev/devrel-agent/tree/main/evals) comparing the `commons` agent with Claude Code on the same data; the [R documentation](../r/#evaluation) presents the results.

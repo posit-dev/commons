@@ -26,6 +26,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/posit-dev/commons"
+Documentation = "https://posit-dev.github.io/commons/py/"
 Issues = "https://github.com/posit-dev/commons/issues"
 
 [project.optional-dependencies]
@@ -43,6 +44,10 @@ shiny = [
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]"]
+docs = [
+    "griffe<2",
+    "quartodoc>=0.11.1",
+]
 
 [build-system]
 requires = ["hatchling"]

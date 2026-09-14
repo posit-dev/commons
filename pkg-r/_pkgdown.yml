@@ -5,6 +5,18 @@ development:
 template:
   bootstrap: 5
 
+navbar:
+  structure:
+    right: [search, github, python]
+  components:
+    python:
+      icon: fab fa-python fa-lg
+      # Absolute, so it works from both the release site (/r/) and the dev
+      # site (/r/dev/), unlike the unversioned Quarto site's ../r/ link.
+      href: https://posit-dev.github.io/commons/py/
+      title: Python Documentation
+      aria-label: Python documentation
+
 reference:
 - title: Main functions
   description: The main agent constructor, plus the building blocks for a commons agent.
