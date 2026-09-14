@@ -11,5 +11,6 @@ Edit the files here, never a copy.
 
 The icon paths in `site.webmanifest` are relative, because each site serves its
 own copy from a different prefix. The `<link>` tags live with each site: the
-pkgdown template writes them for the R site, `pkg-py/docs/favicon.html` for the
-Python site, and `docs/index.html` for the landing page.
+pkgdown template writes them for the R site, `include_in_header` in
+`pkg-py/great-docs.yml` for the Python site, and `docs/index.html` for the
+landing page.
