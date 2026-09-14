@@ -20,11 +20,11 @@ jobs:
     defaults:
       run:
         working-directory: pkg-r
-    # Per workflow and per pull request, so a newer push supersedes an older
-    # pending build of the same site. Races between the two sites are handled
-    # at the push instead, by the deploy action's rebase.
+    # Only restrict concurrency for non-PR jobs: those share gh-pages, and a
+    # PR build deploys nothing. Races against quartodoc.yaml's deploy are
+    # handled at the push instead, by the deploy action's rebase.
     concurrency:
-      group: pkgdown-${{ github.event.number || github.ref }}
+      group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     permissions:
