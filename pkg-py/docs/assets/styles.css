@@ -96,20 +96,65 @@ h3 {
   border-bottom-color: transparent;
 }
 
-/* great-docs hardcodes the current sidebar item as rgb(244, 121, 0) with a
-   3px rgba(101, 180, 237, .75) underline, in great-docs.scss, with no config
-   key to change it. This is the only place to override it. Set the two
-   properties below to try other treatments: a colour on its own, weight on
-   its own, or both. `inherit` keeps the body colour. */
+/* great-docs paints several things a signature orange that this site does not
+   otherwise use. Two of them are theme variables and can be redirected from
+   here; the other two are literals in great-docs.scss and need their own
+   selectors overridden. There is no configuration key for any of it.
+
+   Left alone deliberately: --gd-syn-operator, the operator colour inside code
+   blocks, which is syntax highlighting rather than site accent.
+
+   To try other treatments, change the two properties below: a colour on its
+   own, weight on its own, or both. `inherit` keeps the body colour. */
 :root {
   --commons-active-link-color: inherit;
   --commons-active-link-weight: bold;
+
+  /* Consumed by the dark-mode sidebar and on-this-page active items.
+     currentColor makes `color: var(--gd-active-link)` a no-op. */
+  --gd-active-link: currentColor;
+}
+
+body.quarto-dark {
+  --gd-active-link: currentColor;
+}
+
+/* The current page, in the navbar and in the section list: weight rather than
+   a rule under it. great-docs underlines the navbar item and gives the sidebar
+   item orange text with a thick blue underline, two accent colours the site
+   has nowhere else. The sidebar colour is a literal, so the variable above
+   does not reach it. */
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a.active {
+  font-weight: bold;
+  border-bottom-color: transparent;
 }
 
 #quarto-sidebar a.sidebar-item-text.sidebar-link.active {
   color: var(--commons-active-link-color);
   font-weight: var(--commons-active-link-weight);
   text-decoration: none;
+}
+
+/* Hovering a navbar link filled it with an orange pill and white text. A
+   neutral tint matches the hover on the icon buttons beside it. Both themes
+   are spelled out because great-docs sets the dark one at a higher
+   specificity than the light one. */
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a:hover,
+body.quarto-dark
+  #navbarCollapse
+  > ul.navbar-nav.navbar-nav-scroll.me-auto
+  > li
+  > a:hover {
+  background-color: var(--commons-navbar-hover-bg);
+  color: inherit;
+}
+
+:root {
+  --commons-navbar-hover-bg: rgb(0 0 0 / 6%);
+}
+
+body.quarto-dark {
+  --commons-navbar-hover-bg: rgb(255 255 255 / 12%);
 }
 
 /* great-docs sizes every table to its widest unwrapped line and then scrolls
