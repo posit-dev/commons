@@ -108,4 +108,4 @@ jobs:
 
             **Python site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/py/](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/py/)
 
-            Built from the latest commit on this branch. The landing page's R link resolves inside the preview only if this pull request also rebuilt the R site.
+            Built from the latest commit on this branch. The R links in it point at the published R site, which no pull request rebuilds.

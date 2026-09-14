@@ -12,7 +12,7 @@ navbar:
     python:
       icon: fab fa-python fa-lg
       # Absolute, so it works from both the release site (/r/) and the dev
-      # site (/r/dev/), unlike the unversioned Quarto site's ../r/ link.
+      # site (/r/dev/).
       href: https://posit-dev.github.io/commons/py/
       title: Python Documentation
       aria-label: Python documentation

@@ -2,7 +2,7 @@ This repository is a monorepo holding two implementations of commons: the R pack
 
 Work from the relevant package's directory, not the repository root: `pkg-r/` for R (`devtools::load_all()`, `R CMD check`) and `pkg-py/` for Python (`uv run ruff check`, `uv run pyrefly check src tests`, `uv run pytest`). CI is scoped the same way. Run all of a package's checks before pushing; the pyrefly invocation needs its explicit `src tests` paths, because with none it consults the repo's git ignore files and a worktree checked out under an ignored directory silently type-checks nothing.
 
-The documentation sites are the exception, because they are published as one tree and their links to each other are relative. `scripts/preview-docs.sh` builds them into that tree and serves it, which is the layout a pull request preview publishes. It skips a site whose toolchain is missing rather than failing.
+The documentation sites are the exception, because they are published as one tree: the landing page at the root, the R site under `r/`, and the Python site under `py/`. `scripts/preview-docs.sh` builds both into that tree and serves it, so a change can be read in place. It skips a site whose toolchain is missing rather than failing. Only the Python site gets a pull request preview; the R site follows the usual R package arrangement, where `r/dev/` tracks the development version and `r/` is redeployed by hand at release.
 
 Neither package has been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
 

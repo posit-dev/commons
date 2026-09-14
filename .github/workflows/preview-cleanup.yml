@@ -1,5 +1,5 @@
-# Removes the pr-<number>/ preview folders that pkgdown.yaml and
-# quartodoc.yaml publish to gh-pages.
+# Removes the pr-<number>/ preview folders that quartodoc.yaml publishes to
+# gh-pages.
 #
 # Closing a pull request handles the ordinary case immediately. The schedule
 # is what makes the branch converge: it does not care whether a close event

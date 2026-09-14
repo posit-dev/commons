@@ -33,7 +33,9 @@ website:
         text: API Reference
     right:
       - text: '<span class="r-logo" title="R Documentation">R Documentation</span>'
-        href: ../r/
+        # Absolute, so it works from a pull request preview too, which builds
+        # this site but not the R one.
+        href: https://posit-dev.github.io/commons/r/
       - icon: box-seam
         href: https://pypi.org/project/commons/
         aria-label: commons on PyPI

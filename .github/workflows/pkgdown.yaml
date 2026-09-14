@@ -20,19 +20,15 @@ jobs:
     defaults:
       run:
         working-directory: pkg-r
-    # Per workflow and per pull request, so a run supersedes an older pending
-    # run of the same site. Serializing every gh-pages push in one group would
-    # be wrong: Actions keeps only one pending run per group, so a third
-    # arrival cancels the queued one outright and its preview never publishes.
-    # Races between the two sites are handled at the push instead, by the
-    # deploy action's rebase.
+    # Per workflow and per pull request, so a newer push supersedes an older
+    # pending build of the same site. Races between the two sites are handled
+    # at the push instead, by the deploy action's rebase.
     concurrency:
       group: pkgdown-${{ github.event.number || github.ref }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v6
 
@@ -57,75 +53,8 @@ jobs:
           clean: false
           branch: gh-pages
           folder: docs
-          # Both sites and the preview deploys push to this one branch, so a
-          # deploy has to rebase onto whatever landed while it was building.
-          # Forcing would silently drop that other deploy.
+          # Both sites and the Python preview deploys push to this one
+          # branch, so a deploy has to rebase onto whatever landed while it
+          # was building. Forcing would silently drop that other deploy.
           force: false
           attempt-limit: 10
-
-      # A fork's GITHUB_TOKEN is read-only, so the deploy and the comment both
-      # fail there. Fork previews are not worth the alternative: publishing
-      # fork-authored HTML to posit-dev.github.io means serving unreviewed
-      # content from our own origin.
-      # Preview only. The production deploy above publishes r/ as the released
-      # documentation, and this would replace its index with a redirect.
-      - name: Point r/ at the development site
-        if: >
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.fork != true
-        working-directory: .
-        run: .github/scripts/link-r-dev.sh docs
-
-      # pkgdown's automatic development mode puts a released version's site at
-      # the root of destination and a development version's in dev/ below it,
-      # so the entry point moves with the version in DESCRIPTION. Linking to
-      # r/ unconditionally hands the reviewer a directory listing.
-      - name: Find the built site's entry point
-        id: entry
-        if: >
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.fork != true
-        working-directory: .
-        run: |
-          if [ -f docs/r/index.html ]; then
-            echo "path=r/" >> "$GITHUB_OUTPUT"
-          elif [ -f docs/r/dev/index.html ]; then
-            echo "path=r/dev/" >> "$GITHUB_OUTPUT"
-          else
-            echo "The R site has no index.html to link to." >&2
-            exit 1
-          fi
-
-      - name: Mark the preview noindex
-        if: >
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.fork != true
-        working-directory: .
-        run: python3 .github/scripts/noindex-preview.py docs
-
-      - name: Deploy the pull request preview 🔎
-        if: >
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.fork != true
-        uses: JamesIves/github-pages-deploy-action@d92aa235d04922e8f08b40ce78cc5442fcfbfa2f # v4.8.0
-        with:
-          clean: false
-          branch: gh-pages
-          folder: docs
-          target-folder: pr-${{ github.event.number }}
-          force: false
-          attempt-limit: 10
-
-      - name: Comment the preview link
-        if: >
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.fork != true
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
-        with:
-          header: preview-r
-          message: |
-            **Preview root:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/)
-
-            **R site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/${{ steps.entry.outputs.path }}](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/${{ steps.entry.outputs.path }})
-
-            Built from the latest commit on this branch. Use the link above rather than the landing page's, which points at the released site. The landing page's Python link resolves only if this pull request also rebuilt the Python site.

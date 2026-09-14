@@ -2,10 +2,10 @@
 # Build the documentation sites and serve them the way they are deployed.
 #
 # The sites are published as one tree: the landing page at the root, the R
-# site under r/, and the Python site under py/, which mirrors the deployment
-# arrangement. This script assembles the documentation page in docs/ and 
-# serves it in the same layout a pull request preview publishes, so it
-# should match what a PR reviewer will see.
+# site under r/, and the Python site under py/. This script assembles that
+# tree in docs/ and serves it, so both sites can be read together the way a
+# reader meets them. Only the Python site gets a pull request preview, so for
+# the R site this is the only rendered view before it is deployed.
 #
 # Usage:
 #   scripts/preview-docs.sh            build both sites and serve
@@ -107,9 +107,6 @@ build_r() {
     (cd "$root/pkg-r" && Rscript -e 'pkgdown::build_site(new_process = FALSE, install = FALSE)') \
       2>&1 1>&3 | sed '/^\[WARNING\] Deprecated: --math/d' >&2
   } 3>&1
-  # So the landing page's link to r/ works here. The published site keeps the
-  # released documentation there, which is why this is not part of the build.
-  "$root/.github/scripts/link-r-dev.sh" "$root/docs"
 }
 
 build_py() {
@@ -143,10 +140,8 @@ done
 
 # pkgdown's automatic development mode decides where a site lands from the
 # version in DESCRIPTION: a released version goes to the root of destination,
-# a development version to dev/ below it. So the R entry point moves, and
-# pointing at r/ on a development version serves a directory listing. The
-# landing page links to r/, which is right for the deployed site and wrong
-# here, so the addresses below are worth reading rather than guessing.
+# a development version to dev/ below it. So the R entry point moves between
+# builds, and the addresses below are worth reading rather than guessing.
 entry_point() {
   if [ -f "$root/docs/$1/index.html" ]; then
     echo "$1/"
