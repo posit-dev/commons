@@ -84,3 +84,40 @@ include_in_header:
         tools.prepend(link);
       });
       </script>
+
+# Hand-maintained, newest first. Deriving this from py-v* tags would have to
+# guess which releases are prereleases or end of life, and those are
+# editorial calls that belong in a reviewable diff. Adding an entry is a step
+# in the release runbook. `great-docs api-snapshot <tag>` reads a specific
+# git tag, so a version's API snapshot can be backfilled later.
+versions:
+  - label: "0.2.0 (dev)"
+    tag: dev
+    version: "0.2.0"
+    prerelease: true
+  # A beta, but the only published release, so it holds the latest slot and is
+  # what /py/ serves: that matches what `pip install commons` resolves to.
+  # `latest` has to be set explicitly, because a prerelease is excluded from
+  # latest auto-detection and every entry here is one. The beta warning is
+  # carried by the announcement banner rather than by a selector badge.
+  - label: "0.1.0b1"
+    tag: "0.1.0b1"
+    version: "0.1.0b1"
+    prerelease: true
+    latest: true
+
+version_selector:
+  enabled: true
+  placement: navbar-right
+  warning_banner: true
+
+version_aliases:
+  latest: true
+  stable: true
+  dev: true
+
+announcement:
+  content: "`commons` for Python is a **beta** and does not yet do everything the R package does."
+  type: info
+  url: user-guide/feature-parity.html
+  dismissable: true
