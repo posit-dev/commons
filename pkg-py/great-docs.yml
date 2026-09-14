@@ -108,15 +108,20 @@ include_in_header:
       })();
       </script>
 
-  # Selected by class substring on purpose: great-docs drops every
-  # include_in_header entry whose text contains its own "gd-announcement"
-  # marker, so naming the class in full removes this script silently.
-  # The banner is built client-side from a meta tag and its url is used
-  # verbatim, so Quarto never rewrites it per page depth and a relative link
-  # resolves against the current page's directory: from user-guide/ it asked
-  # for user-guide/user-guide/. Quarto's own offset meta gives the prefix back,
-  # which is what great-docs' version selector and sidebar scripts use, and it
-  # stays correct in a pull request preview and inside a /v/ copy.
+  # Selected by class and meta-name substrings on purpose: great-docs drops
+  # every include_in_header entry whose text contains its own "gd-announcement"
+  # marker, so naming either in full removes this script silently.
+  #
+  # The banner is built client-side and its url is used verbatim, so Quarto
+  # never rewrites it per page depth and a relative link resolved against the
+  # current page's directory: from user-guide/ the banner asked for
+  # user-guide/user-guide/. The prefix comes from Quarto's offset meta, which is
+  # how great-docs' own version selector and sidebar scripts find the site root,
+  # and it stays correct in a pull request preview and inside a /v/ copy.
+  #
+  # The raw path is read back from the meta, not from the link: assigning to
+  # a.href reflects the *resolved* absolute URL into the attribute, so reading
+  # the link would only ever see the already-wrong absolute path.
   - text: |
       <script>
       (function () {
@@ -128,14 +133,13 @@ include_in_header:
             return;
           }
           if (link.dataset.commonsOffsetApplied) return;
-          var raw = link.getAttribute("href") || "";
+          var ann = document.querySelector('meta[name$="announcement"]');
+          var raw = ann ? ann.getAttribute("data-url") || "" : "";
           if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
-          var meta = document.querySelector('meta[name="quarto:offset"]');
-          var offset = meta ? meta.getAttribute("content") || "" : "";
+          var off = document.querySelector('meta[name="quarto:offset"]');
+          var prefix = (off ? off.getAttribute("content") || "./" : "./");
+          link.setAttribute("href", prefix.replace(/\/?$/, "/") + raw);
           link.dataset.commonsOffsetApplied = "1";
-          if (offset && offset !== "./") {
-            link.setAttribute("href", offset.replace(/\/?$/, "/") + raw);
-          }
         }
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", fix);
