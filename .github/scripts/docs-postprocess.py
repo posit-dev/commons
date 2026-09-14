@@ -31,6 +31,12 @@ BADGE = re.compile(r'\s*<span class="version-badge"[^>]*>[^<]*</span>')
 
 OFFSET = re.compile(r'<meta name="quarto:offset" content="([^"]*)"')
 
+# Only <link> tags are rewritten. great-docs also injects a canonical-URL
+# script whose base is the site URL, which it concatenates with a path at
+# runtime; turning that into a page-relative prefix would yield a bogus
+# canonical URL on every non-latest version.
+LINK = re.compile(r"<link\b[^>]*>")
+
 
 def fix(text: str, site_url: str, offset: str) -> str | None:
     """Return `text` with icon links made relative and the badge removed.
@@ -41,9 +47,17 @@ def fix(text: str, site_url: str, offset: str) -> str | None:
     base = site_url if site_url.endswith("/") else site_url + "/"
     prefix = offset if offset.endswith("/") else offset + "/"
 
-    patched, icons = re.subn(
-        r'(?<=")' + re.escape(base) + r'(?=[^"]*")', prefix, text
-    )
+    icons = 0
+
+    def relativize(match: re.Match[str]) -> str:
+        nonlocal icons
+        tag, n = re.subn(
+            r'(?<=href=")' + re.escape(base), prefix, match.group(0)
+        )
+        icons += n
+        return tag
+
+    patched = LINK.sub(relativize, text)
     patched, badges = BADGE.subn("", patched)
 
     if not (icons or badges) or patched == text:

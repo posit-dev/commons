@@ -67,6 +67,29 @@ class RelativizeIconsTest(unittest.TestCase):
         assert out is not None
         self.assertIn('href="../favicon.ico"', out)
 
+    def test_leaves_the_versioned_canonical_script_alone(self):
+        # great-docs injects a canonical-URL script whose base is the site URL
+        # without a trailing slash, and builds a path onto it at runtime.
+        # Rewriting it to a page-relative prefix would produce a bogus
+        # canonical URL on every non-latest version.
+        page = '<script>var base="https://posit-dev.github.io/commons/py";</script>'
+        self.assertIsNone(fix(page, BASE, "../"))
+
+    def test_leaves_a_script_using_the_trailing_slash_form_alone(self):
+        # Same risk, one character different: only <link> hrefs are rewritten.
+        page = f'<script>var base="{BASE}";</script>'
+        self.assertIsNone(fix(page, BASE, "../"))
+
+    def test_rewrites_the_link_but_not_a_neighbouring_script(self):
+        page = (
+            f'<link rel="icon" href="{BASE}favicon.ico">'
+            f'<script>var base="{BASE}";</script>'
+        )
+        out = fix(page, BASE, "../")
+        assert out is not None
+        self.assertIn('href="../favicon.ico"', out)
+        self.assertIn(f'var base="{BASE}";', out)
+
     def test_leaves_an_unrelated_absolute_url_alone(self):
         page = '<a href="https://pypi.org/project/commons/">PyPI</a>'
         self.assertIsNone(fix(page, BASE, "../"))
