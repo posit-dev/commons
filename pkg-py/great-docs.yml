@@ -19,15 +19,19 @@ changelog:
 # does not export `ui`, so the Shiny entries only appear because they are
 # listed here.
 reference:
-  - title: Main functions
-    desc: The main agent constructor, plus the building blocks for a commons agent.
-    contents: [Commons, data_source, semantic_layer, measure, context_layer]
-  - title: Supporting types
-    desc: The objects the constructors return, and the values they carry.
-    contents: [DataSource, SemanticLayer, ContextLayer, Measure, Injected, Tag, list_tables]
-  - title: Shiny UI and server
-    desc: "Put a commons agent inside of an interactive chat app. Needs the `shiny` extra."
-    contents: [ui.app, ui.server, ui.theme, ui.commons_chat_dependency, ui.asset_base_url]
+  # The dict form, because the navbar label only comes from `title` when
+  # `reference` is a mapping; as a bare list of sections it is ignored.
+  title: API Reference
+  sections:
+    - title: Main functions
+      desc: The main agent constructor, plus the building blocks for a commons agent.
+      contents: [Commons, data_source, semantic_layer, measure, context_layer]
+    - title: Supporting types
+      desc: The objects the constructors return, and the values they carry.
+      contents: [DataSource, SemanticLayer, ContextLayer, Measure, Injected, Tag, list_tables]
+    - title: Shiny UI and server
+      desc: "Put a commons agent inside of an interactive chat app. Needs the `shiny` extra."
+      contents: [ui.app, ui.server, ui.theme, ui.commons_chat_dependency, ui.asset_base_url]
 
 # Nested under `site:`, which is the key great-docs reads; a top-level
 # `css:` is silently ignored. Paths are relative to the project root.
@@ -131,7 +135,7 @@ version_aliases:
   dev: true
 
 announcement:
-  content: "`commons` for Python is a **beta** and does not yet do everything the R package does."
+  content: "`commons` for Python is still in **beta** and does not yet do everything the R package does. Click on this banner to see feature parity."
   type: info
   url: user-guide/feature-parity.html
   dismissable: true

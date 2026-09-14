@@ -96,9 +96,19 @@ h3 {
   border-bottom-color: transparent;
 }
 
+/* great-docs hardcodes the current sidebar item as rgb(244, 121, 0) with a
+   3px rgba(101, 180, 237, .75) underline, in great-docs.scss, with no config
+   key to change it. This is the only place to override it. Set the two
+   properties below to try other treatments: a colour on its own, weight on
+   its own, or both. `inherit` keeps the body colour. */
+:root {
+  --commons-active-link-color: inherit;
+  --commons-active-link-weight: bold;
+}
+
 #quarto-sidebar a.sidebar-item-text.sidebar-link.active {
-  color: inherit;
-  font-weight: bold;
+  color: var(--commons-active-link-color);
+  font-weight: var(--commons-active-link-weight);
   text-decoration: none;
 }
 
