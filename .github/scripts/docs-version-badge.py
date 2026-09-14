@@ -23,26 +23,38 @@ import pathlib
 import re
 import sys
 
-# Captures the badge's attributes separately from its text, so a release-date
-# title survives and an already-correct page can be left alone. The closing
-# quote after the class name is what stops a longer class that merely starts
-# the same way, such as version-badge-legend, from matching.
-BADGE = re.compile(r'(<span class="version-badge"[^>]*>)([^<]*)(</span>)')
+# The closing quote after the class name is what stops a longer class that
+# merely starts the same way, such as version-badge-legend, from matching. The
+# release-date title attribute is dropped rather than captured: see below.
+BADGE = re.compile(r'<span class="version-badge"[^>]*>[^<]*</span>')
+
+# When the navbar carries a logo rather than a text title, great-docs puts the
+# version in a Tippy tooltip on the brand link instead of a badge span, so the
+# same wrong version arrives by a second route. Anchoring on the opening
+# `<code>v` is what distinguishes it from every other tooltip on the page. The
+# optional trailing clause is the release date, dropped with it.
+TOOLTIP = re.compile(r'(data-tippy-content=")<code>v[^<]*</code>(?:<br>[^"]*)?(")')
 
 
 def retag(text: str, version: str) -> str | None:
-    """Return `text` with every badge reading `v<version>`, or None if unchanged.
+    """Return `text` with every version reading `v<version>`, or None if unchanged.
 
     Returning None for "nothing to do" keeps the caller from rewriting a file
     it does not need to touch, and makes the function idempotent.
     """
     wanted = f"v{version}"
 
-    def replace(match: re.Match[str]) -> str:
-        return f"{match.group(1)}{wanted}{match.group(3)}"
+    def replace_tooltip(match: re.Match[str]) -> str:
+        return f"{match.group(1)}<code>{wanted}</code>{match.group(2)}"
 
-    patched, count = BADGE.subn(replace, text)
-    if not count or patched == text:
+    # Both forms are rebuilt rather than edited in place, because the release
+    # date great-docs pairs with the version comes from the same wrong GitHub
+    # Release and pyproject.toml has no date to replace it with. Asserting the
+    # R package's release date next to the Python version would be a second
+    # wrong claim, so it is removed.
+    patched, badges = BADGE.subn(f'<span class="version-badge">{wanted}</span>', text)
+    patched, tooltips = TOOLTIP.subn(replace_tooltip, patched)
+    if not (badges or tooltips) or patched == text:
         return None
     return patched
 
