@@ -47,8 +47,13 @@ logo:
   light: docs/assets/logos/python-logo.svg
   show_title: true
 
+# The hero logo path is emitted as the img src verbatim and great-docs does not
+# copy the file the way it copies the navbar logo, so this names where the
+# asset actually lands in the built site: docs/ is the user_guide directory,
+# which is published under user-guide/. The hero is only on the landing page,
+# at the site root, so a path relative to the root is right.
 hero:
-  logo: docs/assets/hex/commons-hex.png
+  logo: user-guide/assets/hex/commons-hex.png
 
 # The icon both other sites serve, so all three show the same one in a tab.
 # The PNG rather than the SVG source: great-docs rasterizes an SVG with

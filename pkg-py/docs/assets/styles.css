@@ -157,3 +157,13 @@ body.quarto-dark
 #quarto-sidebar.gd-sidebar-float .sidebar-link[href] {
   margin-left: 0;
 }
+
+/* The package name is drawn as a bordered pill. The name alone is enough, and
+   the version beside it duplicates the version selector, so the badge is
+   stripped from the markup by .github/scripts/docs-postprocess.py. */
+.navbar-title {
+  border-style: none;
+  border-width: 0;
+  border-radius: 0;
+  padding: 0;
+}

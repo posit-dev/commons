@@ -125,8 +125,8 @@ build_py() {
   # refuses to clean an output directory outside its project.
   (cd "$root/pkg-py" && uv sync --extra shiny --group docs --quiet)
   (cd "$root/pkg-py" && uv run great-docs build)
-  version="$(cd "$root/pkg-py" && uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
-  (cd "$root/pkg-py" && uv run python "$root/.github/scripts/docs-version-badge.py" great-docs/_site "$version")
+  site_url="$(cd "$root/pkg-py" && uv run python -c 'import yaml; print(yaml.safe_load(open("great-docs.yml"))["site_url"])')"
+  (cd "$root/pkg-py" && uv run python "$root/.github/scripts/docs-postprocess.py" great-docs/_site "$site_url")
   rm -rf "$root/docs/py"
   cp -r "$root/pkg-py/great-docs/_site" "$root/docs/py"
 }
