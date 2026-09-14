@@ -1,0 +1,34 @@
+# Tells a fork's author why their pull request has no documentation preview.
+#
+# quartodoc.yaml skips the preview deploy for forks, and a fork's
+# GITHUB_TOKEN is read-only, so that workflow cannot post this itself.
+# pull_request_target runs with the base repository's token, which can. This workflow never checks out the pull request, and asks for no
+# permission beyond writing the comment, so none of what makes
+# pull_request_target dangerous applies: it reads no fork code and runs none.
+name: preview-fork-notice.yml
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  notice:
+    if: github.event.pull_request.head.repo.fork == true
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Post the fork preview notice
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: preview-fork
+          message: |
+            **No documentation preview for this pull request.**
+
+            Previews are published to this repository's own GitHub Pages site,
+            so building one from a fork would serve unreviewed HTML from
+            `posit-dev.github.io`. A maintainer who wants to see the rendered
+            docs can push this branch to the repository, which produces a
+            preview automatically.

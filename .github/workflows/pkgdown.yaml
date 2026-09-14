@@ -20,10 +20,11 @@ jobs:
     defaults:
       run:
         working-directory: pkg-r
-    # Shared with the sibling site's workflow: both deploy to gh-pages, and
-    # two pushes to one branch race.
+    # Only restrict concurrency for non-PR jobs: those share gh-pages, and a
+    # PR build deploys nothing. Races against quartodoc.yaml's deploy are
+    # handled at the push instead, by the deploy action's rebase.
     concurrency:
-      group: gh-pages-${{ github.event_name != 'pull_request' || github.run_id }}
+      group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     permissions:
@@ -52,3 +53,8 @@ jobs:
           clean: false
           branch: gh-pages
           folder: docs
+          # Both sites and the Python preview deploys push to this one
+          # branch, so a deploy has to rebase onto whatever landed while it
+          # was building. Forcing would silently drop that other deploy.
+          force: false
+          attempt-limit: 10

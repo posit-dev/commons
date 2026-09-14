@@ -1,0 +1,124 @@
+# Removes the pr-<number>/ preview folders that quartodoc.yaml publishes to
+# gh-pages.
+#
+# Closing a pull request handles the ordinary case immediately. The schedule
+# is what makes the branch converge: it does not care whether a close event
+# ever fired, whether this workflow existed when the pull request was opened,
+# or whether an earlier run failed, because it derives the whole answer from
+# the branch and the API each time.
+#
+# workflow_dispatch exists because a schedule only ever runs the copy of this
+# file on the default branch, so this job cannot run at all until it merges.
+# Its dry run defaults to true so the first manual run reports rather than
+# deletes.
+name: preview-cleanup.yml
+
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    # Weekly. Stale previews cost nothing but repository size, so this only
+    # needs to be faster than the rate at which they accumulate.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: List what would be removed without removing it
+        type: boolean
+        default: true
+
+permissions: read-all
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    # Only against other cleanup runs. This job cannot be serialized against
+    # the deploys: Actions keeps one pending run per group, so sharing theirs
+    # would cancel a queued preview. It rebases onto a concurrent deploy
+    # below, and the schedule collects anything the two still interleave.
+    concurrency:
+      group: preview-cleanup
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: gh-pages
+          # A shallow clone cannot be pushed back.
+          fetch-depth: 0
+
+      - name: Remove preview folders
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          CLOSED_PR: ${{ github.event.number }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "pull_request" ]; then
+            targets="pr-$CLOSED_PR"
+          else
+            # Ask once for the open pull requests, rather than asking about
+            # each folder. Per-folder queries have to decide what a failed
+            # query means, and the safe answer ("leave it") is the same as
+            # the answer for an open pull request, so the query earns
+            # nothing. One list also fails loudly: a rate limit or a bad
+            # token aborts the run here, where deleting nothing is correct,
+            # instead of reading as "no pull request is open" and collecting
+            # every live preview.
+            open_prs=$(gh api "repos/$REPO/pulls?state=open&per_page=100" --paginate --jq '.[].number')
+
+            targets=""
+            # `-printf` would be shorter, but it is GNU-only, and a portable
+            # listing is one that can be exercised outside the runner.
+            for dir in $(find . -maxdepth 1 -type d -name 'pr-*' | sed 's|^\./||' | sort); do
+              number="${dir#pr-}"
+              if ! printf '%s' "$number" | grep -qE '^[0-9]+$'; then
+                echo "Skipping $dir: not a pull request number"
+                continue
+              fi
+              if printf '%s\n' "$open_prs" | grep -qx "$number"; then
+                echo "Keeping $dir: pull request is open"
+              else
+                echo "Collecting $dir: pull request is not open"
+                targets="$targets $dir"
+              fi
+            done
+          fi
+
+          removed=""
+          for dir in $targets; do
+            [ -d "$dir" ] || continue
+            removed="$removed $dir"
+          done
+
+          if [ -z "$removed" ]; then
+            echo "Nothing to remove."
+            exit 0
+          fi
+
+          if [ "${DRY_RUN:-false}" = "true" ]; then
+            echo "Dry run. Would remove:$removed"
+            exit 0
+          fi
+
+          git rm -r --quiet $removed
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Remove preview folders:$removed"
+
+          # A deploy may have landed on gh-pages while this job ran. Rebase
+          # onto it and try again rather than forcing, which would drop it.
+          for attempt in 1 2 3 4 5; do
+            if git push origin gh-pages; then
+              exit 0
+            fi
+            echo "Push rejected, rebasing (attempt $attempt)"
+            git pull --rebase origin gh-pages
+          done
+
+          echo "Could not push after 5 attempts." >&2
+          exit 1
