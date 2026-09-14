@@ -135,7 +135,7 @@ version_aliases:
   dev: true
 
 announcement:
-  content: "`commons` for Python is still in **beta** and does not yet do everything the R package does. Click on this banner to see feature parity."
+  content: "Heads up! `commons` for Python is *still in beta* and is not yet equal to the R package in functionality. Click here to see specific feature parity."
   type: info
   url: user-guide/feature-parity.html
   dismissable: true
