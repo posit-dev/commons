@@ -88,17 +88,20 @@ h3 {
 }
 
 :root {
-  --commons-active-link-color: inherit;
+  /* The brightest text in either theme, so the current item reads as more
+     prominent than its siblings rather than less. --gd-text-primary is itself
+     theme-scoped, so one value serves both. */
+  --commons-active-link-color: var(--gd-text-primary);
   --commons-active-link-weight: bold;
   --commons-navbar-hover-bg: rgb(0 0 0 / 14%);
-  /* Dark-mode sidebar and on-this-page active items read this; currentColor
-     makes those rules a no-op. */
-  --gd-active-link: currentColor;
+  --gd-active-link: var(--gd-text-primary);
 }
 
+/* Repeated because great-docs defines both of these under this same selector,
+   which outranks :root. */
 body.quarto-dark {
   --commons-navbar-hover-bg: rgb(255 255 255 / 14%);
-  --gd-active-link: currentColor;
+  --gd-active-link: var(--gd-text-primary);
 }
 
 /* Current page: weight, not a coloured rule. The sidebar colour is a literal
@@ -147,4 +150,10 @@ body.quarto-dark
   margin-left: 0;
   margin-right: 0;
   text-decoration: underline;
+}
+
+/* The hover pill carries 8px of padding each side but a -8px left margin, so
+   it sat flush against the sidebar's left edge while inset on the right. */
+#quarto-sidebar.gd-sidebar-float .sidebar-link[href] {
+  margin-left: 0;
 }
