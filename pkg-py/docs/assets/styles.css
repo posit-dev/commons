@@ -69,7 +69,7 @@ h3 {
 .doc-reference dt a,
 .doc-reference section.doc-group > dl a,
 .table a,
-#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a {
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a:not(.active) {
   font-weight: normal;
 }
 
@@ -85,4 +85,40 @@ h3 {
   color: inherit;
   padding: 0.1em 0.3em;
   border-radius: 3px;
+}
+
+/* Mark the current page with weight rather than a rule under it, in the navbar
+   and in the section list. great-docs underlines the navbar item, and gives the
+   sidebar item orange text with a thick blue underline, which reads as two
+   unrelated accent colours against a site that has neither. */
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a.active {
+  font-weight: bold;
+  border-bottom-color: transparent;
+}
+
+#quarto-sidebar a.sidebar-item-text.sidebar-link.active {
+  color: inherit;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+/* great-docs sizes every table to its widest unwrapped line and then scrolls
+   it, which suits a data table but not one of prose: the feature-parity table
+   ran well past the page instead of wrapping inside it. */
+.gd-table-scroll > table {
+  width: 100%;
+}
+
+/* The previous/next page links are drawn as outlined buttons. They are
+   ordinary links, so they are styled as ordinary links. */
+.nav-page.nav-page-previous a,
+.nav-page.nav-page-next a {
+  border-style: none;
+  border-width: 0;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+  margin-left: 0;
+  margin-right: 0;
+  text-decoration: underline;
 }
