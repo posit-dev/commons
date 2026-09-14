@@ -18,5 +18,7 @@ dist/
 /.quarto/
 **/*.quarto_ipynb
 
-# The site great-docs assembles and renders.
+# The site great-docs assembles and renders, plus its working directories.
 /great-docs/
+/.great-docs/
+/_great_docs_build/
