@@ -62,10 +62,11 @@ h3 {
   margin-top: -2px;
 }
 
-/* great-docs sets its reference entries, its navbar links and its table links
-   in bold monospace. The monospace is wanted, since these are symbol names,
-   but the weight on top of an underline reads as shouting on a page that is
-   mostly a list of them. Normal weight keeps the underline as the affordance. */
+/* Overrides for great-docs' own stylesheet, which this file loads after.
+   None of the below has a configuration key. */
+
+/* Symbol names stay monospace, but drop the bold: the reference is mostly a
+   list of them, and weight on top of an underline shouts. */
 .doc-reference dt a,
 .doc-reference section.doc-group > dl a,
 .table a,
@@ -73,9 +74,8 @@ h3 {
   font-weight: normal;
 }
 
-/* The announcement banner paints a mid-blue background but leaves the text at
-   the body colour, which is close to unreadable in light mode, and an inline
-   code span keeps its own pale pill background and so disappears entirely. */
+/* The banner sets a mid-blue background but no text colour, and a code span
+   keeps its own pale pill, which vanishes into it. */
 .gd-announcement-banner {
   color: #fff;
 }
@@ -87,46 +87,28 @@ h3 {
   border-radius: 3px;
 }
 
-/* Mark the current page with weight rather than a rule under it, in the navbar
-   and in the section list. great-docs underlines the navbar item, and gives the
-   sidebar item orange text with a thick blue underline, which reads as two
-   unrelated accent colours against a site that has neither. */
-#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a.active {
-  font-weight: bold;
-  border-bottom-color: transparent;
-}
-
-/* great-docs paints several things a signature orange that this site does not
-   otherwise use. Two of them are theme variables and can be redirected from
-   here; the other two are literals in great-docs.scss and need their own
-   selectors overridden. There is no configuration key for any of it.
-
-   Left alone deliberately: --gd-syn-operator, the operator colour inside code
-   blocks, which is syntax highlighting rather than site accent.
-
-   To try other treatments, change the two properties below: a colour on its
-   own, weight on its own, or both. `inherit` keeps the body colour. */
 :root {
   --commons-active-link-color: inherit;
   --commons-active-link-weight: bold;
-
-  /* Consumed by the dark-mode sidebar and on-this-page active items.
-     currentColor makes `color: var(--gd-active-link)` a no-op. */
+  --commons-navbar-hover-bg: rgb(0 0 0 / 14%);
+  /* Dark-mode sidebar and on-this-page active items read this; currentColor
+     makes those rules a no-op. */
   --gd-active-link: currentColor;
 }
 
 body.quarto-dark {
+  --commons-navbar-hover-bg: rgb(255 255 255 / 14%);
   --gd-active-link: currentColor;
 }
 
-/* The current page, in the navbar and in the section list: weight rather than
-   a rule under it. great-docs underlines the navbar item and gives the sidebar
-   item orange text with a thick blue underline, two accent colours the site
-   has nowhere else. The sidebar colour is a literal, so the variable above
-   does not reach it. */
+/* Current page: weight, not a coloured rule. The sidebar colour is a literal
+   upstream, so --gd-active-link above does not reach it. */
 #navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a.active {
   font-weight: bold;
+  /* Two underlines: a bottom border from .nav-underline, a text decoration
+     from .nav-link.active. */
   border-bottom-color: transparent;
+  text-decoration: none;
 }
 
 #quarto-sidebar a.sidebar-item-text.sidebar-link.active {
@@ -135,10 +117,8 @@ body.quarto-dark {
   text-decoration: none;
 }
 
-/* Hovering a navbar link filled it with an orange pill and white text. A
-   neutral tint matches the hover on the icon buttons beside it. Both themes
-   are spelled out because great-docs sets the dark one at a higher
-   specificity than the light one. */
+/* Hover filled the link with an orange pill. Both themes are spelled out
+   because great-docs sets the dark one at a higher specificity. */
 #navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a:hover,
 body.quarto-dark
   #navbarCollapse
@@ -146,31 +126,17 @@ body.quarto-dark
   > li
   > a:hover {
   background-color: var(--commons-navbar-hover-bg);
-  color: inherit;
+  /* Not `inherit`: that takes the list item's colour, not the link's. */
+  color: var(--gd-navbar-text);
 }
 
-/* Ink over the navbar background, which is #f0f0f0 light and #1a1a1a dark, so
-   the two alphas land a similar distance from their base: #cecece and #3a3a3a.
-   great-docs hovers its icon buttons at 10% and 12%, but those carry a border
-   to help them read and a bare text link does not, so these go a step further.
-   6% was the buttons' resting tint and was invisible as a hover. */
-:root {
-  --commons-navbar-hover-bg: rgb(0 0 0 / 14%);
-}
-
-body.quarto-dark {
-  --commons-navbar-hover-bg: rgb(255 255 255 / 14%);
-}
-
-/* great-docs sizes every table to its widest unwrapped line and then scrolls
-   it, which suits a data table but not one of prose: the feature-parity table
-   ran well past the page instead of wrapping inside it. */
+/* Tables were sized to their widest unwrapped line and scrolled. Suits a data
+   table; the feature-parity table is prose. */
 .gd-table-scroll > table {
   width: 100%;
 }
 
-/* The previous/next page links are drawn as outlined buttons. They are
-   ordinary links, so they are styled as ordinary links. */
+/* The previous/next page links were drawn as outlined buttons. */
 .nav-page.nav-page-previous a,
 .nav-page.nav-page-next a {
   border-style: none;
