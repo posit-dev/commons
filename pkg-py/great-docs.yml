@@ -39,11 +39,16 @@ site:
   css:
     - docs/assets/styles.css
 
-# The hex sticker is the site's mark, shown in the navbar and, larger, on the
-# landing page. It used to be an inline image in index.qmd, which great-docs
-# would have shown underneath its own logo.
+# The navbar carries the Python mark beside the package name, as the R site
+# carries the R mark beside it; show_title is needed because great-docs
+# suppresses the text title whenever a logo is set. The hex is the landing
+# page's mark, via hero.logo, which otherwise inherits the navbar logo.
 logo:
-  light: docs/assets/hex/commons-hex.png
+  light: docs/assets/logos/python-logo.svg
+  show_title: true
+
+hero:
+  logo: docs/assets/hex/commons-hex.png
 
 # The icon both other sites serve, so all three show the same one in a tab.
 # The PNG rather than the SVG source: great-docs rasterizes an SVG with
