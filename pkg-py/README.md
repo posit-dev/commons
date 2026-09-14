@@ -10,10 +10,10 @@ The core dependencies will allow you to build and query an agent. Installing the
 
 ## Get started
 
-An agent needs a chat client and at least one data source. A semantic layer of trusted calculations and a context layer of prose are both optional. The semantic layer changes which tools the agent registers, since a measure is what `call_measure` calls. The context layer does not: `search_context` is always registered, and without a layer behind it the tool reports that none is configured. Every parameter the model supplies to a measure needs a description, which is what the model reads to decide how to call it.
+An agent needs a chat client and at least one data source. A semantic layer of trusted calculations and a context layer of prose are both optional. The semantic layer changes which tools the agent registers, since a measure is what `call_measure` calls. The context layer does not: `search_context` is always registered, and without a layer behind it the tool reports that none is configured. Every parameter the model supplies to a measure needs a description, which is what the model reads to decide how to call it. commons fills a `commons.Injected` parameter itself, with the connection of the data source that shares its name, and the model never sees it.
 
 ```python
-from typing import Annotated
+from typing import Annotated, Any
 
 import chatlas
 import commons
@@ -27,14 +27,18 @@ sales = pd.DataFrame(
 
 @commons.measure(description="Total revenue for one region.")
 def region_revenue(
-    region: Annotated[str, Field(description="Which region to total.")] = "EMEA",
+    region: Annotated[str, Field(description="Which region to total.")],
+    warehouse: commons.Injected[Any],
 ) -> float:
-    return float(sales[sales["region"] == region]["revenue"].sum())
+    (total,) = warehouse.execute(
+        "SELECT SUM(revenue) FROM sales WHERE region = ?", [region]
+    ).fetchone()
+    return float(total)
 
 
 agent = commons.Commons(
-    client=chatlas.ChatAnthropic(model="claude-sonnet-5"),
-    data_sources=commons.data_source(sales=sales, dictionary="data-dict.yaml"),
+    client=chatlas.ChatAuto("anthropic/claude-sonnet-5"),
+    data_sources={"warehouse": commons.data_source(sales=sales)},
     semantic_layer=commons.semantic_layer(region_revenue),
     context_layer=commons.context_layer(files=["reporting-policy.md"]),
 )
