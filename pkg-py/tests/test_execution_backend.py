@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
 import signal
 import sys
+import time
 from typing import Any, cast
 
 import pytest
@@ -102,19 +104,50 @@ async def test_output_past_the_cap_keeps_the_tail_and_the_process_still_finishes
     assert result.stdout_truncated
 
 
-def _sleeper(sentinel: object, *, ignore_sigterm: bool = False) -> str:
+def _sleeper(
+    sentinel: object, *, ignore_sigterm: bool = False, ready: object = None
+) -> str:
     """Code that outlives its timeout and records the fact if it is allowed to.
 
     The sleep sits well past the point where a working shutdown has killed
     the process, so a slow or loaded machine delays the kill into slack
     rather than into a false failure.
+
+    ``ready`` names a file the child creates for a test that cancels
+    mid-call, which waits for it rather than sleeping. The child first reads
+    stdin to EOF, because exec closes stdin from inside the try block that
+    installs the shutdown: the file therefore proves the cancel has somewhere
+    to land. Waiting only for the child to start would not -- the spawn can
+    still be mid-await, and the cancel would leave nothing to shut down and
+    the assertions passing for want of a process.
     """
     guard = (
         "import signal; signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
         if ignore_sigterm
         else ""
     )
-    return f"{guard}import time; time.sleep(1.5); open({str(sentinel)!r}, 'w').close()"
+    announce = (
+        ""
+        if ready is None
+        else f"import sys; sys.stdin.read(); open({str(ready)!r}, 'w').close(); "
+    )
+    return (
+        f"{guard}import time; {announce}"
+        f"time.sleep(1.5); open({str(sentinel)!r}, 'w').close()"
+    )
+
+
+async def _wait_until_cancellable(ready: pathlib.Path, timeout: float = 10.0) -> None:
+    """Block until the child announces that exec is inside its try block.
+
+    Polling, because the child is a separate process with nothing to await.
+    The timeout only has to outlast a spawn.
+    """
+    deadline = time.monotonic() + timeout
+    while not ready.exists():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"the call did not become cancellable within {timeout}s")
+        await asyncio.sleep(0.01)
 
 
 async def test_a_call_past_the_timeout_raises_and_the_process_does_not_survive(
@@ -257,9 +290,12 @@ async def test_cancelling_a_call_does_not_leave_the_process_running(tmp_path) ->
     # The driver cancels calls when a conversation goes away or the agent
     # shuts down. Whoever started the process has to be the one to end it.
     sentinel = tmp_path / "survived"
+    ready = tmp_path / "ready"
     backend = LocalBackend(terminate_grace=0.1)
-    call = asyncio.create_task(backend.exec([sys.executable, "-c", _sleeper(sentinel)]))
-    await asyncio.sleep(0.1)
+    call = asyncio.create_task(
+        backend.exec([sys.executable, "-c", _sleeper(sentinel, ready=ready)])
+    )
+    await _wait_until_cancellable(ready)
 
     call.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -284,11 +320,18 @@ async def test_cancellation_still_escalates_for_a_process_ignoring_sigterm(
     # The cancellation path does its waiting inside an except block, where an
     # await can be cut short. SIGKILL still has to land.
     sentinel = tmp_path / "survived"
+    ready = tmp_path / "ready"
     backend = LocalBackend(terminate_grace=0.1)
     call = asyncio.create_task(
-        backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
+        backend.exec(
+            [
+                sys.executable,
+                "-c",
+                _sleeper(sentinel, ignore_sigterm=True, ready=ready),
+            ]
+        )
     )
-    await asyncio.sleep(0.1)
+    await _wait_until_cancellable(ready)
 
     call.cancel()
     with pytest.raises(asyncio.CancelledError):
@@ -303,11 +346,18 @@ async def test_a_second_cancellation_cannot_abort_the_shutdown(tmp_path) -> None
     # grace period is being awaited would otherwise skip SIGKILL and leave a
     # SIGTERM-ignoring child running.
     sentinel = tmp_path / "survived"
+    ready = tmp_path / "ready"
     backend = LocalBackend(terminate_grace=1.0)
     call = asyncio.create_task(
-        backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
+        backend.exec(
+            [
+                sys.executable,
+                "-c",
+                _sleeper(sentinel, ignore_sigterm=True, ready=ready),
+            ]
+        )
     )
-    await asyncio.sleep(0.1)
+    await _wait_until_cancellable(ready)
 
     call.cancel()
     # The SIGTERM grace runs for 1.0s from the first cancel, so the second
@@ -464,11 +514,18 @@ async def test_aclose_waits_for_shutdowns_still_in_flight(tmp_path) -> None:
     # aclose is how a driver honours it while tearing down. A second cancel
     # is what leaves a shutdown running detached after the call has ended.
     sentinel = tmp_path / "survived"
+    ready = tmp_path / "ready"
     backend = LocalBackend(terminate_grace=1.0)
     call = asyncio.create_task(
-        backend.exec([sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)])
+        backend.exec(
+            [
+                sys.executable,
+                "-c",
+                _sleeper(sentinel, ignore_sigterm=True, ready=ready),
+            ]
+        )
     )
-    await asyncio.sleep(0.1)
+    await _wait_until_cancellable(ready)
 
     call.cancel()
     await asyncio.sleep(0.1)
