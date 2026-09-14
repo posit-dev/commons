@@ -4,9 +4,9 @@ on:
     # paths does not filter a tag push, so a release rebuilds the site
     # whatever it touched, which is what a release should do.
     tags: ["py-v*"]
-    paths: [pkg-py/**, docs/**, .github/workflows/quartodoc.yaml]
+    paths: [pkg-py/**, docs/**, .github/scripts/docs-version-badge.py, .github/workflows/quartodoc.yaml]
   pull_request:
-    paths: [pkg-py/**, docs/**, .github/workflows/quartodoc.yaml]
+    paths: [pkg-py/**, docs/**, .github/scripts/docs-version-badge.py, .github/workflows/quartodoc.yaml]
   workflow_dispatch:
 
 name: quartodoc.yaml

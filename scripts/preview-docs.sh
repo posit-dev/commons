@@ -126,7 +126,7 @@ build_py() {
   (cd "$root/pkg-py" && uv sync --extra shiny --group docs --quiet)
   (cd "$root/pkg-py" && uv run great-docs build)
   version="$(cd "$root/pkg-py" && uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
-  python3 "$root/.github/scripts/docs-version-badge.py" "$root/pkg-py/great-docs/_site" "$version"
+  (cd "$root/pkg-py" && uv run python "$root/.github/scripts/docs-version-badge.py" great-docs/_site "$version")
   rm -rf "$root/docs/py"
   cp -r "$root/pkg-py/great-docs/_site" "$root/docs/py"
 }
