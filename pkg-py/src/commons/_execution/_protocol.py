@@ -1,15 +1,19 @@
-"""The wire between the execution driver and its worker.
+"""The message protocol between the execution driver and its worker process.
 
-One JSON object per line, in both directions. The worker imports this module
-directly rather than as part of ``commons``: it runs under ``-I`` with only
-its own directory on the path, and pulling the package in would drag the
-agent's dependencies into a process whose whole point is to hold nothing.
-Nothing here may import from ``commons``.
+Messages are newline-delimited JSON: one object per line, in both
+directions.
 
-The far end runs model-written code, so the decode side treats every byte
-as hostile: a line of the wrong shape is a ``ProtocolError``, an
-unrecoverable channel a ``ChannelError``, and nothing the wire names is
-imported or constructed beyond the three frame libraries below.
+The worker imports this module directly rather than as part of ``commons``.
+It runs under ``python -I`` with only its own directory on the path, and
+importing the package would pull the agent's dependencies into a process
+that is deliberately kept free of them. For that reason, nothing in this
+module may import from ``commons``.
+
+Because the worker runs model-written code, the decode side treats every
+incoming byte as untrusted. A line that does not match the protocol raises
+``ProtocolError``; a channel that can no longer be trusted raises
+``ChannelError``. Nothing named on the wire is imported or constructed
+beyond the three supported frame libraries (pandas, polars, and pyarrow).
 """
 
 from __future__ import annotations
@@ -44,22 +48,24 @@ __all__ = [
 ]
 
 # The longest allowed message line. Whoever opens the channel must pass this
-# as `limit=`: `asyncio` defaults a stream to 64 KiB, which any real frame
-# exceeds. A message past the limit is a `ChannelError` from `read_message`.
+# as `limit=`, because `asyncio` caps a stream at 64 KiB by default and any
+# real frame exceeds that. A message past the limit surfaces as a
+# `ChannelError` from `read_message`.
 STREAM_LIMIT = 64 * 1024 * 1024
 
 # The largest a frame may be after Arrow decompression. IPC bodies can be
 # compressed, so a line well under STREAM_LIMIT can decode to far more.
-# 1 GiB covers any real frame while bounding what a hostile worker can make
-# the driver allocate.
+# 1 GiB covers any real frame while bounding how much memory an untrusted
+# worker can make the driver allocate.
 FRAME_BYTES_LIMIT = 1024**3
 
 # The deepest a JSON-shaped value may nest and still cross as JSON. `json`
-# itself used to bound this by raising `RecursionError`; as of 3.14 its
-# parser and encoder are iterative and never will, while everything a value
-# meets after the codec — `repr`, re-serialization, display — still
+# itself used to enforce a bound by raising `RecursionError`, but as of 3.14
+# its parser and encoder are iterative and never will — while everything a
+# value meets after the codec (`repr`, re-serialization, display) still
 # recurses. A value past the limit crosses as its repr, and a line past it
-# is refused: the codec stays the one chokepoint for pathological nesting.
+# is refused, so the codec stays the single chokepoint for pathological
+# nesting.
 _JSON_DEPTH_LIMIT = 100
 
 # The message envelope wraps a value in a few container levels of its own
@@ -72,8 +78,8 @@ _ENVELOPE_DEPTH = 8
 # importable at the far end.
 _FRAME_TYPES = {"pandas": "DataFrame", "polars": "DataFrame", "pyarrow": "Table"}
 
-# The repr fallback exists to be smaller than the value, so the repr itself
-# is capped.
+# The repr fallback exists to be smaller than the value it replaces, so the
+# repr itself is capped.
 _REPR_TEXT_LIMIT = 10_000
 
 # Printed output and tracebacks are clipped to this many characters when a
@@ -83,34 +89,35 @@ _TEXT_CLIP_LIMIT = 1024 * 1024
 # The largest Arrow frame that still fits the line once it is base64, which
 # costs four bytes for every three. A frame above this would be encoded and
 # then thrown away again by `encode_message`. The frame is not the whole
-# line, so the budget holds back what rides beside it: printed output and a
-# traceback, each clipped to `_TEXT_CLIP_LIMIT`, and the envelope. Text that
-# escapes long can still overrun it; `encode_message` remains the authority.
+# line, so the budget also reserves room for what rides beside it: printed
+# output and a traceback, each clipped to `_TEXT_CLIP_LIMIT`, plus the
+# envelope. Text that escapes long can still overrun the limit;
+# `encode_message` remains the final authority.
 _FRAME_WIRE_LIMIT = (STREAM_LIMIT - 2 * _TEXT_CLIP_LIMIT - 4096) * 3 // 4
 
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
 
-# Arrow IPC message header types, and the one field type that writes no
-# buffer, as the format's flatbuffer schemas number them.
+# Arrow IPC message header types, plus the one field type that writes no
+# buffer, numbered as the format's flatbuffer schemas number them.
 _SCHEMA = 1
 _DICTIONARY_BATCH = 2
 _RECORD_BATCH = 3
 _NULL_TYPE = 1
 
-# How deep a schema may nest its fields: the walk below holds one iterator
+# How deep a schema may nest its fields; the walk below holds one iterator
 # per level. pyarrow refuses to read a stream nested even half this deep,
 # so the cap is reachable only by a schema written by hand.
 _SCHEMA_DEPTH_LIMIT = 128
 
-# `_coerce_scalar` returns this when a value has no JSON-carryable rendering.
+# Returned by `_coerce_scalar` when a value has no JSON-carryable rendering.
 _FALL_BACK = object()
 
 
 class ProtocolError(Exception):
-    """A line on the channel was not a message this protocol defines.
+    """A line on the channel was not a valid protocol message.
 
-    Recoverable: only the offending message is lost. For the failure that
-    is not, see ``ChannelError``.
+    This error is recoverable: only the offending message is lost. See
+    ``ChannelError`` for the unrecoverable case.
     """
 
 
@@ -119,24 +126,25 @@ class ChannelError(Exception):
 
     Raised when a message overran the stream's limit: the reader has
     discarded bytes up to an offset the far end chose, so no later line can
-    be trusted and the channel must be abandoned. Not a ``ProtocolError``,
-    so that drivers which tolerate junk lines cannot swallow it.
+    be trusted and the channel must be abandoned. This deliberately does not
+    subclass ``ProtocolError``, so that drivers which tolerate malformed
+    lines cannot accidentally swallow it.
     """
 
 
 @dataclass(frozen=True, kw_only=True)
 class OpaqueValue:
-    """Stands in for a value that could not be copied across the channel.
+    """A stand-in for a value that could not be copied across the channel.
 
-    An open file, a database connection, a fitted model: values that only
-    make sense in the process holding them. Crossing by reference is what
-    this transport exists to prevent, so what crosses is what a REPL would
-    have shown instead.
+    Some values — an open file, a database connection, a fitted model —
+    only make sense inside the process that holds them. Copying them across
+    by reference is exactly what this transport exists to prevent, so what
+    crosses instead is the text a REPL would have shown.
 
     Both fields are written by the far end, which runs model-written code:
-    treat them as hostile text. Escape them wherever they are rendered, and
-    never use ``type_name`` as proof of the value's type — the sender chose
-    it.
+    treat them as untrusted text. Escape them wherever they are rendered,
+    and never rely on ``type_name`` as proof of the value's type — the
+    sender chose it.
     """
 
     type_name: str
@@ -145,12 +153,12 @@ class OpaqueValue:
 
 @dataclass(frozen=True, kw_only=True)
 class Ready:
-    """Worker to driver, once the sandbox is up and the loop is running."""
+    """Sent by the worker to the driver once the sandbox is up and running."""
 
 
 @dataclass(frozen=True, kw_only=True)
 class Call:
-    """Driver to worker: code to run, and the handles it may reach for."""
+    """Sent by the driver to the worker: code to run, and the handles it may use."""
 
     id: str
     code: str
@@ -159,10 +167,10 @@ class Call:
 
 @dataclass(frozen=True, kw_only=True)
 class Result:
-    """Worker to driver: what the code evaluated to, and what it printed.
+    """Sent by the worker to the driver: what the code evaluated to, and what it printed.
 
     ``value`` is ``None`` both when the code ended in a statement and when it
-    ended in an expression evaluating to ``None``. The two are the same thing
+    ended in an expression that evaluated to ``None``. The two are equivalent
     to the model, which is why the REPL suppresses a ``None`` result.
     """
 
@@ -174,7 +182,7 @@ class Result:
 
 @dataclass(frozen=True, kw_only=True)
 class Error:
-    """Worker to driver: the code raised, and this is what it said."""
+    """Sent by the worker to the driver: the code raised, and this is what it said."""
 
     id: str
     message: str
@@ -185,24 +193,24 @@ Message = Ready | Call | Result | Error
 
 
 def encode_value(value: Any) -> dict[str, Any]:
-    """Render ``value`` as the JSON-shaped payload that carries it.
+    """Render ``value`` as the JSON-shaped payload that carries it across the channel.
 
-    Frames cross as Arrow IPC; a ``Series`` crosses as a one-column frame.
-    Everything else crosses as JSON when JSON can hold it — numpy scalars
-    and arrays count, so ``df["a"].sum()`` arrives as a number — and as its
-    ``repr`` when it cannot, which covers datetimes, ``Decimal``, and
-    anything process-local. Containers arrive in their JSON shape: a tuple
-    comes back a list, dict keys come back as strings, and a container
-    holding a frame crosses as its repr as a whole.
+    DataFrames cross as Arrow IPC, and a ``Series`` crosses as a one-column
+    frame. Everything else crosses as JSON when JSON can represent it —
+    numpy scalars and arrays count, so ``df["a"].sum()`` arrives as a plain
+    number — and as its ``repr`` when it cannot, which covers datetimes,
+    ``Decimal``, and anything process-local. Containers arrive in their JSON
+    shape: a tuple comes back as a list, dict keys come back as strings, and
+    a container holding a frame crosses as its repr as a whole.
 
-    Never raises: a value that cannot cross, or is too large for the
-    channel, arrives as its repr, so a bad value costs the value, never
-    the call.
+    This function never raises: a value that cannot cross, or that is too
+    large for the channel, arrives as its repr. A bad value costs the value,
+    never the call.
     """
     try:
         if isinstance(value, OpaqueValue):
-            # Already crossed once: pass it through rather than wrapping
-            # its repr in a second OpaqueValue.
+            # The value has crossed once already: pass it through rather
+            # than wrapping its repr in a second OpaqueValue.
             return {
                 "encoding": "repr",
                 "type": _clip(value.type_name),
@@ -211,7 +219,8 @@ def encode_value(value: Any) -> dict[str, Any]:
         frame = _as_frame(value)
     except Exception:  # noqa: BLE001 - a spoofed __class__ must not escape
         # `isinstance` is model-controlled input (`__class__` is
-        # assignable), so classification itself sits inside the fallback.
+        # assignable), so the classification itself has to sit inside the
+        # fallback.
         return _repr_payload(value)
     if frame is not None:
         library, frame_value = frame
@@ -243,7 +252,7 @@ def encode_value(value: Any) -> dict[str, Any]:
 
 
 def _repr_payload(value: Any) -> dict[str, Any]:
-    # `repr`, never `pickle`: a pickle stream is a program, and this one
+    # Use `repr`, never `pickle`: a pickle stream is a program, and this one
     # would have been written by whatever the worker just ran.
     return {
         "encoding": "repr",
@@ -253,7 +262,7 @@ def _repr_payload(value: Any) -> dict[str, Any]:
 
 
 def _safe_repr(value: Any) -> str:
-    """``repr(value)``, guaranteed to return bounded text and never raise."""
+    """``repr(value)``, guaranteed to return bounded text and to never raise."""
     try:
         text = repr(value)
     except Exception:  # noqa: BLE001 - the last resort may not itself raise
@@ -266,10 +275,11 @@ def _safe_repr(value: Any) -> str:
 def _exceeds_json_depth(value: Any, limit: int = _JSON_DEPTH_LIMIT) -> bool:
     """Whether ``value`` nests JSON containers deeper than ``limit``.
 
-    A stack of iterators, one per level: the inputs this exists for are
-    exactly the ones a recursive walk could not survive, and auxiliary
-    memory stays proportional to nesting depth — a wide hostile value pays
-    one ``isinstance`` per element, never a stack entry per child.
+    The walk uses an explicit stack of iterators, one per level, because the
+    inputs this function exists for are exactly the ones a recursive walk
+    could not survive. Auxiliary memory stays proportional to nesting depth,
+    so a very wide hostile value pays one ``isinstance`` per element rather
+    than a stack entry per child.
     """
     stack = [(_container_children(value), 1)]
     while stack:
@@ -299,11 +309,12 @@ def _container_children(node: Any) -> Iterator[Any]:
 def _coerce_scalar(value: Any) -> Any:
     """A JSON-carryable rendering of a value JSON doesn't know, or ``_FALL_BACK``.
 
-    numpy scalars are the everyday case (``df["a"].sum()`` is an ``int64``):
-    JSON numbers in every respect but their class, and a repr would
-    silently downgrade them. numpy arrays cross as their ``tolist``.
-    ``np.bool_``, datetimes, and ``Decimal`` stay reprs on purpose: theirs
-    are readable, and a guessed type would change what the model sees.
+    numpy scalars are the everyday case: ``df["a"].sum()`` is an ``int64``,
+    a JSON number in every respect but its class, and falling back to repr
+    would silently downgrade it. numpy arrays cross as their ``tolist``.
+    ``np.bool_``, datetimes, and ``Decimal`` deliberately stay as reprs:
+    their reprs are readable, and guessing a type would change what the
+    model sees.
     """
     if isinstance(value, numbers.Integral):
         candidate: Any = int(value)
@@ -319,20 +330,21 @@ def _coerce_scalar(value: Any) -> Any:
             return _FALL_BACK
     try:
         # An object array's tolist can hide arbitrarily deep nesting; the
-        # depth limit applies to what crosses, not to what was asked for.
+        # depth limit applies to what actually crosses, not to what was
+        # asked for.
         if _exceeds_json_depth(candidate):
             return _FALL_BACK
         json.dumps(candidate)
     except Exception:  # noqa: BLE001 - any failure means the repr fallback
         # An int past the interpreter's digit limit, a complex array's
-        # tolist: nothing JSON carries after all.
+        # tolist: things JSON cannot carry after all.
         return _FALL_BACK
     return candidate
 
 
-# Recognized without importing anything: a value can only be a pandas frame
-# if pandas is already imported, and forcing the import here would make the
-# worker pay for a library the code it ran never asked for.
+# Frames are recognized without importing anything: a value can only be a
+# pandas frame if pandas is already imported, and forcing the import here
+# would make the worker pay for a library the code it ran never asked for.
 def _as_frame(value: Any) -> tuple[str, Any] | None:
     """The ``(library, frame)`` ``value`` can cross as, or ``None``.
 
@@ -352,10 +364,10 @@ def _as_frame(value: Any) -> tuple[str, Any] | None:
     return None
 
 
-# `None`, not an exception, for a frame Arrow will not carry: the caller
-# falls back to repr. Arrow's refusals span exception types beyond
-# `ValueError`/`TypeError`, and a fake frame (`__class__` is assignable)
-# raises `AttributeError`, so the catch is all of `Exception`.
+# Return `None`, not an exception, for a frame Arrow will not carry; the
+# caller falls back to repr. Arrow's refusals span exception types beyond
+# `ValueError` and `TypeError`, and a fake frame (`__class__` is assignable)
+# raises `AttributeError`, so the catch covers all of `Exception`.
 def _to_arrow_ipc(frame: Any, library: str) -> bytes | None:
     try:
         pyarrow = importlib.import_module("pyarrow")
@@ -376,9 +388,9 @@ def _to_arrow_ipc(frame: Any, library: str) -> bytes | None:
 def _deduplicated_columns(frame: Any) -> Any:
     """Rename duplicated pandas columns the way pandas itself would.
 
-    Arrow holds duplicate field names happily; only ``Table.from_pandas``
-    refuses them, and ``pd.concat(axis=1)`` output is too common to lose
-    over it.
+    Arrow accepts duplicate field names; only ``Table.from_pandas`` refuses
+    them, and the output of ``pd.concat(axis=1)`` is too common to lose over
+    it.
     """
     columns = list(frame.columns)
     if len(set(columns)) == len(columns):
@@ -395,15 +407,16 @@ def _deduplicated_columns(frame: Any) -> Any:
 
 
 # Annotated `Any` rather than `dict`, because the argument arrives off the
-# channel: distrusting its shape is the function's job, not its caller's.
+# channel: distrusting its shape is this function's job, not its caller's.
 def decode_value(payload: Any, *, max_frame_bytes: int = FRAME_BYTES_LIMIT) -> Any:
     """Read back a payload written by ``encode_value``.
 
-    Raises ``ProtocolError`` for anything that is not such a payload — the
-    far end runs model-written code, so a malformed or hostile payload is
-    ordinary and must not surface as whatever a codec raises first. A frame
-    decoding past ``max_frame_bytes`` is refused the same way, before the
-    memory is allocated.
+    Raises ``ProtocolError`` for anything that is not such a payload. The
+    far end runs model-written code, so a malformed or hostile payload is an
+    ordinary event and must surface as ``ProtocolError``, not as whatever a
+    codec happens to raise first. A frame that would decode to more than
+    ``max_frame_bytes`` is refused the same way, before that memory is
+    allocated.
     """
     encoding = payload.get("encoding") if isinstance(payload, dict) else None
     try:
@@ -428,7 +441,7 @@ def decode_value(payload: Any, *, max_frame_bytes: int = FRAME_BYTES_LIMIT) -> A
 def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
     # `library` names the module the frame is reconstructed with, so it is
     # checked against the known set before anything is imported: the wire
-    # gets to pick among three names and nothing else.
+    # gets to choose among three names and nothing else.
     if library not in _FRAME_TYPES:
         raise ProtocolError(f"unknown frame library: {library!r}")
     try:
@@ -438,8 +451,8 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
     # Only pandas spends a pointer on a null value. Arrow holds a null
     # column as a length and polars keeps it that way, so the cells the
     # caps below charge for are free unless the frame becomes a pandas
-    # one, and charging them anyway would refuse a frame this module is
-    # willing to encode.
+    # one; charging them anyway would refuse frames this module is willing
+    # to encode.
     cells = library == "pandas"
     try:
         _check_ipc_size(data, max_frame_bytes, cells)
@@ -452,10 +465,10 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
 
 def _rebuild_frame(table: Any, library: str) -> Any:
     # The wire names the library and carries the bytes separately, so a
-    # table Arrow accepts can still be one pandas or polars will not hold.
-    # Their refusals are ordinary exceptions of their own making, and the
-    # size is already checked, so anything raised here is the payload's
-    # fault and owes the caller a `ProtocolError`.
+    # table Arrow accepts can still be one that pandas or polars will not
+    # hold. Their refusals are ordinary exceptions of their own making, and
+    # the size is already checked, so anything raised here is the payload's
+    # fault and must surface to the caller as a `ProtocolError`.
     try:
         if library == "pandas":
             return table.to_pandas()
@@ -470,17 +483,17 @@ def _rebuild_frame(table: Any, library: str) -> Any:
 
 
 def _check_ipc_size(data: bytes, max_frame_bytes: int, cells: bool) -> None:
-    """Refuse a stream that declares more than ``max_frame_bytes`` decoded.
+    """Refuse a stream that declares more than ``max_frame_bytes`` once decoded.
 
-    Reads only the IPC framing and flatbuffer metadata: nothing is
+    Only the IPC framing and flatbuffer metadata are read: nothing is
     decompressed and no Arrow structure is built. Each record batch or
-    dictionary delta is charged the sum of its buffers, the uncompressed
-    length prefix for a compressed buffer and the declared length
-    otherwise, plus a pointer per cell for the null fields the schema
-    named, which write no buffer to be charged for. Anything that does
-    not parse as the layout pyarrow's writer emits is refused, which
-    honest traffic never trips because every stream on this channel came
-    from ``_to_arrow_ipc``.
+    dictionary delta is charged the sum of its buffers — the uncompressed
+    length prefix for a compressed buffer, the declared length otherwise —
+    plus one pointer per cell for the null fields named in the schema, which
+    write no buffer of their own to be charged for. Anything that does not
+    parse as the layout pyarrow's writer emits is refused; honest traffic
+    never trips this, because every stream on this channel came from
+    ``_to_arrow_ipc``.
     """
     pos = 0
     decoded = 0
@@ -544,40 +557,40 @@ def _ipc_message(metadata: bytes) -> tuple[int, int, int | None]:
 
 
 def _null_fields(metadata: bytes, schema: int) -> bytearray:
-    """Which of the schema's field nodes are the null type, in batch order.
+    """Which of the schema's field nodes have the null type, in batch order.
 
-    A null field is the one kind that writes no buffer at all, so it is
-    free on the wire and a pointer per cell in pandas. Which fields those
-    are has to come from the schema: a batch says how many nodes it
-    carries, not which of them cost nothing, and one string field's three
-    buffers are enough to hide two null columns behind it.
+    A null field is the one kind that writes no buffer at all: it is free on
+    the wire but costs a pointer per cell in pandas. Which fields those are
+    has to come from the schema, because a batch says how many nodes it
+    carries, not which of them are free — one string field's three buffers
+    are enough to hide two null columns behind it.
 
     A batch lists its nodes in the order this walk visits the fields,
-    parents before children, so a field's position is what the batch is
-    charged by. A dictionary-encoded field is one node holding indices,
-    however deep the type it encodes, and the walk stops there: those
-    values arrive in a batch of their own and cost pandas nothing, which
+    parents before children, so a field's position here is what the batch is
+    charged by. A dictionary-encoded field is a single node holding indices,
+    however deep the type it encodes, and the walk stops there: its values
+    arrive in a batch of their own and cost pandas nothing, since pandas
     refuses a null category outright and holds the rest by index.
     """
     fields_at = _table_field(metadata, schema, 1)
     if fields_at is None:
         return bytearray()
-    # A flag per field rather than the position of each null one: the
-    # positions are integers the far end decides how many of, and a schema
-    # entitled to name millions of them would be paid for in objects. A
-    # flag costs the byte the field's own offset cost.
+    # Store a flag per field rather than the position of each null one: the
+    # far end decides how many positions there are, and a schema entitled to
+    # name millions of them would be paid for in objects. A flag costs only
+    # the byte that the field's own offset already cost.
     flags = bytearray()
-    # Nothing guarantees the offsets move: a hand-built schema can point a
-    # field's children back at the field, and the walk would never end. No
-    # field costs fewer than sixteen bytes of message (pyarrow's writer
-    # spends nearer forty), so the message bounds how many it can hold.
-    # Garbage offsets fail their own reads long before this; it is here to
-    # end a cycle, not to catch one.
+    # Nothing guarantees the offsets advance: a hand-built schema can point
+    # a field's children back at the field itself, and the walk would never
+    # end. No field costs fewer than sixteen bytes of message (pyarrow's
+    # writer spends nearer forty), so the message length bounds how many it
+    # can hold. Garbage offsets fail their own reads long before this check;
+    # it is here to end a cycle, not to catch one.
     budget = len(metadata) // 16
-    # One iterator per level, never a list of every field: the counts are
-    # the far end's to choose, and a vector it is entitled to declare is
-    # long enough that reading it all in would be the allocation this
-    # function exists to refuse.
+    # Keep one iterator per level rather than a list of every field: the
+    # counts are the far end's to choose, and a vector it is entitled to
+    # declare is long enough that reading it all in would be the very
+    # allocation this function exists to refuse.
     stack = [_tables(metadata, fields_at)]
     while stack:
         field = next(stack[-1], None)
@@ -623,8 +636,8 @@ def _ipc_batch_size(
     size = _null_node_size(metadata, batch, nulls)
     if buffers_at is not None:
         start, count = _vector(metadata, buffers_at)
-        # A lying count would churn allocations until the reads ran out of
-        # message; the entries are 16 bytes each and must fit inside it.
+        # A count that lies would churn allocations until the reads ran out
+        # of message; each entry is 16 bytes and must fit inside it.
         if count > (len(metadata) - start) // 16:
             raise ProtocolError(
                 "malformed value payload: IPC buffer count overruns its message"
@@ -649,18 +662,19 @@ def _ipc_batch_size(
             if prefix < -1:
                 raise ProtocolError("malformed value payload: bad IPC buffer prefix")
             # A compressed buffer starts with its uncompressed length; -1
-            # marks a buffer stored uncompressed, which cost it the prefix.
+            # marks a buffer stored uncompressed, which is what cost it the
+            # prefix.
             size += length - 8 if prefix == -1 else prefix
     return size
 
 
 def _null_node_size(metadata: bytes, batch: int, nulls: bytearray) -> int:
-    """What the batch's null fields cost, at a pointer per cell.
+    """What the batch's null fields cost, at one pointer per cell.
 
-    Each is charged by its own node's length rather than the batch's, so
-    that a nested one is charged for the values it holds: a single row of
-    ``list<null>`` costs one offsets buffer on the wire and says in its
-    child node how many nulls that row unpacks into.
+    Each null field is charged by its own node's length rather than the
+    batch's, so a nested one is charged for the values it holds: a single
+    row of ``list<null>`` costs one offsets buffer on the wire, and its
+    child node says how many nulls that row unpacks into.
     """
     if not nulls:
         return 0
@@ -681,8 +695,9 @@ def _null_node_size(metadata: bytes, batch: int, nulls: bytearray) -> int:
             continue
         length = _i64(metadata, start + 16 * at)
         if length < 0:
-            # The length is signed on the wire and charged by below; a
-            # negative one would pay the batch back for its buffers.
+            # The length is signed on the wire and charged against the
+            # limit below; a negative one would pay the batch back for its
+            # buffers.
             raise ProtocolError("malformed value payload: IPC node of negative length")
         size += 8 * length
     return size
@@ -730,10 +745,10 @@ def _i64(buf: bytes, off: int) -> int:
 def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int, cells: bool) -> Any:
     """Read the stream, refusing to decode past ``max_frame_bytes``.
 
-    The runtime backstop to ``_check_ipc_size``, which enforces the cap from
-    the stream's declared metadata before anything decompresses. The two
-    should agree; if a crafted stream ever divides them, counting batches as
-    they materialize bounds the damage to one batch past the cap.
+    This is the runtime backstop to ``_check_ipc_size``, which enforces the
+    cap from the stream's declared metadata before anything decompresses.
+    The two should agree; if a crafted stream ever divides them, counting
+    batches as they materialize bounds the damage to one batch past the cap.
     """
     batches = []
     decoded = 0
@@ -749,13 +764,13 @@ def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int, cells: bool) -
 
 
 def _batch_cost(batch: Any, pyarrow: Any, cells: bool) -> int:
-    """What one batch costs once it is a frame, in bytes.
+    """What one batch costs once it becomes a frame, in bytes.
 
     ``nbytes`` is what Arrow holds, which is nothing for a null value: a
-    wide frame of null columns, or one row of a list of them, is
-    kilobytes of Arrow and a pointer per cell of pandas. Charging those
-    cells keeps this in step with the pre-flight instead of sharing its
-    blind spot, and only where they cost anything.
+    wide frame of null columns, or one row of a list of them, is kilobytes
+    of Arrow but a pointer per cell of pandas. Charging those cells keeps
+    this in step with the pre-flight check instead of sharing its blind
+    spot — and only where they actually cost anything.
     """
     if not cells:
         return batch.nbytes
@@ -764,10 +779,10 @@ def _batch_cost(batch: Any, pyarrow: Any, cells: bool) -> int:
 
 
 def _null_cells(array: Any, pyarrow: Any) -> int:
-    """How many values ``array`` holds that are the null type.
+    """How many values in ``array`` have the null type.
 
-    A dictionary is not walked into, for the reason ``_null_fields``
-    gives: its values reach pandas by index, never a pointer each.
+    Dictionary arrays are not walked into, for the reason ``_null_fields``
+    gives: their values reach pandas by index, never one pointer each.
     """
     kind = array.type
     if pyarrow.types.is_null(kind):
@@ -814,8 +829,8 @@ def encode_message(message: Message) -> bytes:
 
 
 def _encode_line(message: Message) -> bytes:
-    # `ensure_ascii` is what keeps the line a line: it escapes every newline
-    # inside a string, so only the terminator below is a real one.
+    # `ensure_ascii` is what keeps the line a single line: it escapes every
+    # newline inside a string, so only the terminator below is a real one.
     return json.dumps(_message_body(message), ensure_ascii=True).encode() + b"\n"
 
 
@@ -909,16 +924,16 @@ def _clip(text: str) -> str:
 def decode_message(line: bytes | str, *, max_frame_bytes: int = FRAME_BYTES_LIMIT) -> Message:
     """Read back a line written by ``encode_message``.
 
-    Raises ``ProtocolError`` for anything else: not JSON, not an object,
-    an unknown message type, or fields missing, extra, or the wrong shape.
-    Every field came off the channel, so nothing about its shape is
-    guaranteed; a wrong shape must fail here, not much later in a driver
-    that keys its in-flight calls on ``id``.
+    Raises ``ProtocolError`` for anything else: not JSON, not an object, an
+    unknown message type, or fields that are missing, extra, or the wrong
+    shape. Every field came off the channel, so nothing about its shape is
+    guaranteed; a wrong shape must fail here rather than much later, in a
+    driver that keys its in-flight calls on ``id``.
 
-    ``line`` is assumed to be one already bounded by the reader that
-    produced it: ``read_message`` refuses anything past ``STREAM_LIMIT``
-    before a line gets here. Its length is not checked again, so a caller
-    reading from somewhere else owes the bound itself.
+    ``line`` is assumed to be bounded already by the reader that produced
+    it: ``read_message`` refuses anything past ``STREAM_LIMIT`` before a
+    line gets here. Its length is not checked again, so a caller reading
+    from somewhere else must enforce that bound itself.
     """
     try:
         body = json.loads(line)
@@ -1007,7 +1022,7 @@ def _abbrev(line: bytes | str, limit: int = 200) -> str:
     """A short rendering of a rejected line, for an error message.
 
     The whole line can be megabytes of far-end-chosen bytes; it does not
-    belong whole in a log or a model's context.
+    belong whole in a log or in a model's context.
     """
     text = repr(line)
     return text if len(text) <= limit else text[:limit] + "…"
@@ -1018,9 +1033,9 @@ async def read_message(
 ) -> Message | None:
     """Read the next message, or ``None`` once the channel is done.
 
-    A worker that has exited is the ordinary end of a channel, so that is
-    an answer, not an exception. A line past the stream's limit is a
-    ``ChannelError``, on that call and every later one: the reader has
+    A worker that has exited is the ordinary end of a channel, so that is an
+    answer rather than an exception. A line past the stream's limit is a
+    ``ChannelError``, on that call and on every later one: the reader has
     discarded bytes up to an offset the far end chose, so no later boundary
     can be trusted and the channel must be abandoned.
     """
@@ -1036,7 +1051,8 @@ async def read_message(
         )
         # Latch onto the reader so a driver that catches and continues
         # cannot get a "recovered" read positioned by the far end.
-        # (`setattr`: the latch is ours, not StreamReader's typed surface.)
+        # (`setattr` because the latch is ours, not part of StreamReader's
+        # typed surface.)
         setattr(reader, "_commons_channel_error", channel_error)  # noqa: B010
         raise channel_error from error
     if not line:
