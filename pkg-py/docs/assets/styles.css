@@ -149,12 +149,17 @@ body.quarto-dark
   color: inherit;
 }
 
+/* Ink over the navbar background, which is #f0f0f0 light and #1a1a1a dark, so
+   the two alphas land a similar distance from their base: #cecece and #3a3a3a.
+   great-docs hovers its icon buttons at 10% and 12%, but those carry a border
+   to help them read and a bare text link does not, so these go a step further.
+   6% was the buttons' resting tint and was invisible as a hover. */
 :root {
-  --commons-navbar-hover-bg: rgb(0 0 0 / 6%);
+  --commons-navbar-hover-bg: rgb(0 0 0 / 14%);
 }
 
 body.quarto-dark {
-  --commons-navbar-hover-bg: rgb(255 255 255 / 12%);
+  --commons-navbar-hover-bg: rgb(255 255 255 / 14%);
 }
 
 /* great-docs sizes every table to its widest unwrapped line and then scrolls
