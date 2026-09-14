@@ -108,6 +108,43 @@ include_in_header:
       })();
       </script>
 
+  # Selected by class substring on purpose: great-docs drops every
+  # include_in_header entry whose text contains its own "gd-announcement"
+  # marker, so naming the class in full removes this script silently.
+  # The banner is built client-side from a meta tag and its url is used
+  # verbatim, so Quarto never rewrites it per page depth and a relative link
+  # resolves against the current page's directory: from user-guide/ it asked
+  # for user-guide/user-guide/. Quarto's own offset meta gives the prefix back,
+  # which is what great-docs' version selector and sidebar scripts use, and it
+  # stays correct in a pull request preview and inside a /v/ copy.
+  - text: |
+      <script>
+      (function () {
+        var tries = 0;
+        function fix() {
+          var link = document.querySelector('[class*="announcement-banner"] a');
+          if (!link) {
+            if (tries++ < 100) return window.setTimeout(fix, 50);
+            return;
+          }
+          if (link.dataset.commonsOffsetApplied) return;
+          var raw = link.getAttribute("href") || "";
+          if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
+          var meta = document.querySelector('meta[name="quarto:offset"]');
+          var offset = meta ? meta.getAttribute("content") || "" : "";
+          link.dataset.commonsOffsetApplied = "1";
+          if (offset && offset !== "./") {
+            link.setAttribute("href", offset.replace(/\/?$/, "/") + raw);
+          }
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", fix);
+        } else {
+          fix();
+        }
+      })();
+      </script>
+
 versions:
   - label: "0.2.0 (dev)"
     tag: dev
