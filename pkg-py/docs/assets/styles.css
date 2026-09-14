@@ -45,10 +45,10 @@ h3 {
 }
 
 /* Show the R logo in place of the "R" navbar link text. The url() resolves
-   relative to this stylesheet, so it works from any page depth (unlike an
-   img src written into the navbar HTML). Both files live under assets/
-   because quarto preview (1.10) fails to copy a CSS url() resource located
-   at the project root: "Cannot copy ... to a subdirectory of itself". */
+   relative to this stylesheet, so it works from any page depth and from any
+   versioned copy of the site (unlike an img src written into the navbar
+   HTML). great-docs copies this stylesheet to the site root and the assets
+   directory under user-guide/, which is what the path below reflects. */
 .navbar a[href$="/r/"] {
   display: flex;
   align-items: center;
@@ -65,7 +65,7 @@ h3 {
 
 .navbar a[href$="/r/"] .r-logo {
   font-size: 0;
-  background: url("logos/r-logo.svg") no-repeat center / contain;
+  background: url("user-guide/assets/logos/r-logo.svg") no-repeat center / contain;
   width: 1.29rem;
   height: 1rem;
   /* Optical alignment: the logo's visual weight sits low (the gray oval is

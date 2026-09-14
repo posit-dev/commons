@@ -28,3 +28,59 @@ reference:
   - title: Shiny UI and server
     desc: "Put a commons agent inside of an interactive chat app. Needs the `shiny` extra."
     contents: [ui.app, ui.server, ui.theme, ui.commons_chat_dependency, ui.asset_base_url]
+
+# Nested under `site:`, which is the key great-docs reads; a top-level
+# `css:` is silently ignored. Paths are relative to the project root.
+site:
+  css:
+    - docs/assets/styles.css
+
+# The navbar logo, as the previous Quarto config had it. The hex sticker is
+# a homepage image rather than the navbar mark.
+logo:
+  light: docs/assets/logos/python-logo.svg
+
+authors:
+  - name: Josh Taillon
+    role: Maintainer
+    affiliation: Posit, PBC
+
+funding:
+  name: Posit Software, PBC
+  roles:
+    - Copyright holder
+    - funder
+  homepage: https://posit.co
+
+include_in_header:
+  # The icon tags pkgdown writes for the R site, so both serve the same icons
+  # from the shared /favicon/ at the site root. A leading / is
+  # project-relative and Quarto rewrites it per page depth. great-docs'
+  # `favicon:` key takes a single file and would drop the manifest and the
+  # other sizes.
+  - text: |
+      <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
+      <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg">
+      <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
+      <link rel="icon" sizes="any" href="/favicon/favicon.ico">
+      <link rel="manifest" href="/favicon/site.webmanifest">
+  # No config key adds a navbar link, and the generated _quarto.yml is
+  # rewritten on every build, so the R cross-link is injected next to
+  # great-docs' own navbar tools. The href is absolute so it works from a
+  # pull request preview and from every /v/ copy, matching the mirror-image
+  # link in pkg-r/_pkgdown.yml. The empty span is what
+  # docs/assets/styles.css turns into the R logo.
+  - text: |
+      <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        var tools = document.querySelector(".quarto-navbar-tools");
+        if (!tools || document.querySelector(".commons-r-link")) return;
+        var link = document.createElement("a");
+        link.className = "nav-link commons-r-link";
+        link.href = "https://posit-dev.github.io/commons/r/";
+        link.title = "R Documentation";
+        link.setAttribute("aria-label", "R documentation");
+        link.innerHTML = '<span class="r-logo"></span>';
+        tools.prepend(link);
+      });
+      </script>
