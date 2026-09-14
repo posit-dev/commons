@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>semantic_layer – commons</title>
+<title>semantic_layer() – commons | commons</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -71,6 +71,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-search/fuse.min.js"></script>
 <script src="../site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="../">
+<link href="../favicon.ico" rel="icon">
 <script src="../site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
 <script src="../site_libs/quarto-html/popper.min.js"></script>
@@ -80,7 +81,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-3e9b1289f5f353c49b617ce48ad2bc38.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-a38d33e8a12d5f06b93c4d053614e4f6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -108,19 +109,124 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<!-- The tags pkgdown writes for the R site, so both serve the same icons.
-     A leading / is project-relative; Quarto rewrites it per page depth. -->
-<link rel="icon" type="image/png" sizes="96x96" href="../favicon/favicon-96x96.png">
-<link rel="icon" type="image/svg+xml" href="../favicon/favicon.svg">
-<link rel="apple-touch-icon" sizes="180x180" href="../favicon/apple-touch-icon.png">
-<link rel="icon" sizes="any" href="../favicon/favicon.ico">
-<link rel="manifest" href="../favicon/site.webmanifest">
+<script>
+(function () {
+  var tries = 0;
+  function inject() {
+    if (document.querySelector(".commons-r-link")) return;
+    var tools = document.getElementById("gd-navbar-widgets");
+    if (!tools) {
+      if (tries++ < 100) return window.setTimeout(inject, 50);
+      return;
+    }
+    var link = document.createElement("a");
+    link.className = "nav-link gd-navbar-icon commons-r-link";
+    link.href = "https://posit-dev.github.io/commons/r/";
+    link.title = "R Documentation";
+    link.setAttribute("aria-label", "R documentation");
+    link.innerHTML = '<span class="r-logo"></span>';
+    tools.insertBefore(link, tools.firstChild);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", inject);
+  } else {
+    inject();
+  }
+})();
+</script>
+<script>
+(function () {
+  var tries = 0;
+  function fix() {
+    var link = document.querySelector('[class*="announcement-banner"] a');
+    if (!link) {
+      if (tries++ < 100) return window.setTimeout(fix, 50);
+      return;
+    }
+    if (link.dataset.commonsOffsetApplied) return;
+    var ann = document.querySelector('meta[name$="announcement"]');
+    var raw = ann ? ann.getAttribute("data-url") || "" : "";
+    if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
+    var off = document.querySelector('meta[name="quarto:offset"]');
+    var prefix = (off ? off.getAttribute("content") || "./" : "./");
+    var fixed = prefix.replace(/\/?$/, "/") + raw;
+    link.setAttribute("href", fixed);
+    // Quarto stashes the pre-rewrite href here and its external-link
+    // pass restores it, which would undo the line above. That pass
+    // treats this link as external whenever the served prefix differs
+    // from site_url, which is the case in every pull request preview,
+    // so both the opt-out class and the stashed value are set.
+    link.classList.add("no-external");
+    link.dataset.originalHref = fixed;
+    link.dataset.commonsOffsetApplied = "1";
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", fix);
+  } else {
+    fix();
+  }
+})();
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'termshow.css'}));</script>
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox.css'}));</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'gd-lightbox.js';s.defer=true;document.head.appendChild(s);})();</script>
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox-compare.css'}));</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'gd-lightbox-compare.js';s.defer=true;document.head.appendChild(s);})();</script>
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox-annotate.css'}));</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'gd-lightbox-annotate.js';s.defer=true;document.head.appendChild(s);})();</script>
+<link rel="icon" type="image/x-icon" href="../favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../apple-touch-icon.png">
+<script src="../theme-init.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/posit-dev/supported-by-posit/js/badge.min.js"></script>
+<meta name="gd-announcement" data-content="Heads up! <code>commons</code> for Python is <em>still in beta</em> and is not yet equal to the R package in functionality. Click here to see specific feature parity." data-type="info" data-dismissable="true" data-url="user-guide/feature-parity.html" data-style="" data-position="above-navbar">
+<meta name="gd-version-map" content="{&quot;versions&quot;:[{&quot;tag&quot;:&quot;dev&quot;,&quot;label&quot;:&quot;0.2.0 (dev)&quot;,&quot;path_prefix&quot;:&quot;v/dev&quot;,&quot;prerelease&quot;:true},{&quot;tag&quot;:&quot;0.1.0b1&quot;,&quot;label&quot;:&quot;0.1.0b1&quot;,&quot;latest&quot;:true,&quot;path_prefix&quot;:&quot;&quot;,&quot;prerelease&quot;:true}],&quot;pages&quot;:{}}">
 
 
-<link rel="stylesheet" href="../assets/styles.css">
+<link rel="stylesheet" href="../styles.css">
+  <link rel="alternate" type="text/markdown" href="semantic_layer.md">
+  <link rel="canonical" href="https://posit-dev.github.io/commons/reference/semantic_layer.html">
+  <meta name="description" content="Collect measures into a semantic layer.">
+  <script type="application/ld+json">
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "commons",
+    "description": "AI Agents for Data Analysis",
+    "license": "https://opensource.org/licenses/MIT",
+    "url": "https://posit-dev.github.io/commons",
+    "documentation": "https://posit-dev.github.io/commons",
+    "programmingLanguage": {
+      "@type": "ComputerLanguage",
+      "name": "Python"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "name": "semantic_layer - commons",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "commons"
+    },
+    "url": "https://posit-dev.github.io/commons/reference/semantic_layer.html"
+  }
+]
+</script>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="semantic_layer() – commons | commons">
+  <meta property="og:description" content="Collect measures into a semantic layer.">
+  <meta property="og:url" content="https://posit-dev.github.io/commons/reference/semantic_layer.html">
+  <meta property="og:site_name" content="commons">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="semantic_layer() – commons | commons">
+  <meta name="twitter:description" content="Collect measures into a semantic layer.">
 </head>
 
-<body class="nav-sidebar floating nav-fixed quarto-light">
+<body class="gd-ref-sidebar nav-sidebar floating nav-fixed doc-api-page quarto-light">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
@@ -128,30 +234,22 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="../index.html" class="navbar-brand navbar-brand-logo">
-    <img src="../assets/logos/python-logo.svg" alt="" class="navbar-logo light-content">
-    <img src="../assets/logos/python-logo.svg" alt="" class="navbar-logo dark-content">
+    <img src="../python-logo.svg" alt="commons" class="navbar-logo light-content">
+    <img src="../python-logo.svg" alt="commons" class="navbar-logo dark-content">
     </a>
     <a class="navbar-brand" href="../index.html">
     <span class="navbar-title">commons</span>
     </a>
   </div>
-            <div id="quarto-search" class="" title="Search"></div>
+            <div id="quarto-search" class=""></div>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
   <span class="navbar-toggler-icon"></span>
 </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="../get-started.html"> 
-<span class="menu-text">Get started</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="../governance.html"> 
-<span class="menu-text">Security and governance</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="../feature-parity.html"> 
-<span class="menu-text">Feature parity</span></a>
+    <a class="nav-link" href="../user-guide/get-started.html"> 
+<span class="menu-text">User Guide</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link active" href="../reference/index.html" aria-current="page"> 
@@ -160,18 +258,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ul>
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
-    <a class="nav-link" href="https://posit-dev.github.io/commons/r/"> 
-<span class="menu-text"><span class="r-logo" title="R Documentation">R Documentation</span></span></a>
-  </li>  
-  <li class="nav-item compact">
-    <a class="nav-link" href="https://pypi.org/project/commons/"> <i class="bi bi-box-seam" role="img" aria-label="commons on PyPI">
-</i> 
-<span class="menu-text"></span></a>
-  </li>  
-  <li class="nav-item compact">
-    <a class="nav-link" href="https://github.com/posit-dev/commons"> <i class="bi bi-github" role="img">
-</i> 
-<span class="menu-text"></span></a>
+    <span class="nav-link">
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="26" data-forks="1"></div>
+    </span>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -184,7 +273,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
         <i class="bi bi-layout-text-sidebar-reverse"></i>
       </button>
-        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../reference/Commons.html">Main functions</a></li><li class="breadcrumb-item"><a href="../reference/semantic_layer.html">semantic_layer</a></li></ol></nav>
+        <h1 class="quarto-secondary-nav-title no-breadcrumbs gd-ref-title"><span class="gd-ref-title-prefix">API</span><span class="gd-ref-title-sep">/</span><span class="gd-ref-title-name">semantic_layer()</span></h1>
         <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
         </a>
     </div>
@@ -197,20 +286,17 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
         <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
-  <a href="../reference/index.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Reference</span></a>
+  <div class="sidebar-item-container" style="padding-bottom: 0.5rem; padding-top: 0.25rem;"> 
+  <a href="../reference/index.html" style="font-family: &quot;Open Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif;" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">API Index</span></a>
   </div>
 </li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+            <a class="sidebar-item-text sidebar-link text-start">
  <span class="menu-text">Main functions</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+</div>
+      <ul id="quarto-sidebar-section-1" class="list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../reference/Commons.html" class="sidebar-item-text sidebar-link">
@@ -245,13 +331,114 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   </li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true">
+            <a class="sidebar-item-text sidebar-link text-start">
+ <span class="menu-text">Commons Methods</span></a>
+</div>
+      <ul id="quarto-sidebar-section-2" class="list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.__repr__.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.__repr__</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.__deepcopy__.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.__deepcopy__</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.chat.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.chat</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.stream_async.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.stream_async</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.chat_async.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.chat_async</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.stream.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.stream</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.chat_structured.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.chat_structured</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.chat_structured_async.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.chat_structured_async</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.extract_data.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.extract_data</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.extract_data_async.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.extract_data_async</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.to_solver.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.to_solver</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.citation_corpus.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.citation_corpus</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.prewarm.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.prewarm</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.add_turn.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.add_turn</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.set_turns.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.set_turns</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/Commons.queue_restore_reminder.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Commons.queue_restore_reminder</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start">
  <span class="menu-text">Supporting types</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-2" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-2" class="collapse list-unstyled sidebar-section depth1 show">  
+</div>
+      <ul id="quarto-sidebar-section-3" class="list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="../reference/DataSource.html" class="sidebar-item-text sidebar-link">
@@ -298,41 +485,82 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   </li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
-            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true">
+            <a class="sidebar-item-text sidebar-link text-start">
+ <span class="menu-text">DataSource Methods</span></a>
+</div>
+      <ul id="quarto-sidebar-section-4" class="list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/DataSource.from_frames.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">DataSource.from_frames</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/DataSource.from_engine.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">DataSource.from_engine</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/DataSource.from_board.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">DataSource.from_board</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/DataSource.query.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">DataSource.query</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/DataSource.ensure_loaded.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">DataSource.ensure_loaded</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../reference/DataSource.dialect.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">DataSource.dialect</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start">
  <span class="menu-text">Shiny UI and server</span></a>
-          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-3" role="navigation" aria-expanded="true" aria-label="Toggle section">
-            <i class="bi bi-chevron-right ms-2"></i>
-          </a> 
-      </div>
-      <ul id="quarto-sidebar-section-3" class="collapse list-unstyled sidebar-section depth1 show">  
+</div>
+      <ul id="quarto-sidebar-section-5" class="list-unstyled sidebar-section depth1 show">  
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/app.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">app</span></a>
+  <a href="../reference/ui.app.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">ui.app</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/server.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">server</span></a>
+  <a href="../reference/ui.server.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">ui.server</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/theme.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">theme</span></a>
+  <a href="../reference/ui.theme.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">ui.theme</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/commons_chat_dependency.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">commons_chat_dependency</span></a>
+  <a href="../reference/ui.commons_chat_dependency.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">ui.commons_chat_dependency</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../reference/asset_base_url.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">asset_base_url</span></a>
+  <a href="../reference/ui.asset_base_url.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">ui.asset_base_url</span></a>
   </div>
 </li>
       </ul>
@@ -342,33 +570,52 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </nav>
 <div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
-    <h2 id="toc-title">On this page</h2>
-   
-  <ul>
-  <li><a href="#commons.semantic_layer" id="toc-commons.semantic_layer" class="nav-link active" data-scroll-target="#commons.semantic_layer">semantic_layer</a></li>
-  </ul>
-</nav>
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
+        
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../reference/Commons.html">Main functions</a></li><li class="breadcrumb-item"><a href="../reference/semantic_layer.html">semantic_layer</a></li></ol></nav></header>
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h2 class="title" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 1.25rem;"><span class="doc-object-name doc-function doc-label doc-label-function">semantic_layer()</span></h2>
+</div>
 
 
 
+<div class="quarto-title-meta">
 
-<section id="commons.semantic_layer" class="level1">
-<h1>semantic_layer</h1>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>semantic_layer(<span class="op">*</span>items)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div class="doc-subject">
 <p>Collect measures into a semantic layer.</p>
+</div>
+<div class="doc-usage-source">
+<p>Usage</p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_measures.py#L452-L502" target="_blank" rel="noopener">Source</a></p>
+</div>
+<div class="doc-signature doc-Kind.FUNCTION">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">semantic_layer</span>(<span class="op">*</span><span class="va">items</span>)</span></code></pre></div>
+</div>
+<div class="doc-text">
 <p>Each item is a measure, a list (or tuple) of measures, a module, or a path to a Python file or a directory of them. Directory searches are not recursive.</p>
 <p>A sibling file is imported by plain absolute import; its directory is on sys.path only while the file loads. Even a single requested file puts its whole directory on sys.path, so every .py file beside it – and every subdirectory, which is importable as a package – is checked: a name that collides with the standard library, an installed package, or a module already imported from elsewhere is a construction error. A sibling imported this way stays in sys.modules under its bare name for the rest of the process, so two directories that each define a same-named helper cannot both be loaded in one process.</p>
 <p>Collecting the same measure twice – the same file passed alongside its own directory, say – is not an error; two different measures sharing one name is. The R implementation is stricter here: it rejects a repeated name even when it is the same measure twice.</p>
+</div>
 
 
-</section>
 
-</main> <!-- /main -->
+</main>
+<hr style="padding: 0; margin: 0;">
+ <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";
@@ -378,68 +625,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       icon: icon
     };
     anchorJS.add('.anchored');
-    const isCodeAnnotation = (el) => {
-      for (const clz of el.classList) {
-        if (clz.startsWith('code-annotation-')) {                     
-          return true;
-        }
-      }
-      return false;
-    }
-    const onCopySuccess = function(e) {
-      // button target
-      const button = e.trigger;
-      // don't keep focus
-      button.blur();
-      // flash "checked"
-      button.classList.add('code-copy-button-checked');
-      var currentTitle = button.getAttribute("title");
-      button.setAttribute("title", "Copied!");
-      let tooltip;
-      if (window.bootstrap) {
-        button.setAttribute("data-bs-toggle", "tooltip");
-        button.setAttribute("data-bs-placement", "left");
-        button.setAttribute("data-bs-title", "Copied!");
-        tooltip = new bootstrap.Tooltip(button, 
-          { trigger: "manual", 
-            customClass: "code-copy-button-tooltip",
-            offset: [0, -8]});
-        tooltip.show();    
-      }
-      setTimeout(function() {
-        if (tooltip) {
-          tooltip.hide();
-          button.removeAttribute("data-bs-title");
-          button.removeAttribute("data-bs-toggle");
-          button.removeAttribute("data-bs-placement");
-        }
-        button.setAttribute("title", currentTitle);
-        button.classList.remove('code-copy-button-checked');
-      }, 1000);
-      // clear code selection
-      e.clearSelection();
-    }
-    const getTextToCopy = function(trigger) {
-      const outerScaffold = trigger.parentElement.cloneNode(true);
-      const codeEl = outerScaffold.querySelector('code');
-      for (const childEl of codeEl.children) {
-        if (isCodeAnnotation(childEl)) {
-          childEl.remove();
-        }
-      }
-      return codeEl.innerText;
-    }
-    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
-      text: getTextToCopy
-    });
-    clipboard.on('success', onCopySuccess);
-    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
-      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
-        text: getTextToCopy,
-        container: window.document.getElementById('quarto-embedded-source-code-modal')
-      });
-      clipboardModal.on('success', onCopySuccess);
-    }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
         var filterRegex = new RegExp("https:\/\/posit-dev\.github\.io\/commons\/py\/");
@@ -772,17 +957,31 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div> <!-- /content -->
 <footer class="footer">
   <div class="nav-footer">
-    <div class="nav-footer-left">
-<p>Developed by Josh Taillon, Posit Software, PBC.</p>
-</div>   
-    <div class="nav-footer-center">
-      &nbsp;
-    </div>
-    <div class="nav-footer-right">
-<p>Site built with <a href="https://quarto.org/">Quarto</a>.</p>
+<div class="nav-footer-center">
+<p>Developed by <a href="https://opensource.posit.co/people/josh-taillon/"><strong>Josh&nbsp;Taillon</strong></a>. Supported by <a href="https://posit.co"><strong>Posit&nbsp;Software,&nbsp;PBC</strong></a>.<br>Site created with <strong>Great&nbsp;Docs</strong>.</p>
 </div>
-  </div>
+</div>
 </footer>
+<script src="../announcement-banner.js"></script>
+<script src="../github-widget.js"></script>
+<script src="../copy-page.js"></script>
+<script src="../sidebar-wrap.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'sidebar-float.js';document.body.appendChild(s);})();</script>
+<script src="../sidebar-filter.js"></script>
+<script src="../dark-mode-toggle.js"></script>
+<script src="../back-to-top.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'on-this-page.js';document.body.appendChild(s);})();</script>
+<script src="../keyboard-nav.js"></script>
+<script src="../copy-code.js"></script>
+<script src="../details.js"></script>
+<script src="../mermaid-renderer.js"></script>
+<script src="../tooltips.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'color-swatch.js';document.body.appendChild(s);})();</script>
+<script src="../responsive-tables.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'video-embed.js';document.body.appendChild(s);})();</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'termshow.js';document.body.appendChild(s);})();</script>
+<script src="../version-selector.js"></script>
+<script src="../navbar-widgets.js"></script>
 
 
 
