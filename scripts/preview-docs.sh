@@ -126,7 +126,7 @@ build_py() {
   (cd "$root/pkg-py" && uv sync --extra shiny --group docs --quiet)
   (cd "$root/pkg-py" && uv run great-docs build)
   site_url="$(cd "$root/pkg-py" && uv run python -c 'import yaml; print(yaml.safe_load(open("great-docs.yml"))["site_url"])')"
-  (cd "$root/pkg-py" && uv run python "$root/.github/scripts/docs-postprocess.py" great-docs/_site "$site_url")
+  (cd "$root/pkg-py" && uv run python "$root/.github/scripts/docs-postprocess.py" great-docs/_site "$site_url" pkg-py)
   rm -rf "$root/docs/py"
   cp -r "$root/pkg-py/great-docs/_site" "$root/docs/py"
 }

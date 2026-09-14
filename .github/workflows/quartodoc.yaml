@@ -52,7 +52,7 @@ jobs:
         working-directory: pkg-py
         run: |
           site_url="$(uv run python -c 'import yaml; print(yaml.safe_load(open("great-docs.yml"))["site_url"])')"
-          python3 ../.github/scripts/docs-postprocess.py great-docs/_site "$site_url"
+          python3 ../.github/scripts/docs-postprocess.py great-docs/_site "$site_url" pkg-py
 
       # The deploy publishes the whole of docs/, so the rendered site has to
       # sit at the path it is served from.
