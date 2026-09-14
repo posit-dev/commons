@@ -2,12 +2,6 @@
 title: "commons"
 ---
 
-```{=html}
-<!-- Under user-guide/ because great-docs copies docs/ wholesale to that
-     prefix, and only the configured navbar logo is surfaced at the root. -->
-<img src="user-guide/assets/hex/commons-hex.png" class="commons-hex" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space.">
-```
-
 `commons` helps data scientists build trustworthy data agents.
 
 Data teams typically have trusted code that they use to analyze their data and build reports and apps. `commons` leverages that expertise, situating the information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.
