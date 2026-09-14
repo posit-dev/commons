@@ -41,10 +41,24 @@ site:
 logo:
   light: docs/assets/hex/commons-hex.png
 
+# The icon both other sites serve, so all three show the same one in a tab.
+# The PNG rather than the SVG source: great-docs rasterizes an SVG with
+# cairosvg, which needs a system cairo library, and warns and skips when it
+# is missing. Pillow handles the PNG with no extra dependency.
+favicon: docs/favicon/favicon-96x96.png
+
+# Each key renders an icon link beside the name, the way pkgdown does on the R
+# site; great-docs does not link the name text itself.
+# Each key renders an icon link beside the name, the way pkgdown does on the R
+# site; great-docs does not link the name text itself.
 authors:
   - name: Josh Taillon
     role: Maintainer
     affiliation: Posit, PBC
+    github: jat255
+    homepage: https://opensource.posit.co/people/josh-taillon/
+    orcid: 0000-0002-5185-4503
+    github: jat255
 
 funding:
   name: Posit Software, PBC
@@ -54,17 +68,6 @@ funding:
   homepage: https://posit.co
 
 include_in_header:
-  # The icon tags pkgdown writes for the R site, so both serve the same icons
-  # from the shared /favicon/ at the site root. A leading / is
-  # project-relative and Quarto rewrites it per page depth. great-docs'
-  # `favicon:` key takes a single file and would drop the manifest and the
-  # other sizes.
-  - text: |
-      <link rel="icon" type="image/png" sizes="96x96" href="/favicon/favicon-96x96.png">
-      <link rel="icon" type="image/svg+xml" href="/favicon/favicon.svg">
-      <link rel="apple-touch-icon" sizes="180x180" href="/favicon/apple-touch-icon.png">
-      <link rel="icon" sizes="any" href="/favicon/favicon.ico">
-      <link rel="manifest" href="/favicon/site.webmanifest">
   # No config key adds a navbar link, and the generated _quarto.yml is
   # rewritten on every build, so the R cross-link is injected instead.
   # great-docs collects its own widgets into #gd-navbar-widgets, which is
