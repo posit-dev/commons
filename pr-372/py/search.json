@@ -1,0 +1,493 @@
+[
+  {
+    "objectID": "reference/theme.html",
+    "href": "reference/theme.html",
+    "title": "theme",
+    "section": "",
+    "text": "ui.theme(preset='shiny', **variables)\nBuild the theme a commons chat page uses.\nLayers the commons chat variables over shinychat.page_chat_theme() and attaches the dependency serving the chat script, stylesheet and icons.\n\n\n\npreset : str | None = 'shiny'\n\nA Shiny or Bootswatch preset name.\n\n****variables** : str | float | bool | None = {}\n\nSass-variable overrides, in either snake_case or kebab-case. These win over the commons defaults.",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "theme"
+    ]
+  },
+  {
+    "objectID": "reference/theme.html#parameters",
+    "href": "reference/theme.html#parameters",
+    "title": "theme",
+    "section": "",
+    "text": "preset : str | None = 'shiny'\n\nA Shiny or Bootswatch preset name.\n\n****variables** : str | float | bool | None = {}\n\nSass-variable overrides, in either snake_case or kebab-case. These win over the commons defaults.",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "theme"
+    ]
+  },
+  {
+    "objectID": "reference/semantic_layer.html",
+    "href": "reference/semantic_layer.html",
+    "title": "semantic_layer",
+    "section": "",
+    "text": "semantic_layer\nsemantic_layer(*items)\nCollect measures into a semantic layer.\nEach item is a measure, a list (or tuple) of measures, a module, or a path to a Python file or a directory of them. Directory searches are not recursive.\nA sibling file is imported by plain absolute import; its directory is on sys.path only while the file loads. Even a single requested file puts its whole directory on sys.path, so every .py file beside it – and every subdirectory, which is importable as a package – is checked: a name that collides with the standard library, an installed package, or a module already imported from elsewhere is a construction error. A sibling imported this way stays in sys.modules under its bare name for the rest of the process, so two directories that each define a same-named helper cannot both be loaded in one process.\nCollecting the same measure twice – the same file passed alongside its own directory, say – is not an error; two different measures sharing one name is. The R implementation is stricter here: it rejects a repeated name even when it is the same measure twice.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "semantic_layer"
+    ]
+  },
+  {
+    "objectID": "reference/list_tables.html",
+    "href": "reference/list_tables.html",
+    "title": "list_tables",
+    "section": "",
+    "text": "list_tables\nlist_tables(source)\nThe table names an agent can query on source.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "list_tables"
+    ]
+  },
+  {
+    "objectID": "reference/data_source.html",
+    "href": "reference/data_source.html",
+    "title": "data_source",
+    "section": "",
+    "text": "data_source\ndata_source(*args, tables=None, exclude=None, dictionary=None, **frames)\nCreate a data source from an engine, a pins board, or named frames.\nA thin dispatcher over the constructors, which are the documented way in.\ntables, exclude, and dictionary are keyword-only options, so all three names are reserved in every form: a frame passed under one of them is rejected with a TypeError naming it, never silently consumed. tables selects tables of the engine and board forms, exclude drops relations from a warehouse catalog listing by glob, and dictionary attaches a data dictionary to any form. To use one as a frame name, call DataSource.from_frames() directly.\nA dictionary’s governed definitions are compiled for the source’s dialect during construction, so construction raises if the dialect has no emitter (DuckDB, Snowflake, and Databricks have one), if a definition sits on a table the source does not expose, or if a metric mixes row and aggregate grain. On a warehouse the authored column spellings are bound to the names the catalog reported before anything is lowered, so it raises there only if a table declaring definitions matched no exposed relation, or if a definition names an authored column the selected relation does not have.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "data_source"
+    ]
+  },
+  {
+    "objectID": "reference/commons_chat_dependency.html",
+    "href": "reference/commons_chat_dependency.html",
+    "title": "commons_chat_dependency",
+    "section": "",
+    "text": "commons_chat_dependency\nui.commons_chat_dependency()\nThe dependency serving the chat script, stylesheet and icons.",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "commons_chat_dependency"
+    ]
+  },
+  {
+    "objectID": "reference/app.html",
+    "href": "reference/app.html",
+    "title": "app",
+    "section": "",
+    "text": "ui.app(client, *, toolbar=True, **kwargs)\nBuild a complete app around a commons agent.\nEvery session the app serves shares the one agent passed here via client: a second visitor joins the first one’s conversation, and two questions answered at once interleave the agent’s citation and provenance state, so neither answer can be trusted. To give each session its own agent, assemble the page and the server yourself with commons.ui.theme() and commons.ui.server(), building the agent inside the server function.\n\n\n\nclient : Commons\n\nA commons agent.\n\ntoolbar : bool = True\n\nWhether to show the development toolbar, a dark-mode switch.\n\n****kwargs** : Any = {}\n\nPassed to shiny.App().",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "app"
+    ]
+  },
+  {
+    "objectID": "reference/app.html#parameters",
+    "href": "reference/app.html#parameters",
+    "title": "app",
+    "section": "",
+    "text": "client : Commons\n\nA commons agent.\n\ntoolbar : bool = True\n\nWhether to show the development toolbar, a dark-mode switch.\n\n****kwargs** : Any = {}\n\nPassed to shiny.App().",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "app"
+    ]
+  },
+  {
+    "objectID": "reference/SemanticLayer.html",
+    "href": "reference/SemanticLayer.html",
+    "title": "SemanticLayer",
+    "section": "",
+    "text": "SemanticLayer\nSemanticLayer(measures, source_text)\nThe trusted calculations an agent can run.\nsource_text holds the source of the measures and the module-level helpers they call, keyed by Python function name. Only text is kept: the agent’s worker session reads measure definitions but never receives a callable. Two functions that share a Python name share one entry, and the first definition collected wins, so a measure whose function shares its name with an earlier one is shown that earlier function’s source instead. The R implementation sources a path’s files into one shared environment, so there the last definition of a same-named helper wins instead, and is what every measure calling it actually runs.\nThe layout of this object is internal and may change without notice.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "SemanticLayer"
+    ]
+  },
+  {
+    "objectID": "reference/Injected.html",
+    "href": "reference/Injected.html",
+    "title": "Injected",
+    "section": "",
+    "text": "Injected\nInjected",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Injected"
+    ]
+  },
+  {
+    "objectID": "reference/ContextLayer.html",
+    "href": "reference/ContextLayer.html",
+    "title": "ContextLayer",
+    "section": "",
+    "text": "ContextLayer(docs=())\nText that helps an agent interpret its data source.\nConstruct one with :func:context_layer. Internals are private and may change without notice.\n\n\n\n\n\nName\nDescription\n\n\n\n\ndocs\nThe documents as read from their files, frontmatter stripped.\n\n\n\n\n\n\n\n\n\nName\nDescription\n\n\n\n\nprewarm\nBuild the index now so the first search does not pay for it.\n\n\nsearch\nRetrieve the chunks most relevant to query.\n\n\n\n\n\nContextLayer.prewarm()\nBuild the index now so the first search does not pay for it.\nOptional and idempotent; worth calling when a search is known to be coming, so its cost does not land on the first user turn.\n\n\n\nContextLayer.search(query, top_k=3)\nRetrieve the chunks most relevant to query.\nReturns chunk texts, best match first, at most top_k of them. An empty layer, or a query nothing matches, returns an empty list. top_k must be at least 1.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "ContextLayer"
+    ]
+  },
+  {
+    "objectID": "reference/ContextLayer.html#attributes",
+    "href": "reference/ContextLayer.html#attributes",
+    "title": "ContextLayer",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\ndocs\nThe documents as read from their files, frontmatter stripped.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "ContextLayer"
+    ]
+  },
+  {
+    "objectID": "reference/ContextLayer.html#methods",
+    "href": "reference/ContextLayer.html#methods",
+    "title": "ContextLayer",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nprewarm\nBuild the index now so the first search does not pay for it.\n\n\nsearch\nRetrieve the chunks most relevant to query.\n\n\n\n\n\nContextLayer.prewarm()\nBuild the index now so the first search does not pay for it.\nOptional and idempotent; worth calling when a search is known to be coming, so its cost does not land on the first user turn.\n\n\n\nContextLayer.search(query, top_k=3)\nRetrieve the chunks most relevant to query.\nReturns chunk texts, best match first, at most top_k of them. An empty layer, or a query nothing matches, returns an empty list. top_k must be at least 1.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "ContextLayer"
+    ]
+  },
+  {
+    "objectID": "feature-parity.html",
+    "href": "feature-parity.html",
+    "title": "Feature parity with the R package",
+    "section": "",
+    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\n\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\nSnowflake semantic views and Databricks metric views as trusted calculations, answered Verified answer\nImports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so Cited or Untrusted\n\n\nCustom R code from the agent, run in a sandboxed worker process\nWrites custom SQL only, with Python execution coming soon\n\n\ngt tables and ggplot figures returned by measures, rendered in the chat\nRenders data-frame results as tables, with no current plot support\n\n\ntrajectory_read() and trajectory_review(), for reading and annotating logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures."
+  },
+  {
+    "objectID": "get-started.html",
+    "href": "get-started.html",
+    "title": "Introduction to commons",
+    "section": "",
+    "text": "This page explains the structure of a commons project and how to start building a commons agent in Python."
+  },
+  {
+    "objectID": "get-started.html#design-philosophy",
+    "href": "get-started.html#design-philosophy",
+    "title": "Introduction to commons",
+    "section": "Design philosophy",
+    "text": "Design philosophy\nAI agents for data analysis range from cautious and narrowly correct to wildly untrustworthy. commons increases the chance of a correct answer by giving the agent access to trusted code that you already have, while the agent keeps enough freedom to answer new, realistic questions. commons also derives a provenance outcome from the path the agent took, so a user can decide how much to trust each answer.\nIf you are a data analyst, data scientist, or other data practitioner, you probably have a collection of trusted code. This is the code you depend on for your analyses, apps, and reports. The core idea of commons is that an agent gives more correct answers when it can run this code and read its documentation.\nThe high-trust path occurs when a question matches one of these trusted calculations. For example, a commons agent can analyze biodiversity data, and a user asks:\n\nHow many total animals were observed at Oak Bluff?\n\nThe agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the Verified answer outcome.\n\nAt Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. \n\nAlthough the agent had to decide which trusted calculation to run. It did not have to decide what code to write, reducing degrees of freedom and allowing the agent to use code that you already vetted.\nHowever, we also expect users to ask questions that stray from the “happy path.” For those, the agent searches for additional context and writes custom code (currently SQL, but soon custom Python code as well). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an Untrusted outcome."
+  },
+  {
+    "objectID": "get-started.html#trust-flow",
+    "href": "get-started.html#trust-flow",
+    "title": "Introduction to commons",
+    "section": "Trust flow",
+    "text": "Trust flow\nA commons agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the Verified answer outcome.\nIf a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user’s question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an Untrusted outcome.\nThe lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is Cited and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is Untrusted and the answer displays the yellow exclamation provenance marker\nThe table below lists how each provenance outcome can occur:\n\n\n\nHow the answer is produced\nProvenance outcome\n\n\n\n\nA trusted Python measure\nVerified answer \n\n\nA data dictionary metric, possibly grouped or filtered with definitions\nVerified answer \n\n\nCustom SQL, including SQL that uses data dictionary definitions\nCited  or Untrusted \n\n\nNo data tool used (for example, the agent already had the information, or no accessible information answered the question)\nNo provenance outcome\n\n\n\nThe agent does not decide the provenance outcome. commons derives it from the tools the agent called and the citations it made."
+  },
+  {
+    "objectID": "get-started.html#information-layers",
+    "href": "get-started.html#information-layers",
+    "title": "Introduction to commons",
+    "section": "Information layers",
+    "text": "Information layers\ncommons has two primary layers of information: the semantic layer and the context layer. The semantic layer holds trusted calculations, ideally lifted from reliable code that you already use. The context layer holds background information. The agent uses this information to decide what custom SQL to write and how to interpret results. Data dictionaries span the two layers.\n\n\n\nLayer\nSources\nRole\n\n\n\n\nSemantic layer\nMeasures in .py files and definitions in data-dict.yaml\nProvides trusted calculations.\n\n\nContext layer\nMarkdown files and descriptive fields in data-dict.yaml\nInforms custom SQL and guides interpretation.\n\n\n\n\nSemantic layer\nThe most direct way to add a trusted calculation is a measure. A measure is a Python function decorated with @commons.measure. The decorator needs a description, from its description argument or from the docstring of the function. When measures exist, the agent searches for a measure that matches the question. If it finds one, it calls that measure, with arguments if the measure takes any.\nA measure can take two kinds of parameter in its signature. A parameter declared as Annotated[T, Field(description=...)] gets its value from the model, which reads the description to decide what value to pass. A parameter declared as commons.Injected[T] gets its value from commons. The model never sees this parameter: commons passes the connection of the data source that has the same name as the parameter. A parameter with no description and no Injected annotation will result in an error.\nAs an example, in this measure, commons passes biodiversity and the model passes site:\n@commons.measure(description=\"Species observed at one site.\")\ndef species_at_site(\n    biodiversity: commons.Injected[Any],  # commons passes the connection\n    site: Annotated[str, Field(description=\"Site name.\")],  # the model passes a value\n) -&gt; Any:\n    ...\nWhen a user asks “Which species were observed at Oak Bluff?”, the model reads the description of site and passes \"Oak Bluff\". commons passes the connection of the data source named biodiversity, and the measure runs with both.\ndata-dict.yaml files also add to the semantic layer through definitions.\n\n\nContext layer\nThe context layer holds unstructured text from Markdown files and the descriptive fields of data-dict.yaml. commons indexes this text and retrieves the parts that match a question. Facts that every conversation needs belong in instructions, not in the context layer.\n\n\nExamples\nHere are short examples of a data dictionary, a measure file, and a context document for the biodiversity example:\n\nData dictionary\ndictionaries/biodiversity.yaml\ntables:\n  - name: observations\n    description: Species observations by nature preserve.\n    columns:\n      - name: count\n        description: Individuals observed during surveys.\n\n\nMeasure file\nmeasures/biodiversity.py\nfrom typing import Annotated, Any\n\nfrom pydantic import Field\n\nimport commons\n\n\n@commons.measure(description=\"Species richness by site.\")\ndef biodiversity_by_site(\n    biodiversity: commons.Injected[Any],\n    site: Annotated[str, Field(description=\"Site name.\")],\n) -&gt; Any:\n    return biodiversity.execute(\n        \"SELECT COUNT(DISTINCT species) AS species_richness \"\n        \"FROM observations WHERE obs_site = ?\",\n        [site],\n    ).fetchdf()\nThe biodiversity parameter receives the connection of the data source named biodiversity. The model supplies site.\n\n\nContext document\ncontext/biodiversity.md\n# Interpreting survey results\n\nObserved individuals reflect organisms recorded during surveys. They are not a complete population census of a nature preserve."
+  },
+  {
+    "objectID": "get-started.html#data-sources",
+    "href": "get-started.html#data-sources",
+    "title": "Introduction to commons",
+    "section": "Data sources",
+    "text": "Data sources\nOne of the primary decisions you’ll need to make when building a commons agent is which data sources to grant the agent access to. Each data source combines the underlying data with the tables to expose to the agent. It can also include a data dictionary describing those tables and trusted calculations on them.\nData sources are created with commons.data_source(). The data can be named pandas or polars data frames, a pins board, or a SQLAlchemy Engine. commons loads data frames and pins into an in-process DuckDB database. commons queries a database engine directly without copying data into a local database.\nFor example, the following code creates a data source from two data frames. Each name becomes a table that the agent can query. dictionary is an optional path to a data-dict.yaml file.\nbiodiversity = commons.data_source(\n    observations=observations,\n    site_area=site_area,\n    dictionary=\"dictionaries/biodiversity.yaml\",\n)\nFor an engine or a pins board, the tables argument selects the tables to expose. An engine takes a list of table names:\nimport sqlalchemy\n\nengine = sqlalchemy.create_engine(\"duckdb:///surveys.duckdb\")\nsurveys = commons.data_source(engine, tables=[\"observations\", \"sites\"])\nWith a pins board, tables maps each table name the agent sees to the pin that supplies the data:\nsurveys = commons.data_source(\n    board,\n    tables={\"observations\": \"survey-observations\", \"sites\": \"survey-sites\"},\n)\nA Snowflake or Databricks engine also imports its catalog, so commons can resolve the selection against the warehouse and check access. exclude drops objects from the catalog listing by glob:\nwarehouse = commons.data_source(engine, exclude=[\"TMP_*\"])\nIf the catalog is too large for the system prompt, the agent gets a search_catalog tool instead of a table listing. The system prompt reports only the number of selected catalog objects and tells the agent to call search_catalog before describe_table. The agent then searches the catalog for objects that match the question and describes only those before it writes SQL.\n\nData dictionaries\nA data dictionary provides structured documentation for one data source. Use it to state what each table represents, the meaning and type of each column, relationships between tables, and glossary terms. It also holds trusted definitions. commons reads the data-dict.yaml specification.\nA commons agent uses a data dictionary in three ways:\n\nDataset-level descriptions give broad context that is always available. Glossary terms go in the system prompt as space allows.\nWhen the agent first uses a documented table in a conversation, it receives the description, columns, relationships, and glossary terms of that table.\nDescriptive fields, such as description and details, are part of the context layer.\n\n\nDefinitions\nDefinitions are named, governed expressions attached to tables in data-dict.yaml. They let an agent reuse trusted metrics, filters, and derived values, so they add to the semantic layer.\nEach definition is an expression in the data-dict expression language, not in the SQL dialect of your database:\ntables:\n  - name: observations\n    columns:\n      - name: count\n        type: number\n    definitions:\n      - name: total_individuals\n        label: Total individuals observed\n        description: Sum of the individuals recorded in surveys.\n        expr: SUM(count)\nThere are three kinds of definition. A definition can take part in a trusted metric calculation, or the agent can use it in custom SQL:1\n\n\n\n\n\n\n\n\nKind\nExample\nUse in a trusted metric calculation\n\n\n\n\nMetric\nSUM(n)\nComputes the metric\n\n\nFilter\nstatus = 'active'\nRestricts rows or provides a grouping dimension\n\n\nDerived value\nprice * quantity\nProvides a grouping dimension\n\n\n\ncommons infers the kind from the expression. An aggregate or constant expression is a metric. A row-level Boolean expression is a filter. Every other row-level expression is a derived value.\nSee the DevRel Agent’s data-dict.yaml for examples of definitions.\nWhen a data source is constructed, commons validates each definition and compiles it to the source’s SQL dialect."
+  },
+  {
+    "objectID": "get-started.html#project-directory-organization",
+    "href": "get-started.html#project-directory-organization",
+    "title": "Introduction to commons",
+    "section": "Project directory organization",
+    "text": "Project directory organization\nA commons agent is easiest to maintain when each piece has its own file:\n.\n|-- app.py\n|-- agent.py\n|-- pyproject.toml\n|-- AGENTS.md # or the file your coding agent reads (for example, CLAUDE.md)\n|-- instructions.md\n|-- dictionaries/\n|   `-- biodiversity.yaml\n|-- measures/\n|   `-- biodiversity.py\n`-- context/\n    `-- context.md"
+  },
+  {
+    "objectID": "get-started.html#constructing-the-agent",
+    "href": "get-started.html#constructing-the-agent",
+    "title": "Introduction to commons",
+    "section": "Constructing the agent",
+    "text": "Constructing the agent\nUse commons.Commons() to construct an agent. Pass it a chatlas.Chat and one or more data sources, plus any semantic and context layers. You can also optionally append information to the commons agent system prompt using the instructions argument.\nimport chatlas\nimport commons\n\nbiodiversity = commons.data_source(\n    observations=observations,\n    site_area=site_area,\n    dictionary=\"dictionaries/biodiversity.yaml\",\n)\n\nagent = commons.Commons(\n    client=chatlas.ChatAnthropic(model=\"claude-sonnet-5\"),\n    data_sources={\"biodiversity\": biodiversity},\n    semantic_layer=commons.semantic_layer(\"measures\"),\n    context_layer=commons.context_layer(files=[\"context/context.md\"]),\n    instructions=\"instructions.md\",\n)\n\nagent.chat(\"How many species were observed at Oak Bluff?\")\ndata_sources is one DataSource or a mapping of name to DataSource. Name the sources when a measure takes an injected connection, because commons injects by name. semantic_layer() accepts measures, modules, or paths to .py files and directories. context_layer() accepts a list of file paths.\nUnderneath, a Commons agent inherits from a chatlas.Chat object, but builds its own system prompt and tools. As such, it follows the Chat API and provides the chat() and stream_async() methods as ways to ask a question. The other chatlas entry points, such as chat_async(), stream(), and chat_structured(), are not supported and will raise NotImplementedError at this moment.\n\nChat UI\nThe above examples will build a terminal-based agent without any UI attached. If you want to use the agent in an interactive web UI, the commons.ui module will put the agent behind a Shiny chat. This requires installing the shiny extra group.\nWhen developing locally, you can use commons.ui.app(agent) to return a complete Shiny app:\napp = commons.ui.app(agent)\ncommons.ui.app() shares one agent across every session, so it suits one visitor at a time. For a deployed app, you should instead build the page with commons.ui.theme() and construct the agent inside the Shiny server function, so each session gets its own agent:\nimport shinychat\nfrom shiny import App\n\napp_ui = shinychat.page_chat(\"Biodiversity\", id=\"chat\", theme=commons.ui.theme())\n\n\ndef app_server(input, output, session):\n    # The same construction as above; building it per session keeps each\n    # session's citation and provenance state separate.\n    commons.ui.server(\n        \"chat\",\n        commons.Commons(\n            client=chatlas.ChatAnthropic(model=\"claude-sonnet-5\"),\n            data_sources={\"biodiversity\": biodiversity},\n            semantic_layer=commons.semantic_layer(\"measures\"),\n            context_layer=commons.context_layer(files=[\"context/context.md\"]),\n            instructions=\"instructions.md\",\n        ),\n    )\n\n\napp = App(app_ui, app_server)"
+  },
+  {
+    "objectID": "get-started.html#example-application",
+    "href": "get-started.html#example-application",
+    "title": "Introduction to commons",
+    "section": "Example application",
+    "text": "Example application\ndemo.py, in the Python package’s directory, is a fuller worked example: an agent over made-up forest canopy data with a semantic layer of measures and a context layer. Run it with uv run shiny run demo.py for the chat UI, or uv run python demo.py to ask the same questions from the terminal. demo.ipynb is the same agent in a notebook, with cells for reading what the agent registered and adding a measure of your own."
+  },
+  {
+    "objectID": "get-started.html#footnotes",
+    "href": "get-started.html#footnotes",
+    "title": "Introduction to commons",
+    "section": "Footnotes",
+    "text": "Footnotes\n\n\nIn custom SQL, the agent writes a definition as a {name} token, and commons expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is Cited or Untrusted, not Verified answer.↩︎"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "commons",
+    "section": "",
+    "text": "commons helps data scientists build trustworthy data agents.\nData teams typically have trusted code that they use to analyze their data and build reports and apps. commons leverages that expertise, situating the information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.\nTrusted calculations can come from Python functions (as measures) or data dictionary definitions."
+  },
+  {
+    "objectID": "index.html#installation",
+    "href": "index.html#installation",
+    "title": "commons",
+    "section": "Installation",
+    "text": "Installation\ncommons requires Python 3.11 or later. To install the package from PyPI, run:\n# create a virtual environment with `uv venv` if you need first, then run:\nuv pip install commons\nIf you want the chat UI, install the shiny extra, as well:\nuv pip install \"commons[shiny]\"\nOr, for the development version:\n# just the core package:\nuv pip install \"commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\"\n\n# with the shiny UI dependencies:\nuv pip install \"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py\""
+  },
+  {
+    "objectID": "index.html#get-started",
+    "href": "index.html#get-started",
+    "title": "commons",
+    "section": "Get started",
+    "text": "Get started\ncommons uses chatlas to access LLMs, so you will need access to one of chatlas’s supported providers.\nThe Introduction to commons page explains the structure of a commons agent and the creation process. For a complete example application, see demo.py in the repository."
+  },
+  {
+    "objectID": "index.html#trusted-answers",
+    "href": "index.html#trusted-answers",
+    "title": "commons",
+    "section": "Trusted answers",
+    "text": "Trusted answers\nThere are two provenance paths available to a commons agent. When a user asks a question for which there is trusted code, the agent runs that code and reports the result. When no trusted code covers the question, the agent writes custom SQL, leaning on additional context provided to the agent.\nAnswers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.\nFor more information, see the Introduction to commons page."
+  },
+  {
+    "objectID": "index.html#evaluation",
+    "href": "index.html#evaluation",
+    "title": "commons",
+    "section": "Evaluation",
+    "text": "Evaluation\nThe DevRel agent is an example commons agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit’s open-source projects. Its repository contains an evaluation comparing the commons agent with Claude Code on the same data; the R documentation presents the results."
+  },
+  {
+    "objectID": "governance.html",
+    "href": "governance.html",
+    "title": "Security and governance for commons agents",
+    "section": "",
+    "text": "commons allows users to build and deploy agents that can run SQL queries against live databases and (soon) execute arbitrary Python code. This raises several security and governance questions: How do you make sure that an agent cannot delete production data? Can model-generated Python code interfere with a Posit Connect deployment? Can an agent show users tables, rows, or business context that they shouldn’t be able to see?\nThis page explains the boundaries that commons provides and the responsibilities that remain with the application author and server administrator."
+  },
+  {
+    "objectID": "governance.html#the-commons-harness",
+    "href": "governance.html#the-commons-harness",
+    "title": "Security and governance for commons agents",
+    "section": "The commons harness",
+    "text": "The commons harness\nA commons agent is a chatlas.Chat object that carries a system prompt and a set of tools. The system prompt lists the available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, or run a SQL query.\nWe assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like “never reveal sensitive data.” Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider. The agent must therefore not have access to data that you do not trust that provider to process."
+  },
+  {
+    "objectID": "governance.html#sql-code-execution",
+    "href": "governance.html#sql-code-execution",
+    "title": "Security and governance for commons agents",
+    "section": "SQL code execution",
+    "text": "SQL code execution\n\nDestructive actions\nThe agent can run one read-only statement at a time. commons parses each statement with sqlglot and checks its structure against an allowlist of statement forms that only read, such as SELECT and the set operations. commons refuses every other form, stacked statements, and statements that sqlglot cannot parse, so it fails safe/closed.\nFor data frames and pins, which commons loads into its own DuckDB database, it also hardens the connection. It disables community and unsigned extensions, automatic extension install and load, external access, and the local filesystem. Then it sets lock_configuration, so a query cannot turn those settings back on.\nThese checks provide defense in depth, but they are not a database sandbox. When you supply a database connection, commons queries it as-is, and a statement that the parser accepts runs with all the permissions of that connection. The primary safeguard against destructive SQL is therefore database-enforced read-only access, and you should open the connection as a read-only user or role.\n\n\nData access\nThe tables argument to data_source() controls which tables commons describes to the model, but it is not an authorization boundary. SQL written by the agent can query any object that the connection can reach.\nOn Posit Connect, viewer OAuth integrations can give an interactive application the current viewer’s Snowflake or Databricks credentials. If the application creates its engine from those credentials, the warehouse continues to enforce that viewer’s existing access policies, including row-level and column-level security.\nFor a Snowflake or Databricks source, commons snapshots the connection’s principal and namespace when it creates a Snowflake or Databricks data source, and its active and secondary roles as well on Snowflake, and rejects subsequent operations if that identity changes.\nViewer credentials are not automatic. commons uses the engine that the application supplies. When using viewer credentials, you should create the engine and the commons agent inside the Shiny server function so that each session has the correct database identity.\nWhen viewer credentials are not available, it is recommended to use a service account with access only to the data that the application needs. Every viewer then has the same database permissions, so share the application only with users who are allowed that access."
+  },
+  {
+    "objectID": "governance.html#python-code-execution",
+    "href": "governance.html#python-code-execution",
+    "title": "Security and governance for commons agents",
+    "section": "Python code execution",
+    "text": "Python code execution\nThe Python agent currently has no tool that runs code written by the model, but this feature is expected in the near future. Currently, there is no concern for Python commons agents executing arbitrary Python code. When the feature is added, it will generally follow the R package’s R code execution design."
+  },
+  {
+    "objectID": "governance.html#permissioning-facts",
+    "href": "governance.html#permissioning-facts",
+    "title": "Security and governance for commons agents",
+    "section": "Permissioning facts",
+    "text": "Permissioning facts\nThe rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.\nBecause of this, you should only include facts that you can share with both the application’s viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information."
+  },
+  {
+    "objectID": "governance.html#telemetry",
+    "href": "governance.html#telemetry",
+    "title": "Security and governance for commons agents",
+    "section": "Telemetry",
+    "text": "Telemetry\nThe Python implementation of commons currently does not support telemetry or conversation logging, though this feature is planned to be added in the near future. When it is added, it will generally follow the R package’s Logging trajectories design."
+  },
+  {
+    "objectID": "reference/Commons.html",
+    "href": "reference/Commons.html",
+    "title": "Commons",
+    "section": "",
+    "text": "Commons(\n    client,\n    data_sources,\n    semantic_layer=None,\n    context_layer=None,\n    *,\n    instructions=None,\n)\nA trustworthy agent that answers questions about its data.\nGiven a chatlas.Chat for the provider and model, the data sources it can query, and optionally a semantic layer of trusted calculations and a context layer of prose, a Commons agent will allow for agent interactions with answers classified by how they were produced.\nA Commons agent inherits directly from chatlas.Chat and relies on the chatlas infrastructure to set up the LLM provider and model. Commons initializes its own chat state and system prompt to ensure provenance and citation tracking. Passing a custom system prompt in the Commons constructor is ignored with a warning; use instructions to add to commons’ prompt instead. For best results, enable thinking where the provider and model support it.\nchat() and stream_async() are the currently supported ways to interact with a Commons agent. The other entry points chatlas offers (chat_async(), stream(), chat_structured(), etc.) are disabled and raise NotImplementedErrors because they are not (yet) tied in to the commons framework. The rest of chatlas’s surface works as it does on any chat.\ndata_sources is a DataSource, or a mapping of name to DataSource; a measure can take a named source’s connection as an argument named after it. instructions is extra text placed under an ## Additional instructions heading at the end of commons’ built-in system prompt, as a string or the path to a text or Markdown file.\nConstruction raises a TypeError if client is not a chatlas.Chat, if an entry of data_sources is not a DataSource, or if a layer is not the layer its argument claims; a ValueError if data_sources names no source or a measure asks for an injection no named source can fill; and a FileNotFoundError if instructions names a file that does not exist.\n\n\n\n\n\nName\nDescription\n\n\n\n\nadd_turn\nAdd a turn, restarting the citation request if a person spoke.\n\n\nchat\nAsk a question and wait for the whole answer.\n\n\ncitation_corpus\nThe trusted text this agent’s citations are verified against.\n\n\nprewarm\nBuild the caches the first question would otherwise pay for.\n\n\nqueue_restore_reminder\nTell the next turn that the session behind its history is gone.\n\n\nset_turns\nReplace the conversation, dropping any reminder queued for it.\n\n\nstream_async\nAsk a question and stream the answer as it arrives.\n\n\n\n\n\nCommons.add_turn(turn)\nAdd a turn, restarting the citation request if a person spoke.\nA user turn of nothing but tool results is the same question still running, and an assistant turn is nobody asking anything.\n\n\n\nCommons.chat(*args, echo='output', stream=True, kwargs=None)\nAsk a question and wait for the whole answer.\nA reminder queued with queue_restore_reminder() rides this turn, and a turn that fails leaves it queued for the next one.\n\n\n\nCommons.citation_corpus()\nThe trusted text this agent’s citations are verified against.\n\n\n\nCommons.prewarm()\nBuild the caches the first question would otherwise pay for.\nFailures propagate: a direct call is typically warming caches ahead of a deployment, so a cold cache should fail the deploy.\n\n\n\nCommons.queue_restore_reminder()\nTell the next turn that the session behind its history is gone.\n\n\n\nCommons.set_turns(turns)\nReplace the conversation, dropping any reminder queued for it.\n\n\n\nCommons.stream_async(\n    *args,\n    content='text',\n    echo='none',\n    data_model=None,\n    kwargs=None,\n    controller=None,\n)\nAsk a question and stream the answer as it arrives.\nThe signature is identical to chatlas’s, so a chat UI can drive this agent directly and needs the attachment content, the mode, and the controller its stop button cancels through.\nThe Commons agent does not accept data_model. If you pass it, this method raises NotImplementedError. In chatlas, using data_model means the chunks are JSON that the caller parses as one document. Commons adds provenance markers and citations to the stream that are not compatible with data_model, so it is explicitly forbidden.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "Commons"
+    ]
+  },
+  {
+    "objectID": "reference/Commons.html#methods",
+    "href": "reference/Commons.html#methods",
+    "title": "Commons",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nadd_turn\nAdd a turn, restarting the citation request if a person spoke.\n\n\nchat\nAsk a question and wait for the whole answer.\n\n\ncitation_corpus\nThe trusted text this agent’s citations are verified against.\n\n\nprewarm\nBuild the caches the first question would otherwise pay for.\n\n\nqueue_restore_reminder\nTell the next turn that the session behind its history is gone.\n\n\nset_turns\nReplace the conversation, dropping any reminder queued for it.\n\n\nstream_async\nAsk a question and stream the answer as it arrives.\n\n\n\n\n\nCommons.add_turn(turn)\nAdd a turn, restarting the citation request if a person spoke.\nA user turn of nothing but tool results is the same question still running, and an assistant turn is nobody asking anything.\n\n\n\nCommons.chat(*args, echo='output', stream=True, kwargs=None)\nAsk a question and wait for the whole answer.\nA reminder queued with queue_restore_reminder() rides this turn, and a turn that fails leaves it queued for the next one.\n\n\n\nCommons.citation_corpus()\nThe trusted text this agent’s citations are verified against.\n\n\n\nCommons.prewarm()\nBuild the caches the first question would otherwise pay for.\nFailures propagate: a direct call is typically warming caches ahead of a deployment, so a cold cache should fail the deploy.\n\n\n\nCommons.queue_restore_reminder()\nTell the next turn that the session behind its history is gone.\n\n\n\nCommons.set_turns(turns)\nReplace the conversation, dropping any reminder queued for it.\n\n\n\nCommons.stream_async(\n    *args,\n    content='text',\n    echo='none',\n    data_model=None,\n    kwargs=None,\n    controller=None,\n)\nAsk a question and stream the answer as it arrives.\nThe signature is identical to chatlas’s, so a chat UI can drive this agent directly and needs the attachment content, the mode, and the controller its stop button cancels through.\nThe Commons agent does not accept data_model. If you pass it, this method raises NotImplementedError. In chatlas, using data_model means the chunks are JSON that the caller parses as one document. Commons adds provenance markers and citations to the stream that are not compatible with data_model, so it is explicitly forbidden.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "Commons"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.html",
+    "href": "reference/DataSource.html",
+    "title": "DataSource",
+    "section": "",
+    "text": "DataSource(\n    backend,\n    tables,\n    table_ids=dict(),\n    pending=None,\n    dictionary=None,\n    relations=None,\n    manifest=None,\n    session=None,\n    definition_bindings=None,\n)\nTables an agent can query, and the dictionary that describes them.\n\n\n\n\n\nName\nDescription\n\n\n\n\ndialect\nA hint for the system prompt, not a contract.\n\n\nensure_loaded\nRead every pin this source has not read yet.\n\n\nfrom_board\nExpose a pins board’s pins as tables, each read on first use.\n\n\nfrom_engine\nQuery a caller’s database directly. Nothing is copied.\n\n\nfrom_frames\nLoad named data frames into a locked-down in-process DuckDB.\n\n\nquery\nRun one read-only statement, rejecting anything else first.\n\n\n\n\n\nDataSource.dialect()\nA hint for the system prompt, not a contract.\n\n\n\nDataSource.ensure_loaded()\nRead every pin this source has not read yet.\nA board source loads a pin when a query names it, and that recovery lives on query(). A measure is handed the connection itself and never goes through query(), so nothing there would trigger the read and the measure would fail on a relation that does not exist yet. source_ensure_all() in pkg-r/R/data-source.R is the same step for the same reason. A source with nothing pending, which is every source that is not board-backed, does nothing.\n\n\n\nDataSource.from_board(board, tables, dictionary=None)\nExpose a pins board’s pins as tables, each read on first use.\ndictionary is taken here so that the argument survives the dispatcher; a board has no catalog listing to fold into it. Its governed definitions are lowered at the end of construction, once the dialect and the final table set are known.\n\n\n\nDataSource.from_engine(engine, tables=None, exclude=None, dictionary=None)\nQuery a caller’s database directly. Nothing is copied.\nA Snowflake or Databricks engine imports its catalog: the selection is resolved against the warehouse, access to it is verified for the current principal, and what it reports is folded into dictionary.\nWith tables unset on any other backend, its own listing is taken as given: it reports what exists, so there is nothing to check and no round trip worth paying for.\nexclude takes unqualified object-name globs to drop from a warehouse catalog listing, such as \"TMP_*\". Only a warehouse has a listing to drop from, so any other engine refuses it.\nOn a warehouse dictionary is taken here because the catalog listing is folded into it during construction; on any other engine it is simply attached. Its governed definitions are lowered once the dialect and the final table set are known, at the end of construction.\n\n\n\nDataSource.from_frames(**frames)\nLoad named data frames into a locked-down in-process DuckDB.\n\n\n\nDataSource.query(sql)\nRun one read-only statement, rejecting anything else first.\nOn a warehouse source the connection identity is checked before the statement is read: access to these tables was decided for one principal, role, and namespace, so a query raises rather than runs once any of those has moved.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "DataSource"
+    ]
+  },
+  {
+    "objectID": "reference/DataSource.html#methods",
+    "href": "reference/DataSource.html#methods",
+    "title": "DataSource",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\ndialect\nA hint for the system prompt, not a contract.\n\n\nensure_loaded\nRead every pin this source has not read yet.\n\n\nfrom_board\nExpose a pins board’s pins as tables, each read on first use.\n\n\nfrom_engine\nQuery a caller’s database directly. Nothing is copied.\n\n\nfrom_frames\nLoad named data frames into a locked-down in-process DuckDB.\n\n\nquery\nRun one read-only statement, rejecting anything else first.\n\n\n\n\n\nDataSource.dialect()\nA hint for the system prompt, not a contract.\n\n\n\nDataSource.ensure_loaded()\nRead every pin this source has not read yet.\nA board source loads a pin when a query names it, and that recovery lives on query(). A measure is handed the connection itself and never goes through query(), so nothing there would trigger the read and the measure would fail on a relation that does not exist yet. source_ensure_all() in pkg-r/R/data-source.R is the same step for the same reason. A source with nothing pending, which is every source that is not board-backed, does nothing.\n\n\n\nDataSource.from_board(board, tables, dictionary=None)\nExpose a pins board’s pins as tables, each read on first use.\ndictionary is taken here so that the argument survives the dispatcher; a board has no catalog listing to fold into it. Its governed definitions are lowered at the end of construction, once the dialect and the final table set are known.\n\n\n\nDataSource.from_engine(engine, tables=None, exclude=None, dictionary=None)\nQuery a caller’s database directly. Nothing is copied.\nA Snowflake or Databricks engine imports its catalog: the selection is resolved against the warehouse, access to it is verified for the current principal, and what it reports is folded into dictionary.\nWith tables unset on any other backend, its own listing is taken as given: it reports what exists, so there is nothing to check and no round trip worth paying for.\nexclude takes unqualified object-name globs to drop from a warehouse catalog listing, such as \"TMP_*\". Only a warehouse has a listing to drop from, so any other engine refuses it.\nOn a warehouse dictionary is taken here because the catalog listing is folded into it during construction; on any other engine it is simply attached. Its governed definitions are lowered once the dialect and the final table set are known, at the end of construction.\n\n\n\nDataSource.from_frames(**frames)\nLoad named data frames into a locked-down in-process DuckDB.\n\n\n\nDataSource.query(sql)\nRun one read-only statement, rejecting anything else first.\nOn a warehouse source the connection identity is checked before the statement is read: access to these tables was decided for one principal, role, and namespace, so a query raises rather than runs once any of those has moved.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "DataSource"
+    ]
+  },
+  {
+    "objectID": "reference/Measure.html",
+    "href": "reference/Measure.html",
+    "title": "Measure",
+    "section": "",
+    "text": "Measure(name, title, description, func, params, injected=(), provenance=())\nA trusted calculation the agent can run.\nparams describes only the arguments the model supplies; injected names the arguments commons supplies, which the model never sees.\n\n\n\n\n\nName\nDescription\n\n\n\n\nvalidate_args\nCheck and coerce the model’s arguments against the schema.\n\n\n\n\n\nMeasure.validate_args(args)\nCheck and coerce the model’s arguments against the schema.\nThe provider only ever sees call_measure, so a measure’s own arguments arrive unchecked and are validated here.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Measure"
+    ]
+  },
+  {
+    "objectID": "reference/Measure.html#methods",
+    "href": "reference/Measure.html#methods",
+    "title": "Measure",
+    "section": "",
+    "text": "Name\nDescription\n\n\n\n\nvalidate_args\nCheck and coerce the model’s arguments against the schema.\n\n\n\n\n\nMeasure.validate_args(args)\nCheck and coerce the model’s arguments against the schema.\nThe provider only ever sees call_measure, so a measure’s own arguments arrive unchecked and are validated here.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Measure"
+    ]
+  },
+  {
+    "objectID": "reference/Tag.html",
+    "href": "reference/Tag.html",
+    "title": "Tag",
+    "section": "",
+    "text": "Tag\nTag()\nHow an answer was produced.\nA and B are set by tools on their results. C is only ever derived: it is what a B becomes when its citation does not verify.\nStrEnum rather than a plain str, Enum mixin, which formats as “Tag.A”. The tag is written to the commons.provenance.tag span attribute, where R writes the bare letter and a mismatch would corrupt traces silently.",
+    "crumbs": [
+      "API Reference",
+      "Supporting types",
+      "Tag"
+    ]
+  },
+  {
+    "objectID": "reference/asset_base_url.html",
+    "href": "reference/asset_base_url.html",
+    "title": "asset_base_url",
+    "section": "",
+    "text": "asset_base_url\nui.asset_base_url()\nThe URL the assets are served under on a page.",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "asset_base_url"
+    ]
+  },
+  {
+    "objectID": "reference/context_layer.html",
+    "href": "reference/context_layer.html",
+    "title": "context_layer",
+    "section": "",
+    "text": "context_layer\ncontext_layer(files=())\nCreate a context layer from text or Markdown files.\nfiles must be a collection of paths; a bare string or path raises TypeError. Files are read eagerly and decoded as UTF-8, so a missing path (FileNotFoundError), a directory (IsADirectoryError), or a file in another encoding (UnicodeDecodeError) fails here rather than mid-conversation.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "context_layer"
+    ]
+  },
+  {
+    "objectID": "reference/index.html",
+    "href": "reference/index.html",
+    "title": "Reference",
+    "section": "",
+    "text": "The main agent constructor, plus the building blocks for a commons agent.\n\n\n\nCommons\nA trustworthy agent that answers questions about its data.\n\n\ndata_source\nCreate a data source from an engine, a pins board, or named frames.\n\n\nsemantic_layer\nCollect measures into a semantic layer.\n\n\nmeasure\nMark a function as a measure.\n\n\ncontext_layer\nCreate a context layer from text or Markdown files.\n\n\n\n\n\n\nThe objects the constructors return, and the values they carry.\n\n\n\nDataSource\nTables an agent can query, and the dictionary that describes them.\n\n\nSemanticLayer\nThe trusted calculations an agent can run.\n\n\nContextLayer\nText that helps an agent interpret its data source.\n\n\nMeasure\nA trusted calculation the agent can run.\n\n\nInjected\n\n\n\nTag\nHow an answer was produced.\n\n\nlist_tables\nThe table names an agent can query on source.\n\n\n\n\n\n\nPut a commons agent inside of an interactive chat app. Needs the shiny extra.\n\n\n\napp\nBuild a complete app around a commons agent.\n\n\nserver\nWire a commons agent to the chat element id on the page.\n\n\ntheme\nBuild the theme a commons chat page uses.\n\n\ncommons_chat_dependency\nThe dependency serving the chat script, stylesheet and icons.\n\n\nasset_base_url\nThe URL the assets are served under on a page.",
+    "crumbs": [
+      "API Reference",
+      "Reference"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#main-functions",
+    "href": "reference/index.html#main-functions",
+    "title": "Reference",
+    "section": "",
+    "text": "The main agent constructor, plus the building blocks for a commons agent.\n\n\n\nCommons\nA trustworthy agent that answers questions about its data.\n\n\ndata_source\nCreate a data source from an engine, a pins board, or named frames.\n\n\nsemantic_layer\nCollect measures into a semantic layer.\n\n\nmeasure\nMark a function as a measure.\n\n\ncontext_layer\nCreate a context layer from text or Markdown files.",
+    "crumbs": [
+      "API Reference",
+      "Reference"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#supporting-types",
+    "href": "reference/index.html#supporting-types",
+    "title": "Reference",
+    "section": "",
+    "text": "The objects the constructors return, and the values they carry.\n\n\n\nDataSource\nTables an agent can query, and the dictionary that describes them.\n\n\nSemanticLayer\nThe trusted calculations an agent can run.\n\n\nContextLayer\nText that helps an agent interpret its data source.\n\n\nMeasure\nA trusted calculation the agent can run.\n\n\nInjected\n\n\n\nTag\nHow an answer was produced.\n\n\nlist_tables\nThe table names an agent can query on source.",
+    "crumbs": [
+      "API Reference",
+      "Reference"
+    ]
+  },
+  {
+    "objectID": "reference/index.html#shiny-ui-and-server",
+    "href": "reference/index.html#shiny-ui-and-server",
+    "title": "Reference",
+    "section": "",
+    "text": "Put a commons agent inside of an interactive chat app. Needs the shiny extra.\n\n\n\napp\nBuild a complete app around a commons agent.\n\n\nserver\nWire a commons agent to the chat element id on the page.\n\n\ntheme\nBuild the theme a commons chat page uses.\n\n\ncommons_chat_dependency\nThe dependency serving the chat script, stylesheet and icons.\n\n\nasset_base_url\nThe URL the assets are served under on a page.",
+    "crumbs": [
+      "API Reference",
+      "Reference"
+    ]
+  },
+  {
+    "objectID": "reference/measure.html",
+    "href": "reference/measure.html",
+    "title": "measure",
+    "section": "",
+    "text": "measure\nmeasure(description=None, name=None, title=None, provenance=())\nMark a function as a measure.\nThe decorated function is returned unchanged, so measures and the helpers they call stay ordinary callables. Model-supplied arguments are expected to be scalars, enums, or arrays of those; richer shapes are not rejected, but the schema block renders them only approximately.\nprovenance records links back to wherever the measure’s definition came from. The R implementation attaches provenance through a roxygen tag instead, and only to measures sourced from a file.",
+    "crumbs": [
+      "API Reference",
+      "Main functions",
+      "measure"
+    ]
+  },
+  {
+    "objectID": "reference/server.html",
+    "href": "reference/server.html",
+    "title": "server",
+    "section": "",
+    "text": "ui.server(id, client, **kwargs)\nWire a commons agent to the chat element id on the page.\nPair this with a page built on commons.ui.theme(), so the chat assets the answers reference are served. In a deployed app, build the agent inside the server function and pass it here, so each session gets its own agent state.\nA client that is not a commons agent raises TypeError: a plain chatlas chat has none of the citation or provenance handling the chat surface renders.\n\n\n\nid : str\n\nThe id of the chat element on the page.\n\nclient : Commons\n\nA commons agent.\n\n****kwargs** : Any = {}\n\nPassed to shinychat.Chat().",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "server"
+    ]
+  },
+  {
+    "objectID": "reference/server.html#parameters",
+    "href": "reference/server.html#parameters",
+    "title": "server",
+    "section": "",
+    "text": "id : str\n\nThe id of the chat element on the page.\n\nclient : Commons\n\nA commons agent.\n\n****kwargs** : Any = {}\n\nPassed to shinychat.Chat().",
+    "crumbs": [
+      "API Reference",
+      "Shiny UI and server",
+      "server"
+    ]
+  }
+]
