@@ -1,0 +1,30 @@
+# The site is assembled by great-docs, which generates a Quarto project into
+# great-docs/ and renders it.
+display_name: commons
+site_url: https://posit-dev.github.io/commons/py/
+repo: https://github.com/posit-dev/commons
+pypi: https://pypi.org/project/commons/
+
+# The narrative pages. This is a directory, and everything under it is
+# rendered, which is why the design notes live in ../notes instead.
+user_guide: docs
+
+# The generated changelog reads GitHub Releases for the whole repository with
+# no tag-prefix filter, so it renders the R package's notes on this site.
+changelog:
+  enabled: false
+
+# Names are relative to the package: `ui.app`, not `commons.ui.app`. A
+# section-level `package:` key is accepted and then ignored. `commons.__all__`
+# does not export `ui`, so the Shiny entries only appear because they are
+# listed here.
+reference:
+  - title: Main functions
+    desc: The main agent constructor, plus the building blocks for a commons agent.
+    contents: [Commons, data_source, semantic_layer, measure, context_layer]
+  - title: Supporting types
+    desc: The objects the constructors return, and the values they carry.
+    contents: [DataSource, SemanticLayer, ContextLayer, Measure, Injected, Tag, list_tables]
+  - title: Shiny UI and server
+    desc: "Put a commons agent inside of an interactive chat app. Needs the `shiny` extra."
+    contents: [ui.app, ui.server, ui.theme, ui.commons_chat_dependency, ui.asset_base_url]
