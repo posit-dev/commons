@@ -20,3 +20,6 @@ jobs:
 
       - name: Test noindex-preview.py
         run: python3 .github/scripts/test_noindex_preview.py
+
+      - name: Test docs-version-badge.py
+        run: python3 .github/scripts/test_docs_version_badge.py
