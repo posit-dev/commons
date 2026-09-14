@@ -20,7 +20,7 @@ so the badge is removed rather than corrected.
 Remove the corresponding half of this script if great-docs gains relative icon
 links, or a way to suppress the badge.
 
-Usage: docs-postprocess.py <site-directory> <site-url> <package-root>
+Usage: docs-postprocess.py <site-directory> <site-url> <repo-url> <package-root>
 """
 
 from __future__ import annotations
@@ -45,11 +45,17 @@ LINK = re.compile(r"<link\b[^>]*>")
 # not the repository root, so they arrive missing the package directory. The
 # `source.path` config key cannot do this: it replaces the whole path with the
 # file's basename, which flattens nested modules such as commons/_ui/_server.py.
-# The non-greedy middle group is the git ref, which may itself contain slashes.
-SOURCE = re.compile(r'(https://github\.com/[^"/]+/[^"/]+/blob/)([^"]+?)(/src/)')
+# Scoped to this repository, so a documentation link into another project's
+# src/ tree is left alone. The non-greedy group is the git ref, which may
+# itself contain slashes.
+def source_pattern(repo_url: str) -> re.Pattern[str]:
+    repo = repo_url.rstrip("/")
+    return re.compile(re.escape(repo) + r'/blob/([^"]+?)(/src/)')
 
 
-def fix(text: str, site_url: str, package_root: str, offset: str) -> str | None:
+def fix(
+    text: str, site_url: str, repo_url: str, package_root: str, offset: str
+) -> str | None:
     """Return `text` post-processed, or None when it needs no change.
 
     Returns None when the page needs neither, which keeps the caller from
@@ -68,23 +74,25 @@ def fix(text: str, site_url: str, package_root: str, offset: str) -> str | None:
         icons += n
         return tag
 
+    repo = repo_url.rstrip("/")
+
     def relocate(match: re.Match[str]) -> str:
-        ref = match.group(2)
+        ref = match.group(1)
         # Already carries the package directory, so leave it be.
         if ref == package_root or ref.endswith("/" + package_root):
             return match.group(0)
-        return f"{match.group(1)}{ref}/{package_root}{match.group(3)}"
+        return f"{repo}/blob/{ref}/{package_root}{match.group(2)}"
 
     patched = LINK.sub(relativize, text)
     patched, badges = BADGE.subn("", patched)
-    patched, sources = SOURCE.subn(relocate, patched)
+    patched, sources = source_pattern(repo_url).subn(relocate, patched)
 
     if not (icons or badges or sources) or patched == text:
         return None
     return patched
 
 
-def main(root: str, site_url: str, package_root: str) -> int:
+def main(root: str, site_url: str, repo_url: str, package_root: str) -> int:
     directory = pathlib.Path(root)
     if not directory.is_dir():
         print(f"{root} is not a directory", file=sys.stderr)
@@ -97,7 +105,7 @@ def main(root: str, site_url: str, package_root: str) -> int:
         # makes this correct inside a versioned copy as well as at the top.
         found = OFFSET.search(text)
         offset = found.group(1) if found else "./"
-        patched = fix(text, site_url, package_root, offset)
+        patched = fix(text, site_url, repo_url, package_root, offset)
         if patched is None:
             skipped += 1
             continue
@@ -109,7 +117,7 @@ def main(root: str, site_url: str, package_root: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 5:
         print(__doc__, file=sys.stderr)
         raise SystemExit(2)
-    raise SystemExit(main(sys.argv[1], sys.argv[2], sys.argv[3]))
+    raise SystemExit(main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]))

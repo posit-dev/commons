@@ -1,6 +1,6 @@
 # Tells a fork's author why their pull request has no documentation preview.
 #
-# quartodoc.yaml skips the preview deploy for forks, and a fork's
+# py-docs.yaml skips the preview deploy for forks, and a fork's
 # GITHUB_TOKEN is read-only, so that workflow cannot post this itself.
 # pull_request_target runs with the base repository's token, which can. This workflow never checks out the pull request, and asks for no
 # permission beyond writing the comment, so none of what makes
