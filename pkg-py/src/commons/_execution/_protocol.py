@@ -80,7 +80,27 @@ _REPR_TEXT_LIMIT = 10_000
 # message would otherwise exceed STREAM_LIMIT.
 _TEXT_CLIP_LIMIT = 1024 * 1024
 
+# The largest Arrow frame that still fits the line once it is base64, which
+# costs four bytes for every three. A frame above this would be encoded and
+# then thrown away again by `encode_message`. The frame is not the whole
+# line, so the budget holds back what rides beside it: printed output and a
+# traceback, each clipped to `_TEXT_CLIP_LIMIT`, and the envelope. Text that
+# escapes long can still overrun it; `encode_message` remains the authority.
+_FRAME_WIRE_LIMIT = (STREAM_LIMIT - 2 * _TEXT_CLIP_LIMIT - 4096) * 3 // 4
+
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
+
+# Arrow IPC message header types, and the one field type that writes no
+# buffer, as the format's flatbuffer schemas number them.
+_SCHEMA = 1
+_DICTIONARY_BATCH = 2
+_RECORD_BATCH = 3
+_NULL_TYPE = 1
+
+# How deep a schema may nest its fields: the walk below holds one iterator
+# per level. pyarrow refuses to read a stream nested even half this deep,
+# so the cap is reachable only by a schema written by hand.
+_SCHEMA_DEPTH_LIMIT = 128
 
 # `_coerce_scalar` returns this when a value has no JSON-carryable rendering.
 _FALL_BACK = object()
@@ -199,7 +219,7 @@ def encode_value(value: Any) -> dict[str, Any]:
         # A column Arrow cannot hold (objects in a pandas `object` column,
         # complex numbers) or a frame too large for the channel falls back
         # to repr: one bad column costs the value, not the call.
-        if data is not None and len(data) <= STREAM_LIMIT:
+        if data is not None and len(data) <= _FRAME_WIRE_LIMIT:
             return {
                 "encoding": "arrow",
                 "library": library,
@@ -415,37 +435,56 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
         pyarrow = importlib.import_module("pyarrow")
     except ImportError as error:
         raise ProtocolError(f"cannot decode a frame without pyarrow: {error}") from error
+    # Only pandas spends a pointer on a null value. Arrow holds a null
+    # column as a length and polars keeps it that way, so the cells the
+    # caps below charge for are free unless the frame becomes a pandas
+    # one, and charging them anyway would refuse a frame this module is
+    # willing to encode.
+    cells = library == "pandas"
     try:
-        _check_ipc_size(data, max_frame_bytes)
+        _check_ipc_size(data, max_frame_bytes, cells)
         reader = pyarrow.ipc.open_stream(pyarrow.py_buffer(data))
-        table = _read_capped(reader, pyarrow, max_frame_bytes)
+        table = _read_capped(reader, pyarrow, max_frame_bytes, cells)
+        return _rebuild_frame(table, library)
+    except (ImportError, RecursionError, *_arrow_refusals(pyarrow)) as error:
+        raise ProtocolError(f"malformed value payload: {error}") from error
+
+
+def _rebuild_frame(table: Any, library: str) -> Any:
+    # The wire names the library and carries the bytes separately, so a
+    # table Arrow accepts can still be one pandas or polars will not hold.
+    # Their refusals are ordinary exceptions of their own making, and the
+    # size is already checked, so anything raised here is the payload's
+    # fault and owes the caller a `ProtocolError`.
+    try:
         if library == "pandas":
             return table.to_pandas()
         if library == "polars":
             return importlib.import_module("polars").from_arrow(table)
         return table
-    except (ImportError, RecursionError, *_arrow_refusals(pyarrow)) as error:
+    except Exception as error:  # the boundary owes a ProtocolError, whatever raised
         raise ProtocolError(f"malformed value payload: {error}") from error
 
 
 # --- the size cap, enforced before decompression ----------------------------
 
 
-def _check_ipc_size(data: bytes, max_frame_bytes: int) -> None:
+def _check_ipc_size(data: bytes, max_frame_bytes: int, cells: bool) -> None:
     """Refuse a stream that declares more than ``max_frame_bytes`` decoded.
 
     Reads only the IPC framing and flatbuffer metadata: nothing is
     decompressed and no Arrow structure is built. Each record batch or
-    dictionary delta is charged the sum of its buffers — the uncompressed
-    length prefix for a compressed buffer, the declared length otherwise —
-    and a batch declaring no buffers is rows of nothing but null columns,
-    which pandas conversion prices at a pointer per row. Anything that does
-    not parse as the layout pyarrow's writer emits is refused, which honest
-    traffic never trips because every stream on this channel came from
-    ``_to_arrow_ipc``.
+    dictionary delta is charged the sum of its buffers, the uncompressed
+    length prefix for a compressed buffer and the declared length
+    otherwise, plus a pointer per cell for the null fields the schema
+    named, which write no buffer to be charged for. Anything that does
+    not parse as the layout pyarrow's writer emits is refused, which
+    honest traffic never trips because every stream on this channel came
+    from ``_to_arrow_ipc``.
     """
     pos = 0
     decoded = 0
+    nulls = bytearray()
     while pos < len(data):
         marker = _u32(data, pos)
         pos += 4
@@ -460,13 +499,22 @@ def _check_ipc_size(data: bytes, max_frame_bytes: int) -> None:
             raise ProtocolError("malformed value payload: truncated Arrow IPC metadata")
         metadata = data[pos : pos + metadata_length]
         pos += metadata_length
-        body_length, batch = _ipc_message(metadata)
+        body_length, kind, header = _ipc_message(metadata)
         if body_length < 0 or pos + body_length > len(data):
             raise ProtocolError("malformed value payload: truncated Arrow IPC body")
         body = data[pos : pos + body_length]
         pos += body_length
-        if batch is not None:
-            decoded += _ipc_batch_size(metadata, batch, body)
+        if kind == _SCHEMA and header is not None:
+            if cells:
+                nulls = _null_fields(metadata, header)
+        elif header is not None:
+            # A dictionary batch carries one field's values, which the
+            # schema's node positions do not describe and pandas does not
+            # pay for; only a record batch is charged against them.
+            decoded += _ipc_batch_size(
+                metadata, header, body,
+                nulls if kind == _RECORD_BATCH else bytearray(),
+            )
             if decoded > max_frame_bytes:
                 raise ProtocolError(
                     "a frame decodes to more than the channel allows "
@@ -474,35 +522,105 @@ def _check_ipc_size(data: bytes, max_frame_bytes: int) -> None:
                 )
 
 
-def _ipc_message(metadata: bytes) -> tuple[int, int | None]:
-    """The (body length, batch table offset) declared by one message."""
+def _ipc_message(metadata: bytes) -> tuple[int, int, int | None]:
+    """The (body length, kind, header table offset) declared by one message."""
     root = _u32(metadata, 0)
     type_at = _table_field(metadata, root, 1)
     header_type = _u8(metadata, type_at) if type_at is not None else 0
     length_at = _table_field(metadata, root, 3)
     body_length = _i64(metadata, length_at) if length_at is not None else 0
-    if header_type not in (2, 3):  # not a DictionaryBatch or RecordBatch
-        return body_length, None
+    if header_type not in (_SCHEMA, _DICTIONARY_BATCH, _RECORD_BATCH):
+        return body_length, header_type, None
     header_at = _table_field(metadata, root, 2)
     if header_at is None:
         raise ProtocolError("malformed value payload: IPC message with no header")
     header = header_at + _u32(metadata, header_at)
-    if header_type == 2:  # a DictionaryBatch wraps the RecordBatch it carries
+    if header_type == _DICTIONARY_BATCH:  # it wraps the RecordBatch it carries
         data_at = _table_field(metadata, header, 1)
         if data_at is None:
             raise ProtocolError("malformed value payload: dictionary batch with no data")
         header = data_at + _u32(metadata, data_at)
-    return body_length, header
+    return body_length, header_type, header
 
 
-def _ipc_batch_size(metadata: bytes, batch: int, body: bytes) -> int:
+def _null_fields(metadata: bytes, schema: int) -> bytearray:
+    """Which of the schema's field nodes are the null type, in batch order.
+
+    A null field is the one kind that writes no buffer at all, so it is
+    free on the wire and a pointer per cell in pandas. Which fields those
+    are has to come from the schema: a batch says how many nodes it
+    carries, not which of them cost nothing, and one string field's three
+    buffers are enough to hide two null columns behind it.
+
+    A batch lists its nodes in the order this walk visits the fields,
+    parents before children, so a field's position is what the batch is
+    charged by. A dictionary-encoded field is one node holding indices,
+    however deep the type it encodes, and the walk stops there: those
+    values arrive in a batch of their own and cost pandas nothing, which
+    refuses a null category outright and holds the rest by index.
+    """
+    fields_at = _table_field(metadata, schema, 1)
+    if fields_at is None:
+        return bytearray()
+    # A flag per field rather than the position of each null one: the
+    # positions are integers the far end decides how many of, and a schema
+    # entitled to name millions of them would be paid for in objects. A
+    # flag costs the byte the field's own offset cost.
+    flags = bytearray()
+    # Nothing guarantees the offsets move: a hand-built schema can point a
+    # field's children back at the field, and the walk would never end. No
+    # field costs fewer than sixteen bytes of message (pyarrow's writer
+    # spends nearer forty), so the message bounds how many it can hold.
+    # Garbage offsets fail their own reads long before this; it is here to
+    # end a cycle, not to catch one.
+    budget = len(metadata) // 16
+    # One iterator per level, never a list of every field: the counts are
+    # the far end's to choose, and a vector it is entitled to declare is
+    # long enough that reading it all in would be the allocation this
+    # function exists to refuse.
+    stack = [_tables(metadata, fields_at)]
+    while stack:
+        field = next(stack[-1], None)
+        if field is None:
+            stack.pop()
+            continue
+        if budget <= 0:
+            raise ProtocolError(
+                "malformed value payload: IPC schema overruns its message"
+            )
+        budget -= 1
+        encoded = _table_field(metadata, field, 4) is not None
+        type_at = _table_field(metadata, field, 2)
+        is_null = type_at is not None and _u8(metadata, type_at) == _NULL_TYPE
+        flags.append(1 if is_null and not encoded else 0)
+        children_at = _table_field(metadata, field, 5)
+        if encoded or children_at is None:
+            continue
+        if len(stack) >= _SCHEMA_DEPTH_LIMIT:
+            raise ProtocolError("malformed value payload: IPC schema nests too deep")
+        stack.append(_tables(metadata, children_at))
+    # Most frames have no null field at all and owe the batches nothing.
+    return flags if 1 in flags else bytearray()
+
+
+def _tables(buf: bytes, loc: int) -> Iterator[int]:
+    """Where each table in the vector of tables at ``loc`` begins."""
+    start, count = _vector(buf, loc)
+    # Each entry is a 4-byte offset and must fit inside the message.
+    if count > (len(buf) - start) // 4:
+        raise ProtocolError(
+            "malformed value payload: IPC field count overruns its message"
+        )
+    return (start + 4 * i + _u32(buf, start + 4 * i) for i in range(count))
+
+
+def _ipc_batch_size(
+    metadata: bytes, batch: int, body: bytes, nulls: bytearray
+) -> int:
     """The decoded size one record batch declares, in bytes."""
-    rows_at = _table_field(metadata, batch, 0)
-    rows = _i64(metadata, rows_at) if rows_at is not None else 0
     buffers_at = _table_field(metadata, batch, 2)
     compressed = _table_field(metadata, batch, 3) is not None
-    size = 0
-    count = 0
+    size = _null_node_size(metadata, batch, nulls)
     if buffers_at is not None:
         start, count = _vector(metadata, buffers_at)
         # A lying count would churn allocations until the reads ran out of
@@ -521,16 +639,52 @@ def _ipc_batch_size(metadata: bytes, batch: int, body: bytes) -> int:
             if not compressed:
                 size += length
                 continue
+            if length < 8:
+                # The prefix below is those eight bytes; a shorter buffer
+                # would charge the batch a negative number of them.
+                raise ProtocolError(
+                    "malformed value payload: IPC buffer shorter than its prefix"
+                )
             prefix = _i64(body, offset)
             if prefix < -1:
                 raise ProtocolError("malformed value payload: bad IPC buffer prefix")
             # A compressed buffer starts with its uncompressed length; -1
             # marks a buffer stored uncompressed, which cost it the prefix.
             size += length - 8 if prefix == -1 else prefix
-    if count == 0 and rows > 0:
-        # No buffers at all: rows of nothing but null columns, which pandas
-        # conversion prices at a pointer per row.
-        size += 8 * rows
+    return size
+
+
+def _null_node_size(metadata: bytes, batch: int, nulls: bytearray) -> int:
+    """What the batch's null fields cost, at a pointer per cell.
+
+    Each is charged by its own node's length rather than the batch's, so
+    that a nested one is charged for the values it holds: a single row of
+    ``list<null>`` costs one offsets buffer on the wire and says in its
+    child node how many nulls that row unpacks into.
+    """
+    if not nulls:
+        return 0
+    nodes_at = _table_field(metadata, batch, 1)
+    if nodes_at is None:
+        raise ProtocolError("malformed value payload: IPC batch with no field nodes")
+    start, count = _vector(metadata, nodes_at)
+    # The entries are 16 bytes each and must fit inside the message.
+    if count > (len(metadata) - start) // 16:
+        raise ProtocolError(
+            "malformed value payload: IPC node count overruns its message"
+        )
+    if count < len(nulls):
+        raise ProtocolError("malformed value payload: IPC batch short of its schema")
+    size = 0
+    for at, is_null in enumerate(nulls):
+        if not is_null:
+            continue
+        length = _i64(metadata, start + 16 * at)
+        if length < 0:
+            # The length is signed on the wire and charged by below; a
+            # negative one would pay the batch back for its buffers.
+            raise ProtocolError("malformed value payload: IPC node of negative length")
+        size += 8 * length
     return size
 
 
@@ -548,6 +702,7 @@ def _vector(buf: bytes, loc: int) -> tuple[int, int]:
     """(first element, count) of the flatbuffer vector whose offset is at ``loc``."""
     start = loc + _u32(buf, loc)
     return start + 4, _u32(buf, start)
+
 
 
 def _read_int(buf: bytes, off: int, size: int, signed: bool = False) -> int:
@@ -572,7 +727,7 @@ def _i64(buf: bytes, off: int) -> int:
     return _read_int(buf, off, 8, signed=True)
 
 
-def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int) -> Any:
+def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int, cells: bool) -> Any:
     """Read the stream, refusing to decode past ``max_frame_bytes``.
 
     The runtime backstop to ``_check_ipc_size``, which enforces the cap from
@@ -583,7 +738,7 @@ def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int) -> Any:
     batches = []
     decoded = 0
     for batch in reader:
-        decoded += batch.nbytes
+        decoded += _batch_cost(batch, pyarrow, cells)
         if decoded > max_frame_bytes:
             raise ProtocolError(
                 "a frame decodes to more than the channel allows "
@@ -591,6 +746,39 @@ def _read_capped(reader: Any, pyarrow: Any, max_frame_bytes: int) -> Any:
             )
         batches.append(batch)
     return pyarrow.Table.from_batches(batches, schema=reader.schema)
+
+
+def _batch_cost(batch: Any, pyarrow: Any, cells: bool) -> int:
+    """What one batch costs once it is a frame, in bytes.
+
+    ``nbytes`` is what Arrow holds, which is nothing for a null value: a
+    wide frame of null columns, or one row of a list of them, is
+    kilobytes of Arrow and a pointer per cell of pandas. Charging those
+    cells keeps this in step with the pre-flight instead of sharing its
+    blind spot, and only where they cost anything.
+    """
+    if not cells:
+        return batch.nbytes
+    nulls = sum(_null_cells(column, pyarrow) for column in batch.columns)
+    return batch.nbytes + 8 * nulls
+
+
+def _null_cells(array: Any, pyarrow: Any) -> int:
+    """How many values ``array`` holds that are the null type.
+
+    A dictionary is not walked into, for the reason ``_null_fields``
+    gives: its values reach pandas by index, never a pointer each.
+    """
+    kind = array.type
+    if pyarrow.types.is_null(kind):
+        return len(array)
+    if pyarrow.types.is_struct(kind) or pyarrow.types.is_union(kind):
+        children: Any = (array.field(i) for i in range(kind.num_fields))
+    elif hasattr(array, "values"):  # every flavour of list, and map
+        children = (array.values,)
+    else:
+        return 0
+    return sum(_null_cells(child, pyarrow) for child in children)
 
 
 # `ArrowInvalid` and `ArrowTypeError` are `ValueError` and `TypeError`, but
@@ -726,6 +914,11 @@ def decode_message(line: bytes | str, *, max_frame_bytes: int = FRAME_BYTES_LIMI
     Every field came off the channel, so nothing about its shape is
     guaranteed; a wrong shape must fail here, not much later in a driver
     that keys its in-flight calls on ``id``.
+
+    ``line`` is assumed to be one already bounded by the reader that
+    produced it: ``read_message`` refuses anything past ``STREAM_LIMIT``
+    before a line gets here. Its length is not checked again, so a caller
+    reading from somewhere else owes the bound itself.
     """
     try:
         body = json.loads(line)

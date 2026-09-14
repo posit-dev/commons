@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import decimal
 import json
 import math
 import os
@@ -256,6 +257,38 @@ def test_a_value_whose_repr_raises_still_crosses():
     assert "repr raised" in crossed.text
 
 
+def test_a_value_with_an_enormous_repr_crosses_clipped():
+    # A repr is the fallback for everything, so it is the one place an
+    # unbounded string can reach the line; it has to arrive clipped, and
+    # say how much was left behind.
+    class Verbose:
+        def __repr__(self):
+            return "v" * (_protocol._REPR_TEXT_LIMIT * 3)
+
+    crossed = decode_value(encode_value(Verbose()))
+    assert isinstance(crossed, OpaqueValue)
+    assert len(crossed.text) < _protocol._REPR_TEXT_LIMIT * 2
+    full = f"{_protocol._REPR_TEXT_LIMIT * 3:,}"
+    assert crossed.text.endswith(f"[{full} characters in full]")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(lambda np: np.bool_(True), id="numpy bool"),
+        pytest.param(lambda np: np.datetime64("2026-01-01"), id="numpy datetime"),
+        pytest.param(lambda np: decimal.Decimal("1.5"), id="decimal"),
+    ],
+)
+def test_a_scalar_json_cannot_hold_stays_a_repr(value):
+    # `_coerce_scalar` turns numpy numbers into JSON numbers. These three
+    # are deliberately left out: their reprs read well, and any guess at a
+    # JSON type would change what the model is shown.
+    np = pytest.importorskip("numpy")
+    crossed = decode_value(encode_value(value(np)))
+    assert isinstance(crossed, OpaqueValue)
+
+
 def test_an_impossibly_large_integer_crosses_as_text():
     # `json.dumps` refuses an int past the interpreter's digit limit, and
     # `repr` refuses it too; neither may cost the call.
@@ -412,6 +445,24 @@ def test_a_frame_too_large_for_the_channel_crosses_as_its_repr():
     assert crossed.stdout == "kept\n"
 
 
+def test_a_frame_that_cannot_fit_the_line_is_not_encoded_for_it():
+    # Two things stand between a frame and the line it has to fit: base64,
+    # which costs a third on top, and the message around it. A frame this
+    # size clears STREAM_LIMIT on its own and clears neither, so it must
+    # fall back here rather than be encoded and thrown away in the shrink.
+    # `encode_message` still decides the outcome; what this saves is the
+    # encoding of 47 MiB nobody keeps.
+    pd = pytest.importorskip("pandas")
+    frame = pd.DataFrame({"n": range(6_200_000)})  # ~47 MiB as Arrow
+    assert encode_value(frame)["encoding"] == "repr"
+    printed = "o" * (_protocol._TEXT_CLIP_LIMIT + 1000)
+    line = encode_message(Result(id="c1", value=frame, stdout=printed))
+    assert len(line) <= STREAM_LIMIT
+    crossed = decode_message(line)
+    assert isinstance(crossed, Result)
+    assert crossed.stdout == printed
+
+
 def test_output_too_large_for_the_channel_is_clipped():
     # stdout holds unbounded model output, so this is reachable without any
     # adversary. The value survives; the output is clipped, and says so.
@@ -500,22 +551,143 @@ def test_a_lying_buffer_count_is_refused():
     # or a stream-sized payload can force allocations far past itself.
     payload = _compressed_frame_payload()
     data = base64.b64decode(payload["data"])
-    pos = 0
-    meta = b""
-    batch = None
-    while batch is None:
-        assert _protocol._u32(data, pos) == 0xFFFFFFFF
-        mlen = _protocol._u32(data, pos + 4)
-        meta = data[pos + 8 : pos + 8 + mlen]
-        body_length, batch = _protocol._ipc_message(meta)
-        if batch is None:
-            pos += 8 + mlen + body_length
+    pos, meta, batch = _find_record_batch(data)
     buffers_at = _protocol._table_field(meta, batch, 2)
     assert buffers_at is not None
     count_at = pos + 8 + buffers_at + _protocol._u32(meta, buffers_at)
     patched = data[:count_at] + (2**31).to_bytes(4, "little") + data[count_at + 4 :]
     with pytest.raises(ProtocolError, match="overruns"):
         decode_value({**payload, "data": base64.b64encode(patched).decode("ascii")})
+
+
+def _find_record_batch(data):
+    """(message start, metadata, batch offset) of a stream's first batch."""
+    pos = 0
+    while True:
+        assert _protocol._u32(data, pos) == 0xFFFFFFFF
+        length = _protocol._u32(data, pos + 4)
+        meta = data[pos + 8 : pos + 8 + length]
+        body_length, kind, header = _protocol._ipc_message(meta)
+        if kind in (_protocol._DICTIONARY_BATCH, _protocol._RECORD_BATCH):
+            assert header is not None
+            return pos, meta, header
+        pos += 8 + length + body_length
+
+
+def _patched(data, at, value, size=8):
+    raw = value.to_bytes(size, "little", signed=value < 0)
+    return data[:at] + raw + data[at + size :]
+
+
+def _refused(payload, data, match):
+    with pytest.raises(ProtocolError, match=match):
+        decode_value({**payload, "data": base64.b64encode(data).decode("ascii")})
+
+
+def test_a_stream_cut_off_inside_its_metadata_is_refused():
+    # Every branch below is one flatbuffer edit away from an honest
+    # payload, and each must be refused from the metadata alone, before
+    # pyarrow is handed the stream.
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos, meta, _batch = _find_record_batch(data)
+    _refused(payload, data[: pos + 8 + len(meta) // 2], "truncated Arrow IPC metadata")
+
+
+def test_a_stream_cut_off_before_its_body_is_refused():
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos, meta, _batch = _find_record_batch(data)
+    _refused(payload, data[: pos + 8 + len(meta)], "truncated Arrow IPC body")
+
+
+def test_a_batch_message_with_no_header_is_refused():
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos, meta, _batch = _find_record_batch(data)
+    root = _protocol._u32(meta, 0)
+    vtable = root - _protocol._read_int(meta, root, 4, signed=True)
+    # Field 2 of a Message is the header the batch lives in; a zero in its
+    # vtable slot says the message declares a batch and then omits it.
+    _refused(
+        payload,
+        _patched(data, pos + 8 + vtable + 4 + 2 * 2, 0, size=2),
+        "IPC message with no header",
+    )
+
+
+def test_a_dictionary_batch_with_no_record_batch_is_refused():
+    pa = pytest.importorskip("pyarrow")
+    table = pa.table({"c": pa.array(["x", "y", "x"]).dictionary_encode()})
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    data = sink.getvalue().to_pybytes()
+    payload = {"encoding": "arrow", "library": "pyarrow", "data": ""}
+    pos, meta, _batch = _find_record_batch(data)
+    header_at = _protocol._table_field(meta, _protocol._u32(meta, 0), 2)
+    assert header_at is not None
+    header = header_at + _protocol._u32(meta, header_at)
+    vtable = header - _protocol._read_int(meta, header, 4, signed=True)
+    # Field 1 of a DictionaryBatch is the record batch it wraps.
+    _refused(
+        payload,
+        _patched(data, pos + 8 + vtable + 4 + 2 * 1, 0, size=2),
+        "dictionary batch with no data",
+    )
+
+
+def test_a_buffer_reaching_past_its_body_is_refused():
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos, meta, batch = _find_record_batch(data)
+    buffers_at = _protocol._table_field(meta, batch, 2)
+    assert buffers_at is not None
+    start, _count = _protocol._vector(meta, buffers_at)
+    _refused(
+        payload,
+        _patched(data, pos + 8 + start + 8, 1 << 40),
+        "IPC buffer outside its body",
+    )
+
+
+def test_a_buffer_with_a_nonsense_prefix_is_refused():
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos, meta, batch = _find_record_batch(data)
+    buffers_at = _protocol._table_field(meta, batch, 2)
+    assert buffers_at is not None
+    start, count = _protocol._vector(meta, buffers_at)
+    at = next(
+        start + 16 * i
+        for i in range(count)
+        if _protocol._i64(meta, start + 16 * i + 8) >= 8
+    )
+    offset = _protocol._i64(meta, at)
+    # Only -1 (stored uncompressed) is a legal negative prefix.
+    crafted = _patched(data, pos + 8 + len(meta) + offset, -2)
+    _refused(payload, crafted, "bad IPC buffer prefix")
+
+
+def test_a_compressed_buffer_too_short_to_hold_its_prefix_is_refused():
+    # A compressed buffer opens with its uncompressed length, so eight of
+    # its bytes are not payload. A crafted length below that would have the
+    # pre-flight subtract from the running total instead of adding to it.
+    payload = _compressed_frame_payload()
+    data = base64.b64decode(payload["data"])
+    pos, meta, batch = _find_record_batch(data)
+    buffers_at = _protocol._table_field(meta, batch, 2)
+    assert buffers_at is not None
+    start, count = _protocol._vector(meta, buffers_at)
+    at = next(
+        start + 16 * i + 8
+        for i in range(count)
+        if _protocol._i64(meta, start + 16 * i + 8) >= 8
+    )
+    at += pos + 8
+    crafted = data[:at] + (4).to_bytes(8, "little") + data[at + 8 :]
+    with pytest.raises(ProtocolError, match="shorter than its prefix"):
+        decode_value({**payload, "data": base64.b64encode(crafted).decode("ascii")})
 
 
 def test_a_compressed_stream_with_incompressible_buffers_crosses():
@@ -546,6 +718,98 @@ def test_a_dictionary_encoded_frame_round_trips():
     pd.testing.assert_frame_equal(crossed, frame)
 
 
+def test_a_dictionary_batch_does_not_pay_for_the_schemas_null_columns():
+    # A dictionary batch carries one column of its own, the dictionary's
+    # values, and as many rows as the dictionary is long. Charging it for
+    # the null columns in the schema would price a frame at whatever its
+    # categories happen to number and refuse honest ones.
+    pa = pytest.importorskip("pyarrow")
+    values = [f"v{i}" for i in range(50_000)]
+    fields = [("c", pa.dictionary(pa.int32(), pa.string()))]
+    fields += [(f"n{i}", pa.null()) for i in range(2_000)]
+    schema = pa.schema(fields)
+    # Ten rows drawn from a dictionary of fifty thousand.
+    columns = [
+        pa.DictionaryArray.from_arrays(
+            pa.array(list(range(10)), type=pa.int32()), pa.array(values)
+        )
+    ]
+    columns += [pa.nulls(10, pa.null())] * 2_000
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, schema) as writer:
+        writer.write_table(pa.table(columns, schema=schema))
+    # 10 rows of 2,000 null columns is 160 KB; the dictionary's own rows
+    # would add 800 MB if they were charged the same way.
+    _protocol._check_ipc_size(sink.getvalue().to_pybytes(), 16 * 1024 * 1024, True)
+
+
+def test_a_dictionary_field_is_one_node_however_deep_its_values_go():
+    # A record batch holds a dictionary-encoded field as its indices, one
+    # node with nothing under it. Read the schema as if the batch carried
+    # the type it encodes and every node after it is charged to the wrong
+    # field. Nothing under a dictionary reaches pandas a pointer at a
+    # time, so the pre-flight has no quarrel with this frame; pandas
+    # refuses the categories itself, which is its refusal to make.
+    data = _dictionary_of_lists(20_000_000)
+    _protocol._check_ipc_size(data, 8 * 1024 * 1024, True)
+    payload = {
+        "encoding": "arrow",
+        "library": "pandas",
+        "data": base64.b64encode(data).decode("ascii"),
+    }
+    with pytest.raises(ProtocolError, match="unhashable|Categorical"):
+        decode_value(payload)
+
+
+def test_a_dictionary_of_nulls_is_charged_for_its_indices():
+    # The node a dictionary-encoded field puts in the batch holds its
+    # indices, so it costs what an index costs however null the values
+    # it points at are.
+    pa = pytest.importorskip("pyarrow")
+    rows = 2_000_000
+    column = pa.DictionaryArray.from_arrays(
+        pa.array([0] * rows, type=pa.int32()), pa.nulls(4, pa.null())
+    )
+    sink = pa.BufferOutputStream()
+    batch = pa.record_batch([column], names=["c"])
+    with pa.ipc.new_stream(sink, batch.schema) as writer:
+        writer.write_batch(batch)
+    # Eight megabytes of indices, and nothing for the values behind them.
+    _protocol._check_ipc_size(sink.getvalue().to_pybytes(), 16 * 1024 * 1024, True)
+
+
+def test_a_null_column_after_a_dictionary_is_still_priced():
+    # The positions only line up if the walk stops at the dictionary:
+    # one node for it, then the next node is this column.
+    pa = pytest.importorskip("pyarrow")
+    rows = 2_000_000
+    table = pa.table(
+        {
+            "d": pa.array(["x", "y"] * (rows // 2)).dictionary_encode(),
+            "n": pa.nulls(rows, pa.null()),
+        }
+    )
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    with pytest.raises(ProtocolError, match="declared"):
+        _protocol._check_ipc_size(sink.getvalue().to_pybytes(), 8 * 1024 * 1024, True)
+
+
+def _dictionary_of_lists(children):
+    """A frame whose categories are lists of nulls, ``children`` in all."""
+    pa = pytest.importorskip("pyarrow")
+    values = pa.ListArray.from_arrays(
+        pa.array([0, children], type=pa.int32()), pa.nulls(children, pa.null())
+    )
+    column = pa.DictionaryArray.from_arrays(pa.array([0, 0], type=pa.int32()), values)
+    table = pa.table({"c": column, "n": pa.nulls(2, pa.null())})
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    return sink.getvalue().to_pybytes()
+
+
 def test_a_frame_of_nothing_but_none_round_trips():
     # An all-None column crosses as a batch with no buffers at all; the
     # pre-flight prices it at a pointer per row.
@@ -553,6 +817,243 @@ def test_a_frame_of_nothing_but_none_round_trips():
     frame = pd.DataFrame({"x": [None] * 1000})
     crossed = decode_value(encode_value(frame))
     pd.testing.assert_frame_equal(crossed, frame)
+
+
+def _null_frame_payload(columns, rows):
+    pa = pytest.importorskip("pyarrow")
+    schema = pa.schema([(f"c{i}", pa.null()) for i in range(columns)])
+    table = pa.table([pa.nulls(rows, pa.null())] * columns, schema=schema)
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, schema) as writer:
+        writer.write_table(table)
+    return {
+        "encoding": "arrow",
+        "library": "pandas",
+        "data": base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii"),
+    }
+
+
+def test_a_wide_all_null_frame_is_priced_by_its_cells():
+    # Null columns carry no buffers, so a frame of them is kilobytes on the
+    # wire and a pointer per cell once pandas holds it: 10M cells here. The
+    # cap has to count the columns, not just the rows.
+    payload = _null_frame_payload(columns=2_000, rows=5_000)
+    assert len(payload["data"]) < 1024 * 1024
+    with pytest.raises(ProtocolError, match="declared"):
+        # Named directly: the runtime backstop refuses this frame too, and
+        # the point of the pre-flight is refusing it before pyarrow reads.
+        _protocol._check_ipc_size(
+            base64.b64decode(payload["data"]), 8 * 1024 * 1024, True
+        )
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        decode_value(payload, max_frame_bytes=8 * 1024 * 1024)
+
+
+def test_null_columns_beside_a_real_one_are_priced_too():
+    # The all-null batch is the obvious shape, but one real column is
+    # enough to put buffers in the batch; the null columns beside it still
+    # cost a pointer per cell.
+    pa = pytest.importorskip("pyarrow")
+    rows = 5_000
+    fields = [("real", pa.int64())] + [(f"c{i}", pa.null()) for i in range(2_000)]
+    schema = pa.schema(fields)
+    columns = [pa.array([0] * rows, type=pa.int64())]
+    columns += [pa.nulls(rows, pa.null())] * 2_000
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, schema) as writer:
+        writer.write_table(pa.table(columns, schema=schema))
+    data = sink.getvalue().to_pybytes()
+    payload = {
+        "encoding": "arrow",
+        "library": "pandas",
+        "data": base64.b64encode(data).decode("ascii"),
+    }
+    with pytest.raises(ProtocolError, match="declared"):
+        _protocol._check_ipc_size(data, 8 * 1024 * 1024, True)
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        decode_value(payload, max_frame_bytes=8 * 1024 * 1024)
+
+
+def test_null_columns_hidden_behind_a_string_column_are_priced():
+    # What a column costs cannot be read off the batch: a string field has
+    # one field node and three buffers, so counting either against the
+    # other lets one of them stand in for two null columns. The schema is
+    # the only thing that says which columns are free on the wire.
+    pa = pytest.importorskip("pyarrow")
+    rows = 5_000
+    nulls = 4_000
+    fields = [(f"s{i}", pa.string()) for i in range(2_000)]
+    fields += [(f"n{i}", pa.null()) for i in range(nulls)]
+    schema = pa.schema(fields)
+    columns = [pa.array([""] * rows, type=pa.string())] * 2_000
+    columns += [pa.nulls(rows, pa.null())] * nulls
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, schema) as writer:
+        writer.write_table(pa.table(columns, schema=schema))
+    data = sink.getvalue().to_pybytes()
+    with pytest.raises(ProtocolError, match="declared"):
+        _protocol._check_ipc_size(data, 64 * 1024 * 1024, True)
+
+
+def _schema_fields_count_at(data):
+    """Where the count of the schema's top-level fields vector lives."""
+    length = _protocol._u32(data, 4)
+    meta = data[8 : 8 + length]
+    _body, kind, header = _protocol._ipc_message(meta)
+    assert kind == _protocol._SCHEMA and header is not None
+    fields_at = _protocol._table_field(meta, header, 1)
+    assert fields_at is not None
+    return 8 + fields_at + _protocol._u32(meta, fields_at)
+
+
+def test_a_lying_field_count_is_refused():
+    # The schema says which columns are free on the wire, so its own
+    # counts are attacker-controlled too: each entry is a four-byte offset
+    # and they must all fit in the message that declares them. Only a
+    # frame bound for pandas is read this closely, so ask for one.
+    payload = {**_compressed_frame_payload(), "library": "pandas"}
+    data = base64.b64decode(payload["data"])
+    at = _schema_fields_count_at(data)
+    _refused(payload, _patched(data, at, 2**31, size=4), "field count overruns")
+
+
+
+def _nodes_vector_at(data):
+    """(message start, metadata, offset of the node vector's count)."""
+    pos, meta, batch = _find_record_batch(data)
+    nodes_at = _protocol._table_field(meta, batch, 1)
+    assert nodes_at is not None
+    return pos, meta, batch, pos + 8 + nodes_at + _protocol._u32(meta, nodes_at)
+
+
+def test_a_lying_node_count_is_refused():
+    # The node vector's count is the far end's to choose, like every other
+    # count in the message, and 16 bytes an entry must fit inside it.
+    payload = _null_frame_payload(columns=4, rows=1_000)
+    data = base64.b64decode(payload["data"])
+    *_rest, at = _nodes_vector_at(data)
+    _refused(payload, _patched(data, at, 2**31, size=4), "node count overruns")
+
+
+def test_a_batch_short_of_the_nodes_its_schema_names_is_refused():
+    # The schema says which node positions are null fields; a batch that
+    # stops before one of them has no length to charge it by.
+    payload = _null_frame_payload(columns=4, rows=1_000)
+    data = base64.b64decode(payload["data"])
+    *_rest, at = _nodes_vector_at(data)
+    _refused(payload, _patched(data, at, 1, size=4), "short of its schema")
+
+
+def test_a_batch_with_no_field_nodes_at_all_is_refused():
+    payload = _null_frame_payload(columns=4, rows=1_000)
+    data = base64.b64decode(payload["data"])
+    pos, meta, batch, _at = _nodes_vector_at(data)
+    vtable = batch - _protocol._read_int(meta, batch, 4, signed=True)
+    # Field 1 of a RecordBatch is the vector of field nodes.
+    crafted = _patched(data, pos + 8 + vtable + 4 + 2 * 1, 0, size=2)
+    _refused(payload, crafted, "no field nodes")
+
+
+def test_a_null_column_costs_only_the_frame_that_pays_for_it():
+    # Arrow holds a null column as a length; only pandas gives every cell
+    # a pointer. The same bytes are a small pyarrow table and a frame
+    # past the cap, and this module writes them itself, so refusing them
+    # for every destination would refuse what it just encoded.
+    pa = pytest.importorskip("pyarrow")
+    payload = encode_value(pa.table({"n": pa.nulls(200_000_000, pa.null())}))
+    assert payload["encoding"] == "arrow"
+    assert len(payload["data"]) < 1024
+    assert decode_value(payload).num_rows == 200_000_000
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        decode_value({**payload, "library": "pandas"})
+
+
+def test_a_schema_nested_past_what_the_walk_holds_is_refused():
+    # One iterator per level, so the depth is capped. pyarrow writes a
+    # schema this deep and then refuses to read it back; the cap means
+    # the refusal is this module's, before any of it is decoded.
+    pa = pytest.importorskip("pyarrow")
+    kind = pa.null()
+    for _ in range(_protocol._SCHEMA_DEPTH_LIMIT + 2):
+        kind = pa.list_(kind)
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, pa.schema([("c", kind)])):
+        pass
+    with pytest.raises(ProtocolError, match="nests too deep"):
+        _protocol._check_ipc_size(sink.getvalue().to_pybytes(), 1024**3, True)
+
+
+def test_a_node_claiming_a_negative_length_is_refused():
+    # A null field is priced by the length its own node declares, and that
+    # is signed on the wire: a negative one would pay the batch back for
+    # the buffers beside it and carry the rest in under the cap.
+    payload = _null_frame_payload(columns=4, rows=1_000)
+    data = base64.b64decode(payload["data"])
+    pos, meta, batch = _find_record_batch(data)
+    nodes_at = _protocol._table_field(meta, batch, 1)
+    assert nodes_at is not None
+    start, _count = _protocol._vector(meta, nodes_at)
+    _refused(payload, _patched(data, pos + 8 + start, -(1 << 40)), "negative length")
+
+
+def _nested_null_stream(children):
+    """One row of ``list<null>``, holding ``children`` nulls."""
+    pa = pytest.importorskip("pyarrow")
+    offsets = pa.array([0, children], type=pa.int32())
+    column = pa.ListArray.from_arrays(offsets, pa.nulls(children, pa.null()))
+    table = pa.table({"c": column})
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    return sink.getvalue().to_pybytes()
+
+
+def test_a_nested_null_column_is_priced_by_what_it_unpacks_to():
+    # A row of `list<null>` is an offsets buffer and nothing else, so the
+    # batch's own row count says one row and the wire says a few hundred
+    # bytes. The child node is where the twenty million nulls are
+    # declared, and pandas gives every one of them a pointer.
+    data = _nested_null_stream(20_000_000)
+    assert len(data) < 1024
+    with pytest.raises(ProtocolError, match="declared"):
+        _protocol._check_ipc_size(data, 8 * 1024 * 1024, True)
+
+
+def test_the_runtime_backstop_prices_nested_nulls_too():
+    pa = pytest.importorskip("pyarrow")
+    data = _nested_null_stream(20_000_000)
+    reader = pa.ipc.open_stream(pa.py_buffer(data))
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        _protocol._read_capped(reader, pa, 8 * 1024 * 1024, True)
+
+
+def test_a_nested_null_column_still_crosses_when_it_fits():
+    # The charge is by cell, not by nesting: a small list of nulls is a
+    # small frame and has to arrive as one.
+    pd = pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    data = _nested_null_stream(1_000)
+    crossed = decode_value(
+        {
+            "encoding": "arrow",
+            "library": "pandas",
+            "data": base64.b64encode(data).decode("ascii"),
+        }
+    )
+    assert isinstance(crossed, pd.DataFrame)
+    assert len(crossed["c"][0]) == 1_000
+
+
+def test_the_runtime_backstop_prices_null_columns_too():
+    # `_read_capped` is the backstop for a stream whose metadata lies, and
+    # Arrow reports a null column as zero bytes; if it trusted that, it
+    # would agree with the pre-flight's blind spot instead of catching it.
+    pa = pytest.importorskip("pyarrow")
+    payload = _null_frame_payload(columns=2_000, rows=5_000)
+    data = base64.b64decode(payload["data"])
+    reader = pa.ipc.open_stream(pa.py_buffer(data))
+    with pytest.raises(ProtocolError, match="more than the channel allows"):
+        _protocol._read_capped(reader, pa, 8 * 1024 * 1024, True)
 
 
 async def test_the_frame_limit_applies_to_lines_read_from_the_channel():
@@ -668,10 +1169,20 @@ async def test_writing_after_the_far_end_is_gone_fails():
     # has to say so, not hang or succeed into the void.
     _reader, writer, read_transport = await open_channel()
     read_transport.close()
-    with pytest.raises(ConnectionError):
-        for _ in range(10):
-            await write_message(writer, Ready())
-            await asyncio.sleep(0)
+    try:
+        with pytest.raises(ConnectionError):
+            for _ in range(10):
+                await write_message(writer, Ready())
+                await asyncio.sleep(0)
+    finally:
+        writer.close()
+
+
+def test_a_broken_channel_is_not_a_malformed_message():
+    # A driver that tolerates junk lines catches `ProtocolError` around the
+    # read; losing the message boundaries has to get past that catch.
+    assert not issubclass(ChannelError, ProtocolError)
+    assert not issubclass(ProtocolError, ChannelError)
 
 
 def test_the_protocol_module_speaks_for_itself_without_commons():
@@ -783,6 +1294,28 @@ def test_a_frame_of_a_type_arrow_has_no_mapping_for_crosses_as_its_repr():
     crossed = decode_value(encode_value(frame))
     assert isinstance(crossed, OpaqueValue)
     assert crossed.type_name == "DataFrame"
+
+
+def test_a_frame_the_named_library_refuses_to_hold_is_refused():
+    # The library name and the bytes are chosen separately by the far end,
+    # so they need not agree: polars has no room for a duplicate column
+    # name that Arrow and pandas both allow. Its refusal is a plain
+    # `Exception`, and it has to arrive as a `ProtocolError` anyway.
+    pa = pytest.importorskip("pyarrow")
+    pytest.importorskip("polars")
+    schema = pa.schema([("a", pa.int64()), ("a", pa.int64())])
+    table = pa.table([pa.array([1, 2]), pa.array([3, 4])], schema=schema)
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, schema) as writer:
+        writer.write_table(table)
+    with pytest.raises(ProtocolError, match="malformed value payload"):
+        decode_value(
+            {
+                "encoding": "arrow",
+                "library": "polars",
+                "data": base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii"),
+            }
+        )
 
 
 @pytest.mark.parametrize(
