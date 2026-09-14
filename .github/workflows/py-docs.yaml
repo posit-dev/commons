@@ -1,19 +1,20 @@
 on:
   push:
     branches: [main]
-    paths: [pkg-py/**, docs/**, .github/workflows/quartodoc.yaml]
+    # paths does not filter a tag push, so a release rebuilds the site
+    # whatever it touched, which is what a release should do.
+    tags: ["py-v*"]
+    paths: [pkg-py/**, docs/**, .github/scripts/docs-postprocess.py, .github/workflows/py-docs.yaml]
   pull_request:
-    paths: [pkg-py/**, docs/**, .github/workflows/quartodoc.yaml]
-  release:
-    types: [published]
+    paths: [pkg-py/**, docs/**, .github/scripts/docs-postprocess.py, .github/workflows/py-docs.yaml]
   workflow_dispatch:
 
-name: quartodoc.yaml
+name: Python documentation build
 
 permissions: read-all
 
 jobs:
-  quartodoc:
+  py-docs:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,7 +26,7 @@ jobs:
     # Races between the two sites are handled at the push instead, by the
     # deploy action's rebase.
     concurrency:
-      group: quartodoc-${{ github.event.number || github.ref }}
+      group: py-docs-${{ github.event.number || github.ref }}
     permissions:
       contents: write
       pull-requests: write
@@ -41,13 +42,17 @@ jobs:
       - name: Install the package and its docs dependencies
         run: uv sync --extra shiny --group docs
 
-      - name: Build the reference pages
-        working-directory: pkg-py/docs
-        run: uv run quartodoc build
+      - name: Build the site
+        working-directory: pkg-py
+        run: uv run great-docs build
 
-      - name: Render the site
-        working-directory: pkg-py/docs
-        run: uv run quarto render
+      # Relativizes the favicon links great-docs writes against site_url, and
+      # drops its version badge. See the script for why each is needed.
+      - name: Post-process the built site
+        working-directory: pkg-py
+        run: |
+          read -r site_url repo_url < <(uv run python -c 'import yaml; c = yaml.safe_load(open("great-docs.yml")); print(c["site_url"], c["repo"])')
+          python3 ../.github/scripts/docs-postprocess.py great-docs/_site "$site_url" "$repo_url" pkg-py
 
       # The deploy publishes the whole of docs/, so the rendered site has to
       # sit at the path it is served from.
@@ -55,7 +60,7 @@ jobs:
         working-directory: .
         run: |
           rm -rf docs/py
-          cp -r pkg-py/docs/_site docs/py
+          cp -r pkg-py/great-docs/_site docs/py
 
       # `clean: false` so this and the pkgdown deploy can each own a
       # subdirectory of the same branch without erasing the other.

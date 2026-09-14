@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: pkg-r
     # Only restrict concurrency for non-PR jobs: those share gh-pages, and a
-    # PR build deploys nothing. Races against quartodoc.yaml's deploy are
+    # PR build deploys nothing. Races against py-docs.yaml's deploy are
     # handled at the push instead, by the deploy action's rebase.
     concurrency:
       group: pkgdown-${{ github.event_name != 'pull_request' || github.run_id }}

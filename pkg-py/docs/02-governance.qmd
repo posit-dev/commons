@@ -36,7 +36,7 @@ When viewer credentials are not available, it is recommended to use a service ac
 
 ## Python code execution
 
-The Python agent currently has no tool that runs code written by the model, but this feature is expected in the near future. Currently, there is no concern for Python `commons` agents executing arbitrary Python code. When the feature is added, it will generally follow the R package's [R code execution](../r/articles/governance.html#r-code-execution) design.
+The Python agent currently has no tool that runs code written by the model, but this feature is expected in the near future. Currently, there is no concern for Python `commons` agents executing arbitrary Python code. When the feature is added, it will generally follow the R package's [R code execution](https://posit-dev.github.io/commons/r/articles/governance.html#r-code-execution) design.
 
 ## Permissioning facts
 
@@ -46,4 +46,4 @@ Because of this, you should only include facts that you can share with both the 
 
 ## Telemetry
 
-The Python implementation of `commons` currently does not support telemetry or conversation logging, though this feature is planned to be added in the near future. When it is added, it will generally follow the R package's [Logging trajectories](../r/articles/governance.html#logging-trajectories) design.
+The Python implementation of `commons` currently does not support telemetry or conversation logging, though this feature is planned to be added in the near future. When it is added, it will generally follow the R package's [Logging trajectories](https://posit-dev.github.io/commons/r/articles/governance.html#logging-trajectories) design.

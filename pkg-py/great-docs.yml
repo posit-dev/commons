@@ -1,0 +1,199 @@
+# The site is assembled by great-docs, which generates a Quarto project into
+# great-docs/ and renders it.
+display_name: commons
+site_url: https://posit-dev.github.io/commons/py/
+repo: https://github.com/posit-dev/commons
+pypi: https://pypi.org/project/commons/
+
+# The narrative pages. This is a directory, and everything under it is
+# rendered, which is why the design notes live in ../notes instead.
+user_guide: docs
+
+# The generated changelog reads GitHub Releases for the whole repository with
+# no tag-prefix filter, so it renders the R package's notes on this site.
+changelog:
+  enabled: false
+
+# Names are relative to the package: `ui.app`, not `commons.ui.app`. A
+# section-level `package:` key is accepted and then ignored. `commons.__all__`
+# does not export `ui`, so the Shiny entries only appear because they are
+# listed here.
+reference:
+  # The dict form, because the navbar label only comes from `title` when
+  # `reference` is a mapping; as a bare list of sections it is ignored.
+  title: API Reference
+  sections:
+    - title: Main functions
+      desc: The main agent constructor, plus the building blocks for a commons agent.
+      contents: [Commons, data_source, semantic_layer, measure, context_layer]
+    - title: Supporting types
+      desc: The objects the constructors return, and the values they carry.
+      contents: [DataSource, SemanticLayer, ContextLayer, Measure, Injected, Tag, list_tables]
+    - title: Shiny UI and server
+      desc: "Put a commons agent inside of an interactive chat app. Needs the `shiny` extra."
+      contents: [ui.app, ui.server, ui.theme, ui.commons_chat_dependency, ui.asset_base_url]
+
+# Nested under `site:`, which is the key great-docs reads; a top-level
+# `css:` is silently ignored. Paths are relative to the project root.
+site:
+  css:
+    - docs/assets/styles.css
+
+# The navbar carries the Python mark beside the package name, as the R site
+# carries the R mark beside it; show_title is needed because great-docs
+# suppresses the text title whenever a logo is set. The hex is the landing
+# page's mark, via hero.logo, which otherwise inherits the navbar logo.
+logo:
+  light: docs/assets/logos/python-logo.svg
+  show_title: true
+
+# The hero logo path is emitted as the img src verbatim and great-docs does not
+# copy the file the way it copies the navbar logo, so this names where the
+# asset actually lands in the built site: docs/ is the user_guide directory,
+# which is published under user-guide/. The hero is only on the landing page,
+# at the site root, so a path relative to the root is right.
+hero:
+  logo: user-guide/assets/hex/commons-hex.png
+
+# The icon both other sites serve, so all three show the same one in a tab.
+# The PNG rather than the SVG source: great-docs rasterizes an SVG with
+# cairosvg, which needs a system cairo library, and warns and skips when it
+# is missing. Pillow handles the PNG with no extra dependency.
+favicon: docs/favicon/favicon-96x96.png
+
+# Each key renders an icon link beside the name, the way pkgdown does on the R
+# site; great-docs does not link the name text itself.
+# Each key renders an icon link beside the name, the way pkgdown does on the R
+# site; great-docs does not link the name text itself.
+authors:
+  - name: Josh Taillon
+    role: Maintainer
+    affiliation: Posit, PBC
+    github: jat255
+    homepage: https://opensource.posit.co/people/josh-taillon/
+    orcid: 0000-0002-5185-4503
+
+funding:
+  name: Posit Software, PBC
+  roles:
+    - Copyright holder
+    - funder
+  homepage: https://posit.co
+
+include_in_header:
+  # No config key adds a navbar link, and the generated _quarto.yml is
+  # rewritten on every build, so the R cross-link is injected instead.
+  # great-docs collects its own widgets into #gd-navbar-widgets, which is
+  # built by a script that runs after this one, so the container is polled for
+  # rather than assumed. Joining that container is what gets the shared flex
+  # alignment and gap; the gd-navbar-icon class is what makes the link look
+  # like the neighbouring buttons. The href is absolute so it works from a
+  # pull request preview and from every /v/ copy, matching the mirror-image
+  # link in pkg-r/_pkgdown.yml.
+  - text: |
+      <script>
+      (function () {
+        var tries = 0;
+        function inject() {
+          if (document.querySelector(".commons-r-link")) return;
+          var tools = document.getElementById("gd-navbar-widgets");
+          if (!tools) {
+            if (tries++ < 100) return window.setTimeout(inject, 50);
+            return;
+          }
+          var link = document.createElement("a");
+          link.className = "nav-link gd-navbar-icon commons-r-link";
+          link.href = "https://posit-dev.github.io/commons/r/";
+          link.title = "R Documentation";
+          link.setAttribute("aria-label", "R documentation");
+          link.innerHTML = '<span class="r-logo"></span>';
+          tools.insertBefore(link, tools.firstChild);
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", inject);
+        } else {
+          inject();
+        }
+      })();
+      </script>
+
+  # Selected by class and meta-name substrings on purpose: great-docs drops
+  # every include_in_header entry whose text contains its own "gd-announcement"
+  # marker, so naming either in full removes this script silently.
+  #
+  # The banner is built client-side and its url is used verbatim, so Quarto
+  # never rewrites it per page depth and a relative link resolved against the
+  # current page's directory: from user-guide/ the banner asked for
+  # user-guide/user-guide/. The prefix comes from Quarto's offset meta, which is
+  # how great-docs' own version selector and sidebar scripts find the site root,
+  # and it stays correct in a pull request preview and inside a /v/ copy.
+  #
+  # The raw path is read back from the meta, not from the link: assigning to
+  # a.href reflects the *resolved* absolute URL into the attribute, so reading
+  # the link would only ever see the already-wrong absolute path.
+  - text: |
+      <script>
+      (function () {
+        var tries = 0;
+        function fix() {
+          var link = document.querySelector('[class*="announcement-banner"] a');
+          if (!link) {
+            if (tries++ < 100) return window.setTimeout(fix, 50);
+            return;
+          }
+          if (link.dataset.commonsOffsetApplied) return;
+          var ann = document.querySelector('meta[name$="announcement"]');
+          var raw = ann ? ann.getAttribute("data-url") || "" : "";
+          if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
+          var off = document.querySelector('meta[name="quarto:offset"]');
+          var prefix = (off ? off.getAttribute("content") || "./" : "./");
+          var fixed = prefix.replace(/\/?$/, "/") + raw;
+          link.setAttribute("href", fixed);
+          // Quarto stashes the pre-rewrite href here and its external-link
+          // pass restores it, which would undo the line above. That pass
+          // treats this link as external whenever the served prefix differs
+          // from site_url, which is the case in every pull request preview,
+          // so both the opt-out class and the stashed value are set.
+          link.classList.add("no-external");
+          link.dataset.originalHref = fixed;
+          link.dataset.commonsOffsetApplied = "1";
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", fix);
+        } else {
+          fix();
+        }
+      })();
+      </script>
+
+versions:
+  - label: "0.2.0 (dev)"
+    tag: dev
+    version: "0.2.0"
+    prerelease: true
+  # A beta, but the only published release, so it holds the latest slot and is
+  # what /py/ serves: that matches what `pip install commons` resolves to.
+  # `latest` has to be set explicitly, because a prerelease is excluded from
+  # latest auto-detection and every entry here is one. The beta warning is
+  # carried by the announcement banner rather than by a selector badge.
+  - label: "0.1.0b1"
+    tag: "0.1.0b1"
+    version: "0.1.0b1"
+    prerelease: true
+    latest: true
+
+version_selector:
+  enabled: true
+  placement: navbar-right
+  warning_banner: true
+
+version_aliases:
+  latest: true
+  stable: true
+  dev: true
+
+announcement:
+  content: "Heads up! `commons` for Python is *still in beta* and is not yet equal to the R package in functionality. Click here to see specific feature parity."
+  type: info
+  url: user-guide/feature-parity.html
+  dismissable: true

@@ -45,8 +45,7 @@ shiny = [
 [dependency-groups]
 dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]"]
 docs = [
-    "griffe<2",
-    "quartodoc>=0.11.1",
+    "great-docs>=0.17",
 ]
 
 [build-system]

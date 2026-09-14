@@ -120,13 +120,15 @@ build_py() {
     return
   fi
   echo "==> Building the Python site into docs/py"
-  # Matches .github/workflows/quartodoc.yaml, including the copy: quarto
-  # warns and refuses to clean an output directory outside its project, so
-  # the site renders in place and is copied into position.
+  # Matches .github/workflows/py-docs.yaml, including the copy and the
+  # version correction: great-docs renders in place, because quarto warns and
+  # refuses to clean an output directory outside its project.
   (cd "$root/pkg-py" && uv sync --extra shiny --group docs --quiet)
-  (cd "$root/pkg-py/docs" && uv run quartodoc build && uv run quarto render)
+  (cd "$root/pkg-py" && uv run great-docs build)
+  read -r site_url repo_url < <(cd "$root/pkg-py" && uv run python -c 'import yaml; c = yaml.safe_load(open("great-docs.yml")); print(c["site_url"], c["repo"])')
+  (cd "$root/pkg-py" && uv run python "$root/.github/scripts/docs-postprocess.py" great-docs/_site "$site_url" "$repo_url" pkg-py)
   rm -rf "$root/docs/py"
-  cp -r "$root/pkg-py/docs/_site" "$root/docs/py"
+  cp -r "$root/pkg-py/great-docs/_site" "$root/docs/py"
 }
 
 for site in $sites; do
