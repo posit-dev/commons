@@ -646,7 +646,7 @@ biodiversity = commons.data_source(
 )
 
 agent = commons.Commons(
-    client=chatlas.ChatAnthropic(model="claude-sonnet-5"),
+    client=chatlas.ChatAuto("anthropic/claude-sonnet-5"),
     data_sources={"biodiversity": biodiversity},
     semantic_layer=commons.semantic_layer("measures"),
     context_layer=commons.context_layer(files=["context/context.md"]),
@@ -689,7 +689,7 @@ def app_server(input, output, session):
     commons.ui.server(
         "chat",
         commons.Commons(
-            client=chatlas.ChatAnthropic(model="claude-sonnet-5"),
+            client=chatlas.ChatAuto("anthropic/claude-sonnet-5"),
             data_sources={"biodiversity": biodiversity},
             semantic_layer=commons.semantic_layer("measures"),
             context_layer=commons.context_layer(files=["context/context.md"]),
