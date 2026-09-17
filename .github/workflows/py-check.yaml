@@ -1,4 +1,4 @@
-name: py-check
+name: Py — Package checks
 
 on:
   push:

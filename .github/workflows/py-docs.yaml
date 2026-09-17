@@ -9,7 +9,7 @@ on:
     paths: [pkg-py/**, docs/**, .github/scripts/docs-postprocess.py, .github/workflows/py-docs.yaml]
   workflow_dispatch:
 
-name: Python documentation build
+name: Py — Docs build
 
 permissions: read-all
 
