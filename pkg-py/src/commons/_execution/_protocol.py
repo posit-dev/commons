@@ -244,8 +244,11 @@ def encode_value(value: Any) -> dict[str, Any]:
 
 
 def _repr_payload(value: Any) -> dict[str, Any]:
-    # Use `repr`, never `pickle`: a pickle stream is a program, and this one
-    # would have been written by whatever the worker just ran.
+    """A repr payload for ``value``.
+
+    Uses ``repr``, never ``pickle``: a pickle stream is a program, and this
+    one would have been written by whatever the worker just ran.
+    """
     return {
         "encoding": "repr",
         "type": type(value).__name__,
@@ -355,11 +358,14 @@ def _as_frame(value: Any) -> tuple[str, Any] | None:
     return None
 
 
-# Return `None`, not an exception, for a frame Arrow will not carry; the
-# caller falls back to repr. Arrow's refusals span exception types beyond
-# `ValueError` and `TypeError`, and a fake frame (`__class__` is assignable)
-# raises `AttributeError`, so the catch covers all of `Exception`.
 def _to_arrow_ipc(frame: Any, library: str) -> bytes | None:
+    """``frame`` as Arrow IPC bytes, or ``None`` for a frame Arrow will not carry.
+
+    Returning ``None`` rather than raising lets the caller fall back to
+    repr. Arrow's refusals span exception types beyond ``ValueError`` and
+    ``TypeError``, and a fake frame (``__class__`` is assignable) raises
+    ``AttributeError``, so the catch covers all of ``Exception``.
+    """
     try:
         pyarrow = importlib.import_module("pyarrow")
         if library == "pandas":
@@ -429,6 +435,12 @@ def decode_value(payload: Any, *, max_frame_bytes: int = FRAME_BYTES_LIMIT) -> A
 
 
 def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
+    """The frame in Arrow IPC ``data``, rebuilt with ``library``.
+
+    Raises ``ProtocolError`` for an unknown library, a missing pyarrow, a
+    stream that decodes past ``max_frame_bytes``, or anything pyarrow
+    refuses.
+    """
     # `library` names the module the frame is reconstructed with, so it is
     # checked against the known set before anything is imported: the wire
     # gets to choose among three names and nothing else.
@@ -454,11 +466,12 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
 
 
 def _rebuild_frame(table: Any, library: str) -> Any:
-    # The wire names the library and carries the bytes separately, so a
-    # table Arrow accepts can still be one that pandas or polars will not
-    # hold. Their refusals are exceptions of their own making, and
-    # the size is already checked, so anything raised here is the payload's
-    # fault and must surface to the caller as a `ProtocolError`.
+    """``table`` rebuilt as the frame type ``library`` names.
+
+    A table Arrow accepts can still be one pandas or polars will not hold;
+    the size is already checked, so anything raised here is the payload's
+    fault and surfaces as ``ProtocolError``.
+    """
     try:
         if library == "pandas":
             return table.to_pandas()
@@ -549,37 +562,28 @@ def _ipc_message(metadata: bytes) -> tuple[int, int, int | None]:
 def _null_fields(metadata: bytes, schema: int) -> bytearray:
     """Which of the schema's field nodes have the null type, in batch order.
 
-    A null field is the one kind that writes no buffer at all: it is free on
-    the wire but costs a pointer per cell in pandas. Which fields those are
-    has to come from the schema, because a batch says how many nodes it
-    carries, not which of them are free — one string field's three buffers
-    are enough to hide two null columns behind it.
+    Null fields write no buffer, so a batch's buffer sizes alone cannot
+    reveal them; the schema must. They cost pandas a pointer per cell, so
+    the size cap needs to know where they are.
 
-    A batch lists its nodes in the order this walk visits the fields,
-    parents before children, so a field's position here is what the batch is
-    charged by. A dictionary-encoded field is a single node holding indices,
-    however deep the type it encodes, and the walk stops there: its values
-    arrive in a batch of their own and cost pandas nothing, since pandas
-    refuses a null category outright and holds the rest by index.
+    A batch lists its nodes in the same parent-before-child order this walk
+    visits the fields, so a field's position here is what the batch is
+    charged by. A dictionary-encoded field is a single node; its values
+    arrive in their own batch and cost pandas nothing.
     """
     fields_at = _table_field(metadata, schema, 1)
     if fields_at is None:
         return bytearray()
-    # Store a flag per field rather than the position of each null one: the
-    # sender decides how many positions there are, and a schema entitled to
-    # name millions of them would be paid for in objects. A flag costs only
-    # the byte that the field's own offset already cost.
+    # A flag per field costs one byte each; positions of the null fields
+    # would cost an object each in a schema naming millions of fields.
     flags = bytearray()
-    # Nothing guarantees the offsets advance: a hand-built schema can point
-    # a field's children back at the field itself, and the walk would never
-    # end. No field costs fewer than sixteen bytes of message (pyarrow's
-    # writer spends nearer forty), so the message length bounds how many it
-    # can hold. Garbage offsets fail their own reads long before this check;
-    # it is here to end a cycle, not to catch one.
+    # A hand-built schema can point a field's children back at the field
+    # itself, cycling forever. No field costs fewer than sixteen bytes of
+    # message, so the message length bounds the walk.
     budget = len(metadata) // 16
     # Keep one iterator per level rather than a list of every field: the
-    # counts are the sender's to choose, and a declared vector can be long
-    # enough that reading it all in would defeat the cap.
+    # sender chooses the counts, and a declared vector can be too long to
+    # read in.
     stack = [_tables(metadata, fields_at)]
     while stack:
         field = next(stack[-1], None)
@@ -710,24 +714,29 @@ def _vector(buf: bytes, loc: int) -> tuple[int, int]:
 
 
 def _read_int(buf: bytes, off: int, size: int, signed: bool = False) -> int:
+    """The little-endian integer of ``size`` bytes at ``off``, refusing a short buffer."""
     if off < 0 or off + size > len(buf):
         raise ProtocolError("malformed value payload: truncated Arrow IPC metadata")
     return int.from_bytes(buf[off : off + size], "little", signed=signed)
 
 
 def _u8(buf: bytes, off: int) -> int:
+    """The unsigned 8-bit integer at ``off``."""
     return _read_int(buf, off, 1)
 
 
 def _u16(buf: bytes, off: int) -> int:
+    """The unsigned 16-bit integer at ``off``."""
     return _read_int(buf, off, 2)
 
 
 def _u32(buf: bytes, off: int) -> int:
+    """The unsigned 32-bit integer at ``off``."""
     return _read_int(buf, off, 4)
 
 
 def _i64(buf: bytes, off: int) -> int:
+    """The signed 64-bit integer at ``off``."""
     return _read_int(buf, off, 8, signed=True)
 
 
@@ -785,11 +794,15 @@ def _null_cells(array: Any, pyarrow: Any) -> int:
     return sum(_null_cells(child, pyarrow) for child in children)
 
 
-# `ArrowInvalid` and `ArrowTypeError` are `ValueError` and `TypeError`, but
-# `ArrowNotImplementedError` and several others are not, so catching the
-# builtin types alone lets a real refusal through. `ArrowIOError` is named
-# separately because it does not descend from `ArrowException`.
 def _arrow_refusals(pyarrow: Any) -> tuple[type[BaseException], ...]:
+    """The exception types pyarrow raises for a stream it refuses.
+
+    ``ArrowInvalid`` and ``ArrowTypeError`` are ``ValueError`` and
+    ``TypeError``, but ``ArrowNotImplementedError`` and others are not, so
+    the builtin types alone would let a real refusal through.
+    ``ArrowIOError`` is named separately because it does not descend from
+    ``ArrowException``.
+    """
     return (TypeError, ValueError, pyarrow.ArrowException, pyarrow.ArrowIOError)
 
 
@@ -818,12 +831,14 @@ def encode_message(message: Message) -> bytes:
 
 
 def _encode_line(message: Message) -> bytes:
+    """``message`` as one newline-terminated line of ASCII-safe JSON."""
     # `ensure_ascii` is what keeps the line a single line: it escapes every
     # newline inside a string, so only the terminator below is a real one.
     return json.dumps(_message_body(message), ensure_ascii=True).encode() + b"\n"
 
 
 def _message_body(message: Message) -> dict[str, Any]:
+    """The JSON object for ``message``, with any carried values encoded."""
     match message:
         case Ready():
             return {"type": "ready"}
@@ -899,12 +914,14 @@ def _shrink_values(message: Message) -> Message:
 
 
 def _as_opaque(value: Any) -> Any:
+    """``value`` as an ``OpaqueValue``, passing one through unchanged."""
     if isinstance(value, OpaqueValue):
         return value
     return OpaqueValue(type_name=type(value).__name__, text=_safe_repr(value))
 
 
 def _clip(text: str) -> str:
+    """``text`` clipped to ``_TEXT_CLIP_LIMIT``, with a truncation note appended."""
     if len(text) <= _TEXT_CLIP_LIMIT:
         return text
     return text[:_TEXT_CLIP_LIMIT] + _TRUNCATION_NOTE
@@ -966,12 +983,14 @@ def decode_message(line: bytes | str, *, max_frame_bytes: int = FRAME_BYTES_LIMI
 
 
 def _refuse_unknown_fields(body: dict[str, Any], kind: str, known: set[str]) -> None:
+    """Raise ``ProtocolError`` if ``body`` carries fields outside ``known``."""
     unknown = sorted(set(body) - known)
     if unknown:
         raise ProtocolError(f"malformed {kind} message: unknown field {unknown[0]!r}")
 
 
 def _required_text(body: dict[str, Any], name: str, kind: str) -> str:
+    """The string field ``name`` from ``body``, refusing a missing or non-string one."""
     if name not in body:
         raise ProtocolError(f"malformed {kind} message: missing {name}")
     value = body[name]
@@ -981,6 +1000,7 @@ def _required_text(body: dict[str, Any], name: str, kind: str) -> str:
 
 
 def _optional_text(body: dict[str, Any], name: str, kind: str) -> str:
+    """The string field ``name`` from ``body``, or ``""`` when absent."""
     if name not in body:
         return ""
     value = body[name]
@@ -990,6 +1010,7 @@ def _optional_text(body: dict[str, Any], name: str, kind: str) -> str:
 
 
 def _decode_handles(body: dict[str, Any], max_frame_bytes: int) -> dict[str, Any]:
+    """The ``handles`` mapping of a call body, each value decoded."""
     if "handles" not in body:
         return {}
     raw = body["handles"]
@@ -1002,6 +1023,7 @@ def _decode_handles(body: dict[str, Any], max_frame_bytes: int) -> dict[str, Any
 
 
 def _decode_result_value(body: dict[str, Any], max_frame_bytes: int) -> Any:
+    """The decoded ``value`` of a result body, or ``None`` when absent."""
     if "value" not in body:
         return None
     return decode_value(body["value"], max_frame_bytes=max_frame_bytes)
@@ -1010,7 +1032,7 @@ def _decode_result_value(body: dict[str, Any], max_frame_bytes: int) -> Any:
 def _abbrev(line: bytes | str, limit: int = 200) -> str:
     """A short rendering of a rejected line, for an error message.
 
-    The whole line can be megabytes of far-end-chosen bytes; it does not
+    The whole line can be megabytes of sender-chosen bytes; it does not
     belong whole in a log or in a model's context.
     """
     text = repr(line)
