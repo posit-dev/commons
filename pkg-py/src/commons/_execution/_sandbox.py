@@ -80,14 +80,16 @@ def protection_mode(
 
     Returns ``"sandbox"`` when the host offers a real sandbox. Otherwise
     raises, unless guardrails have been opted into, in which case it returns
-    ``"guardrails"``: a scratch-directory working directory, an address-space
-    limit, and a warning. Guardrails are a way to keep working on a host
-    commons cannot protect; they provide no sandbox.
+    ``"guardrails"``: the address-space limit today, with a scratch-directory
+    working directory and a warning to come as the worker is built. Guardrails
+    are a way to keep working on a host commons cannot protect; they provide
+    no sandbox.
 
     ``capabilities`` and ``sysname`` default to this host; passing them is
-    how the decision table is exercised from any machine. There is
-    deliberately no argument for the opt-in: the only way to accept
-    guardrails is to set the environment variable.
+    how the decision table is exercised from any machine, so leave both at
+    their defaults outside the tests. There is deliberately no argument for
+    the opt-in: the only way to accept guardrails is to set the environment
+    variable.
     """
     if capabilities is None:
         capabilities = sandbox_capabilities()
@@ -117,11 +119,11 @@ def protection_mode(
         raise RuntimeError(
             "commons cannot sandbox the code execution worker because this "
             "Linux host offers neither Landlock nor unprivileged user "
-            "namespaces. Use a kernel with Landlock, or enable unprivileged "
-            "user namespaces: check `sysctl user.max_user_namespaces` and, in "
+            "namespaces. Use a kernel with Landlock. Unprivileged user "
+            "namespaces work too, where the host accepts their larger kernel "
+            "attack surface: check `sysctl user.max_user_namespaces` and, in "
             f"a container, its seccomp profile. {_OPT_IN}"
         )
     raise RuntimeError(
-        "commons cannot sandbox the code execution worker on "
-        f"{sysname}. {_OPT_IN}"
+        f"commons cannot sandbox the code execution worker on {sysname}. {_OPT_IN}"
     )

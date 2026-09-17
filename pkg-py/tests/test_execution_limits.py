@@ -7,6 +7,7 @@ actually enforces it, which an assertion about the arguments passed to
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import pathlib
@@ -33,6 +34,11 @@ soft, hard = resource.getrlimit(resource.RLIMIT_AS)
 json.dump({{"applied": applied, "soft": soft, "hard": hard}}, sys.stdout)
 """
 
+REPORT_INHERITED = (
+    "import json, resource, sys;"
+    " json.dump(resource.getrlimit(resource.RLIMIT_AS), sys.stdout)"
+)
+
 
 def apply_in_child(request: str = "", pre: str = "") -> dict[str, int | None]:
     """Apply the limit in a fresh interpreter and report what stuck.
@@ -50,13 +56,13 @@ def apply_in_child(request: str = "", pre: str = "") -> dict[str, int | None]:
     return json.loads(completed.stdout)
 
 
-REPORT_INHERITED = (
-    "import json, resource, sys;"
-    " json.dump(resource.getrlimit(resource.RLIMIT_AS), sys.stdout)"
-)
+def cap_the_child(limit: int) -> str:
+    """Child code that clamps address space before the limit is applied."""
+    return f"resource.setrlimit(resource.RLIMIT_AS, ({limit}, {limit}))"
 
 
-def inherited_ceiling() -> int | None:
+@pytest.fixture(scope="module")
+def ceiling() -> int | None:
     """The tightest limit a fresh child already has, or ``None`` for no limit.
 
     Everything below is expressed relative to this: a host that already caps
@@ -65,11 +71,7 @@ def inherited_ceiling() -> int | None:
     """
     reported = json.loads(
         subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                REPORT_INHERITED,
-            ],
+            [sys.executable, "-c", REPORT_INHERITED],
             capture_output=True,
             text=True,
             check=True,
@@ -79,63 +81,82 @@ def inherited_ceiling() -> int | None:
     return min(finite) if finite else None
 
 
-CEILING = inherited_ceiling()
+@pytest.fixture(scope="module")
+def lower(ceiling: int | None) -> int:
+    """The limit the clamp cases pre-set on the child, chosen to be one the
+    child can actually reach."""
+    return 2 * GIB if ceiling is None else min(2 * GIB, ceiling // 2)
 
-# The limit the clamp cases pre-set on the child, chosen to be one the child
-# can actually reach.
-LOWER = 2 * GIB if CEILING is None else min(2 * GIB, CEILING // 2)
-LOWER_THE_LIMIT = f"resource.setrlimit(resource.RLIMIT_AS, ({LOWER}, {LOWER}))"
 
-
-def address_space_is_settable() -> bool:
-    """Whether this host lets a process cap its own address space at all.
+@pytest.fixture(scope="module")
+def refusal_errno(lower: int) -> int | None:
+    """The errno a fresh child gets from capping its address space, or
+    ``None`` when the call succeeds.
 
     macOS accepts the call on some releases and rejects it with ``EINVAL`` on
     others, so this is a question about the running kernel; the platform name
-    cannot answer it.
+    cannot answer it. A child refused for any other reason (a seccomp profile
+    that blocks ``setrlimit``, say) may still enforce ``RLIMIT_AS``, and only
+    an ``EINVAL`` refusal lets the no-cap test below conclude the kernel has
+    no such limit.
     """
-    completed = subprocess.run(
-        [sys.executable, "-c", f"import resource; {LOWER_THE_LIMIT}"],
-        capture_output=True,
-        check=False,
+    probe = (
+        "import errno, json, resource, sys\n"
+        "try:\n"
+        f"    resource.setrlimit(resource.RLIMIT_AS, ({lower}, {lower}))\n"
+        "except ValueError:\n"
+        "    result = errno.EINVAL\n"
+        "except OSError as exc:\n"
+        "    result = exc.errno\n"
+        "else:\n"
+        "    result = 0\n"
+        "json.dump(result, sys.stdout)\n"
     )
-    return completed.returncode == 0
+    completed = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+    return result if result != 0 else None
 
 
-SETTABLE = address_space_is_settable()
-
-settable = pytest.mark.skipif(
-    not SETTABLE, reason="this kernel does not enforce RLIMIT_AS"
-)
-
-
-@settable
-@pytest.mark.skipif(
-    CEILING is not None and CEILING < 8 * GIB,
-    reason="this host already caps address space below the default",
-)
-def test_the_default_limit_is_eight_gibibytes_and_is_the_one_in_force() -> None:
+def test_the_default_limit_is_eight_gibibytes_and_is_the_one_in_force(
+    ceiling: int | None, refusal_errno: int | None
+) -> None:
+    if refusal_errno is not None:
+        pytest.skip("this kernel does not enforce RLIMIT_AS")
+    if ceiling is not None and ceiling < 8 * GIB:
+        pytest.skip("this host already caps address space below the default")
     reported = apply_in_child()
     assert reported["applied"] == 8 * GIB
     assert reported["soft"] == 8 * GIB
     assert reported["hard"] == 8 * GIB
 
 
-@settable
-def test_a_lower_inherited_limit_is_not_raised() -> None:
-    reported = apply_in_child(pre=LOWER_THE_LIMIT)
-    assert reported["applied"] == LOWER
-    assert reported["soft"] == LOWER
+def test_a_lower_inherited_limit_is_not_raised(
+    lower: int, refusal_errno: int | None
+) -> None:
+    if refusal_errno is not None:
+        pytest.skip("this kernel does not enforce RLIMIT_AS")
+    reported = apply_in_child(pre=cap_the_child(lower))
+    assert reported["applied"] == lower
+    assert reported["soft"] == lower
 
 
-@settable
-def test_a_request_below_the_inherited_limit_still_applies() -> None:
-    reported = apply_in_child(request=str(LOWER // 2), pre=LOWER_THE_LIMIT)
-    assert reported["applied"] == LOWER // 2
+def test_a_request_below_the_inherited_limit_still_applies(
+    lower: int, refusal_errno: int | None
+) -> None:
+    if refusal_errno is not None:
+        pytest.skip("this kernel does not enforce RLIMIT_AS")
+    reported = apply_in_child(request=str(lower // 2), pre=cap_the_child(lower))
+    assert reported["applied"] == lower // 2
 
 
-@pytest.mark.skipif(SETTABLE, reason="this kernel enforces RLIMIT_AS")
-def test_a_kernel_that_refuses_the_limit_does_not_stop_the_worker() -> None:
+def test_a_kernel_that_refuses_the_limit_does_not_stop_the_worker(
+    refusal_errno: int | None,
+) -> None:
     """The worker runs on without the cap and still starts.
 
     The cap guards against a runaway allocation; the security boundary is the
@@ -143,6 +164,10 @@ def test_a_kernel_that_refuses_the_limit_does_not_stop_the_worker() -> None:
     on. ``apply_in_child`` requires a clean exit, so reaching an answer at all
     is half of what this asserts.
     """
+    if refusal_errno is None:
+        pytest.skip("this kernel enforces RLIMIT_AS")
+    if refusal_errno != errno.EINVAL:
+        pytest.skip("this host refuses the call for a reason of its own")
     assert apply_in_child()["applied"] is None
 
 
@@ -154,7 +179,7 @@ def test_the_limit_module_does_not_import_commons() -> None:
             "-c",
             "import _limits, sys; sys.exit('commons' in sys.modules)",
         ],
-        env={"PYTHONPATH": RUNTIME_DIR, "PATH": os.environ.get("PATH", "")},
+        env={**os.environ, "PYTHONPATH": RUNTIME_DIR},
         capture_output=True,
         text=True,
         check=False,
