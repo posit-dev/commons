@@ -132,9 +132,11 @@ class OpaqueValue:
     make sense inside the process that holds them. For those, the channel
     carries the text a REPL would have shown.
 
-    Both fields come from the worker, which runs model-written code, so
-    treat them as untrusted text: escape them wherever they are rendered,
-    and do not rely on ``type_name`` as proof of the value's type.
+    Both fields come from the sender, so treat them as untrusted text:
+    escape them wherever they are rendered, and do not rely on
+    ``type_name`` as proof of the value's type. The driver may send one
+    back to the worker as a call handle, but its fields originated in an
+    earlier worker result that ran model-written code.
     """
 
     type_name: str
@@ -265,11 +267,10 @@ def _safe_repr(value: Any) -> str:
 def _exceeds_json_depth(value: Any, limit: int = _JSON_DEPTH_LIMIT) -> bool:
     """Whether ``value`` nests JSON containers deeper than ``limit``.
 
-    The walk uses an explicit stack of iterators, one per level, because the
-    inputs this function exists for are exactly the ones a recursive walk
-    could not survive. Auxiliary memory stays proportional to nesting depth,
-    so a very wide hostile value pays one ``isinstance`` per element rather
-    than a stack entry per child.
+    The walk uses an explicit stack of iterators, one per level, so nesting
+    depth alone cannot overflow the call stack. Auxiliary memory stays
+    proportional to nesting depth, so a very wide hostile value pays one
+    ``isinstance`` per element rather than a stack entry per child.
     """
     stack = [(_container_children(value), 1)]
     while stack:
@@ -299,9 +300,9 @@ def _container_children(node: Any) -> Iterator[Any]:
 def _coerce_scalar(value: Any) -> Any:
     """A JSON-carryable rendering of a value JSON doesn't know, or ``_FALL_BACK``.
 
-    numpy scalars are the everyday case: ``df["a"].sum()`` is an ``int64``,
+    numpy scalars are the common case: ``df["a"].sum()`` is an ``int64``,
     a JSON number in every respect but its class, and falling back to repr
-    would silently downgrade it. numpy arrays cross as their ``tolist``.
+    would silently downgrade it. numpy arrays cross as their ``tolist`` form.
     ``np.bool_``, datetimes, and ``Decimal`` deliberately stay as reprs:
     their reprs are readable, and guessing a type would change what the
     model sees.
@@ -402,11 +403,10 @@ def decode_value(payload: Any, *, max_frame_bytes: int = FRAME_BYTES_LIMIT) -> A
     """Read back a payload written by ``encode_value``.
 
     Raises ``ProtocolError`` for anything that is not such a payload. The
-    sender runs model-written code, so a malformed or hostile payload is an
-    ordinary event and must surface as ``ProtocolError``, not as whatever a
-    codec happens to raise first. A frame that would decode to more than
-    ``max_frame_bytes`` is refused the same way, before that memory is
-    allocated.
+    sender runs model-written code, so a malformed or hostile payload must
+    surface as ``ProtocolError``, not as whatever a codec happens to raise
+    first. A frame that would decode to more than ``max_frame_bytes`` is
+    refused the same way, before that memory is allocated.
     """
     encoding = payload.get("encoding") if isinstance(payload, dict) else None
     try:
@@ -456,7 +456,7 @@ def _from_arrow_ipc(data: bytes, library: str, max_frame_bytes: int) -> Any:
 def _rebuild_frame(table: Any, library: str) -> Any:
     # The wire names the library and carries the bytes separately, so a
     # table Arrow accepts can still be one that pandas or polars will not
-    # hold. Their refusals are ordinary exceptions of their own making, and
+    # hold. Their refusals are exceptions of their own making, and
     # the size is already checked, so anything raised here is the payload's
     # fault and must surface to the caller as a `ProtocolError`.
     try:
@@ -578,9 +578,8 @@ def _null_fields(metadata: bytes, schema: int) -> bytearray:
     # it is here to end a cycle, not to catch one.
     budget = len(metadata) // 16
     # Keep one iterator per level rather than a list of every field: the
-    # counts are the sender's to choose, and a vector it is entitled to
-    # declare is long enough that reading it all in would be the very
-    # allocation this function exists to refuse.
+    # counts are the sender's to choose, and a declared vector can be long
+    # enough that reading it all in would defeat the cap.
     stack = [_tables(metadata, fields_at)]
     while stack:
         field = next(stack[-1], None)
@@ -1023,8 +1022,8 @@ async def read_message(
 ) -> Message | None:
     """Read the next message, or ``None`` once the channel is done.
 
-    A worker that has exited is the ordinary end of a channel, so that is an
-    answer rather than an exception. A line past the stream's limit is a
+    An exited worker ends the channel without error, so that is an answer
+    rather than an exception. A line past the stream's limit is a
     ``ChannelError``, on that call and on every later one: the reader has
     discarded bytes up to an offset the sender chose, so no later boundary
     can be trusted and the channel must be abandoned.
