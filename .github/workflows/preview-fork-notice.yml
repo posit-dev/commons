@@ -5,7 +5,7 @@
 # pull_request_target runs with the base repository's token, which can. This workflow never checks out the pull request, and asks for no
 # permission beyond writing the comment, so none of what makes
 # pull_request_target dangerous applies: it reads no fork code and runs none.
-name: preview-fork-notice.yml
+name: Fork preview notice
 
 on:
   pull_request_target:

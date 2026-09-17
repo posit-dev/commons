@@ -1,4 +1,4 @@
-name: Cleanup PR Previews
+name: Cleanup Connect PR previews
 
 on:
   pull_request:

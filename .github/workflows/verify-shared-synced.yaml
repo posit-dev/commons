@@ -1,4 +1,4 @@
-name: verify-shared-synced
+name: Verify shared artifacts synced
 
 # The repository root holds the source for everything both packages share; each
 # package reads a committed copy, because neither can reach outside its own
