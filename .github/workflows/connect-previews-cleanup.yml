@@ -1,4 +1,4 @@
-name: Cleanup Connect PR previews
+name: R — Cleanup Connect PR previews
 
 on:
   pull_request:

@@ -1,4 +1,4 @@
-name: Verify shared artifacts synced
+name: R + Py — Verify shared artifacts are in sync
 
 # The repository root holds the source for everything both packages share; each
 # package reads a committed copy, because neither can reach outside its own
