@@ -20,6 +20,12 @@ NOTHING = SandboxCapabilities(
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_opt_in_from_the_environment(monkeypatch) -> None:
+    """A developer or CI host with the opt-in set should run the same suite."""
+    monkeypatch.delenv("COMMONS_ALLOW_UNSAFE_FALLBACK", raising=False)
+
+
 def test_the_host_probe_reports_every_mechanism() -> None:
     capabilities = sandbox_capabilities()
     assert isinstance(capabilities.landlock_abi, int)
