@@ -171,16 +171,20 @@ versions:
     tag: dev
     version: "0.2.0"
     prerelease: true
-  # A beta, but the only published release, so it holds the latest slot and is
-  # what /py/ serves: that matches what `pip install commons` resolves to.
+  # A beta, but the newest published release, so it holds the latest slot and
+  # is what /py/ serves: that matches what `pip install commons` resolves to.
   # `latest` has to be set explicitly, because a prerelease is excluded from
   # latest auto-detection and every entry here is one. The beta warning is
   # carried by the announcement banner rather than by a selector badge.
+  - label: "0.1.0b2"
+    tag: "0.1.0b2"
+    version: "0.1.0b2"
+    prerelease: true
+    latest: true
   - label: "0.1.0b1"
     tag: "0.1.0b1"
     version: "0.1.0b1"
     prerelease: true
-    latest: true
 
 version_selector:
   enabled: true
