@@ -1,7 +1,7 @@
 """Whether this host can sandbox the worker, decided before anything runs.
 
 The worker sandboxes itself, in the child, before any model-written code is
-loaded. What lives here is the parent's half: a probe of what the host offers
+loaded. This module is the parent's half: a probe of what the host offers
 and the gate that turns that into a refusal, so a host commons cannot protect
 is reported when the agent is constructed rather than when a model first asks
 to run code.
@@ -28,15 +28,15 @@ __all__ = [
 ProtectionMode = Literal["sandbox", "guardrails"]
 
 # An environment variable rather than a constructor keyword: accepting weaker
-# protection should take a deliberate act outside the code, not a keyword a
-# caller can pass without noticing what it gives up.
+# protection should take a deliberate act outside the code; a keyword is too
+# easy for a caller to pass without noticing what it gives up.
 ALLOW_UNSAFE_FALLBACK = "COMMONS_ALLOW_UNSAFE_FALLBACK"
 
 _AFFIRMATIVE = frozenset({"1", "true", "yes", "on"})
 
 _OPT_IN = (
     f"For local development only, set {ALLOW_UNSAFE_FALLBACK}=1 to accept "
-    "best-effort guardrails, which are not a security boundary."
+    "best-effort guardrails; guardrails provide no security boundary."
 )
 
 
@@ -82,7 +82,7 @@ def protection_mode(
     raises, unless guardrails have been opted into, in which case it returns
     ``"guardrails"``: a scratch-directory working directory, an address-space
     limit, and a warning. Guardrails are a way to keep working on a host
-    commons cannot protect, not a weaker sandbox.
+    commons cannot protect; they provide no sandbox.
 
     ``capabilities`` and ``sysname`` default to this host; passing them is
     how the decision table is exercised from any machine. There is

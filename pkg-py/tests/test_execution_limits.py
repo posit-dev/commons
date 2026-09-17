@@ -1,8 +1,8 @@
 """The address-space limit the worker puts on itself before it runs any code.
 
 These run real interpreters. A limit is only worth having if the kernel
-actually holds the process to it, and an assertion about the arguments passed
-to ``setrlimit`` would not show that.
+actually enforces it, which an assertion about the arguments passed to
+``setrlimit`` cannot show.
 """
 
 from __future__ import annotations
@@ -60,8 +60,8 @@ def inherited_ceiling() -> int | None:
     """The tightest limit a fresh child already has, or ``None`` for no limit.
 
     Everything below is expressed relative to this: a host that already caps
-    address space caps these tests too, and a case that assumed otherwise
-    would be asserting the host's configuration rather than the code's.
+    address space caps these tests too, and a case that assumed a fixed value
+    would assert the host's configuration when it means to assert the code's.
     """
     reported = json.loads(
         subprocess.run(
@@ -91,8 +91,8 @@ def address_space_is_settable() -> bool:
     """Whether this host lets a process cap its own address space at all.
 
     macOS accepts the call on some releases and rejects it with ``EINVAL`` on
-    others, so this is a question about the running kernel rather than about
-    the platform name.
+    others, so this is a question about the running kernel; the platform name
+    cannot answer it.
     """
     completed = subprocess.run(
         [sys.executable, "-c", f"import resource; {LOWER_THE_LIMIT}"],
@@ -136,12 +136,12 @@ def test_a_request_below_the_inherited_limit_still_applies() -> None:
 
 @pytest.mark.skipif(SETTABLE, reason="this kernel enforces RLIMIT_AS")
 def test_a_kernel_that_refuses_the_limit_does_not_stop_the_worker() -> None:
-    """The worker runs on without the cap rather than failing to start.
+    """The worker runs on without the cap and still starts.
 
-    The cap guards against a runaway allocation; it is not the security
-    boundary, which is the sandbox. A host without it is worth reporting, not
-    worth refusing to run on. ``apply_in_child`` requires a clean exit, so
-    reaching an answer at all is half of what this asserts.
+    The cap guards against a runaway allocation; the security boundary is the
+    sandbox. A host without the cap is worth reporting and still worth running
+    on. ``apply_in_child`` requires a clean exit, so reaching an answer at all
+    is half of what this asserts.
     """
     assert apply_in_child()["applied"] is None
 

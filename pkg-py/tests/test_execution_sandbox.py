@@ -1,7 +1,7 @@
 """The gate that decides whether the worker can be sandboxed on this host.
 
-The decision table is driven with constructed capability values rather than
-whatever the test machine happens to support, so every branch is reachable
+The decision table is driven with constructed capability values, independent
+of whatever the test machine happens to support, so every branch is reachable
 from any host. The cases match pkg-r/tests/testthat/test-sandbox.R.
 """
 

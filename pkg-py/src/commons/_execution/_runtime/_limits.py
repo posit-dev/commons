@@ -1,8 +1,8 @@
 """The address-space cap the worker puts on itself.
 
 This runs in the child, before the sandbox engages and long before any
-model-written code is loaded. It is a guard against a runaway allocation
-taking the host down with it, not a security boundary; the sandbox is that.
+model-written code is loaded. It guards against a runaway allocation
+taking the host down with it; the security boundary is the sandbox.
 """
 
 from __future__ import annotations
