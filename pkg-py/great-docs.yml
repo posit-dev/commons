@@ -181,10 +181,10 @@ versions:
     version: "0.1.0b2"
     prerelease: true
     latest: true
-  - label: "0.1.0b1"
-    tag: "0.1.0b1"
-    version: "0.1.0b1"
-    prerelease: true
+  # - label: "0.1.0b1"
+  #   tag: "0.1.0b1"
+  #   version: "0.1.0b1"
+  #   prerelease: true
 
 version_selector:
   enabled: true
