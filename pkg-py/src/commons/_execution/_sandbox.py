@@ -63,8 +63,7 @@ def sandbox_capabilities() -> SandboxCapabilities:
 
     Each field is filled in by the ctypes module that implements its
     mechanism, none of which exist yet. Until they do this reports every
-    mechanism unavailable, so ``protection_mode()`` refuses every host: the
-    safe direction to be wrong in while the sandbox is being built.
+    mechanism unavailable, so ``protection_mode()`` refuses every host.
     """
     return SandboxCapabilities(
         landlock_abi=-1, seccomp=False, seatbelt=False, userns=False
@@ -84,16 +83,14 @@ def protection_mode(
 
     Returns ``"sandbox"`` when the host offers a real sandbox. Otherwise
     raises, unless guardrails have been opted into, in which case it returns
-    ``"guardrails"``: the address-space limit today, with a scratch-directory
-    working directory and a warning to come as the worker is built. Guardrails
-    are a way to keep working on a host commons cannot protect; they provide
-    no sandbox.
+    ``"guardrails"``. Guardrails are a way to keep working on a host commons
+    cannot protect; they provide no sandbox.
 
     ``capabilities`` and ``sysname`` default to this host; passing them is
     how the decision table is exercised from any machine, so leave both at
     their defaults outside the tests. There is deliberately no argument for
     the opt-in: the only way to accept guardrails is to set the environment
-    variable.
+    variable defined in ``ALLOW_UNSAFE_FALLBACK``.
     """
     if capabilities is None:
         capabilities = sandbox_capabilities()
@@ -123,10 +120,10 @@ def protection_mode(
         raise RuntimeError(
             "commons cannot sandbox the code execution worker because this "
             "Linux host offers neither Landlock nor unprivileged user "
-            "namespaces. Use a kernel with Landlock. Unprivileged user "
-            "namespaces work too, where the host accepts their larger kernel "
-            "attack surface: check `sysctl user.max_user_namespaces` and, in "
-            f"a container, its seccomp profile. {_OPT_IN}"
+            "namespaces. Use a kernel with Landlock, or enable user "
+            "namespaces with `sysctl user.max_user_namespaces` (some "
+            "container seccomp profiles block them) and accept the larger "
+            f"kernel attack surface. {_OPT_IN}"
         )
     raise RuntimeError(
         f"commons cannot sandbox the code execution worker on {sysname}. {_OPT_IN}"

@@ -1,8 +1,9 @@
-"""What runs inside the worker process, and nothing else.
+"""Code that runs inside the worker process.
 
-Modules here are for the worker to run against itself: lowering resource
-limits, engaging a sandbox, taking over stdout. Importing one from the parent
-would restrict the parent. Nothing here imports ``commons``, which is what
-lets the worker be launched by absolute path on an interpreter that has never
-heard of the package.
+Each module here changes the process that runs it: lowering resource
+limits, engaging a sandbox, taking over stdout, and so on. The worker runs
+them against itself. The parent never imports them, because that would affect
+the parent's resources. None of these modules imports ``commons``: the
+worker loads them by absolute path, on an interpreter that will not have
+commons installed.
 """
