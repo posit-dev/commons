@@ -25,18 +25,22 @@ __all__ = [
     "sandbox_capabilities",
 ]
 
+# "sandbox" means the worker restricts itself with a kernel mechanism, so
+# model-written code is genuinely contained. "guardrails" is the weaker
+# fallback reachable only by opting in through ALLOW_UNSAFE_FALLBACK: it
+# provides no security boundary.
 ProtectionMode = Literal["sandbox", "guardrails"]
 
-# An environment variable rather than a constructor keyword: accepting weaker
-# protection should take a deliberate act outside the code; a keyword is too
-# easy for a caller to pass without noticing what it gives up.
+# Accepting weaker protection should take a deliberate act outside the code,
+# so this opt-in lives in an environment variable: a constructor keyword is
+# too easy for a caller to pass without noticing what it gives up.
 ALLOW_UNSAFE_FALLBACK = "COMMONS_ALLOW_UNSAFE_FALLBACK"
 
 _AFFIRMATIVE = frozenset({"1", "true", "yes", "on"})
 
 _OPT_IN = (
     f"For local development only, set {ALLOW_UNSAFE_FALLBACK}=1 to accept "
-    "best-effort guardrails; guardrails provide no security boundary."
+    "best-effort guardrails; guardrails provide no security boundary!"
 )
 
 
