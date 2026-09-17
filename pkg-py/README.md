@@ -12,6 +12,8 @@ The core dependencies will allow you to build and query an agent. Installing the
 
 An agent needs a chat client and at least one data source. A semantic layer of trusted calculations and a context layer of prose are both optional. The semantic layer changes which tools the agent registers, since a measure is what `call_measure` calls. The context layer does not: `search_context` is always registered, and without a layer behind it the tool reports that none is configured. Every parameter the model supplies to a measure needs a description, which is what the model reads to decide how to call it. commons fills a `commons.Injected` parameter itself, with the connection of the data source that shares its name, and the model never sees it.
 
+The chat client comes from chatlas, so install the package for whichever provider you point it at — `chatlas.ChatAuto("anthropic/claude-sonnet-5")` below needs `pip install anthropic` — and set the provider's API key in the environment.
+
 ```python
 from typing import Annotated, Any
 
