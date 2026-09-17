@@ -10,7 +10,7 @@ on:
     types: [published]
   workflow_dispatch:
 
-name: R — Build pkgdown site
+name: "R: Build pkgdown site"
 
 permissions: read-all
 

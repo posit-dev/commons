@@ -1,4 +1,4 @@
-name: R — R CMD check
+name: "R: R CMD check"
 
 on:
   push:

@@ -1,6 +1,6 @@
 # The CI helpers under .github/scripts/ have no package to be tested by, so
 # they are tested here.
-name: Py — Checks for CI scripts
+name: "Py: Checks for CI scripts"
 
 on:
   push:
