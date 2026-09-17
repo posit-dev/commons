@@ -14,6 +14,13 @@ incoming byte as untrusted. A line that does not match the protocol raises
 ``ProtocolError``; a channel that can no longer be trusted raises
 ``ChannelError``. Nothing named on the wire is imported or constructed
 beyond the three supported frame libraries (pandas, polars, and pyarrow).
+
+For reference, the following terminology is used throughout this module:
+``driver`` and ``worker`` name the two processes; ``sender``
+and ``receiver`` name the direction a message travels; ``reader`` and
+``writer`` name the ``asyncio`` stream objects on either side of the
+channel. The channel is the connected pair of pipes over which every message
+travels between the two processes, one stream per direction.
 """
 
 from __future__ import annotations
@@ -110,9 +117,9 @@ class ChannelError(Exception):
     """The channel can no longer produce trustworthy message boundaries.
 
     Raised when a message overran the stream's limit: the reader has
-    discarded bytes up to an offset the far end chose, so no later line can
+    discarded bytes up to an offset the sender chose, so no later line can
     be trusted and the channel must be abandoned. This deliberately does not
-    subclass ``ProtocolError``, so that drivers which tolerate malformed
+    subclass ``ProtocolError``, so that callers which tolerate malformed
     lines cannot accidentally swallow it.
     """
 
@@ -121,15 +128,13 @@ class ChannelError(Exception):
 class OpaqueValue:
     """A stand-in for a value that could not be copied across the channel.
 
-    Some values — an open file, a database connection, a fitted model —
-    only make sense inside the process that holds them. Copying them across
-    by reference is exactly what this transport exists to prevent, so what
-    crosses instead is the text a REPL would have shown.
+    Values like an open file, a database connection, or a fitted model only
+    make sense inside the process that holds them. For those, the channel
+    carries the text a REPL would have shown.
 
-    Both fields are written by the far end, which runs model-written code:
-    treat them as untrusted text. Escape them wherever they are rendered,
-    and never rely on ``type_name`` as proof of the value's type — the
-    sender chose it.
+    Both fields come from the worker, which runs model-written code, so
+    treat them as untrusted text: escape them wherever they are rendered,
+    and do not rely on ``type_name`` as proof of the value's type.
     """
 
     type_name: str
@@ -397,7 +402,7 @@ def decode_value(payload: Any, *, max_frame_bytes: int = FRAME_BYTES_LIMIT) -> A
     """Read back a payload written by ``encode_value``.
 
     Raises ``ProtocolError`` for anything that is not such a payload. The
-    far end runs model-written code, so a malformed or hostile payload is an
+    sender runs model-written code, so a malformed or hostile payload is an
     ordinary event and must surface as ``ProtocolError``, not as whatever a
     codec happens to raise first. A frame that would decode to more than
     ``max_frame_bytes`` is refused the same way, before that memory is
@@ -561,7 +566,7 @@ def _null_fields(metadata: bytes, schema: int) -> bytearray:
     if fields_at is None:
         return bytearray()
     # Store a flag per field rather than the position of each null one: the
-    # far end decides how many positions there are, and a schema entitled to
+    # sender decides how many positions there are, and a schema entitled to
     # name millions of them would be paid for in objects. A flag costs only
     # the byte that the field's own offset already cost.
     flags = bytearray()
@@ -573,7 +578,7 @@ def _null_fields(metadata: bytes, schema: int) -> bytearray:
     # it is here to end a cycle, not to catch one.
     budget = len(metadata) // 16
     # Keep one iterator per level rather than a list of every field: the
-    # counts are the far end's to choose, and a vector it is entitled to
+    # counts are the sender's to choose, and a vector it is entitled to
     # declare is long enough that reading it all in would be the very
     # allocation this function exists to refuse.
     stack = [_tables(metadata, fields_at)]
@@ -1021,7 +1026,7 @@ async def read_message(
     A worker that has exited is the ordinary end of a channel, so that is an
     answer rather than an exception. A line past the stream's limit is a
     ``ChannelError``, on that call and on every later one: the reader has
-    discarded bytes up to an offset the far end chose, so no later boundary
+    discarded bytes up to an offset the sender chose, so no later boundary
     can be trusted and the channel must be abandoned.
     """
     latched = getattr(reader, "_commons_channel_error", None)
@@ -1034,8 +1039,8 @@ async def read_message(
             "a message was longer than the channel allows; the channel "
             "cannot be resynchronised and must be abandoned"
         )
-        # Latch onto the reader so a driver that catches and continues
-        # cannot get a "recovered" read positioned by the far end.
+        # Latch onto the reader so a caller that catches and continues
+        # cannot get a "recovered" read positioned by the sender.
         # (`setattr` because the latch is ours, not part of StreamReader's
         # typed surface.)
         setattr(reader, "_commons_channel_error", channel_error)  # noqa: B010
@@ -1046,11 +1051,11 @@ async def read_message(
 
 
 async def write_message(writer: asyncio.StreamWriter, message: Message) -> None:
-    """Send ``message``, waiting for the far end to keep up.
+    """Send ``message``, waiting for the receiver to keep up.
 
     Raises ``ProtocolError`` if the message cannot be made to fit the
     channel, and ``OSError`` — usually ``ConnectionResetError`` — once the
-    far end is gone.
+    receiver is gone.
     """
     writer.write(encode_message(message))
     await writer.drain()
