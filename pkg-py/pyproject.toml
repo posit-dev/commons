@@ -1,6 +1,6 @@
 [project]
 name = "commons"
-version = "0.1.0b1"
+version = "0.1.0b2"
 description = "AI Agents for Data Analysis"
 readme = "README.md"
 requires-python = ">=3.11"
