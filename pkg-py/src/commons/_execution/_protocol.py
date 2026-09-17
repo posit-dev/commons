@@ -47,69 +47,54 @@ __all__ = [
     "write_message",
 ]
 
-# The longest allowed message line. Whoever opens the channel must pass this
-# as `limit=`, because `asyncio` caps a stream at 64 KiB by default and any
-# real frame exceeds that. A message past the limit surfaces as a
-# `ChannelError` from `read_message`.
+# Bounds on the channel's allowed traffic: how large, deep, or long a message,
+# frame, value, or schema may be before the codec refuses or clips it.
+
+# Longest message line. Pass as `limit=` when opening the channel (asyncio's
+# default is 64 KiB); an over-limit message surfaces as `ChannelError`.
 STREAM_LIMIT = 64 * 1024 * 1024
 
-# The largest a frame may be after Arrow decompression. IPC bodies can be
-# compressed, so a line well under STREAM_LIMIT can decode to far more.
-# 1 GiB covers any real frame while bounding how much memory an untrusted
-# worker can make the driver allocate.
+# Largest frame after Arrow decompression; compressed IPC means a small line
+# can decode to far more. Bounds the memory a worker can make the driver allocate.
 FRAME_BYTES_LIMIT = 1024**3
 
-# The deepest a JSON-shaped value may nest and still cross as JSON. `json`
-# itself used to enforce a bound by raising `RecursionError`, but as of 3.14
-# its parser and encoder are iterative and never will — while everything a
-# value meets after the codec (`repr`, re-serialization, display) still
-# recurses. A value past the limit crosses as its repr, and a line past it
-# is refused, so the codec stays the single chokepoint for pathological
-# nesting.
+# Deepest a value may nest and still cross as JSON; deeper values cross as
+# their repr, and an over-deep line is refused.
 _JSON_DEPTH_LIMIT = 100
 
-# The message envelope wraps a value in a few container levels of its own
-# (`value`, the payload object, `data`), so a line is allowed slightly more
-# depth than the value it carries.
+# Extra depth allowed for the envelope around the value itself.
 _ENVELOPE_DEPTH = 8
 
-# Frames cross as Arrow IPC and arrive as whatever library sent them; driver
-# and worker share an interpreter, so the sending library is always
-# importable at the far end.
+# Frames cross as Arrow IPC; the sending library is always importable at the
+# receiving end.
 _FRAME_TYPES = {"pandas": "DataFrame", "polars": "DataFrame", "pyarrow": "Table"}
 
-# The repr fallback exists to be smaller than the value it replaces, so the
-# repr itself is capped.
+# Cap on the repr fallback, which must stay smaller than the value it replaces.
 _REPR_TEXT_LIMIT = 10_000
 
-# Printed output and tracebacks are clipped to this many characters when a
-# message would otherwise exceed STREAM_LIMIT.
+# Printed output and tracebacks are clipped to this when a message would
+# otherwise exceed STREAM_LIMIT.
 _TEXT_CLIP_LIMIT = 1024 * 1024
 
-# The largest Arrow frame that still fits the line once it is base64, which
-# costs four bytes for every three. A frame above this would be encoded and
-# then thrown away again by `encode_message`. The frame is not the whole
-# line, so the budget also reserves room for what rides beside it: printed
-# output and a traceback, each clipped to `_TEXT_CLIP_LIMIT`, plus the
-# envelope. Text that escapes long can still overrun the limit;
-# `encode_message` remains the final authority.
+# Largest frame that fits the line after base64 (4 bytes per 3), minus room
+# for clipped text and the envelope. `encode_message` remains the final
+# authority on the limit.
 _FRAME_WIRE_LIMIT = (STREAM_LIMIT - 2 * _TEXT_CLIP_LIMIT - 4096) * 3 // 4
 
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
 
-# Arrow IPC message header types, plus the one field type that writes no
-# buffer, numbered as the format's flatbuffer schemas number them.
+# Arrow IPC header types and the buffer-less field type, numbered per the
+# format's flatbuffer schemas.
 _SCHEMA = 1
 _DICTIONARY_BATCH = 2
 _RECORD_BATCH = 3
 _NULL_TYPE = 1
 
-# How deep a schema may nest its fields; the walk below holds one iterator
-# per level. pyarrow refuses to read a stream nested even half this deep,
-# so the cap is reachable only by a schema written by hand.
+# Deepest a schema may nest its fields; the walk below holds one iterator
+# per level.
 _SCHEMA_DEPTH_LIMIT = 128
 
-# Returned by `_coerce_scalar` when a value has no JSON-carryable rendering.
+# `_coerce_scalar` sentinel for a value with no JSON-carryable rendering.
 _FALL_BACK = object()
 
 
