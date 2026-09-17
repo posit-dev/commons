@@ -1,4 +1,4 @@
-name: R — Citation browser tests
+name: "R: Citation browser tests"
 
 on:
   push:

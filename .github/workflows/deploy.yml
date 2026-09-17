@@ -1,4 +1,4 @@
-name: R — Deploy to Connect
+name: "R: Deploy to Connect"
 
 on:
   push:

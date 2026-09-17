@@ -11,7 +11,7 @@
 # file on the default branch, so this job cannot run at all until it merges.
 # Its dry run defaults to true so the first manual run reports rather than
 # deletes.
-name: Py — Cleanup docs previews
+name: "Py: Cleanup docs previews"
 
 on:
   pull_request:

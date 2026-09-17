@@ -1,4 +1,4 @@
-name: Py — Package checks
+name: "Py: Package checks"
 
 on:
   push:

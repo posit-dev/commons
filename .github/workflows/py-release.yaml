@@ -1,4 +1,4 @@
-name: Py — PyPI release
+name: "Py: PyPI release"
 
 # Publishes pkg-py to PyPI via trusted publishing (OIDC); no API token is stored.
 # PyPI's publisher config for commons names this file, so renaming it
