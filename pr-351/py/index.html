@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>commons</title>
+<title>commons | commons</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -71,6 +71,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="site_libs/quarto-search/fuse.min.js"></script>
 <script src="site_libs/quarto-search/quarto-search.js"></script>
 <meta name="quarto:offset" content="./">
+<link href="./favicon.ico" rel="icon">
 <script src="site_libs/quarto-html/quarto.js" type="module"></script>
 <script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
 <script src="site_libs/quarto-html/popper.min.js"></script>
@@ -80,7 +81,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="site_libs/bootstrap/bootstrap-3e9b1289f5f353c49b617ce48ad2bc38.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-a38d33e8a12d5f06b93c4d053614e4f6.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -108,19 +109,111 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
     "search-label": "Search"
   }
 }</script>
-<!-- The tags pkgdown writes for the R site, so both serve the same icons.
-     A leading / is project-relative; Quarto rewrites it per page depth. -->
-<link rel="icon" type="image/png" sizes="96x96" href="./favicon/favicon-96x96.png">
-<link rel="icon" type="image/svg+xml" href="./favicon/favicon.svg">
-<link rel="apple-touch-icon" sizes="180x180" href="./favicon/apple-touch-icon.png">
-<link rel="icon" sizes="any" href="./favicon/favicon.ico">
-<link rel="manifest" href="./favicon/site.webmanifest">
+<script>
+(function () {
+  var tries = 0;
+  function inject() {
+    if (document.querySelector(".commons-r-link")) return;
+    var tools = document.getElementById("gd-navbar-widgets");
+    if (!tools) {
+      if (tries++ < 100) return window.setTimeout(inject, 50);
+      return;
+    }
+    var link = document.createElement("a");
+    link.className = "nav-link gd-navbar-icon commons-r-link";
+    link.href = "https://posit-dev.github.io/commons/r/";
+    link.title = "R Documentation";
+    link.setAttribute("aria-label", "R documentation");
+    link.innerHTML = '<span class="r-logo"></span>';
+    tools.insertBefore(link, tools.firstChild);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", inject);
+  } else {
+    inject();
+  }
+})();
+</script>
+<script>
+(function () {
+  var tries = 0;
+  function fix() {
+    var link = document.querySelector('[class*="announcement-banner"] a');
+    if (!link) {
+      if (tries++ < 100) return window.setTimeout(fix, 50);
+      return;
+    }
+    if (link.dataset.commonsOffsetApplied) return;
+    var ann = document.querySelector('meta[name$="announcement"]');
+    var raw = ann ? ann.getAttribute("data-url") || "" : "";
+    if (!raw || /^([a-z][a-z0-9+.-]*:|\/\/|\/|#)/i.test(raw)) return;
+    var off = document.querySelector('meta[name="quarto:offset"]');
+    var prefix = (off ? off.getAttribute("content") || "./" : "./");
+    var fixed = prefix.replace(/\/?$/, "/") + raw;
+    link.setAttribute("href", fixed);
+    // Quarto stashes the pre-rewrite href here and its external-link
+    // pass restores it, which would undo the line above. That pass
+    // treats this link as external whenever the served prefix differs
+    // from site_url, which is the case in every pull request preview,
+    // so both the opt-out class and the stashed value are set.
+    link.classList.add("no-external");
+    link.dataset.originalHref = fixed;
+    link.dataset.commonsOffsetApplied = "1";
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", fix);
+  } else {
+    fix();
+  }
+})();
+</script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'termshow.css'}));</script>
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox.css'}));</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'gd-lightbox.js';s.defer=true;document.head.appendChild(s);})();</script>
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox-compare.css'}));</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'gd-lightbox-compare.js';s.defer=true;document.head.appendChild(s);})();</script>
+<script>document.head.appendChild(Object.assign(document.createElement('link'),{rel:'stylesheet',href:(document.querySelector('meta[name="quarto:offset"]')||{content:''}).content+'gd-lightbox-annotate.css'}));</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'gd-lightbox-annotate.js';s.defer=true;document.head.appendChild(s);})();</script>
+<link rel="icon" type="image/x-icon" href="./favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
+<script src="theme-init.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/posit-dev/supported-by-posit/js/badge.min.js"></script>
+<meta name="gd-announcement" data-content="Heads up! <code>commons</code> for Python is <em>still in beta</em> and is not yet equal to the R package in functionality. Click here to see specific feature parity." data-type="info" data-dismissable="true" data-url="user-guide/feature-parity.html" data-style="" data-position="above-navbar">
+<meta name="gd-version-map" content="{&quot;versions&quot;:[{&quot;tag&quot;:&quot;dev&quot;,&quot;label&quot;:&quot;0.2.0 (dev)&quot;,&quot;path_prefix&quot;:&quot;v/dev&quot;,&quot;prerelease&quot;:true},{&quot;tag&quot;:&quot;0.1.0b1&quot;,&quot;label&quot;:&quot;0.1.0b1&quot;,&quot;latest&quot;:true,&quot;path_prefix&quot;:&quot;&quot;,&quot;prerelease&quot;:true}],&quot;pages&quot;:{}}">
 
 
-<link rel="stylesheet" href="assets/styles.css">
+<link rel="stylesheet" href="styles.css">
+  <link rel="canonical" href="https://posit-dev.github.io/commons/">
+  <meta name="description" content="AI Agents for Data Analysis">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "commons",
+  "description": "AI Agents for Data Analysis",
+  "license": "https://opensource.org/licenses/MIT",
+  "url": "https://posit-dev.github.io/commons",
+  "documentation": "https://posit-dev.github.io/commons",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "Python"
+  }
+}
+</script>
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="commons | commons">
+  <meta property="og:description" content="AI Agents for Data Analysis">
+  <meta property="og:url" content="https://posit-dev.github.io/commons">
+  <meta property="og:site_name" content="commons">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="commons | commons">
+  <meta name="twitter:description" content="AI Agents for Data Analysis">
 </head>
 
-<body class="nav-fixed quarto-light">
+<body class="nav-fixed gd-homepage quarto-light">
 
 <div id="quarto-search-results"></div>
   <header id="quarto-header" class="headroom fixed-top">
@@ -128,30 +221,22 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       <div class="navbar-container container-fluid">
       <div class="navbar-brand-container mx-auto">
     <a href="./index.html" class="navbar-brand navbar-brand-logo">
-    <img src="./assets/logos/python-logo.svg" alt="" class="navbar-logo light-content">
-    <img src="./assets/logos/python-logo.svg" alt="" class="navbar-logo dark-content">
+    <img src="./python-logo.svg" alt="commons" class="navbar-logo light-content">
+    <img src="./python-logo.svg" alt="commons" class="navbar-logo dark-content">
     </a>
     <a class="navbar-brand" href="./index.html">
     <span class="navbar-title">commons</span>
     </a>
   </div>
-            <div id="quarto-search" class="" title="Search"></div>
+            <div id="quarto-search" class=""></div>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" role="menu" aria-expanded="false" aria-label="Toggle navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
   <span class="navbar-toggler-icon"></span>
 </button>
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="./get-started.html"> 
-<span class="menu-text">Get started</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./governance.html"> 
-<span class="menu-text">Security and governance</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link" href="./feature-parity.html"> 
-<span class="menu-text">Feature parity</span></a>
+    <a class="nav-link" href="./user-guide/get-started.html"> 
+<span class="menu-text">User Guide</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="./reference/index.html"> 
@@ -160,18 +245,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </ul>
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
-    <a class="nav-link" href="https://posit-dev.github.io/commons/r/"> 
-<span class="menu-text"><span class="r-logo" title="R Documentation">R Documentation</span></span></a>
-  </li>  
-  <li class="nav-item compact">
-    <a class="nav-link" href="https://pypi.org/project/commons/"> <i class="bi bi-box-seam" role="img" aria-label="commons on PyPI">
-</i> 
-<span class="menu-text"></span></a>
-  </li>  
-  <li class="nav-item compact">
-    <a class="nav-link" href="https://github.com/posit-dev/commons"> <i class="bi bi-github" role="img">
-</i> 
-<span class="menu-text"></span></a>
+    <span class="nav-link">
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="40" data-forks="1"></div>
+    </span>
   </li>  
 </ul>
           </div> <!-- /navcollapse -->
@@ -184,20 +260,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
 <!-- sidebar -->
 <!-- margin-sidebar -->
-    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
-        <nav id="TOC" role="doc-toc" class="toc-active">
-    <h2 id="toc-title">On this page</h2>
-   
-  <ul>
-  <li><a href="#installation" id="toc-installation" class="nav-link active" data-scroll-target="#installation">Installation</a></li>
-  <li><a href="#get-started" id="toc-get-started" class="nav-link" data-scroll-target="#get-started">Get started</a></li>
-  <li><a href="#trusted-answers" id="toc-trusted-answers" class="nav-link" data-scroll-target="#trusted-answers">Trusted answers</a></li>
-  <li><a href="#evaluation" id="toc-evaluation" class="nav-link" data-scroll-target="#evaluation">Evaluation</a></li>
-  </ul>
-</nav>
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar zindex-bottom">
     </div>
 <!-- main -->
-<main class="content" id="quarto-document-content">
+<main class="content page-columns page-full" id="quarto-document-content">
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
@@ -218,38 +284,94 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </header>
 
 
-<img src="assets/hex/commons-hex.png" class="commons-hex" alt="The package's hex sticker; a Common Kingfisher drawn in a cartoonish style, sitting on a park bench with a plaque reading 'commons'. Behind the bird is an open green space.">
-<p><code>commons</code> helps data scientists build trustworthy data agents.</p>
+<style>
+section.level1:first-of-type > h1:first-child,
+section.level2:first-of-type > h2:first-child,
+.column-body-outset-right > section.level1:first-of-type > h1,
+#quarto-document-content > section:first-of-type > h1 {
+  margin-top: 4px !important;
+}
+</style>
+<div class="gd-hero">
+<img src="user-guide/assets/hex/commons-hex.png" alt="Logo" class="gd-hero-logo" style="max-height:200px">
+<p class="gd-hero-name">commons</p>
+<p class="gd-hero-tagline">AI Agents for Data Analysis</p>
+</div>
+
+
+<div class="no-row-height column-margin column-container"><div class="">
+<section id="links" class="level3">
+<h3 class="anchored" data-anchor-id="links">Links</h3>
+<p><a href="https://pypi.org/project/commons/">View on PyPI<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -0.05em; margin-left: 0em; margin-top: 0.1em;" viewbox="0 0 24 24"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg></a><br> <a href="https://github.com/posit-dev/commons/issues">Issues<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -0.05em; margin-left: 0em; margin-top: 0.1em;" viewbox="0 0 24 24"><path d="M7 7h10v10"></path><path d="M7 17 17 7"></path></svg></a><br></p>
+</section>
+<section id="ai-agents" class="level3">
+<h3 class="anchored" data-anchor-id="ai-agents">AI / Agents</h3>
+<p><a href="skills.html">Skills<svg class="gd-sparkle" xmlns="http://www.w3.org/2000/svg" width="0.85em" height="0.85em" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -0.1em; margin-left: 0.25em;"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .963L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path></svg></a><br> <a href="llms.txt">llms.txt</a><br> <a href="llms-full.txt">llms-full.txt</a><br></p>
+</section>
+<section id="developers" class="level3">
+<h3 class="anchored" data-anchor-id="developers">Developers</h3>
+<div>
+<span>
+<p>
+<strong style="padding-bottom: 4px;">Josh Taillon</strong>
+</p>
+</span><span style="margin-top: -0.15em; display: block;">
+<p>
+<small>Maintainer</small>
+</p>
+</span><span>
+<p>
+<small style="margin-top: -0.15em; display: block;">Posit, PBC</small>
+</p>
+</span><span style="margin-top: -0.15em; display: block;"><a href="https://github.com/jat255" title="GitHub"><i class="bi bi-github"></i></a> <a href="https://opensource.posit.co/people/josh-taillon/" title="Website"><i class="bi bi-globe"></i></a> <a href="https://orcid.org/0000-0002-5185-4503" title="ORCID"><i class="fa-brands fa-orcid"></i></a></span>
+</div>
+<div style="padding-top: 10px;">
+<span>
+<p>
+<strong style="padding-bottom: 4px;">Posit Software, PBC</strong>
+</p>
+</span><span style="margin-top: -0.15em; display: block;">
+<p>
+<small>Copyright holder, funder</small>
+</p>
+</span><span style="margin-top: -0.15em; display: block;"><a href="https://posit.co" title="Website"><i class="bi bi-globe"></i></a></span>
+</div>
+</section>
+<section id="meta" class="level3">
+<h3 class="anchored" data-anchor-id="meta">Meta</h3>
+<p><strong>Requires:</strong> Python <code>&gt;=3.11</code><br> <strong>Provides-Extra:</strong> <code>tracing</code>, <code>shiny</code><br> <a href="package-info.html">Package Info</a></p>
+</section>
+</div></div><p><code>commons</code> helps data scientists build trustworthy data agents.</p>
 <p>Data teams typically have trusted code that they use to analyze their data and build reports and apps. <code>commons</code> leverages that expertise, situating the information in a series of prompts and tools designed to create an accurate, fast, and cost-effective agent.</p>
 <p>Trusted calculations can come from Python functions (as <em>measures</em>) or <a href="https://data-dict.tidyverse.org/">data dictionary</a> definitions.</p>
 <section id="installation" class="level2">
 <h2 class="anchored" data-anchor-id="installation">Installation</h2>
 <p><code>commons</code> requires Python 3.11 or later. To install <a href="https://pypi.org/project/commons/">the package from PyPI</a>, run:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># create a virtual environment with `uv venv` if you need first, then run:</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install commons</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># create a virtual environment with `uv venv` if you need first, then run:</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install commons</span></code></pre></div>
 <p>If you want the chat UI, install the <code>shiny</code> extra, as well:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny]"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny]"</span></span></code></pre></div>
 <p>Or, for the development version:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># just the core package:</span></span>
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># just the core package:</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co"># with the shiny UI dependencies:</span></span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="ex">uv</span> pip install <span class="st">"commons[shiny] @ git+https://github.com/posit-dev/commons#subdirectory=pkg-py"</span></span></code></pre></div>
 </section>
 <section id="get-started" class="level2">
 <h2 class="anchored" data-anchor-id="get-started">Get started</h2>
 <p><code>commons</code> uses <a href="https://posit-dev.github.io/chatlas/"><code>chatlas</code></a> to access LLMs, so you will need access to one of chatlas’s supported providers.</p>
-<p>The <a href="./get-started.html">Introduction to commons</a> page explains the structure of a <code>commons</code> agent and the creation process. For a complete example application, see <a href="https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py"><code>demo.py</code></a> in the repository.</p>
+<p>The <a href="./user-guide/get-started.html">Introduction to commons</a> page explains the structure of a <code>commons</code> agent and the creation process. For a complete example application, see <a href="https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py"><code>demo.py</code></a> in the repository.</p>
 </section>
 <section id="trusted-answers" class="level2">
 <h2 class="anchored" data-anchor-id="trusted-answers">Trusted answers</h2>
 <p>There are two provenance paths available to a <code>commons</code> agent. When a user asks a question for which there is trusted code, the agent runs that code and reports the result. When no trusted code covers the question, the agent writes custom SQL, leaning on additional context provided to the agent.</p>
 <p>Answers display provenance according to the analysis path followed, so users can determine how much trust to put in a given answer.</p>
-<p>For more information, see the <a href="./get-started.html">Introduction to <code>commons</code></a> page.</p>
+<p>For more information, see the <a href="./user-guide/get-started.html">Introduction to <code>commons</code></a> page.</p>
 </section>
 <section id="evaluation" class="level2">
 <h2 class="anchored" data-anchor-id="evaluation">Evaluation</h2>
-<p>The <a href="https://github.com/posit-dev/devrel-agent">DevRel agent</a> is an example <code>commons</code> agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit’s open-source projects. Its repository contains an <a href="https://github.com/posit-dev/devrel-agent/tree/main/evals">evaluation</a> comparing the <code>commons</code> agent with Claude Code on the same data; the <a href="../r/#evaluation">R documentation</a> presents the results.</p>
+<p>The <a href="https://github.com/posit-dev/devrel-agent">DevRel agent</a> is an example <code>commons</code> agent (using the R implementation) that answers questions about adoption, engagement, and growth across Posit’s open-source projects. Its repository contains an <a href="https://github.com/posit-dev/devrel-agent/tree/main/evals">evaluation</a> comparing the <code>commons</code> agent with Claude Code on the same data; the <a href="https://posit-dev.github.io/commons/r/#evaluation">R documentation</a> presents the results.</p>
 
 
 </section>
@@ -264,68 +386,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
       icon: icon
     };
     anchorJS.add('.anchored');
-    const isCodeAnnotation = (el) => {
-      for (const clz of el.classList) {
-        if (clz.startsWith('code-annotation-')) {                     
-          return true;
-        }
-      }
-      return false;
-    }
-    const onCopySuccess = function(e) {
-      // button target
-      const button = e.trigger;
-      // don't keep focus
-      button.blur();
-      // flash "checked"
-      button.classList.add('code-copy-button-checked');
-      var currentTitle = button.getAttribute("title");
-      button.setAttribute("title", "Copied!");
-      let tooltip;
-      if (window.bootstrap) {
-        button.setAttribute("data-bs-toggle", "tooltip");
-        button.setAttribute("data-bs-placement", "left");
-        button.setAttribute("data-bs-title", "Copied!");
-        tooltip = new bootstrap.Tooltip(button, 
-          { trigger: "manual", 
-            customClass: "code-copy-button-tooltip",
-            offset: [0, -8]});
-        tooltip.show();    
-      }
-      setTimeout(function() {
-        if (tooltip) {
-          tooltip.hide();
-          button.removeAttribute("data-bs-title");
-          button.removeAttribute("data-bs-toggle");
-          button.removeAttribute("data-bs-placement");
-        }
-        button.setAttribute("title", currentTitle);
-        button.classList.remove('code-copy-button-checked');
-      }, 1000);
-      // clear code selection
-      e.clearSelection();
-    }
-    const getTextToCopy = function(trigger) {
-      const outerScaffold = trigger.parentElement.cloneNode(true);
-      const codeEl = outerScaffold.querySelector('code');
-      for (const childEl of codeEl.children) {
-        if (isCodeAnnotation(childEl)) {
-          childEl.remove();
-        }
-      }
-      return codeEl.innerText;
-    }
-    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
-      text: getTextToCopy
-    });
-    clipboard.on('success', onCopySuccess);
-    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
-      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
-        text: getTextToCopy,
-        container: window.document.getElementById('quarto-embedded-source-code-modal')
-      });
-      clipboardModal.on('success', onCopySuccess);
-    }
       var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
       var mailtoRegex = new RegExp(/^mailto:/);
         var filterRegex = new RegExp("https:\/\/posit-dev\.github\.io\/commons\/py\/");
@@ -658,17 +718,30 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div> <!-- /content -->
 <footer class="footer">
   <div class="nav-footer">
-    <div class="nav-footer-left">
-<p>Developed by Josh Taillon, Posit Software, PBC.</p>
-</div>   
-    <div class="nav-footer-center">
-      &nbsp;
-    </div>
-    <div class="nav-footer-right">
-<p>Site built with <a href="https://quarto.org/">Quarto</a>.</p>
+<div class="nav-footer-center">
+<p>Developed by <a href="https://opensource.posit.co/people/josh-taillon/"><strong>Josh&nbsp;Taillon</strong></a>. Supported by <a href="https://posit.co"><strong>Posit&nbsp;Software,&nbsp;PBC</strong></a>.<br>Site created with <strong>Great&nbsp;Docs</strong>.</p>
 </div>
-  </div>
+</div>
 </footer>
+<script src="announcement-banner.js"></script>
+<script src="github-widget.js"></script>
+<script src="sidebar-wrap.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'sidebar-float.js';document.body.appendChild(s);})();</script>
+<script src="sidebar-filter.js"></script>
+<script src="dark-mode-toggle.js"></script>
+<script src="back-to-top.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'on-this-page.js';document.body.appendChild(s);})();</script>
+<script src="keyboard-nav.js"></script>
+<script src="copy-code.js"></script>
+<script src="details.js"></script>
+<script src="mermaid-renderer.js"></script>
+<script src="tooltips.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'color-swatch.js';document.body.appendChild(s);})();</script>
+<script src="responsive-tables.js"></script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'video-embed.js';document.body.appendChild(s);})();</script>
+<script>(function(){var s=document.createElement('script');var m=document.querySelector('meta[name="quarto:offset"]');s.src=(m?m.content:'')+'termshow.js';document.body.appendChild(s);})();</script>
+<script src="version-selector.js"></script>
+<script src="navbar-widgets.js"></script>
 
 
 
