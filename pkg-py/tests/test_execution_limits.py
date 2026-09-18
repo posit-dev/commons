@@ -41,7 +41,7 @@ REPORT_INHERITED = (
 
 
 def apply_in_child(request: str = "", pre: str = "") -> dict[str, int | None]:
-    """Apply the limit in a fresh interpreter and report what stuck.
+    """Apply the limit in a fresh interpreter and report the limit in force.
 
     ``pre`` runs before the limit is applied, which is how a host that has
     already capped the worker is simulated.

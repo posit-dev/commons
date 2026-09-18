@@ -18,7 +18,7 @@ DEFAULT_ADDRESS_SPACE = 8 * 1024**3
 
 
 def apply_address_space_limit(limit: int = DEFAULT_ADDRESS_SPACE) -> int | None:
-    """Cap this process's address space, and report what stuck.
+    """Cap this process's address space, and report what applied.
 
     Returns the limit in force afterwards: ``limit``, or a smaller one
     already inherited. Returns ``None`` where the kernel has no
