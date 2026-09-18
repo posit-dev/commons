@@ -152,6 +152,13 @@ def _set_no_new_privs() -> None:
         raise OSError(code, f"prctl(PR_SET_NO_NEW_PRIVS) failed: {os.strerror(code)}")
 
 
+# The newest ABI the mask table in handled_access() has been checked
+# against: 6, 7 and 8 add no filesystem right, so the table is complete
+# through 8. The nightly Landlock ABI workflow fails when a kernel reports
+# newer, which is the prompt to re-check the table.
+NEWEST_REVIEWED_ABI = 8
+
+
 def handled_access(abi: int) -> int:
     """Every filesystem right a ruleset should handle on this ABI.
 
@@ -164,10 +171,9 @@ def handled_access(abi: int) -> int:
     more than that is handled as 5, which means a filesystem right added by
     some later ABI would go unhandled, and therefore unrestricted, until
     this table learns about it. ABI 6, 7 and 8 exist and add none, so the
-    table is complete today; kata `ctv9` tracks re-checking it. Declining
-    Landlock on an unrecognised ABI was considered and rejected: it would
-    give up a working sandbox on every future kernel to guard against a
-    right that does not exist yet.
+    table is complete today, but this is a known potential drift location:
+    ``NEWEST_REVIEWED_ABI`` records how far the check has gone, and the
+    nightly Landlock ABI workflow alarms past it.
     """
     handled = FS_V1_ALL
     if abi >= 2:

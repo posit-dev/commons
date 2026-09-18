@@ -1,0 +1,71 @@
+# A scheduled check rather than a suite test, so a kernel that outgrows the
+# reviewed Landlock ABI table alarms the maintainers without turning every
+# unrelated PR red. The probe is a raw syscall, so the runner's own kernel
+# answers it; one leg is enough because the ABI numbers are
+# architecture-shared. The issue opens only on the past-ceiling verdict, so
+# a broken runner or a kernel without Landlock fails red without filing a
+# misleading report.
+name: "Py: Landlock ABI ceiling"
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkg-py
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: pkg-py/uv.lock
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Compare the kernel's Landlock ABI with the reviewed ceiling
+        id: compare
+        run: |
+          uv run python - <<'EOF'
+          import os
+          from commons._execution._runtime import _landlock
+
+          abi = _landlock.abi_version()
+          ceiling = _landlock.NEWEST_REVIEWED_ABI
+          print(f"kernel Landlock ABI: {abi}; reviewed through: {ceiling}")
+          verdict = "ok"
+          if abi < 1:
+              print("this runner has no Landlock; the ceiling check needs one")
+              verdict = "no-landlock"
+          elif abi > ceiling:
+              print(
+                  "past the reviewed ceiling: check landlock(7) for any "
+                  "filesystem right the new ABI adds, extend handled_access() "
+                  "if it adds one, and raise NEWEST_REVIEWED_ABI"
+              )
+              verdict = "past-ceiling"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              print(f"verdict={verdict}", file=fh)
+          EOF
+      - name: Open an issue when the ceiling is exceeded
+        if: steps.compare.outputs.verdict == 'past-ceiling'
+        run: |
+          title="Landlock ABI past the reviewed ceiling"
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq length)
+          if [ "$open" = "0" ]; then
+            gh issue create --title "$title" --body "A nightly runner reports a Landlock ABI newer than NEWEST_REVIEWED_ABI in pkg-py/src/commons/_execution/_runtime/_landlock.py. Check landlock(7) for filesystem rights the new ABI adds, extend handled_access() if it adds any, then raise the constant."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fail the run unless the ceiling holds
+        if: steps.compare.outputs.verdict != 'ok'
+        run: |
+          echo "::error::Landlock ABI ceiling check: ${{ steps.compare.outputs.verdict }}"
+          exit 1
