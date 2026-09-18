@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import ctypes
 import errno
-import fcntl
 import os
 import platform
 import re
@@ -47,7 +46,12 @@ MS_RELATIME = 1 << 21
 
 MNT_DETACH = 2
 
+PR_SET_NO_NEW_PRIVS = 38
 PR_CAPBSET_DROP = 24
+
+# Carried as a number like the syscall table above: os.O_PATH exists only on
+# Linux, and the module has to import everywhere.
+_O_PATH = 0o10000000
 _CAP_VERSION_3 = 0x20080522
 
 # statvfs numbers the flags a mount carries differently from mount() itself,
@@ -80,11 +84,14 @@ _OCTAL = re.compile(r"\\([0-7]{3})")
 
 
 class UsernsUnavailable(OSError):
-    """This host will not give the worker a user namespace.
+    """The sandbox cannot be engaged from this process, and nothing changed.
 
-    Raised only where nothing has changed yet, so the caller is free to
-    report an unsupported host and carry on deciding what to do. Container
-    seccomp profiles and a zeroed user.max_user_namespaces land here.
+    Raised only where the process is still as it was, so the caller is free
+    to report the refusal and decide what to do. Some refusals are the
+    host's policy -- container seccomp profiles, a zeroed
+    user.max_user_namespaces, an architecture with no known syscall
+    numbers -- and some are the caller's to fix, like engaging from a
+    multi-threaded process. The message says which.
     """
 
 
@@ -136,6 +143,8 @@ def _libc() -> ctypes.CDLL:
         _LIBC.umount2.argtypes = [ctypes.c_char_p, ctypes.c_int]
         _LIBC.unshare.restype = ctypes.c_int
         _LIBC.unshare.argtypes = [ctypes.c_int]
+        _LIBC.prctl.restype = ctypes.c_int
+        _LIBC.prctl.argtypes = [ctypes.c_int] + [ctypes.c_ulong] * 4
         _LIBC.syscall.restype = ctypes.c_long
     return _LIBC
 
@@ -173,7 +182,9 @@ def _mount(
     data: str | None,
 ) -> int:
     def encode(value: str | None) -> bytes | None:
-        return None if value is None else value.encode()
+        # fsencode, so a mount point that is not UTF-8 survives the round
+        # trip from mountinfo back to mount().
+        return None if value is None else os.fsencode(value)
 
     return _libc().mount(
         encode(source), target.encode(), encode(fstype), flags, encode(data)
@@ -187,14 +198,17 @@ def _write_proc(path: str, content: str) -> None:
     writes only happen after ``unshare()`` has already put the process in a
     new namespace, where it holds the overflow ids until they are mapped.
     """
+    data = content.encode()
     try:
         fd = os.open(path, os.O_WRONLY | os.O_CLOEXEC)
         try:
-            os.write(fd, content.encode())
+            written = os.write(fd, data)
         finally:
             os.close(fd)
     except OSError as exc:
         raise UsernsError(exc.errno, f"cannot write {path}: {exc.strerror}") from exc
+    if written != len(data):
+        raise UsernsError(errno.EIO, f"cannot write {path}: short write")
 
 
 def mountinfo_paths(mountinfo: str) -> list[str]:
@@ -288,11 +302,21 @@ def _close_external_fds(
     """Close descriptors that point outside the granted roots.
 
     A descriptor opened before the pivot still reaches whatever it was opened
-    on, so the mounts alone do not confine the worker. Sockets go
-    unconditionally. A file or directory stays only if its path is under a
-    granted root, and under a read-only root only if it was opened read-only.
-    Pipes and the like are left alone: they carry the protocol.
+    on, so the mounts alone do not confine the worker. Sockets, directories
+    and O_PATH descriptors go unconditionally: a kept directory descriptor
+    anchors the detached host tree, and openat() relative to it climbs back
+    out of the sandbox. Anything legitimate is reopenable after the pivot. A
+    regular file stays only if its path is under a granted root, and under a
+    read-only root only if it was opened read-only. Pipes and the
+    anonymous-inode descriptors (epoll, inotify, eventfd) are left alone:
+    the worker's protocol speaks over the pipes, and an anonymous inode has
+    no path to check. Descriptors 0-2 are left alone on the launcher's
+    promise that they are pipes, not files.
     """
+    # Imported here rather than at module level so the module still imports
+    # on Windows, where fcntl does not exist and this never runs.
+    import fcntl
+
     scan_fd = os.open("/proc/self/fd", os.O_RDONLY | os.O_DIRECTORY)
     try:
         entries = os.listdir(scan_fd)
@@ -308,23 +332,26 @@ def _close_external_fds(
             mode = os.fstat(fd).st_mode
         except OSError:
             continue
-        if stat.S_ISSOCK(mode):
+        if stat.S_ISSOCK(mode) or stat.S_ISDIR(mode):
             os.close(fd)
             continue
         if not (
-            stat.S_ISREG(mode)
-            or stat.S_ISDIR(mode)
-            or stat.S_ISCHR(mode)
-            or stat.S_ISBLK(mode)
+            stat.S_ISREG(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode)
         ):
             continue
         try:
             target = os.readlink(f"/proc/self/fd/{fd}")
-            accmode = fcntl.fcntl(fd, fcntl.F_GETFL) & os.O_ACCMODE
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
         except OSError:
             os.close(fd)
             continue
-        readable = accmode == os.O_RDONLY and path_in_roots(target, read_roots)
+        if flags & _O_PATH:
+            os.close(fd)
+            continue
+        readable = (
+            flags & os.O_ACCMODE == os.O_RDONLY
+            and path_in_roots(target, read_roots)
+        )
         if not readable and not path_in_roots(target, rw_roots):
             os.close(fd)
 
@@ -348,18 +375,85 @@ def _drop_capabilities() -> None:
         raise _fail(UsernsError, "cannot clear the sandbox capabilities")
 
 
+def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
+    """Validate and trim the granted roots, before anything has changed.
+
+    A root has to be an absolute path that names something: ``""`` and
+    ``"//"`` would otherwise collapse to ``/`` and grant the whole host
+    filesystem. A read-write root also cannot be ``/`` or the sandbox root:
+    the sandbox root is mounted where ``/tmp`` was and remounted read-only
+    at the end, so either grant would come out read-only and the promise
+    made here is one the engage cannot keep.
+    """
+    normalized = []
+    for root in roots:
+        if not root.startswith("/"):
+            raise UsernsUnavailable(
+                0, f"a granted root must be an absolute path, not {root!r}"
+            )
+        trimmed = root.rstrip("/") or "/"
+        if trimmed == "/" and root != "/":
+            raise UsernsUnavailable(
+                0, f"a granted root must name a directory, not {root!r}"
+            )
+        if writable and trimmed in ("/", _SANDBOX_ROOT):
+            raise UsernsUnavailable(
+                0,
+                f"{trimmed} cannot be granted read-write: the sandbox root "
+                "is remounted read-only over it",
+            )
+        normalized.append(trimmed)
+    return normalized
+
+
+def _check_nesting(read_roots: list[str], rw_roots: list[str]) -> None:
+    """Refuse a read-only grant that a read-write grant would swallow.
+
+    Read roots are bound first, so a recursive read-write bind stacks over a
+    read-only bind nested inside it and the nested grant comes out writable.
+    The reverse nesting is safe: a read-write bind inside a read-only root
+    mounts over it and stays writable.
+    """
+    for root in read_roots:
+        for rw_root in rw_roots:
+            if root.startswith(rw_root + "/"):
+                raise UsernsUnavailable(
+                    0,
+                    f"read-only root {root} sits inside read-write root "
+                    f"{rw_root} and would come out writable",
+                )
+
+
 def engage(
     read_roots: list[str], rw_roots: list[str], *, preserve_fds: list[int]
 ) -> None:
     """Confine this process to ``read_roots`` and ``rw_roots``, for good.
 
+    Three preconditions, all checked before anything changes: Linux with
+    /proc mounted (the thread count and the mount table come from it), a
+    single-threaded process (``unshare(CLONE_NEWUSER)`` refuses one with
+    threads, so the BLAS pools have to be pinned before they start), and
+    running before the seccomp filter, which screens the mount, pivot_root
+    and unshare calls this makes.
+
     Raises ``UsernsUnavailable`` when the namespace never appears, which
     means this host cannot run this sandbox and the caller should say so.
     Every later failure raises ``UsernsError``.
     """
-    # Both preflights, because everything below this point is irreversible.
+    if platform.system() != "Linux":
+        raise UsernsUnavailable(0, "the user-namespace sandbox is Linux-only")
+    # Every check goes before map_ids(), the first irreversible step.
     _syscall_numbers()
-    threads = len(os.listdir("/proc/self/task"))
+    read_roots = _normalize_roots(read_roots, writable=False)
+    rw_roots = _normalize_roots(rw_roots, writable=True)
+    _check_nesting(read_roots, rw_roots)
+    try:
+        threads = len(os.listdir("/proc/self/task"))
+        cwd = os.getcwd()
+    except OSError as exc:
+        raise UsernsUnavailable(
+            exc.errno, f"cannot preflight the sandbox: {exc.strerror}"
+        ) from exc
     if threads != 1:
         raise UsernsUnavailable(
             0,
@@ -367,17 +461,40 @@ def engage(
             "threads; start the worker with OPENBLAS_NUM_THREADS=1 and "
             "OMP_NUM_THREADS=1",
         )
-    read_roots = [root.rstrip("/") or "/" for root in read_roots]
-    rw_roots = [root.rstrip("/") or "/" for root in rw_roots]
-    cwd = os.getcwd()
 
     map_ids()
 
+    try:
+        _confine(read_roots, rw_roots, preserve_fds, cwd)
+    except (UsernsError, UsernsUnavailable):
+        raise
+    except OSError as exc:
+        raise UsernsError(
+            exc.errno, f"cannot engage the sandbox: {exc.strerror}"
+        ) from exc
+
+
+def _confine(
+    read_roots: list[str],
+    rw_roots: list[str],
+    preserve_fds: list[int],
+    cwd: str,
+) -> None:
+    """The irreversible body of ``engage()``, entered in the new namespace.
+
+    Every failure here leaves a process that cannot be recovered, so
+    ``engage()`` reports whatever escapes as a ``UsernsError``.
+    """
+    # Keep a setuid binary from handing back what the sandbox took away. The
+    # seccomp filter sets this too, but this mechanism should not depend on
+    # the other one running.
+    if _libc().prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0:
+        raise _fail(UsernsError, "cannot set no_new_privs")
     # Cut mount propagation both ways before recording or changing anything.
     if _mount("none", "/", None, MS_PRIVATE | MS_REC, None) != 0:
         raise _fail(UsernsError, "cannot make / a private mount")
-    with open("/proc/self/mountinfo") as handle:
-        submounts = mountinfo_paths(handle.read())
+    with open("/proc/self/mountinfo", "rb") as handle:
+        submounts = mountinfo_paths(os.fsdecode(handle.read()))
     _close_external_fds(read_roots, rw_roots, preserve_fds)
 
     if _mount("tmpfs", _SANDBOX_ROOT, "tmpfs", 0, "size=16m,mode=0755") != 0:
@@ -433,6 +550,9 @@ def available() -> bool:
         _syscall_numbers()
     except UsernsUnavailable:
         return False
+    # Warm the libc handle in the parent, so the child's first call really
+    # is a syscall and the fork-warning suppression stays honest.
+    _libc()
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
@@ -445,8 +565,17 @@ def available() -> bool:
         except BaseException:  # noqa: BLE001 - the child reports by exit status
             os._exit(1)
         os._exit(0)
-    try:
-        _, status = os.waitpid(pid, 0)
-    except OSError:
-        return False
+    while True:
+        try:
+            _, status = os.waitpid(pid, 0)
+            break
+        except InterruptedError:
+            continue
+        except ChildProcessError:
+            # The embedding application reaps children itself (SIGCHLD set
+            # to SIG_IGN), so the probe's answer is unknowable; report the
+            # host unusable rather than guess.
+            return False
+        except OSError:
+            return False
     return os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0

@@ -14,6 +14,9 @@ from __future__ import annotations
 import errno
 import json
 import os
+import select
+import signal
+import socket
 import sys
 import threading
 import time
@@ -65,7 +68,9 @@ def in_child(fn: Callable[[int], Any]) -> Any:
     Everything here is irreversible in the process that does it, so it is
     done in a child that exits straight afterwards. ``fn`` is handed the
     write end of the pipe, which is the descriptor it must ask the sandbox
-    to preserve if it wants to be able to answer at all.
+    to preserve if it wants to be able to answer at all. The read has a
+    deadline: a child that wedges on a lock another thread held at fork
+    time fails the test rather than hanging the suite.
     """
     read_fd, write_fd = os.pipe()
     with warnings.catch_warnings():
@@ -86,9 +91,21 @@ def in_child(fn: Callable[[int], Any]) -> Any:
         finally:
             os._exit(0)
     os.close(write_fd)
-    with os.fdopen(read_fd, "rb") as pipe:
-        raw = pipe.read()
+    poller = select.poll()
+    poller.register(read_fd, select.POLLIN | select.POLLHUP)
+    chunks = []
+    while True:
+        if not poller.poll(30_000):
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+            pytest.fail("the child did not report back within 30 seconds")
+        chunk = os.read(read_fd, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    os.close(read_fd)
     os.waitpid(pid, 0)
+    raw = b"".join(chunks)
     assert raw, "the child exited without reporting anything"
     reported = json.loads(raw)
     if "error" in reported:
@@ -173,9 +190,10 @@ def test_the_host_filesystem_is_gone_once_the_sandbox_is_engaged(tmp_path) -> No
         return {
             "granted": os.path.exists(f"{granted}/note.txt"),
             "host": os.path.exists("/etc/passwd"),
+            "oldroot": os.path.exists(_userns._OLD_ROOT),
         }
 
-    assert in_child(child) == {"granted": True, "host": False}
+    assert in_child(child) == {"granted": True, "host": False, "oldroot": False}
 
 
 @requires_userns
@@ -279,7 +297,111 @@ def test_a_descriptor_inside_a_granted_root_stays_open(tmp_path) -> None:
 
 
 @requires_userns
-def test_a_read_only_descriptor_is_not_kept_for_a_read_write_root(tmp_path) -> None:
+def test_a_directory_descriptor_is_closed_even_under_a_granted_root(
+    tmp_path,
+) -> None:
+    # A kept directory descriptor anchors the detached host tree: openat()
+    # relative to it climbs back out of the sandbox, so directories go
+    # unconditionally and anything legitimate is reopened after the pivot.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> str:
+        dir_fd = os.open(str(granted), os.O_RDONLY | os.O_DIRECTORY)
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.listdir(dir_fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_an_o_path_descriptor_is_closed_even_under_a_granted_root(
+    tmp_path,
+) -> None:
+    # An O_PATH descriptor reports an access mode of read-only, so the
+    # path-and-mode rule would keep it -- and openat() works relative to it.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+    (granted / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> str:
+        fd = os.open(f"{granted}/note.txt", _userns._O_PATH)
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.dup(fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_a_writable_descriptor_under_a_read_root_is_closed(tmp_path) -> None:
+    # Remounting the root read-only does not revoke a descriptor that was
+    # already opened for writing, so the sweep has to close it.
+    root = tmp_path / "readable"
+    root.mkdir()
+    (root / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> str:
+        leaked = os.open(f"{root}/note.txt", os.O_RDWR)
+        engage([str(root)], [], preserve_fds=[write_fd])
+        try:
+            os.write(leaked, b"nope")
+        except OSError as exc:
+            return error_code(exc)
+        return "wrote"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_a_socket_is_closed_unconditionally(tmp_path) -> None:
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> str:
+        left, _right = socket.socketpair()
+        fd = left.fileno()
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.fstat(fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_preserve_fds_keeps_a_descriptor_that_would_otherwise_go(
+    tmp_path,
+) -> None:
+    # A socket survives only through the preserve list, which is what makes
+    # this a real exercise of it: a pipe would survive the sweep regardless.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> str:
+        left, _right = socket.socketpair()
+        fd = left.fileno()
+        engage([str(granted)], [], preserve_fds=[write_fd, fd])
+        try:
+            os.fstat(fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "kept"
+
+
+@requires_userns
+def test_a_read_write_descriptor_is_kept_for_a_read_write_root(tmp_path) -> None:
     # The rule is about the path, not the mode: a descriptor under a
     # read-write root survives whichever way it was opened.
     root = tmp_path / "writable"
@@ -348,6 +470,38 @@ def write_attempt(path: str) -> str | None:
 
 
 @requires_userns
+def test_the_sandbox_root_itself_is_read_only(tmp_path) -> None:
+    # Without the final remount, the sandbox root is a writable 16 MB tmpfs:
+    # space the worker was never granted.
+    root = tmp_path / "writable"
+    root.mkdir()
+
+    def child(write_fd: int) -> str | None:
+        engage([], [str(root)], preserve_fds=[write_fd])
+        return write_attempt("/commons-write-probe")
+
+    assert in_child(child) == "EROFS"
+
+
+@requires_userns
+def test_a_granted_root_that_does_not_exist_is_a_userns_error(tmp_path) -> None:
+    # The bind fails after the namespace exists, which is the UsernsError
+    # contract: the process is already changed and cannot be recovered.
+    missing = tmp_path / "missing"
+
+    def child(write_fd: int) -> str:
+        try:
+            engage([str(missing)], [], preserve_fds=[write_fd])
+        except UsernsError:
+            return "error"
+        except UsernsUnavailable:
+            return "unavailable"
+        return "engaged"
+
+    assert in_child(child) == "error"
+
+
+@requires_userns
 @pytest.mark.parametrize("kind", ["file", "dir"])
 def test_a_mount_nested_under_a_read_root_comes_along_and_is_read_only(kind) -> None:
     # The bind has to be recursive or the nested mount is replaced by the
@@ -356,6 +510,12 @@ def test_a_mount_nested_under_a_read_root_comes_along_and_is_read_only(kind) -> 
     if found is None:
         pytest.skip(f"this host has no nested {kind} mount inside a plain directory")
     root, nested = found
+    if write_attempt(nested) is not None:
+        # A mount that is already read-only on the host would report EROFS
+        # whether or not the sandbox remounted it, and pin nothing.
+        pytest.skip(f"the nested mount at {nested} is not writable on this host")
+    if os.path.isdir(nested):
+        os.remove(os.path.join(nested, "commons-write-probe"))
 
     def child(write_fd: int) -> dict[str, object]:
         engage([root, "/proc"], [], preserve_fds=[write_fd])
@@ -411,6 +571,43 @@ def test_a_failed_id_map_is_not_reported_as_an_unavailable_host() -> None:
     leaves a process that can still be asked to do something else."""
     assert not issubclass(UsernsError, UsernsUnavailable)
     assert not issubclass(UsernsUnavailable, UsernsError)
+
+
+def test_roots_are_trimmed_without_changing_where_they_point() -> None:
+    normalized = _userns._normalize_roots(["/", "/foo/", "/bar"], writable=False)
+    assert normalized == ["/", "/foo", "/bar"]
+
+
+@pytest.mark.parametrize("root", ["", "//", "relative/path", "."])
+def test_a_root_that_is_not_an_absolute_directory_is_refused(root) -> None:
+    # "" and "//" would otherwise collapse to "/" and grant the whole host
+    # filesystem -- fail-open on a security boundary.
+    with pytest.raises(UsernsUnavailable):
+        _userns._normalize_roots([root], writable=False)
+
+
+@pytest.mark.parametrize("root", ["/", _userns._SANDBOX_ROOT])
+def test_a_read_write_root_the_final_remount_would_clobber_is_refused(
+    root,
+) -> None:
+    with pytest.raises(UsernsUnavailable):
+        _userns._normalize_roots([root], writable=True)
+
+
+def test_a_read_root_inside_a_read_write_root_is_refused() -> None:
+    # Read roots bind first, so the recursive read-write bind would stack
+    # over the nested read-only bind and the grant would come out writable.
+    with pytest.raises(UsernsUnavailable):
+        _userns._check_nesting(["/a/b"], ["/a"])
+    # The reverse nesting is safe: the read-write bind mounts over the
+    # read-only one and stays writable.
+    _userns._check_nesting(["/a"], ["/a/b"])
+
+
+@pytest.mark.skipif(sys.platform == "linux", reason="asks about other kernels")
+def test_engaging_off_linux_is_an_unavailable_host() -> None:
+    with pytest.raises(UsernsUnavailable):
+        engage([], [], preserve_fds=[])
 
 
 @pytest.mark.parametrize(
