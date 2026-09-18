@@ -99,8 +99,7 @@ def sandbox_capabilities() -> SandboxCapabilities:
     ABI version is a read-only syscall. The seccomp probe installs a
     filter in a child process, so its answer is computed once and
     cached. Only user namespaces have no implementation yet and report
-    unavailable, which costs nothing on a kernel that offers Landlock
-    and is the safe direction to be wrong in on one that does not.
+    unavailable.
     """
     return SandboxCapabilities(
         landlock_abi=_landlock.abi_version(),
