@@ -173,7 +173,8 @@ def handled_access(abi: int) -> int:
     this table learns about it. ABI 6, 7 and 8 exist and add none, so the
     table is complete today, but this is a known potential drift location:
     ``NEWEST_REVIEWED_ABI`` records how far the check has gone, and the
-    nightly Landlock ABI workflow alarms past it.
+    nightly workflow in ``.github/workflows/py-landlock-abi.yaml`` fails
+    when a kernel reports a newer one to alert on the change.
     """
     handled = FS_V1_ALL
     if abi >= 2:
