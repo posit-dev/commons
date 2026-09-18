@@ -181,4 +181,4 @@ def test_the_probe_reports_the_landlock_a_capable_kernel_has() -> None:
     signal to fall back, so the assertion is guarded by the kernel actually
     having some.
     """
-    assert sandbox_capabilities().landlock_abi >= 1
+    assert sandbox_capabilities().landlock_abi == _landlock.abi_version()

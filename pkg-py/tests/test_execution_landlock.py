@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import functools
 import json
+import os
 import pathlib
 import platform
 import shutil
@@ -40,16 +41,23 @@ def _docker_has_landlock() -> bool:
 
     Asks the kernel through the same code under test rather than inferring it
     from a version string: a daemon can be running, and its kernel can still
-    have Landlock compiled out or fenced off by a seccomp profile.
+    have Landlock compiled out or fenced off by a seccomp profile. The
+    answer is bounded: a daemon that cannot reply within the timeout,
+    image pull included, means skipping the container cases rather than
+    hanging the run that asked.
     """
     if shutil.which("docker") is None:
         return False
-    return (
-        subprocess.run(
-            _docker_command(ABI_PROBE), capture_output=True, check=False
-        ).returncode
-        == 0
-    )
+    try:
+        completed = subprocess.run(
+            _docker_command(ABI_PROBE),
+            capture_output=True,
+            check=False,
+            timeout=300,
+        )
+    except subprocess.TimeoutExpired:
+        return False
+    return completed.returncode == 0
 
 
 def _docker_command(script: str) -> list[str]:
@@ -89,10 +97,19 @@ def run_on_a_landlock_kernel(script: str) -> dict:
     return json.loads(completed.stdout)
 
 
-landlock_kernel = pytest.mark.skipif(
-    not (_host_has_landlock() or _docker_has_landlock()),
-    reason="no Landlock-capable kernel available, on this host or through Docker",
-)
+@pytest.fixture(scope="module")
+def landlock_kernel() -> None:
+    """Skip the kernel cases unless a Landlock-capable kernel is reachable.
+
+    A fixture rather than a mark, so the check runs only for a test that
+    needs it: a mark's condition is evaluated at import, and the Docker
+    half can pull an image into a run that merely collected this file on
+    the way to an unrelated test.
+    """
+    if not (_host_has_landlock() or _docker_has_landlock()):
+        pytest.skip(
+            "no Landlock-capable kernel available, on this host or through Docker"
+        )
 
 # Reporting the exception's type rather than a bare "denied" keeps a case
 # honest: a setup mistake surfaces as FileNotFoundError instead of passing as
@@ -155,34 +172,29 @@ json.dump(
 
 
 @pytest.fixture(scope="module")
-def probe() -> dict:
+def probe(landlock_kernel: None) -> dict:
     return run_on_a_landlock_kernel(PROBE)
 
 
-@landlock_kernel
 def test_a_read_root_can_be_read_but_not_written(probe) -> None:
     assert probe["read_readable"] == "allowed"
     assert probe["write_readable"] == "PermissionError"
 
 
-@landlock_kernel
 def test_the_write_root_can_be_both_read_and_written(probe) -> None:
     assert probe["read_scratch"] == "allowed"
     assert probe["write_scratch"] == "allowed"
 
 
-@landlock_kernel
 def test_a_directory_in_no_rule_is_reachable_neither_way(probe) -> None:
     assert probe["read_outside"] == "PermissionError"
     assert probe["write_outside"] == "PermissionError"
 
 
-@landlock_kernel
 def test_the_worker_keeps_running_once_restricted(probe) -> None:
     assert probe["still_running"] == 55
 
 
-@landlock_kernel
 def test_engage_reports_the_abi_it_restricted_the_process_with(probe) -> None:
     assert probe["abi"] >= 1
 
@@ -222,8 +234,8 @@ json.dump(
 )
 
 
-@landlock_kernel
 def test_a_package_symlinked_into_a_store_is_readable_through_its_library(
+    landlock_kernel: None,
 ) -> None:
     """Granting the library alone leaves every package in it unreadable.
 
@@ -254,8 +266,9 @@ json.dump({"abi": abi, "write_scratch": write(scratch)}, sys.stdout)
 )
 
 
-@landlock_kernel
-def test_a_root_that_does_not_exist_is_skipped_rather_than_fatal() -> None:
+def test_a_root_that_does_not_exist_is_skipped_rather_than_fatal(
+    landlock_kernel: None,
+) -> None:
     """Granting nothing can only narrow what the worker reaches.
 
     The read roots are a list of places an interpreter might keep its
@@ -304,3 +317,52 @@ def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
     assert _landlock.FS_READ_ONLY & _landlock.FS_WRITE_FILE == 0
     assert _landlock.FS_READ_ONLY & _landlock.FS_MAKE_REG == 0
     assert _landlock.FS_READ_ONLY & _landlock.FS_REMOVE_FILE == 0
+
+
+def test_engage_reports_none_where_the_kernel_has_no_landlock(monkeypatch) -> None:
+    """``None`` rather than an error is the signal to fall back to another
+    backend.
+
+    The answer is patched in rather than read from the host: on a kernel
+    that does have Landlock, engaging for real would restrict this test
+    process past what pytest can survive.
+    """
+    monkeypatch.setattr(_landlock, "abi_version", lambda: -1)
+    assert _landlock.engage([], []) is None
+
+
+def test_a_host_outside_the_known_architectures_reports_no_landlock(
+    monkeypatch,
+) -> None:
+    """The syscall numbers hold only for the allowlisted architectures, so
+    anywhere else must fall back rather than dial a number that means
+    something else."""
+    monkeypatch.setattr(_landlock, "ON_LINUX", False)
+    assert _landlock.abi_version() == -1
+
+
+def test_roots_of_no_paths_is_empty() -> None:
+    assert _landlock._roots([]) == []
+
+
+def test_roots_repeats_no_path(tmp_path) -> None:
+    once = _landlock._roots([str(tmp_path)])
+    assert _landlock._roots([str(tmp_path), str(tmp_path)]) == once
+
+
+def test_an_absent_root_yields_itself_and_nothing_more(tmp_path) -> None:
+    missing = str(tmp_path / "not-here")
+    assert set(_landlock._roots([missing])) == {missing, os.path.realpath(missing)}
+
+
+def test_roots_resolves_symlinked_entries_one_level_down(tmp_path) -> None:
+    store = tmp_path / "store" / "pkg"
+    store.mkdir(parents=True)
+    library = tmp_path / "library"
+    library.mkdir()
+    (library / "pkg").symlink_to(store, target_is_directory=True)
+    assert set(_landlock._roots([str(library)])) == {
+        str(library),
+        os.path.realpath(library),
+        os.path.realpath(library / "pkg"),
+    }
