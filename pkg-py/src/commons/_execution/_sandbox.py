@@ -7,10 +7,14 @@ is reported when the agent is constructed, ahead of any model asking to run
 code.
 
 ``run_r_protection_mode()`` in ``pkg-r/R/sandbox.R`` makes the same
-decision, with one divergence on macOS: R reports seatbelt from the
+decision, with two divergences. On macOS, R reports seatbelt from the
 compile-time platform, so a macOS without these symbols would promise
 "sandbox" there and fail at engage, where the runtime probe here refuses
-at construction.
+at construction. On Linux, R asks the kernel whether seccomp exists, while
+the probe here instead installs a filter in a child. A container profile
+can answer that query while refusing the install: R reports such a host as
+seccomp-capable and fails it at engage, and the probe here reports
+it incapable and refuses at construction.
 """
 
 from __future__ import annotations
@@ -20,6 +24,8 @@ import os
 import platform
 from dataclasses import dataclass
 from typing import Literal
+
+from ._runtime import _seccomp
 
 __all__ = [
     "ALLOW_UNSAFE_FALLBACK",
@@ -68,7 +74,8 @@ def _seatbelt_present() -> bool:
     The symbol is looked up on the running host, so a macOS that ever drops
     these entry points reports no seatbelt. Inferring from the platform would
     promise a sandbox the worker cannot engage. The worker repeats this check
-    for itself; the parent must not import the module that engages it.
+    for itself; the parent's copy stays here because a symbol lookup is cheap
+    enough that repeating it beats importing the module that engages it.
 
     Note: ``sandbox_init`` has been officially deprecated (though still working)
     since macOS 10.8 (July 2012), with no replacement offered to unentitled
@@ -88,15 +95,15 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is probed here rather than by the module that engages the
-    mechanism, because the parent must not import the engaging module. The
-    Linux fields have no implementation yet and report unavailable until
-    they do, so ``protection_mode()`` still refuses every Linux host: the
-    safe direction to be wrong in while those sandboxes are being built.
+    Seatbelt support is a symbol lookup in libSystem. The seccomp probe
+    installs a filter in a child process, so its answer is computed once
+    and cached. Landlock and user namespaces have no implementation
+    yet and report unavailable, so ``protection_mode()`` will still refuse
+    every Linux host.
     """
     return SandboxCapabilities(
         landlock_abi=-1,
-        seccomp=False,
+        seccomp=_seccomp.seccomp_available(),
         seatbelt=_seatbelt_present(),
         userns=False,
     )

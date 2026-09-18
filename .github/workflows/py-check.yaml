@@ -18,6 +18,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          # One arm64 leg, for the seccomp filter's aarch64 syscall numbers.
+          # They are the same at every Python version, so one is enough.
+          - os: ubuntu-24.04-arm
+            python-version: "3.13"
     defaults:
       run:
         working-directory: pkg-py
