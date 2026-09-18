@@ -26,6 +26,7 @@ sandbox never granted.
 from __future__ import annotations
 
 import ctypes
+import functools
 import os
 import pathlib
 import platform
@@ -40,6 +41,7 @@ __all__ = [
     "ARCHES",
     "NETWORK_SCREENED",
     "SCREENED",
+    "SCREENED_WHERE_PRESENT",
     "Arch",
     "allow_all",
     "arch_for",
@@ -185,7 +187,13 @@ def _preamble(arch: Arch) -> list[SockFilter]:
 
 
 def build_network_filter(arch: Arch) -> list[SockFilter]:
-    """A filter that refuses every way of opening a socket."""
+    """A filter that refuses every syscall that creates a socket.
+
+    The filter acts on creation alone: a socket descriptor the process
+    started with, or one received over an existing channel, is already
+    open. The guarantee assumes the worker starts with a clean
+    descriptor table.
+    """
     program = _preamble(arch)
     for name in NETWORK_SCREENED:
         if name in arch.syscalls:
@@ -412,9 +420,13 @@ def _a_filter_installs() -> bool:
         # -I to match how the worker is launched, so a sitecustomize on the
         # host's PYTHONPATH cannot decide the answer, and an empty
         # environment for the same reason: an inherited LD_PRELOAD would
-        # load into the probe before it can refuse anything. A timeout
-        # because this runs while the agent is being built, and a probe
-        # that never came back would hang that rather than report anything.
+        # load into the probe before it can refuse anything. The empty
+        # environment has one cost: an interpreter built --enable-shared
+        # that finds libpython through LD_LIBRARY_PATH cannot start
+        # without it, and such a host reports unsandboxable, the
+        # fail-closed direction. A timeout is included because this runs while the
+        # agent is being built, and a probe that never came back would
+        # hang that rather than report anything.
         completed = subprocess.run(
             [sys.executable, "-I", "-c", probe],
             capture_output=True,
@@ -432,6 +444,7 @@ def allow_all() -> list[SockFilter]:
     return [SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW)]
 
 
+@functools.cache
 def seccomp_available() -> bool:
     """Whether this host can hold the worker to a seccomp filter.
 
@@ -441,7 +454,8 @@ def seccomp_available() -> bool:
     There is no query worth making first: a profile can refuse
     PR_GET_SECCOMP while permitting the install, or answer it while
     refusing PR_SET_SECCOMP, so the child probe's install attempt is the
-    only answer trusted.
+    only answer trusted. The answer cannot change during the process's
+    life and costs a child process to work out, so it is cached.
     """
     if platform.system() != "Linux" or current_arch() is None:
         return False
@@ -479,6 +493,11 @@ def engage(*, network: Literal["none", "full"]) -> None:
     """
     if network not in ("none", "full"):
         raise ValueError(f"unknown network access level {network!r}")
+    if platform.system() != "Linux":
+        raise RuntimeError(
+            "commons cannot install a seccomp filter on "
+            f"{platform.system()}: seccomp is a Linux facility."
+        )
     arch = current_arch()
     if arch is None:
         raise RuntimeError(

@@ -7,10 +7,14 @@ is reported when the agent is constructed, ahead of any model asking to run
 code.
 
 ``run_r_protection_mode()`` in ``pkg-r/R/sandbox.R`` makes the same
-decision, with one divergence on macOS: R reports seatbelt from the
+decision, with two divergences. On macOS, R reports seatbelt from the
 compile-time platform, so a macOS without these symbols would promise
 "sandbox" there and fail at engage, where the runtime probe here refuses
-at construction.
+at construction. On Linux, R asks the kernel whether seccomp exists, while
+the probe here instead installs a filter in a child. A container profile
+can answer that query while refusing the install: R reports such a host as
+seccomp-capable and fails it at engage, and the probe here reports
+it incapable and refuses at construction.
 """
 
 from __future__ import annotations
@@ -93,15 +97,11 @@ def sandbox_capabilities() -> SandboxCapabilities:
 
     Where a probe lives depends on its cost. Seatbelt's is a symbol
     lookup, repeated here rather than imported. Seccomp's answers by
-    installing a filter in a child process, too much to repeat, so it is
-    imported from the module that implements the mechanism; importing is
-    safe because nothing in ``_runtime`` acts on the importing process
-    until one of its engaging functions is called. Landlock and user
-    namespaces have no implementation yet and report unavailable until
-    they do, so ``protection_mode()`` still refuses every Linux host:
-    seccomp alone is not enough without a filesystem sandbox beside it,
-    which is the safe direction to be wrong in while those are being
-    built.
+    installing a filter in a child process, which determines support
+    once and caches the result. Landlock and user namespaces have no
+    implementation yet and report unavailable until they do, so
+    ``protection_mode()`` still refuses every Linux host:
+    seccomp alone is not enough without a filesystem sandbox beside it.
     """
     return SandboxCapabilities(
         landlock_abi=-1,

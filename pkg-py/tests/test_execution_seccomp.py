@@ -9,12 +9,14 @@ rather than only the one it happens to be running on.
 from __future__ import annotations
 
 import errno
+import functools
 import json
 import pathlib
 import platform
 import socket
 import subprocess
 import sys
+from collections.abc import Callable
 
 import pytest
 
@@ -68,10 +70,16 @@ def run_filter(
 
 
 @pytest.mark.parametrize("name", ARCH_NAMES)
-def test_the_network_filter_refuses_to_open_a_socket(name: str) -> None:
+@pytest.mark.parametrize("syscall", _seccomp.NETWORK_SCREENED)
+def test_the_network_filter_refuses_to_open_a_socket(
+    name: str, syscall: str
+) -> None:
     arch = _seccomp.ARCHES[name]
+    if syscall not in arch.syscalls:
+        # socketcall exists only on the i386 table.
+        pytest.skip(f"the {name} table has no {syscall}")
     program = _seccomp.build_network_filter(arch)
-    decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls["socket"])
+    decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls[syscall])
     assert decision == _seccomp.DENY_EPERM
 
 
@@ -106,16 +114,6 @@ def test_the_network_filter_denies_the_x32_abi() -> None:
         _seccomp.build_network_filter(arch),
         arch=arch.audit_arch,
         nr=arch.x32_bit | arch.syscalls["socket"],
-    )
-    assert decision == _seccomp.DENY_EPERM
-
-
-def test_the_network_filter_denies_i386_socketcall() -> None:
-    arch = _seccomp.ARCHES["i386"]
-    decision = run_filter(
-        _seccomp.build_network_filter(arch),
-        arch=arch.audit_arch,
-        nr=arch.syscalls["socketcall"],
     )
     assert decision == _seccomp.DENY_EPERM
 
@@ -264,10 +262,21 @@ linux_only = pytest.mark.skipif(
 # a Linux host is entitled not to be: a container profile can permit the
 # query and refuse PR_SET_SECCOMP, and that is a host the probe is meant to
 # report False for, not one the suite should fail on.
-needs_seccomp = pytest.mark.skipif(
-    not _seccomp.seccomp_available(),
-    reason="this host does not let a seccomp filter be installed",
-)
+def needs_seccomp(test: Callable[..., None]) -> Callable[..., None]:
+    """Skip at call time rather than at collection, as a mark would.
+
+    The skip question costs a probe subprocess to answer, and a mark
+    answers it at collection, spending the subprocess on every run of
+    this file, even one that deselects every test here.
+    """
+
+    @functools.wraps(test)
+    def wrapper(*args: object, **kwargs: object) -> None:
+        if not _seccomp.seccomp_available():
+            pytest.skip("this host does not let a seccomp filter be installed")
+        test(*args, **kwargs)
+
+    return wrapper
 
 # A filter cannot be lifted once installed, so every one of these runs in an
 # interpreter of its own. Reporting from inside the child is also the only
@@ -287,6 +296,7 @@ def engage_in_child(body: str, *, network: str = "none") -> dict[str, object]:
     completed = subprocess.run(
         [
             sys.executable,
+            "-I",
             "-c",
             ENGAGE.format(runtime=RUNTIME_DIR, network=network, body=body),
         ],
@@ -349,7 +359,7 @@ def unshare_refused_without_any_filter() -> bool:
     assertion that unshare is refused would hold whatever this filter says.
     """
     completed = subprocess.run(
-        [sys.executable, "-c", f"result = {{}}\n{UNSHARE}\nprint(result['rc'])"],
+        [sys.executable, "-I", "-c", f"result = {{}}\n{UNSHARE}\nprint(result['rc'])"],
         capture_output=True,
         text=True,
         check=True,
@@ -423,6 +433,7 @@ def _available_when_denied(option: str) -> dict:
     completed = subprocess.run(
         [
             sys.executable,
+            "-I",
             "-c",
             DENY_PRCTL_OPTION.format(
                 runtime=RUNTIME_DIR, prctl=PRCTL[arch.name], option=option
@@ -474,7 +485,7 @@ result['errno'] = ctypes.get_errno()
 
 def pidfd_getfd_unfiltered() -> int:
     completed = subprocess.run(
-        [sys.executable, "-c", f"result = {{}}\n{PIDFD_GETFD}\nprint(result['errno'])"],
+        [sys.executable, "-I", "-c", f"result = {{}}\n{PIDFD_GETFD}\nprint(result['errno'])"],
         capture_output=True,
         text=True,
         check=True,
@@ -500,6 +511,51 @@ def test_a_descriptor_cannot_be_taken_from_another_process() -> None:
     assert result["errno"] == errno.EPERM
 
 
+PTRACE = """
+import ctypes
+libc = ctypes.CDLL(None, use_errno=True)
+ctypes.set_errno(0)
+# PTRACE_TRACEME asks the parent to trace this process. It needs no
+# privilege, so without the filter it succeeds, and with it the call
+# never reaches the kernel.
+result['rc'] = libc.ptrace(0, 0, 0, 0)
+result['errno'] = ctypes.get_errno()
+"""
+
+
+def ptrace_unfiltered_errno() -> int:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            f"result = {{}}\n{PTRACE}\nprint(result['errno'])",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return int(completed.stdout.strip())
+
+
+@needs_seccomp
+def test_ptrace_is_refused_with_this_archs_table_number() -> None:
+    """A live check on a table number the interpreter tests cannot pin.
+
+    The interpreter tests feed each table its own numbers, so a
+    mis-transcribed number passes them. Here the kernel decides:
+    PTRACE_TRACEME succeeds with no filter on, and meets EPERM only if
+    this architecture's table entry really is ptrace's number.
+    """
+    if ptrace_unfiltered_errno() != 0:
+        # A container profile that already blocks ptrace makes this hold
+        # whatever the filter says.
+        pytest.skip("this host refuses ptrace with no filter on")
+    result = engage_in_child(PTRACE)
+    assert result["rc"] == -1
+    assert result["errno"] == errno.EPERM
+
+
 def test_only_i386_still_carries_the_legacy_umount() -> None:
     """ARM looks like it should have it too, and does not.
 
@@ -521,8 +577,13 @@ def test_the_probe_ignores_a_sitecustomize_on_the_host(tmp_path, monkeypatch) ->
     anything the probe does. Without isolation an unrelated file on the
     host's PYTHONPATH would decide whether this host looks sandboxable.
     """
+    # The answer is cached, so each probe starts from a cleared cache;
+    # otherwise the second call repeats the first without probing, and
+    # the test says nothing.
+    _seccomp.seccomp_available.cache_clear()
     before = _seccomp.seccomp_available()
     (tmp_path / "sitecustomize.py").write_text("raise SystemExit(3)\n")
     monkeypatch.setenv("PYTHONPATH", str(tmp_path))
 
+    _seccomp.seccomp_available.cache_clear()
     assert _seccomp.seccomp_available() is before
