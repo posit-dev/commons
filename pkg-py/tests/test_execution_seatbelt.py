@@ -143,7 +143,9 @@ def test_a_rejected_profile_raises_seatbelts_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     # A second sandbox_init succeeds, so no live call reaches the error path;
-    # the library is faked at the ctypes boundary instead.
+    # the library is faked at the ctypes boundary instead. The platform guard
+    # is stubbed past so the test exercises that path on any host.
+    monkeypatch.setattr(platform, "system", lambda: "Darwin")
     freed: list[object] = []
 
     def fake_sandbox_init(profile: bytes, flags: int, error_out: Any) -> int:
