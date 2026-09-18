@@ -66,10 +66,16 @@ def _seatbelt_present() -> bool:
     """Whether libSystem here exports seatbelt's entry point.
 
     The symbol is looked up on the running host, so a macOS that ever drops
-    these deprecated entry points reports no seatbelt. Inferring from the
-    platform would promise a sandbox the worker cannot engage. The worker
-    repeats this check for itself; the parent must not import the module that
-    engages it.
+    these entry points reports no seatbelt. Inferring from the platform would
+    promise a sandbox the worker cannot engage. The worker repeats this check
+    for itself; the parent must not import the module that engages it.
+
+    Note: ``sandbox_init`` has been officially deprecated (though still working)
+    since macOS 10.8 (July 2012), with no replacement offered to unentitled
+    processes; see ``man 3 sandbox_init``
+    (https://keith.github.io/xcode-man-pages/sandbox_init.3.html). OpenAI's
+    Codex CLI relies on the same deprecated interface to sandbox its agent on
+    macOS (https://github.com/openai/codex/issues/215).
     """
     if platform.system() != "Darwin":
         return False
