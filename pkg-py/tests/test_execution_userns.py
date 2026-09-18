@@ -640,6 +640,35 @@ def test_thread_pinning_is_asked_for_only_where_this_sandbox_is_the_one_used(
 
 
 @linux_only
+def test_a_symlinked_root_is_refused_before_the_namespace_is_entered(
+    tmp_path,
+) -> None:
+    # A root containing a symlink is the same directory as its target under
+    # an alias the overlap check cannot see, so it is refused outright --
+    # and refused in preflight, before anything has changed.
+    target = tmp_path / "data"
+    target.mkdir()
+    link = tmp_path / "data-link"
+    link.symlink_to(target)
+    before = os.readlink("/proc/self/ns/user")
+
+    def child(write_fd: int) -> dict[str, str]:
+        try:
+            engage([str(link)], [], preserve_fds=[write_fd])
+        except UsernsUnavailable:
+            return {
+                "raised": "unavailable",
+                "namespace": os.readlink("/proc/self/ns/user"),
+            }
+        return {
+            "raised": "nothing",
+            "namespace": os.readlink("/proc/self/ns/user"),
+        }
+
+    assert in_child(child) == {"raised": "unavailable", "namespace": before}
+
+
+@linux_only
 def test_the_probe_refuses_an_architecture_with_no_known_syscall_numbers(
     monkeypatch,
 ) -> None:

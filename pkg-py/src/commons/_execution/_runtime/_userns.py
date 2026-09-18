@@ -378,13 +378,15 @@ def _drop_capabilities() -> None:
 def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
     """Validate and trim the granted roots, before anything has changed.
 
-    A root has to be an absolute, canonical path: ``""`` or ``"//"`` would
-    otherwise collapse to ``/`` and grant the whole host filesystem, and
-    ``//tmp`` or ``/data/../tmp`` would answer the checks below for one
-    path and mount another. A read-write root also cannot be ``/`` or the
-    sandbox root: the sandbox root is mounted where ``/tmp`` was and
-    remounted read-only at the end, so either grant would come out
-    read-only and the promise made here is one the engage cannot keep.
+    A root has to be an absolute, canonical, fully-resolved path. ``""`` or
+    ``"//"`` would otherwise collapse to ``/`` and grant the whole host
+    filesystem, ``//tmp`` or ``/data/../tmp`` would answer the checks here
+    for one path and mount another, and a root containing a symlink would
+    be the same directory as its target under an alias the overlap check
+    cannot see. A read-write root also cannot be ``/`` or the sandbox
+    root: the sandbox root is mounted where ``/tmp`` was and remounted
+    read-only at the end, so either grant would come out read-only and
+    the promise made here is one the engage cannot keep.
     """
     normalized = []
     for root in roots:
@@ -398,6 +400,18 @@ def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
         ):
             raise UsernsUnavailable(
                 0, f"a granted root must be a canonical path, not {root!r}"
+            )
+        try:
+            resolved = os.path.realpath(trimmed)
+        except OSError as exc:
+            raise UsernsUnavailable(
+                exc.errno, f"cannot resolve {root!r}: {exc.strerror}"
+            ) from exc
+        if resolved != trimmed:
+            raise UsernsUnavailable(
+                0,
+                f"a granted root must not contain a symlink, but {root!r} "
+                f"resolves to {resolved!r}",
             )
         if writable and trimmed in ("/", _SANDBOX_ROOT):
             raise UsernsUnavailable(
