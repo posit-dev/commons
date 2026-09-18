@@ -168,8 +168,8 @@ def run_sandboxed(
     """Engage the seatbelt in a fresh interpreter, then run ``body``.
 
     ``body`` reports through a ``result`` name, which is printed as JSON. The
-    module is imported by directory rather than as part of ``commons``, which
-    is how the worker reaches it and proves it needs nothing from the package.
+    module is imported by directory, the way the worker reaches it, which
+    proves it needs nothing from the package.
     """
     script = "\n".join(
         [
@@ -303,7 +303,7 @@ def test_dev_null_is_writable_under_the_sandbox(tmp_path) -> None:
 
 def test_no_read_roots_denies_every_read_rather_than_allowing_them_all() -> None:
     # An allow with no path predicate applies to everything, and it comes
-    # after the deny, so it would hand back every file on the host.
+    # after the deny, so it would permit reading every file on the host.
     profile = seatbelt_profile([], [])
     assert "(allow file-read*)" not in profile
     assert "(allow file-read* )" not in profile

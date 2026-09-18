@@ -3,8 +3,8 @@
 The worker sandboxes itself, in the child, before any model-written code is
 loaded. This module is the parent's half: a probe of what the host offers
 and the gate that turns that into a refusal, so a host commons cannot protect
-is reported when the agent is constructed rather than when a model first asks
-to run code.
+is reported when the agent is constructed, ahead of any model asking to run
+code.
 
 The same decision is made by ``run_r_protection_mode()`` in
 ``pkg-r/R/sandbox.R``.
@@ -62,10 +62,11 @@ class SandboxCapabilities:
 def _seatbelt_present() -> bool:
     """Whether libSystem here exports seatbelt's entry point.
 
-    The symbol is looked up rather than inferred from the platform, so a
-    macOS that ever drops these deprecated entry points reports no seatbelt
-    instead of promising one the worker cannot engage. The worker repeats this
-    check for itself; the parent must not import the module that engages it.
+    The symbol is looked up on the running host, so a macOS that ever drops
+    these deprecated entry points reports no seatbelt. Inferring from the
+    platform would promise a sandbox the worker cannot engage. The worker
+    repeats this check for itself; the parent must not import the module that
+    engages it.
     """
     if platform.system() != "Darwin":
         return False

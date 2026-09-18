@@ -121,19 +121,19 @@ def test_only_an_affirmative_opt_in_counts(monkeypatch, value) -> None:
 
 
 def test_a_host_that_is_not_a_mac_reports_no_seatbelt(monkeypatch) -> None:
-    # The probe is called directly rather than through
-    # sandbox_capabilities(). Claiming to be Linux patches the shared
-    # platform module, so the aggregate would send the other probes down
-    # their Linux paths on a host that has none of those interfaces.
+    # The probe is called directly: patching the shared platform module to
+    # claim Linux would also affect sandbox_capabilities(), whose other probes
+    # would then exercise their Linux branches on a host that has none of
+    # those interfaces.
     monkeypatch.setattr(_sandbox.platform, "system", lambda: "Linux")
     assert _sandbox._seatbelt_present() is False
 
 
 def test_a_mac_without_the_symbol_reports_no_seatbelt(monkeypatch) -> None:
     # sandbox_init has been deprecated since 10.8. A macOS that finally drops
-    # it must report no seatbelt rather than promise one the worker cannot
-    # engage, so the probe looks the symbol up instead of trusting the
-    # platform name.
+    # it must report no seatbelt; inferring one from the platform name would
+    # promise a sandbox the worker cannot engage, so the probe looks the
+    # symbol up.
     monkeypatch.setattr(_sandbox.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(_sandbox.ctypes, "CDLL", lambda name: object())
     assert _sandbox._seatbelt_present() is False

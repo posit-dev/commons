@@ -60,7 +60,8 @@ def seatbelt_profile(
     Reads are granted under ``read_roots`` and writes under ``write_roots``,
     and write roots are granted for reading too. Both the original and the
     symlink-free form of every root are granted, because the sandbox matches
-    resolved paths and macOS ``/tmp`` and ``/var`` live under ``/private``.
+    resolved paths, and macOS ``/tmp`` and ``/var`` are symlinks into
+    ``/private``.
     """
     if network not in get_args(NetworkAccess):
         raise ValueError(f"unknown network access level {network!r}")
@@ -74,7 +75,7 @@ def seatbelt_profile(
     if network == "none":
         lines.append("(deny network*)")
     lines.append("(deny file-write*)")
-    # This allow always carries the /dev/null literal, so it is never the
+    # This allow always includes the /dev/null literal, so it is never the
     # unscoped rule the read allow above could become.
     lines.append(
         '(allow file-write* (literal "/dev/null")' + _subpaths(writable) + ")"
@@ -83,8 +84,7 @@ def seatbelt_profile(
     grantable = _unique(readable + writable)
     if grantable:
         # An allow with no path predicate would apply to everything, and it
-        # comes after the deny, so with no roots the rule is left out rather
-        # than emitted empty.
+        # comes after the deny, so with no roots the rule is omitted.
         lines.append("(allow file-read*" + _subpaths(grantable) + ")")
     lines.append("(allow file-read-metadata)")
     return "\n".join(lines) + "\n"
@@ -98,9 +98,8 @@ def engage_seatbelt(
 ) -> None:
     """Restrict this process to the given roots, permanently.
 
-    There is no way to lift a seatbelt profile once it is in place, which is
-    the point: the worker calls this on itself before any model-written code
-    is loaded.
+    A seatbelt profile cannot be revoked once it is in place, and the worker
+    calls this on itself before any model-written code is loaded.
     """
     profile = seatbelt_profile(read_roots, write_roots, network=network)
 
