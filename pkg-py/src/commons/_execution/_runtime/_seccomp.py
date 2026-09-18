@@ -202,10 +202,15 @@ def build_network_filter(arch: Arch) -> list[SockFilter]:
     return program
 
 
-# Numbers read from each architecture's kernel headers rather than written
-# from memory: they agree from 425 up and diverge below, and two neighbours
-# disagree where it would be easy to assume otherwise (pivot_root is 217 on
-# i386 and 218 on arm).
+# Numbers read from each architecture's kernel syscall table rather than
+# written from memory: arch/x86/entry/syscalls/syscall_64.tbl and
+# syscall_32.tbl for x86_64 and i386, include/uapi/asm-generic/unistd.h
+# for aarch64, and arch/arm/tools/syscall.tbl for arm, whose newer calls
+# follow the generic table. The audit tags are the AUDIT_ARCH_* values in
+# include/uapi/linux/audit.h, and the x32 bit is __X32_SYSCALL_BIT in
+# arch/x86/include/uapi/asm/unistd.h. The tables agree from 425 up and
+# diverge below, and two neighbours disagree where it would be easy to
+# assume otherwise (pivot_root is 217 on i386 and 218 on arm).
 ARCHES: Mapping[str, Arch] = {
     "x86_64": Arch(
         name="x86_64",
