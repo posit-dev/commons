@@ -42,12 +42,17 @@ NR_CREATE_RULESET = 444
 NR_ADD_RULE = 445
 NR_RESTRICT_SELF = 446
 
-# Those numbers come from the table most architectures share for syscalls
-# added since 2019, but not all: mips offsets its whole table by thousands,
-# so 444 there is a different call entirely. Calling a syscall by the wrong
-# number is worse than not calling it, so this is an allowlist of the
-# architectures the numbers are known to hold for, and anything else reports
-# no Landlock and falls back.
+# The numbers come from include/uapi/asm-generic/unistd.h in the kernel
+# tree, the table most architectures share for syscalls added since 2019;
+# x86_64's arch/x86/entry/syscalls/syscall_64.tbl assigns the same values.
+# The structs and flag bits below are include/uapi/linux/landlock.h, and
+# the landlock_create_ruleset(2), landlock_add_rule(2),
+# landlock_restrict_self(2) and landlock(7) man pages document the
+# contract. mips offsets its whole table by thousands, so 444 there is a
+# different call entirely. Calling a syscall by the wrong number is worse
+# than not calling it, so this is an allowlist of the architectures the
+# numbers are verified for, and anything else reports no Landlock and
+# falls back.
 KNOWN_ARCHITECTURES = frozenset({"x86_64", "amd64", "aarch64", "arm64"})
 
 CREATE_RULESET_VERSION = 1 << 0
