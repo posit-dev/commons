@@ -95,13 +95,11 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Where a probe lives depends on its cost. Seatbelt's is a symbol
-    lookup, repeated here rather than imported. Seccomp's answers by
-    installing a filter in a child process, which determines support
-    once and caches the result. Landlock and user namespaces have no
-    implementation yet and report unavailable until they do, so
-    ``protection_mode()`` still refuses every Linux host:
-    seccomp alone is not enough without a filesystem sandbox beside it.
+    Seatbelt support is a symbol lookup in libSystem. The seccomp probe
+    installs a filter in a child process, so its answer is computed once
+    and cached. Landlock and user namespaces have no implementation
+    yet and report unavailable, so ``protection_mode()`` will still refuse
+    every Linux host.
     """
     return SandboxCapabilities(
         landlock_abi=-1,
