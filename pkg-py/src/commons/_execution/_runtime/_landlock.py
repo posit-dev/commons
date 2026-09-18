@@ -207,10 +207,9 @@ def _grant(ruleset_fd: int, path: str, access: int) -> None:
             ctypes.byref(rule),
             ctypes.c_uint32(0),
         ):
+            code = ctypes.get_errno()
             raise OSError(
-                ctypes.get_errno(),
-                f"landlock_add_rule failed for {path!r}: "
-                f"{os.strerror(ctypes.get_errno())}",
+                code, f"landlock_add_rule failed for {path!r}: {os.strerror(code)}"
             )
     finally:
         os.close(parent)
