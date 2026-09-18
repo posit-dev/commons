@@ -164,9 +164,10 @@ def test_the_probe_agrees_with_what_a_child_can_actually_do() -> None:
     # Stated as an agreement rather than a fixed answer, because whether a
     # namespace can be created is the host's policy: a container with the
     # default seccomp profile refuses, and the same test has to pass there.
-    def child(_write_fd: int) -> bool:
+    # The probe engages the whole sandbox, so the agreement check does too.
+    def child(write_fd: int) -> bool:
         try:
-            map_ids()
+            engage([], [], preserve_fds=[write_fd])
         except OSError:
             return False
         return True
@@ -578,10 +579,15 @@ def test_roots_are_trimmed_without_changing_where_they_point() -> None:
     assert normalized == ["/", "/foo", "/bar"]
 
 
-@pytest.mark.parametrize("root", ["", "//", "relative/path", "."])
-def test_a_root_that_is_not_an_absolute_directory_is_refused(root) -> None:
-    # "" and "//" would otherwise collapse to "/" and grant the whole host
-    # filesystem -- fail-open on a security boundary.
+@pytest.mark.parametrize(
+    "root", ["", "//", "relative/path", ".", "//tmp", "/a/../b", "/a/./b"]
+)
+def test_a_root_that_is_not_an_absolute_canonical_path_is_refused(
+    root,
+) -> None:
+    # "" would collapse to "/" and grant the whole host filesystem, and
+    # "//tmp" or "/a/../b" would answer the checks for one path and mount
+    # another -- fail-open on a security boundary.
     with pytest.raises(UsernsUnavailable):
         _userns._normalize_roots([root], writable=False)
 
@@ -594,11 +600,14 @@ def test_a_read_write_root_the_final_remount_would_clobber_is_refused(
         _userns._normalize_roots([root], writable=True)
 
 
-def test_a_read_root_inside_a_read_write_root_is_refused() -> None:
+def test_a_read_root_overlapping_a_read_write_root_is_refused() -> None:
     # Read roots bind first, so the recursive read-write bind would stack
-    # over the nested read-only bind and the grant would come out writable.
+    # over a read-only bind at or beneath it and the grant would come out
+    # writable.
     with pytest.raises(UsernsUnavailable):
         _userns._check_nesting(["/a/b"], ["/a"])
+    with pytest.raises(UsernsUnavailable):
+        _userns._check_nesting(["/a"], ["/a"])
     # The reverse nesting is safe: the read-write bind mounts over the
     # read-only one and stays writable.
     _userns._check_nesting(["/a"], ["/a/b"])

@@ -187,7 +187,7 @@ def _mount(
         return None if value is None else os.fsencode(value)
 
     return _libc().mount(
-        encode(source), target.encode(), encode(fstype), flags, encode(data)
+        encode(source), encode(target), encode(fstype), flags, encode(data)
     )
 
 
@@ -378,12 +378,13 @@ def _drop_capabilities() -> None:
 def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
     """Validate and trim the granted roots, before anything has changed.
 
-    A root has to be an absolute path that names something: ``""`` and
-    ``"//"`` would otherwise collapse to ``/`` and grant the whole host
-    filesystem. A read-write root also cannot be ``/`` or the sandbox root:
-    the sandbox root is mounted where ``/tmp`` was and remounted read-only
-    at the end, so either grant would come out read-only and the promise
-    made here is one the engage cannot keep.
+    A root has to be an absolute, canonical path: ``""`` or ``"//"`` would
+    otherwise collapse to ``/`` and grant the whole host filesystem, and
+    ``//tmp`` or ``/data/../tmp`` would answer the checks below for one
+    path and mount another. A read-write root also cannot be ``/`` or the
+    sandbox root: the sandbox root is mounted where ``/tmp`` was and
+    remounted read-only at the end, so either grant would come out
+    read-only and the promise made here is one the engage cannot keep.
     """
     normalized = []
     for root in roots:
@@ -392,9 +393,11 @@ def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
                 0, f"a granted root must be an absolute path, not {root!r}"
             )
         trimmed = root.rstrip("/") or "/"
-        if trimmed == "/" and root != "/":
+        if root != "/" and (
+            root.startswith("//") or os.path.normpath(trimmed) != trimmed
+        ):
             raise UsernsUnavailable(
-                0, f"a granted root must name a directory, not {root!r}"
+                0, f"a granted root must be a canonical path, not {root!r}"
             )
         if writable and trimmed in ("/", _SANDBOX_ROOT):
             raise UsernsUnavailable(
@@ -410,18 +413,17 @@ def _check_nesting(read_roots: list[str], rw_roots: list[str]) -> None:
     """Refuse a read-only grant that a read-write grant would swallow.
 
     Read roots are bound first, so a recursive read-write bind stacks over a
-    read-only bind nested inside it and the nested grant comes out writable.
-    The reverse nesting is safe: a read-write bind inside a read-only root
+    read-only bind at or beneath it and the grant comes out writable. The
+    reverse nesting is safe: a read-write bind inside a read-only root
     mounts over it and stays writable.
     """
     for root in read_roots:
-        for rw_root in rw_roots:
-            if root.startswith(rw_root + "/"):
-                raise UsernsUnavailable(
-                    0,
-                    f"read-only root {root} sits inside read-write root "
-                    f"{rw_root} and would come out writable",
-                )
+        if path_in_roots(root, rw_roots):
+            raise UsernsUnavailable(
+                0,
+                f"read-only root {root} overlaps a read-write root and "
+                "would come out writable",
+            )
 
 
 def engage(
@@ -537,11 +539,14 @@ def available() -> bool:
     Asked in a throwaway fork, not here. ``unshare(CLONE_NEWUSER)`` refuses a
     multi-threaded process, and a fork child is always single-threaded
     however many threads its parent is running, so probing in place would
-    report the thread count rather than the host's policy. The child only
-    makes syscalls before ``_exit``, so it cannot deadlock on a lock held at
-    fork time, which is what Python warns about here.
+    report the thread count rather than the host's policy. The child engages
+    the whole sandbox, not just the namespace: a host that permits
+    ``unshare`` but refuses the mounts would otherwise be reported capable
+    and fail only when the worker engages. What the child does before
+    ``_exit`` is syscalls, so it cannot deadlock on a lock held at fork
+    time, which is what Python warns about here.
 
-    Answers ``False`` for every reason a namespace does not appear, because
+    Answers ``False`` for every reason the sandbox does not engage, because
     the caller does the same thing in each case.
     """
     if platform.system() != "Linux":
@@ -561,7 +566,7 @@ def available() -> bool:
         return False
     if pid == 0:  # pragma: no cover - runs only in the child
         try:
-            map_ids()
+            engage([], [], preserve_fds=[])
         except BaseException:  # noqa: BLE001 - the child reports by exit status
             os._exit(1)
         os._exit(0)
