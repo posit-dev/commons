@@ -1,11 +1,14 @@
 """The macOS seatbelt profile the worker engages on itself.
 
 Profile generation is pure, so its rules are checked on any host. The rules
-themselves, and their order, follow the Darwin branch of pkg-r/src/sandbox.c.
+themselves, and their order, follow the Darwin branch of pkg-r/src/sandbox.c
+as pkg-r/inst/worker/worker.R drives it, with the root-handling differences
+the module docstring names.
 """
 
 from __future__ import annotations
 
+import ctypes
 import json
 import pathlib
 import platform
@@ -13,11 +16,15 @@ import socket
 import subprocess
 import sys
 import textwrap
+from typing import Any
 
 import pytest
 
 import commons._execution._runtime
-from commons._execution._runtime._seatbelt import seatbelt_profile
+from commons._execution._runtime._seatbelt import (
+    engage_seatbelt,
+    seatbelt_profile,
+)
 
 
 def test_the_profile_opens_permissively_and_then_denies() -> None:
@@ -105,6 +112,12 @@ def test_a_root_is_granted_once(tmp_path) -> None:
     assert profile.count(f'(subpath "{root}")') == 1
 
 
+def test_a_write_root_is_granted_once(tmp_path) -> None:
+    root = str(tmp_path)
+    write_rule, _ = _write_and_read_rules(seatbelt_profile([], [root, root]))
+    assert write_rule.count(f'(subpath "{root}")') == 1
+
+
 def _write_and_read_rules(profile: str) -> tuple[str, str]:
     """Split a profile into its file-write and file-read allow rules."""
     write_rule = profile.split("(allow file-write*")[1].split("\n")[0]
@@ -118,6 +131,41 @@ def test_a_root_that_is_both_readable_and_writable_is_read_granted_once(
     root = str(tmp_path)
     _, read_rule = _write_and_read_rules(seatbelt_profile([root], [root]))
     assert read_rule.count(f'(subpath "{root}")') == 1
+
+
+def test_engage_refuses_off_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(platform, "system", lambda: "Linux")
+    with pytest.raises(RuntimeError, match="only supported on macOS"):
+        engage_seatbelt(["/usr"], [])
+
+
+def test_a_rejected_profile_raises_seatbelts_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A second sandbox_init succeeds, so no live call reaches the error path;
+    # the library is faked at the ctypes boundary instead.
+    freed: list[object] = []
+
+    def fake_sandbox_init(profile: bytes, flags: int, error_out: Any) -> int:
+        ctypes.cast(error_out, ctypes.POINTER(ctypes.c_char_p)).contents.value = (
+            b"unsupported profile"
+        )
+        return 1
+
+    def fake_sandbox_free_error(message: object) -> None:
+        freed.append(message)
+
+    class FakeLibSystem:
+        def __init__(self) -> None:
+            self.sandbox_init = fake_sandbox_init
+            self.sandbox_free_error = fake_sandbox_free_error
+
+    monkeypatch.setattr(ctypes, "CDLL", lambda _name: FakeLibSystem())
+
+    with pytest.raises(RuntimeError, match="unsupported profile"):
+        engage_seatbelt(["/usr"], [])
+
+    assert len(freed) == 1
 
 
 # The sandbox is engaged in a subprocess for every live test: engaging it in
@@ -306,8 +354,11 @@ def test_no_read_roots_denies_every_read_rather_than_allowing_them_all() -> None
     # after the deny, so it would permit reading every file on the host.
     profile = seatbelt_profile([], [])
     assert "(allow file-read*)" not in profile
-    assert "(allow file-read* )" not in profile
     assert "(deny file-read*)" in profile
+    # The write allow cannot collapse the same way, because the /dev/null
+    # literal is unconditional.
+    write_rule = profile.split("(allow file-write*")[1].split("\n")[0]
+    assert write_rule == ' (literal "/dev/null"))'
 
 
 @darwin_only
@@ -323,3 +374,17 @@ def test_a_profile_with_no_roots_cannot_read_an_unrelated_file(tmp_path) -> None
     )
 
     assert result == "PermissionError"
+
+
+@darwin_only
+def test_a_write_with_no_write_roots_is_denied(tmp_path) -> None:
+    target = tmp_path / "nope.txt"
+
+    result = run_sandboxed(
+        f"pathlib.Path({str(target)!r}).write_text('nope'); result = 'ok'",
+        read_roots=[str(tmp_path)],
+        write_roots=[],
+    )
+
+    assert result == "PermissionError"
+    assert not target.exists()

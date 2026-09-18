@@ -6,8 +6,11 @@ and the gate that turns that into a refusal, so a host commons cannot protect
 is reported when the agent is constructed, ahead of any model asking to run
 code.
 
-The same decision is made by ``run_r_protection_mode()`` in
-``pkg-r/R/sandbox.R``.
+``run_r_protection_mode()`` in ``pkg-r/R/sandbox.R`` makes the same
+decision, with one divergence on macOS: R reports seatbelt from the
+compile-time platform, so a macOS without these symbols would promise
+"sandbox" there and fail at engage, where the runtime probe here refuses
+at construction.
 """
 
 from __future__ import annotations
@@ -79,10 +82,11 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Each field is filled in by the module that implements its mechanism. The
-    Linux fields have no implementation yet and report unavailable until they
-    do, so ``protection_mode()`` still refuses every Linux host: the safe
-    direction to be wrong in while those sandboxes are being built.
+    Each field is probed here rather than by the module that engages the
+    mechanism, because the parent must not import the engaging module. The
+    Linux fields have no implementation yet and report unavailable until
+    they do, so ``protection_mode()`` still refuses every Linux host: the
+    safe direction to be wrong in while those sandboxes are being built.
     """
     return SandboxCapabilities(
         landlock_abi=-1,

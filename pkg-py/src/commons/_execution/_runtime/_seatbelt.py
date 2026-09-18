@@ -5,14 +5,20 @@ them without a compiled extension. ``sandbox.h`` declares them deprecated
 since 10.8 with no replacement for unentitled processes; that is the only
 interface macOS offers, so it is the one used here.
 
-The profile is the same one the Darwin branch of ``pkg-r/src/sandbox.c``
-builds.
+The rules and their order follow the Darwin branch of
+``pkg-r/src/sandbox.c``, which R reaches with the roots
+``pkg-r/inst/worker/worker.R`` prepares. Root handling differs in four
+ways: roots must be absolute paths, each root's symlink-free form is
+granted alongside the original here rather than by the caller, repeats
+are granted once, and an empty read-roots list omits the read allow
+instead of granting every read on the host.
 """
 
 from __future__ import annotations
 
 import ctypes
 import os
+import platform
 from collections.abc import Iterable, Sequence
 from typing import Literal, get_args
 
@@ -62,6 +68,11 @@ def seatbelt_profile(
     symlink-free form of every root are granted, because the sandbox matches
     resolved paths, and macOS ``/tmp`` and ``/var`` are symlinks into
     ``/private``.
+
+    ``network`` is ``"none"`` to deny all network access or ``"full"`` to
+    leave it alone. Raises ``ValueError`` for an unknown network level, a
+    root that is not an absolute path, or a root containing a quote or
+    backslash.
     """
     if network not in get_args(NetworkAccess):
         raise ValueError(f"unknown network access level {network!r}")
@@ -99,8 +110,14 @@ def engage_seatbelt(
     """Restrict this process to the given roots, permanently.
 
     A seatbelt profile cannot be revoked once it is in place, and the worker
-    calls this on itself before any model-written code is loaded.
+    calls this on itself before any model-written code is loaded. Raises
+    ``RuntimeError`` off macOS and when ``sandbox_init`` rejects the
+    profile, and ``ValueError`` for the root and network problems
+    ``seatbelt_profile()`` reports.
     """
+    if platform.system() != "Darwin":
+        raise RuntimeError("the seatbelt sandbox is only supported on macOS")
+
     profile = seatbelt_profile(read_roots, write_roots, network=network)
 
     libsystem = ctypes.CDLL(None)
@@ -118,7 +135,10 @@ def engage_seatbelt(
     error = ctypes.c_char_p()
     if sandbox_init(profile.encode(), 0, ctypes.byref(error)) != 0:
         # The message is seatbelt's own, and it is the only clue about which
-        # rule it rejected.
+        # rule it rejected, when a message comes back at all: a profile
+        # sandbox_init cannot parse can kill the process outright, so the
+        # parent treats a worker that dies before its ready handshake as an
+        # engage failure.
         detail = (
             error.value.decode(errors="replace") if error.value else "unknown error"
         )
