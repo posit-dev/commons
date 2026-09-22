@@ -122,6 +122,23 @@ class TestNamespace:
         run("from __future__ import barry_as_FLUFL", namespace)
         assert "SyntaxError" in run("1 <> 2").error
 
+    def test_run_defaults_to_a_fresh_namespace(self):
+        # A name bound by one default call is gone in the next: each call
+        # that omits the namespace gets a fresh one.
+        _repl.run("x = 1")
+        assert "NameError" in _repl.run("x").error
+
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="PEP 649 evaluates annotations lazily, so a leaked annotations flag is unobservable",
+    )
+    def test_the_modules_own_annotations_import_does_not_leak(self):
+        # Every compile passes dont_inherit=True; without it the module's
+        # own `from __future__ import annotations` would reach model code,
+        # and this annotation would never be evaluated.
+        evaluation = run("def f(x: 1 / 0):\n    pass")
+        assert "ZeroDivisionError" in evaluation.error
+
 
 class TestOutputCapture:
     def test_stdout_is_captured_not_printed(self, capsys):
@@ -152,6 +169,16 @@ class TestOutputCapture:
         evaluation = run(f"print('x' * {2 * _repl._CAPTURE_LIMIT})")
         assert len(evaluation.stdout) <= _repl._CAPTURE_LIMIT
         assert evaluation.stdout.endswith("exceeded the channel limit]")
+
+    def test_the_bound_is_exact(self):
+        # A write that fills the capacity exactly is kept whole, note and
+        # all; one byte more clips to exactly the limit.
+        exact = _repl._CAPTURE_LIMIT - len(_repl._TRUNCATION_NOTE)
+        evaluation = run(f"import sys\nsys.stdout.write('x' * {exact})")
+        assert evaluation.stdout == "x" * exact
+        evaluation = run(f"import sys\nsys.stdout.write('x' * {exact + 1})")
+        assert len(evaluation.stdout) == _repl._CAPTURE_LIMIT
+        assert evaluation.stdout.endswith(_repl._TRUNCATION_NOTE)
 
     def test_discarded_writes_do_not_fail(self):
         evaluation = run(
@@ -214,6 +241,21 @@ class TestOutputCapture:
 
         real = sys.__stdout__, sys.__stderr__
         run("print('x')")
+        assert (sys.__stdout__, sys.__stderr__) == real
+
+    def test_dunder_streams_are_restored_after_an_error(self):
+        import sys
+
+        real = sys.__stdout__, sys.__stderr__
+        run("1 / 0")
+        assert (sys.__stdout__, sys.__stderr__) == real
+
+    def test_dunder_streams_are_restored_after_an_interrupt(self):
+        import sys
+
+        real = sys.__stdout__, sys.__stderr__
+        with pytest.raises(KeyboardInterrupt):
+            run("raise KeyboardInterrupt")
         assert (sys.__stdout__, sys.__stderr__) == real
 
     def test_the_capture_is_not_seekable(self):
@@ -283,6 +325,28 @@ class TestErrors:
         # evaluation, decides what an interrupted call means.
         with pytest.raises(KeyboardInterrupt):
             run("raise KeyboardInterrupt")
+
+    def test_generator_exit_propagates(self):
+        with pytest.raises(GeneratorExit):
+            run("raise GeneratorExit")
+
+    def test_generator_exit_propagates_from_a_sabotaged_readback(self):
+        code = (
+            "import sys\n"
+            "sys.stdout.getvalue = lambda: (_ for _ in ()).throw(GeneratorExit)\n"
+        )
+        with pytest.raises(GeneratorExit):
+            run(code)
+
+    def test_an_interrupt_during_readback_still_propagates(self):
+        # A sabotaged capture can raise from getvalue(); a KeyboardInterrupt
+        # there is an interrupt, not lost output.
+        code = (
+            "import sys\n"
+            "sys.stdout.getvalue = lambda: (_ for _ in ()).throw(KeyboardInterrupt)\n"
+        )
+        with pytest.raises(KeyboardInterrupt):
+            run(code)
 
 
 # The worker loads this module by absolute path on an interpreter without

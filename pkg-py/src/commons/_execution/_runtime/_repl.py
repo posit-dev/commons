@@ -39,10 +39,10 @@ _FILENAME = "<run_python>"
 # The most output a call may hold. An unbounded buffer would let a runaway
 # print loop exhaust the worker's memory before the protocol ever gets to
 # clip the reply, so the capture stops at the size the protocol clips to
-# (``_TEXT_CLIP_LIMIT`` in ``_protocol.py``), note included, which keeps the
-# field short enough that the protocol never clips it a second time. The
-# note's wording matches the protocol's, so the model sees one message
-# whichever layer did the truncating.
+# (``_TEXT_CLIP_LIMIT`` in ``commons._execution._protocol``), note included,
+# which keeps the field short enough that the protocol never clips it a
+# second time. The note's wording matches the protocol's, so the model sees
+# one message whichever layer did the truncating.
 _CAPTURE_LIMIT = 1024 * 1024
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
 
@@ -76,9 +76,11 @@ class _BoundedCapture:
     buffer back after the call, which a closed stream would forbid — so
     model code asking to close its stdout changes nothing.
 
-    The bound guards against runaway output, not against the model itself:
-    code that wants to exhaust the worker's memory can allocate it directly,
-    and the worker's rlimits are the answer to that.
+    The accounting trusts nothing the caller can influence, so the bound
+    applies whether the flood is accidental or deliberate: a runaway print
+    loop and a ``write`` that lies about its length end at the same limit.
+    What the class does not guard against is model code allocating memory
+    directly; the worker's rlimits are the answer to that.
     """
 
     encoding = "utf-8"
@@ -199,11 +201,13 @@ def run(code: str, namespace: dict[str, Any] | None = None) -> Evaluation:
     tb = ""
     real_dunder = sys.__stdout__, sys.__stderr__
     with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-        # The dunder streams are typed TextIOWrapper | None, but anything
-        # file-like serves; the captures are exactly what redirect_stdout
-        # accepts above.
-        sys.__stdout__, sys.__stderr__ = stdout, stderr  # type: ignore[bad-assignment]
         try:
+            # The dunder streams are typed TextIOWrapper | None, but anything
+            # file-like serves; the captures are exactly what redirect_stdout
+            # accepts above. The swap sits inside the try so an interrupt
+            # landing mid-entry cannot leave the dunders bound to the
+            # captures after the call.
+            sys.__stdout__, sys.__stderr__ = stdout, stderr  # type: ignore[bad-assignment]
             value = _evaluate(code, namespace)
         except (Exception, SystemExit) as exc:  # noqa: BLE001 - any failure is the call's answer
             error, tb = _render_error(exc)
@@ -211,11 +215,14 @@ def run(code: str, namespace: dict[str, Any] | None = None) -> Evaluation:
             sys.__stdout__, sys.__stderr__ = real_dunder
     # The model held sys.stdout during the call, capture object included,
     # so the read-back cannot assume the object survived intact. A
-    # sabotaged capture costs the call its output, never its answer.
+    # sabotaged capture costs the call its output, never its answer. Unlike
+    # _render_error's catch, this one excludes KeyboardInterrupt and
+    # GeneratorExit: an interrupt arriving after a finished call means the
+    # same as one arriving mid-call.
     try:
         captured_out = stdout.getvalue()
         captured_err = stderr.getvalue()
-    except BaseException:  # noqa: BLE001 - lost output is not a lost answer
+    except (Exception, SystemExit):  # noqa: BLE001 - lost output is not a lost answer
         captured_out, captured_err = "", ""
     return Evaluation(
         value=value,
