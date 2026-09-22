@@ -1,0 +1,803 @@
+"""The user-namespace and tmpfs sandbox the worker engages on itself.
+
+Two layers. The parsing and matching helpers are ordinary functions and are
+tested everywhere. Engaging the sandbox is irreversible and Linux-only, so
+those tests fork, and the child reports back over a pipe what the sandbox
+would and would not let it do.
+
+The behaviour matches ``userns_engage`` and its helpers in
+pkg-r/src/sandbox.c.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import errno
+import json
+import os
+import select
+import signal
+import socket
+import sys
+import threading
+import time
+import warnings
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+
+from commons._execution._env import worker_env
+from commons._execution._runtime import _userns
+from commons._execution._runtime._userns import (
+    UsernsError,
+    UsernsUnavailable,
+    engage,
+    map_ids,
+    mountinfo_paths,
+    path_in_roots,
+)
+from commons._execution._sandbox import (
+    SandboxCapabilities,
+    needs_single_thread,
+    sandbox_capabilities,
+)
+
+linux_only = pytest.mark.skipif(
+    sys.platform != "linux", reason="the user-namespace sandbox is Linux-only"
+)
+
+# Whether a namespace can be created is the host's policy, not just the
+# kernel's: a container running the default seccomp profile refuses, and so
+# does a host with user.max_user_namespaces at zero. Tests that engage the
+# sandbox skip there rather than fail, which is why they ask the probe.
+requires_userns = pytest.mark.skipif(
+    sys.platform != "linux" or not sandbox_capabilities().userns,
+    reason="this host does not offer unprivileged user namespaces",
+)
+
+
+def error_code(exc: OSError) -> str:
+    """Return the errno name, which reads better in an assertion than the number."""
+    assert exc.errno is not None
+    return errno.errorcode[exc.errno]
+
+
+def in_child(fn: Callable[[int], Any]) -> Any:
+    """Run ``fn`` in a forked child and return what it reports back.
+
+    Everything here is irreversible in the process that does it, so it is
+    done in a child that exits straight afterwards. ``fn`` is handed the
+    write end of the pipe, which is the descriptor it must ask the sandbox
+    to preserve if it wants to be able to answer at all. The read has a
+    deadline: a child that wedges on a lock another thread held at fork
+    time fails the test rather than hanging the suite.
+    """
+    read_fd, write_fd = os.pipe()
+    with warnings.catch_warnings():
+        # The child only makes syscalls and then _exit()s, so it never waits
+        # on a lock another thread held at fork time, which is what the
+        # warning is about. The test process is multi-threaded whatever this
+        # module does: importing commons starts threads.
+        warnings.simplefilter("ignore", DeprecationWarning)
+        pid = os.fork()
+    if pid == 0:  # pragma: no cover - runs only in the child
+        os.close(read_fd)
+        try:
+            payload = {"value": fn(write_fd)}
+        except BaseException as exc:  # noqa: BLE001 - reported over the pipe
+            payload = {"error": f"{type(exc).__name__}: {exc}"}
+        try:
+            os.write(write_fd, json.dumps(payload).encode())
+        finally:
+            os._exit(0)
+    os.close(write_fd)
+    poller = select.poll()
+    poller.register(read_fd, select.POLLIN | select.POLLHUP)
+    chunks = []
+    while True:
+        if not poller.poll(30_000):
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+            pytest.fail("the child did not report back within 30 seconds")
+        chunk = os.read(read_fd, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    os.close(read_fd)
+    os.waitpid(pid, 0)
+    raw = b"".join(chunks)
+    assert raw, "the child exited without reporting anything"
+    reported = json.loads(raw)
+    if "error" in reported:
+        pytest.fail(f"the child failed: {reported['error']}")
+    return reported["value"]
+
+
+def test_mountinfo_paths_reads_the_mount_point_field() -> None:
+    mountinfo = (
+        "23 28 0:22 / /proc rw,nosuid,relatime shared:12 - proc proc rw\n"
+        "24 28 0:5 / /sys rw,nosuid,relatime shared:2 - sysfs sysfs rw\n"
+    )
+    assert mountinfo_paths(mountinfo) == ["/proc", "/sys"]
+
+
+def test_mountinfo_paths_unescapes_octal_sequences() -> None:
+    # A mount point with a space in it arrives as \040, and the bind and
+    # remount calls need the real path, not the escaped one.
+    mountinfo = "31 28 0:30 / /mnt/my\\040disk rw,relatime - tmpfs tmpfs rw\n"
+    assert mountinfo_paths(mountinfo) == ["/mnt/my disk"]
+
+
+def test_mountinfo_paths_unescapes_a_non_utf8_byte_as_a_byte() -> None:
+    # \351 has to come back as the byte 0xE9: as a character number it
+    # would re-encode as two UTF-8 bytes, and the remount would target a
+    # path that does not exist.
+    raw = b"31 28 0:30 / /mnt/my\\351disk rw,relatime - tmpfs tmpfs rw\n"
+    paths = mountinfo_paths(os.fsdecode(raw))
+    assert os.fsencode(paths[0]) == b"/mnt/my\xe9disk"
+
+
+def test_path_in_roots_does_not_match_a_longer_sibling() -> None:
+    # The prefix test is what decides whether an inherited descriptor is
+    # closed, so /foobar must not pass as being under /foo.
+    assert path_in_roots("/foo/file", ["/foo"])
+    assert not path_in_roots("/foobar/file", ["/foo"])
+
+
+@requires_userns
+def test_map_ids_enters_a_new_user_namespace() -> None:
+    def child(_write_fd: int) -> str:
+        map_ids()
+        return os.readlink("/proc/self/ns/user")
+
+    assert in_child(child) != os.readlink("/proc/self/ns/user")
+
+
+@requires_userns
+def test_map_ids_keeps_the_caller_ids_rather_than_the_overflow_ids() -> None:
+    # unshare() reports the overflow ids until the maps are written, so the
+    # real ids have to be read before it and written back afterwards.
+    def child(_write_fd: int) -> list[int]:
+        map_ids()
+        return [os.getuid(), os.getgid()]
+
+    assert in_child(child) == [os.getuid(), os.getgid()]
+
+
+def test_unavailable_is_reported_rather_than_raised_as_a_bare_oserror() -> None:
+    assert issubclass(UsernsUnavailable, OSError)
+
+
+@linux_only
+def test_the_probe_agrees_with_what_a_child_can_actually_do() -> None:
+    # Stated as an agreement rather than a fixed answer, because whether a
+    # namespace can be created is the host's policy: a container with the
+    # default seccomp profile refuses, and the same test has to pass there.
+    # The probe engages the whole sandbox, so the agreement check does too.
+    def child(write_fd: int) -> bool:
+        try:
+            engage([], [], preserve_fds=[write_fd])
+        except OSError:
+            return False
+        return True
+
+    assert sandbox_capabilities().userns == in_child(child)
+
+
+@pytest.mark.skipif(sys.platform == "linux", reason="asks about other kernels")
+def test_the_probe_reports_no_user_namespace_off_linux() -> None:
+    assert sandbox_capabilities().userns is False
+
+
+@requires_userns
+def test_the_host_filesystem_is_gone_once_the_sandbox_is_engaged(tmp_path) -> None:
+    granted = tmp_path / "granted"
+    granted.mkdir()
+    (granted / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> dict[str, bool]:
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        return {
+            "granted": os.path.exists(f"{granted}/note.txt"),
+            "host": os.path.exists("/etc/passwd"),
+            "oldroot": os.path.exists(_userns._OLD_ROOT),
+        }
+
+    assert in_child(child) == {"granted": True, "host": False, "oldroot": False}
+
+
+@requires_userns
+def test_a_read_root_reads_but_does_not_write(tmp_path) -> None:
+    root = tmp_path / "readable"
+    root.mkdir()
+    (root / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> dict[str, object]:
+        engage([str(root)], [], preserve_fds=[write_fd])
+        try:
+            with open(f"{root}/new.txt", "w") as handle:
+                handle.write("nope")
+            wrote = None
+        except OSError as exc:
+            wrote = error_code(exc)
+        with open(f"{root}/note.txt") as handle:
+            return {"read": handle.read(), "wrote": wrote}
+
+    assert in_child(child) == {"read": "visible", "wrote": "EROFS"}
+
+
+@requires_userns
+def test_a_read_write_root_writes(tmp_path) -> None:
+    root = tmp_path / "writable"
+    root.mkdir()
+
+    def child(write_fd: int) -> str:
+        engage([], [str(root)], preserve_fds=[write_fd])
+        with open(f"{root}/new.txt", "w") as handle:
+            handle.write("written")
+        with open(f"{root}/new.txt") as handle:
+            return handle.read()
+
+    assert in_child(child) == "written"
+
+
+@requires_userns
+def test_the_working_directory_survives_the_pivot(tmp_path) -> None:
+    root = tmp_path / "work"
+    root.mkdir()
+
+    def child(write_fd: int) -> str:
+        os.chdir(str(root))
+        engage([], [str(root)], preserve_fds=[write_fd])
+        return os.getcwd()
+
+    assert in_child(child) == str(root)
+
+
+@requires_userns
+def test_a_working_directory_that_was_not_granted_leaves_the_worker_at_root(
+    tmp_path,
+) -> None:
+    # Losing the working directory is not a reason to refuse to sandbox: the
+    # sandbox root is a safe place to be left.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+
+    def child(write_fd: int) -> str:
+        os.chdir(str(elsewhere))
+        engage([], [str(granted)], preserve_fds=[write_fd])
+        return os.getcwd()
+
+    assert in_child(child) == "/"
+
+
+@requires_userns
+def test_a_descriptor_opened_outside_the_granted_roots_is_closed(tmp_path) -> None:
+    granted = tmp_path / "granted"
+    granted.mkdir()
+    outside = tmp_path / "secret.txt"
+    outside.write_text("secret")
+
+    def child(write_fd: int) -> str | None:
+        leaked = os.open(str(outside), os.O_RDONLY)
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.read(leaked, 6)
+        except OSError as exc:
+            return error_code(exc)
+        return None
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_a_descriptor_inside_a_granted_root_stays_open(tmp_path) -> None:
+    granted = tmp_path / "granted"
+    granted.mkdir()
+    (granted / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> str:
+        kept = os.open(f"{granted}/note.txt", os.O_RDONLY)
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        return os.read(kept, 7).decode()
+
+    assert in_child(child) == "visible"
+
+
+@requires_userns
+def test_a_directory_descriptor_is_closed_even_under_a_granted_root(
+    tmp_path,
+) -> None:
+    # A kept directory descriptor anchors the detached host tree: openat()
+    # relative to it climbs back out of the sandbox, so directories go
+    # unconditionally and anything legitimate is reopened after the pivot.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> str:
+        dir_fd = os.open(str(granted), os.O_RDONLY | os.O_DIRECTORY)
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.listdir(dir_fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_an_o_path_descriptor_is_closed_even_under_a_granted_root(
+    tmp_path,
+) -> None:
+    # An O_PATH descriptor reports an access mode of read-only, so the
+    # path-and-mode rule would keep it -- and openat() works relative to it.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+    (granted / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> str:
+        fd = os.open(f"{granted}/note.txt", _userns._O_PATH)
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.dup(fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_a_writable_descriptor_under_a_read_root_is_closed(tmp_path) -> None:
+    # Remounting the root read-only does not revoke a descriptor that was
+    # already opened for writing, so the sweep has to close it.
+    root = tmp_path / "readable"
+    root.mkdir()
+    (root / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> str:
+        leaked = os.open(f"{root}/note.txt", os.O_RDWR)
+        engage([str(root)], [], preserve_fds=[write_fd])
+        try:
+            os.write(leaked, b"nope")
+        except OSError as exc:
+            return error_code(exc)
+        return "wrote"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_a_socket_is_closed_unconditionally(tmp_path) -> None:
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> str:
+        left, _right = socket.socketpair()
+        fd = left.fileno()
+        engage([str(granted)], [], preserve_fds=[write_fd])
+        try:
+            os.fstat(fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "EBADF"
+
+
+@requires_userns
+def test_preserve_fds_keeps_a_descriptor_that_would_otherwise_go(
+    tmp_path,
+) -> None:
+    # A socket survives only through the preserve list, which is what makes
+    # this a real exercise of it: a pipe would survive the sweep regardless.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> str:
+        left, _right = socket.socketpair()
+        fd = left.fileno()
+        engage([str(granted)], [], preserve_fds=[write_fd, fd])
+        try:
+            os.fstat(fd)
+        except OSError as exc:
+            return error_code(exc)
+        return "kept"
+
+    assert in_child(child) == "kept"
+
+
+@requires_userns
+def test_pipes_and_anonymous_inodes_stay_and_inotify_goes(tmp_path) -> None:
+    # Pipes and anonymous-inode descriptors have no path to check, and the
+    # protocol speaks over the pipes, so they stay. A memfd answers with a
+    # host path and goes, and an inotify watch would keep reporting on
+    # paths the sandbox hides.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> dict[str, str]:
+        # getattr, so the test module still type-checks off Linux, where
+        # neither name exists. Both run only under requires_userns.
+        epoll = getattr(select, "epoll")  # noqa: B009 - Linux-only name
+        memfd_create = getattr(os, "memfd_create")  # noqa: B009 - Linux-only
+        read_end, write_end = os.pipe()
+        poller = epoll()
+        memfd = memfd_create("commons-test")
+        libc = ctypes.CDLL(None)
+        watch = libc.inotify_init()
+        assert libc.inotify_add_watch(watch, b"/etc", 0x100) >= 0
+
+        engage([str(granted)], [], preserve_fds=[write_fd])
+
+        outcome = {}
+        os.write(write_end, b"x")
+        outcome["pipe"] = os.read(read_end, 1).decode()
+        outcome["epoll"] = "kept" if os.fstat(poller.fileno()) else "closed"
+        for name, fd in (("memfd", memfd), ("inotify", watch)):
+            try:
+                os.fstat(fd)
+            except OSError as exc:
+                outcome[name] = error_code(exc)
+            else:
+                outcome[name] = "kept"
+        return outcome
+
+    assert in_child(child) == {
+        "pipe": "x",
+        "epoll": "kept",
+        "memfd": "EBADF",
+        "inotify": "EBADF",
+    }
+
+
+@requires_userns
+def test_a_read_write_descriptor_is_kept_for_a_read_write_root(tmp_path) -> None:
+    # The rule is about the path, not the mode: a descriptor under a
+    # read-write root survives whichever way it was opened.
+    root = tmp_path / "writable"
+    root.mkdir()
+    (root / "note.txt").write_text("visible")
+
+    def child(write_fd: int) -> str:
+        kept = os.open(f"{root}/note.txt", os.O_RDWR)
+        engage([], [str(root)], preserve_fds=[write_fd])
+        return os.read(kept, 7).decode()
+
+    assert in_child(child) == "visible"
+
+
+@linux_only
+def test_engaging_from_a_threaded_process_names_the_variables_that_fix_it() -> None:
+    def child(write_fd: int) -> str:
+        thread = threading.Thread(target=lambda: time.sleep(30), daemon=True)
+        thread.start()
+        try:
+            engage([], [], preserve_fds=[write_fd])
+        except UsernsUnavailable as exc:
+            return str(exc)
+        return "no error"
+
+    reported = in_child(child)
+    assert "OPENBLAS_NUM_THREADS=1" in reported
+    assert "OMP_NUM_THREADS=1" in reported
+
+
+def _nested_mounts() -> dict[str, tuple[str, str]]:
+    """Return one nested mount of each kind, keyed "file" and "dir".
+
+    A nested mount is one sitting inside a plain directory, which is what
+    makes its parent usable as a granted root. Which ones a host has differs,
+    so they are discovered: a container image supplies /etc/hosts as a file
+    and /sys/fs/cgroup as a directory.
+    """
+    with open("/proc/self/mountinfo") as handle:
+        paths = mountinfo_paths(handle.read())
+    mounts = set(paths)
+    found: dict[str, tuple[str, str]] = {}
+    for path in sorted(paths):
+        parent = os.path.dirname(path)
+        if parent in ("", "/") or parent in mounts:
+            continue
+        kind = "dir" if os.path.isdir(path) else "file"
+        found.setdefault(kind, (parent, path))
+    return found
+
+
+def write_attempt(path: str) -> str | None:
+    """Try to write at ``path``, and report the errno name if it is refused.
+
+    A mount point is a file on some hosts and a directory on others, and
+    opening a directory for writing fails with EISDIR whatever the mount
+    flags say, so a directory is probed by the file it would contain.
+    """
+    target = os.path.join(path, "commons-write-probe") if os.path.isdir(path) else path
+    try:
+        with open(target, "a"):
+            pass
+    except OSError as exc:
+        return error_code(exc)
+    return None
+
+
+@requires_userns
+def test_the_sandbox_root_itself_is_read_only(tmp_path) -> None:
+    # Without the final remount, the sandbox root is a writable 16 MB tmpfs:
+    # space the worker was never granted.
+    root = tmp_path / "writable"
+    root.mkdir()
+
+    def child(write_fd: int) -> str | None:
+        engage([], [str(root)], preserve_fds=[write_fd])
+        return write_attempt("/commons-write-probe")
+
+    assert in_child(child) == "EROFS"
+
+
+@requires_userns
+def test_a_granted_root_that_does_not_exist_is_a_userns_error(tmp_path) -> None:
+    # The bind fails after the namespace exists, which is the UsernsError
+    # contract: the process is already changed and cannot be recovered.
+    missing = tmp_path / "missing"
+
+    def child(write_fd: int) -> str:
+        try:
+            engage([str(missing)], [], preserve_fds=[write_fd])
+        except UsernsError:
+            return "error"
+        except UsernsUnavailable:
+            return "unavailable"
+        return "engaged"
+
+    assert in_child(child) == "error"
+
+
+@requires_userns
+@pytest.mark.parametrize("kind", ["file", "dir"])
+def test_a_mount_nested_under_a_read_root_comes_along_and_is_read_only(kind) -> None:
+    # The bind has to be recursive or the nested mount is replaced by the
+    # empty directory it covers, and read-only does not reach it on its own.
+    found = _nested_mounts().get(kind)
+    if found is None:
+        pytest.skip(f"this host has no nested {kind} mount inside a plain directory")
+    root, nested = found
+    if write_attempt(nested) is not None:
+        # A mount that is already read-only on the host would report EROFS
+        # whether or not the sandbox remounted it, and pin nothing.
+        pytest.skip(f"the nested mount at {nested} is not writable on this host")
+    if os.path.isdir(nested):
+        os.remove(os.path.join(nested, "commons-write-probe"))
+
+    def child(write_fd: int) -> dict[str, object]:
+        engage([root, "/proc"], [], preserve_fds=[write_fd])
+        with open("/proc/self/mountinfo") as handle:
+            present = nested in mountinfo_paths(handle.read())
+        return {"present": present, "wrote": write_attempt(nested)}
+
+    assert in_child(child) == {"present": True, "wrote": "EROFS"}
+
+
+def _vfs_flags(mountinfo: str, path: str) -> set[str]:
+    """Return the flags one mount point carries in mountinfo contents."""
+    for line, mount_point in zip(
+        mountinfo.splitlines(), mountinfo_paths(mountinfo), strict=True
+    ):
+        if mount_point == path:
+            return set(line.split(" ")[5].split(","))
+    return set()
+
+
+@requires_userns
+def test_a_nested_mount_keeps_its_flags_across_the_read_only_remount() -> None:
+    # A remount that drops nosuid or noexec weakens the mount, so the
+    # remount asks again for the flags the mount already had.
+    candidate = _nested_mounts().get("dir") or _nested_mounts().get("file")
+    if candidate is None:
+        pytest.skip("this host has no nested mount inside a plain directory")
+    root, nested = candidate
+    with open("/proc/self/mountinfo") as handle:
+        carried = _vfs_flags(handle.read(), nested) & {
+            "nosuid",
+            "nodev",
+            "noexec",
+            "noatime",
+            "nodiratime",
+            "relatime",
+        }
+    if not carried:
+        pytest.skip(f"the nested mount at {nested} has no flags to preserve")
+
+    def child(write_fd: int) -> list[str]:
+        engage([root, "/proc"], [], preserve_fds=[write_fd])
+        with open("/proc/self/mountinfo") as handle:
+            return sorted(_vfs_flags(handle.read(), nested))
+
+    flags = set(in_child(child))
+    assert "ro" in flags
+    assert carried <= flags
+
+
+@requires_userns
+def test_the_capabilities_the_namespace_granted_are_given_up() -> None:
+    # A new user namespace makes its creator fully capable inside it, which
+    # is what allows the mounts. Nothing after them needs that.
+    def child(write_fd: int) -> dict[str, str]:
+        engage(["/proc"], [], preserve_fds=[write_fd])
+        wanted = ("CapEff", "CapBnd")
+        with open("/proc/self/status") as handle:
+            return {
+                name: value.strip()
+                for name, _, value in (line.partition(":") for line in handle)
+                if name in wanted
+            }
+
+    assert in_child(child) == {
+        "CapEff": "0000000000000000",
+        "CapBnd": "0000000000000000",
+    }
+
+
+def test_the_single_thread_variables_are_set_only_when_asked() -> None:
+    # unshare(CLONE_NEWUSER) refuses a multi-threaded process, and a BLAS
+    # library starts its pool before the worker gets to engage anything.
+    pinned = worker_env("/tmp/scratch", single_thread=True)
+    assert pinned["OPENBLAS_NUM_THREADS"] == "1"
+    assert pinned["OMP_NUM_THREADS"] == "1"
+    default = worker_env("/tmp/scratch")
+    assert "OPENBLAS_NUM_THREADS" not in default
+    assert "OMP_NUM_THREADS" not in default
+
+
+def test_thread_pinning_is_never_asked_for_off_linux() -> None:
+    capabilities = SandboxCapabilities(
+        landlock_abi=-1, seccomp=False, seatbelt=True, userns=False
+    )
+    assert needs_single_thread(capabilities, sysname="Darwin") is False
+
+
+def test_a_failed_id_map_is_not_reported_as_an_unavailable_host() -> None:
+    """The two failure modes are distinct types, because only one of them
+    leaves a process that can still be asked to do something else."""
+    assert not issubclass(UsernsError, UsernsUnavailable)
+    assert not issubclass(UsernsUnavailable, UsernsError)
+
+
+def test_roots_are_trimmed_without_changing_where_they_point() -> None:
+    normalized = _userns._normalize_roots(["/", "/foo/", "/bar"], writable=False)
+    assert normalized == ["/", "/foo", "/bar"]
+
+
+@pytest.mark.parametrize(
+    "root", ["", "//", "relative/path", ".", "//tmp", "/a/../b", "/a/./b"]
+)
+def test_a_root_that_is_not_an_absolute_canonical_path_is_refused(
+    root,
+) -> None:
+    # "" would collapse to "/" and grant the whole host filesystem, and
+    # "//tmp" or "/a/../b" would answer the checks for one path and mount
+    # another -- fail-open on a security boundary.
+    with pytest.raises(UsernsUnavailable):
+        _userns._normalize_roots([root], writable=False)
+
+
+@pytest.mark.parametrize("root", ["/", _userns._SANDBOX_ROOT])
+def test_a_read_write_root_the_final_remount_would_clobber_is_refused(
+    root,
+) -> None:
+    with pytest.raises(UsernsUnavailable):
+        _userns._normalize_roots([root], writable=True)
+
+
+@pytest.mark.parametrize("writable", [False, True])
+@pytest.mark.parametrize(
+    "root", [_userns._OLD_ROOT, _userns._OLD_ROOT + "/sub"]
+)
+def test_a_root_where_the_old_root_hangs_is_refused(root, writable) -> None:
+    # The pivot hangs the host root there until it is detached; granting
+    # the path would stack a bind over that mount, and the detach would
+    # take the bind instead of the host root.
+    with pytest.raises(UsernsUnavailable):
+        _userns._normalize_roots([root], writable=writable)
+
+
+def test_a_read_root_overlapping_a_read_write_root_is_refused() -> None:
+    # Read roots bind first, so the recursive read-write bind would stack
+    # over a read-only bind at or beneath it and the grant would come out
+    # writable.
+    with pytest.raises(UsernsUnavailable):
+        _userns._check_nesting(["/a/b"], ["/a"])
+    with pytest.raises(UsernsUnavailable):
+        _userns._check_nesting(["/a"], ["/a"])
+    # The reverse nesting is safe: the read-write bind mounts over the
+    # read-only one and stays writable.
+    _userns._check_nesting(["/a"], ["/a/b"])
+
+
+@pytest.mark.skipif(sys.platform == "linux", reason="asks about other kernels")
+def test_engaging_off_linux_is_an_unavailable_host() -> None:
+    with pytest.raises(UsernsUnavailable):
+        engage([], [], preserve_fds=[])
+
+
+@pytest.mark.parametrize(
+    "landlock_abi, seccomp, userns, expected",
+    [
+        (1, True, True, False),
+        (0, True, True, True),
+        (0, True, False, False),
+        # No seccomp means protection_mode() refuses the host whatever the
+        # filesystem sandbox offers, so pinning would buy nothing.
+        (0, False, True, False),
+    ],
+)
+def test_thread_pinning_is_asked_for_only_where_this_sandbox_is_the_one_used(
+    landlock_abi, seccomp, userns, expected
+) -> None:
+    capabilities = SandboxCapabilities(
+        landlock_abi=landlock_abi, seccomp=seccomp, seatbelt=False, userns=userns
+    )
+    assert needs_single_thread(capabilities, sysname="Linux") is expected
+
+
+@linux_only
+def test_a_symlinked_root_is_refused_before_the_namespace_is_entered(
+    tmp_path,
+) -> None:
+    # A root containing a symlink is the same directory as its target under
+    # an alias the overlap check cannot see, so it is refused outright --
+    # and refused in preflight, before anything has changed.
+    target = tmp_path / "data"
+    target.mkdir()
+    link = tmp_path / "data-link"
+    link.symlink_to(target)
+    before = os.readlink("/proc/self/ns/user")
+
+    def child(write_fd: int) -> dict[str, str]:
+        try:
+            engage([str(link)], [], preserve_fds=[write_fd])
+        except UsernsUnavailable:
+            return {
+                "raised": "unavailable",
+                "namespace": os.readlink("/proc/self/ns/user"),
+            }
+        return {
+            "raised": "nothing",
+            "namespace": os.readlink("/proc/self/ns/user"),
+        }
+
+    assert in_child(child) == {"raised": "unavailable", "namespace": before}
+
+
+@linux_only
+def test_the_probe_refuses_an_architecture_with_no_known_syscall_numbers(
+    monkeypatch,
+) -> None:
+    # pivot_root and capset are reached by number, so an architecture that is
+    # not in the table cannot be sandboxed however willing the kernel is.
+    monkeypatch.setattr(_userns, "_SYSCALLS", {})
+    assert _userns.available() is False
+
+
+@requires_userns
+def test_an_unknown_architecture_is_refused_before_the_namespace_is_entered(
+    monkeypatch,
+) -> None:
+    # The refusal has to come first. Raising it after unshare() would report
+    # an unavailable host from a process that has already been changed.
+    monkeypatch.setattr(_userns, "_SYSCALLS", {})
+    before = os.readlink("/proc/self/ns/user")
+
+    def child(write_fd: int) -> dict[str, str]:
+        try:
+            engage([], [], preserve_fds=[write_fd])
+        except UsernsUnavailable:
+            return {"raised": "unavailable", "namespace": os.readlink("/proc/self/ns/user")}
+        except UsernsError:
+            return {"raised": "error", "namespace": os.readlink("/proc/self/ns/user")}
+        return {"raised": "nothing", "namespace": os.readlink("/proc/self/ns/user")}
+
+    assert in_child(child) == {"raised": "unavailable", "namespace": before}
