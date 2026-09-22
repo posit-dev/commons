@@ -514,23 +514,34 @@ worker_run_code <- function(
     if (is.null(last_plot)) {
       return()
     }
+    # The UI image is drawn at the pixel ratio and the model image at 1x, both
+    # from the same recording, so the parent never has to decode a PNG to
+    # downscale it.
+    add(
+      "plot",
+      path = render_plot(plot_pixel_ratio),
+      model_path = render_plot(1L)
+    )
+    last_plot <<- NULL
+  }
+  render_plot <- function(pixel_ratio) {
     path <- tempfile("plot-", fileext = ".png")
-    # HTML displays this 2x image at half its pixel dimensions, giving browsers
-    # two image pixels per CSS pixel. Scaling resolution too preserves text and
-    # point sizes at the logical display size.
+    # HTML displays the 2x image at half its pixel dimensions, giving browsers
+    # two image pixels per CSS pixel. Scaling resolution with the pixel ratio
+    # keeps text and point sizes at the logical display size, so both images
+    # have the same layout.
     ragg::agg_png(
       path,
-      width = plot_width * plot_pixel_ratio,
-      height = plot_height * plot_pixel_ratio,
-      res = 72 * plot_pixel_ratio,
+      width = plot_width * pixel_ratio,
+      height = plot_height * pixel_ratio,
+      res = 72 * pixel_ratio,
       scaling = 1.5
     )
     tryCatch(
       grDevices::replayPlot(last_plot),
       finally = grDevices::dev.off()
     )
-    add("plot", path = path)
-    last_plot <<- NULL
+    path
   }
 
   handler <- new_output_handler(

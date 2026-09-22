@@ -185,12 +185,7 @@ run_r_value <- function(segments) {
       source = NULL,
       plot = {
         flush()
-        dims <- plot_dimensions()
-        out[[length(out) + 1L]] <- model_plot_image(
-          seg$path,
-          dims$width,
-          dims$height
-        )
+        out[[length(out) + 1L]] <- model_plot_image(seg$model_path)
       },
       warning = buffer <- c(buffer, paste0("Warning: ", seg$text)),
       error = buffer <- c(buffer, paste0("Error: ", seg$text)),
