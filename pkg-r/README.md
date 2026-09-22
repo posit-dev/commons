@@ -84,7 +84,7 @@ For more information, see the [Introduction to
 commons](https://posit-dev.github.io/commons/r/articles/commons.html)
 vignette.
 
-<img src="vignettes/trust-flow.svg" alt="Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Verified answer outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome." width="100%" />
+<img src="man/figures/trust-flow.svg" alt="Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Verified answer outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome." width="100%" />
 
 ## Evaluation
 
