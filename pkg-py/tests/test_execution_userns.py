@@ -11,6 +11,7 @@ pkg-r/src/sandbox.c.
 
 from __future__ import annotations
 
+import ctypes
 import errno
 import json
 import os
@@ -126,6 +127,15 @@ def test_mountinfo_paths_unescapes_octal_sequences() -> None:
     # remount calls need the real path, not the escaped one.
     mountinfo = "31 28 0:30 / /mnt/my\\040disk rw,relatime - tmpfs tmpfs rw\n"
     assert mountinfo_paths(mountinfo) == ["/mnt/my disk"]
+
+
+def test_mountinfo_paths_unescapes_a_non_utf8_byte_as_a_byte() -> None:
+    # An escaped byte is a byte, not a character number: \351 has to come
+    # back as the byte 0xE9, or the remount targets a path that does not
+    # exist.
+    raw = b"31 28 0:30 / /mnt/my\\351disk rw,relatime - tmpfs tmpfs rw\n"
+    paths = mountinfo_paths(os.fsdecode(raw))
+    assert os.fsencode(paths[0]) == b"/mnt/my\xe9disk"
 
 
 def test_path_in_roots_does_not_match_a_longer_sibling() -> None:
@@ -402,6 +412,50 @@ def test_preserve_fds_keeps_a_descriptor_that_would_otherwise_go(
 
 
 @requires_userns
+def test_pipes_and_anonymous_inodes_stay_and_inotify_goes(tmp_path) -> None:
+    # Pipes and anonymous-inode descriptors have no path to check, and the
+    # protocol speaks over the pipes, so they stay. A memfd answers with a
+    # host path and goes, and an inotify watch would keep reporting on
+    # paths the sandbox hides.
+    granted = tmp_path / "granted"
+    granted.mkdir()
+
+    def child(write_fd: int) -> dict[str, str]:
+        # getattr, so the test module still type-checks off Linux, where
+        # neither name exists. Both run only under requires_userns.
+        epoll = getattr(select, "epoll")  # noqa: B009 - Linux-only name
+        memfd_create = getattr(os, "memfd_create")  # noqa: B009 - Linux-only
+        read_end, write_end = os.pipe()
+        poller = epoll()
+        memfd = memfd_create("commons-test")
+        libc = ctypes.CDLL(None)
+        watch = libc.inotify_init()
+        assert libc.inotify_add_watch(watch, b"/etc", 0x100) >= 0
+
+        engage([str(granted)], [], preserve_fds=[write_fd])
+
+        outcome = {}
+        os.write(write_end, b"x")
+        outcome["pipe"] = os.read(read_end, 1).decode()
+        outcome["epoll"] = "kept" if os.fstat(poller.fileno()) else "closed"
+        for name, fd in (("memfd", memfd), ("inotify", watch)):
+            try:
+                os.fstat(fd)
+            except OSError as exc:
+                outcome[name] = error_code(exc)
+            else:
+                outcome[name] = "kept"
+        return outcome
+
+    assert in_child(child) == {
+        "pipe": "x",
+        "epoll": "kept",
+        "memfd": "EBADF",
+        "inotify": "EBADF",
+    }
+
+
+@requires_userns
 def test_a_read_write_descriptor_is_kept_for_a_read_write_root(tmp_path) -> None:
     # The rule is about the path, not the mode: a descriptor under a
     # read-write root survives whichever way it was opened.
@@ -527,6 +581,46 @@ def test_a_mount_nested_under_a_read_root_comes_along_and_is_read_only(kind) -> 
     assert in_child(child) == {"present": True, "wrote": "EROFS"}
 
 
+def _vfs_flags(mountinfo: str, path: str) -> set[str]:
+    """The flags one mount point carries in mountinfo contents."""
+    for line, mount_point in zip(
+        mountinfo.splitlines(), mountinfo_paths(mountinfo), strict=True
+    ):
+        if mount_point == path:
+            return set(line.split(" ")[5].split(","))
+    return set()
+
+
+@requires_userns
+def test_a_nested_mount_keeps_its_flags_across_the_read_only_remount() -> None:
+    # A remount that drops nosuid or noexec weakens the mount, so the
+    # remount asks again for the flags the mount already had.
+    candidate = _nested_mounts().get("dir") or _nested_mounts().get("file")
+    if candidate is None:
+        pytest.skip("this host has no nested mount inside a plain directory")
+    root, nested = candidate
+    with open("/proc/self/mountinfo") as handle:
+        carried = _vfs_flags(handle.read(), nested) & {
+            "nosuid",
+            "nodev",
+            "noexec",
+            "noatime",
+            "nodiratime",
+            "relatime",
+        }
+    if not carried:
+        pytest.skip(f"the nested mount at {nested} has no flags to preserve")
+
+    def child(write_fd: int) -> list[str]:
+        engage([root, "/proc"], [], preserve_fds=[write_fd])
+        with open("/proc/self/mountinfo") as handle:
+            return sorted(_vfs_flags(handle.read(), nested))
+
+    flags = set(in_child(child))
+    assert "ro" in flags
+    assert carried <= flags
+
+
 @requires_userns
 def test_the_capabilities_the_namespace_granted_are_given_up() -> None:
     # A new user namespace makes its creator fully capable inside it, which
@@ -598,6 +692,18 @@ def test_a_read_write_root_the_final_remount_would_clobber_is_refused(
 ) -> None:
     with pytest.raises(UsernsUnavailable):
         _userns._normalize_roots([root], writable=True)
+
+
+@pytest.mark.parametrize("writable", [False, True])
+@pytest.mark.parametrize(
+    "root", [_userns._OLD_ROOT, _userns._OLD_ROOT + "/sub"]
+)
+def test_a_root_where_the_old_root_hangs_is_refused(root, writable) -> None:
+    # The pivot hangs the host root there until it is detached; granting
+    # the path would stack a bind over that mount, and the detach would
+    # take the bind instead of the host root.
+    with pytest.raises(UsernsUnavailable):
+        _userns._normalize_roots([root], writable=writable)
 
 
 def test_a_read_root_overlapping_a_read_write_root_is_refused() -> None:

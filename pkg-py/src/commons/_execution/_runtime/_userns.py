@@ -80,7 +80,10 @@ _SANDBOX_ROOT = "/tmp"
 _OLD_ROOT = "/.commons-oldroot"
 
 # mountinfo escapes space, tab, newline and backslash as three octal digits.
-_OCTAL = re.compile(r"\\([0-7]{3})")
+# The pattern runs on bytes: an escaped byte above 0x7F has to come back as
+# the byte it was, since chr() of its number would re-encode as two UTF-8
+# bytes and the remount would target a path that does not exist.
+_OCTAL = re.compile(rb"\\([0-7]{3})")
 
 
 class UsernsUnavailable(OSError):
@@ -223,7 +226,10 @@ def mountinfo_paths(mountinfo: str) -> list[str]:
         fields = line.split(" ", 5)
         if len(fields) < 5:
             continue
-        paths.append(_OCTAL.sub(lambda m: chr(int(m.group(1), 8)), fields[4]))
+        unescaped = _OCTAL.sub(
+            lambda m: bytes([int(m.group(1), 8)]), os.fsencode(fields[4])
+        )
+        paths.append(os.fsdecode(unescaped))
     return paths
 
 
@@ -308,9 +314,11 @@ def _close_external_fds(
     out of the sandbox. Anything legitimate is reopenable after the pivot. A
     regular file stays only if its path is under a granted root, and under a
     read-only root only if it was opened read-only. Pipes and the
-    anonymous-inode descriptors (epoll, inotify, eventfd) are left alone:
-    the worker's protocol speaks over the pipes, and an anonymous inode has
-    no path to check. Descriptors 0-2 are left alone on the launcher's
+    anonymous-inode descriptors (epoll, eventfd) are left alone: the
+    worker's protocol speaks over the pipes, and an anonymous inode has no
+    path to check. inotify and fanotify descriptors are the exception --
+    their watches were established on paths the sandbox hides and keep
+    reporting on them. Descriptors 0-2 are left alone on the launcher's
     promise that they are pipes, not files.
     """
     # Imported here rather than at module level so the module still imports
@@ -338,6 +346,16 @@ def _close_external_fds(
         if not (
             stat.S_ISREG(mode) or stat.S_ISCHR(mode) or stat.S_ISBLK(mode)
         ):
+            # A pipe or an anonymous inode has no path to check and stays,
+            # except inotify and fanotify: their watches outlive the pivot.
+            try:
+                target = os.readlink(f"/proc/self/fd/{fd}")
+            except OSError:
+                continue
+            if target.startswith(
+                ("anon_inode:inotify", "anon_inode:[fanotify")
+            ):
+                os.close(fd)
             continue
         try:
             target = os.readlink(f"/proc/self/fd/{fd}")
@@ -386,7 +404,10 @@ def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
     cannot see. A read-write root also cannot be ``/`` or the sandbox
     root: the sandbox root is mounted where ``/tmp`` was and remounted
     read-only at the end, so either grant would come out read-only and
-    the promise made here is one the engage cannot keep.
+    the promise made here is one the engage cannot keep. A root also may
+    not sit where the pivot hangs the old root: the bind would stack over
+    that mount, and the detach would take the bind instead of the host
+    root.
     """
     normalized = []
     for root in roots:
@@ -412,6 +433,10 @@ def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
                 0,
                 f"a granted root must not contain a symlink, but {root!r} "
                 f"resolves to {resolved!r}",
+            )
+        if path_in_roots(trimmed, [_OLD_ROOT]):
+            raise UsernsUnavailable(
+                0, f"{trimmed} is reserved for the sandbox pivot"
             )
         if writable and trimmed in ("/", _SANDBOX_ROOT):
             raise UsernsUnavailable(
@@ -444,6 +469,11 @@ def engage(
     read_roots: list[str], rw_roots: list[str], *, preserve_fds: list[int]
 ) -> None:
     """Confine this process to ``read_roots`` and ``rw_roots``, for good.
+
+    ``preserve_fds`` names the descriptors the close sweep must keep -- the
+    pipe the worker answers on is the reason the list exists. Every other
+    descriptor above 2 that reaches outside the granted roots is closed, and
+    directory, socket and O_PATH descriptors go regardless.
 
     Three preconditions, all checked before anything changes: Linux with
     /proc mounted (the thread count and the mount table come from it), a
@@ -488,6 +518,8 @@ def engage(
         raise UsernsError(
             exc.errno, f"cannot engage the sandbox: {exc.strerror}"
         ) from exc
+    except Exception as exc:
+        raise UsernsError(0, f"cannot engage the sandbox: {exc}") from exc
 
 
 def _confine(
@@ -532,6 +564,23 @@ def _confine(
         _bind(root, True, submounts)
     for root in rw_roots:
         _bind(root, False, submounts)
+
+    # The submount snapshot predates the binds, and a recursive bind can
+    # itself pull in a mount the snapshot does not know about -- an
+    # automount the walk triggered, or a host mount racing the engage --
+    # and the copy arrives writable under a read-only root. Re-read the
+    # table through the old root and remount whatever a read-only grant
+    # covers, except the old root and anything a read-write grant answers
+    # for. Remounting what the snapshot already remounted is idempotent.
+    with open(_OLD_ROOT + "/proc/self/mountinfo", "rb") as handle:
+        bound = mountinfo_paths(os.fsdecode(handle.read()))
+    for path in bound:
+        if path_in_roots(path, [_OLD_ROOT]):
+            continue
+        if path_in_roots(path, read_roots) and not path_in_roots(
+            path, rw_roots
+        ):
+            _remount_readonly(path)
 
     if _libc().umount2(_OLD_ROOT.encode(), MNT_DETACH) != 0:
         raise _fail(UsernsError, "cannot detach the host root")
