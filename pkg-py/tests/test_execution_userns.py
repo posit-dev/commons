@@ -58,7 +58,7 @@ requires_userns = pytest.mark.skipif(
 
 
 def error_code(exc: OSError) -> str:
-    """The errno name, which reads better in an assertion than the number."""
+    """Return the errno name, which reads better in an assertion than the number."""
     assert exc.errno is not None
     return errno.errorcode[exc.errno]
 
@@ -130,9 +130,9 @@ def test_mountinfo_paths_unescapes_octal_sequences() -> None:
 
 
 def test_mountinfo_paths_unescapes_a_non_utf8_byte_as_a_byte() -> None:
-    # An escaped byte is a byte, not a character number: \351 has to come
-    # back as the byte 0xE9, or the remount targets a path that does not
-    # exist.
+    # \351 has to come back as the byte 0xE9: as a character number it
+    # would re-encode as two UTF-8 bytes, and the remount would target a
+    # path that does not exist.
     raw = b"31 28 0:30 / /mnt/my\\351disk rw,relatime - tmpfs tmpfs rw\n"
     paths = mountinfo_paths(os.fsdecode(raw))
     assert os.fsencode(paths[0]) == b"/mnt/my\xe9disk"
@@ -488,7 +488,7 @@ def test_engaging_from_a_threaded_process_names_the_variables_that_fix_it() -> N
 
 
 def _nested_mounts() -> dict[str, tuple[str, str]]:
-    """One nested mount of each kind, keyed "file" and "dir".
+    """Return one nested mount of each kind, keyed "file" and "dir".
 
     A nested mount is one sitting inside a plain directory, which is what
     makes its parent usable as a granted root. Which ones a host has differs,
@@ -582,7 +582,7 @@ def test_a_mount_nested_under_a_read_root_comes_along_and_is_read_only(kind) -> 
 
 
 def _vfs_flags(mountinfo: str, path: str) -> set[str]:
-    """The flags one mount point carries in mountinfo contents."""
+    """Return the flags one mount point carries in mountinfo contents."""
     for line, mount_point in zip(
         mountinfo.splitlines(), mountinfo_paths(mountinfo), strict=True
     ):
@@ -650,8 +650,6 @@ def test_the_single_thread_variables_are_set_only_when_asked() -> None:
     default = worker_env("/tmp/scratch")
     assert "OPENBLAS_NUM_THREADS" not in default
     assert "OMP_NUM_THREADS" not in default
-
-
 
 
 def test_thread_pinning_is_never_asked_for_off_linux() -> None:

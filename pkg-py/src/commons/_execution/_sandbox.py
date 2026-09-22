@@ -96,7 +96,6 @@ def _seatbelt_present() -> bool:
 def sandbox_capabilities() -> SandboxCapabilities:
     """Probe this host for each mechanism the worker can restrict itself with.
 
-    Every field is answered by the module that implements its mechanism.
     Seatbelt support is a symbol lookup in libSystem, and the Landlock ABI
     version is a read-only syscall. The seccomp probe installs a filter in
     a child process, so its answer is computed once and cached; the
@@ -178,7 +177,7 @@ def needs_single_thread(
     *,
     sysname: str | None = None,
 ) -> bool:
-    """Whether the worker has to be started with its thread pools pinned.
+    """Determine whether the worker has to be started with its thread pools pinned.
 
     ``unshare(CLONE_NEWUSER)`` refuses a multi-threaded process, so the
     user-namespace sandbox can only be engaged by a worker that never started

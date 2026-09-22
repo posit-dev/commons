@@ -1,4 +1,4 @@
-"""The user-namespace and tmpfs sandbox, engaged by the worker on itself.
+"""The user-namespace and tmpfs sandbox the worker engages on itself.
 
 The Linux sandbox for kernels that cannot offer Landlock. The worker enters a
 new user and mount namespace, pivots into a fresh tmpfs root, and binds back
@@ -73,9 +73,9 @@ _SYSCALLS = {
     "aarch64": {"pivot_root": 41, "capset": 91},
 }
 
-# What the worker pivots into, and where the host root hangs until it is
-# detached. /tmp is the one directory guaranteed to exist to mount over, and
-# nothing of the host's /tmp survives the pivot.
+# The worker pivots into _SANDBOX_ROOT; the host root hangs at _OLD_ROOT
+# until it is detached. /tmp is the one directory guaranteed to exist to
+# mount over, and nothing of the host's /tmp survives the pivot.
 _SANDBOX_ROOT = "/tmp"
 _OLD_ROOT = "/.commons-oldroot"
 
@@ -123,11 +123,11 @@ _LIBC: ctypes.CDLL | None = None
 
 
 def _libc() -> ctypes.CDLL:
-    """The one libc handle, which is what makes the argtypes below stick.
+    """Return the process-wide libc handle, so the argtypes below stick.
 
     Each ``CDLL`` carries its own function prototypes and its own errno, so a
-    fresh handle per call would set argtypes on an object nobody calls and
-    read errno from a call nobody made.
+    fresh handle per call would set argtypes on one handle, call another, and
+    read errno from a third.
     """
     global _LIBC
     if _LIBC is None:
@@ -158,11 +158,11 @@ def _fail(kind: type[OSError], message: str) -> OSError:
 
 
 def _syscall_numbers() -> dict[str, int]:
-    """The syscall numbers for this architecture, or refuse the host.
+    """Return the syscall numbers for this architecture, or refuse the host.
 
-    Asked before anything is changed, never in the middle of engaging, so
-    that an architecture commons has no numbers for is an unavailable host
-    rather than a process left half-confined.
+    The check runs before anything is changed, never in the middle of
+    engaging, so an architecture commons has no numbers for is an unavailable
+    host rather than a process left half-confined.
     """
     machine = os.uname().machine
     try:
@@ -215,11 +215,11 @@ def _write_proc(path: str, content: str) -> None:
 
 
 def mountinfo_paths(mountinfo: str) -> list[str]:
-    """Every mount point in ``/proc/self/mountinfo`` contents, unescaped.
+    """Return every mount point in ``/proc/self/mountinfo`` contents, unescaped.
 
-    Read before the pivot, because a read-only root has to remount each mount
-    nested under it as well: a locked child mount keeps its own flags and
-    stays writable otherwise.
+    The table is read before the pivot, because a read-only root has to
+    remount each mount nested under it as well: a locked child mount keeps
+    its own flags and stays writable otherwise.
     """
     paths = []
     for line in mountinfo.splitlines():
@@ -234,7 +234,7 @@ def mountinfo_paths(mountinfo: str) -> list[str]:
 
 
 def path_in_roots(path: str, roots: list[str]) -> bool:
-    """Whether ``path`` is one of ``roots`` or sits underneath one.
+    """Return whether ``path`` is one of ``roots`` or sits underneath one.
 
     What follows the root has to be nothing or a new component, so ``/foobar``
     is not treated as being under ``/foo``.
@@ -394,7 +394,7 @@ def _drop_capabilities() -> None:
 
 
 def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
-    """Validate and trim the granted roots, before anything has changed.
+    """Validate and trim the granted roots before anything has changed.
 
     A root has to be an absolute, canonical, fully-resolved path. ``""`` or
     ``"//"`` would otherwise collapse to ``/`` and grant the whole host
@@ -404,10 +404,7 @@ def _normalize_roots(roots: list[str], *, writable: bool) -> list[str]:
     cannot see. A read-write root also cannot be ``/`` or the sandbox
     root: the sandbox root is mounted where ``/tmp`` was and remounted
     read-only at the end, so either grant would come out read-only and
-    the promise made here is one the engage cannot keep. A root also may
-    not sit where the pivot hangs the old root: the bind would stack over
-    that mount, and the detach would take the bind instead of the host
-    root.
+    the promise made here is one the engage cannot keep.
     """
     normalized = []
     for root in roots:
@@ -468,31 +465,32 @@ def _check_nesting(read_roots: list[str], rw_roots: list[str]) -> None:
 def engage(
     read_roots: list[str], rw_roots: list[str], *, preserve_fds: list[int]
 ) -> None:
-    """Confine this process to ``read_roots`` and ``rw_roots``, for good.
+    """Confine this process to ``read_roots`` and ``rw_roots`` permanently.
 
-    ``preserve_fds`` names the descriptors the close sweep must keep -- the
-    pipe the worker answers on is the reason the list exists. Every other
-    descriptor above 2 that reaches outside the granted roots is closed, and
-    directory, socket and O_PATH descriptors go regardless.
+    The list in ``preserve_fds`` contains every descriptor the process still
+    needs after the sandbox engages, such as the pipe the worker answers on.
+    The sweep closes every other descriptor above 2 that reaches outside the
+    granted roots, and closes directory, socket and O_PATH descriptors
+    regardless.
 
-    Three preconditions, all checked before anything changes: Linux with
-    /proc mounted (the thread count and the mount table come from it), a
-    single-threaded process (``unshare(CLONE_NEWUSER)`` refuses one with
-    threads, so the BLAS pools have to be pinned before they start), and
-    running before the seccomp filter, which screens the mount, pivot_root
-    and unshare calls this makes.
+    Three preconditions must be met before anything changes: run on
+    Linux with /proc mounted (the thread count and the mount table come
+    from it), stay single-threaded (``unshare(CLONE_NEWUSER)`` refuses a
+    process with threads, so pin the BLAS pools before they start), and
+    call before the seccomp filter goes on, since it screens the mount,
+    pivot_root and unshare calls made here.
 
-    Raises ``UsernsUnavailable`` when the namespace never appears, which
-    means this host cannot run this sandbox and the caller should say so.
-    Every later failure raises ``UsernsError``.
+    Raises ``UsernsUnavailable`` when the namespace never appears: this
+    host cannot run the sandbox, and the caller should say so. Raises
+    ``UsernsError`` for every later failure.
     """
     if platform.system() != "Linux":
         raise UsernsUnavailable(0, "the user-namespace sandbox is Linux-only")
     # Every check goes before map_ids(), the first irreversible step.
-    _syscall_numbers()
+    _syscall_numbers()  # called to cause a raise for unknown architectures
     read_roots = _normalize_roots(read_roots, writable=False)
     rw_roots = _normalize_roots(rw_roots, writable=True)
-    _check_nesting(read_roots, rw_roots)
+    _check_nesting(read_roots, rw_roots)  # raises if rw_roots overlaps read_roots
     try:
         threads = len(os.listdir("/proc/self/task"))
         cwd = os.getcwd()
@@ -528,7 +526,7 @@ def _confine(
     preserve_fds: list[int],
     cwd: str,
 ) -> None:
-    """The irreversible body of ``engage()``, entered in the new namespace.
+    """Do the irreversible work of ``engage()`` from inside the new namespace.
 
     Every failure here leaves a process that cannot be recovered, so
     ``engage()`` reports whatever escapes as a ``UsernsError``.
@@ -597,9 +595,10 @@ def _confine(
 
 
 def available() -> bool:
-    """Whether a child of this process could create a user namespace.
+    """Return whether a child of this process could create a user namespace.
 
-    Asked in a throwaway fork, not here. ``unshare(CLONE_NEWUSER)`` refuses a
+    The probe runs in a throwaway fork, not in this process.
+    ``unshare(CLONE_NEWUSER)`` refuses a
     multi-threaded process, and a fork child is always single-threaded
     however many threads its parent is running, so probing in place would
     report the thread count rather than the host's policy. The child engages
