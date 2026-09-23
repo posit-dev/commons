@@ -11,7 +11,7 @@ The protocol channel is claimed at the file-descriptor level before anything
 else happens: duplicates of fds 0 and 1 become the channel, and the
 model-visible fds are pointed at sinks. Model code that writes straight to
 fd 1 — ``os.write``, a C extension, a thread still printing after its call
-returned — lands in the sink rather than mid-message on the channel, and a
+returned — goes to the sink rather than mid-message on the channel, and a
 thread reading fd 0 gets EOF rather than the next call's bytes. The
 sys-level redirection in ``_repl`` cannot close those holes; these are
 closed by construction, for the process's whole life.
@@ -160,7 +160,7 @@ def _send(message: _protocol.Message) -> None:
 
 
 # Seeded into the session namespace at startup. Harvested measure sources
-# are reference material: they arrive without their module's imports and
+# are reference material: they come without their module's imports and
 # globals, and a default argument naming one (``def m(region=DEFAULT)``)
 # would otherwise fail the define — and with it the spawn — where R's lazy
 # defaults define fine. Each default expression is therefore evaluated

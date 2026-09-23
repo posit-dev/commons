@@ -223,7 +223,7 @@ async def test_a_timed_out_call_takes_its_children_with_it():
             pytest.skip("the sandbox refuses child processes on this host")
         code = (
             "import subprocess\n"
-            # The interrupt lands while the call blocks on the child. If it
+            # The interrupt fires while the call blocks on the child. If it
             # reaches the worker alone, the child survives to write the file.
             "subprocess.run(['sh', '-c', 'sleep 1.5; touch survived'])\n"
         )
