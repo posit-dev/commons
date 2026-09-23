@@ -41,6 +41,7 @@ jobs:
           extra-packages: any::rcmdcheck, local::.
           needs: check
           working-directory: pkg-r
+          cache-version: 2
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: pkg-r
