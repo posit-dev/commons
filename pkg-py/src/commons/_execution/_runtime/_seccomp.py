@@ -16,12 +16,11 @@ a number this filter reads as something else.
 
 The baseline for this filter is ``seccomp_engage()`` and
 ``network_engage()`` in ``pkg-r/src/sandbox.c``, where the compiler
-supplies the numbers. Two entry points the R filter does not screen are
-screened here, with kata mv69 tracking the R-side fix: ``socketcall`` on
-i386, which multiplexes the socket calls behind one number, and
-``pidfd_getfd``, which hands over a descriptor belonging to another
-process of the same user and so returns a capability the filesystem
-sandbox never granted.
+supplies the numbers. Two entries in the tables reward a second look:
+``socketcall`` on i386, which multiplexes the socket calls behind one
+number, and ``pidfd_getfd``, which hands over a descriptor belonging to
+another process of the same user and so returns a capability the
+filesystem sandbox never granted.
 """
 
 from __future__ import annotations

@@ -92,6 +92,9 @@
 #ifndef __NR_mount_setattr
 #define __NR_mount_setattr 442
 #endif
+#ifndef __NR_pidfd_getfd
+#define __NR_pidfd_getfd 438
+#endif
 
 #ifndef CLONE_NEWCGROUP
 #define CLONE_NEWCGROUP 0x02000000
@@ -599,6 +602,10 @@ static void seccomp_engage(void) {
     SANDBOX_SCREEN(__NR_ptrace),
     SANDBOX_SCREEN(__NR_process_vm_readv),
     SANDBOX_SCREEN(__NR_process_vm_writev),
+    /* Hands over an open descriptor belonging to another process of the
+     * same user, returning a capability the filesystem sandbox never
+     * granted. */
+    SANDBOX_SCREEN(__NR_pidfd_getfd),
     SANDBOX_SCREEN(__NR_mount),
     SANDBOX_SCREEN(__NR_umount2),
 #ifdef __NR_umount
@@ -656,6 +663,14 @@ static void network_engage(void) {
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_io_uring_setup, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+#ifdef __NR_socketcall
+    /* i386 multiplexes every socket call behind this one number, so
+     * screening the direct entries alone would leave them all open. The
+     * other supported architectures have no socketcall, and the #ifdef
+     * leaves their filters byte-identical. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socketcall, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+#endif
     /* socketpair() stays open, since it supports no family but AF_UNIX and
      * so reaches no network; these screen the calls that would aim its
      * descriptors at a peer by address, including the abstract AF_UNIX
