@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import errno
 import functools
+import importlib.util
 import json
 import pathlib
 import platform
@@ -17,11 +18,37 @@ import socket
 import subprocess
 import sys
 from collections.abc import Callable
+from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pytest
 
-from commons._execution._runtime import _seccomp
-from commons._execution._sandbox import sandbox_capabilities
+if TYPE_CHECKING:
+    from commons._execution._runtime import _seccomp, _userns
+else:
+    # Loaded by absolute path, the way the worker loads them: the 32-bit CI
+    # legs run this file on a bare interpreter, where importing commons
+    # would drag in dependencies that publish no 32-bit wheels.
+    def _load_runtime_module(name: str) -> ModuleType:
+        spec = importlib.util.spec_from_file_location(
+            name,
+            pathlib.Path(__file__).parent.parent
+            / "src"
+            / "commons"
+            / "_execution"
+            / "_runtime"
+            / f"{name}.py",
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        # Dataclasses resolve their module through sys.modules, so the module
+        # has to be registered before it executes.
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    _seccomp = _load_runtime_module("_seccomp")
+    _userns = _load_runtime_module("_userns")
 
 RUNTIME_DIR = str(pathlib.Path(_seccomp.__file__).parent)
 
@@ -460,7 +487,7 @@ def test_clone_with_the_newtime_bit_set_is_refused() -> None:
     unfiltered clone has to succeed for the filtered one's EPERM to mean
     anything.
     """
-    if not sandbox_capabilities().userns:
+    if not _userns.available():
         pytest.skip("this host does not offer unprivileged user namespaces")
     completed = subprocess.run(
         [sys.executable, "-I", "-c", CLONE_NEWTIME_PROBE.format(runtime=RUNTIME_DIR)],
