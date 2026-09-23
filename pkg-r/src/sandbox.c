@@ -17,6 +17,7 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sched.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -95,6 +96,10 @@
 
 #ifndef CLONE_NEWCGROUP
 #define CLONE_NEWCGROUP 0x02000000
+#endif
+/* Kernel 5.6, so toolchains older than that may not define it. */
+#ifndef CLONE_NEWTIME
+#define CLONE_NEWTIME 0x00000080
 #endif
 
 #define LL_CREATE_RULESET_VERSION (1U << 0)
@@ -546,7 +551,9 @@ static int userns_engage(SEXP read_roots, SEXP rw_roots, SEXP preserve_fds) {
   return 0;
 }
 
-static void seccomp_engage(void) {
+/* Install the sandbox filter, reporting errno rather than raising so the
+ * newtime probe below can call it from a forked child. */
+static int seccomp_install(void) {
 #define SANDBOX_DENY(err) \
   BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | ((err) & SECCOMP_RET_DATA))
 #define SANDBOX_SCREEN(nr) \
@@ -592,8 +599,9 @@ static void seccomp_engage(void) {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
              (uint32_t) offsetof(struct seccomp_data, args[0])),
     BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K,
-             CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID |
-             CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWCGROUP, 0, 1),
+             CLONE_NEWTIME | CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET |
+             CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWCGROUP,
+             0, 1),
     SANDBOX_DENY(EPERM),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
   };
@@ -602,11 +610,19 @@ static void seccomp_engage(void) {
     .filter = filt
   };
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
-    Rf_error("seccomp filter install failed: %s", strerror(errno));
+    return errno;
   }
+  return 0;
 
 #undef SANDBOX_SCREEN
 #undef SANDBOX_DENY
+}
+
+static void seccomp_engage(void) {
+  int err = seccomp_install();
+  if (err != 0) {
+    Rf_error("seccomp filter install failed: %s", strerror(err));
+  }
 }
 
 static void network_engage(void) {
@@ -634,6 +650,84 @@ static void network_engage(void) {
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
     Rf_error("network filter install failed: %s", strerror(errno));
   }
+}
+
+/* The clone child's only job is to leave, on the stack clone() gave it. */
+static int probe_grandchild_leave(void *arg) {
+  (void) arg;
+  exit_probe_child(0);
+  return 0;
+}
+
+/* Try a clone whose flags set the CLONE_NEWTIME bit; return 0 when the
+ * kernel allows it and the errno when it does not. CLONE_NEWTIME (0x80)
+ * sits inside the low byte of clone's flags, which is the exit signal, so
+ * the child reports signal 0x91 rather than SIGCHLD and only __WALL will
+ * reap it. */
+static int probe_clone_newtime(char *stack_top) {
+  errno = 0;
+  pid_t child = clone(probe_grandchild_leave, stack_top,
+                      CLONE_NEWTIME | SIGCHLD, NULL);
+  if (child < 0) {
+    return errno;
+  }
+  int status;
+  waitpid(child, &status, __WALL);
+  return 0;
+}
+
+/* Test hook for the namespace-flag screen: attempt a clone whose flags set
+ * the CLONE_NEWTIME bit, with and without the seccomp filter, and report
+ * both errnos (0 when the clone succeeded). The legacy clone ABI cannot
+ * create a time namespace, because the kernel strips the CSIGNAL byte, the
+ * 0x80 bit included, from the flags before the namespace logic runs. What
+ * this pins is the mask itself: a clone whose flags word has the bit set is
+ * refused. The child still enters a user namespace first, keeping the probe
+ * meaningful on any kernel that honours the bit, where an unprivileged
+ * clone would earn the kernel's own EPERM and the filter's answer could
+ * not be told apart from it. A filter survives fork(), so the probe runs in
+ * a forked child and reports over a pipe. A -1 entry means the probe step
+ * itself could not run. */
+SEXP c_sandbox_probe_newtime(void) {
+  int pipefd[2];
+  if (pipe(pipefd) != 0) {
+    Rf_error("cannot create the probe pipe: %s", strerror(errno));
+  }
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(pipefd[0]);
+    close(pipefd[1]);
+    Rf_error("cannot fork the newtime probe: %s", strerror(errno));
+  }
+  if (pid == 0) {
+    close(pipefd[0]);
+    int results[2] = {-1, -1};
+    char *stack = malloc(1 << 16);
+    if (stack != NULL && userns_map_ids() == 0) {
+      results[0] = probe_clone_newtime(stack + (1 << 16));
+      if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0 &&
+          seccomp_install() == 0) {
+        results[1] = probe_clone_newtime(stack + (1 << 16));
+      }
+    }
+    ssize_t written = write(pipefd[1], results, sizeof(results));
+    (void) written;
+    exit_probe_child(0);
+  }
+  close(pipefd[1]);
+  int results[2] = {-1, -1};
+  ssize_t got = read(pipefd[0], results, sizeof(results));
+  close(pipefd[0]);
+  int status;
+  waitpid(pid, &status, 0);
+  if (got != (ssize_t) sizeof(results)) {
+    Rf_error("the newtime probe child did not report back");
+  }
+  SEXP out = PROTECT(Rf_allocVector(INTSXP, 2));
+  INTEGER(out)[0] = results[0];
+  INTEGER(out)[1] = results[1];
+  UNPROTECT(1);
+  return out;
 }
 
 SEXP c_sandbox_capabilities(void) {
@@ -852,6 +946,11 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   return Rf_mkString("seatbelt");
 }
 
+SEXP c_sandbox_probe_newtime(void) {
+  Rf_error("the seccomp filter is Linux-only");
+  return R_NilValue;
+}
+
 #else /* not __linux__ or __APPLE__ */
 
 SEXP c_sandbox_capabilities(void) {
@@ -870,11 +969,17 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   return R_NilValue;
 }
 
+SEXP c_sandbox_probe_newtime(void) {
+  Rf_error("the seccomp filter is Linux-only");
+  return R_NilValue;
+}
+
 #endif
 
 static const R_CallMethodDef call_methods[] = {
   {"c_sandbox_capabilities", (DL_FUNC) &c_sandbox_capabilities, 0},
   {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 6},
+  {"c_sandbox_probe_newtime", (DL_FUNC) &c_sandbox_probe_newtime, 0},
   {NULL, NULL, 0}
 };
 

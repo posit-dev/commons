@@ -7,6 +7,26 @@ test_that("sandbox_capabilities reports all mechanisms", {
   expect_type(caps$userns, "logical")
 })
 
+test_that("the seccomp filter refuses clone() with the CLONE_NEWTIME bit set", {
+  skip_if_not(identical(Sys.info()[["sysname"]], "Linux"))
+  skip_if_not(sandbox_capabilities()$userns, "no unprivileged user namespaces")
+
+  # The probe runs the clone with and without the filter, from inside a
+  # fresh user namespace so a kernel that honours the bit would permit it;
+  # see c_sandbox_probe_newtime for why the bit cannot be told apart from
+  # the exit signal on the legacy clone ABI.
+  probe <- .Call("c_sandbox_probe_newtime", PACKAGE = "commons")
+  skip_if_not(
+    identical(probe[[1]], 0L),
+    "this host refuses the probe clone even without the filter"
+  )
+  skip_if(
+    identical(probe[[2]], -1L),
+    "this host would not let the probe install a seccomp filter"
+  )
+  expect_identical(probe[[2]], 1L) # EPERM
+})
+
 test_that("run_r protection rejects unsupported Linux hosts", {
   capabilities <- list(
     landlock_abi = 0L,

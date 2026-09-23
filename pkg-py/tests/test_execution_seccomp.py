@@ -21,6 +21,7 @@ from collections.abc import Callable
 import pytest
 
 from commons._execution._runtime import _seccomp
+from commons._execution._sandbox import sandbox_capabilities
 
 RUNTIME_DIR = str(pathlib.Path(_seccomp.__file__).parent)
 
@@ -170,14 +171,31 @@ def test_clone3_reports_itself_missing_rather_than_forbidden(name: str) -> None:
     assert decision == _seccomp.DENY_ENOSYS
 
 
+# Every namespace flag the clone screen must refuse, pinned one by one so a
+# flag dropped from the mask fails under its own name.
+NAMESPACE_FLAGS = {
+    "CLONE_NEWTIME": _seccomp.CLONE_NEWTIME,
+    "CLONE_NEWNS": _seccomp.CLONE_NEWNS,
+    "CLONE_NEWCGROUP": _seccomp.CLONE_NEWCGROUP,
+    "CLONE_NEWUTS": _seccomp.CLONE_NEWUTS,
+    "CLONE_NEWIPC": _seccomp.CLONE_NEWIPC,
+    "CLONE_NEWUSER": _seccomp.CLONE_NEWUSER,
+    "CLONE_NEWPID": _seccomp.CLONE_NEWPID,
+    "CLONE_NEWNET": _seccomp.CLONE_NEWNET,
+}
+
+
 @pytest.mark.parametrize("name", ARCH_NAMES)
-def test_clone_is_denied_when_it_asks_for_a_new_namespace(name: str) -> None:
+@pytest.mark.parametrize("flag", NAMESPACE_FLAGS.values(), ids=NAMESPACE_FLAGS.keys())
+def test_clone_is_denied_when_it_asks_for_a_new_namespace(
+    name: str, flag: int
+) -> None:
     arch = _seccomp.ARCHES[name]
     decision = run_filter(
         _seccomp.build_sandbox_filter(arch),
         arch=arch.audit_arch,
         nr=arch.syscalls["clone"],
-        arg0=_seccomp.CLONE_NEWUSER,
+        arg0=flag,
     )
     assert decision == _seccomp.DENY_EPERM
 
@@ -376,6 +394,89 @@ def test_a_new_namespace_cannot_be_unshared(network: str) -> None:
     result = engage_in_child(UNSHARE, network=network)
     assert result["rc"] == -1
     assert result["errno"] == errno.EPERM
+
+
+CLONE_NEWTIME_PROBE = """
+import ctypes, json, os, sys
+sys.path.insert(0, {runtime!r})
+import _seccomp, _userns
+
+CLONE_NEWTIME = 0x00000080
+SIGCHLD = 17
+STACK_SIZE = 65536
+
+libc = _seccomp._libc()
+stack = ctypes.create_string_buffer(STACK_SIZE)
+stack_top = ctypes.addressof(stack) + STACK_SIZE
+clone_fn = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
+
+
+def leave_immediately(_):
+    os._exit(0)
+    return 0
+
+
+def clone_with_newtime_bit():
+    ctypes.set_errno(0)
+    # The glibc clone() wrapper rather than the raw syscall, so the cloned
+    # child is handed a working stack and can leave through the callback.
+    pid = libc.clone(
+        clone_fn(leave_immediately),
+        ctypes.c_void_p(stack_top),
+        CLONE_NEWTIME | SIGCHLD,
+        None,
+    )
+    if pid > 0:
+        # CLONE_NEWTIME (0x80) sits inside the low byte of clone's flags,
+        # which is the exit signal, so the child reports signal 0x91 rather
+        # than SIGCHLD and only __WALL will reap it.
+        os.waitpid(pid, 0x40000000)
+        return 0
+    return ctypes.get_errno()
+
+
+_userns.map_ids()
+result = {{}}
+result['unfiltered'] = clone_with_newtime_bit()
+_seccomp.engage(network='full')
+result['filtered'] = clone_with_newtime_bit()
+json.dump(result, sys.stdout)
+"""
+
+
+@needs_seccomp
+def test_clone_with_the_newtime_bit_set_is_refused() -> None:
+    """The flag the namespace mask was missing, against the live kernel.
+
+    The legacy clone ABI cannot create a time namespace: the kernel strips
+    the CSIGNAL byte, the 0x80 bit included, from the flags before the
+    namespace logic runs, so the live paths are unshare (screened outright)
+    and clone3 (denied ENOSYS). What this test pins is the mask itself: a
+    clone whose flags word has the CLONE_NEWTIME bit set is refused,
+    whatever the kernel would have made of it. The probe still enters a
+    user namespace first, so the test keeps its meaning on any kernel that
+    honours the bit, where an unprivileged clone would earn the kernel's
+    own EPERM and the filter's answer could not be told apart from it. The
+    unfiltered clone has to succeed for the filtered one's EPERM to mean
+    anything.
+    """
+    if not sandbox_capabilities().userns:
+        pytest.skip("this host does not offer unprivileged user namespaces")
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", CLONE_NEWTIME_PROBE.format(runtime=RUNTIME_DIR)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+    if result["unfiltered"] != 0:
+        # A restrictive container profile can refuse the clone outright, and
+        # on such a host the filter's effect cannot be shown.
+        pytest.skip(
+            "this host refuses the clone with no filter on "
+            f"(errno {result['unfiltered']})"
+        )
+    assert result["filtered"] == errno.EPERM
 
 
 @needs_seccomp
