@@ -11,7 +11,9 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# One line per shared source: the source directory, then every destination.
+# One line per shared source: the source file or directory, then every
+# destination. A file source names destination files; a directory source names
+# destination directories.
 # The Python suite reads tests/shared/ in place, so only the R package needs
 # that copy; both packages ship the prompts and the browser assets. Nothing
 # in pkg-py reads www/ until its UI layer lands, but the destination belongs
@@ -28,10 +30,25 @@ sources=(
   "logos pkg-py/docs/assets/logos:bare pkg-r/pkgdown/assets/logos:bare"
   "www/commons-chat/figs pkg-py/docs/assets/figs:bare"
   "hex docs/assets/hex:bare pkg-py/docs/assets/hex:bare"
+  "docs/assets/trust-flow.svg pkg-r/man/figures/trust-flow.svg"
 )
 
 for entry in "${sources[@]}"; do
   read -r src dests <<<"$entry"
+
+  if [ -f "$root/$src" ]; then
+    for dest in $dests; do
+      mkdir -p "$root/$(dirname "$dest")"
+      cp "$root/$src" "$root/$dest"
+      echo "Synced ${src} into ${dest}"
+    done
+    continue
+  fi
+
+  if [ ! -d "$root/$src" ]; then
+    echo "Shared source not found: $src" >&2
+    exit 1
+  fi
 
   # Every file, whatever its extension: a fixture may use a format other than
   # JSON, and globbing would drop such a file silently while leaving the

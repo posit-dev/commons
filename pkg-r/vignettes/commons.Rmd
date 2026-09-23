@@ -89,47 +89,14 @@ commons agents will use trusted calculations whenever possible. When the user as
 
 If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
-<figure class="commons-flow commons-flow-trusted-calculations column-page">
-<div class="commons-branch-flow"
-     role="img"
-     aria-label="Search trusted calculations, then follow either the high-trust path through a relevant calculation to a verified answer marker, or the lower-trust path through context and custom SQL or R to a citation or untrusted marker">
-<div class="commons-branch-origin">
-<span class="commons-flow-node">Search trusted<br>calculations</span>
-</div>
-<div class="commons-branch-connectors" aria-hidden="true">
-<span class="commons-flow-arrow commons-flow-arrow-up">&rarr;</span>
-<span class="commons-flow-arrow commons-flow-arrow-down">&rarr;</span>
-</div>
-<div class="commons-branch-routes">
-<div class="commons-trust-segment commons-trust-segment-high">
-<div class="commons-trust-label">High trust</div>
-<div class="commons-trust-steps">
-<span class="commons-flow-node">Relevant calculation<br>found</span>
-<span class="commons-flow-arrow">&rarr;</span>
-<span class="commons-flow-node">Run trusted<br>calculation</span>
-<span class="commons-flow-arrow">&rarr;</span>
-`r documentation_marker("A")`
-</div>
-</div>
-<div class="commons-trust-segment commons-trust-segment-lower">
-<div class="commons-trust-label">Lower trust</div>
-<div class="commons-trust-steps">
-<span class="commons-flow-node">No relevant<br>calculation found</span>
-<span class="commons-flow-arrow">&rarr;</span>
-<span class="commons-flow-node">Search<br>context</span>
-<span class="commons-flow-arrow">&rarr;</span>
-<span class="commons-flow-node">Write<br>SQL/R</span>
-<span class="commons-flow-arrow">&rarr;</span>
-<span class="commons-flow-results">
-`r documentation_marker("B")`
-<span class="commons-flow-or">or</span>
-`r documentation_marker("C")`
-</span>
-</div>
-</div>
-</div>
-</div>
-</figure>
+```{r trust-flow}
+#| echo: false
+#| eval: true
+#| fig-alt: "Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Verified answer outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome."
+#| out-width: 100%
+
+knitr::include_graphics("../man/figures/trust-flow.svg")
+```
 
 The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or R, it can also include supporting text quoted from a trusted source. If commons verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker.
 
