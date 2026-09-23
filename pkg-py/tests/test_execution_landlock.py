@@ -365,7 +365,9 @@ def test_abstract_sockets_outside_the_domain_are_unreachable(
     before the ruleset goes on becomes unreachable; what the scoped process
     binds itself does not."""
     reported = run_on_a_landlock_kernel(SCOPE_PROBE)
-    if reported["abi"] < _landlock.SCOPE_MIN_ABI:
+    # A None abi means a policy forbade the ruleset on a kernel that has
+    # Landlock; the fixture asks only that the kernel offer it.
+    if reported["abi"] is None or reported["abi"] < _landlock.SCOPE_MIN_ABI:
         pytest.skip(
             "abstract-socket scoping needs Landlock ABI "
             f"{_landlock.SCOPE_MIN_ABI} (Linux 6.12); this kernel reports "

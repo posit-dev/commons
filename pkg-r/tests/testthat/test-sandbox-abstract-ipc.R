@@ -18,7 +18,7 @@ test_that("the network filter screens the fixture's address-taking calls", {
 
   src <- sandbox_c_source()
   network_filter <- src[seq(
-    from = grep("network_engage", src, fixed = TRUE)[[1]],
+    from = grep("static void network_engage", src, fixed = TRUE)[[1]],
     to = length(src)
   )]
   for (name in c(screened$always, screened$when_addressed)) {
@@ -27,6 +27,24 @@ test_that("the network filter screens the fixture's address-taking calls", {
       info = paste("network_engage does not screen", name)
     )
   }
+})
+
+test_that("the filters screen the entry points Python has long screened", {
+  # socketcall multiplexes every socket call behind one number on i386, and
+  # pidfd_getfd hands over a descriptor belonging to another process; both
+  # are one-line screens whose absence is invisible without a check.
+  src <- sandbox_c_source()
+  network_filter <- src[seq(
+    from = grep("static void network_engage", src, fixed = TRUE)[[1]],
+    to = length(src)
+  )]
+  expect_true(any(grepl("__NR_socketcall", network_filter, fixed = TRUE)))
+
+  sandbox_filter <- src[seq(
+    from = grep("static void seccomp_engage", src, fixed = TRUE)[[1]],
+    to = length(src)
+  )]
+  expect_true(any(grepl("__NR_pidfd_getfd", sandbox_filter, fixed = TRUE)))
 })
 
 test_that("landlock_engage scopes abstract sockets from the fixture ABI", {
