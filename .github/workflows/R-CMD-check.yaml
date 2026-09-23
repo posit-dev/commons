@@ -38,10 +38,15 @@ jobs:
           use-public-rspm: true
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck, local::.
+          # odbc has no macOS arm64 binary for this R release on either P3M or
+          # its CRAN mirror fallback right now; skip it rather than failing
+          # the whole check. kata 52s4.
+          extra-packages: any::rcmdcheck, local::., odbc=?ignore-unavailable
           needs: check
           working-directory: pkg-r
           cache-version: 2
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: pkg-r
+        env:
+          _R_CHECK_FORCE_SUGGESTS_: false
