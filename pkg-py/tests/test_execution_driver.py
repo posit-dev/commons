@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
+import time
 from datetime import date
 from typing import Annotated
 
@@ -250,11 +252,24 @@ async def test_a_crashed_workers_children_do_not_outlive_it():
         code = "import subprocess, os\nsubprocess.Popen(['sleep', '30'])\nos._exit(1)\n"
         reply = await worker.run(code)
         assert isinstance(reply, Failure)
-        # The shutdown killed the group, not just the leader.
-        with pytest.raises(ProcessLookupError):
-            os.killpg(process.pid, 0)
+        # The shutdown killed the group, not just the leader. The kill is sent
+        # before run() returns, but a killed child takes a moment to finish
+        # exiting, and until then the group still exists.
+        deadline = time.monotonic() + 2
+        while True:
+            try:
+                os.killpg(process.pid, 0)
+            except ProcessLookupError:
+                break
+            assert time.monotonic() < deadline, "a child outlived the crashed worker"
+            await asyncio.sleep(0.01)
 
 
+@pytest.mark.skipif(
+    sys.platform == "darwin" and sys.version_info >= (3, 14),
+    reason="asyncio on 3.14 reads macOS's waitid() report of a stopped child "
+    "as an exit and blocks the event loop in waitpid() until it really exits",
+)
 async def test_a_worker_that_stops_reading_fails_the_call_instead_of_hanging():
     async with make_worker(call_timeout=0.5) as worker:
         await worker.run("1")
