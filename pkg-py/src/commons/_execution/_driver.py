@@ -50,7 +50,7 @@ INTERRUPT_GRACE = 5.0
 SPAWN_TIMEOUT = 30.0
 
 # Kept from the worker's stderr for diagnosing a failed start. The worker
-# points fd 2 at a sink once it is up, so only startup output can arrive.
+# points fd 2 at a sink once it is up, so only startup output is written.
 _STDERR_TAIL = 8 * 1024
 
 _WORKER_SCRIPT = Path(__file__).parent / "_runtime" / "_worker.py"
@@ -438,8 +438,9 @@ class Worker:
         """Drain the worker's stderr, keeping the tail for spawn diagnostics.
 
         Draining is the point: a process whose output nobody reads blocks
-        forever on a full pipe. Only startup output can arrive — the worker
-        points fd 2 at a sink once it is up — so a small tail suffices.
+        forever on a full pipe. Only startup output is ever written — the
+        worker points fd 2 at a sink once it is up — so a small tail
+        suffices.
         """
         if process.stderr is None:
             return
