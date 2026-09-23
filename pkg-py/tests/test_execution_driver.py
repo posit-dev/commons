@@ -510,6 +510,22 @@ async def test_aclose_waits_for_a_spawn_in_flight():
     assert worker._process is None
 
 
+async def test_aclose_during_a_failing_spawn_does_not_deadlock(tmp_path, monkeypatch):
+    script = tmp_path / "worker.py"
+    script.write_text("import sys\nsys.exit(3)\n")
+    monkeypatch.setattr(_driver, "_WORKER_SCRIPT", script)
+    worker = make_worker()
+    call = asyncio.ensure_future(worker.run("1"))
+    await asyncio.sleep(0)
+    closing = asyncio.ensure_future(worker.aclose())
+    # asyncio.wait, not wait_for: aclose() absorbs cancellation, so a
+    # wait_for bound would hang along with it.
+    done, _ = await asyncio.wait({call, closing}, timeout=10)
+    assert done == {call, closing}
+    assert isinstance(call.result(), Failure)
+    assert worker._process is None
+
+
 async def test_cancelling_during_the_spawn_leaves_nothing_tracked():
     async with make_worker() as worker:
         call = asyncio.ensure_future(worker.run("1"))

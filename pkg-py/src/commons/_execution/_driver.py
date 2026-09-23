@@ -401,10 +401,14 @@ class Worker:
                 "responding during startup"
             ) from None
         except Exception as exc:
+            drain = self._stderr_task
             await self._shutdown()
             # Let the stderr drain finish: a worker that wrote its failure
-            # just before exiting may have bytes still in the pipe.
-            await asyncio.gather(*list(self._shutdowns), return_exceptions=True)
+            # just before exiting may have bytes still in the pipe. Only the
+            # drain: the other shutdowns can include aclose() waiting on the
+            # lock this call holds.
+            if drain is not None:
+                await asyncio.gather(drain, return_exceptions=True)
             detail = self._stderr_tail.decode(errors="replace").strip()
             raise RuntimeError(
                 f"the Python session failed to start: {exc}"
