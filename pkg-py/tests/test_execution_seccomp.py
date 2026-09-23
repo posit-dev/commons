@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import errno
 import functools
+import importlib.util
 import json
 import pathlib
 import platform
@@ -17,10 +18,31 @@ import socket
 import subprocess
 import sys
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import pytest
 
-from commons._execution._runtime import _seccomp
+if TYPE_CHECKING:
+    from commons._execution._runtime import _seccomp
+else:
+    # Loaded by absolute path, the way the worker loads it: the 32-bit CI
+    # legs run this file on a bare interpreter, where importing commons
+    # would drag in dependencies that publish no 32-bit wheels.
+    _spec = importlib.util.spec_from_file_location(
+        "_seccomp",
+        pathlib.Path(__file__).parent.parent
+        / "src"
+        / "commons"
+        / "_execution"
+        / "_runtime"
+        / "_seccomp.py",
+    )
+    assert _spec is not None and _spec.loader is not None
+    _seccomp = importlib.util.module_from_spec(_spec)
+    # Dataclasses resolve their module through sys.modules, so the module
+    # has to be registered before it executes.
+    sys.modules["_seccomp"] = _seccomp
+    _spec.loader.exec_module(_seccomp)
 
 RUNTIME_DIR = str(pathlib.Path(_seccomp.__file__).parent)
 

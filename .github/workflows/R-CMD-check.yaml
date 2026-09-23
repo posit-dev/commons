@@ -36,11 +36,25 @@ jobs:
           r-version: ${{ matrix.config.r }}
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
+      # BEGIN odbc workaround: remove this step once mac.cran.dev serves a
+      # gzip odbc binary (posit-dev/commons#388). pak cannot extract the
+      # Zstandard file it serves now, but pak keeps an installed copy whose
+      # build matches, so install CRAN's copy first.
+      - name: Install odbc from CRAN
+        if: runner.os == 'macOS'
+        shell: Rscript {0}
+        run: |
+          lib <- Sys.getenv("R_LIBS_USER")
+          dir.create(lib, recursive = TRUE, showWarnings = FALSE)
+          install.packages("odbc", lib = lib, repos = "https://cran.r-project.org")
+          stopifnot(nzchar(system.file(package = "odbc", lib.loc = lib)))
+      # END odbc workaround
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck, local::.
           needs: check
           working-directory: pkg-r
+          cache-version: 2
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: pkg-r
