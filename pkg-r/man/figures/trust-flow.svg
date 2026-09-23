@@ -1,4 +1,3 @@
-<!-- Copied from the repository source at docs/assets/trust-flow.svg; update both together. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" role="img" aria-labelledby="title description">
   <title id="title">How commons routes data analysis questions</title>
   <desc id="description">A commons agent searches trusted calculations. If it finds a relevant calculation, it runs it and returns a verified answer. Otherwise, it searches context, writes SQL or R, and returns either a cited or untrusted answer.</desc>

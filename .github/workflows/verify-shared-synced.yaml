@@ -25,6 +25,8 @@ on:
       - pkg-py/docs/assets/figs/**
       - pkg-py/docs/assets/hex/**
       - docs/assets/hex/**
+      - docs/assets/trust-flow.svg
+      - pkg-r/man/figures/trust-flow.svg
       - pkg-r/pkgdown/assets/logos/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
@@ -48,6 +50,8 @@ on:
       - pkg-py/docs/assets/figs/**
       - pkg-py/docs/assets/hex/**
       - docs/assets/hex/**
+      - docs/assets/trust-flow.svg
+      - pkg-r/man/figures/trust-flow.svg
       - pkg-r/pkgdown/assets/logos/**
       - scripts/sync-shared.sh
       - .github/workflows/verify-shared-synced.yaml
