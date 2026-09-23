@@ -124,8 +124,29 @@ static uint64_t landlock_handled(long abi) {
   return handled;
 }
 
+/* The scoping bit ABI 6 (Linux 6.12) adds. A scoped process can connect only
+ * to abstract AF_UNIX sockets bound inside its own domain, so the daemons
+ * listening on the host's abstract namespace become unreachable. The path
+ * ruleset cannot express this, because an abstract name is not a path, and
+ * the user-namespace fallback cannot either, so this is the one screen that
+ * also holds when the caller allowed full network. ABI 7's scope bit covers
+ * signals instead and is left out: what it would buy the worker is a
+ * question of its own. */
+/* LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET in the kernel's linux/landlock.h,
+ * which the build need not carry. */
+#define LL_SCOPE_ABSTRACT_UNIX_SOCKET (1ULL << 0)
+#define LL_SCOPE_MIN_ABI 6
+
 struct ll_ruleset_attr {
   uint64_t handled_access_fs;
+};
+/* The ruleset attribute extended through ABI 6's scoping field. The network
+ * field sits between the two because that is the order the kernel appended
+ * them; it stays zero, declaring the ruleset handles no network right. */
+struct ll_scoped_ruleset_attr {
+  uint64_t handled_access_fs;
+  uint64_t handled_access_net;
+  uint64_t scoped;
 };
 struct ll_path_beneath_attr {
   uint64_t allowed_access;
@@ -163,8 +184,18 @@ static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
     return errno;
   }
   uint64_t handled = landlock_handled(abi);
-  struct ll_ruleset_attr attr = { .handled_access_fs = handled };
-  int fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+  int fd;
+  if (abi >= LL_SCOPE_MIN_ABI) {
+    struct ll_scoped_ruleset_attr attr = {
+      .handled_access_fs = handled,
+      .handled_access_net = 0,
+      .scoped = LL_SCOPE_ABSTRACT_UNIX_SOCKET
+    };
+    fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+  } else {
+    struct ll_ruleset_attr attr = { .handled_access_fs = handled };
+    fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+  }
   if (fd < 0) {
     return errno;
   }
@@ -624,6 +655,33 @@ static void network_engage(void) {
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_io_uring_setup, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    /* socketpair() stays open, since it supports no family but AF_UNIX and
+     * so reaches no network; these screen the calls that would aim its
+     * descriptors at a peer by address, including the abstract AF_UNIX
+     * namespace, which no path sandbox governs. With them screened, a
+     * socketpair end reaches only its own sibling. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_bind, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_connect, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendmsg, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendmmsg, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    /* sendto() is the same door with one legitimate tenant: libc implements
+     * send() as sendto() with a NULL address, which is the form a socketpair
+     * end uses to talk to its sibling. Screen the call only when an address
+     * is supplied: what the address says sits behind the pointer, which a
+     * filter cannot follow, so the distinction available is whether one was
+     * given at all. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendto, 0, 5),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, args[4])),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 2),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) (offsetof(struct seccomp_data, args[4]) + 4)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 1, 0),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
   };

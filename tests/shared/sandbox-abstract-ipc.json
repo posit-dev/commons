@@ -1,0 +1,10 @@
+{
+  "seccomp_screened_under_network_none": {
+    "always": ["bind", "connect", "sendmsg", "sendmmsg"],
+    "when_addressed": ["sendto"]
+  },
+  "landlock_abstract_unix_scope": {
+    "flag": "LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET",
+    "min_abi": 6
+  }
+}

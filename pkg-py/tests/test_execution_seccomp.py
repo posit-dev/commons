@@ -35,14 +35,25 @@ def test_every_screened_syscall_has_a_number_on_every_arch(name: str) -> None:
 
 
 def run_filter(
-    program: list[_seccomp.SockFilter], *, arch: int, nr: int, arg0: int = 0
+    program: list[_seccomp.SockFilter],
+    *,
+    arch: int,
+    nr: int,
+    arg0: int = 0,
+    arg4: int = 0,
 ) -> int:
     """Return what the filter decides for one syscall.
 
     A reading of the BPF subset the filter is built from, which is how the
     tables for architectures this machine is not can still be checked.
     """
-    data = {_seccomp.DATA_NR: nr, _seccomp.DATA_ARCH: arch, _seccomp.DATA_ARG0: arg0}
+    data = {
+        _seccomp.DATA_NR: nr,
+        _seccomp.DATA_ARCH: arch,
+        _seccomp.DATA_ARG0: arg0,
+        _seccomp.DATA_ARG4: arg4 & 0xFFFFFFFF,
+        _seccomp.DATA_ARG4 + 4: (arg4 >> 32) & 0xFFFFFFFF,
+    }
     accumulator = 0
     index = 0
     while True:
@@ -125,6 +136,57 @@ def test_the_network_filter_leaves_reading_a_file_alone(name: str) -> None:
         _seccomp.build_network_filter(arch),
         arch=arch.audit_arch,
         nr=arch.syscalls["ptrace"],
+    )
+    assert decision == _seccomp.SECCOMP_RET_ALLOW
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize("syscall", _seccomp.LOCAL_PEER_SCREENED)
+def test_the_network_filter_refuses_to_aim_a_socket_at_a_peer(
+    name: str, syscall: str
+) -> None:
+    """The abstract AF_UNIX namespace has no path, so no path sandbox
+    governs it; under no network these calls are the only way to aim a
+    socketpair() end at it."""
+    arch = _seccomp.ARCHES[name]
+    program = _seccomp.build_network_filter(arch)
+    decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls[syscall])
+    assert decision == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_network_filter_refuses_an_addressed_sendto(name: str) -> None:
+    arch = _seccomp.ARCHES[name]
+    program = _seccomp.build_network_filter(arch)
+    nr = arch.syscalls["sendto"]
+    for address in (0x7FFF00001000, 1 << 32, 1):
+        decision = run_filter(program, arch=arch.audit_arch, nr=nr, arg4=address)
+        assert decision == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_network_filter_permits_a_send_with_no_address(name: str) -> None:
+    """libc spells send() as sendto() with a NULL address, and that form is
+    how a socketpair end talks to its own sibling."""
+    arch = _seccomp.ARCHES[name]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["sendto"],
+        arg4=0,
+    )
+    assert decision == _seccomp.SECCOMP_RET_ALLOW
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_network_filter_leaves_socketpair_open(name: str) -> None:
+    """socketpair() supports no family but AF_UNIX, so it opens no network
+    door; asyncio's self-pipe is one, and it has to keep working."""
+    arch = _seccomp.ARCHES[name]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["socketpair"],
     )
     assert decision == _seccomp.SECCOMP_RET_ALLOW
 
@@ -341,6 +403,75 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         network="full",
     )
     assert result["family"] == int(socket.AF_INET)
+
+
+@needs_seccomp
+def test_a_socketpair_end_cannot_be_connected_to_an_abstract_name() -> None:
+    """The hole the local-peer screens close: socketpair() is allowed, and
+    without the connect() screen its ends could be aimed at the abstract
+    AF_UNIX namespace, which no path sandbox governs."""
+    result = engage_in_child(
+        """
+import socket
+a, b = socket.socketpair()
+try:
+    a.connect("\\0commons-test")
+    result['error'] = None
+except PermissionError as exc:
+    result['error'] = exc.errno
+""",
+        network="none",
+    )
+    assert result["error"] == errno.EPERM
+
+
+@needs_seccomp
+def test_a_datagram_socketpair_end_cannot_sendto_an_abstract_name() -> None:
+    """sendto() with a destination reaches an abstract name without ever
+    calling connect(), so the screen is on the address being supplied."""
+    result = engage_in_child(
+        """
+import socket
+a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+try:
+    a.sendto(b"x", "\\0commons-test")
+    result['error'] = None
+except PermissionError as exc:
+    result['error'] = exc.errno
+""",
+        network="none",
+    )
+    assert result["error"] == errno.EPERM
+
+
+@needs_seccomp
+def test_a_socketpair_still_round_trips_under_no_network() -> None:
+    """libc's send() is sendto() with a NULL address; the filter keeps it."""
+    result = engage_in_child(
+        """
+import socket
+a, b = socket.socketpair()
+a.sendall(b"ping")
+result['heard'] = b.recv(4).decode()
+""",
+        network="none",
+    )
+    assert result["heard"] == "ping"
+
+
+@needs_seccomp
+def test_asyncio_still_runs_under_no_network() -> None:
+    """The selector event loop's self-pipe is a socketpair."""
+    result = engage_in_child(
+        """
+import asyncio
+async def main():
+    return 42
+result['ran'] = asyncio.run(main())
+""",
+        network="none",
+    )
+    assert result["ran"] == 42
 
 
 UNSHARE = """

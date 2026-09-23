@@ -310,6 +310,71 @@ def test_the_rule_attribute_is_packed_as_the_kernel_reads_it() -> None:
     assert ctypes.sizeof(_landlock.PathBeneathAttr) == 12
 
 
+def test_the_scoped_ruleset_attribute_matches_the_kernel_layout() -> None:
+    """ABI 6 appended scoping after the network rights, so the field order
+    is fixed by the kernel's struct rather than by which fields we use."""
+    attr = _landlock.ScopedRulesetAttr
+    assert ctypes.sizeof(attr) == 24
+    assert attr.handled_access_fs.offset == 0
+    assert attr.handled_access_net.offset == 8
+    assert attr.scoped.offset == 16
+
+
+SCOPE_PROBE = """
+import json, os, socket, sys, tempfile
+import _landlock
+
+base = tempfile.mkdtemp()
+scratch = os.path.join(base, "scratch")
+os.makedirs(scratch)
+
+# Bound before the ruleset goes on, standing in for a host daemon.
+name = "\\0commons-scope-probe"
+daemon = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+daemon.bind(name)
+
+abi = _landlock.engage(["/usr"], [scratch])
+result = {"abi": abi}
+
+client = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+try:
+    client.connect(name)
+    result["preexisting"] = "allowed"
+except OSError as error:
+    result["preexisting"] = type(error).__name__
+
+# A socket the scoped process binds itself stays reachable from inside.
+own = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+own.bind("\\0commons-scope-own")
+peer = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+try:
+    peer.connect("\\0commons-scope-own")
+    result["own"] = "allowed"
+except OSError as error:
+    result["own"] = type(error).__name__
+
+json.dump(result, sys.stdout)
+"""
+
+
+def test_abstract_sockets_outside_the_domain_are_unreachable(
+    landlock_kernel: None,
+) -> None:
+    """Scoping, not the path ruleset, is what closes the abstract namespace:
+    an abstract name is not a path, so no rule could match it. What is bound
+    before the ruleset goes on becomes unreachable; what the scoped process
+    binds itself does not."""
+    reported = run_on_a_landlock_kernel(SCOPE_PROBE)
+    if reported["abi"] < _landlock.SCOPE_MIN_ABI:
+        pytest.skip(
+            "abstract-socket scoping needs Landlock ABI "
+            f"{_landlock.SCOPE_MIN_ABI} (Linux 6.12); this kernel reports "
+            f"{reported['abi']}"
+        )
+    assert reported["preexisting"] == "PermissionError"
+    assert reported["own"] == "allowed"
+
+
 def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
     assert _landlock.FS_READ_ONLY == (
         _landlock.FS_EXECUTE | _landlock.FS_READ_FILE | _landlock.FS_READ_DIR

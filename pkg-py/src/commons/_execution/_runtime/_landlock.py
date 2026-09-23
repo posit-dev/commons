@@ -32,7 +32,10 @@ __all__ = [
     "FS_REMOVE_FILE",
     "FS_TRUNCATE",
     "FS_WRITE_FILE",
+    "SCOPE_ABSTRACT_UNIX_SOCKET",
+    "SCOPE_MIN_ABI",
     "PathBeneathAttr",
+    "ScopedRulesetAttr",
     "abi_version",
     "engage",
     "handled_access",
@@ -80,6 +83,17 @@ FS_IOCTL_DEV = 1 << 15
 # directory has to be listable for an import to find anything in it.
 FS_READ_ONLY = FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 
+# The scoping bit ABI 6 (Linux 6.12) adds. A scoped process can connect only
+# to abstract AF_UNIX sockets bound inside its own domain, which is to say by
+# itself or a descendant: the daemons listening on the host's abstract
+# namespace become unreachable. The path ruleset cannot express this, because
+# an abstract name is not a path, and the user-namespace fallback cannot
+# either, so this is the one screen that also holds when the caller allowed
+# full network. ABI 7's scope bit covers signals instead and is left out:
+# what it would buy the worker is a question of its own.
+SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
+SCOPE_MIN_ABI = 6
+
 # A kernel that has no Landlock, or that is behind a policy forbidding it,
 # is a kernel to fall back from rather than fail on.
 _UNAVAILABLE = frozenset({errno.ENOSYS, errno.EOPNOTSUPP, errno.EPERM})
@@ -90,10 +104,27 @@ class RulesetAttr(ctypes.Structure):
 
     Later versions append fields for network rights and scoping. The struct
     is extensible and read at the size it is given, so passing this one asks
-    for a filesystem-only ruleset on any kernel.
+    for a filesystem-only ruleset on any kernel. ABI 6's scoping field is
+    worth having, and ``ScopedRulesetAttr`` carries it when the kernel does.
     """
 
     _fields_ = (("handled_access_fs", ctypes.c_uint64),)
+
+
+class ScopedRulesetAttr(ctypes.Structure):
+    """The ruleset attribute extended through ABI 6's scoping field.
+
+    The network field sits between the two because that is the order the
+    kernel appended them. It is left at zero, declaring the ruleset handles
+    no network right: handling one while granting none would refuse the
+    network access the ruleset never meant to govern.
+    """
+
+    _fields_ = (
+        ("handled_access_fs", ctypes.c_uint64),
+        ("handled_access_net", ctypes.c_uint64),
+        ("scoped", ctypes.c_uint64),
+    )
 
 
 class PathBeneathAttr(ctypes.Structure):
@@ -270,9 +301,12 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
     since that is a broken host rather than an old one.
 
     Read roots are granted execute, read-file and read-dir. Write roots are
-    granted everything the ruleset handles. Once this returns, nothing can
-    widen the process's access again, including anything it goes on to
-    execute.
+    granted everything the ruleset handles. On ABI 6 and later the ruleset
+    also scopes abstract AF_UNIX sockets, cutting the process off from the
+    abstract listeners bound outside it; the seccomp network block screens
+    the same namespace under ``network="none"``, and this is what screens it
+    under ``network="full"``. Once this returns, nothing can widen the
+    process's access again, including anything it goes on to execute.
     """
     abi = abi_version()
     if abi < 1:
@@ -281,7 +315,15 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
     _set_no_new_privs()
 
     handled = handled_access(abi)
-    attr = RulesetAttr(handled_access_fs=handled)
+    attr: RulesetAttr | ScopedRulesetAttr
+    if abi >= SCOPE_MIN_ABI:
+        attr = ScopedRulesetAttr(
+            handled_access_fs=handled,
+            handled_access_net=0,
+            scoped=SCOPE_ABSTRACT_UNIX_SOCKET,
+        )
+    else:
+        attr = RulesetAttr(handled_access_fs=handled)
     ruleset_fd = _syscall(
         NR_CREATE_RULESET,
         ctypes.byref(attr),

@@ -4,7 +4,8 @@ This runs in the child, after the filesystem sandbox and before any
 model-written code is loaded. Its job is the part of the boundary a
 filesystem sandbox cannot express: the syscalls that would let the worker
 step out of that sandbox rather than read around it, and, when the caller
-asked for no network, the syscalls that open a socket.
+asked for no network, the syscalls that open a socket or aim an existing
+one at a peer by address.
 
 A seccomp filter matches raw syscall numbers, and those are per
 architecture, so the number table below is per architecture too. The filter's
@@ -39,6 +40,8 @@ from typing import Literal
 
 __all__ = [
     "ARCHES",
+    "LOCAL_PEER_SCREENED",
+    "LOCAL_PEER_SCREENED_WHEN_ADDRESSED",
     "NETWORK_SCREENED",
     "SCREENED",
     "SCREENED_WHERE_PRESENT",
@@ -85,6 +88,25 @@ SCREENED_WHERE_PRESENT = ("umount",)
 # escaping the sandbox is not.
 NETWORK_SCREENED = ("socket", "socketcall", "io_uring_setup")
 
+# Syscalls that aim a socket the process already holds at a peer by address.
+# Screened alongside NETWORK_SCREENED because socketpair() stays open under
+# network="none" — it supports no family but AF_UNIX, so it opens no network
+# door — and an unscreened connect() would aim its descriptors at the
+# abstract AF_UNIX namespace, which the path sandboxes cannot govern because
+# an abstract name is not a path. With these screened, a socketpair end
+# reaches only its own sibling. sendmsg() and sendmmsg() take their addresses
+# inside a message struct a filter cannot read, so they are denied whole, at
+# the cost of descriptor passing between siblings, which a no-network worker
+# has no call for. Under network="full" all of these stay open, and abstract
+# names are the Landlock scope's job there.
+LOCAL_PEER_SCREENED = ("bind", "connect", "sendmsg", "sendmmsg")
+
+# sendto() is the same door with one legitimate tenant: libc implements
+# send() as sendto() with a NULL address, which is the form a socketpair end
+# uses to talk to its sibling. The filter denies the call only when an
+# address is supplied.
+LOCAL_PEER_SCREENED_WHEN_ADDRESSED = ("sendto",)
+
 
 class SockFilter(ctypes.Structure):
     """One BPF instruction, ``struct sock_filter``."""
@@ -116,10 +138,12 @@ BPF_JSET_K = 0x05 | 0x40 | 0x00
 BPF_RET_K = 0x06 | 0x00
 
 # Offsets into struct seccomp_data, whose layout is fixed across
-# architectures.
+# architectures. Each argument is a 64-bit word whatever the process's
+# pointer size, so a pointer argument occupies two inspected words.
 DATA_NR = 0
 DATA_ARCH = 4
 DATA_ARG0 = 16
+DATA_ARG4 = 16 + 4 * 8
 
 SECCOMP_RET_ALLOW = 0x7FFF0000
 _SECCOMP_RET_ERRNO = 0x00050000
@@ -165,6 +189,22 @@ def _screen(program: list[SockFilter], nr: int, verdict: int) -> None:
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=verdict))
 
 
+def _screen_when_addressed(
+    program: list[SockFilter], nr: int, address_offset: int
+) -> None:
+    """Deny one syscall when its address argument is a non-NULL pointer.
+
+    What the address says sits behind the pointer, which a filter cannot
+    follow, so the distinction available is whether one was given at all.
+    """
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=5, k=nr))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=address_offset))
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=2, k=0))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=address_offset + 4))
+    program.append(SockFilter(code=BPF_JEQ_K, jt=1, jf=0, k=0))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
+
+
 def _preamble(arch: Arch) -> list[SockFilter]:
     """Confirm the caller's ABI, then load the syscall number.
 
@@ -187,17 +227,23 @@ def _preamble(arch: Arch) -> list[SockFilter]:
 
 
 def build_network_filter(arch: Arch) -> list[SockFilter]:
-    """A filter that refuses every syscall that creates a socket.
+    """A filter that cuts a no-network worker off from sockets altogether.
 
-    The filter acts on creation alone: a socket descriptor the process
-    started with, or one received over an existing channel, is already
-    open. The guarantee assumes the worker starts with a clean
-    descriptor table.
+    The creation calls are refused, and so are the calls that would aim a
+    socket the process already holds at a peer by address, since
+    socketpair() is left open and its ends could otherwise be connected
+    into the abstract AF_UNIX namespace. The filter acts on calls alone:
+    a socket descriptor the process started with, or one received over an
+    existing channel, is already open. The guarantee assumes the worker
+    starts with a clean descriptor table.
     """
     program = _preamble(arch)
-    for name in NETWORK_SCREENED:
+    for name in (*NETWORK_SCREENED, *LOCAL_PEER_SCREENED):
         if name in arch.syscalls:
             _screen(program, arch.syscalls[name], DENY_EPERM)
+    for name in LOCAL_PEER_SCREENED_WHEN_ADDRESSED:
+        if name in arch.syscalls:
+            _screen_when_addressed(program, arch.syscalls[name], DATA_ARG4)
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
     return program
 
@@ -237,6 +283,12 @@ ARCHES: Mapping[str, Arch] = {
             "clone": 56,
             "clone3": 435,
             "socket": 41,
+            "socketpair": 53,
+            "bind": 49,
+            "connect": 42,
+            "sendto": 44,
+            "sendmsg": 46,
+            "sendmmsg": 307,
             "io_uring_setup": 425,
         },
     ),
@@ -264,6 +316,12 @@ ARCHES: Mapping[str, Arch] = {
             "clone": 220,
             "clone3": 435,
             "socket": 198,
+            "socketpair": 199,
+            "bind": 200,
+            "connect": 203,
+            "sendto": 206,
+            "sendmsg": 211,
+            "sendmmsg": 269,
             "io_uring_setup": 425,
         },
     ),
@@ -296,8 +354,15 @@ ARCHES: Mapping[str, Arch] = {
             "socket": 359,
             # i386 alone still multiplexes the socket calls through one entry
             # point, so screening socket() by itself would leave a way to
-            # open one.
+            # open one. The direct numbers below are what kernels since 4.3
+            # and current glibc use; socketcall covers the legacy path.
             "socketcall": 102,
+            "socketpair": 360,
+            "bind": 361,
+            "connect": 362,
+            "sendto": 369,
+            "sendmsg": 370,
+            "sendmmsg": 345,
             "io_uring_setup": 425,
         },
     ),
@@ -325,6 +390,12 @@ ARCHES: Mapping[str, Arch] = {
             "clone": 120,
             "clone3": 435,
             "socket": 281,
+            "socketpair": 288,
+            "bind": 282,
+            "connect": 283,
+            "sendto": 290,
+            "sendmsg": 296,
+            "sendmmsg": 374,
             "io_uring_setup": 425,
         },
     ),
