@@ -88,7 +88,7 @@ FS_READ_ONLY = FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 # itself or a descendant: the daemons listening on the host's abstract
 # namespace become unreachable. The path ruleset cannot express this, because
 # an abstract name is not a path, and the user-namespace fallback cannot
-# either, so this is the one screen that also holds when the caller allowed
+# either, so this is the one screen that also applies when the caller allowed
 # full network. ABI 7's scope bit covers signals instead and is left out:
 # what it would buy the worker is a question of its own.
 SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
@@ -105,7 +105,7 @@ class RulesetAttr(ctypes.Structure):
     Later versions append fields for network rights and scoping. The struct
     is extensible and read at the size it is given, so passing this one asks
     for a filesystem-only ruleset on any kernel. ABI 6's scoping field is
-    worth having, and ``ScopedRulesetAttr`` carries it when the kernel does.
+    worth having, and ``ScopedRulesetAttr`` supplies it when the kernel does.
     """
 
     _fields_ = (("handled_access_fs", ctypes.c_uint64),)

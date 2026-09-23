@@ -7,10 +7,11 @@ The same sequence is in ``userns_engage`` in pkg-r/src/sandbox.c.
 
 One channel this tier leaves open: the abstract AF_UNIX namespace, which no
 path rule can govern because an abstract name is not a path. Landlock scopes
-it from ABI 6; the kernels that land on this tier are by definition older,
-so under ``network="full"`` a worker here can still reach the host's
-abstract listeners. Under ``network="none"`` the seccomp filter screens the
-address-taking socket calls, which closes it there.
+it from ABI 6, and a host ends up on this tier when its kernel predates
+that or its policy forbids Landlock, so under ``network="full"`` a worker
+here can still reach the host's abstract listeners. Under ``network="none"``
+the seccomp filter screens the address-taking socket calls, which closes it
+there.
 
 Importing this module is harmless. Calling ``engage()`` is not, and cannot be
 undone in the process that calls it.

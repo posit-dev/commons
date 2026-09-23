@@ -132,8 +132,8 @@ static uint64_t landlock_handled(long abi) {
  * listening on the host's abstract namespace become unreachable. The path
  * ruleset cannot express this, because an abstract name is not a path, and
  * the user-namespace fallback cannot either, so this is the one screen that
- * also holds when the caller allowed full network. ABI 7's scope bit covers
- * signals instead and is left out: what it would buy the worker is a
+ * also applies when the caller allowed full network. ABI 7's scope bit
+ * covers signals instead and is left out: what it would buy the worker is a
  * question of its own. */
 /* LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET in the kernel's linux/landlock.h,
  * which the build need not carry. */
@@ -512,7 +512,15 @@ static const char **userns_submounts(int *n) {
   return out;
 }
 
-/* Return availability errors so the caller can report unsupported hosts. */
+/* Return availability errors so the caller can report unsupported hosts.
+ *
+ * One channel this tier leaves open: the abstract AF_UNIX namespace, which
+ * no path rule can govern because an abstract name is not a path. Landlock
+ * scopes it from ABI 6, and a host ends up on this tier when its kernel
+ * predates that or its policy forbids Landlock, so under network="full" a
+ * worker here can still reach the host's abstract listeners. Under
+ * network="none" the seccomp filter screens the address-taking socket
+ * calls, which closes it there. */
 static int userns_engage(SEXP read_roots, SEXP rw_roots, SEXP preserve_fds) {
   int threads = count_threads();
   if (threads != 1) {
