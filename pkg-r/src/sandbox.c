@@ -652,18 +652,15 @@ static void network_engage(void) {
   }
 }
 
-/* The clone child's only job is to leave, on the stack clone() gave it. */
+/* The clone child exits at once. */
 static int probe_grandchild_leave(void *arg) {
   (void) arg;
   exit_probe_child(0);
   return 0;
 }
 
-/* Try a clone whose flags set the CLONE_NEWTIME bit; return 0 when the
- * kernel allows it and the errno when it does not. CLONE_NEWTIME (0x80)
- * sits inside the low byte of clone's flags, which is the exit signal, so
- * the child reports signal 0x91 rather than SIGCHLD and only __WALL will
- * reap it. */
+/* Clone with the CLONE_NEWTIME bit set; return 0 on success, else errno.
+ * The bit falls in the exit-signal byte, so only __WALL reaps the child. */
 static int probe_clone_newtime(char *stack_top) {
   errno = 0;
   pid_t child = clone(probe_grandchild_leave, stack_top,
@@ -676,18 +673,10 @@ static int probe_clone_newtime(char *stack_top) {
   return 0;
 }
 
-/* Test hook for the namespace-flag screen: attempt a clone whose flags set
- * the CLONE_NEWTIME bit, with and without the seccomp filter, and report
- * both errnos (0 when the clone succeeded). The legacy clone ABI cannot
- * create a time namespace, because the kernel strips the CSIGNAL byte, the
- * 0x80 bit included, from the flags before the namespace logic runs. What
- * this pins is the mask itself: a clone whose flags word has the bit set is
- * refused. The child still enters a user namespace first, keeping the probe
- * meaningful on any kernel that honours the bit, where an unprivileged
- * clone would earn the kernel's own EPERM and the filter's answer could
- * not be told apart from it. A filter survives fork(), so the probe runs in
- * a forked child and reports over a pipe. A -1 entry means the probe step
- * itself could not run. */
+/* Test hook: the CLONE_NEWTIME clone's errno without and with the seccomp
+ * filter, run in a forked child so R itself never gets the filter. The child
+ * enters a user namespace first so the kernel's own EPERM cannot mask the
+ * filter's. -1 means that step could not run. */
 SEXP c_sandbox_probe_newtime(void) {
   int pipefd[2];
   if (pipe(pipefd) != 0) {
