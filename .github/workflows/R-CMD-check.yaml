@@ -41,9 +41,6 @@ jobs:
           extra-packages: any::rcmdcheck, local::.
           needs: check
           working-directory: pkg-r
-          # Version 1's cached pak metadata points at a P3M macOS binary of
-          # odbc 1.7.1 that the server no longer has, failing every install
-          # with "unknown archive type" on the 404 body.
           cache-version: 2
       - uses: r-lib/actions/check-r-package@v2
         with:
