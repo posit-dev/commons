@@ -1,0 +1,169 @@
+/* Palette shared with the landing page at docs/styles.css. */
+:root {
+  --commons-background: #fbfbfb;
+  --commons-foreground: #212529;
+  --commons-muted: #5f6368;
+  --commons-link: #256b58;
+  --commons-border: #dee2e6;
+}
+
+body {
+  color: var(--commons-foreground);
+  background: var(--commons-background);
+}
+
+a {
+  color: var(--commons-link);
+}
+
+.navbar {
+  border-bottom: 1px solid var(--commons-border);
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+}
+
+/* Inline provenance markers, sized to sit in running text. The same rule
+   styles the markers in the R package's vignettes. */
+.commons-documentation-marker {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  height: 1.5em;
+  margin: 0;
+  padding: 0;
+  vertical-align: text-bottom;
+  width: 1.5em;
+}
+
+/* Keep the reference tables readable when a signature is long. */
+.doc-signature code {
+  overflow-wrap: anywhere;
+}
+
+/* The R cross-link is injected into great-docs' navbar widget container and
+   carries its gd-navbar-icon class, so the 34px box, the centring and the
+   spacing all come from there. Only the logo itself is described here. The
+   url() resolves relative to this stylesheet, so it works from any page depth
+   and from any versioned copy of the site, unlike an img src written into the
+   navbar HTML. great-docs copies this stylesheet to the site root and the
+   assets directory under user-guide/, which is what the path reflects. */
+.commons-r-link .r-logo {
+  display: block;
+  width: 1.29rem;
+  height: 1rem;
+  background: url("user-guide/assets/logos/r-logo.svg") no-repeat center / contain;
+  /* Optical alignment: the logo's visual weight sits low, because the gray
+     oval is lighter than the blue R, so nudge it up from the geometric
+     centre. */
+  margin-top: -2px;
+}
+
+/* Overrides for great-docs' own stylesheet, which this file loads after.
+   None of the below has a configuration key. */
+
+/* Symbol names stay monospace, but drop the bold: the reference is mostly a
+   list of them, and weight on top of an underline shouts. */
+.doc-reference dt a,
+.doc-reference section.doc-group > dl a,
+.table a,
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a:not(.active) {
+  font-weight: normal;
+}
+
+/* The banner sets a mid-blue background but no text colour, and a code span
+   keeps its own pale pill, which vanishes into it. */
+.gd-announcement-banner {
+  color: #fff;
+}
+
+.gd-announcement-banner code {
+  background: rgb(255 255 255 / 18%);
+  color: inherit;
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+}
+
+:root {
+  /* The brightest text in either theme, so the current item reads as more
+     prominent than its siblings rather than less. --gd-text-primary is itself
+     theme-scoped, so one value serves both. */
+  --commons-active-link-color: var(--gd-text-primary);
+  --commons-active-link-weight: bold;
+  --commons-navbar-hover-bg: rgb(0 0 0 / 14%);
+  --gd-active-link: var(--gd-text-primary);
+}
+
+/* Repeated because great-docs defines both of these under this same selector,
+   which outranks :root. */
+body.quarto-dark {
+  --commons-navbar-hover-bg: rgb(255 255 255 / 14%);
+  --gd-active-link: var(--gd-text-primary);
+}
+
+/* Current page: weight, not a coloured rule. The sidebar colour is a literal
+   upstream, so --gd-active-link above does not reach it. */
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a.active {
+  font-weight: bold;
+  /* Two underlines: a bottom border from .nav-underline, a text decoration
+     from .nav-link.active. */
+  border-bottom-color: transparent;
+  text-decoration: none;
+}
+
+#quarto-sidebar a.sidebar-item-text.sidebar-link.active {
+  color: var(--commons-active-link-color);
+  font-weight: var(--commons-active-link-weight);
+  text-decoration: none;
+}
+
+/* Hover filled the link with an orange pill. Both themes are spelled out
+   because great-docs sets the dark one at a higher specificity. */
+#navbarCollapse > ul.navbar-nav.navbar-nav-scroll.me-auto > li > a:hover,
+body.quarto-dark
+  #navbarCollapse
+  > ul.navbar-nav.navbar-nav-scroll.me-auto
+  > li
+  > a:hover {
+  background-color: var(--commons-navbar-hover-bg);
+  /* Not `inherit`: that takes the list item's colour, not the link's. */
+  color: var(--gd-navbar-text);
+}
+
+/* Tables were sized to their widest unwrapped line and scrolled. Suits a data
+   table; the feature-parity table is prose. */
+.gd-table-scroll > table {
+  width: 100%;
+}
+
+/* The previous/next page links were drawn as outlined buttons. */
+.nav-page.nav-page-previous a,
+.nav-page.nav-page-next a {
+  border-style: none;
+  border-width: 0;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+  margin-left: 0;
+  margin-right: 0;
+  text-decoration: underline;
+}
+
+/* The hover pill carries 8px of padding each side but a -8px left margin, so
+   it sat flush against the sidebar's left edge while inset on the right. */
+#quarto-sidebar.gd-sidebar-float .sidebar-link[href] {
+  margin-left: 0;
+}
+
+/* The package name is drawn as a bordered pill. The name alone is enough, and
+   the version beside it duplicates the version selector, so the badge is
+   stripped from the markup by .github/scripts/docs-postprocess.py. */
+.navbar-title {
+  border-style: none;
+  border-width: 0;
+  border-radius: 0;
+  padding: 0;
+}
