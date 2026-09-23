@@ -67,3 +67,65 @@ jobs:
               sys.exit(f'{wheel} is missing: {missing}')
           print(f'{wheel} ships the browser assets')
           "
+
+  seccomp-32bit:
+    # The interpreter tests feed each syscall table its own numbers, so a
+    # mis-transcribed i386 or arm number passes them. These legs rerun the
+    # seccomp suite under a 32-bit personality, which an x86_64 or arm64
+    # kernel runs natively while tagging the syscalls with the 32-bit ABI,
+    # so the live tests check the 32-bit tables against the kernel itself.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux/386
+            arch: i386
+          - os: ubuntu-24.04-arm
+            platform: linux/arm/v7
+            arch: arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Refuse to pass on a skip
+        # needs_seccomp skips the live tests when arch detection or the
+        # filter install fails, and a leg where all ten skip has tested
+        # nothing. Fail first instead, in the same environment the suite
+        # then runs in.
+        run: |
+          docker run --rm \
+            --platform '${{ matrix.platform }}' \
+            --security-opt seccomp=unconfined \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work/pkg-py \
+            python:3.13-slim \
+            setarch linux32 python -c "
+          import sys
+          sys.path.insert(0, 'src/commons/_execution/_runtime')
+          import _seccomp
+          arch = _seccomp.current_arch()
+          assert arch is not None and arch.name == '${{ matrix.arch }}', arch
+          assert _seccomp.seccomp_available(), 'a filter does not install here'
+          print(f'{arch.name}: a filter installs')
+          "
+      - name: Run the seccomp suite under a 32-bit personality
+        # seccomp=unconfined lifts docker's own filter, which refuses some
+        # of the calls these tests make unfiltered as a control (ptrace,
+        # pidfd_getfd) and would turn the live checks into skips. The
+        # filter under test is then the only one on the process.
+        # --noconftest: the suite-wide conftest imports commons, whose
+        # dependencies publish no 32-bit wheels; the seccomp file uses
+        # none of its fixtures.
+        # setarch linux32: the container runtime leaves the host's uname
+        # personality on a 32-bit container, so the process still sees a
+        # 64-bit machine name, a combination arch detection refuses
+        # (rightly: it is also how x32 looks). A 32-bit process started
+        # natively runs under PER_LINUX32 and reports the 32-bit name.
+        run: |
+          docker run --rm \
+            --platform '${{ matrix.platform }}' \
+            --security-opt seccomp=unconfined \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work/pkg-py \
+            python:3.13-slim \
+            sh -c "pip install -q pytest && setarch linux32 python -m pytest --noconftest -rs tests/test_execution_seccomp.py"
