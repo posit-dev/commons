@@ -1,0 +1,327 @@
+# Introduction to commons
+
+This page explains the structure of a commons project and how to start building a commons agent in Python.
+
+``` python
+import commons
+```
+
+
+# Design philosophy
+
+AI agents for data analysis range from cautious and narrowly correct to wildly untrustworthy. `commons` increases the chance of a correct answer by giving the agent access to trusted code that you already have, while the agent keeps enough freedom to answer new, realistic questions. `commons` also derives a provenance outcome from the path the agent took, so a user can decide how much to trust each answer.
+
+If you are a data analyst, data scientist, or other data practitioner, you probably have a collection of trusted code. This is the code you depend on for your analyses, apps, and reports. The core idea of `commons` is that an agent gives more correct answers when it can run this code and read its documentation.
+
+The high-trust path occurs when a question matches one of these **trusted calculations**. For example, a `commons` agent can analyze biodiversity data, and a user asks:
+
+> How many total animals were observed at Oak Bluff?
+
+The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the `Verified answer` outcome.
+
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" alt="Verified answer" />
+
+Although the agent had to decide *which* trusted calculation to run. It did not have to decide *what code to write*, reducing degrees of freedom and allowing the agent to use code that you already vetted.
+
+However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (currently SQL, but soon custom Python code as well). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an `Untrusted` outcome.
+
+
+# Trust flow
+
+A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Verified answer` outcome.
+
+If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
+
+The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If `commons` verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker
+
+The table below lists how each provenance outcome can occur:
+
+| How the answer is produced | Provenance outcome |
+|----|----|
+| A trusted Python [measure](#semantic-layer) | `Verified answer` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Verified answer` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> or `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
+| No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
+
+The agent does not decide the provenance outcome. `commons` derives it from the tools the agent called and the citations it made.
+
+
+# Information layers
+
+`commons` has two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer holds trusted calculations, ideally lifted from reliable code that you already use. The context layer holds background information. The agent uses this information to decide what custom SQL to write and how to interpret results. Data dictionaries span the two layers.
+
+| Layer | Sources | Role |
+|----|----|----|
+| Semantic layer | Measures in `.py` files and [`definitions`](#definitions) in `data-dict.yaml` | Provides trusted calculations. |
+| Context layer | Markdown files and descriptive fields in [`data-dict.yaml`](#data-dictionaries) | Informs custom SQL and guides interpretation. |
+
+
+## Semantic layer
+
+The most direct way to add a trusted calculation is a **measure**. A measure is a Python function decorated with `@commons.measure`. The decorator needs a description, from its `description` argument or from the docstring of the function. When measures exist, the agent searches for a measure that matches the question. If it finds one, it calls that measure, with arguments if the measure takes any.
+
+A measure can take two kinds of parameter in its signature. A parameter declared as `Annotated[T, Field(description=...)]` gets its value from the model, which reads the description to decide what value to pass. A parameter declared as `commons.Injected[T]` gets its value from `commons`. The model never sees this parameter: `commons` passes the connection of the data source that has the same name as the parameter. A parameter with no description and no [Injected](../reference/Injected.md#commons.Injected) annotation will result in an error.
+
+As an example, in this measure, `commons` passes `biodiversity` and the model passes `site`:
+
+``` python
+@commons.measure(description="Species observed at one site.")
+def species_at_site(
+    biodiversity: commons.Injected[Any],  # commons passes the connection
+    site: Annotated[str, Field(description="Site name.")],  # the model passes a value
+) -> Any:
+    ...
+```
+
+When a user asks "Which species were observed at Oak Bluff?", the model reads the description of `site` and passes `"Oak Bluff"`. `commons` passes the connection of the data source named `biodiversity`, and the measure runs with both.
+
+`data-dict.yaml` files also add to the semantic layer through [`definitions`](#definitions).
+
+
+## Context layer
+
+The context layer holds unstructured text from Markdown files and the descriptive fields of `data-dict.yaml`. commons indexes this text and retrieves the parts that match a question. Facts that every conversation needs belong in `instructions`, not in the context layer.
+
+
+## Examples
+
+Here are short examples of a data dictionary, a measure file, and a context document for the biodiversity example:
+
+
+### Data dictionary
+
+`dictionaries/biodiversity.yaml`
+
+``` yaml
+tables:
+  - name: observations
+    description: Species observations by nature preserve.
+    columns:
+      - name: count
+        description: Individuals observed during surveys.
+```
+
+
+### Measure file
+
+`measures/biodiversity.py`
+
+``` python
+from typing import Annotated, Any
+
+from pydantic import Field
+
+import commons
+
+
+@commons.measure(description="Species richness by site.")
+def biodiversity_by_site(
+    biodiversity: commons.Injected[Any],
+    site: Annotated[str, Field(description="Site name.")],
+) -> Any:
+    return biodiversity.execute(
+        "SELECT COUNT(DISTINCT species) AS species_richness "
+        "FROM observations WHERE obs_site = ?",
+        [site],
+    ).fetchdf()
+```
+
+The `biodiversity` parameter receives the connection of the data source named `biodiversity`. The model supplies `site`.
+
+
+### Context document
+
+`context/biodiversity.md`
+
+``` markdown
+# Interpreting survey results
+
+Observed individuals reflect organisms recorded during surveys. They are not a complete population census of a nature preserve.
+```
+
+
+# Data sources
+
+One of the primary decisions you'll need to make when building a `commons` agent is which data sources to grant the agent access to. Each data source combines the underlying data with the tables to expose to the agent. It can also include a data dictionary describing those tables and trusted calculations on them.
+
+Data sources are created with [commons.data_source()](../reference/data_source.md#commons.data_source). The data can be named `pandas` or `polars` data frames, a [pins](https://rstudio.github.io/pins-python/) board, or a SQLAlchemy `Engine`. `commons` loads data frames and pins into an in-process DuckDB database. `commons` queries a database engine directly without copying data into a local database.
+
+For example, the following code creates a data source from two data frames. Each name becomes a table that the agent can query. `dictionary` is an optional path to a `data-dict.yaml` file.
+
+``` python
+biodiversity = commons.data_source(
+    observations=observations,
+    site_area=site_area,
+    dictionary="dictionaries/biodiversity.yaml",
+)
+```
+
+For an engine or a pins board, the `tables` argument selects the tables to expose. An engine takes a list of table names:
+
+``` python
+import sqlalchemy
+
+engine = sqlalchemy.create_engine("duckdb:///surveys.duckdb")
+surveys = commons.data_source(engine, tables=["observations", "sites"])
+```
+
+With a pins board, `tables` maps each table name the agent sees to the pin that supplies the data:
+
+``` python
+surveys = commons.data_source(
+    board,
+    tables={"observations": "survey-observations", "sites": "survey-sites"},
+)
+```
+
+A Snowflake or Databricks engine also imports its catalog, so commons can resolve the selection against the warehouse and check access. `exclude` drops objects from the catalog listing by glob:
+
+``` python
+warehouse = commons.data_source(engine, exclude=["TMP_*"])
+```
+
+If the catalog is too large for the system prompt, the agent gets a `search_catalog` tool instead of a table listing. The system prompt reports only the number of selected catalog objects and tells the agent to call `search_catalog` before `describe_table`. The agent then searches the catalog for objects that match the question and describes only those before it writes SQL.
+
+
+## Data dictionaries
+
+A data dictionary provides structured documentation for one data source. Use it to state what each table represents, the meaning and type of each column, relationships between tables, and glossary terms. It also holds trusted `definitions`. `commons` reads the [`data-dict.yaml` specification](https://data-dict.tidyverse.org/).
+
+A `commons` agent uses a data dictionary in three ways:
+
+- Dataset-level descriptions give broad context that is always available. Glossary terms go in the system prompt as space allows.
+- When the agent first uses a documented table in a conversation, it receives the description, columns, relationships, and glossary terms of that table.
+- Descriptive fields, such as `description` and `details`, are part of the context layer.
+
+
+### Definitions
+
+**Definitions** are named, governed expressions attached to tables in `data-dict.yaml`. They let an agent reuse trusted metrics, filters, and derived values, so they add to the semantic layer.
+
+Each definition is an expression in the [data-dict expression language](https://data-dict.tidyverse.org/expressions.html), not in the SQL dialect of your database:
+
+``` yaml
+tables:
+  - name: observations
+    columns:
+      - name: count
+        type: number
+    definitions:
+      - name: total_individuals
+        label: Total individuals observed
+        description: Sum of the individuals recorded in surveys.
+        expr: SUM(count)
+```
+
+There are three kinds of definition. A definition can take part in a trusted metric calculation, or the agent can use it in custom SQL:[^1]
+
+| Kind | Example | Use in a trusted metric calculation |
+|----|----|----|
+| Metric | `SUM(n)` | Computes the metric |
+| Filter | `status = 'active'` | Restricts rows or provides a grouping dimension |
+| Derived value | `price * quantity` | Provides a grouping dimension |
+
+`commons` infers the kind from the expression. An aggregate or constant expression is a metric. A row-level Boolean expression is a filter. Every other row-level expression is a derived value.
+
+See the [DevRel Agent's `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
+
+When a data source is constructed, `commons` validates each definition and compiles it to the source's SQL dialect.
+
+
+# Project directory organization
+
+A `commons` agent is easiest to maintain when each piece has its own file:
+
+``` text
+.
+|-- app.py
+|-- agent.py
+|-- pyproject.toml
+|-- AGENTS.md # or the file your coding agent reads (for example, CLAUDE.md)
+|-- instructions.md
+|-- dictionaries/
+|   `-- biodiversity.yaml
+|-- measures/
+|   `-- biodiversity.py
+`-- context/
+    `-- context.md
+```
+
+
+# Constructing the agent
+
+Use [commons.Commons()](../reference/Commons.md#commons.Commons) to construct an agent. Pass it a `chatlas.Chat` and one or more data sources, plus any semantic and context layers. You can also optionally append information to the `commons` agent system prompt using the `instructions` argument.
+
+``` python
+import chatlas
+import commons
+
+biodiversity = commons.data_source(
+    observations=observations,
+    site_area=site_area,
+    dictionary="dictionaries/biodiversity.yaml",
+)
+
+agent = commons.Commons(
+    client=chatlas.ChatAuto("anthropic/claude-sonnet-5"),
+    data_sources={"biodiversity": biodiversity},
+    semantic_layer=commons.semantic_layer("measures"),
+    context_layer=commons.context_layer(files=["context/context.md"]),
+    instructions="instructions.md",
+)
+
+agent.chat("How many species were observed at Oak Bluff?")
+```
+
+`data_sources` is one [DataSource](../reference/DataSource.md#commons.DataSource) or a mapping of name to [DataSource](../reference/DataSource.md#commons.DataSource). Name the sources when a measure takes an injected connection, because commons injects by name. [semantic_layer()](../reference/semantic_layer.md#commons.semantic_layer) accepts measures, modules, or paths to `.py` files and directories. [context_layer()](../reference/context_layer.md#commons.context_layer) accepts a list of file paths.
+
+Underneath, a [Commons](../reference/Commons.md#commons.Commons) agent inherits from a `chatlas.Chat` object, but builds its own system prompt and tools. As such, it follows the `Chat` API and provides the [chat()](../reference/Commons.chat.md#commons.Commons.chat) and [stream_async()](../reference/Commons.stream_async.md#commons.Commons.stream_async) methods as ways to ask a question. The other `chatlas` entry points, such as [chat_async()](../reference/Commons.chat_async.md#commons.Commons.chat_async), [stream()](../reference/Commons.stream.md#commons.Commons.stream), and [chat_structured()](../reference/Commons.chat_structured.md#commons.Commons.chat_structured), are not supported and will raise `NotImplementedError` at this moment.
+
+
+## Chat UI
+
+The above examples will build a terminal-based agent without any UI attached. If you want to use the agent in an interactive web UI, the `commons.ui` module will put the agent behind a [Shiny](https://shiny.posit.co/py/) chat. This requires installing the `shiny` extra group.
+
+When developing locally, you can use `commons.ui.app(agent)` to return a complete Shiny app:
+
+``` python
+app = commons.ui.app(agent)
+```
+
+[commons.ui.app()](../reference/ui.app.md#commons.ui.app) shares one agent across every session, so it suits one visitor at a time. For a deployed app, you should instead build the page with [commons.ui.theme()](../reference/ui.theme.md#commons.ui.theme) and construct the agent inside the Shiny server function, so each session gets its own agent:
+
+``` python
+import shinychat
+from shiny import App
+
+app_ui = shinychat.page_chat("Biodiversity", id="chat", theme=commons.ui.theme())
+
+
+def app_server(input, output, session):
+    # The same construction as above; building it per session keeps each
+    # session's citation and provenance state separate.
+    commons.ui.server(
+        "chat",
+        commons.Commons(
+            client=chatlas.ChatAuto("anthropic/claude-sonnet-5"),
+            data_sources={"biodiversity": biodiversity},
+            semantic_layer=commons.semantic_layer("measures"),
+            context_layer=commons.context_layer(files=["context/context.md"]),
+            instructions="instructions.md",
+        ),
+    )
+
+
+app = App(app_ui, app_server)
+```
+
+
+# Example application
+
+[`demo.py`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.py), in the Python package's directory, is a fuller worked example: an agent over made-up forest canopy data with a semantic layer of measures and a context layer. Run it with `uv run shiny run demo.py` for the chat UI, or `uv run python demo.py` to ask the same questions from the terminal. [`demo.ipynb`](https://github.com/posit-dev/commons/blob/main/pkg-py/demo.ipynb) is the same agent in a notebook, with cells for reading what the agent registered and adding a measure of your own.
+
+
+## Footnotes
+
+
+[^1]: In custom SQL, the agent writes a definition as a `{name}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Verified answer`.
