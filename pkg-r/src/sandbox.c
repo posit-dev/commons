@@ -17,7 +17,6 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <sched.h>
-#include <signal.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -551,9 +550,7 @@ static int userns_engage(SEXP read_roots, SEXP rw_roots, SEXP preserve_fds) {
   return 0;
 }
 
-/* Install the sandbox filter, reporting errno rather than raising so the
- * newtime probe below can call it from a forked child. */
-static int seccomp_install(void) {
+static void seccomp_engage(void) {
 #define SANDBOX_DENY(err) \
   BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | ((err) & SECCOMP_RET_DATA))
 #define SANDBOX_SCREEN(nr) \
@@ -610,19 +607,11 @@ static int seccomp_install(void) {
     .filter = filt
   };
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
-    return errno;
+    Rf_error("seccomp filter install failed: %s", strerror(errno));
   }
-  return 0;
 
 #undef SANDBOX_SCREEN
 #undef SANDBOX_DENY
-}
-
-static void seccomp_engage(void) {
-  int err = seccomp_install();
-  if (err != 0) {
-    Rf_error("seccomp filter install failed: %s", strerror(err));
-  }
 }
 
 static void network_engage(void) {
@@ -650,73 +639,6 @@ static void network_engage(void) {
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
     Rf_error("network filter install failed: %s", strerror(errno));
   }
-}
-
-/* The clone child exits at once. */
-static int probe_grandchild_leave(void *arg) {
-  (void) arg;
-  exit_probe_child(0);
-  return 0;
-}
-
-/* Clone with the CLONE_NEWTIME bit set; return 0 on success, else errno.
- * The bit falls in the exit-signal byte, so only __WALL reaps the child. */
-static int probe_clone_newtime(char *stack_top) {
-  errno = 0;
-  pid_t child = clone(probe_grandchild_leave, stack_top,
-                      CLONE_NEWTIME | SIGCHLD, NULL);
-  if (child < 0) {
-    return errno;
-  }
-  int status;
-  waitpid(child, &status, __WALL);
-  return 0;
-}
-
-/* Test hook: the CLONE_NEWTIME clone's errno without and with the seccomp
- * filter, run in a forked child so R itself never gets the filter. The child
- * enters a user namespace first so the kernel's own EPERM cannot mask the
- * filter's. -1 means that step could not run. */
-SEXP c_sandbox_probe_newtime(void) {
-  int pipefd[2];
-  if (pipe(pipefd) != 0) {
-    Rf_error("cannot create the probe pipe: %s", strerror(errno));
-  }
-  pid_t pid = fork();
-  if (pid < 0) {
-    close(pipefd[0]);
-    close(pipefd[1]);
-    Rf_error("cannot fork the newtime probe: %s", strerror(errno));
-  }
-  if (pid == 0) {
-    close(pipefd[0]);
-    int results[2] = {-1, -1};
-    char *stack = malloc(1 << 16);
-    if (stack != NULL && userns_map_ids() == 0) {
-      results[0] = probe_clone_newtime(stack + (1 << 16));
-      if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0 &&
-          seccomp_install() == 0) {
-        results[1] = probe_clone_newtime(stack + (1 << 16));
-      }
-    }
-    ssize_t written = write(pipefd[1], results, sizeof(results));
-    (void) written;
-    exit_probe_child(0);
-  }
-  close(pipefd[1]);
-  int results[2] = {-1, -1};
-  ssize_t got = read(pipefd[0], results, sizeof(results));
-  close(pipefd[0]);
-  int status;
-  waitpid(pid, &status, 0);
-  if (got != (ssize_t) sizeof(results)) {
-    Rf_error("the newtime probe child did not report back");
-  }
-  SEXP out = PROTECT(Rf_allocVector(INTSXP, 2));
-  INTEGER(out)[0] = results[0];
-  INTEGER(out)[1] = results[1];
-  UNPROTECT(1);
-  return out;
 }
 
 SEXP c_sandbox_capabilities(void) {
@@ -935,11 +857,6 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   return Rf_mkString("seatbelt");
 }
 
-SEXP c_sandbox_probe_newtime(void) {
-  Rf_error("the seccomp filter is Linux-only");
-  return R_NilValue;
-}
-
 #else /* not __linux__ or __APPLE__ */
 
 SEXP c_sandbox_capabilities(void) {
@@ -958,17 +875,11 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   return R_NilValue;
 }
 
-SEXP c_sandbox_probe_newtime(void) {
-  Rf_error("the seccomp filter is Linux-only");
-  return R_NilValue;
-}
-
 #endif
 
 static const R_CallMethodDef call_methods[] = {
   {"c_sandbox_capabilities", (DL_FUNC) &c_sandbox_capabilities, 0},
   {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 6},
-  {"c_sandbox_probe_newtime", (DL_FUNC) &c_sandbox_probe_newtime, 0},
   {NULL, NULL, 0}
 };
 
