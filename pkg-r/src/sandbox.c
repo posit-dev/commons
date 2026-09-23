@@ -96,6 +96,10 @@
 #ifndef CLONE_NEWCGROUP
 #define CLONE_NEWCGROUP 0x02000000
 #endif
+/* Kernel 5.6, so toolchains older than that may not define it. */
+#ifndef CLONE_NEWTIME
+#define CLONE_NEWTIME 0x00000080
+#endif
 
 #define LL_CREATE_RULESET_VERSION (1U << 0)
 #define LL_RULE_PATH_BENEATH 1
@@ -592,8 +596,9 @@ static void seccomp_engage(void) {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
              (uint32_t) offsetof(struct seccomp_data, args[0])),
     BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K,
-             CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID |
-             CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWCGROUP, 0, 1),
+             CLONE_NEWTIME | CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET |
+             CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWUTS | CLONE_NEWCGROUP,
+             0, 1),
     SANDBOX_DENY(EPERM),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
   };
