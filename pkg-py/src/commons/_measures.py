@@ -11,12 +11,14 @@ hidden from the model by forgetting to describe it.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import inspect
 import os
 import re
 import sys
+import textwrap
 import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -419,7 +421,8 @@ class SemanticLayer:
     """The trusted calculations an agent can run.
 
     ``source_text`` holds the source of the measures and the module-level
-    helpers they call, keyed by Python function name. Only text is kept:
+    helpers they call, keyed by Python function name, dedented and without
+    decorator lines so the worker can exec it as-is. Only text is kept:
     the agent's worker session reads measure definitions but never receives
     a callable. Two functions that share a Python name share one entry, and
     the first definition collected wins, so a measure whose function shares
@@ -839,6 +842,26 @@ def _check_directory_importable(directory: Path, requested: Path) -> None:
 
 def _source_text(func: Callable[..., Any]) -> str:
     try:
-        return inspect.getsource(func)
+        source = inspect.getsource(func)
     except (OSError, TypeError):
         return f"# source unavailable for {func.__name__}"
+    return _exec_ready(source)
+
+
+def _exec_ready(source: str) -> str:
+    """``source`` as a definition that stands alone: dedented, decorators dropped.
+
+    The worker exec's the harvested text in a session where the ``measure``
+    decorator, and whatever a helper was decorated with, do not exist. The
+    decorator lines are removed exactly, by their parsed spans, so the
+    definition itself keeps its original text byte for byte.
+    """
+    source = textwrap.dedent(source)
+    lines = source.splitlines(keepends=True)
+    for node in ast.parse(source).body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            for line in range(decorator.lineno - 1, decorator.end_lineno or 0):
+                lines[line] = ""
+    return "".join(lines)

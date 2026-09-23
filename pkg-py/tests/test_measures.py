@@ -1,5 +1,7 @@
 """The semantic layer: measures, their schemas, and injected arguments."""
 
+import __future__
+
 import enum
 import importlib
 import os
@@ -269,6 +271,27 @@ def test_measure_defaults_name_and_title_from_the_function() -> None:
     assert m.description == "Count of orders."
 
 
+def test_source_text_execs_as_a_standalone_definition() -> None:
+    @measure(description="Count of orders.")
+    def order_count(
+        region: Annotated[Literal["EMEA", "AMER"], Field(description="The region.")],
+    ) -> int:
+        return 1
+
+    layer = semantic_layer([order_count])
+    source = layer.source_text["order_count"]
+    # Harvested inside a function, so the raw source was indented and
+    # decorated; the kept text is neither, and it execs with neither the
+    # measure decorator nor the annotations' imports existing.
+    assert "@measure" not in source
+    namespace: dict[str, Any] = {}
+    exec(  # noqa: S102 - the worker's exec of this text is what is tested
+        compile(source, "<test>", "exec", flags=__future__.annotations.compiler_flag),
+        namespace,
+    )
+    assert namespace["order_count"]("EMEA") == 1
+
+
 def test_measure_leaves_the_function_callable() -> None:
     @measure(description="Count of orders.")
     def order_count() -> int:
@@ -390,6 +413,7 @@ def test_measure_is_frozen() -> None:
 SCHEMA_CASES: list[dict[str, Any]] = load_shared_fixture("measure-schema")[
     "measure_schema_text"
 ]["cases"]
+
 
 def test_schema_fixture_is_not_empty() -> None:
     assert SCHEMA_CASES
@@ -655,7 +679,10 @@ def test_semantic_layer_harvests_helper_source_alongside_measures() -> None:
 
     assert set(layer.source_text) >= {"double", "order_count"}
     assert "x * 2" in layer.source_text["double"]
-    assert "@measure(" in layer.source_text["order_count"]
+    # The harvested text execs as-is in the worker, where the decorator
+    # does not exist, so the decorator line is not part of it.
+    assert "@measure(" not in layer.source_text["order_count"]
+    assert layer.source_text["order_count"].startswith("def order_count(")
 
 
 def test_harvested_source_excludes_imported_names() -> None:
