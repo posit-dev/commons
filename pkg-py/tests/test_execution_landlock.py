@@ -249,6 +249,39 @@ def test_a_package_symlinked_into_a_store_is_readable_through_its_library(
     assert reported["at_the_store"] == "allowed"
 
 
+FILE_SYMLINK_PROBE = (
+    """
+import json, os, sys, tempfile
+import _landlock
+
+# The shape /bin has: an entry that is a symlink to a regular file, as pkill
+# is to pgrep. Resolving it yields a file, which cannot take directory rights.
+base = tempfile.mkdtemp()
+tools = os.path.join(base, "tools")
+scratch = os.path.join(base, "scratch")
+os.makedirs(tools)
+os.makedirs(scratch)
+target = os.path.join(base, "target.txt")
+with open(target, "w") as handle:
+    handle.write("contents")
+os.symlink(target, os.path.join(tools, "link"))
+_landlock.engage(["/usr", tools], [scratch])
+"""
+    + ATTEMPT
+    + """
+json.dump(
+    {"through_the_link": attempt(lambda: open(os.path.join(tools, "link")).close())},
+    sys.stdout,
+)
+"""
+)
+
+
+def test_a_root_holding_a_symlink_to_a_file_engages(landlock_kernel: None) -> None:
+    reported = run_on_a_landlock_kernel(FILE_SYMLINK_PROBE)
+    assert reported["through_the_link"] == "allowed"
+
+
 MISSING_ROOT_PROBE = (
     """
 import json, os, sys, tempfile
