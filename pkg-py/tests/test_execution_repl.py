@@ -16,7 +16,7 @@ import sys
 
 import pytest
 
-from commons._execution import _runtime
+from commons._execution import _protocol, _runtime
 from commons._execution._runtime import _repl
 
 RUNTIME_DIR = str(pathlib.Path(_runtime.__file__).parent)
@@ -76,8 +76,8 @@ class TestNamespace:
     # cannot tell a flagged session from a fresh one on 3.14, which
     # evaluates annotations lazily by default (PEP 649).
     def test_future_imports_apply_to_later_calls(self):
-        # A REPL carries a future import forward: with barry_as_FLUFL in
-        # effect, a later call parses `<>` as a comparison.
+        # barry_as_FLUFL changes the grammar, so this also checks that the
+        # session's flags reach the parser, not only the compiler.
         namespace: dict = {}
         run("from __future__ import barry_as_FLUFL", namespace)
         assert run("1 <> 2", namespace).value is True
@@ -89,14 +89,6 @@ class TestNamespace:
         evaluation = run("from __future__ import barry_as_FLUFL\n1 / 0", namespace)
         assert "ZeroDivisionError" in evaluation.error
         assert run("1 <> 2", namespace).value is True
-
-    def test_parse_time_future_features_apply_to_later_calls(self):
-        # barry_as_FLUFL changes the grammar itself, so the session's flags
-        # have to reach the parser, not just the compiler.
-        namespace: dict = {}
-        run("from __future__ import barry_as_FLUFL", namespace)
-        assert run("1 <> 2", namespace).value is True
-        assert "SyntaxError" in run("1 <> 2").error
 
     def test_a_clobbered_flag_word_cannot_poison_the_session(self):
         import ast
@@ -163,9 +155,7 @@ class TestOutputCapture:
         assert "ZeroDivisionError" in evaluation.error
 
     def test_output_is_bounded(self):
-        # A runaway print loop cannot grow the capture past what the channel
-        # carries; the output ends with a note rather than the worker's
-        # memory.
+        # A runaway print loop stops at the channel limit, with a note.
         evaluation = run(f"print('x' * {2 * _repl._CAPTURE_LIMIT})")
         assert len(evaluation.stdout) <= _repl._CAPTURE_LIMIT
         assert evaluation.stdout.endswith("exceeded the channel limit]")
@@ -259,9 +249,28 @@ class TestOutputCapture:
         assert (sys.__stdout__, sys.__stderr__) == real
 
     def test_the_capture_is_not_seekable(self):
-        # Neither is a real pipe, so this costs model code nothing it had.
+        # A real pipe is not seekable either.
         evaluation = run("import sys\nsys.stdout.seek(0)")
         assert "AttributeError" in evaluation.error
+
+    def test_the_capture_reports_no_file_descriptor(self):
+        # io.UnsupportedOperation is what libraries catch when they probe a
+        # stream for a descriptor, as they do with io.StringIO.
+        code = (
+            "import io, sys\n"
+            "try:\n"
+            "    sys.stdout.fileno()\n"
+            "except io.UnsupportedOperation:\n"
+            "    probed = True\n"
+            "(probed, sys.stdout.writable(), sys.stdout.readable(), sys.stdout.errors)"
+        )
+        assert run(code).value == (True, True, False, "strict")
+
+    def test_the_bound_matches_the_protocol_clip(self):
+        # The module stands alone, so it copies these values rather than
+        # importing them; the protocol's note is the one the model sees.
+        assert _repl._CAPTURE_LIMIT == _protocol._TEXT_CLIP_LIMIT
+        assert _repl._TRUNCATION_NOTE == _protocol._TRUNCATION_NOTE
 
 
 class TestErrors:
@@ -275,6 +284,17 @@ class TestErrors:
         evaluation = run("def :")
         assert "SyntaxError" in evaluation.error
         assert "<run_python>" in evaluation.traceback
+
+    def test_the_traceback_leaves_out_the_worker_frames(self):
+        evaluation = run("def g():\n    return 1 / 0\ng()")
+        assert evaluation.traceback.startswith("Traceback (most recent call last):")
+        assert 'File "<run_python>", line 2, in g' in evaluation.traceback
+        assert _repl.__file__ not in evaluation.traceback
+
+    def test_a_syntax_error_traceback_leaves_out_the_worker_frames(self):
+        evaluation = run("x = (")
+        assert evaluation.traceback.startswith('  File "<run_python>", line 1')
+        assert _repl.__file__ not in evaluation.traceback
 
     def test_a_failed_prefix_never_runs_the_trailing_expression(self):
         evaluation = run("raise ValueError('boom')\n'unreached'")
@@ -326,17 +346,34 @@ class TestErrors:
         with pytest.raises(KeyboardInterrupt):
             run("raise KeyboardInterrupt")
 
-    def test_generator_exit_propagates(self):
-        with pytest.raises(GeneratorExit):
-            run("raise GeneratorExit")
+    def test_a_cancelled_task_is_the_calls_answer(self):
+        # CancelledError derives from BaseException; asyncio.run raises it
+        # when the main task is cancelled.
+        code = (
+            "import asyncio\n"
+            "async def main():\n"
+            "    asyncio.current_task().cancel()\n"
+            "    await asyncio.sleep(0)\n"
+            "asyncio.run(main())"
+        )
+        assert "CancelledError" in run(code).error
 
-    def test_generator_exit_propagates_from_a_sabotaged_readback(self):
+    def test_a_base_exception_subclass_is_the_calls_answer(self):
+        code = "class Stop(BaseException):\n    pass\nraise Stop()"
+        assert run(code).error == "Stop: "
+
+    def test_generator_exit_is_the_calls_answer(self):
+        assert "GeneratorExit" in run("raise GeneratorExit").error
+
+    def test_a_sabotaged_readback_raising_generator_exit_keeps_the_answer(self):
         code = (
             "import sys\n"
             "sys.stdout.getvalue = lambda: (_ for _ in ()).throw(GeneratorExit)\n"
+            "40 + 2"
         )
-        with pytest.raises(GeneratorExit):
-            run(code)
+        evaluation = run(code)
+        assert evaluation.value == 42
+        assert evaluation.stdout == ""
 
     def test_an_interrupt_during_readback_still_propagates(self):
         # A sabotaged capture can raise from getvalue(); a KeyboardInterrupt
