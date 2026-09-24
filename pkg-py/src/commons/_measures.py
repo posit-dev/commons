@@ -18,7 +18,6 @@ import inspect
 import os
 import re
 import sys
-import textwrap
 import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -841,11 +840,21 @@ def _check_directory_importable(directory: Path, requested: Path) -> None:
 
 
 def _source_text(func: Callable[..., Any]) -> str:
+    unavailable = f"# source unavailable for {func.__name__}"
     try:
         source = inspect.getsource(func)
     except (OSError, TypeError):
-        return f"# source unavailable for {func.__name__}"
-    return _exec_ready(source)
+        return unavailable
+    try:
+        return _exec_ready(source)
+    except SyntaxError:
+        # The worker defines every harvested source at spawn, and one that
+        # does not parse would fail every spawn.
+        return unavailable
+
+
+# Line boundaries as the parser counts them, so AST line numbers index this.
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
 
 
 def _exec_ready(source: str) -> str:
@@ -853,15 +862,36 @@ def _exec_ready(source: str) -> str:
 
     The worker exec's the harvested text in a session where the ``measure``
     decorator, and whatever a helper was decorated with, do not exist. The
-    decorator lines are removed exactly, by their parsed spans, so the
-    definition itself keeps its original text byte for byte.
+    indent is removed from code lines only: a line that begins inside a
+    multi-line string keeps its text, so a flush-left SQL string in a nested
+    function neither blocks the dedent nor changes value. Raises
+    ``SyntaxError`` for source that does not parse as a definition.
     """
-    source = textwrap.dedent(source)
-    lines = source.splitlines(keepends=True)
-    for node in ast.parse(source).body:
+    lines = _LINE.findall(source)
+    if not lines:
+        return source
+    indent = len(lines[0]) - len(lines[0].lstrip(" \t"))
+    # An indented definition parses as the body of a block; the wrapper line
+    # shifts every AST line number by one.
+    prefix, offset = ("if True:\n", 1) if indent else ("", 0)
+    tree = ast.parse(prefix + source)
+    body = tree.body
+    if indent and isinstance(body[0], ast.If):
+        body = body[0].body
+    keep: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Constant, ast.JoinedStr)) and node.end_lineno:
+            keep.update(range(node.lineno - offset, node.end_lineno - offset))
+    for node in body:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         for decorator in node.decorator_list:
-            for line in range(decorator.lineno - 1, decorator.end_lineno or 0):
-                lines[line] = ""
+            end = (decorator.end_lineno or decorator.lineno) - offset
+            for index in range(decorator.lineno - 1 - offset, end):
+                lines[index] = ""
+    for index, line in enumerate(lines):
+        if index in keep or not line:
+            continue
+        leading = len(line) - len(line.lstrip(" \t"))
+        lines[index] = line[min(indent, leading) :]
     return "".join(lines)

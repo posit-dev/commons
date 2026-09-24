@@ -292,6 +292,48 @@ def test_source_text_execs_as_a_standalone_definition() -> None:
     assert namespace["order_count"]("EMEA") == 1
 
 
+def test_source_text_keeps_a_flush_left_string_in_a_nested_measure() -> None:
+    @measure(
+        description="Count of orders.",
+    )
+    def order_count() -> int:
+        query = """
+SELECT count(*)
+FROM orders
+"""
+        return len(query)
+
+    # The string's lines sit at column 0, so there is no indent common to
+    # every line; the dedent still applies to the code lines around it.
+    source = semantic_layer([order_count]).source_text["order_count"]
+    assert source.startswith("def order_count(")
+    namespace: dict[str, Any] = {}
+    exec(source, namespace)  # noqa: S102 - the worker's exec of this text is what is tested
+    assert namespace["order_count"]() == order_count()
+
+
+def test_a_helper_whose_source_does_not_parse_is_kept_as_a_comment(
+    tmp_path: Path,
+) -> None:
+    # A lambda sharing a line with the tail of a bracketed expression: its
+    # source is that line alone, which does not parse. The worker defines a
+    # comment harmlessly, where the fragment would fail every spawn.
+    module = tmp_path / "odd_helpers.py"
+    module.write_text(
+        "from commons import measure\n"
+        "\n"
+        "LIMITS = [\n"
+        "    1] ; halve = lambda x: x / 2\n"
+        "\n"
+        '@measure(description="Count of orders.")\n'
+        "def order_count() -> int:\n"
+        "    return 1\n"
+    )
+    layer = semantic_layer(module)
+    assert layer.source_text["<lambda>"] == "# source unavailable for <lambda>"
+    assert layer.source_text["order_count"].startswith("def order_count(")
+
+
 def test_measure_leaves_the_function_callable() -> None:
     @measure(description="Count of orders.")
     def order_count() -> int:
