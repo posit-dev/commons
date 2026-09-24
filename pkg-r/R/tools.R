@@ -65,9 +65,12 @@ tool_describe_trust_system <- function() {
 }
 
 trust_system_explanation <- function() {
-  verified <- trust_system_marker("trusted-icon.svg")
-  cited <- trust_system_marker("citation-mark.svg")
-  untrusted <- trust_system_marker("warning-icon.svg")
+  verified <- trust_system_marker(
+    "trusted-icon.svg",
+    "Verified answer marker"
+  )
+  cited <- trust_system_marker("citation-mark.svg", "Cited marker")
+  untrusted <- trust_system_marker("warning-icon.svg", "Untrusted marker")
   paste(
     "Insert the supplied provenance markers inline wherever they help explain",
     "the trust system.",
@@ -94,13 +97,14 @@ trust_system_explanation <- function() {
   )
 }
 
-trust_system_marker <- function(file) {
+trust_system_marker <- function(file, alt) {
   sprintf(
     paste0(
-      '<img src="%s" alt="" aria-hidden="true" ',
+      '<img src="%s" alt="%s" ',
       'width="16" height="16" style="vertical-align: -0.15em;">'
     ),
-    escape_attr(commons_icon_url(file))
+    escape_attr(commons_icon_url(file)),
+    escape_attr(alt)
   )
 }
 

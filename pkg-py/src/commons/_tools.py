@@ -255,9 +255,12 @@ def _describe_trust_system() -> Tool:
 
 def _trust_system_explanation() -> str:
     markers = [
-        ("Verified answer", _trust_system_marker("trusted-icon.svg")),
-        ("Cited", _trust_system_marker("citation-mark.svg")),
-        ("Untrusted", _trust_system_marker("warning-icon.svg")),
+        (
+            "Verified answer",
+            _trust_system_marker("trusted-icon.svg", "Verified answer marker"),
+        ),
+        ("Cited", _trust_system_marker("citation-mark.svg", "Cited marker")),
+        ("Untrusted", _trust_system_marker("warning-icon.svg", "Untrusted marker")),
     ]
     supplied = [(label, marker) for label, marker in markers if marker]
     marker_text = (
@@ -292,12 +295,12 @@ def _trust_system_explanation() -> str:
     )
 
 
-def _trust_system_marker(file: str) -> str:
+def _trust_system_marker(file: str, alt: str) -> str:
     url = icon_url(file)
     if url is None:
         return ""
     return (
-        f'<img src="{escape_attr(url)}" alt="" aria-hidden="true" '
+        f'<img src="{escape_attr(url)}" alt="{escape_attr(alt)}" '
         'width="16" height="16" style="vertical-align: -0.15em;">'
     )
 
