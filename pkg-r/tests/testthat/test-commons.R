@@ -5,7 +5,13 @@ test_that("commons() registers only the tools the agent's composition earns", {
   # No measures: nothing about the agent's surface should imply them.
   expect_setequal(
     vapply(agent$get_tools(), tool_name, character(1)),
-    c("search_context", "describe_table", "run_sql", "run_r")
+    c(
+      "search_context",
+      "describe_table",
+      "run_sql",
+      "run_r",
+      "describe_trust_system"
+    )
   )
   expect_no_match(agent$get_system_prompt(), "search_pool")
 
@@ -20,7 +26,8 @@ test_that("commons() registers only the tools the agent's composition earns", {
       "search_context",
       "describe_table",
       "run_sql",
-      "run_r"
+      "run_r",
+      "describe_trust_system"
     )
   )
 })

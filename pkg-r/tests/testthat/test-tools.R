@@ -1,3 +1,27 @@
+test_that("describe_trust_system explains provenance without classifying it", {
+  result <- tool_describe_trust_system()()
+
+  expect_identical(result@value, trust_system_explanation())
+  expect_match(
+    result@value,
+    commons_icon_url("trusted-icon.svg"),
+    fixed = TRUE
+  )
+  expect_match(
+    result@value,
+    commons_icon_url("citation-mark.svg"),
+    fixed = TRUE
+  )
+  expect_match(
+    result@value,
+    commons_icon_url("warning-icon.svg"),
+    fixed = TRUE
+  )
+  expect_null(result@extra$display$html)
+  expect_null(result@extra$display$markdown)
+  expect_null(result@extra$commons_tag)
+})
+
 test_that("call_measure_tool runs a measure and tags the result", {
   registry <- list(order_count = count_measure_tool())
   res <- call_measure_tool(
