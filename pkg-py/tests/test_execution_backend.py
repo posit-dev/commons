@@ -1,197 +1,289 @@
-"""The exec-shaped seam the execution subsystem sits on.
+"""The seam the execution subsystem sits on: starting and ending a worker.
 
 Tests drive real subprocesses rather than mocks: the behaviours that matter
-here (stdin delivery, output caps, kill escalation) are properties of process
-handling, and a mock would only restate the implementation.
+here (the channel, the environment, kill escalation) are properties of
+process handling, and a mock would only restate the implementation. Each
+test hands the backend a small script of its own in place of the worker
+entry point, so the process does exactly what the test needs of it.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-import pathlib
 import signal
-import sys
 import time
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from commons._execution import _backend as backend_module
 from commons._execution._backend import (
-    DEFAULT_OUTPUT_LIMIT,
+    STDERR_TAIL,
     TERMINATE_GRACE,
     ExecBackend,
-    ExecTimeoutError,
     LocalBackend,
+    LocalSession,
+    WorkerSession,
+    _read_tail,
     _terminate,
 )
+from commons._execution._sandbox import protection_mode
+
+try:
+    protection_mode()
+except RuntimeError:
+    pytestmark = pytest.mark.skip(reason="this host cannot sandbox the worker")
 
 
-async def test_runs_a_command_and_returns_its_output() -> None:
-    backend = LocalBackend()
-
-    result = await backend.exec([sys.executable, "-c", "print('hello')"])
-
-    assert result.returncode == 0
-    assert result.stdout == "hello\n"
-    assert result.stderr == ""
+def backend_running(tmp_path: Path, code: str, **kwargs: Any) -> LocalBackend:
+    """A backend whose worker runs ``code`` in place of the real entry point."""
+    script = tmp_path / "worker.py"
+    script.write_text(code)
+    return LocalBackend(worker_script=script, **kwargs)
 
 
-async def test_input_reaches_the_process_on_stdin() -> None:
-    # Code goes in on stdin rather than as an argument: no escaping to get
-    # wrong and no command-line length limit.
-    backend = LocalBackend()
-
-    result = await backend.exec(
-        [sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"],
-        input="model-written code\n",
-    )
-
-    assert result.stdout == "model-written code\n"
+async def wait_for_file(path: Path, timeout: float = 10.0) -> None:
+    """Block until the child creates ``path``; polling, since it is another process."""
+    deadline = time.monotonic() + timeout
+    while not path.exists():
+        if time.monotonic() > deadline:
+            raise AssertionError(f"{path.name} did not appear within {timeout}s")
+        await asyncio.sleep(0.01)
 
 
-async def test_the_process_starts_in_the_given_working_directory(tmp_path) -> None:
-    backend = LocalBackend()
-
-    result = await backend.exec(
-        [sys.executable, "-c", "import os; print(os.getcwd())"],
-        cwd=str(tmp_path),
-    )
-
-    assert result.stdout.strip() == os.path.realpath(tmp_path)
-
-
-async def test_the_given_environment_replaces_the_parents_rather_than_extending_it(
-    monkeypatch,
-) -> None:
-    # The parent holds credentials a child has no business seeing, and a
-    # subprocess inherits the whole environment by default. Passing `env` has
-    # to mean "exactly this", not "this as well".
-    monkeypatch.setenv("COMMONS_TEST_SECRET", "sk-not-a-real-key")
-    backend = LocalBackend()
-
-    result = await backend.exec(
-        [
-            sys.executable,
-            "-c",
-            "import os; print(os.environ.get('COMMONS_TEST_SECRET'))",
-        ],
-        env={"PATH": os.environ["PATH"]},
-    )
-
-    assert result.stdout.strip() == "None"
-
-
-NOISY = "for i in range(200): print(f'line-{i}:' + 'x' * 1000)"
-
-
-async def test_output_past_the_cap_keeps_the_tail_and_the_process_still_finishes() -> (
-    None
-):
-    # Killing the process on the cap would lose a result the code had already
-    # computed, and simply not reading would deadlock it against a full pipe.
-    # Keep draining, keep the most recent bytes, let it exit.
-    backend = LocalBackend(output_limit=2000)
-
-    result = await backend.exec([sys.executable, "-c", NOISY])
-
-    assert result.returncode == 0
-    assert len(result.stdout) <= 2000
-    assert result.stdout.rstrip().endswith("x" * 100)
-    assert "line-199:" in result.stdout
-    assert "line-0:" not in result.stdout
-    assert result.stdout_truncated
-
-
-def _sleeper(
-    sentinel: object, *, ignore_sigterm: bool = False, ready: object = None
-) -> str:
-    """Code that outlives its timeout and records the fact if it is allowed to.
+def sleeper(sentinel: Path, ready: Path, *, ignore_sigterm: bool = False) -> str:
+    """A worker that announces itself, then records it if it outlives its close.
 
     The sleep sits well past the point where a working shutdown has killed
-    the process, so a slow or loaded machine delays the kill into slack
-    rather than into a false failure.
-
-    ``ready`` names a file the child creates for a test that cancels
-    mid-call, which waits for it rather than sleeping. The child first reads
-    stdin to EOF, because exec closes stdin from inside the try block that
-    installs the shutdown: the file therefore proves the cancel has somewhere
-    to land. Waiting only for the child to start would not -- the spawn can
-    still be mid-await, and the cancel would leave nothing to shut down and
-    the assertions passing for want of a process.
+    the process, so a slow machine delays the kill into slack rather than
+    into a false failure.
     """
     guard = (
         "import signal; signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
         if ignore_sigterm
         else ""
     )
-    announce = (
-        ""
-        if ready is None
-        else f"import sys; sys.stdin.read(); open({str(ready)!r}, 'w').close(); "
-    )
     return (
-        f"{guard}import time; {announce}"
-        f"time.sleep(1.5); open({str(sentinel)!r}, 'w').close()"
+        f"{guard}import time\n"
+        f"open({str(ready)!r}, 'w').close()\n"
+        f"time.sleep(1.5); open({str(sentinel)!r}, 'w').close()\n"
     )
 
 
-async def _wait_until_cancellable(ready: pathlib.Path, timeout: float = 10.0) -> None:
-    """Block until the child announces that exec is inside its try block.
-
-    Polling, because the child is a separate process with nothing to await.
-    The timeout only has to outlast a spawn.
-    """
-    deadline = time.monotonic() + timeout
-    while not ready.exists():
-        if time.monotonic() > deadline:
-            raise AssertionError(f"the call did not become cancellable within {timeout}s")
-        await asyncio.sleep(0.01)
+async def test_the_channel_is_the_workers_stdin_and_stdout(tmp_path) -> None:
+    backend = backend_running(
+        tmp_path, "import sys\nsys.stdout.write(sys.stdin.readline().upper())\n"
+    )
+    session = await backend.start(network="none")
+    session.stdin.write(b"model-written code\n")
+    await session.stdin.drain()
+    assert await session.stdout.readline() == b"MODEL-WRITTEN CODE\n"
+    await session.close()
 
 
-async def test_a_call_past_the_timeout_raises_and_the_process_does_not_survive(
+async def test_the_worker_starts_in_a_scratch_directory_that_close_removes(
     tmp_path,
 ) -> None:
-    sentinel = tmp_path / "survived"
-    backend = LocalBackend()
+    backend = backend_running(tmp_path, "import os\nprint(os.getcwd())\n")
+    session = await backend.start(network="none")
+    assert isinstance(session, LocalSession)
+    cwd = (await session.stdout.readline()).decode().strip()
+    assert cwd == os.path.realpath(session.scratch)
+    assert cwd != os.path.realpath(tmp_path)
+    await session.close()
+    assert not os.path.exists(session.scratch)
 
-    with pytest.raises(ExecTimeoutError):
-        await backend.exec([sys.executable, "-c", _sleeper(sentinel)], timeout=0.15)
 
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
+async def test_the_worker_gets_the_allowlisted_environment_not_the_parents(
+    tmp_path, monkeypatch
+) -> None:
+    # The parent holds credentials a child has no business seeing, and a
+    # subprocess inherits the whole environment by default.
+    monkeypatch.setenv("COMMONS_TEST_SECRET", "sk-not-a-real-key")
+    backend = backend_running(
+        tmp_path,
+        "import os\n"
+        "print(os.environ.get('COMMONS_TEST_SECRET'), os.path.realpath(os.environ['HOME']) == os.getcwd())\n",
+    )
+    session = await backend.start(network="none")
+    assert (await session.stdout.readline()).split() == [b"None", b"True"]
+    await session.close()
 
 
-async def test_a_process_that_handles_sigterm_gets_to_clean_up_first(tmp_path) -> None:
+async def test_the_worker_is_told_its_network_and_protection(tmp_path) -> None:
+    backend = backend_running(tmp_path, "import sys\nprint(sys.argv[1:])\n")
+    session = await backend.start(network="full")
+    line = (await session.stdout.readline()).decode()
+    assert line.strip() == repr(["full", protection_mode()])
+    await session.close()
+
+
+async def test_interrupt_raises_keyboard_interrupt_in_the_worker(tmp_path) -> None:
+    ready = tmp_path / "ready"
+    backend = backend_running(
+        tmp_path,
+        "import time\n"
+        "try:\n"
+        f"    open({str(ready)!r}, 'w').close(); time.sleep(30)\n"
+        "except KeyboardInterrupt:\n"
+        "    print('interrupted', flush=True)\n",
+    )
+    session = await backend.start(network="none")
+    await wait_for_file(ready)
+    session.interrupt()
+    line = await asyncio.wait_for(session.stdout.readline(), 5)
+    assert line == b"interrupted\n"
+    await session.close()
+
+
+async def test_a_worker_that_handles_sigterm_gets_to_clean_up_first(tmp_path) -> None:
     # SIGKILL first would strand whatever the worker was in the middle of.
     # Ask politely, then insist.
     marker = tmp_path / "cleaned-up"
-    code = (
+    ready = tmp_path / "ready"
+    backend = backend_running(
+        tmp_path,
         "import signal, sys, time\n"
         f"signal.signal(signal.SIGTERM, lambda *a: (open({str(marker)!r}, 'w').close(), sys.exit(0)))\n"
-        "time.sleep(5)\n"
+        f"open({str(ready)!r}, 'w').close()\n"
+        "time.sleep(5)\n",
     )
-    backend = LocalBackend()
-
-    with pytest.raises(ExecTimeoutError):
-        await backend.exec([sys.executable, "-c", code], timeout=0.15)
-
+    session = await backend.start(network="none")
+    await wait_for_file(ready)
+    await session.close()
     assert marker.exists()
 
 
-async def test_a_process_that_ignores_sigterm_is_killed_anyway(tmp_path) -> None:
-    sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=0.1)
-
-    with pytest.raises(ExecTimeoutError):
-        await backend.exec(
-            [sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)],
-            timeout=0.15,
-        )
-
+async def test_a_worker_that_ignores_sigterm_is_killed_anyway(tmp_path) -> None:
+    sentinel, ready = tmp_path / "survived", tmp_path / "ready"
+    backend = backend_running(
+        tmp_path, sleeper(sentinel, ready, ignore_sigterm=True), terminate_grace=0.1
+    )
+    session = await backend.start(network="none")
+    await wait_for_file(ready)
+    await session.close()
+    assert session.returncode is not None
     await asyncio.sleep(1.8)
     assert not sentinel.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="os.fork is POSIX-only")
+async def test_a_workers_own_children_do_not_survive_the_close(tmp_path) -> None:
+    # The escalation signals the worker's whole process group: code that
+    # forks a child of its own cannot strand it.
+    sentinel, ready = tmp_path / "survived", tmp_path / "ready"
+    backend = backend_running(
+        tmp_path,
+        "import os, time\n"
+        "if os.fork() == 0:\n"
+        f"    time.sleep(1.5); open({str(sentinel)!r}, 'w').close(); os._exit(0)\n"
+        f"open({str(ready)!r}, 'w').close()\n"
+        "time.sleep(5)\n",
+        terminate_grace=0.1,
+    )
+    session = await backend.start(network="none")
+    await wait_for_file(ready)
+    await session.close()
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="os.fork is POSIX-only")
+async def test_closing_a_dead_worker_still_kills_its_children(tmp_path) -> None:
+    # The leader's exit leaves its process group behind; the close takes it
+    # anyway rather than skipping a worker that is already gone.
+    sentinel = tmp_path / "survived"
+    backend = backend_running(
+        tmp_path,
+        "import os, time\n"
+        "if os.fork() == 0:\n"
+        f"    time.sleep(1.5); open({str(sentinel)!r}, 'w').close(); os._exit(0)\n",
+    )
+    session = await backend.start(network="none")
+    assert isinstance(session, LocalSession)
+    await session.process.wait()
+    await session.close()
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+async def test_a_cancelled_close_still_kills_the_worker_and_reraises(tmp_path) -> None:
+    # Shutdown is not the caller's to interrupt: a cancel arriving while the
+    # SIGTERM grace is awaited would otherwise skip SIGKILL. The caller is
+    # still told it was cancelled.
+    sentinel, ready = tmp_path / "survived", tmp_path / "ready"
+    backend = backend_running(
+        tmp_path, sleeper(sentinel, ready, ignore_sigterm=True), terminate_grace=1.0
+    )
+    session = await backend.start(network="none")
+    await wait_for_file(ready)
+    closing = asyncio.ensure_future(session.close())
+    # The grace runs for 1.0s, so a cancel at 0.2s arrives mid-shutdown.
+    await asyncio.sleep(0.2)
+    closing.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await closing
+    assert backend._shutdowns
+    await backend.aclose()
+    assert not backend._shutdowns
+    assert session.returncode is not None
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+async def test_close_is_safe_to_call_twice(tmp_path) -> None:
+    backend = backend_running(tmp_path, "import time\ntime.sleep(30)\n")
+    session = await backend.start(network="none")
+    await asyncio.gather(session.close(), session.close())
+    await session.close()
+    assert session.returncode is not None
+
+
+async def test_cancelling_a_start_leaves_no_worker_behind(tmp_path) -> None:
+    sentinel = tmp_path / "survived"
+    backend = backend_running(
+        tmp_path,
+        f"import time\ntime.sleep(1.5); open({str(sentinel)!r}, 'w').close()\n",
+        terminate_grace=0.1,
+    )
+    starting = asyncio.ensure_future(backend.start(network="none"))
+    await asyncio.sleep(0)
+    starting.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await starting
+    await backend.aclose()
+    await asyncio.sleep(1.8)
+    assert not sentinel.exists()
+
+
+async def test_stderr_keeps_the_tail_of_what_the_worker_wrote(tmp_path) -> None:
+    backend = backend_running(
+        tmp_path,
+        "import sys\n"
+        "for i in range(200):\n"
+        "    sys.stderr.write(f'line-{i}:' + 'x' * 1000 + '\\n')\n",
+    )
+    session = await backend.start(network="none")
+    assert isinstance(session, LocalSession)
+    await session.process.wait()
+    await session.close()
+    tail = await session.stderr()
+    assert len(tail) <= STDERR_TAIL
+    assert "line-199:" in tail
+    assert "line-0:" not in tail
+
+
+async def test_reading_a_tail_keeps_the_last_bytes_and_flags_the_cut() -> None:
+    stream = asyncio.StreamReader()
+    stream.feed_data(b"a" * 5000 + b"end")
+    stream.feed_eof()
+    assert await _read_tail(stream, 10) == (b"aaaaaaaend", True)
+
+
+async def test_reading_the_tail_of_a_missing_stream_is_empty() -> None:
+    assert await _read_tail(None, 10) == (b"", False)
 
 
 class _NeverReaped:
@@ -212,9 +304,7 @@ class _NeverReaped:
         return 0
 
 
-async def test_terminate_gives_up_when_the_exit_is_never_reaped(
-    monkeypatch,
-) -> None:
+async def test_terminate_gives_up_when_the_exit_is_never_reaped(monkeypatch) -> None:
     process = _NeverReaped()
 
     def record_signals(process: Any, sig: signal.Signals) -> None:
@@ -230,357 +320,17 @@ async def test_terminate_gives_up_when_the_exit_is_never_reaped(
     assert process.signals == ["term", "kill"]
 
 
-async def test_input_to_a_process_that_never_reads_it_is_not_an_error() -> None:
-    # A worker that dies during startup leaves nobody on the other end of the
-    # pipe. That is a failed call to report, not an exception from the plumbing.
-    backend = LocalBackend()
-
-    result = await backend.exec(
-        [sys.executable, "-c", "raise SystemExit(3)"],
-        input="x" * (4 * 1024 * 1024),
-    )
-
-    assert result.returncode == 3
-
-
-async def test_input_larger_than_the_pipe_buffer_arrives_in_full() -> None:
-    # Handles cross this boundary, so delivery cannot quietly stop at whatever
-    # the operating system's pipe buffer happens to be.
-    backend = LocalBackend()
-    payload = "y" * (4 * 1024 * 1024)
-
-    result = await backend.exec(
-        [sys.executable, "-c", "import sys; print(len(sys.stdin.read()))"],
-        input=payload,
-    )
-
-    assert result.stdout.strip() == str(len(payload))
-
-
-def test_the_local_backend_satisfies_the_backend_interface() -> None:
-    # The annotation is the real assertion: pyrefly rejects an implementation
-    # whose signature has drifted from the interface a container-hosted
-    # backend would also have to meet.
-    backend: ExecBackend = LocalBackend()
-
+async def test_the_local_backend_satisfies_the_backend_interface(tmp_path) -> None:
+    # The annotations are the real assertion: pyrefly rejects an
+    # implementation whose signature has drifted from the interface a
+    # container-hosted backend would also have to meet.
+    backend: ExecBackend = backend_running(tmp_path, "")
+    session: WorkerSession = await backend.start(network="none")
     assert isinstance(backend, ExecBackend)
+    assert isinstance(session, WorkerSession)
+    await session.close()
 
 
-async def test_the_timeout_still_applies_after_the_output_streams_close(
-    tmp_path,
-) -> None:
-    # Reaching end-of-output is not the same as being finished. Code that
-    # closes its streams and keeps running must still hit the deadline.
-    sentinel = tmp_path / "survived"
-    code = (
-        "import os, time\n"
-        "os.close(1); os.close(2)\n"
-        f"time.sleep(1.5); open({str(sentinel)!r}, 'w').close()\n"
-    )
-    backend = LocalBackend()
+def test_the_default_grace_is_the_documented_constant() -> None:
+    assert LocalBackend()._terminate_grace == TERMINATE_GRACE
 
-    with pytest.raises(ExecTimeoutError):
-        await backend.exec([sys.executable, "-c", code], timeout=0.15)
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_cancelling_a_call_does_not_leave_the_process_running(tmp_path) -> None:
-    # The driver cancels calls when a conversation goes away or the agent
-    # shuts down. Whoever started the process has to be the one to end it.
-    sentinel = tmp_path / "survived"
-    ready = tmp_path / "ready"
-    backend = LocalBackend(terminate_grace=0.1)
-    call = asyncio.create_task(
-        backend.exec([sys.executable, "-c", _sleeper(sentinel, ready=ready)])
-    )
-    await _wait_until_cancellable(ready)
-
-    call.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await call
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_a_command_that_cannot_be_started_raises_os_error() -> None:
-    # Nothing was spawned, so there is nothing to clean up: the failure
-    # propagates as-is rather than being dressed up as an exec result.
-    backend = LocalBackend()
-
-    with pytest.raises(FileNotFoundError):
-        await backend.exec(["/no/such/binary"])
-
-
-async def test_cancellation_still_escalates_for_a_process_ignoring_sigterm(
-    tmp_path,
-) -> None:
-    # The cancellation path does its waiting inside an except block, where an
-    # await can be cut short. SIGKILL still has to land.
-    sentinel = tmp_path / "survived"
-    ready = tmp_path / "ready"
-    backend = LocalBackend(terminate_grace=0.1)
-    call = asyncio.create_task(
-        backend.exec(
-            [
-                sys.executable,
-                "-c",
-                _sleeper(sentinel, ignore_sigterm=True, ready=ready),
-            ]
-        )
-    )
-    await _wait_until_cancellable(ready)
-
-    call.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await call
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_a_second_cancellation_cannot_abort_the_shutdown(tmp_path) -> None:
-    # Shutdown is not the caller's to interrupt. A cancel landing while the
-    # grace period is being awaited would otherwise skip SIGKILL and leave a
-    # SIGTERM-ignoring child running.
-    sentinel = tmp_path / "survived"
-    ready = tmp_path / "ready"
-    backend = LocalBackend(terminate_grace=1.0)
-    call = asyncio.create_task(
-        backend.exec(
-            [
-                sys.executable,
-                "-c",
-                _sleeper(sentinel, ignore_sigterm=True, ready=ready),
-            ]
-        )
-    )
-    await _wait_until_cancellable(ready)
-
-    call.cancel()
-    # The SIGTERM grace runs for 1.0s from the first cancel, so the second
-    # cancel at ~0.3s lands mid-shutdown with margin on both sides — the
-    # race this test exists for must actually happen, or it quietly
-    # degenerates into the plain cancellation test above.
-    await asyncio.sleep(0.2)
-    call.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await call
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_omitting_the_environment_gives_the_child_an_empty_one(
-    monkeypatch,
-) -> None:
-    # The parent holds credentials a child has no business seeing, so with no
-    # allowlist in hand the default has to fail closed: no environment at
-    # all, rather than the whole of the parent's.
-    monkeypatch.setenv("COMMONS_TEST_SECRET", "sk-not-a-real-key")
-    backend = LocalBackend()
-
-    result = await backend.exec(
-        [sys.executable, "-c", "import os; print(sorted(os.environ))"]
-    )
-
-    assert "COMMONS_TEST_SECRET" not in result.stdout
-
-
-async def test_stderr_past_the_cap_keeps_the_tail_and_sets_its_own_flag() -> None:
-    # The two streams are capped and flagged independently; a flag wired to
-    # the wrong stream is invisible if only stdout is ever exercised.
-    backend = LocalBackend(output_limit=2000)
-    code = (
-        "import sys\n"
-        "for i in range(200):\n"
-        "    sys.stderr.write(f'line-{i}:' + 'x' * 1000 + '\\n')\n"
-    )
-
-    result = await backend.exec([sys.executable, "-c", code])
-
-    assert result.returncode == 0
-    assert result.stdout == ""
-    assert not result.stdout_truncated
-    assert result.stderr_truncated
-    assert len(result.stderr) <= 2000
-    assert "line-199:" in result.stderr
-    assert "line-0:" not in result.stderr
-
-
-async def test_an_unexpected_error_mid_call_still_kills_the_process(
-    tmp_path, monkeypatch
-) -> None:
-    # Timeout and cancellation are not the only ways out of a call. A pipe
-    # failing mid-read (or any other surprise) must not leave the worker
-    # running with nobody waiting on it.
-    async def fail_read(
-        stream: asyncio.StreamReader | None, limit: int
-    ) -> tuple[bytes, bool]:
-        raise RuntimeError("pipe failed mid-read")
-
-    monkeypatch.setattr(backend_module, "_read_tail", fail_read)
-    sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=0.1)
-
-    with pytest.raises(RuntimeError, match="pipe failed"):
-        await backend.exec([sys.executable, "-c", _sleeper(sentinel)])
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_input_that_cannot_be_encoded_still_kills_the_process(
-    tmp_path,
-) -> None:
-    # Model-written text can contain unpaired surrogates, which fail at
-    # encode time — after the child has already been spawned.
-    sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=0.1)
-
-    with pytest.raises(UnicodeEncodeError):
-        await backend.exec(
-            [sys.executable, "-c", _sleeper(sentinel)], input="\ud800"
-        )
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_cancellation_during_the_timeout_shutdown_cannot_abort_it(
-    tmp_path,
-) -> None:
-    # A cancel landing while the post-timeout shutdown is in flight must not
-    # skip SIGKILL. The shutdown runs in its own task precisely so that it
-    # outlives the call that started it.
-    sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=1.0)
-    call = asyncio.create_task(
-        backend.exec(
-            [sys.executable, "-c", _sleeper(sentinel, ignore_sigterm=True)],
-            timeout=0.1,
-        )
-    )
-    # The timeout fires at ~0.1s and the SIGTERM grace then runs for 1.0s,
-    # so a cancel at 0.5s lands in the middle of the shutdown with margin on
-    # both sides — the race this test exists for must actually happen, or it
-    # quietly degenerates into the plain timeout test above.
-    await asyncio.sleep(0.5)
-
-    call.cancel()
-    with pytest.raises((asyncio.CancelledError, ExecTimeoutError)):
-        await call
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_reading_the_tail_of_a_missing_stream_is_empty() -> None:
-    # exec always pipes both streams, so this guard is defensive; pin it so
-    # it cannot be broken or deleted unnoticed.
-    assert await backend_module._read_tail(None, 10) == (b"", False)
-
-
-def test_the_defaults_are_the_documented_constants() -> None:
-    # Every other test overrides these; pin the wiring itself.
-    backend = LocalBackend()
-
-    assert backend._output_limit == DEFAULT_OUTPUT_LIMIT
-    assert backend._terminate_grace == TERMINATE_GRACE
-
-
-async def test_concurrent_calls_on_one_backend_do_not_interfere(tmp_path) -> None:
-    # The backend's one piece of shared state is the set of in-flight
-    # shutdowns; one call timing out must not disturb another's result.
-    sentinel = tmp_path / "survived"
-    backend = LocalBackend(terminate_grace=0.1)
-    slow = asyncio.create_task(
-        backend.exec([sys.executable, "-c", _sleeper(sentinel)], timeout=0.15)
-    )
-    fast = asyncio.create_task(backend.exec([sys.executable, "-c", "print('ok')"]))
-
-    with pytest.raises(ExecTimeoutError):
-        await slow
-    assert (await fast).stdout == "ok\n"
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_aclose_waits_for_shutdowns_still_in_flight(tmp_path) -> None:
-    # The escalation guarantee only holds while the event loop is running;
-    # aclose is how a driver honours it while tearing down. A second cancel
-    # is what leaves a shutdown running detached after the call has ended.
-    sentinel = tmp_path / "survived"
-    ready = tmp_path / "ready"
-    backend = LocalBackend(terminate_grace=1.0)
-    call = asyncio.create_task(
-        backend.exec(
-            [
-                sys.executable,
-                "-c",
-                _sleeper(sentinel, ignore_sigterm=True, ready=ready),
-            ]
-        )
-    )
-    await _wait_until_cancellable(ready)
-
-    call.cancel()
-    await asyncio.sleep(0.1)
-    call.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await call
-
-    assert backend._shutdowns
-    await backend.aclose()
-    assert not backend._shutdowns
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-@pytest.mark.skipif(os.name != "posix", reason="os.fork is POSIX-only")
-async def test_a_workers_own_children_do_not_survive_the_shutdown(tmp_path) -> None:
-    # The escalation signals the worker's whole process group: code that
-    # forks a child of its own cannot strand it, and cannot hold the output
-    # pipes open past the worker's own exit.
-    sentinel = tmp_path / "survived"
-    code = (
-        "import os, time\n"
-        "if os.fork() == 0:\n"
-        f"    time.sleep(1.5); open({str(sentinel)!r}, 'w').close(); os._exit(0)\n"
-        "time.sleep(5)\n"
-    )
-    backend = LocalBackend(terminate_grace=0.1)
-
-    with pytest.raises(ExecTimeoutError):
-        await backend.exec([sys.executable, "-c", code], timeout=0.15)
-
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
-
-
-async def test_both_streams_past_the_cap_are_capped_independently() -> None:
-    # The two streams keep separate buffers and flags even when both blow
-    # past the cap in the same call.
-    backend = LocalBackend(output_limit=2000)
-    code = (
-        "import sys\n"
-        "for i in range(200):\n"
-        "    sys.stdout.write(f'o-{i}:' + 'x' * 1000 + '\\n')\n"
-        "    sys.stderr.write(f'e-{i}:' + 'y' * 1000 + '\\n')\n"
-    )
-
-    result = await backend.exec([sys.executable, "-c", code])
-
-    assert result.returncode == 0
-    assert result.stdout_truncated
-    assert result.stderr_truncated
-    assert len(result.stdout) <= 2000
-    assert len(result.stderr) <= 2000
-    assert "o-199:" in result.stdout
-    assert "o-0:" not in result.stdout
-    assert "e-199:" in result.stderr
-    assert "e-0:" not in result.stderr

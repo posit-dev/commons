@@ -20,7 +20,7 @@ import pytest
 from pydantic import Field
 
 from commons import measure, semantic_layer
-from commons._execution import _driver
+from commons._execution._backend import LocalBackend, LocalSession
 from commons._execution._driver import Failure, Worker
 from commons._execution._protocol import Error, Result
 from commons._execution._sandbox import protection_mode
@@ -85,11 +85,18 @@ def make_worker(**kwargs) -> Worker:
     return Worker(**kwargs)
 
 
+def process_of(worker: Worker) -> asyncio.subprocess.Process:
+    """The running worker's process, which the local backend exposes."""
+    session = worker._session
+    assert isinstance(session, LocalSession)
+    return session.process
+
+
 async def test_no_process_exists_until_the_first_call():
     async with make_worker() as worker:
-        assert worker._process is None
+        assert worker._session is None
         await worker.run("1")
-        assert worker._process is not None
+        assert worker._session is not None
 
 
 async def test_a_trailing_expression_is_the_result():
@@ -247,8 +254,7 @@ async def test_a_crashed_workers_children_do_not_outlive_it():
             # The macOS sandbox aborts child processes outright, so there
             # is nothing to outlive the worker on this host.
             pytest.skip("the sandbox refuses child processes on this host")
-        process = worker._process
-        assert process is not None
+        process = process_of(worker)
         code = "import subprocess, os\nsubprocess.Popen(['sleep', '30'])\nos._exit(1)\n"
         reply = await worker.run(code)
         assert isinstance(reply, Failure)
@@ -273,8 +279,7 @@ async def test_a_crashed_workers_children_do_not_outlive_it():
 async def test_a_worker_that_stops_reading_fails_the_call_instead_of_hanging():
     async with make_worker(call_timeout=0.5) as worker:
         await worker.run("1")
-        process = worker._process
-        assert process is not None
+        process = process_of(worker)
         # A stopped worker cannot drain its stdin; a call bigger than the
         # pipe buffer would block the write forever without a bound on it.
         process.send_signal(signal.SIGSTOP)
@@ -297,17 +302,15 @@ async def test_a_crash_is_reported_and_the_next_call_respawns():
 async def test_an_idle_worker_is_reaped_and_the_next_call_respawns():
     async with make_worker(idle_timeout=0.5) as worker:
         await worker.run("x = 5")
-        process = worker._process
-        assert process is not None
+        process = process_of(worker)
         await asyncio.sleep(2)
         # The reaper closed the worker; nothing is running now.
-        assert worker._process is None
+        assert worker._session is None
         reply = await worker.run("x")
         # The respawned session has never seen x.
         assert isinstance(reply, Error)
         assert "NameError" in reply.message
-        assert worker._process is not None
-        assert worker._process.pid != process.pid
+        assert process_of(worker).pid != process.pid
 
 
 async def test_the_reaper_leaves_a_worker_with_a_call_in_flight_alone():
@@ -429,13 +432,12 @@ async def test_a_default_that_resolves_keeps_its_real_value():
         assert reply.value == 42
 
 
-async def test_a_failed_start_reports_the_workers_stderr(tmp_path, monkeypatch):
+async def test_a_failed_start_reports_the_workers_stderr(tmp_path):
     script = tmp_path / "worker.py"
     script.write_text(
         "import sys\nprint('boom: the sandbox refused', file=sys.stderr)\nsys.exit(3)\n"
     )
-    monkeypatch.setattr(_driver, "_WORKER_SCRIPT", script)
-    async with make_worker() as worker:
+    async with make_worker(backend=LocalBackend(worker_script=script)) as worker:
         reply = await worker.run("1")
         assert isinstance(reply, Failure)
         assert "failed to start" in reply.message
@@ -485,20 +487,19 @@ async def test_a_reaped_workers_scratch_directory_is_removed():
         assert isinstance(reply, Result)
         scratch = reply.value
         await asyncio.sleep(2)
-        assert worker._process is None
+        assert worker._session is None
         assert not os.path.exists(scratch)
 
 
 async def test_aclose_during_a_reap_still_kills_a_sigterm_ignoring_worker():
     worker = make_worker(idle_timeout=0.2)
     await worker.run("import signal; signal.signal(signal.SIGTERM, signal.SIG_IGN)")
-    process = worker._process
-    assert process is not None
+    process = process_of(worker)
     # Wait for the reap to begin (it clears the process synchronously),
     # then close while its SIGTERM grace window is still open. Cancelling
     # the reaper must not strand the worker before its SIGKILL.
     deadline = asyncio.get_running_loop().time() + 5
-    while worker._process is not None:
+    while worker._session is not None:
         assert asyncio.get_running_loop().time() < deadline
         await asyncio.sleep(0.05)
     await worker.aclose()
@@ -515,7 +516,7 @@ async def test_cancelling_a_call_shuts_the_worker_down():
             await call
         # The cancelled call's worker is gone rather than still computing,
         # so its late reply cannot poison the next call's channel.
-        assert worker._process is None
+        assert worker._session is None
         reply = await worker.run("x")
         assert isinstance(reply, Error)
         assert "NameError" in reply.message
@@ -543,7 +544,7 @@ async def test_cancelling_aclose_still_closes_the_worker():
     with pytest.raises(asyncio.CancelledError):
         await call
     await asyncio.gather(closing, return_exceptions=True)
-    assert worker._process is None
+    assert worker._session is None
 
 
 async def test_aclose_waits_for_a_spawn_in_flight():
@@ -554,23 +555,22 @@ async def test_aclose_waits_for_a_spawn_in_flight():
     # However the two interleaved, the close waited the call out and no
     # worker outlived it.
     await call
-    assert worker._process is None
+    assert worker._session is None
 
 
-async def test_aclose_during_a_failing_spawn_does_not_deadlock(tmp_path, monkeypatch):
+async def test_aclose_during_a_failing_spawn_does_not_deadlock(tmp_path):
     script = tmp_path / "worker.py"
     script.write_text("import sys\nsys.exit(3)\n")
-    monkeypatch.setattr(_driver, "_WORKER_SCRIPT", script)
-    worker = make_worker()
+    worker = make_worker(backend=LocalBackend(worker_script=script))
     call = asyncio.ensure_future(worker.run("1"))
     await asyncio.sleep(0)
     closing = asyncio.ensure_future(worker.aclose())
-    # asyncio.wait, not wait_for: aclose() absorbs cancellation, so a
-    # wait_for bound would hang along with it.
+    # asyncio.wait bounds the two together without cancelling either, so
+    # a deadlock shows up as a task left pending.
     done, _ = await asyncio.wait({call, closing}, timeout=10)
     assert done == {call, closing}
     assert isinstance(call.result(), Failure)
-    assert worker._process is None
+    assert worker._session is None
 
 
 async def test_cancelling_during_the_spawn_leaves_nothing_tracked():
@@ -582,7 +582,7 @@ async def test_cancelling_during_the_spawn_leaves_nothing_tracked():
             await call
         # Whether the cancellation landed before or during the spawn,
         # nothing half-started survives it.
-        assert worker._process is None
+        assert worker._session is None
         reply = await worker.run("6 * 7")
         assert isinstance(reply, Result)
         assert reply.value == 42
@@ -593,8 +593,7 @@ async def test_a_worker_that_died_between_calls_loses_its_scratch_directory():
         reply = await worker.run("import os; os.getcwd()")
         assert isinstance(reply, Result)
         scratch = reply.value
-        process = worker._process
-        assert process is not None
+        process = process_of(worker)
         process.kill()
         await process.wait()
         # The next call spawns a replacement, and the dead worker's
