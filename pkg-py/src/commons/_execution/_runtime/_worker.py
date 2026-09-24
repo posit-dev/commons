@@ -24,6 +24,7 @@ code never runs before then.
 from __future__ import annotations
 
 import os
+import signal
 import sys
 
 # The channel takeover runs before any import that could print, and before
@@ -145,18 +146,24 @@ def _engage_sandbox(network: str, protection: str) -> None:
 def _send(message: _protocol.Message) -> None:
     """Write ``message`` to the protocol channel, whole.
 
-    A half-written line poisons the channel, so a write interrupted by a
-    signal — the driver's SIGINT included — is retried until the line is
-    out. The call the interrupt was meant for has already finished by the
-    time its reply is being sent.
+    ``os.write`` may write part of the line, and a half-written line poisons
+    the channel, so the rest is written until the line is out.
     """
     view = memoryview(_protocol.encode_message(message))
     while view:
-        try:
-            written = os.write(_PROTOCOL_OUT, view)
-        except (InterruptedError, KeyboardInterrupt):
-            continue
-        view = view[written:]
+        view = view[os.write(_PROTOCOL_OUT, view) :]
+
+
+# Whether model code is running. The driver's SIGINT is meant for the call
+# it timed out; one that arrives while the worker encodes a reply, reads the
+# next line, or waits between calls has nothing to interrupt, and raising
+# there would lose the reply or the session.
+_in_call = False
+
+
+def _on_interrupt(signum: int, frame: object) -> None:
+    if _in_call:
+        raise KeyboardInterrupt
 
 
 # Seeded into the session namespace at startup. Harvested measure sources
@@ -257,13 +264,19 @@ def _commons_define_source(source):
 
 def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
     """Run one call in the session namespace and render its reply."""
+    global _in_call
     namespace.update(call.handles)
+    _in_call = True
     try:
         evaluation = _repl.run(call.code, namespace)
     except KeyboardInterrupt:
         # The driver's SIGINT broke the call out of its computation. The
         # session and its variables survive; the driver reports the
         # interrupt in its own words.
+        evaluation = None
+    finally:
+        _in_call = False
+    if evaluation is None:
         return _protocol.Error(id=call.id, message="KeyboardInterrupt")
     if evaluation.error:
         return _protocol.Error(
@@ -280,6 +293,9 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
 def main() -> None:
     network, protection = sys.argv[1], sys.argv[2]
     _engage_sandbox(network, protection)
+    # Installed explicitly, so a worker whose parent ignores SIGINT, as a
+    # shell does for a background job, can still be interrupted.
+    signal.signal(signal.SIGINT, _on_interrupt)
     _send(_protocol.Ready())
     _silence_stderr()
 
@@ -289,12 +305,7 @@ def main() -> None:
     exec(compile(_DEFINE_SOURCE, "<worker>", "exec"), namespace)  # noqa: S102
     calls = os.fdopen(_PROTOCOL_IN, "rb")
     while True:
-        try:
-            line = calls.readline()
-        except KeyboardInterrupt:
-            # A SIGINT that landed between calls; there is nothing in
-            # flight to abort, so go back to listening.
-            continue
+        line = calls.readline()
         if not line:
             return  # The driver is gone, and with it the reason to be here.
         try:
