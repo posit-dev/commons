@@ -212,6 +212,36 @@ async def test_a_timeout_interrupts_the_call_and_keeps_the_session():
         assert reply.value == 5
 
 
+async def test_an_interrupt_between_calls_leaves_the_session_alone():
+    # The driver can interrupt a call just as it finishes, so the SIGINT
+    # arrives once the worker is back to waiting for the next line.
+    async with make_worker() as worker:
+        await worker.run("x = 5")
+        os.killpg(process_of(worker).pid, signal.SIGINT)
+        await asyncio.sleep(0.3)
+        reply = await worker.run("x")
+        assert isinstance(reply, Result)
+        assert reply.value == 5
+
+
+async def test_a_host_that_ignores_sigint_still_gets_its_calls_interrupted():
+    # A background job's shell starts it with SIGINT ignored, which a child
+    # inherits; the worker must not lose its interrupt to that.
+    previous = signal.signal(signal.SIGINT, signal.SIG_IGN)
+    worker = make_worker(call_timeout=0.5)
+    try:
+        await worker.run("x = 5")
+    finally:
+        signal.signal(signal.SIGINT, previous)
+    async with worker:
+        reply = await worker.run("import time; time.sleep(60)")
+        assert isinstance(reply, Failure)
+        assert "remain available" in reply.message
+        reply = await worker.run("x")
+        assert isinstance(reply, Result)
+        assert reply.value == 5
+
+
 async def test_a_worker_that_ignores_the_interrupt_is_restarted():
     async with make_worker(call_timeout=0.5, interrupt_grace=1) as worker:
         await worker.run("x = 5")
