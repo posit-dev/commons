@@ -99,6 +99,15 @@ async def test_no_process_exists_until_the_first_call():
         assert worker._session is not None
 
 
+@pytest.mark.parametrize("network", ["none", "full"])
+async def test_the_worker_is_started_with_its_network_access(network):
+    # The backend passes the access level to the worker's entry point.
+    async with make_worker(network=network) as worker:
+        reply = await worker.run("import sys; sys.argv[1]")
+        assert isinstance(reply, Result)
+        assert reply.value == network
+
+
 async def test_a_trailing_expression_is_the_result():
     async with make_worker() as worker:
         reply = await worker.run("6 * 7")

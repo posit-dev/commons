@@ -193,12 +193,17 @@ async def test_a_workers_own_children_do_not_survive_the_close(tmp_path) -> None
 @pytest.mark.skipif(os.name != "posix", reason="os.fork is POSIX-only")
 async def test_closing_a_dead_worker_still_kills_its_children(tmp_path) -> None:
     # The leader's exit leaves its process group behind; the close takes it
-    # anyway rather than skipping a worker that is already gone.
+    # anyway rather than skipping a worker that is already gone. The child
+    # lets go of the pipes, as the real worker's fds are sinks, so that the
+    # leader's exit is observed while the child still runs.
     sentinel = tmp_path / "survived"
     backend = backend_running(
         tmp_path,
         "import os, time\n"
         "if os.fork() == 0:\n"
+        "    sink = os.open(os.devnull, os.O_RDWR)\n"
+        "    for fd in (0, 1, 2):\n"
+        "        os.dup2(sink, fd)\n"
         f"    time.sleep(1.5); open({str(sentinel)!r}, 'w').close(); os._exit(0)\n",
     )
     session = await backend.start(network="none")
