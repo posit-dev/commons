@@ -4,7 +4,8 @@ This runs in the child, after the filesystem sandbox and before any
 model-written code is loaded. Its job is the part of the boundary a
 filesystem sandbox cannot express: the syscalls that would let the worker
 step out of that sandbox rather than read around it, and, when the caller
-asked for no network, the syscalls that open a socket.
+asked for no network, the syscalls that open a socket or send one to an
+address.
 
 A seccomp filter matches raw syscall numbers, and those are per
 architecture, so the number table below is per architecture too. The filter's
@@ -15,12 +16,8 @@ a number this filter reads as something else.
 
 The baseline for this filter is ``seccomp_engage()`` and
 ``network_engage()`` in ``pkg-r/src/sandbox.c``, where the compiler
-supplies the numbers. Two entry points the R filter does not screen are
-screened here, with kata mv69 tracking the R-side fix: ``socketcall`` on
-i386, which multiplexes the socket calls behind one number, and
-``pidfd_getfd``, which hands over a descriptor belonging to another
-process of the same user and so returns a capability the filesystem
-sandbox never granted.
+supplies the numbers. ``pidfd_getfd`` is screened because it can take a
+descriptor from another process of the same user.
 """
 
 from __future__ import annotations
@@ -39,9 +36,12 @@ from typing import Literal
 
 __all__ = [
     "ARCHES",
+    "LOCAL_PEER_SCREENED",
+    "LOCAL_PEER_SCREENED_WHEN_ADDRESSED",
     "NETWORK_SCREENED",
     "SCREENED",
     "SCREENED_WHERE_PRESENT",
+    "SOCKETCALL_ALLOWED",
     "Arch",
     "allow_all",
     "arch_for",
@@ -83,7 +83,35 @@ SCREENED_WHERE_PRESENT = ("umount",)
 # Syscalls that open a socket, screened only when the caller asked for no
 # network. Separate from SCREENED because network access is a choice and
 # escaping the sandbox is not.
-NETWORK_SCREENED = ("socket", "socketcall", "io_uring_setup")
+NETWORK_SCREENED = ("socket", "io_uring_setup")
+
+# Syscalls that send an existing socket to an address. socketpair() stays
+# open under network="none", and these stop its ends from reaching abstract
+# AF_UNIX names. sendmsg() and sendmmsg() keep the address in a struct the
+# filter cannot read, so they are denied outright.
+LOCAL_PEER_SCREENED = ("bind", "connect", "sendmsg", "sendmmsg")
+
+# libc implements send() as sendto() with a NULL address, so sendto() is
+# denied only when it has an address.
+LOCAL_PEER_SCREENED_WHEN_ADDRESSED = ("sendto",)
+
+# The socketcall() sub-calls allowed under network="none", from
+# include/uapi/linux/net.h. i386 glibc routes socketpair(), send() and recv()
+# through socketcall(), so it is filtered by sub-call. The address behind a
+# sub-call is out of the filter's reach, so sendto() is denied here outright.
+SOCKETCALL_ALLOWED: Mapping[str, int] = {
+    "getsockname": 6,
+    "getpeername": 7,
+    "socketpair": 8,
+    "send": 9,
+    "recv": 10,
+    "recvfrom": 12,
+    "shutdown": 13,
+    "setsockopt": 14,
+    "getsockopt": 15,
+    "recvmsg": 17,
+    "recvmmsg": 19,
+}
 
 
 class SockFilter(ctypes.Structure):
@@ -116,10 +144,11 @@ BPF_JSET_K = 0x05 | 0x40 | 0x00
 BPF_RET_K = 0x06 | 0x00
 
 # Offsets into struct seccomp_data, whose layout is fixed across
-# architectures.
+# architectures. Each argument is 64 bits, so a pointer takes two loads.
 DATA_NR = 0
 DATA_ARCH = 4
 DATA_ARG0 = 16
+DATA_ARG4 = 16 + 4 * 8
 
 SECCOMP_RET_ALLOW = 0x7FFF0000
 _SECCOMP_RET_ERRNO = 0x00050000
@@ -165,6 +194,30 @@ def _screen(program: list[SockFilter], nr: int, verdict: int) -> None:
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=verdict))
 
 
+def _screen_when_addressed(
+    program: list[SockFilter], nr: int, address_offset: int
+) -> None:
+    """Deny one syscall when its address argument is not NULL."""
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=5, k=nr))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=address_offset))
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=2, k=0))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=address_offset + 4))
+    program.append(SockFilter(code=BPF_JEQ_K, jt=1, jf=0, k=0))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
+
+
+def _screen_socketcall(program: list[SockFilter], nr: int) -> None:
+    """Deny socketcall() unless its sub-call is in ``SOCKETCALL_ALLOWED``."""
+    allowed = sorted(SOCKETCALL_ALLOWED.values())
+    count = len(allowed)
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=count + 3, k=nr))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=DATA_ARG0))
+    for index, call in enumerate(allowed):
+        program.append(SockFilter(code=BPF_JEQ_K, jt=count - index, jf=0, k=call))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
+
+
 def _preamble(arch: Arch) -> list[SockFilter]:
     """Confirm the caller's ABI, then load the syscall number.
 
@@ -187,17 +240,22 @@ def _preamble(arch: Arch) -> list[SockFilter]:
 
 
 def build_network_filter(arch: Arch) -> list[SockFilter]:
-    """A filter that refuses every syscall that creates a socket.
+    """A filter that refuses socket creation and addressed socket calls.
 
-    The filter acts on creation alone: a socket descriptor the process
+    The filter acts on calls alone: a socket descriptor the process
     started with, or one received over an existing channel, is already
     open. The guarantee assumes the worker starts with a clean
     descriptor table.
     """
     program = _preamble(arch)
-    for name in NETWORK_SCREENED:
+    for name in (*NETWORK_SCREENED, *LOCAL_PEER_SCREENED):
         if name in arch.syscalls:
             _screen(program, arch.syscalls[name], DENY_EPERM)
+    for name in LOCAL_PEER_SCREENED_WHEN_ADDRESSED:
+        if name in arch.syscalls:
+            _screen_when_addressed(program, arch.syscalls[name], DATA_ARG4)
+    if "socketcall" in arch.syscalls:
+        _screen_socketcall(program, arch.syscalls["socketcall"])
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
     return program
 
@@ -237,6 +295,12 @@ ARCHES: Mapping[str, Arch] = {
             "clone": 56,
             "clone3": 435,
             "socket": 41,
+            "socketpair": 53,
+            "bind": 49,
+            "connect": 42,
+            "sendto": 44,
+            "sendmsg": 46,
+            "sendmmsg": 307,
             "io_uring_setup": 425,
         },
     ),
@@ -264,6 +328,12 @@ ARCHES: Mapping[str, Arch] = {
             "clone": 220,
             "clone3": 435,
             "socket": 198,
+            "socketpair": 199,
+            "bind": 200,
+            "connect": 203,
+            "sendto": 206,
+            "sendmsg": 211,
+            "sendmmsg": 269,
             "io_uring_setup": 425,
         },
     ),
@@ -296,8 +366,14 @@ ARCHES: Mapping[str, Arch] = {
             "socket": 359,
             # i386 alone still multiplexes the socket calls through one entry
             # point, so screening socket() by itself would leave a way to
-            # open one.
+            # open one. Kernels since 4.3 also have the direct numbers below.
             "socketcall": 102,
+            "socketpair": 360,
+            "bind": 361,
+            "connect": 362,
+            "sendto": 369,
+            "sendmsg": 370,
+            "sendmmsg": 345,
             "io_uring_setup": 425,
         },
     ),
@@ -325,6 +401,12 @@ ARCHES: Mapping[str, Arch] = {
             "clone": 120,
             "clone3": 435,
             "socket": 281,
+            "socketpair": 288,
+            "bind": 282,
+            "connect": 283,
+            "sendto": 290,
+            "sendmsg": 296,
+            "sendmmsg": 374,
             "io_uring_setup": 425,
         },
     ),

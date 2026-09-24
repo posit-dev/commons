@@ -5,6 +5,9 @@ new user and mount namespace, pivots into a fresh tmpfs root, and binds back
 only the roots it has been granted, so what it cannot see it cannot reach.
 The same sequence is in ``userns_engage`` in pkg-r/src/sandbox.c.
 
+Under ``network="full"``, abstract AF_UNIX sockets stay reachable on this
+tier, because they have no filesystem path.
+
 Importing this module is harmless. Calling ``engage()`` is not, and cannot be
 undone in the process that calls it.
 """

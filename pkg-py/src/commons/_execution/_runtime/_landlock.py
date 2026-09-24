@@ -32,7 +32,10 @@ __all__ = [
     "FS_REMOVE_FILE",
     "FS_TRUNCATE",
     "FS_WRITE_FILE",
+    "SCOPE_ABSTRACT_UNIX_SOCKET",
+    "SCOPE_MIN_ABI",
     "PathBeneathAttr",
+    "ScopedRulesetAttr",
     "abi_version",
     "engage",
     "handled_access",
@@ -80,6 +83,11 @@ FS_IOCTL_DEV = 1 << 15
 # directory has to be listable for an import to find anything in it.
 FS_READ_ONLY = FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 
+# ABI 6 (Linux 6.12) scoping: the worker can connect only to abstract AF_UNIX
+# sockets that it or its descendants bound, even under full network.
+SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
+SCOPE_MIN_ABI = 6
+
 # A kernel that has no Landlock, or that is behind a policy forbidding it,
 # is a kernel to fall back from rather than fail on.
 _UNAVAILABLE = frozenset({errno.ENOSYS, errno.EOPNOTSUPP, errno.EPERM})
@@ -90,10 +98,21 @@ class RulesetAttr(ctypes.Structure):
 
     Later versions append fields for network rights and scoping. The struct
     is extensible and read at the size it is given, so passing this one asks
-    for a filesystem-only ruleset on any kernel.
+    for a filesystem-only ruleset on any kernel. ``ScopedRulesetAttr`` adds
+    ABI 6's scoping field.
     """
 
     _fields_ = (("handled_access_fs", ctypes.c_uint64),)
+
+
+class ScopedRulesetAttr(ctypes.Structure):
+    """The ruleset attribute with ABI 6's ``scoped`` field, in kernel order."""
+
+    _fields_ = (
+        ("handled_access_fs", ctypes.c_uint64),
+        ("handled_access_net", ctypes.c_uint64),
+        ("scoped", ctypes.c_uint64),
+    )
 
 
 class PathBeneathAttr(ctypes.Structure):
@@ -110,11 +129,9 @@ class PathBeneathAttr(ctypes.Structure):
     )
 
 
-# Syscall numbers are per-kernel and per-architecture, so making these calls
-# anywhere else would not fail to find Landlock, it would invoke whatever
-# that number means on the host instead. Everything below therefore refuses
-# to run outside the pairs the numbers are known for, rather than trusting
-# the call to come back with ENOSYS.
+# Syscall numbers differ by architecture, so on an unknown one these numbers
+# could call an unrelated syscall instead of failing with ENOSYS. Everything
+# below runs only on the known ones.
 ON_LINUX = sys.platform == "linux" and platform.machine().lower() in (
     KNOWN_ARCHITECTURES
 )
@@ -270,7 +287,8 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
     since that is a broken host rather than an old one.
 
     Read roots are granted execute, read-file and read-dir. Write roots are
-    granted everything the ruleset handles. Once this returns, nothing can
+    granted everything the ruleset handles. On ABI 6 and later the ruleset
+    also scopes abstract AF_UNIX sockets. Once this returns, nothing can
     widen the process's access again, including anything it goes on to
     execute.
     """
@@ -281,7 +299,16 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
     _set_no_new_privs()
 
     handled = handled_access(abi)
-    attr = RulesetAttr(handled_access_fs=handled)
+    attr: RulesetAttr | ScopedRulesetAttr
+    if abi >= SCOPE_MIN_ABI:
+        attr = ScopedRulesetAttr(
+            handled_access_fs=handled,
+            # Zero, so Landlock leaves network access alone.
+            handled_access_net=0,
+            scoped=SCOPE_ABSTRACT_UNIX_SOCKET,
+        )
+    else:
+        attr = RulesetAttr(handled_access_fs=handled)
     ruleset_fd = _syscall(
         NR_CREATE_RULESET,
         ctypes.byref(attr),

@@ -1,0 +1,23 @@
+{
+  "seccomp_screened_under_network_none": {
+    "always": ["bind", "connect", "sendmsg", "sendmmsg"],
+    "when_addressed": ["sendto"]
+  },
+  "socketcall_allowed_under_network_none": [
+    "getsockname",
+    "getpeername",
+    "socketpair",
+    "send",
+    "recv",
+    "recvfrom",
+    "shutdown",
+    "setsockopt",
+    "getsockopt",
+    "recvmsg",
+    "recvmmsg"
+  ],
+  "landlock_abstract_unix_scope": {
+    "flag": "LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET",
+    "min_abi": 6
+  }
+}

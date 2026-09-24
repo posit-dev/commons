@@ -33,6 +33,7 @@
 #include <linux/audit.h>
 #include <linux/capability.h>
 #include <linux/filter.h>
+#include <linux/net.h>
 #include <linux/seccomp.h>
 
 /* The seccomp filter matches syscall numbers, which are architecture-specific,
@@ -92,6 +93,9 @@
 #ifndef __NR_mount_setattr
 #define __NR_mount_setattr 442
 #endif
+#ifndef __NR_pidfd_getfd
+#define __NR_pidfd_getfd 438
+#endif
 
 #ifndef CLONE_NEWCGROUP
 #define CLONE_NEWCGROUP 0x02000000
@@ -124,8 +128,20 @@ static uint64_t landlock_handled(long abi) {
   return handled;
 }
 
+/* ABI 6 (Linux 6.12) scoping: the worker can connect only to abstract AF_UNIX
+ * sockets that it or its descendants bound, even under full network. The bit
+ * is LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET, defined here for older headers. */
+#define LL_SCOPE_ABSTRACT_UNIX_SOCKET (1ULL << 0)
+#define LL_SCOPE_MIN_ABI 6
+
 struct ll_ruleset_attr {
   uint64_t handled_access_fs;
+};
+/* The ruleset attribute with ABI 6's scoped field, in kernel order. */
+struct ll_scoped_ruleset_attr {
+  uint64_t handled_access_fs;
+  uint64_t handled_access_net;
+  uint64_t scoped;
 };
 struct ll_path_beneath_attr {
   uint64_t allowed_access;
@@ -163,8 +179,19 @@ static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
     return errno;
   }
   uint64_t handled = landlock_handled(abi);
-  struct ll_ruleset_attr attr = { .handled_access_fs = handled };
-  int fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+  int fd;
+  if (abi >= LL_SCOPE_MIN_ABI) {
+    struct ll_scoped_ruleset_attr attr = {
+      .handled_access_fs = handled,
+      /* Zero, so Landlock leaves network access alone. */
+      .handled_access_net = 0,
+      .scoped = LL_SCOPE_ABSTRACT_UNIX_SOCKET
+    };
+    fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+  } else {
+    struct ll_ruleset_attr attr = { .handled_access_fs = handled };
+    fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
+  }
   if (fd < 0) {
     return errno;
   }
@@ -478,7 +505,9 @@ static const char **userns_submounts(int *n) {
   return out;
 }
 
-/* Return availability errors so the caller can report unsupported hosts. */
+/* Return availability errors so the caller can report unsupported hosts.
+ * Under network="full", abstract AF_UNIX sockets stay reachable on this
+ * tier, because they have no filesystem path. */
 static int userns_engage(SEXP read_roots, SEXP rw_roots, SEXP preserve_fds) {
   int threads = count_threads();
   if (threads != 1) {
@@ -568,6 +597,8 @@ static void seccomp_engage(void) {
     SANDBOX_SCREEN(__NR_ptrace),
     SANDBOX_SCREEN(__NR_process_vm_readv),
     SANDBOX_SCREEN(__NR_process_vm_writev),
+    /* Can take a descriptor from another process of the same user. */
+    SANDBOX_SCREEN(__NR_pidfd_getfd),
     SANDBOX_SCREEN(__NR_mount),
     SANDBOX_SCREEN(__NR_umount2),
 #ifdef __NR_umount
@@ -624,6 +655,47 @@ static void network_engage(void) {
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socket, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_io_uring_setup, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+#ifdef __NR_socketcall
+    /* i386 glibc routes socketpair(), send() and recv() through socketcall,
+     * so allow only these sub-calls. The address behind a sub-call is out of
+     * the filter's reach, so SYS_SENDTO is denied outright. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socketcall, 0, 14),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, args[0])),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_GETSOCKNAME, 11, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_GETPEERNAME, 10, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SOCKETPAIR, 9, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SEND, 8, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECV, 7, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECVFROM, 6, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SHUTDOWN, 5, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SETSOCKOPT, 4, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_GETSOCKOPT, 3, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECVMSG, 2, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECVMMSG, 1, 0),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
+#endif
+    /* socketpair() stays open, and these stop its ends from reaching
+     * abstract AF_UNIX names. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_bind, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_connect, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendmsg, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendmmsg, 0, 1),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    /* libc implements send() as sendto() with a NULL address, so deny
+     * sendto() only when it has an address. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendto, 0, 5),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, args[4])),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 0, 2),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) (offsetof(struct seccomp_data, args[4]) + 4)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, 1, 0),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
   };
