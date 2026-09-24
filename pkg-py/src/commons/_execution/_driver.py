@@ -88,7 +88,10 @@ class Worker:
         self._spawn_timeout = spawn_timeout
 
         self._session: WorkerSession | None = None
+        # How many of the store's handles the running worker has, and which
+        # store they came from; a different store is synced from its start.
         self._synced = 0
+        self._synced_store: HandleStore | None = None
         self._pending = 0
         self._reap_task: asyncio.Task[None] | None = None
         # A close outlives a cancelled aclose(), so it needs an owner that
@@ -112,8 +115,8 @@ class Worker:
         A ``Result`` is the code's answer, an ``Error`` is the code's own
         exception, and a ``Failure`` is the machinery's: the worker timed
         out, crashed, or would not start. ``handles`` is the conversation's
-        result store; entries the worker has not seen yet are sent with
-        the call, so a restarted worker is re-synced from the store's
+        result store; entries the worker has not seen yet are sent ahead
+        of the call, so a restarted worker is re-synced from the store's
         beginning.
 
         The pending count is incremented before the call queues on the
@@ -126,6 +129,10 @@ class Worker:
         self._pending += 1
         try:
             async with self._lock:
+                # A call queued behind aclose() must not start a worker that
+                # the close would then have to kill.
+                if self._closed:
+                    return Failure(message="the Python session is closed.")
                 return await self._call(code, handles)
         finally:
             self._pending -= 1
@@ -161,18 +168,12 @@ class Worker:
         """One call, run under the lock with the worker up."""
         try:
             session = await self._ensure()
-            if handles is None:
-                ids, new_handles = [], {}
-            else:
-                ids = handles.ids()
-                new_handles = {id_: handles.get(id_) for id_ in ids[self._synced :]}
+            if handles is not None:
+                failure = await self._sync(session, handles)
+                if failure is not None:
+                    return failure
             call_id = f"c{next(self._ids)}"
-            await self._send(
-                session, Call(id=call_id, code=code, handles=new_handles)
-            )
-            # The write succeeded, so the worker has the handles whether or
-            # not the call below settles; a restart resets the mark to zero.
-            self._synced = len(ids)
+            await self._send(session, Call(id=call_id, code=code))
             return await self._await_reply(session, call_id)
         except TimeoutError:
             # The write blocked: the worker stopped reading, and a caller
@@ -182,6 +183,14 @@ class Worker:
             return Failure(
                 message="the Python session stopped reading its calls, so it "
                 "was restarted. Session variables were reset."
+            )
+        except ConnectionError:
+            # The worker exited between calls without its exit being seen
+            # yet, so the write found no reader.
+            await self._shutdown()
+            return Failure(
+                message="the Python session exited and was restarted. "
+                "Session variables were reset."
             )
         except asyncio.CancelledError:
             # The caller gave up mid-call, but the worker has not: it is
@@ -195,6 +204,38 @@ class Worker:
             # start over rather than trust it.
             await self._shutdown()
             return Failure(message=str(exc))
+
+    async def _sync(
+        self, session: WorkerSession, handles: HandleStore
+    ) -> Failure | None:
+        """Send the store's handles the worker does not have, one message each.
+
+        A restarted worker is sent the whole store again, and in a single
+        message a large store would outgrow the channel and be shrunk to
+        reprs. Each handle counts as synced once the worker acknowledges
+        it; one the worker could not decode is skipped rather than retried
+        on every call.
+        """
+        if handles is not self._synced_store:
+            self._synced_store, self._synced = handles, 0
+        for id_ in handles.ids()[self._synced :]:
+            sync_id = f"s{next(self._ids)}"
+            await self._send(
+                session,
+                Call(id=sync_id, code="None", handles={id_: handles.get(id_)}),
+            )
+            try:
+                reply = await asyncio.wait_for(
+                    _protocol.read_message(session.stdout), self._call_timeout
+                )
+            except (_protocol.ProtocolError, _protocol.ChannelError) as exc:
+                await self._shutdown()
+                return _unparseable(exc)
+            outcome = await self._classify(sync_id, reply)
+            if isinstance(outcome, Failure):
+                return outcome
+            self._synced += 1
+        return None
 
     async def _send(self, session: WorkerSession, message: Call) -> None:
         """Write ``message``, giving up on a worker that stops reading.
@@ -219,10 +260,7 @@ class Worker:
             return await self._escalate(session, call_id)
         except (_protocol.ProtocolError, _protocol.ChannelError) as exc:
             await self._shutdown()
-            return Failure(
-                message="the Python session answered with a line that does not "
-                f"parse ({exc}), so it was restarted. Session variables were reset."
-            )
+            return _unparseable(exc)
         return await self._classify(call_id, reply)
 
     async def _classify(
@@ -386,3 +424,10 @@ class Worker:
         self._synced = 0
         if session is not None:
             await session.close()
+
+
+def _unparseable(exc: Exception) -> Failure:
+    return Failure(
+        message="the Python session answered with a line that does not "
+        f"parse ({exc}), so it was restarted. Session variables were reset."
+    )
