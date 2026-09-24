@@ -213,8 +213,8 @@ async def test_a_timeout_interrupts_the_call_and_keeps_the_session():
 
 
 async def test_an_interrupt_between_calls_leaves_the_session_alone():
-    # The driver can interrupt a call just as it finishes, so the SIGINT
-    # arrives once the worker is back to waiting for the next line.
+    # The driver can interrupt a call just as it finishes, so the worker
+    # receives the SIGINT once it is back to waiting for the next line.
     async with make_worker() as worker:
         await worker.run("x = 5")
         os.killpg(process_of(worker).pid, signal.SIGINT)
@@ -483,7 +483,7 @@ async def test_a_failed_start_reports_the_workers_stderr(tmp_path):
         assert "boom: the sandbox refused" in reply.message
 
 
-async def test_handles_ride_along_with_the_call():
+async def test_handles_are_sent_with_the_call():
     store = HandleStore()
     store.register(41)
     async with make_worker() as worker:
@@ -619,7 +619,7 @@ async def test_cancelling_during_the_spawn_leaves_nothing_tracked():
         call.cancel()
         with pytest.raises(asyncio.CancelledError):
             await call
-        # Whether the cancellation landed before or during the spawn,
+        # Whether the call was cancelled before or during the spawn,
         # nothing half-started survives it.
         assert worker._session is None
         reply = await worker.run("6 * 7")

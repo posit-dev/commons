@@ -187,7 +187,7 @@ class LocalBackend:
         """Wait for any shutdowns still in flight.
 
         The escalation guarantee, that a cancelled call cannot leave a
-        SIGTERM-ignoring child alive, holds only while the event loop is
+        SIGTERM-ignoring child alive, applies only while the event loop is
         running. A driver that is tearing down should call this before the
         loop closes. Each shutdown is bounded by two grace periods, so this
         returns in bounded time.

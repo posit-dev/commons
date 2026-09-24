@@ -99,8 +99,8 @@ async def test_the_worker_starts_in_a_scratch_directory_that_close_removes(
 async def test_the_worker_gets_the_allowlisted_environment_not_the_parents(
     tmp_path, monkeypatch
 ) -> None:
-    # The parent holds credentials a child has no business seeing, and a
-    # subprocess inherits the whole environment by default.
+    # The parent's environment has credentials a child has no business
+    # seeing, and a subprocess inherits the whole environment by default.
     monkeypatch.setenv("COMMONS_TEST_SECRET", "sk-not-a-real-key")
     backend = backend_running(
         tmp_path,
@@ -215,9 +215,9 @@ async def test_closing_a_dead_worker_still_kills_its_children(tmp_path) -> None:
 
 
 async def test_a_cancelled_close_still_kills_the_worker_and_reraises(tmp_path) -> None:
-    # Shutdown is not the caller's to interrupt: a cancel arriving while the
-    # SIGTERM grace is awaited would otherwise skip SIGKILL. The caller is
-    # still told it was cancelled.
+    # Shutdown is not the caller's to interrupt: a cancel during the SIGTERM
+    # grace would otherwise skip SIGKILL. The caller is still told it was
+    # cancelled.
     sentinel, ready = tmp_path / "survived", tmp_path / "ready"
     backend = backend_running(
         tmp_path, sleeper(sentinel, ready, ignore_sigterm=True), terminate_grace=1.0
@@ -225,7 +225,7 @@ async def test_a_cancelled_close_still_kills_the_worker_and_reraises(tmp_path) -
     session = await backend.start(network="none")
     await wait_for_file(ready)
     closing = asyncio.ensure_future(session.close())
-    # The grace runs for 1.0s, so a cancel at 0.2s arrives mid-shutdown.
+    # The grace runs for 1.0s, so a cancel at 0.2s is mid-shutdown.
     await asyncio.sleep(0.2)
     closing.cancel()
     with pytest.raises(asyncio.CancelledError):

@@ -155,7 +155,7 @@ def _send(message: _protocol.Message) -> None:
 
 
 # Whether model code is running. The driver's SIGINT is meant for the call
-# it timed out; one that arrives while the worker encodes a reply, reads the
+# it timed out; one the worker receives while it encodes a reply, reads the
 # next line, or waits between calls has nothing to interrupt, and raising
 # there would lose the reply or the session.
 _in_call = False

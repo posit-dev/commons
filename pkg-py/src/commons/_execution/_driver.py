@@ -255,7 +255,7 @@ class Worker:
         that does not is stuck, in C code that never checks for signals,
         say, and is restarted instead.
 
-        The grace-window reply is held to the same contract as any other:
+        The grace-window reply must meet the same contract as any other:
         only this call's own ``Result`` or ``Error`` proves the session
         survived.
         """
@@ -277,7 +277,7 @@ class Worker:
         if isinstance(outcome, Failure):
             return outcome
         # The reply itself is discarded: whatever the call was doing when
-        # the interrupt arrived, the answer the model needs is that its code
+        # it was interrupted, the answer the model needs is that its code
         # ran out of time.
         return Failure(
             message=f"the code was interrupted after exceeding the "
