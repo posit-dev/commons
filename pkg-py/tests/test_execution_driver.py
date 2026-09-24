@@ -388,6 +388,38 @@ async def test_a_default_composed_from_an_unharvested_global_still_defines():
         assert "DEFAULT_REGION" in reply.value
 
 
+async def test_lambda_and_keyword_only_defaults_naming_unharvested_globals_define(
+    tmp_path,
+):
+    # The harvest keeps module-level lambdas as well as defs, and a default
+    # in either shape is evaluated as the source is defined.
+    module = tmp_path / "scaled.py"
+    module.write_text(
+        "from typing import Annotated\n"
+        "from pydantic import Field\n"
+        "from commons import measure\n"
+        "\n"
+        "FACTOR = 2\n"
+        "scale = lambda x, k=FACTOR: x * k\n"
+        "\n"
+        '@measure(description="Scaled orders.")\n'
+        "def scaled(\n"
+        '    *, n: Annotated[int, Field(description="Count.")] = FACTOR\n'
+        ") -> int:\n"
+        "    return scale(n)\n"
+    )
+    layer = semantic_layer(module)
+    async with make_worker(measure_sources=list(layer.source_text.values())) as worker:
+        reply = await worker.run("scale(3, k=2)")
+        assert isinstance(reply, Result)
+        assert reply.value == 6
+        reply = await worker.run(
+            "repr(scale.__defaults__[0]) + repr(scaled.__kwdefaults__['n'])"
+        )
+        assert isinstance(reply, Result)
+        assert reply.value.count("FACTOR") == 2
+
+
 async def test_a_default_that_resolves_keeps_its_real_value():
     layer = semantic_layer([double_n])
     async with make_worker(measure_sources=list(layer.source_text.values())) as worker:

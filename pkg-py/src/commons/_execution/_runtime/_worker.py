@@ -222,10 +222,22 @@ def _commons_define_source(source):
             keywords=[],
         )
 
+    functions = (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.Lambda)
     tree = _ast.parse(source)
-    for node in tree.body:
-        if not isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-            continue
+    # Every function whose defaults are evaluated as the source is defined:
+    # a def or lambda reached without entering a function body, which runs
+    # only when called. A harvested helper can be a lambda assignment.
+    defined = []
+    stack = list(tree.body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, functions):
+            defined.append(node)
+            stack.extend(node.args.defaults)
+            stack.extend(d for d in node.args.kw_defaults if d is not None)
+        else:
+            stack.extend(_ast.iter_child_nodes(node))
+    for node in defined:
         # Each default keeps its slot; only its evaluation is guarded.
         node.args.defaults = [guard(d) for d in node.args.defaults]
         node.args.kw_defaults = [
