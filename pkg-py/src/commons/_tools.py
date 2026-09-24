@@ -50,9 +50,10 @@ from ._display import (
 )
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
+from ._icons import icon_url
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
-from ._provenance import TAG_EXTRA_KEY, Tag
+from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
@@ -160,6 +161,7 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
             _search_context(context),
             _describe_table(context),
             _run_sql(context),
+            _describe_trust_system(),
         ]
     )
     return tools
@@ -229,6 +231,75 @@ def tool_description(tool: Tool) -> str:
     back has one spelling rather than one per caller.
     """
     return str(tool.schema["function"]["description"])
+
+
+def _describe_trust_system() -> Tool:
+    def describe_trust_system() -> ContentToolResult:
+        return tool_result(
+            _trust_system_explanation(),
+            title="Explained answer trust",
+        )
+
+    return _tool(
+        describe_trust_system,
+        "describe_trust_system",
+        "Answer questions about the trust system. Call this tool when the user "
+        "asks about green shields, blue citation boxes, yellow warning signs, "
+        "trusted code, trusted context, or how answer trust is determined. "
+        "Insert the supplied provenance markers inline wherever they help "
+        "explain the trust system.",
+        _parameters({}, []),
+        "Explaining answer trust",
+    )
+
+
+def _trust_system_explanation() -> str:
+    markers = [
+        ("Verified answer", _trust_system_marker("trusted-icon.svg")),
+        ("Cited", _trust_system_marker("citation-mark.svg")),
+        ("Untrusted", _trust_system_marker("warning-icon.svg")),
+    ]
+    supplied = [(label, marker) for label, marker in markers if marker]
+    marker_text = (
+        [
+            "Insert the supplied provenance markers inline wherever they help explain",
+            "the trust system.",
+            "",
+            "Available provenance markers:",
+            *(f"- {label}: {marker}" for label, marker in supplied),
+            "",
+        ]
+        if supplied
+        else []
+    )
+    return "\n".join(
+        [
+            *marker_text,
+            "Trusted calculations use code selected and maintained by the app authors.",
+            "Trusted context is documentation supplied and vetted by the app authors.",
+            "",
+            "- Verified answer: The answer uses only trusted calculations.",
+            "- Cited: The answer uses ad hoc analysis and cites trusted context",
+            "  that supports its approach.",
+            "- Untrusted: The answer uses ad hoc analysis without citing trusted",
+            "  context that supports its approach.",
+            "- No marker: The answer does not include a new calculation.",
+            "",
+            "Do not imply that you selected or assigned a provenance outcome or",
+            "marker, because commons determines the outcome from the calculations",
+            "and citations used in the answer.",
+        ]
+    )
+
+
+def _trust_system_marker(file: str) -> str:
+    url = icon_url(file)
+    if url is None:
+        return ""
+    return (
+        f'<img src="{escape_attr(url)}" alt="" aria-hidden="true" '
+        'width="16" height="16" style="vertical-align: -0.15em;">'
+    )
 
 
 def _resolve_source(
