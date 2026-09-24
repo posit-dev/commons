@@ -269,12 +269,14 @@ sandboxed_worker_probes <- function(
 }
 
 # EPERM is 1. Without the filter, connect() and the addressed send() fail
-# with ECONNREFUSED, since nothing listens on the name, and bind() succeeds.
-expect_local_peer_screened <- function(local_peer) {
+# with ECONNREFUSED (111), since nothing listens on the name, and bind()
+# succeeds.
+expect_local_peer <- function(local_peer, screened) {
   skip_if(is.null(local_peer), "perl is not installed")
-  expect_equal(local_peer$connect, "1")
-  expect_equal(local_peer$sendto, "1")
-  expect_equal(local_peer$bind, "1")
+  refused <- if (screened) "1" else "111"
+  expect_equal(local_peer$connect, refused)
+  expect_equal(local_peer$sendto, refused)
+  expect_equal(local_peer$bind, if (screened) "1" else "0")
   expect_equal(local_peer$pair, "ping")
 }
 
@@ -296,7 +298,7 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   if (identical(Sys.info()[["sysname"]], "Linux")) {
     expect_equal(probes$exec, "allowed")
     expect_lte(probes$address_space, 8 * 1024^2)
-    expect_local_peer_screened(probes$local_peer)
+    expect_local_peer(probes$local_peer, screened = TRUE)
   }
   expect_equal(probes$compute, 55)
 })
@@ -312,7 +314,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
   expect_equal(probes$exec, "allowed")
-  expect_local_peer_screened(probes$local_peer)
+  expect_local_peer(probes$local_peer, screened = TRUE)
   expect_equal(probes$compute, 55)
 })
 
@@ -331,6 +333,7 @@ test_that("full network access leaves the filesystem sandboxed", {
   expect_equal(probes$socket, "allowed")
   if (identical(Sys.info()[["sysname"]], "Linux")) {
     expect_equal(probes$exec, "allowed")
+    expect_local_peer(probes$local_peer, screened = FALSE)
   }
   expect_equal(probes$compute, 55)
 })
