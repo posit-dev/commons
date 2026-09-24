@@ -3,7 +3,7 @@
 Register only the tools the agent's composition earns: nothing about its
 surface should imply operations it does not have. `pkg-r/R/tools.R` decides
 the same thing for R, and `tests/shared/tool-registration.json` pins the
-conditions and the tool descriptions both packages must agree on.
+registration, descriptions, and responses both packages must agree on.
 
 `build_commons_tools()` returns tool objects rather than registering them on a
 chat client, so an agent's surface can be built and inspected before there is

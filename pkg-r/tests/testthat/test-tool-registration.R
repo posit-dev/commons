@@ -1,4 +1,4 @@
-# The tool registration and description contract both packages consume.
+# The tool registration, description, and response contract both packages consume.
 # The Python suite runs the same cases from the same file. See
 # tests/shared/README.md.
 
