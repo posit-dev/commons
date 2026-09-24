@@ -11,6 +11,7 @@ hidden from the model by forgetting to describe it.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 import inspect
@@ -419,7 +420,8 @@ class SemanticLayer:
     """The trusted calculations an agent can run.
 
     ``source_text`` holds the source of the measures and the module-level
-    helpers they call, keyed by Python function name. Only text is kept:
+    helpers they call, keyed by Python function name, dedented and without
+    decorator lines so the worker can exec it as-is. Only text is kept:
     the agent's worker session reads measure definitions but never receives
     a callable. Two functions that share a Python name share one entry, and
     the first definition collected wins, so a measure whose function shares
@@ -838,7 +840,58 @@ def _check_directory_importable(directory: Path, requested: Path) -> None:
 
 
 def _source_text(func: Callable[..., Any]) -> str:
+    unavailable = f"# source unavailable for {func.__name__}"
     try:
-        return inspect.getsource(func)
+        source = inspect.getsource(func)
     except (OSError, TypeError):
-        return f"# source unavailable for {func.__name__}"
+        return unavailable
+    try:
+        return _exec_ready(source)
+    except SyntaxError:
+        # The worker defines every harvested source at spawn, and one that
+        # does not parse would fail every spawn.
+        return unavailable
+
+
+# Line boundaries as the parser counts them, so AST line numbers index this.
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
+
+
+def _exec_ready(source: str) -> str:
+    """``source`` as a definition that stands alone: dedented, decorators dropped.
+
+    The worker exec's the harvested text in a session where the ``measure``
+    decorator, and whatever a helper was decorated with, do not exist. The
+    indent is removed from code lines only: a line that begins inside a
+    multi-line string keeps its text, so a flush-left SQL string in a nested
+    function neither blocks the dedent nor changes value. Raises
+    ``SyntaxError`` for source that does not parse as a definition.
+    """
+    lines = _LINE.findall(source)
+    if not lines:
+        return source
+    indent = len(lines[0]) - len(lines[0].lstrip(" \t"))
+    # An indented definition parses as the body of a block; the wrapper line
+    # shifts every AST line number by one.
+    prefix, offset = ("if True:\n", 1) if indent else ("", 0)
+    tree = ast.parse(prefix + source)
+    body = tree.body
+    if indent and isinstance(body[0], ast.If):
+        body = body[0].body
+    keep: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Constant, ast.JoinedStr)) and node.end_lineno:
+            keep.update(range(node.lineno - offset, node.end_lineno - offset))
+    for node in body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            end = (decorator.end_lineno or decorator.lineno) - offset
+            for index in range(decorator.lineno - 1 - offset, end):
+                lines[index] = ""
+    for index, line in enumerate(lines):
+        if index in keep or not line:
+            continue
+        leading = len(line) - len(line.lstrip(" \t"))
+        lines[index] = line[min(indent, leading) :]
+    return "".join(lines)
