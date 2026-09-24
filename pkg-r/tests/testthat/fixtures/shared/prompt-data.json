@@ -19,7 +19,6 @@
     "dictionary_context",
     "glossary_context",
     "definition_index",
-    "citation_trust_exception",
     "has_search_pool",
     "has_search_context",
     "has_describe_table",
@@ -49,7 +48,6 @@
         "dictionary_context": "",
         "glossary_context": "",
         "definition_index": "",
-        "citation_trust_exception": "",
         "has_run_sql": false,
         "has_instructions": false,
         "instructions": ""
@@ -350,8 +348,7 @@
         "instructions": "Prefer weekly grain.",
         "has_run_sql": true,
         "has_call_measure": true,
-        "has_search_pool": false,
-        "citation_trust_exception": " that is not based solely on output from `call_measure`"
+        "has_search_pool": false
       }
     },
     {

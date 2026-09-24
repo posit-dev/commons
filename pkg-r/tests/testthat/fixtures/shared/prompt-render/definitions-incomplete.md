@@ -14,9 +14,6 @@ When no trusted calculations are available, search context for relevant tables, 
 
 ## Citations
 
-Any answer in this conversation that is not based solely on output from `search_pool` is presented to the
-user as "Untrusted" unless you cite trusted text that supports your approach.
-
 Only the following text is citable:
 
 - Data dictionary prose shown in this system prompt.

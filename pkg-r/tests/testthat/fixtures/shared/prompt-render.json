@@ -34,7 +34,6 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": "",
           "has_definitions": false,
           "has_complete_definitions": false
         },
@@ -66,7 +65,6 @@
           "has_call_calculation": false,
           "has_execution_tool": true,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_measure` or `call_metrics`",
           "has_definitions": true,
           "has_complete_definitions": true
         },
@@ -98,7 +96,6 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `call_measure`",
           "has_definitions": false,
           "has_complete_definitions": false
         },
@@ -130,7 +127,6 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `search_pool`",
           "has_definitions": true,
           "has_complete_definitions": false
         },
@@ -162,7 +158,6 @@
           "has_call_calculation": true,
           "has_execution_tool": true,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `call_calculation`",
           "has_definitions": true,
           "has_complete_definitions": false
         },
@@ -207,7 +202,7 @@
     ]
   },
   "tool_data": {
-    "description": "Prompt data derived from the names of the tools an agent registered. `has_*` drives the citable and non-citable lists in the template; `citation_trust_exception` is a clause spliced into a sentence, so it carries its own leading space and is empty when no trusted-calculation tool is registered. A tools entry of `$execution_tool` stands for the runner's own code-execution tool (`run_r` in R, `run_python` in Python), so the neutral `has_execution_tool` flag is pinned without the fixture picking a language.",
+    "description": "Prompt data derived from the names of the tools an agent registered. `has_*` drives the citable and non-citable lists in the template. A tools entry of `$execution_tool` stands for the runner's own code-execution tool (`run_r` in R, `run_python` in Python), so the neutral `has_execution_tool` flag is pinned without the fixture picking a language.",
     "cases": [
       {
         "name": "no trusted tools",
@@ -223,8 +218,7 @@
           "has_call_measure": false,
           "has_call_metrics": false,
           "has_call_calculation": false,
-          "has_execution_tool": false,
-          "citation_trust_exception": ""
+          "has_execution_tool": false
         }
       },
       {
@@ -247,8 +241,7 @@
           "has_call_measure": true,
           "has_call_metrics": true,
           "has_call_calculation": true,
-          "has_execution_tool": true,
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_measure` or `call_metrics` or `call_calculation`"
+          "has_execution_tool": true
         }
       },
       {
@@ -265,8 +258,7 @@
           "has_call_measure": false,
           "has_call_metrics": false,
           "has_call_calculation": true,
-          "has_execution_tool": true,
-          "citation_trust_exception": " that is not based solely on output from `call_calculation`"
+          "has_execution_tool": true
         }
       },
       {
@@ -284,8 +276,7 @@
           "has_call_measure": false,
           "has_call_metrics": true,
           "has_call_calculation": false,
-          "has_execution_tool": false,
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_metrics`"
+          "has_execution_tool": false
         }
       },
       {
@@ -299,8 +290,7 @@
           "has_call_measure": false,
           "has_call_metrics": false,
           "has_call_calculation": false,
-          "has_execution_tool": false,
-          "citation_trust_exception": ""
+          "has_execution_tool": false
         }
       }
     ]
