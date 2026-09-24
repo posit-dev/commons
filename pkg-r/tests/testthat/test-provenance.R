@@ -50,11 +50,20 @@ test_that("collect_appended_tags matches the shared fixture", {
 
     # `skip` counts the turns present when the exchange began; from_index is
     # 1-based here and 0-based in Python.
+    tags <- collect_appended_tags(turns, from_index = case$skip + 1)
     expect_identical(
-      collect_appended_tags(turns, from_index = case$skip + 1),
+      tags,
       as.character(unlist(case$expected)),
       info = case$name
     )
+
+    if (!is.null(case$expected_outcome)) {
+      expect_identical(
+        derive_provenance_tag(tags, case$verified),
+        case$expected_outcome,
+        info = case$name
+      )
+    }
   }
 })
 
