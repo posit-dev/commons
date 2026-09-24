@@ -231,11 +231,51 @@ sandboxed_worker_probes <- function(
             stdout = TRUE
           ))
         },
+        # R has no AF_UNIX API, so perl aims a socketpair end at an abstract
+        # name: each call reports its errno, and the pair a round trip. The
+        # script is a file because `perl -e` opens /dev/null, which the
+        # sandbox does not grant; NULL means perl is not installed.
+        local_peer = if (identical(Sys.info()[["sysname"]], "Linux")) {
+          script <- tempfile(fileext = ".pl")
+          writeLines(
+            c(
+              "use Socket;",
+              "socketpair(my $a, my $b, AF_UNIX, SOCK_DGRAM, 0) or die $!;",
+              "my $name = pack_sockaddr_un(\"\\0commons-probe\");",
+              "my %r;",
+              "$r{connect} = connect($a, $name) ? 0 : $! + 0;",
+              "$r{sendto} = defined(send($a, \"x\", 0, $name)) ? 0 : $! + 0;",
+              "$r{bind} = bind($a, $name) ? 0 : $! + 0;",
+              "defined(send($a, \"ping\", 0)) or die $!;",
+              "recv($b, $r{pair}, 4, 0);",
+              "print map { \"$_=$r{$_}\\n\" } sort keys %r;"
+            ),
+            script
+          )
+          out <- suppressWarnings(system2("perl", script, stdout = TRUE))
+          if (!identical(attr(out, "status"), 127L)) {
+            pairs <- strsplit(out, "=", fixed = TRUE)
+            stats::setNames(
+              lapply(pairs, `[[`, 2),
+              vapply(pairs, `[[`, "", 1)
+            )
+          }
+        },
         compute = sum(1:10)
       )
     },
     args = list(outside = outside)
   )
+}
+
+# EPERM is 1. Without the filter, connect() and the addressed send() fail
+# with ECONNREFUSED, since nothing listens on the name, and bind() succeeds.
+expect_local_peer_screened <- function(local_peer) {
+  skip_if(is.null(local_peer), "perl is not installed")
+  expect_equal(local_peer$connect, "1")
+  expect_equal(local_peer$sendto, "1")
+  expect_equal(local_peer$bind, "1")
+  expect_equal(local_peer$pair, "ping")
 }
 
 test_that("an initialized worker is denied reads, writes, and sockets", {
@@ -256,6 +296,7 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   if (identical(Sys.info()[["sysname"]], "Linux")) {
     expect_equal(probes$exec, "allowed")
     expect_lte(probes$address_space, 8 * 1024^2)
+    expect_local_peer_screened(probes$local_peer)
   }
   expect_equal(probes$compute, 55)
 })
@@ -271,6 +312,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
   expect_equal(probes$exec, "allowed")
+  expect_local_peer_screened(probes$local_peer)
   expect_equal(probes$compute, 55)
 })
 
