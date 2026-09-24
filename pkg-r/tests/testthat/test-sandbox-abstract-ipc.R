@@ -41,6 +41,23 @@ test_that("the filters screen socketcall and pidfd_getfd", {
   expect_true(any(grepl("__NR_pidfd_getfd", sandbox_filter, fixed = TRUE)))
 })
 
+test_that("socketcall allows only the fixture's sub-calls", {
+  fixture <- shared_fixture("sandbox-abstract-ipc")
+  allowed <- fixture$socketcall_allowed_under_network_none
+  expect_gt(length(allowed), 0)
+
+  src <- sandbox_c_source()
+  network_filter <- src[seq(
+    from = grep("static void network_engage", src, fixed = TRUE)[[1]],
+    to = length(src)
+  )]
+  listed <- regmatches(
+    network_filter,
+    regexpr("(?<=BPF_K, )SYS_[A-Z]+", network_filter, perl = TRUE)
+  )
+  expect_setequal(listed, paste0("SYS_", toupper(allowed)))
+})
+
 test_that("landlock_engage scopes abstract sockets from the fixture ABI", {
   fixture <- shared_fixture("sandbox-abstract-ipc")
   scope <- fixture$landlock_abstract_unix_scope

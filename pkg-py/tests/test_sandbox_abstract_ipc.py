@@ -24,6 +24,13 @@ def test_the_network_block_screens_the_fixture_calls() -> None:
     )
 
 
+def test_socketcall_allows_only_the_fixture_sub_calls() -> None:
+    fixture = load_shared_fixture("sandbox-abstract-ipc")
+    allowed = fixture["socketcall_allowed_under_network_none"]
+    assert allowed
+    assert sorted(_seccomp.SOCKETCALL_ALLOWED) == sorted(allowed)
+
+
 def test_landlock_scopes_abstract_sockets_from_the_fixture_abi() -> None:
     fixture = load_shared_fixture("sandbox-abstract-ipc")
     scope = fixture["landlock_abstract_unix_scope"]

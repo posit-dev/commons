@@ -33,6 +33,7 @@
 #include <linux/audit.h>
 #include <linux/capability.h>
 #include <linux/filter.h>
+#include <linux/net.h>
 #include <linux/seccomp.h>
 
 /* The seccomp filter matches syscall numbers, which are architecture-specific,
@@ -656,9 +657,25 @@ static void network_engage(void) {
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_io_uring_setup, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
 #ifdef __NR_socketcall
-    /* i386 routes every socket call through socketcall. */
-    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socketcall, 0, 1),
+    /* i386 glibc routes socketpair(), send() and recv() through socketcall,
+     * so allow only these sub-calls. The address behind a sub-call is out of
+     * the filter's reach, so SYS_SENDTO is denied outright. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socketcall, 0, 14),
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, args[0])),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_GETSOCKNAME, 11, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_GETPEERNAME, 10, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SOCKETPAIR, 9, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SEND, 8, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECV, 7, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECVFROM, 6, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SHUTDOWN, 5, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_SETSOCKOPT, 4, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_GETSOCKOPT, 3, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECVMSG, 2, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_RECVMMSG, 1, 0),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
+    BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW),
 #endif
     /* socketpair() stays open, and these stop its ends from reaching
      * abstract AF_UNIX names. */

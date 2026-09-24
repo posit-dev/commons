@@ -41,6 +41,7 @@ __all__ = [
     "NETWORK_SCREENED",
     "SCREENED",
     "SCREENED_WHERE_PRESENT",
+    "SOCKETCALL_ALLOWED",
     "Arch",
     "allow_all",
     "arch_for",
@@ -82,7 +83,7 @@ SCREENED_WHERE_PRESENT = ("umount",)
 # Syscalls that open a socket, screened only when the caller asked for no
 # network. Separate from SCREENED because network access is a choice and
 # escaping the sandbox is not.
-NETWORK_SCREENED = ("socket", "socketcall", "io_uring_setup")
+NETWORK_SCREENED = ("socket", "io_uring_setup")
 
 # Syscalls that send an existing socket to an address. socketpair() stays
 # open under network="none", and these stop its ends from reaching abstract
@@ -93,6 +94,24 @@ LOCAL_PEER_SCREENED = ("bind", "connect", "sendmsg", "sendmmsg")
 # libc implements send() as sendto() with a NULL address, so sendto() is
 # denied only when it has an address.
 LOCAL_PEER_SCREENED_WHEN_ADDRESSED = ("sendto",)
+
+# The socketcall() sub-calls allowed under network="none", from
+# include/uapi/linux/net.h. i386 glibc routes socketpair(), send() and recv()
+# through socketcall(), so it is filtered by sub-call. The address behind a
+# sub-call is out of the filter's reach, so sendto() is denied here outright.
+SOCKETCALL_ALLOWED: Mapping[str, int] = {
+    "getsockname": 6,
+    "getpeername": 7,
+    "socketpair": 8,
+    "send": 9,
+    "recv": 10,
+    "recvfrom": 12,
+    "shutdown": 13,
+    "setsockopt": 14,
+    "getsockopt": 15,
+    "recvmsg": 17,
+    "recvmmsg": 19,
+}
 
 
 class SockFilter(ctypes.Structure):
@@ -187,6 +206,18 @@ def _screen_when_addressed(
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
 
 
+def _screen_socketcall(program: list[SockFilter], nr: int) -> None:
+    """Deny socketcall() unless its sub-call is in ``SOCKETCALL_ALLOWED``."""
+    allowed = sorted(SOCKETCALL_ALLOWED.values())
+    count = len(allowed)
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=count + 3, k=nr))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=DATA_ARG0))
+    for index, call in enumerate(allowed):
+        program.append(SockFilter(code=BPF_JEQ_K, jt=count - index, jf=0, k=call))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
+
+
 def _preamble(arch: Arch) -> list[SockFilter]:
     """Confirm the caller's ABI, then load the syscall number.
 
@@ -223,6 +254,8 @@ def build_network_filter(arch: Arch) -> list[SockFilter]:
     for name in LOCAL_PEER_SCREENED_WHEN_ADDRESSED:
         if name in arch.syscalls:
             _screen_when_addressed(program, arch.syscalls[name], DATA_ARG4)
+    if "socketcall" in arch.syscalls:
+        _screen_socketcall(program, arch.syscalls["socketcall"])
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
     return program
 

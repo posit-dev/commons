@@ -86,11 +86,34 @@ def test_the_network_filter_refuses_to_open_a_socket(
     name: str, syscall: str
 ) -> None:
     arch = _seccomp.ARCHES[name]
-    if syscall not in arch.syscalls:
-        # socketcall exists only on the i386 table.
-        pytest.skip(f"the {name} table has no {syscall}")
     program = _seccomp.build_network_filter(arch)
     decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls[syscall])
+    assert decision == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("call", sorted(_seccomp.SOCKETCALL_ALLOWED.values()))
+def test_the_network_filter_allows_a_listed_socketcall(call: int) -> None:
+    arch = _seccomp.ARCHES["i386"]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["socketcall"],
+        arg0=call,
+    )
+    assert decision == _seccomp.SECCOMP_RET_ALLOW
+
+
+# socket, bind, connect, listen, accept, sendto, sendmsg, accept4, sendmmsg,
+# and two numbers outside the table.
+@pytest.mark.parametrize("call", [1, 2, 3, 4, 5, 11, 16, 18, 20, 0, 21])
+def test_the_network_filter_denies_any_other_socketcall(call: int) -> None:
+    arch = _seccomp.ARCHES["i386"]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["socketcall"],
+        arg0=call,
+    )
     assert decision == _seccomp.DENY_EPERM
 
 
