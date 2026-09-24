@@ -23,6 +23,7 @@ code never runs before then.
 
 from __future__ import annotations
 
+import json
 import os
 import signal
 import sys
@@ -290,6 +291,19 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
     )
 
 
+def _call_id(line: bytes) -> str | None:
+    """The ``id`` of a call line that failed to decode, if it has one."""
+    try:
+        body = json.loads(line)
+    except (ValueError, RecursionError):
+        return None
+    if isinstance(body, dict) and body.get("type") == "call":
+        call_id = body.get("id")
+        if isinstance(call_id, str):
+            return call_id
+    return None
+
+
 def main() -> None:
     network, protection = sys.argv[1], sys.argv[2]
     _engage_sandbox(network, protection)
@@ -312,8 +326,15 @@ def main() -> None:
             message = _protocol.decode_message(line)
         except _protocol.ChannelError:
             return  # No later line can be trusted; the driver starts over.
-        except _protocol.ProtocolError:
-            continue  # One bad line costs the line, not the session.
+        except _protocol.ProtocolError as error:
+            # One bad line costs the line, not the session. The driver is
+            # waiting on the call's reply, so a call it can still key gets
+            # its error now rather than a silent wait for the timeout.
+            call_id = _call_id(line)
+            if call_id is not None:
+                message = f"the call could not be decoded: {error}"
+                _send(_protocol.Error(id=call_id, message=message))
+            continue
         if not isinstance(message, _protocol.Call):
             # The driver only ever sends calls; anything else means the two
             # sides disagree about the protocol, and the channel is done.

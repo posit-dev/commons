@@ -609,9 +609,25 @@ async def test_cancelling_aclose_still_closes_the_worker():
         await closing
     reply = await call
     assert isinstance(reply, Result)
-    await worker.aclose()
+    # The cancelled close finishes on its own; nothing calls aclose() again
+    # until it has.
+    await asyncio.wait_for(process.wait(), 5)
     assert worker._session is None
-    assert process.returncode is not None
+    await worker.aclose()
+
+
+async def test_a_call_queued_behind_aclose_does_not_start_a_worker():
+    worker = make_worker()
+    first = asyncio.ensure_future(worker.run("import time; time.sleep(0.5); 1"))
+    await asyncio.sleep(0.2)
+    queued = asyncio.ensure_future(worker.run("2"))
+    await asyncio.sleep(0)
+    await worker.aclose()
+    assert isinstance(await first, Result)
+    reply = await queued
+    assert isinstance(reply, Failure)
+    assert "closed" in reply.message
+    assert worker._session is None
 
 
 async def test_aclose_waits_for_a_spawn_in_flight():
@@ -740,3 +756,65 @@ async def test_a_line_the_worker_cannot_decode_costs_only_that_line():
         reply = await worker.run("x")
         assert isinstance(reply, Result)
         assert reply.value == 5
+
+
+async def test_a_call_the_worker_cannot_decode_is_answered_with_an_error():
+    # The driver is waiting on this id; without an answer it would wait out
+    # the whole call timeout and then the interrupt grace.
+    backend = LocalBackend()
+    session = await backend.start(network="none")
+    try:
+        ready = await asyncio.wait_for(session.stdout.readline(), 10)
+        assert b'"ready"' in ready
+        session.stdin.write(b'{"type": "call", "id": "c1", "code": 5}\n')
+        reply = await asyncio.wait_for(session.stdout.readline(), 5)
+        assert b'"error"' in reply
+        assert b'"c1"' in reply
+        assert b"could not be decoded" in reply
+    finally:
+        await session.close()
+
+
+async def test_a_call_without_handles_leaves_the_synced_handles_alone():
+    # A call that passes no store must not make the next one resend the
+    # store, which would overwrite a handle the model reassigned.
+    store = HandleStore()
+    store.register(41)
+    async with make_worker() as worker:
+        await worker.run("r1 = 0", handles=store)
+        await worker.run("1")
+        reply = await worker.run("r1", handles=store)
+        assert isinstance(reply, Result)
+        assert reply.value == 0
+
+
+async def test_a_different_store_is_synced_from_its_start():
+    first, second = HandleStore(), HandleStore()
+    first.register(41)
+    second.register(7)
+    async with make_worker() as worker:
+        await worker.run("r1", handles=first)
+        reply = await worker.run("r1", handles=second)
+        assert isinstance(reply, Result)
+        assert reply.value == 7
+
+
+async def test_handles_too_large_for_one_message_all_reach_the_worker(monkeypatch):
+    # Each handle fits the channel on its own, but together they do not; sent
+    # in one message they would be shrunk to reprs. The limit is lowered in
+    # the driver alone, which is the side that shrinks.
+    import numpy as np
+
+    from commons._execution import _protocol
+
+    monkeypatch.setattr(_protocol, "STREAM_LIMIT", 150_000)
+    frame = pd.DataFrame({"x": np.random.default_rng(0).integers(0, 2**62, 20000)})
+    store = HandleStore()
+    store.register(frame)
+    store.register(frame.copy())
+    async with make_worker() as worker:
+        reply = await worker.run(
+            "type(r1).__name__, type(r2).__name__, len(r2)", handles=store
+        )
+        assert isinstance(reply, Result)
+        assert list(reply.value) == ["DataFrame", "DataFrame", len(store.get("r2"))]
