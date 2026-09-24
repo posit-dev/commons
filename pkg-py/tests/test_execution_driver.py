@@ -271,9 +271,11 @@ async def test_a_timed_out_call_takes_its_children_with_it():
             pytest.skip("the sandbox refuses child processes on this host")
         code = (
             "import subprocess\n"
-            # The interrupt fires while the call blocks on the child. If it
-            # reaches the worker alone, the child survives to write the file.
-            "subprocess.run(['sh', '-c', 'sleep 1.5; touch survived'])\n"
+            # The interrupt fires while the call waits on the child. If only
+            # the worker receives it, the child survives to write the file.
+            # Popen().wait() rather than run(), which kills its own child on
+            # KeyboardInterrupt and would pass either way.
+            "subprocess.Popen(['sh', '-c', 'sleep 1.5; touch survived']).wait()\n"
         )
         reply = await worker.run(code)
         assert isinstance(reply, Failure)
@@ -370,6 +372,7 @@ async def test_measure_sources_are_defined_at_spawn_and_at_respawn():
         assert isinstance(reply, Result)
         assert reply.value == 42
         await asyncio.sleep(2)
+        assert worker._session is None
         # The respawned worker was given the same sources at spawn.
         reply = await worker.run("ANSWER")
         assert isinstance(reply, Result)
@@ -381,6 +384,26 @@ async def test_a_measure_source_that_fails_stops_the_spawn():
         reply = await worker.run("1")
         assert isinstance(reply, Failure)
         assert "failed to start" in reply.message
+        assert "ZeroDivisionError" in reply.message
+
+
+async def test_a_measure_source_that_ends_the_worker_stops_the_spawn():
+    async with make_worker(measure_sources=["import os; os._exit(1)"]) as worker:
+        reply = await worker.run("1")
+        assert isinstance(reply, Failure)
+        assert "exited while defining" in reply.message
+        assert worker._session is None
+
+
+async def test_a_worker_that_never_becomes_ready_fails_the_call(tmp_path):
+    script = tmp_path / "worker.py"
+    script.write_text("import time\ntime.sleep(60)\n")
+    backend = LocalBackend(worker_script=script, terminate_grace=0.1)
+    async with make_worker(backend=backend, spawn_timeout=0.5) as worker:
+        reply = await worker.run("1")
+        assert isinstance(reply, Failure)
+        assert "stopped responding during startup" in reply.message
+        assert worker._session is None
 
 
 async def test_harvested_measure_sources_define_their_names():
@@ -505,6 +528,7 @@ async def test_handles_are_resent_to_a_respawned_worker():
         reply = await worker.run("r1", handles=store)
         assert isinstance(reply, Result)
         await asyncio.sleep(2)
+        assert worker._session is None
         reply = await worker.run("r1 + 1", handles=store)
         assert isinstance(reply, Result)
         assert reply.value == 42
@@ -572,18 +596,22 @@ async def test_a_closed_worker_stays_closed():
 
 async def test_cancelling_aclose_still_closes_the_worker():
     worker = make_worker()
-    call = asyncio.ensure_future(worker.run("import time; time.sleep(30)"))
+    call = asyncio.ensure_future(worker.run("import time; time.sleep(1); 1"))
     await asyncio.sleep(0.2)
     closing = asyncio.ensure_future(worker.aclose())
     await asyncio.sleep(0.2)
-    # The close is waiting out the in-flight call when it is cancelled;
-    # cancelling the call must still leave the worker shut down.
+    # The close is waiting out the in-flight call when it is cancelled. The
+    # cancellation reaches aclose()'s caller, and the close still happens
+    # once the call finishes.
+    process = process_of(worker)
     closing.cancel()
-    call.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await call
-    await asyncio.gather(closing, return_exceptions=True)
+        await closing
+    reply = await call
+    assert isinstance(reply, Result)
+    await worker.aclose()
     assert worker._session is None
+    assert process.returncode is not None
 
 
 async def test_aclose_waits_for_a_spawn_in_flight():
@@ -640,3 +668,75 @@ async def test_a_worker_that_died_between_calls_loses_its_scratch_directory():
         reply = await worker.run("1 + 1")
         assert isinstance(reply, Result)
         assert not os.path.exists(scratch)
+
+
+# Model code can reach the worker's own module, and with it the protocol
+# channel; these tests use that to put a bad line on the channel on demand.
+WORKER_MODULE = "import sys, os; w = sys.modules['__main__']\n"
+BOGUS_REPLY = "w._send(w._protocol.Result(id='bogus', value=1, stdout='', stderr=''))\n"
+
+
+async def test_a_reply_that_does_not_parse_restarts_the_worker():
+    async with make_worker() as worker:
+        await worker.run("x = 5")
+        reply = await worker.run(
+            WORKER_MODULE + "os.write(w._PROTOCOL_OUT, b'garbage\\n')\n1"
+        )
+        assert isinstance(reply, Failure)
+        assert "does not parse" in reply.message
+        reply = await worker.run("x")
+        assert isinstance(reply, Error)
+        assert "NameError" in reply.message
+
+
+async def test_a_reply_out_of_turn_restarts_the_worker():
+    # Were the stale reply trusted, the next call would read this call's
+    # real answer as its own.
+    async with make_worker() as worker:
+        await worker.run("x = 5")
+        reply = await worker.run(WORKER_MODULE + BOGUS_REPLY + "1")
+        assert isinstance(reply, Failure)
+        assert "out of turn" in reply.message
+        reply = await worker.run("x")
+        assert isinstance(reply, Error)
+        assert "NameError" in reply.message
+
+
+async def test_a_worker_that_dies_on_the_interrupt_is_reported_as_crashed():
+    async with make_worker(call_timeout=0.5) as worker:
+        code = (
+            "import os, signal, time\n"
+            "signal.signal(signal.SIGINT, lambda *a: os._exit(1))\n"
+            "time.sleep(60)\n"
+        )
+        reply = await worker.run(code)
+        assert isinstance(reply, Failure)
+        assert "crashed" in reply.message
+        assert worker._session is None
+
+
+async def test_an_out_of_turn_answer_to_the_interrupt_restarts_the_worker():
+    async with make_worker(call_timeout=0.5) as worker:
+        code = (
+            WORKER_MODULE
+            + "import signal, time\n"
+            + "signal.signal(signal.SIGINT, lambda *a: "
+            + BOGUS_REPLY.strip()
+            + ")\n"
+            + "time.sleep(60)\n"
+        )
+        reply = await worker.run(code)
+        assert isinstance(reply, Failure)
+        assert "out of turn" in reply.message
+        assert worker._session is None
+
+
+async def test_a_line_the_worker_cannot_decode_costs_only_that_line():
+    async with make_worker() as worker:
+        await worker.run("x = 5")
+        session = worker._session
+        assert session is not None
+        session.stdin.write(b"garbage\n")
+        reply = await worker.run("x")
+        assert isinstance(reply, Result)
+        assert reply.value == 5
