@@ -311,8 +311,6 @@ def test_the_rule_attribute_is_packed_as_the_kernel_reads_it() -> None:
 
 
 def test_the_scoped_ruleset_attribute_matches_the_kernel_layout() -> None:
-    """ABI 6 appended scoping after the network rights, so the field order
-    is fixed by the kernel's struct rather than by which fields we use."""
     attr = _landlock.ScopedRulesetAttr
     assert ctypes.sizeof(attr) == 24
     assert attr.handled_access_fs.offset == 0
@@ -328,7 +326,7 @@ base = tempfile.mkdtemp()
 scratch = os.path.join(base, "scratch")
 os.makedirs(scratch)
 
-# Bound before the ruleset goes on, standing in for a host daemon.
+# Stands in for a host daemon.
 name = "\\0commons-scope-probe"
 daemon = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 daemon.bind(name)
@@ -343,7 +341,7 @@ try:
 except OSError as error:
     result["preexisting"] = type(error).__name__
 
-# A socket the scoped process binds itself stays reachable from inside.
+# A socket bound after scoping stays reachable.
 own = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
 own.bind("\\0commons-scope-own")
 peer = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
@@ -360,13 +358,8 @@ json.dump(result, sys.stdout)
 def test_abstract_sockets_outside_the_domain_are_unreachable(
     landlock_kernel: None,
 ) -> None:
-    """Scoping, not the path ruleset, is what closes the abstract namespace:
-    an abstract name is not a path, so no rule could match it. What is bound
-    before the ruleset goes on becomes unreachable; what the scoped process
-    binds itself does not."""
     reported = run_on_a_landlock_kernel(SCOPE_PROBE)
-    # A None abi means a policy forbade the ruleset on a kernel that has
-    # Landlock; the fixture asks only that the kernel offer it.
+    # None means a policy forbade Landlock on this kernel.
     if reported["abi"] is None or reported["abi"] < _landlock.SCOPE_MIN_ABI:
         pytest.skip(
             "abstract-socket scoping needs Landlock ABI "

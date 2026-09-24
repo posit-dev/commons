@@ -1,8 +1,5 @@
-# The abstract-AF_UNIX boundary, driven by the shared fixture. The Python
-# suite asserts its filter tables and constants against the same fixture;
-# here the check is the C source, because an installed seccomp filter cannot
-# be introspected back. See tests/shared/sandbox-abstract-ipc.json and
-# tests/shared/README.md.
+# Runner for tests/shared/sandbox-abstract-ipc.json. It checks the C source,
+# because an installed seccomp filter cannot be read back.
 
 sandbox_c_source <- function() {
   path <- test_path("../../src/sandbox.c")
@@ -29,10 +26,7 @@ test_that("the network filter screens the fixture's address-taking calls", {
   }
 })
 
-test_that("the filters screen the entry points Python has long screened", {
-  # socketcall multiplexes every socket call behind one number on i386, and
-  # pidfd_getfd hands over a descriptor belonging to another process; both
-  # are one-line screens whose absence is invisible without a check.
+test_that("the filters screen socketcall and pidfd_getfd", {
   src <- sandbox_c_source()
   network_filter <- src[seq(
     from = grep("static void network_engage", src, fixed = TRUE)[[1]],

@@ -83,14 +83,8 @@ FS_IOCTL_DEV = 1 << 15
 # directory has to be listable for an import to find anything in it.
 FS_READ_ONLY = FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 
-# The scoping bit ABI 6 (Linux 6.12) adds. A scoped process can connect only
-# to abstract AF_UNIX sockets bound inside its own domain, which is to say by
-# itself or a descendant: the daemons listening on the host's abstract
-# namespace become unreachable. The path ruleset cannot express this, because
-# an abstract name is not a path, and the user-namespace fallback cannot
-# either, so this is the one screen that also applies when the caller allowed
-# full network. ABI 7's scope bit covers signals instead and is left out:
-# what it would buy the worker is a question of its own.
+# ABI 6 (Linux 6.12) scoping: the worker can connect only to abstract AF_UNIX
+# sockets that it or its descendants bound, even under full network.
 SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
 SCOPE_MIN_ABI = 6
 
@@ -104,21 +98,15 @@ class RulesetAttr(ctypes.Structure):
 
     Later versions append fields for network rights and scoping. The struct
     is extensible and read at the size it is given, so passing this one asks
-    for a filesystem-only ruleset on any kernel. ABI 6's scoping field is
-    worth having, and ``ScopedRulesetAttr`` supplies it when the kernel does.
+    for a filesystem-only ruleset on any kernel. ``ScopedRulesetAttr`` adds
+    ABI 6's scoping field.
     """
 
     _fields_ = (("handled_access_fs", ctypes.c_uint64),)
 
 
 class ScopedRulesetAttr(ctypes.Structure):
-    """The ruleset attribute extended through ABI 6's scoping field.
-
-    The network field sits between the two because that is the order the
-    kernel appended them. It is left at zero, declaring the ruleset handles
-    no network right: handling one while granting none would refuse the
-    network access the ruleset never meant to govern.
-    """
+    """The ruleset attribute with ABI 6's ``scoped`` field, in kernel order."""
 
     _fields_ = (
         ("handled_access_fs", ctypes.c_uint64),
@@ -141,11 +129,9 @@ class PathBeneathAttr(ctypes.Structure):
     )
 
 
-# Syscall numbers are per-kernel and per-architecture, so making these calls
-# anywhere else would not fail to find Landlock, it would invoke whatever
-# that number means on the host instead. Everything below therefore refuses
-# to run outside the pairs the numbers are known for, rather than trusting
-# the call to come back with ENOSYS.
+# Syscall numbers differ by architecture, so on an unknown one these numbers
+# could call an unrelated syscall instead of failing with ENOSYS. Everything
+# below runs only on the known ones.
 ON_LINUX = sys.platform == "linux" and platform.machine().lower() in (
     KNOWN_ARCHITECTURES
 )
@@ -302,11 +288,9 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
 
     Read roots are granted execute, read-file and read-dir. Write roots are
     granted everything the ruleset handles. On ABI 6 and later the ruleset
-    also scopes abstract AF_UNIX sockets, cutting the process off from the
-    abstract listeners bound outside it; the seccomp network block screens
-    the same namespace under ``network="none"``, and this is what screens it
-    under ``network="full"``. Once this returns, nothing can widen the
-    process's access again, including anything it goes on to execute.
+    also scopes abstract AF_UNIX sockets. Once this returns, nothing can
+    widen the process's access again, including anything it goes on to
+    execute.
     """
     abi = abi_version()
     if abi < 1:
@@ -319,6 +303,7 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
     if abi >= SCOPE_MIN_ABI:
         attr = ScopedRulesetAttr(
             handled_access_fs=handled,
+            # Zero, so Landlock leaves network access alone.
             handled_access_net=0,
             scoped=SCOPE_ABSTRACT_UNIX_SOCKET,
         )

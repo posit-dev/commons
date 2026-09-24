@@ -145,9 +145,6 @@ def test_the_network_filter_leaves_reading_a_file_alone(name: str) -> None:
 def test_the_network_filter_refuses_to_aim_a_socket_at_a_peer(
     name: str, syscall: str
 ) -> None:
-    """The abstract AF_UNIX namespace has no path, so no path sandbox
-    governs it; under no network these calls are the only way to aim a
-    socketpair() end at it."""
     arch = _seccomp.ARCHES[name]
     program = _seccomp.build_network_filter(arch)
     decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls[syscall])
@@ -166,8 +163,7 @@ def test_the_network_filter_refuses_an_addressed_sendto(name: str) -> None:
 
 @pytest.mark.parametrize("name", ARCH_NAMES)
 def test_the_network_filter_permits_a_send_with_no_address(name: str) -> None:
-    """libc spells send() as sendto() with a NULL address, and that form is
-    how a socketpair end talks to its own sibling."""
+    """libc implements send() as sendto() with a NULL address."""
     arch = _seccomp.ARCHES[name]
     decision = run_filter(
         _seccomp.build_network_filter(arch),
@@ -180,8 +176,7 @@ def test_the_network_filter_permits_a_send_with_no_address(name: str) -> None:
 
 @pytest.mark.parametrize("name", ARCH_NAMES)
 def test_the_network_filter_leaves_socketpair_open(name: str) -> None:
-    """socketpair() supports no family but AF_UNIX, so it opens no network
-    door; asyncio's self-pipe is one, and it has to keep working."""
+    """asyncio's self-pipe is a socketpair."""
     arch = _seccomp.ARCHES[name]
     decision = run_filter(
         _seccomp.build_network_filter(arch),
@@ -407,9 +402,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
 
 @needs_seccomp
 def test_a_socketpair_end_cannot_be_connected_to_an_abstract_name() -> None:
-    """The hole the local-peer screens close: socketpair() is allowed, and
-    without the connect() screen its ends could be aimed at the abstract
-    AF_UNIX namespace, which no path sandbox governs."""
     result = engage_in_child(
         """
 import socket
@@ -427,8 +419,7 @@ except PermissionError as exc:
 
 @needs_seccomp
 def test_a_datagram_socketpair_end_cannot_sendto_an_abstract_name() -> None:
-    """sendto() with a destination reaches an abstract name without ever
-    calling connect(), so the screen is on the address being supplied."""
+    """sendto() can reach an abstract name without connect()."""
     result = engage_in_child(
         """
 import socket
@@ -446,7 +437,7 @@ except PermissionError as exc:
 
 @needs_seccomp
 def test_a_socketpair_still_round_trips_under_no_network() -> None:
-    """libc's send() is sendto() with a NULL address; the filter keeps it."""
+    """libc implements send() as sendto() with a NULL address."""
     result = engage_in_child(
         """
 import socket

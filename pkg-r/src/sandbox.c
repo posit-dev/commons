@@ -127,25 +127,16 @@ static uint64_t landlock_handled(long abi) {
   return handled;
 }
 
-/* The scoping bit ABI 6 (Linux 6.12) adds. A scoped process can connect only
- * to abstract AF_UNIX sockets bound inside its own domain, so the daemons
- * listening on the host's abstract namespace become unreachable. The path
- * ruleset cannot express this, because an abstract name is not a path, and
- * the user-namespace fallback cannot either, so this is the one screen that
- * also applies when the caller allowed full network. ABI 7's scope bit
- * covers signals instead and is left out: what it would buy the worker is a
- * question of its own. */
-/* LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET in the kernel's linux/landlock.h,
- * which the build need not carry. */
+/* ABI 6 (Linux 6.12) scoping: the worker can connect only to abstract AF_UNIX
+ * sockets that it or its descendants bound, even under full network. The bit
+ * is LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET, defined here for older headers. */
 #define LL_SCOPE_ABSTRACT_UNIX_SOCKET (1ULL << 0)
 #define LL_SCOPE_MIN_ABI 6
 
 struct ll_ruleset_attr {
   uint64_t handled_access_fs;
 };
-/* The ruleset attribute extended through ABI 6's scoping field. The network
- * field sits between the two because that is the order the kernel appended
- * them; it stays zero, declaring the ruleset handles no network right. */
+/* The ruleset attribute with ABI 6's scoped field, in kernel order. */
 struct ll_scoped_ruleset_attr {
   uint64_t handled_access_fs;
   uint64_t handled_access_net;
@@ -191,6 +182,7 @@ static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
   if (abi >= LL_SCOPE_MIN_ABI) {
     struct ll_scoped_ruleset_attr attr = {
       .handled_access_fs = handled,
+      /* Zero, so Landlock leaves network access alone. */
       .handled_access_net = 0,
       .scoped = LL_SCOPE_ABSTRACT_UNIX_SOCKET
     };
@@ -513,14 +505,8 @@ static const char **userns_submounts(int *n) {
 }
 
 /* Return availability errors so the caller can report unsupported hosts.
- *
- * One channel this tier leaves open: the abstract AF_UNIX namespace, which
- * no path rule can govern because an abstract name is not a path. Landlock
- * scopes it from ABI 6, and a host ends up on this tier when its kernel
- * predates that or its policy forbids Landlock, so under network="full" a
- * worker here can still reach the host's abstract listeners. Under
- * network="none" the seccomp filter screens the address-taking socket
- * calls, which closes it there. */
+ * Under network="full", abstract AF_UNIX sockets stay reachable on this
+ * tier, because they have no filesystem path. */
 static int userns_engage(SEXP read_roots, SEXP rw_roots, SEXP preserve_fds) {
   int threads = count_threads();
   if (threads != 1) {
@@ -610,9 +596,7 @@ static void seccomp_engage(void) {
     SANDBOX_SCREEN(__NR_ptrace),
     SANDBOX_SCREEN(__NR_process_vm_readv),
     SANDBOX_SCREEN(__NR_process_vm_writev),
-    /* Hands over an open descriptor belonging to another process of the
-     * same user, returning a capability the filesystem sandbox never
-     * granted. */
+    /* Can take a descriptor from another process of the same user. */
     SANDBOX_SCREEN(__NR_pidfd_getfd),
     SANDBOX_SCREEN(__NR_mount),
     SANDBOX_SCREEN(__NR_umount2),
@@ -672,18 +656,12 @@ static void network_engage(void) {
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_io_uring_setup, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
 #ifdef __NR_socketcall
-    /* i386 multiplexes every socket call behind this one number, so
-     * screening the direct entries alone would leave them all open. The
-     * other supported architectures have no socketcall, and the #ifdef
-     * leaves their filters byte-identical. */
+    /* i386 routes every socket call through socketcall. */
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_socketcall, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
 #endif
-    /* socketpair() stays open, since it supports no family but AF_UNIX and
-     * so reaches no network; these screen the calls that would aim its
-     * descriptors at a peer by address, including the abstract AF_UNIX
-     * namespace, which no path sandbox governs. With them screened, a
-     * socketpair end reaches only its own sibling. */
+    /* socketpair() stays open, and these stop its ends from reaching
+     * abstract AF_UNIX names. */
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_bind, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_connect, 0, 1),
@@ -692,12 +670,8 @@ static void network_engage(void) {
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendmmsg, 0, 1),
     BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | EPERM),
-    /* sendto() is the same door with one legitimate tenant: libc implements
-     * send() as sendto() with a NULL address, which is the form a socketpair
-     * end uses to talk to its sibling. Screen the call only when an address
-     * is supplied: what the address says sits behind the pointer, which a
-     * filter cannot follow, so the distinction available is whether one was
-     * given at all. */
+    /* libc implements send() as sendto() with a NULL address, so deny
+     * sendto() only when it has an address. */
     BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_sendto, 0, 5),
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
              (uint32_t) offsetof(struct seccomp_data, args[4])),

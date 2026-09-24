@@ -1,10 +1,4 @@
-"""The abstract-AF_UNIX boundary, driven by the shared fixture.
-
-Both implementations screen the same address-taking socket calls under
-``network="none"`` and scope abstract sockets from the same Landlock ABI, so
-the agreement lives in ``tests/shared/sandbox-abstract-ipc.json`` and each
-suite runs a runner against it. See ``tests/shared/README.md``.
-"""
+"""Runner for ``tests/shared/sandbox-abstract-ipc.json``."""
 
 from __future__ import annotations
 
