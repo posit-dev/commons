@@ -3,7 +3,7 @@
 Register only the tools the agent's composition earns: nothing about its
 surface should imply operations it does not have. `pkg-r/R/tools.R` decides
 the same thing for R, and `tests/shared/tool-registration.json` pins the
-conditions and the tool descriptions both packages must agree on.
+registration, descriptions, and responses both packages must agree on.
 
 `build_commons_tools()` returns tool objects rather than registering them on a
 chat client, so an agent's surface can be built and inspected before there is
@@ -50,9 +50,10 @@ from ._display import (
 )
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
+from ._icons import icon_url
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
-from ._provenance import TAG_EXTRA_KEY, Tag
+from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
@@ -160,6 +161,7 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
             _search_context(context),
             _describe_table(context),
             _run_sql(context),
+            _describe_trust_system(),
         ]
     )
     return tools
@@ -229,6 +231,81 @@ def tool_description(tool: Tool) -> str:
     back has one spelling rather than one per caller.
     """
     return str(tool.schema["function"]["description"])
+
+
+def _describe_trust_system() -> Tool:
+    def describe_trust_system() -> ContentToolResult:
+        return tool_result(
+            _trust_system_explanation(),
+            title="Explained answer trust",
+        )
+
+    return _tool(
+        describe_trust_system,
+        "describe_trust_system",
+        "Answer questions about the trust system. Call this tool when the user "
+        "asks about green shields, blue citation boxes, yellow warning signs, "
+        "trusted code, trusted context, or how answer trust is determined. "
+        "Insert the supplied provenance markers inline wherever they help "
+        "explain the trust system.",
+        _parameters({}, []),
+        "Explaining answer trust",
+    )
+
+
+def _trust_system_explanation() -> str:
+    markers = [
+        (
+            "Verified answer",
+            _trust_system_marker("trusted-icon.svg", "Verified answer marker"),
+        ),
+        ("Cited", _trust_system_marker("citation-mark.svg", "Cited marker")),
+        ("Untrusted", _trust_system_marker("warning-icon.svg", "Untrusted marker")),
+    ]
+    supplied = [(label, marker) for label, marker in markers if marker]
+    marker_text = (
+        [
+            "Insert the supplied provenance markers inline wherever they help explain",
+            "the trust system.",
+            "",
+            "Available provenance markers:",
+            *(f"- {label}: {marker}" for label, marker in supplied),
+            "",
+        ]
+        if supplied
+        else []
+    )
+    return "\n".join(
+        [
+            *marker_text,
+            "Trusted calculations use code selected and maintained by the app authors.",
+            "Trusted context is documentation supplied and vetted by the app authors.",
+            "",
+            "- Verified answer: The answer is based on trusted calculations and does",
+            "  not use ad hoc code written by the model.",
+            "- Cited: The answer includes ad hoc analysis, so its calculations do not",
+            "  come only from trusted calculations. It cites trusted context that",
+            "  supports its approach.",
+            "- Untrusted: The answer includes ad hoc analysis, so its calculations do",
+            "  not come only from trusted calculations. It does not cite trusted",
+            "  context that supports its approach.",
+            "- No marker: The answer does not include a new calculation.",
+            "",
+            "Do not imply that you selected or assigned a provenance outcome or",
+            "marker, because commons determines the outcome from the calculations",
+            "and citations used in the answer.",
+        ]
+    )
+
+
+def _trust_system_marker(file: str, alt: str) -> str:
+    url = icon_url(file)
+    if url is None:
+        return ""
+    return (
+        f'<img src="{escape_attr(url)}" alt="{escape_attr(alt)}" '
+        'width="16" height="16" style="vertical-align: -0.15em;">'
+    )
 
 
 def _resolve_source(

@@ -340,7 +340,12 @@ def test_an_agent_registers_the_tools_its_composition_earns(
     # Which conditions earn which tool is pinned by
     # tests/shared/tool-registration.json; what matters here is that the
     # agent's own composition is what they were asked about.
-    assert tool_names(agent) == ["search_context", "describe_table", "run_sql"]
+    assert tool_names(agent) == [
+        "search_context",
+        "describe_table",
+        "run_sql",
+        "describe_trust_system",
+    ]
 
 
 def test_a_semantic_layer_earns_the_measure_tools(client: Chat, source: Any) -> None:

@@ -1,5 +1,5 @@
 {
-  "description": "Which tools an agent registers for a given composition, and what each registered tool tells the model it is for. Registration is what the model can reach at all, and a tool description is prompt text it reads before choosing, so both must agree across the two packages. Cases declare only what registration and the descriptions turn on: the measures, the governed definitions, whether a source's catalog is too broad to list, and how many sources there are. Everything else about a source is each package's own business, so a runner fills it in. Tool arguments are deliberately not pinned here: a JSON Schema property and an ellmer type are different objects, and normalizing one into the other would pin the shape of the plumbing rather than what the model reads. Cases never declare a warehouse's own semantic objects or exact trusted queries, so the tools gated on them never register in either package: call_calculation, and the semantic-model half of call_metrics, wait on kata gcgj, which is deferred, and only the R package implements them today. The execution tool is left out for the same reason from the other end: it is run_r in R and run_python in Python, each built by its own owner rather than by build_commons_tools(), so a runner drops every name in execution_tools from what it enumerated before comparing.",
+  "description": "Which tools an agent registers for a given composition, what each registered tool tells the model it is for, and the response of a tool whose output is itself a cross-language contract. Registration is what the model can reach at all, and descriptions and responses are prompt text it reads, so all three must agree across the two packages. Cases declare only what registration and the descriptions turn on: the measures, the governed definitions, whether a source's catalog is too broad to list, and how many sources there are. Everything else about a source is each package's own business, so a runner fills it in. Tool arguments are deliberately not pinned here: a JSON Schema property and an ellmer type are different objects, and normalizing one into the other would pin the shape of the plumbing rather than what the model reads. Cases never declare a warehouse's own semantic objects or exact trusted queries, so the tools gated on them never register in either package: call_calculation, and the semantic-model half of call_metrics, wait on kata gcgj, which is deferred, and only the R package implements them today. The execution tool is left out for the same reason from the other end: it is run_r in R and run_python in Python, each built by its own owner rather than by build_commons_tools(), so a runner drops every name in execution_tools from what it enumerated before comparing.",
   "execution_tools": ["run_r", "run_python"],
   "shapes": {
     "description": "The compositions the cases below are built from. `measures` and `definitions` are the pool's two halves; a definition entry with `count` stands for that many definitions with the name as a prefix and a number after it, which is how a case reaches an index too long for the prompt. `catalog_searchable` marks the sources whose catalog listing is too broad to name in the prompt.",
@@ -82,7 +82,12 @@
       {
         "name": "a source alone earns only the tools every source earns",
         "shape": "bare",
-        "tools": ["search_context", "describe_table", "run_sql"]
+        "tools": [
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "describe_trust_system"
+        ]
       },
       {
         "name": "measures earn the pool and the measure call",
@@ -92,7 +97,8 @@
           "call_measure",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "describe_trust_system"
         ]
       },
       {
@@ -102,13 +108,19 @@
           "call_metrics",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "describe_trust_system"
         ]
       },
       {
         "name": "definitions that are not metrics earn neither",
         "shape": "definitions_without_a_metric",
-        "tools": ["search_context", "describe_table", "run_sql"]
+        "tools": [
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "describe_trust_system"
+        ]
       },
       {
         "name": "an index past the prompt's cap earns the pool",
@@ -118,7 +130,8 @@
           "call_metrics",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "describe_trust_system"
         ]
       },
       {
@@ -130,7 +143,8 @@
           "call_metrics",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "describe_trust_system"
         ]
       },
       {
@@ -140,7 +154,8 @@
           "search_catalog",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "describe_trust_system"
         ]
       },
       {
@@ -150,7 +165,8 @@
           "search_catalog",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "describe_trust_system"
         ]
       }
     ]
@@ -169,6 +185,12 @@
         "shape": "bare",
         "tool": "describe_table",
         "text": "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table. The sample summary covers the sampled rows only, so it cannot show which values the whole table holds. Before you report that a value is absent, query for it."
+      },
+      {
+        "name": "describe_trust_system",
+        "shape": "bare",
+        "tool": "describe_trust_system",
+        "text": "Answer questions about the trust system. Call this tool when the user asks about green shields, blue citation boxes, yellow warning signs, trusted code, trusted context, or how answer trust is determined. Insert the supplied provenance markers inline wherever they help explain the trust system."
       },
       {
         "name": "run_sql with nothing to fall back from",
@@ -237,5 +259,18 @@
         "text": "Search a broad selected catalog by object name and description. Results are stable object names for describe_table."
       }
     ]
+  },
+  "responses": {
+    "description": "Exact model-facing tool responses that both packages must render on their supported themed surfaces. Icon URL placeholders are replaced by each runner because the packages serve the same files under different dependency URLs; every other character is pinned.",
+    "describe_trust_system": {
+      "title": "Explained answer trust",
+      "provenance_tag": null,
+      "icon_files": {
+        "trusted_icon_url": "trusted-icon.svg",
+        "citation_icon_url": "citation-mark.svg",
+        "warning_icon_url": "warning-icon.svg"
+      },
+      "template": "Insert the supplied provenance markers inline wherever they help explain\nthe trust system.\n\nAvailable provenance markers:\n- Verified answer: <img src=\"{{trusted_icon_url}}\" alt=\"Verified answer marker\" width=\"16\" height=\"16\" style=\"vertical-align: -0.15em;\">\n- Cited: <img src=\"{{citation_icon_url}}\" alt=\"Cited marker\" width=\"16\" height=\"16\" style=\"vertical-align: -0.15em;\">\n- Untrusted: <img src=\"{{warning_icon_url}}\" alt=\"Untrusted marker\" width=\"16\" height=\"16\" style=\"vertical-align: -0.15em;\">\n\nTrusted calculations use code selected and maintained by the app authors.\nTrusted context is documentation supplied and vetted by the app authors.\n\n- Verified answer: The answer is based on trusted calculations and does\n  not use ad hoc code written by the model.\n- Cited: The answer includes ad hoc analysis, so its calculations do not\n  come only from trusted calculations. It cites trusted context that\n  supports its approach.\n- Untrusted: The answer includes ad hoc analysis, so its calculations do\n  not come only from trusted calculations. It does not cite trusted\n  context that supports its approach.\n- No marker: The answer does not include a new calculation.\n\nDo not imply that you selected or assigned a provenance outcome or\nmarker, because commons determines the outcome from the calculations\nand citations used in the answer."
+    }
   }
 }

@@ -43,8 +43,7 @@ system_prompt_data <- function(
       tables = tables_text(sources),
       dictionary_context = dictionary_context,
       glossary_context = glossary_context,
-      definition_index = definition_index,
-      citation_trust_exception = citation_trust_exception(tool_names)
+      definition_index = definition_index
     ),
     tool_availability(tool_names),
     list(

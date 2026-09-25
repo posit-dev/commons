@@ -155,17 +155,14 @@ test_that("both packages render the shared prompt cases the same way", {
   }
 })
 
-test_that("tool availability and the trust exception follow the shared cases", {
+test_that("tool availability follows the shared cases", {
   cases <- shared_fixture("prompt-render")$tool_data$cases
   expect_gt(length(cases), 0)
 
   for (case in cases) {
     tools <- as.character(unlist(case$tools))
     tools[tools == "$execution_tool"] <- execution_tool
-    data <- c(
-      tool_availability(tools),
-      list(citation_trust_exception = citation_trust_exception(tools))
-    )
+    data <- tool_availability(tools)
     expect_equal(data[names(case$expected)], case$expected, info = case$name)
   }
 })

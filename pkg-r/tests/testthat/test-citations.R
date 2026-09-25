@@ -258,28 +258,6 @@ test_that("citation instructions describe only available tool outputs", {
   expect_no_match(with_measures, "Native semantic-model", fixed = TRUE)
 })
 
-test_that("citation trust exception names trusted calculation tools", {
-  expect_equal(citation_trust_exception(character()), "")
-  expect_equal(
-    citation_trust_exception("call_measure"),
-    " that is not based solely on output from `call_measure`"
-  )
-  expect_equal(
-    citation_trust_exception("call_calculation"),
-    " that is not based solely on output from `call_calculation`"
-  )
-  expect_equal(
-    citation_trust_exception(
-      c("search_pool", "call_measure", "call_metrics")
-    ),
-    paste0(
-      " that is not based solely on output from `search_pool`",
-      " or `call_measure`",
-      " or `call_metrics`"
-    )
-  )
-})
-
 test_that("user messages reset citation requests but tool results do not", {
   agent <- test_agent()
   tracker <- agent$.__enclos_env__$private$citation_request

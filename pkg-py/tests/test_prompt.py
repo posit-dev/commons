@@ -14,7 +14,6 @@ from commons._definitions._registry import build_registry
 from commons._prompt import (
     EXECUTION_TOOL,
     check_instructions,
-    citation_trust_exception,
     is_claude_5_model,
     prompt_date,
     read_instructions,
@@ -93,7 +92,6 @@ def test_shared_tool_data_cases():
     for case in cases:
         tools = [_own_execution_tool(tool) for tool in case["tools"]]
         data: dict[str, object] = dict(tool_availability(tools))
-        data["citation_trust_exception"] = citation_trust_exception(tools)
         got = {key: data[key] for key in case["expected"]}
         assert got == case["expected"], case["name"]
 
@@ -250,11 +248,8 @@ def test_prompt_data_renders_the_packaged_template():
 def test_prompt_data_reads_tool_names_from_any_iterable():
     source = data_source(orders=pd.DataFrame({"n": [1]}))
     sources = {"sales_db": source}
-    # Both the trust exception and the per-tool flags read `tools`, so a
-    # one-shot iterator has to survive being read twice.
     data = system_prompt_data(
         sources, build_registry(sources), tools=iter(["call_metrics"])
     )
 
     assert data["has_call_metrics"]
-    assert data["citation_trust_exception"].endswith("`call_metrics`")

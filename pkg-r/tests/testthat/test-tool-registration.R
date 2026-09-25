@@ -1,4 +1,4 @@
-# The tool registration and description contract both packages consume.
+# The tool registration, description, and response contract both packages consume.
 # The Python suite runs the same cases from the same file. See
 # tests/shared/README.md.
 
@@ -127,6 +127,30 @@ test_that("tool descriptions match the shared contract", {
       info = case$name
     )
   }
+})
+
+test_that("trust system response matches the shared contract", {
+  spec <- tool_registration_spec()
+  response <- spec$responses$describe_trust_system
+  expected <- response$template
+
+  for (placeholder in names(response$icon_files)) {
+    expected <- gsub(
+      paste0("{{", placeholder, "}}"),
+      commons_icon_url(response$icon_files[[placeholder]]),
+      expected,
+      fixed = TRUE
+    )
+  }
+  expect_no_match(expected, "{{", fixed = TRUE)
+
+  tools <- fixture_tools(spec, "bare")
+  names <- vapply(tools, tool_name, character(1))
+  result <- tools[[match("describe_trust_system", names)]]()
+
+  expect_identical(result@value, expected)
+  expect_identical(result@extra$commons_tag, response$provenance_tag)
+  expect_identical(result@extra$display$title, response$title)
 })
 
 test_that("every shape in the fixture is used", {

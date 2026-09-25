@@ -1,4 +1,4 @@
-"""The tool registration and description contract both packages consume.
+"""The tool registration, description, and response contract both packages consume.
 
 The R suite runs the same cases from the same file. See tests/shared/README.md.
 """
@@ -7,12 +7,13 @@ from typing import Any
 
 import pandas as pd
 import pytest
-from chatlas import Tool
+from chatlas import ContentToolResult, Tool
 
 from commons import DataSource, data_source, measure
 from commons._catalog import Manifest, Relation
 from commons._definitions import ExportRecord, Registry
 from commons._measures import Measure, as_measure
+from commons._provenance import TAG_EXTRA_KEY
 from commons._tools import ToolContext, build_commons_tools, tool_description
 
 from ._shared import load_shared_fixture
@@ -125,6 +126,25 @@ def test_descriptions_match_the_shared_contract(case: dict[str, Any]) -> None:
     found = {tool.name: tool for tool in _tools(case["shape"])}
 
     assert tool_description(found[case["tool"]]) == case["text"]
+
+
+def test_trust_system_response_matches_the_shared_contract(
+    served_bundle: str,
+) -> None:
+    response = SPEC["responses"]["describe_trust_system"]
+    expected = response["template"]
+    for placeholder, file in response["icon_files"].items():
+        expected = expected.replace(
+            f"{{{{{placeholder}}}}}", f"{served_bundle}/figs/{file}"
+        )
+    assert "{{" not in expected
+
+    found = {tool.name: tool for tool in _tools("bare")}
+    result = found["describe_trust_system"].func()
+    assert isinstance(result, ContentToolResult)
+    assert result.value == expected
+    assert result.extra[TAG_EXTRA_KEY] is response["provenance_tag"]
+    assert result.extra["display"]["title"] == response["title"]
 
 
 def test_every_shape_is_used() -> None:
