@@ -282,7 +282,7 @@ def _trust_system_explanation() -> str:
             "Trusted context is documentation supplied and vetted by the app authors.",
             "",
             "- Verified answer: The answer is based on trusted calculations and does",
-            "  not use results from ad hoc SQL or code analysis.",
+            "  not use ad hoc code written by the model.",
             "- Cited: The answer includes ad hoc analysis, so its calculations do not",
             "  come only from trusted calculations. It cites trusted context that",
             "  supports its approach.",
