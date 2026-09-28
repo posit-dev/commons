@@ -87,10 +87,10 @@ vignette.
 ![Flow diagram. A question first searches trusted calculations. The
 high-trust path runs a relevant trusted calculation and ends with a
 green check-shield marker for the Verified answer outcome. The
-lower-trust path searches context and writes custom SQL or R, ending
-with either a blue quote-mark citation marker for the Cited outcome or a
-yellow exclamation marker for the Untrusted
-outcome.](reference/figures/README-trust-flow.png)
+lower-trust path searches context and writes custom SQL, R, or Python,
+ending with either a blue quote-mark citation marker for the Cited
+outcome or a yellow exclamation marker for the Untrusted
+outcome.](reference/figures/trust-flow.svg)
 
 ## Evaluation
 
