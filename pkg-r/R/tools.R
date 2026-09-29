@@ -52,9 +52,7 @@ tool_describe_trust_system <- function() {
     paste(
       "Answer questions about the trust system. Call this tool when the user",
       "asks about green shields, blue citation boxes, yellow warning signs,",
-      "trusted code, trusted context, or how answer trust is determined.",
-      "Insert the supplied provenance markers inline wherever they help",
-      "explain the trust system."
+      "trusted code, trusted context, or how answer trust is determined."
     ),
     name = "describe_trust_system",
     annotations = ellmer::tool_annotations(
