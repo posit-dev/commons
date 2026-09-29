@@ -53,6 +53,7 @@ Suggests:
     dplyr,
     ggplot2,
     gt,
+    nanoparquet,
     odbc,
     otel (>= 0.2.0),
     otelsdk (>= 0.2.0),
