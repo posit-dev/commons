@@ -63,49 +63,14 @@ tool_describe_trust_system <- function() {
 }
 
 trust_system_explanation <- function() {
-  verified <- trust_system_marker(
-    "trusted-icon.svg",
-    "Verified answer marker"
-  )
-  cited <- trust_system_marker("citation-mark.svg", "Cited marker")
-  untrusted <- trust_system_marker("warning-icon.svg", "Untrusted marker")
-  paste(
-    "Insert the supplied provenance markers inline wherever they help explain",
-    "the trust system.",
-    "",
-    "Available provenance markers:",
-    sprintf("- Verified answer: %s", verified),
-    sprintf("- Cited: %s", cited),
-    sprintf("- Untrusted: %s", untrusted),
-    "",
-    "Trusted calculations use code selected and maintained by the app authors.",
-    "Trusted context is documentation supplied and vetted by the app authors.",
-    "",
-    "- Verified answer: The answer is based on trusted calculations and does",
-    "  not use ad hoc code written by the model.",
-    "- Cited: The answer includes ad hoc analysis, so its calculations do not",
-    "  come only from trusted calculations. It cites trusted context that",
-    "  supports its approach.",
-    "- Untrusted: The answer includes ad hoc analysis, so its calculations do",
-    "  not come only from trusted calculations. It does not cite trusted",
-    "  context that supports its approach.",
-    "- No marker: The answer does not include a new calculation.",
-    "",
-    "Do not imply that you selected or assigned a provenance outcome or",
-    "marker, because commons determines the outcome from the calculations",
-    "and citations used in the answer.",
-    sep = "\n"
-  )
-}
-
-trust_system_marker <- function(file, alt) {
-  sprintf(
-    paste0(
-      '<img src="%s" alt="%s" ',
-      'width="16" height="16" style="vertical-align: -0.15em;">'
-    ),
-    escape_attr(commons_icon_url(file)),
-    escape_attr(alt)
+  render_system_prompt(
+    read_prompt("trust-system.md"),
+    list(
+      has_markers = TRUE,
+      trusted_icon_url = escape_attr(commons_icon_url("trusted-icon.svg")),
+      citation_icon_url = escape_attr(commons_icon_url("citation-mark.svg")),
+      warning_icon_url = escape_attr(commons_icon_url("warning-icon.svg"))
+    )
   )
 }
 

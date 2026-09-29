@@ -53,6 +53,7 @@ from ._handles import HandleStore
 from ._icons import icon_url
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
+from ._prompt import read_prompt, render_system_prompt
 from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
@@ -252,57 +253,17 @@ def _describe_trust_system() -> Tool:
 
 
 def _trust_system_explanation() -> str:
-    markers = [
-        (
-            "Verified answer",
-            _trust_system_marker("trusted-icon.svg", "Verified answer marker"),
-        ),
-        ("Cited", _trust_system_marker("citation-mark.svg", "Cited marker")),
-        ("Untrusted", _trust_system_marker("warning-icon.svg", "Untrusted marker")),
-    ]
-    supplied = [(label, marker) for label, marker in markers if marker]
-    marker_text = (
-        [
-            "Insert the supplied provenance markers inline wherever they help explain",
-            "the trust system.",
-            "",
-            "Available provenance markers:",
-            *(f"- {label}: {marker}" for label, marker in supplied),
-            "",
-        ]
-        if supplied
-        else []
-    )
-    return "\n".join(
-        [
-            *marker_text,
-            "Trusted calculations use code selected and maintained by the app authors.",
-            "Trusted context is documentation supplied and vetted by the app authors.",
-            "",
-            "- Verified answer: The answer is based on trusted calculations and does",
-            "  not use ad hoc code written by the model.",
-            "- Cited: The answer includes ad hoc analysis, so its calculations do not",
-            "  come only from trusted calculations. It cites trusted context that",
-            "  supports its approach.",
-            "- Untrusted: The answer includes ad hoc analysis, so its calculations do",
-            "  not come only from trusted calculations. It does not cite trusted",
-            "  context that supports its approach.",
-            "- No marker: The answer does not include a new calculation.",
-            "",
-            "Do not imply that you selected or assigned a provenance outcome or",
-            "marker, because commons determines the outcome from the calculations",
-            "and citations used in the answer.",
-        ]
-    )
-
-
-def _trust_system_marker(file: str, alt: str) -> str:
-    url = icon_url(file)
-    if url is None:
-        return ""
-    return (
-        f'<img src="{escape_attr(url)}" alt="{escape_attr(alt)}" '
-        'width="16" height="16" style="vertical-align: -0.15em;">'
+    urls = {
+        "trusted_icon_url": icon_url("trusted-icon.svg"),
+        "citation_icon_url": icon_url("citation-mark.svg"),
+        "warning_icon_url": icon_url("warning-icon.svg"),
+    }
+    return render_system_prompt(
+        read_prompt("trust-system.md"),
+        {
+            "has_markers": all(urls.values()),
+            **{name: escape_attr(url) if url else "" for name, url in urls.items()},
+        },
     )
 
 
