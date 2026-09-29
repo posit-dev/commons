@@ -41,7 +41,7 @@ build_commons_tools <- function(self, private) {
 }
 
 tool_describe_trust_system <- function() {
-  body <- trust_system_explanation()
+  body <- read_prompt("trust-system.md")
   ellmer::tool(
     function() {
       tool_result(
@@ -58,18 +58,6 @@ tool_describe_trust_system <- function() {
     annotations = ellmer::tool_annotations(
       title = "Explaining answer trust",
       read_only_hint = TRUE
-    )
-  )
-}
-
-trust_system_explanation <- function() {
-  render_system_prompt(
-    read_prompt("trust-system.md"),
-    list(
-      has_markers = TRUE,
-      trusted_icon_url = escape_attr(commons_icon_url("trusted-icon.svg")),
-      citation_icon_url = escape_attr(commons_icon_url("citation-mark.svg")),
-      warning_icon_url = escape_attr(commons_icon_url("warning-icon.svg"))
     )
   )
 }

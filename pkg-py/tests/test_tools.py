@@ -325,23 +325,6 @@ def test_every_tool_is_declared_read_only(plain: DataSource) -> None:
     )
 
 
-# ---- describe_trust_system -------------------------------------------------
-
-
-def test_describe_trust_system_omits_unserved_markers(
-    plain: DataSource,
-) -> None:
-    result = invoke(
-        find(
-            build_commons_tools(ToolContext(sources={"sales_db": plain})),
-            "describe_trust_system",
-        )
-    )
-
-    assert "<img " not in result.value
-    assert result.extra[TAG_EXTRA_KEY] is None
-
-
 # ---- search_context --------------------------------------------------------
 
 

@@ -50,11 +50,10 @@ from ._display import (
 )
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
-from ._icons import icon_url
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
-from ._prompt import read_prompt, render_system_prompt
-from ._provenance import TAG_EXTRA_KEY, Tag, escape_attr
+from ._prompt import read_prompt
+from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 
@@ -237,7 +236,7 @@ def tool_description(tool: Tool) -> str:
 def _describe_trust_system() -> Tool:
     def describe_trust_system() -> ContentToolResult:
         return tool_result(
-            _trust_system_explanation(),
+            read_prompt("trust-system.md"),
             title="Explained answer trust",
         )
 
@@ -249,21 +248,6 @@ def _describe_trust_system() -> Tool:
         "trusted code, trusted context, or how answer trust is determined.",
         _parameters({}, []),
         "Explaining answer trust",
-    )
-
-
-def _trust_system_explanation() -> str:
-    urls = {
-        "trusted_icon_url": icon_url("trusted-icon.svg"),
-        "citation_icon_url": icon_url("citation-mark.svg"),
-        "warning_icon_url": icon_url("warning-icon.svg"),
-    }
-    return render_system_prompt(
-        read_prompt("trust-system.md"),
-        {
-            "has_markers": all(urls.values()),
-            **{name: escape_attr(url) if url else "" for name, url in urls.items()},
-        },
     )
 
 
