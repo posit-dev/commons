@@ -113,9 +113,7 @@ The following table details the various ways each provenance outcome can occur:
 
 The agent itself does not determine the provenance outcome. commons derives it deterministically from the agent's behavior.
 
-### Trusted-only mode
-
-Some applications should never answer from custom code. With `commons(mode = "trusted only")`, the agent has no lower-trust path: it can't run SQL or R, and when no trusted calculation answers a question, it tells the user so. The agent can still search context and inspect table schemas, but not sample rows. Every answer comes from a trusted calculation, so answers carry no provenance markers. A trusted-only agent needs at least one trusted calculation, and it doesn't start an R session, so it runs on hosts without an OS-level sandbox.
+To turn off the lower-trust path altogether, use `commons(mode = "trusted only")`. In this mode, the agent can't write its own SQL or R code; it answers only with trusted calculations. If no trusted calculation answers a question, it tells the user so. Since every answer comes from a trusted calculation, answers carry no provenance markers.
 
 ## Information layers
 
