@@ -113,6 +113,10 @@ The following table details the various ways each provenance outcome can occur:
 
 The agent itself does not determine the provenance outcome. commons derives it deterministically from the agent's behavior.
 
+### Trusted-only mode
+
+Some applications should never answer from custom code. With `commons(mode = "trusted only")`, the agent has no lower-trust path: it can't run SQL or R, and when no trusted calculation answers a question, it tells the user so. The agent can still search context and inspect table schemas, but not sample rows. Every answer comes from a trusted calculation, so answers carry no provenance markers. A trusted-only agent needs at least one trusted calculation, and it doesn't start an R session, so it runs on hosts without an OS-level sandbox.
+
 ## Information layers
 
 commons distinguishes between two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer encodes trusted calculations, ideally lifted from reliable code that you already use. The **context layer** contains background or supporting information, useful both for figuring out what custom code to run and how to interpret results. Data dictionaries span the two layers.

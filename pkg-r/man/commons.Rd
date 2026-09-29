@@ -11,6 +11,7 @@ commons(
   context_layer = NULL,
   ...,
   instructions = NULL,
+  mode = c("normal", "trusted only"),
   network = c("none", "full"),
   log = FALSE,
   share_with = NULL
@@ -43,9 +44,24 @@ system prompt, as a single string or the path to a text or Markdown file.
 )
 }\if{html}{\out{</div>}}}
 
+\item{mode}{Which analysis paths the agent may take. One of:
+\itemize{
+\item \code{"normal"} (the default): the agent prefers trusted calculations and,
+when none answers the question, falls back to writing its own SQL and R
+code.
+\item \code{"trusted only"}: the agent answers only with trusted calculations:
+measures, governed metrics, and exact trusted queries. When none
+answers the question, it says so rather than writing its own code. The
+agent can still search context and inspect table schemas, but not
+sample rows. Because every answer comes from a trusted calculation,
+answers carry no provenance markers, and the agent needs no sandboxed
+R session. The agent must have at least one trusted calculation.
+}}
+
 \item{network}{Whether the agent's R session has network access. One
 of
-\code{"none"} (the default) or \code{"full"}. The session uses OS sandboxing on
+\code{"none"} (the default) or \code{"full"}. Must be \code{"none"} when
+\code{mode = "trusted only"}, since that mode has no R session. The session uses OS sandboxing on
 Linux and macOS. On unsupported hosts, local development can opt in to
 best-effort R guardrails with
 \code{options(commons.allow_unsafe_fallback = TRUE)}. These guardrails
@@ -122,8 +138,8 @@ eviction; change the cap with \code{options(commons.context_cache_max_size)}.
 
 \section{Agent tools}{
 
-Depending on its semantic layer, context layer, and data sources, a commons
-agent receives some combination of these tools:
+Depending on its semantic layer, context layer, data sources, and \code{mode}, a
+commons agent receives some combination of these tools:
 \itemize{
 \item \code{search_pool} searches trusted calculations and semantic models.
 \item \code{search_catalog} searches a warehouse catalog.
@@ -136,6 +152,9 @@ agent receives some combination of these tools:
 \item \code{run_r} executes R code to analyze results and render plots in the agent's
 R session.
 }
+
+With \code{mode = "trusted only"}, the agent never receives \code{run_sql} or \code{run_r},
+and \code{describe_table} omits sample rows.
 
 These model-facing tools should be considered private. Their constructors
 are intentionally not exported, and their names, arguments, availability,

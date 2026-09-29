@@ -84,6 +84,9 @@ def system_prompt_data(
     return {
         "date": prompt_date(),
         "is_claude_5": is_claude_5_model(model),
+        # The shared template can drop the fallback path; this package's
+        # agents always have one.
+        "trusted_only": False,
         "has_multiple_sources": len(sources) > 1,
         "has_catalog_search": any(
             _catalog_searchable(source) for source in sources.values()

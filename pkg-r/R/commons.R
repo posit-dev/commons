@@ -32,9 +32,22 @@
 #'     instructions = "Use the organization's fiscal-year conventions."
 #'   )
 #'   ```
+#' @param mode Which analysis paths the agent may take. One of:
+#'
+#'   * `"normal"` (the default): the agent prefers trusted calculations and,
+#'     when none answers the question, falls back to writing its own SQL and R
+#'     code.
+#'   * `"trusted only"`: the agent answers only with trusted calculations:
+#'     measures, governed metrics, and exact trusted queries. When none
+#'     answers the question, it says so rather than writing its own code. The
+#'     agent can still search context and inspect table schemas, but not
+#'     sample rows. Because every answer comes from a trusted calculation,
+#'     answers carry no provenance markers, and the agent needs no sandboxed
+#'     R session. The agent must have at least one trusted calculation.
 #' @param network Whether the agent's R session has network access. One
 #'   of
-#'   `"none"` (the default) or `"full"`. The session uses OS sandboxing on
+#'   `"none"` (the default) or `"full"`. Must be `"none"` when
+#'   `mode = "trusted only"`, since that mode has no R session. The session uses OS sandboxing on
 #'   Linux and macOS. On unsupported hosts, local development can opt in to
 #'   best-effort R guardrails with
 #'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
@@ -91,8 +104,8 @@
 #' eviction; change the cap with `options(commons.context_cache_max_size)`.
 #'
 #' @section Agent tools:
-#' Depending on its semantic layer, context layer, and data sources, a commons
-#' agent receives some combination of these tools:
+#' Depending on its semantic layer, context layer, data sources, and `mode`, a
+#' commons agent receives some combination of these tools:
 #'
 #' * `search_pool` searches trusted calculations and semantic models.
 #' * `search_catalog` searches a warehouse catalog.
@@ -104,6 +117,9 @@
 #' * `run_sql` executes a read-only SQL query.
 #' * `run_r` executes R code to analyze results and render plots in the agent's
 #'   R session.
+#'
+#' With `mode = "trusted only"`, the agent never receives `run_sql` or `run_r`,
+#' and `describe_table` omits sample rows.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,
@@ -169,6 +185,7 @@ commons <- function(
   context_layer = NULL,
   ...,
   instructions = NULL,
+  mode = c("normal", "trusted only"),
   network = c("none", "full"),
   log = FALSE,
   share_with = NULL
@@ -192,8 +209,17 @@ commons <- function(
   check_context_layer(context_layer)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer)
+  mode <- rlang::arg_match(mode)
   network <- rlang::arg_match(network)
-  protection <- run_r_protection_mode()
+  trusted_only <- identical(mode, "trusted only")
+  if (trusted_only && identical(network, "full")) {
+    cli::cli_abort(
+      "{.code network = \"full\"} can't be combined with
+       {.code mode = \"trusted only\"}, which has no R session."
+    )
+  }
+  # Without run_r there is nothing to sandbox, so the host needs no support.
+  protection <- if (trusted_only) NULL else run_r_protection_mode()
   check_instructions(instructions)
   rlang::check_bool(log)
   check_share_with(share_with)
@@ -206,6 +232,7 @@ commons <- function(
     network = network,
     protection = protection,
     instructions = instructions,
+    mode = mode,
     log = log,
     share_with = share_with
   )
@@ -222,8 +249,9 @@ Commons <- R6::R6Class(
       context_layer = NULL,
       ...,
       instructions = NULL,
+      mode = c("normal", "trusted only"),
       network = c("none", "full"),
-      protection = run_r_protection_mode(),
+      protection = NULL,
       log = FALSE,
       share_with = NULL
     ) {
@@ -234,7 +262,9 @@ Commons <- R6::R6Class(
         echo = "none"
       )
       semantic_layer <- semantic_layer %||% new_semantic_layer()
+      mode <- rlang::arg_match(mode)
       network <- rlang::arg_match(network)
+      private$trusted_only <- identical(mode, "trusted only")
 
       sources <- as_data_sources(data_sources)
 
@@ -269,18 +299,28 @@ Commons <- R6::R6Class(
         )
       )
 
-      private$handles <- new_handle_store()
-      private$worker <- new_r_worker(network, protection)
       private$corpus <- build_citation_corpus(
         private$context_layer,
         private$registry,
         sources
       )
-      private$citation_request <- new.env(parent = emptyenv())
-      private$citation_request$reminder <- citation_reminder_text()
       private$restore_reminder_pending <- FALSE
+      # Handles, the worker, and citation requests all serve the fallback
+      # path, which a trusted-only agent doesn't have.
+      if (!private$trusted_only) {
+        private$handles <- new_handle_store()
+        private$worker <- new_r_worker(
+          network,
+          protection %||% run_r_protection_mode()
+        )
+        private$citation_request <- new.env(parent = emptyenv())
+        private$citation_request$reminder <- citation_reminder_text()
+      }
 
       commons_tools <- build_commons_tools(self, private)
+      if (private$trusted_only) {
+        check_trusted_tools(commons_tools)
+      }
       self$register_tools(commons_tools)
       self$set_system_prompt(
         commons_system_prompt(
@@ -288,13 +328,14 @@ Commons <- R6::R6Class(
           definitions = private$definitions,
           instructions = instructions,
           tools = commons_tools,
-          model = self$get_model()
+          model = self$get_model(),
+          trusted_only = private$trusted_only
         )
       )
     },
 
     add_turn = function(user, assistant, log_tokens = TRUE) {
-      if (turn_has_user_message(user)) {
+      if (turn_has_user_message(user) && !is.null(private$citation_request)) {
         private$citation_request$requested <- FALSE
       }
       super$add_turn(user, assistant, log_tokens = log_tokens)
@@ -339,7 +380,10 @@ Commons <- R6::R6Class(
       )
 
       tracing <- private$tracing
-      corpus <- private$corpus
+      trusted_only <- private$trusted_only
+      # A trusted-only agent shows no provenance markers. An empty corpus still
+      # strips citation markup but rejects every citation, so none renders.
+      corpus <- if (trusted_only) list() else private$corpus
       as_content <- identical(stream, "content")
 
       # Always project citations so reserved model markup cannot reach the browser.
@@ -403,7 +447,13 @@ Commons <- R6::R6Class(
           )
         }
 
-        aside <- provenance_aside(tag)
+        # A trusted-only agent shows no provenance marker. (coro generators
+        # can't assign the result of an `if` expression.)
+        display_tag <- tag
+        if (trusted_only) {
+          display_tag <- NA_character_
+        }
+        aside <- provenance_aside(display_tag)
         if (nzchar(aside)) {
           yield(if (as_content) ellmer::ContentText(aside) else aside)
         }
@@ -462,6 +512,7 @@ Commons <- R6::R6Class(
     },
 
     sources = NULL,
+    trusted_only = FALSE,
     context_layer = NULL,
     registry = NULL,
     definitions = NULL,
@@ -481,7 +532,8 @@ Commons <- R6::R6Class(
 
     prepare_turn_inputs = function(inputs) {
       inputs <- append_turn_reminder(inputs, self$get_model())
-      if (private$restore_reminder_pending) {
+      # The restore reminder is about run_r state, which this mode never has.
+      if (private$restore_reminder_pending && !private$trusted_only) {
         inputs <- append_restored_conversation_reminder(inputs)
       }
       inputs
@@ -495,6 +547,24 @@ Commons <- R6::R6Class(
     }
   )
 )
+
+# A trusted-only agent answers only with trusted calculations, so one that
+# has none could answer nothing.
+check_trusted_tools <- function(tools) {
+  names <- vapply(tools, tool_name, character(1))
+  if (any(c("call_measure", "call_metrics", "call_calculation") %in% names)) {
+    return(invisible(NULL))
+  }
+  cli::cli_abort(
+    c(
+      "{.code mode = \"trusted only\"} needs at least one trusted
+       calculation.",
+      i = "Add measures to {.arg semantic_layer}, governed metric
+           definitions to a data dictionary, or a warehouse semantic model."
+    ),
+    call = NULL
+  )
+}
 
 turn_has_user_message <- function(turn) {
   any(!vapply(turn@contents, is_tool_result_content, logical(1)))
