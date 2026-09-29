@@ -244,7 +244,7 @@ def _describe_trust_system() -> Tool:
         describe_trust_system,
         "describe_trust_system",
         "Answer questions about the trust system. Call this tool when the user "
-        "asks about green shields, blue citation boxes, yellow warning signs, "
+        "asks about green shields, blue quotation marks, yellow warning circles, "
         "trusted code, trusted context, or how answer trust is determined.",
         _parameters({}, []),
         "Explaining answer trust",
