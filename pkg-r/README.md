@@ -78,8 +78,7 @@ writes custom R or SQL code, leaning on additional context provided to
 the agent.
 
 Answers display provenance according to the analysis path followed, so
-users can determine how much trust to put in a given answer. To turn off
-the custom-code path, use `commons(mode = "trusted only")`.
+users can determine how much trust to put in a given answer.
 
 For more information, see the [Introduction to
 commons](https://posit-dev.github.io/commons/r/articles/commons.html)
