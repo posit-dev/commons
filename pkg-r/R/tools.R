@@ -1,6 +1,7 @@
 # Register only the tools the agent's composition earns; nothing about its
 # surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
+  trusted_only <- isTRUE(private$trusted_only)
   c(
     if (pool_searchable(
       private$registry,
@@ -32,10 +33,10 @@ build_commons_tools <- function(self, private) {
     },
     list(
       tool_search_context(private),
-      tool_describe_table(private),
-      tool_run_sql(private),
-      tool_run_r(private)
-    )
+      tool_describe_table(private)
+    ),
+    # A trusted-only agent has no fallback path of its own.
+    if (!trusted_only) list(tool_run_sql(private), tool_run_r(private))
   )
 }
 
@@ -111,6 +112,7 @@ pool_searchable <- function(
 }
 
 tool_search_pool <- function(private) {
+  trusted_only <- isTRUE(private$trusted_only)
   has_semantic_stubs <- nrow(
     registry_semantic_stubs(private$semantic_models)
   ) > 0L
@@ -122,7 +124,11 @@ tool_search_pool <- function(private) {
   kinds <- c(
     if (length(private$registry) > 0) "measures (run with call_measure)",
     if (nrow(registry_defs(private$definitions)) > 0) {
-      "governed definitions (apply as {{name}} tokens in run_sql)"
+      if (trusted_only) {
+        "governed definitions (compute with call_metrics)"
+      } else {
+        "governed definitions (apply as {{name}} tokens in run_sql)"
+      }
     },
     if (nrow(registry_semantic_members(private$semantic_models)) > 0) {
       "native semantic-model metrics (run with call_metrics)"
@@ -142,7 +148,8 @@ tool_search_pool <- function(private) {
         query,
         source_names,
         semantic_models = private$semantic_models,
-        calculations = private$calculations
+        calculations = private$calculations,
+        trusted_only = trusted_only
       )
       display_body <- search_pool_text(
         private$registry,
@@ -151,7 +158,8 @@ tool_search_pool <- function(private) {
         source_names,
         semantic_models = private$semantic_models,
         calculations = private$calculations,
-        measure_titles = TRUE
+        measure_titles = TRUE,
+        trusted_only = trusted_only
       )
       tool_result(
         body,
@@ -206,7 +214,8 @@ tool_call_metrics <- function(private) {
         filters = filters,
         where = where,
         source_name = source,
-        arguments = arguments
+        arguments = arguments,
+        trusted_only = isTRUE(private$trusted_only)
       )
     },
     sprintf(
@@ -382,6 +391,7 @@ tool_search_context <- function(private) {
 }
 
 tool_describe_table <- function(private) {
+  trusted_only <- isTRUE(private$trusted_only)
   has_semantic_models <- sources_have_semantic_models(private$sources) ||
     sources_have_semantic_stubs(private$sources)
   ellmer::tool(
@@ -390,10 +400,24 @@ tool_describe_table <- function(private) {
         resolve_sql_source(private$sources, source),
         table,
         source_name = source,
-        tracker = private$first_touch
+        tracker = private$first_touch,
+        trusted_only = trusted_only
       )
     },
-    if (has_semantic_models) {
+    if (trusted_only) {
+      paste(
+        if (has_semantic_models) {
+          paste(
+            "Describe a catalog object: a table's columns, types, and",
+            "documentation, or a semantic model's public members and any",
+            "verified queries."
+          )
+        } else {
+          "Describe a table: its columns, types, and documentation."
+        },
+        "Use this to find the names that trusted calculations accept."
+      )
+    } else if (has_semantic_models) {
       paste(
         "Describe a catalog object.",
         "For tables, return columns, types, and sample rows.",
@@ -824,10 +848,12 @@ describe_table_tool <- function(
   source,
   table,
   source_name = NULL,
-  tracker = NULL
+  tracker = NULL,
+  trusted_only = FALSE
 ) {
   source_state <- data_source_state(source)
-  d <- source_describe(source, table)
+  # A trusted-only agent never sees raw rows, so none are fetched.
+  d <- source_describe(source, table, n_sample = if (trusted_only) 0 else 5)
   if (inherits(d, "commons_semantic_model_description")) {
     body <- semantic_model_description_text(d)
     return(tool_result(
@@ -848,10 +874,12 @@ describe_table_tool <- function(
     if (is.null(entry)) d$description
   )
 
-  sample <- sprintf(
-    "Sample summary (the sampled rows only, not necessarily every row):\n\n%s",
-    ellmer::df_schema(d$sample, max_cols = ncol(d$sample))
-  )
+  sample <- if (!trusted_only) {
+    sprintf(
+      "Sample summary (the sampled rows only, not necessarily every row):\n\n%s",
+      ellmer::df_schema(d$sample, max_cols = ncol(d$sample))
+    )
+  }
   if (is.null(entry)) {
     parts <- c(
       relation,
@@ -867,7 +895,12 @@ describe_table_tool <- function(
     )
     parts <- c(
       relation,
-      dictionary_entry_parts(source_state$dictionary, table, columns),
+      dictionary_entry_parts(
+        source_state$dictionary,
+        table,
+        columns,
+        trusted_only = trusted_only
+      ),
       context,
       sample
     )

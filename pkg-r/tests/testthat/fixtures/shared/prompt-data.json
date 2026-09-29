@@ -8,6 +8,7 @@
   "fields": [
     "date",
     "is_claude_5",
+    "trusted_only",
     "has_multiple_sources",
     "has_catalog_search",
     "has_dictionary_context",

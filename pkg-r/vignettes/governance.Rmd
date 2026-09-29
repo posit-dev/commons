@@ -26,6 +26,8 @@ A commons agent is an ellmer chat with a system prompt and a set of tools. The s
 
 We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like "never reveal sensitive data." Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider, so the agent should not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
 
+An agent created with `commons(mode = "trusted only")` has neither `run_sql` nor `run_r`. It can run only trusted calculations and inspect table schemas without sample rows, so the SQL and R code execution sections below don't apply to it.
+
 ## SQL code execution
 
 ### Destructive actions
