@@ -18,6 +18,7 @@ import ctypes.util
 import errno
 import os
 import platform
+import stat
 import sys
 from collections.abc import Iterable
 
@@ -87,6 +88,10 @@ FS_READ_ONLY = FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 # sockets that it or its descendants bound, even under full network.
 SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
 SCOPE_MIN_ABI = 6
+
+# The only rights a rule on a non-directory may name; the kernel refuses the
+# rule with EINVAL if it names any other.
+FS_FILE_RIGHTS = FS_EXECUTE | FS_WRITE_FILE | FS_READ_FILE | FS_TRUNCATE | FS_IOCTL_DEV
 
 # A kernel that has no Landlock, or that is behind a policy forbidding it,
 # is a kernel to fall back from rather than fail on.
@@ -228,6 +233,8 @@ def _grant(ruleset_fd: int, path: str, access: int) -> None:
     except FileNotFoundError:
         return
     try:
+        if not stat.S_ISDIR(os.fstat(parent).st_mode):
+            access &= FS_FILE_RIGHTS
         rule = PathBeneathAttr(allowed_access=access, parent_fd=parent)
         if _syscall(
             NR_ADD_RULE,
