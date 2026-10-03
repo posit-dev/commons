@@ -170,34 +170,41 @@ def _on_interrupt(signum: int, frame: object) -> None:
 # Seeded into the session namespace at startup. Harvested measure sources
 # are reference material: they come without their module's imports and
 # globals, and a default argument naming one (``def m(region=DEFAULT)``)
-# would otherwise fail the define — and with it the spawn — where R's lazy
-# defaults define fine. Each default expression is therefore evaluated
-# behind a guard, and one that references anything missing becomes a
-# placeholder naming the expression's source; only a call that actually
-# uses the default meets the placeholder.
+# would otherwise fail the define, where R's lazy defaults define fine.
+# Each default expression is therefore evaluated behind a guard, and one
+# that fails becomes a placeholder naming the expression's source. A call
+# that uses the default gets a NameError from the placeholder, never a
+# value computed from it.
 _DEFINE_SOURCE = '''
 import ast as _ast
 
 
 class _CommonsMissing:
-    """Stand-in for a default whose ingredients the harvest did not include."""
+    """Stand-in for a default that could not be evaluated in this session."""
 
     def __init__(self, what):
         self._what = what
 
     def __repr__(self):
-        return f"<{self._what}: not defined in this session>"
+        return f"<{self._what}: could not be evaluated in this session>"
+
+    def _refuse(self, *args, **kwargs):
+        raise NameError(
+            f"the default `{self._what}` could not be evaluated in this "
+            "session; pass this argument explicitly"
+        )
 
     def __getattr__(self, attr):
         if attr.startswith("__"):
             raise AttributeError(attr)
-        return self
+        self._refuse()
 
-    def __call__(self, *args, **kwargs):
-        return self
-
-    def __getitem__(self, key):
-        return self
+    __call__ = __getitem__ = __iter__ = __len__ = _refuse
+    __str__ = __format__ = __bool__ = __eq__ = __ne__ = _refuse
+    __lt__ = __le__ = __gt__ = __ge__ = __contains__ = _refuse
+    __add__ = __radd__ = __sub__ = __rsub__ = __mul__ = __rmul__ = _refuse
+    __truediv__ = __rtruediv__ = __mod__ = __rmod__ = _refuse
+    __hash__ = object.__hash__
 
 
 def _commons_default(thunk, what):

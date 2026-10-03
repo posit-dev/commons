@@ -379,12 +379,60 @@ async def test_measure_sources_are_defined_at_spawn_and_at_respawn():
         assert reply.value == 42
 
 
-async def test_a_measure_source_that_fails_stops_the_spawn():
-    async with make_worker(measure_sources=["1 / 0"]) as worker:
-        reply = await worker.run("1")
-        assert isinstance(reply, Failure)
-        assert "failed to start" in reply.message
-        assert "ZeroDivisionError" in reply.message
+async def test_a_measure_source_that_fails_is_skipped():
+    sources = ["BEFORE = 1", "1 / 0", "AFTER = 2"]
+    async with make_worker(measure_sources=sources) as worker:
+        reply = await worker.run("BEFORE + AFTER")
+        assert isinstance(reply, Result)
+        assert reply.value == 3
+
+
+async def test_a_harvested_source_that_cannot_run_alone_is_skipped(tmp_path):
+    # Each is a module-level function the harvest keeps, and each fails
+    # once lifted out of its module: a lambda whose line names a module
+    # global, and a closure that rebinds a name its module defined.
+    module = tmp_path / "unliftable.py"
+    module.write_text(
+        "from commons import measure\n"
+        "\n"
+        "LOG = True\n"
+        "to_pct = (lambda x: round(x * 100, 1)) if LOG else None\n"
+        "\n"
+        "def cached(f):\n"
+        "    value = None\n"
+        "    def wrapper():\n"
+        "        nonlocal value\n"
+        "        value = value or f()\n"
+        "        return value\n"
+        "    return wrapper\n"
+        "\n"
+        '@measure(description="Answer.")\n'
+        "def answer() -> int:\n"
+        "    return 42\n"
+    )
+    layer = semantic_layer(module)
+    async with make_worker(measure_sources=list(layer.source_text.values())) as worker:
+        reply = await worker.run("answer()")
+        assert isinstance(reply, Result)
+        assert reply.value == 42
+
+
+async def test_using_a_default_that_could_not_be_evaluated_raises():
+    # A placeholder that formatted into a query would return a wrong
+    # answer instead of an error.
+    layer = semantic_layer([region_count])
+    async with make_worker(measure_sources=list(layer.source_text.values())) as worker:
+        for code in (
+            "f'{region_count.__defaults__[0]}'",
+            "str(region_count.__defaults__[0])",
+            "bool(region_count.__defaults__[0])",
+            "region_count.__defaults__[0] == 'EMEA'",
+            "region_count.__defaults__[0].upper()",
+        ):
+            reply = await worker.run(code)
+            assert isinstance(reply, Error), code
+            assert "NameError" in reply.message, code
+            assert "DEFAULT_REGION" in reply.message, code
 
 
 async def test_a_measure_source_that_ends_the_worker_stops_the_spawn():

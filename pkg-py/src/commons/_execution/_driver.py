@@ -389,6 +389,9 @@ class Worker:
     async def _define(self, session: WorkerSession, index: int, source: str) -> None:
         """Define one measure source in a freshly started worker.
 
+        A source that raises is skipped, so one bad harvest cannot fail
+        every start. Only a worker that stops answering fails the start.
+
         ``_commons_define_source`` is seeded into every worker's session at
         startup: it compiles with annotations deferred and stands in for
         globals the harvest did not include, because a harvested source's
@@ -405,9 +408,9 @@ class Worker:
             _protocol.read_message(session.stdout), self._spawn_timeout
         )
         if isinstance(reply, Error):
-            raise RuntimeError(  # noqa: TRY004 - a failed start, not a bad argument
-                f"a measure source failed to define: {reply.message}"
-            )
+            # The source's own failure: the session lacks only that
+            # definition, and a call that uses it gets a NameError.
+            return
         if not isinstance(reply, Result):
             raise RuntimeError(  # noqa: TRY004 - a failed start, not a bad argument
                 "the worker exited while defining measure sources"
