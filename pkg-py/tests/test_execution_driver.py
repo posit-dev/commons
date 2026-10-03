@@ -397,12 +397,18 @@ async def test_a_measure_source_that_ends_the_worker_stops_the_spawn():
 
 async def test_a_worker_that_never_becomes_ready_fails_the_call(tmp_path):
     script = tmp_path / "worker.py"
-    script.write_text("import time\ntime.sleep(60)\n")
+    script.write_text(
+        "import sys, time\n"
+        "sys.stderr.write('wedged in startup\\n')\n"
+        "sys.stderr.flush()\n"
+        "time.sleep(60)\n"
+    )
     backend = LocalBackend(worker_script=script, terminate_grace=0.1)
     async with make_worker(backend=backend, spawn_timeout=0.5) as worker:
         reply = await worker.run("1")
         assert isinstance(reply, Failure)
         assert "stopped responding during startup" in reply.message
+        assert "wedged in startup" in reply.message
         assert worker._session is None
 
 
@@ -745,6 +751,128 @@ async def test_an_out_of_turn_answer_to_the_interrupt_restarts_the_worker():
         assert isinstance(reply, Failure)
         assert "out of turn" in reply.message
         assert worker._session is None
+
+
+async def test_garbage_in_answer_to_the_interrupt_restarts_the_worker():
+    async with make_worker(call_timeout=0.5) as worker:
+        code = (
+            WORKER_MODULE
+            + "import signal, time\n"
+            + "signal.signal(signal.SIGINT, "
+            + "lambda *a: os.write(w._PROTOCOL_OUT, b'garbage\\n'))\n"
+            + "time.sleep(60)\n"
+        )
+        reply = await worker.run(code)
+        assert isinstance(reply, Failure)
+        assert "does not parse" in reply.message
+        assert worker._session is None
+
+
+# Installed by a call ahead of the store's first handle, so the patched
+# worker is the one the handles are synced to. Sync messages have ids
+# starting with "s"; calls start with "c".
+def patch_sync(replacement: str) -> str:
+    return (
+        WORKER_MODULE
+        + "import time\n"
+        + "_real = w._execute\n"
+        + "def _patched(call, ns):\n"
+        + "    if call.id.startswith('s'):\n"
+        + f"        {replacement}\n"
+        + "    return _real(call, ns)\n"
+        + "w._execute = _patched\n"
+    )
+
+
+async def test_a_sync_that_gets_no_answer_restarts_the_worker():
+    store = HandleStore()
+    async with make_worker(call_timeout=0.5) as worker:
+        await worker.run(patch_sync("time.sleep(60)"))
+        store.register(41)
+        reply = await worker.run("r1", handles=store)
+        assert isinstance(reply, Failure)
+        assert "stopped answering" in reply.message
+        assert worker._session is None
+
+
+async def test_a_sync_answered_with_garbage_restarts_the_worker():
+    store = HandleStore()
+    async with make_worker() as worker:
+        await worker.run(patch_sync("os.write(w._PROTOCOL_OUT, b'garbage\\n')"))
+        store.register(41)
+        reply = await worker.run("r1", handles=store)
+        assert isinstance(reply, Failure)
+        assert "does not parse" in reply.message
+        assert worker._session is None
+
+
+async def test_a_sync_answered_out_of_turn_restarts_the_worker():
+    store = HandleStore()
+    async with make_worker() as worker:
+        bogus = "return w._protocol.Result(id='bogus', value=1, stdout='', stderr='')"
+        await worker.run(patch_sync(bogus))
+        store.register(41)
+        reply = await worker.run("r1", handles=store)
+        assert isinstance(reply, Failure)
+        assert "out of turn" in reply.message
+        assert worker._session is None
+
+
+async def test_a_handle_the_worker_cannot_decode_is_skipped():
+    store = HandleStore()
+    async with make_worker() as worker:
+        code = (
+            WORKER_MODULE
+            + "import json\n"
+            + "_real = w._protocol.decode_message\n"
+            + "def _refuse(line):\n"
+            + "    if json.loads(line).get('id', '').startswith('s'):\n"
+            + "        raise w._protocol.ProtocolError('refused')\n"
+            + "    return _real(line)\n"
+            + "w._protocol.decode_message = _refuse\n"
+            + "x = 5\n"
+        )
+        await worker.run(code)
+        store.register(41)
+        reply = await worker.run("'r1' in dir(), x", handles=store)
+        assert isinstance(reply, Result)
+        assert list(reply.value) == [False, 5]
+        # Counted as synced, so the next call does not send it again.
+        assert worker._synced == 1
+
+
+async def test_a_call_too_large_for_the_channel_keeps_the_session(monkeypatch):
+    from commons._execution import _protocol
+
+    async with make_worker() as worker:
+        await worker.run("x = 5")
+        monkeypatch.setattr(_protocol, "STREAM_LIMIT", 10_000)
+        reply = await worker.run("y = '" + "a" * 20_000 + "'")
+        assert isinstance(reply, Failure)
+        assert "could not be sent" in reply.message
+        assert "remain available" in reply.message
+        monkeypatch.undo()
+        reply = await worker.run("x")
+        assert isinstance(reply, Result)
+        assert reply.value == 5
+
+
+class _Unstartable:
+    """A backend whose process cannot be created at all."""
+
+    async def start(self, *, network):
+        raise FileNotFoundError(2, "No such file or directory", "python")
+
+    async def aclose(self) -> None:
+        pass
+
+
+async def test_a_worker_that_cannot_be_created_says_it_failed_to_start():
+    async with make_worker(backend=_Unstartable()) as worker:
+        reply = await worker.run("1")
+        assert isinstance(reply, Failure)
+        assert reply.message.startswith("the Python session failed to start:")
+        assert "No such file" in reply.message
 
 
 async def test_a_line_the_worker_cannot_decode_costs_only_that_line():

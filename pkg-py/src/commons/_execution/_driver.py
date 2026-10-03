@@ -175,6 +175,13 @@ class Worker:
             call_id = f"c{next(self._ids)}"
             await self._send(session, Call(id=call_id, code=code))
             return await self._await_reply(session, call_id)
+        except _protocol.ProtocolError as exc:
+            # The call did not fit the channel, and was refused before any
+            # of it was written, so the worker is still in step.
+            return Failure(
+                message=f"the code could not be sent: {exc}. The session and "
+                "its variables remain available."
+            )
         except TimeoutError:
             # The write blocked: the worker stopped reading, and a caller
             # waiting on a pipe has no timeout of its own. This one is the
@@ -220,13 +227,25 @@ class Worker:
             self._synced_store, self._synced = handles, 0
         for id_ in handles.ids()[self._synced :]:
             sync_id = f"s{next(self._ids)}"
-            await self._send(
-                session,
-                Call(id=sync_id, code="None", handles={id_: handles.get(id_)}),
-            )
+            try:
+                await self._send(
+                    session,
+                    Call(id=sync_id, code="None", handles={id_: handles.get(id_)}),
+                )
+            except _protocol.ProtocolError:
+                # Refused before any of it was written; a handle that cannot
+                # fit the channel never will, so it is skipped.
+                self._synced += 1
+                continue
             try:
                 reply = await asyncio.wait_for(
                     _protocol.read_message(session.stdout), self._call_timeout
+                )
+            except TimeoutError:
+                await self._shutdown()
+                return Failure(
+                    message="the Python session stopped answering, so it was "
+                    "restarted. Session variables were reset."
                 )
             except (_protocol.ProtocolError, _protocol.ChannelError) as exc:
                 await self._shutdown()
@@ -309,8 +328,9 @@ class Worker:
                 "time limit and the Python session did not respond to an "
                 "interrupt, so it was restarted. Session variables were reset."
             )
-        except (_protocol.ProtocolError, _protocol.ChannelError):
-            reply = None
+        except (_protocol.ProtocolError, _protocol.ChannelError) as exc:
+            await self._shutdown()
+            return _unparseable(exc)
         outcome = await self._classify(call_id, reply)
         if isinstance(outcome, Failure):
             return outcome
@@ -330,7 +350,10 @@ class Worker:
         # A worker that died between calls is still attached here; close it
         # before replacing it, so its files go with it.
         await self._shutdown()
-        session = await self._backend.start(network=self._network)
+        try:
+            session = await self._backend.start(network=self._network)
+        except OSError as exc:
+            raise RuntimeError(f"the Python session failed to start: {exc}") from exc
         self._session = session
         self._synced = 0
         try:
@@ -346,9 +369,11 @@ class Worker:
                 await self._define(session, index, source)
         except TimeoutError:
             await self._shutdown()
+            detail = await session.stderr()
             raise RuntimeError(
                 "the Python session failed to start: the worker stopped "
                 "responding during startup"
+                + (f"\n{detail}" if detail else "")
             ) from None
         except Exception as exc:
             await self._shutdown()
