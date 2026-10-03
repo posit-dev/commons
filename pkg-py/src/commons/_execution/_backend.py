@@ -4,7 +4,8 @@ The driver starts a worker session through ``ExecBackend.start`` and talks to
 it over the session's pipes. Everything about where the process runs belongs
 to the backend: its scratch directory, its environment, how much protection
 it gets, how it is signalled, and how it is shut down. A container-hosted
-backend is then another implementation of this, not an edit to the driver.
+backend is then another implementation of this protocol, and the driver
+stays as it is.
 """
 
 from __future__ import annotations
@@ -58,14 +59,18 @@ class WorkerSession(Protocol):
         ...
 
     def interrupt(self) -> None:
-        """Raise ``KeyboardInterrupt`` in the worker's call, and its children's."""
+        """Send SIGINT to the worker and its children.
+
+        The worker raises ``KeyboardInterrupt`` in a call that is running
+        model code, and ignores the signal otherwise.
+        """
         ...
 
     async def close(self) -> None:
         """End the worker and everything it spawned, then remove its files.
 
         The shutdown runs to completion even if the caller is cancelled
-        while it waits; the cancellation still reaches the caller.
+        while it waits; the caller still receives the ``CancelledError``.
         """
         ...
 
@@ -101,7 +106,7 @@ async def _read_tail(
 
     Draining is the point: a process whose output nobody reads blocks forever
     on a full pipe. Dropping the head rather than the tail keeps the part of
-    the output most likely to hold the result.
+    the output most likely to explain a failed start.
     """
     if stream is None:
         return b"", False

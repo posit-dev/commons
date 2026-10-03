@@ -10,8 +10,8 @@ by path.
 The protocol channel is claimed at the file-descriptor level before anything
 else happens: duplicates of fds 0 and 1 become the channel, and the
 model-visible fds are pointed at sinks. Model code that writes straight to
-fd 1 — ``os.write``, a C extension, a thread still printing after its call
-returned — goes to the sink rather than mid-message on the channel, and a
+fd 1 (``os.write``, a C extension, a thread still printing after its call
+returned) goes to the sink rather than mid-message on the channel, and a
 thread reading fd 0 gets EOF rather than the next call's bytes. The
 sys-level redirection in ``_repl`` cannot close those holes; these are
 closed by construction, for the process's whole life.
@@ -115,8 +115,8 @@ def _engage_sandbox(network: str, protection: str) -> None:
 
     Guardrails mode engages no sandbox: it exists so a host commons cannot
     protect can still run, and it provides no security boundary. The
-    address-space cap applies in both modes — it is a plain rlimit guarding
-    the host from a runaway allocation, not part of the boundary. The order
+    address-space cap applies in both modes; it is a plain rlimit that
+    protects the host from a runaway allocation. The order
     below is fixed by the mechanisms themselves: the user-namespace
     fallback must precede the seccomp filter that would screen its mount
     and unshare calls, and the filter goes last because nothing may widen

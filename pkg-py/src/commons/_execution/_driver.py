@@ -9,8 +9,9 @@ first and restarted only if the interrupt goes unanswered, because the two
 outcomes mean different things: an interrupted session keeps its variables,
 a restarted one has lost them.
 
-``run_r_tool()`` and ``worker_await()`` in pkg-r/R/run-r.R implement the
-same lifecycle over callr's promise chain.
+The R package runs the same lifecycle in pkg-r/R/run-r.R
+(``worker_ensure()``, ``run_r_tool()``, ``worker_await()``, and
+``schedule_worker_reap()``), on a callr session driven through promises.
 """
 
 from __future__ import annotations
@@ -145,7 +146,7 @@ class Worker:
         flight, holds; once it is acquired no worker can be started after
         this close returns. The close runs in its own task, so cancelling
         ``aclose()`` while it waits out an in-flight call still closes the
-        worker, and the cancellation still reaches the caller. The
+        worker, and the caller still receives the ``CancelledError``. The
         backend's shutdowns, the reaper's included, are waited for last.
         """
         self._closed = True
@@ -393,9 +394,10 @@ class Worker:
         every start. Only a worker that stops answering fails the start.
 
         ``_commons_define_source`` is seeded into every worker's session at
-        startup: it compiles with annotations deferred and stands in for
-        globals the harvest did not include, because a harvested source's
-        own module imports do not exist in the session.
+        startup: it compiles with annotations deferred and replaces each
+        default that cannot be evaluated with a placeholder, because a
+        harvested source's own module imports and globals do not exist in
+        the session.
         """
         payload = f"_commons_define_source({source!r})"
         await asyncio.wait_for(
