@@ -227,6 +227,8 @@ class LocalSession:
         self._stdout = process.stdout
         self._drain = asyncio.ensure_future(_read_tail(process.stderr, STDERR_TAIL))
         self._closing: asyncio.Task[None] | None = None
+        self._exit = asyncio.ensure_future(process.wait())
+        self._exit.add_done_callback(self._kill_group)
 
     @property
     def stdin(self) -> asyncio.StreamWriter:
@@ -243,7 +245,10 @@ class LocalSession:
     def interrupt(self) -> None:
         # The whole group, as in the shutdown: a call blocked in
         # subprocess.run() must take its children with it, or they outlive
-        # the timeout the interrupt enforces.
+        # the timeout the interrupt enforces. An exited leader's pid may
+        # since belong to another process, so it is not signalled.
+        if self.process.returncode is not None:
+            return
         with contextlib.suppress(ProcessLookupError):
             _signal_tree(self.process, signal.SIGINT)
 
@@ -261,16 +266,25 @@ class LocalSession:
             return ""
         return tail.decode(errors="replace").strip()
 
+    def _kill_group(self, _: asyncio.Future[int]) -> None:
+        """Kill what is left of the worker's process group once the leader exits.
+
+        A background child outlives the crash that took the worker, and
+        one ignoring SIGTERM outlives a shutdown the leader honoured. The
+        kill is sent as the exit is observed: a group with members keeps
+        its id reserved, and an empty one's id is too fresh to be reused.
+        """
+        if os.name == "posix":
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.killpg(self.process.pid, signal.SIGKILL)
+
     async def _finish(self) -> None:
         """The bounded kill, then the cleanup."""
         process = self.process
-        if process.returncode is not None and os.name == "posix":
-            # The leader is dead, so _terminate below will not signal
-            # anything, but its process group may not be: a background
-            # child outlives the crash that took the worker.
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(process.pid, signal.SIGKILL)
         await _terminate(process, self._backend._terminate_grace)
+        if process.returncode is not None:
+            # Lets the group kill run before the drain waits on its pipe.
+            await asyncio.shield(self._exit)
         # The drain ends at EOF, which the kill forces; the bound covers a
         # descendant that kept the pipe open.
         with contextlib.suppress(TimeoutError):

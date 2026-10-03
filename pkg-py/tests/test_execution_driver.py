@@ -312,6 +312,33 @@ async def test_a_crashed_workers_children_do_not_outlive_it():
             await asyncio.sleep(0.01)
 
 
+async def test_a_child_ignoring_sigterm_does_not_outlive_the_close():
+    worker = make_worker()
+    probe = await worker.run(
+        "import subprocess; subprocess.run(['/bin/echo', 'x']).returncode"
+    )
+    if not isinstance(probe, Result) or probe.value != 0:
+        await worker.aclose()
+        pytest.skip("the sandbox refuses child processes on this host")
+    process = process_of(worker)
+    # The worker honours SIGTERM; its child does not, and before the group
+    # kill it outlived the shutdown.
+    await worker.run(
+        "import subprocess\n"
+        "subprocess.Popen(['sh', '-c', 'trap \"\" TERM; sleep 30'])\n"
+        "import time; time.sleep(0.2)\n"
+    )
+    await worker.aclose()
+    deadline = time.monotonic() + 2
+    while True:
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            break
+        assert time.monotonic() < deadline, "a child outlived the closed worker"
+        await asyncio.sleep(0.01)
+
+
 @pytest.mark.skipif(
     sys.platform == "darwin" and sys.version_info >= (3, 14),
     reason="asyncio on 3.14 reads macOS's waitid() report of a stopped child "
