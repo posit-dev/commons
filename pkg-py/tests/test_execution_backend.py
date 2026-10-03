@@ -191,11 +191,14 @@ async def test_a_workers_own_children_do_not_survive_the_close(tmp_path) -> None
 
 
 @pytest.mark.skipif(os.name != "posix", reason="os.fork is POSIX-only")
-async def test_closing_a_dead_worker_still_kills_its_children(tmp_path) -> None:
-    # The leader's exit leaves its process group behind; the close takes it
-    # anyway rather than skipping a worker that is already gone. The child
-    # lets go of the pipes, as the real worker's fds are sinks, so that the
-    # leader's exit is observed while the child still runs.
+async def test_a_dead_workers_children_are_killed_when_its_exit_is_seen(
+    tmp_path,
+) -> None:
+    # The leader's exit leaves its process group behind; the group is killed
+    # as the exit is observed, without waiting for a close that may come an
+    # idle window later. The child lets go of the pipes, as the real
+    # worker's fds are sinks, so that the leader's exit is observed while
+    # the child still runs.
     sentinel = tmp_path / "survived"
     backend = backend_running(
         tmp_path,
@@ -208,10 +211,12 @@ async def test_closing_a_dead_worker_still_kills_its_children(tmp_path) -> None:
     )
     session = await backend.start(network="none")
     assert isinstance(session, LocalSession)
-    await session.process.wait()
-    await session.close()
-    await asyncio.sleep(1.8)
-    assert not sentinel.exists()
+    try:
+        await session.process.wait()
+        await asyncio.sleep(1.8)
+        assert not sentinel.exists()
+    finally:
+        await session.close()
 
 
 async def test_a_cancelled_close_still_kills_the_worker_and_reraises(tmp_path) -> None:

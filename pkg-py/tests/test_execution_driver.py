@@ -943,6 +943,22 @@ async def test_a_call_too_large_for_the_channel_keeps_the_session(monkeypatch):
         assert reply.value == 5
 
 
+async def test_a_handle_too_large_for_the_channel_is_skipped(monkeypatch):
+    from commons._execution import _protocol
+
+    store = HandleStore()
+    async with make_worker() as worker:
+        await worker.run("x = 5")
+        # Even shrunk to its repr, this handle overruns the lowered limit;
+        # the call itself still fits.
+        monkeypatch.setattr(_protocol, "STREAM_LIMIT", 400)
+        store.register("a" * 100_000)
+        reply = await worker.run("'r1' in dir(), x", handles=store)
+        assert isinstance(reply, Result)
+        assert list(reply.value) == [False, 5]
+        assert worker._synced == 1
+
+
 class _Unstartable:
     """A backend whose process cannot be created at all."""
 
