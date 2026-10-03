@@ -312,6 +312,24 @@ FROM orders
     assert namespace["order_count"]() == order_count()
 
 
+def test_source_text_keeps_the_indent_inside_a_string_in_a_nested_measure() -> None:
+    @measure(description="Count of orders.")
+    def order_count() -> int:
+        query = """
+        SELECT count(*)
+            FROM orders
+        """
+        return len(query)
+
+    # Every line shares the nested measure's indent, string lines included;
+    # dedenting those would change the string's value.
+    source = semantic_layer([order_count]).source_text["order_count"]
+    assert source.startswith("def order_count(")
+    namespace: dict[str, Any] = {}
+    exec(source, namespace)  # noqa: S102 - the worker's exec of this text is what is tested
+    assert namespace["order_count"]() == order_count()
+
+
 def test_a_helper_whose_source_does_not_parse_is_kept_as_a_comment(
     tmp_path: Path,
 ) -> None:
