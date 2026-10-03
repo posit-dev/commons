@@ -92,6 +92,27 @@ def process_of(worker: Worker) -> asyncio.subprocess.Process:
     return session.process
 
 
+async def wait_until(condition, message: str, timeout: float = 5) -> None:
+    """Poll ``condition`` until it holds, failing with ``message`` at the deadline."""
+    deadline = time.monotonic() + timeout
+    while not condition():
+        assert time.monotonic() < deadline, message
+        await asyncio.sleep(0.01)
+
+
+def group_gone(pid: int):
+    """Whether no process in the group ``pid`` leads is left."""
+
+    def check() -> bool:
+        try:
+            os.killpg(pid, 0)
+        except ProcessLookupError:
+            return True
+        return False
+
+    return check
+
+
 async def test_no_process_exists_until_the_first_call():
     async with make_worker() as worker:
         assert worker._session is None
@@ -261,7 +282,7 @@ async def test_a_worker_that_ignores_the_interrupt_is_restarted():
 
 
 async def test_a_timed_out_call_takes_its_children_with_it():
-    async with make_worker(call_timeout=0.5, interrupt_grace=2) as worker:
+    async with make_worker(call_timeout=1, interrupt_grace=2) as worker:
         probe = await worker.run(
             "import subprocess; subprocess.run(['/bin/echo', 'x']).returncode"
         )
@@ -275,12 +296,17 @@ async def test_a_timed_out_call_takes_its_children_with_it():
             # the worker receives it, the child survives to write the file.
             # Popen().wait() rather than run(), which kills its own child on
             # KeyboardInterrupt and would pass either way.
-            "subprocess.Popen(['sh', '-c', 'sleep 1.5; touch survived']).wait()\n"
+            "subprocess.Popen(['sh', '-c', 'touch started; sleep 2; touch survived'])"
+            ".wait()\n"
         )
         reply = await worker.run(code)
         assert isinstance(reply, Failure)
         assert "interrupted" in reply.message
-        await asyncio.sleep(2)
+        # Without a child that started, there is nothing to have outlived.
+        reply = await worker.run("import os; os.path.exists('started')")
+        assert isinstance(reply, Result)
+        assert reply.value is True
+        await asyncio.sleep(2.5)
         reply = await worker.run("import os; os.path.exists('survived')")
         assert isinstance(reply, Result)
         assert reply.value is False
@@ -302,14 +328,9 @@ async def test_a_crashed_workers_children_do_not_outlive_it():
         # The shutdown killed the group, not just the leader. The kill is sent
         # before run() returns, but a killed child takes a moment to finish
         # exiting, and until then the group still exists.
-        deadline = time.monotonic() + 2
-        while True:
-            try:
-                os.killpg(process.pid, 0)
-            except ProcessLookupError:
-                break
-            assert time.monotonic() < deadline, "a child outlived the crashed worker"
-            await asyncio.sleep(0.01)
+        await wait_until(
+            group_gone(process.pid), "a child outlived the crashed worker", timeout=2
+        )
 
 
 async def test_a_child_ignoring_sigterm_does_not_outlive_the_close():
@@ -329,14 +350,9 @@ async def test_a_child_ignoring_sigterm_does_not_outlive_the_close():
         "import time; time.sleep(0.2)\n"
     )
     await worker.aclose()
-    deadline = time.monotonic() + 2
-    while True:
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
-            break
-        assert time.monotonic() < deadline, "a child outlived the closed worker"
-        await asyncio.sleep(0.01)
+    await wait_until(
+        group_gone(process.pid), "a child outlived the closed worker", timeout=2
+    )
 
 
 @pytest.mark.skipif(
@@ -371,9 +387,8 @@ async def test_an_idle_worker_is_reaped_and_the_next_call_respawns():
     async with make_worker(idle_timeout=0.5) as worker:
         await worker.run("x = 5")
         process = process_of(worker)
-        await asyncio.sleep(2)
-        # The reaper closed the worker; nothing is running now.
-        assert worker._session is None
+        # The reaper closes the worker; nothing is running then.
+        await wait_until(lambda: worker._session is None, "the worker was not reaped")
         reply = await worker.run("x")
         # The respawned session has never seen x.
         assert isinstance(reply, Error)
@@ -398,8 +413,7 @@ async def test_measure_sources_are_defined_at_spawn_and_at_respawn():
         reply = await worker.run("ANSWER")
         assert isinstance(reply, Result)
         assert reply.value == 42
-        await asyncio.sleep(2)
-        assert worker._session is None
+        await wait_until(lambda: worker._session is None, "the worker was not reaped")
         # The respawned worker was given the same sources at spawn.
         reply = await worker.run("ANSWER")
         assert isinstance(reply, Result)
@@ -608,8 +622,7 @@ async def test_handles_are_resent_to_a_respawned_worker():
     async with make_worker(idle_timeout=0.5) as worker:
         reply = await worker.run("r1", handles=store)
         assert isinstance(reply, Result)
-        await asyncio.sleep(2)
-        assert worker._session is None
+        await wait_until(lambda: worker._session is None, "the worker was not reaped")
         reply = await worker.run("r1 + 1", handles=store)
         assert isinstance(reply, Result)
         assert reply.value == 42
@@ -630,9 +643,10 @@ async def test_a_reaped_workers_scratch_directory_is_removed():
         reply = await worker.run("import os; os.getcwd()")
         assert isinstance(reply, Result)
         scratch = reply.value
-        await asyncio.sleep(2)
-        assert worker._session is None
-        assert not os.path.exists(scratch)
+        # The reap forgets the session first and removes its files last.
+        await wait_until(
+            lambda: not os.path.exists(scratch), "the scratch directory remained"
+        )
 
 
 async def test_aclose_during_a_reap_still_kills_a_sigterm_ignoring_worker():
@@ -642,10 +656,7 @@ async def test_aclose_during_a_reap_still_kills_a_sigterm_ignoring_worker():
     # Wait for the reap to begin (it clears the process synchronously),
     # then close while its SIGTERM grace window is still open. Cancelling
     # the reaper must not strand the worker before its SIGKILL.
-    deadline = asyncio.get_running_loop().time() + 5
-    while worker._session is not None:
-        assert asyncio.get_running_loop().time() < deadline
-        await asyncio.sleep(0.05)
+    await wait_until(lambda: worker._session is None, "the reap never began")
     await worker.aclose()
     assert process.returncode is not None
 
