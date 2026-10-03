@@ -114,8 +114,10 @@ def _engage_sandbox(network: str, protection: str) -> None:
     """Restrict this process, permanently, before any model-written code runs.
 
     Guardrails mode engages no sandbox: it exists so a host commons cannot
-    protect can still run, and it provides no security boundary. The
-    address-space cap applies in both modes; it is a plain rlimit that
+    protect can still run, and it provides no security boundary. It
+    installs best-effort checks on the same roots and network access
+    instead (see ``_guardrails``), consulted only while model code runs.
+    The address-space cap applies in both modes; it is a plain rlimit that
     protects the host from a runaway allocation. The order
     below is fixed by the mechanisms themselves: the user-namespace
     fallback must precede the seccomp filter that would screen its mount
@@ -123,9 +125,14 @@ def _engage_sandbox(network: str, protection: str) -> None:
     access after it.
     """
     _limits.apply_address_space_limit()
-    if protection == "guardrails":
-        return
     read_roots, write_roots = _sandbox_roots()
+    if protection == "guardrails":
+        import _guardrails  # pyrefly: ignore[missing-import]
+
+        _guardrails.engage(
+            read_roots, write_roots, network=network, active=lambda: _in_call
+        )
+        return
     if sys.platform == "darwin":
         import _seatbelt  # pyrefly: ignore[missing-import]
 
