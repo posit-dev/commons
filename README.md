@@ -19,7 +19,7 @@ Trusted calculations can come from R and Python code (as *measures*), [data
 dictionary](https://data-dict.tidyverse.org/) definitions, Snowflake
 semantic views, or Databricks metric views.
 
-<img src="https://github.com/user-attachments/assets/3a22c3cd-ae73-4177-a9c2-241f497b430d" alt="A screencast of a commons biodiversity agent. It identifies the site with the greatest biodiversity using a trusted calculation and shows the green marker for the Verified answer outcome. It then lists the species observed there using a direct data query and shows the yellow marker for the Untrusted outcome." width="100%" />
+<img src="https://github.com/user-attachments/assets/3a22c3cd-ae73-4177-a9c2-241f497b430d" alt="A screencast of a commons biodiversity agent. It identifies the site with the greatest biodiversity using a trusted calculation and shows the green marker for the Trusted outcome. It then lists the species observed there using a direct data query and shows the yellow marker for the Untrusted outcome." width="100%" />
 
 ## Installation
 
@@ -93,7 +93,7 @@ For more information, see the [Introduction to
 commons](https://posit-dev.github.io/commons/r/articles/commons.html)
 vignette.
 
-<img src="docs/assets/trust-flow.svg" alt="Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Verified answer outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome." width="100%" />
+<img src="docs/assets/trust-flow.svg" alt="Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Trusted outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome." width="100%" />
 
 ## Evaluation
 
