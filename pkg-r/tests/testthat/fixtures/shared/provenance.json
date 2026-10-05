@@ -148,7 +148,7 @@
     "description": "The provenance marker appended after a classified answer. A live answer omits the \"Cited\" marker, because the verified citation's own aside already says as much; a review context asks for every outcome by passing include_cited. `emits` is false when nothing is rendered at all. A rendered marker carries that tag's label and body from provenance_display verbatim. The icon is not pinned here: its URL comes from each package's own served asset bundle.",
     "cases": [
       {
-        "name": "a verified answer renders its marker",
+        "name": "a trusted answer renders its marker",
         "tag": "A",
         "include_cited": false,
         "emits": true
