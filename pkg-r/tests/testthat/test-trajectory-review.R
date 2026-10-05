@@ -109,7 +109,7 @@ test_that("provenance pills describe trusted, cited, and uncited answers", {
   cited <- htmltools::renderTags(commons_answer_pill("B"))$html
   uncited <- htmltools::renderTags(commons_answer_pill("C"))$html
 
-  expect_match(trusted, "Verified answer")
+  expect_match(trusted, "Trusted")
   expect_match(trusted, "trusted calculation")
   expect_match(trusted, "commons-answer-pill-icon")
   expect_match(trusted, "commons-answer-pill-trusted")
@@ -177,7 +177,7 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
   )
   last <- assistant[[length(assistant)]]$content
   trailing <- if (is.character(last)) last else last[[length(last)]]
-  expect_match(trailing, '<shiny-aside label="Verified answer"', fixed = TRUE)
+  expect_match(trailing, '<shiny-aside label="Trusted"', fixed = TRUE)
 })
 
 test_that("review transcripts mark cited answers the live chat leaves bare", {
@@ -554,7 +554,7 @@ test_that("trust_timeline renders a chart and its table view", {
   hovers <- lapply(traces, function(trace) trace$hovertemplate)
   expect_length(unique(hovers), 1)
   expect_match(hovers[[1]][[1]], "(n = 5)", fixed = TRUE)
-  expect_match(hovers[[1]][[2]], "<b>60%</b> Verified", fixed = TRUE)
+  expect_match(hovers[[1]][[2]], "<b>60%</b> Trusted", fixed = TRUE)
   expect_match(hovers[[1]][[2]], "<extra></extra>", fixed = TRUE)
   expect_equal(traces[[1]]$type, "scatter")
 
@@ -625,7 +625,7 @@ test_that("the timeline legend tucks each level's rate into its tooltip", {
     hit_rate(list(c("A", "C"), "B", NA_character_))
   ))
 
-  expect_match(legend, "Verified")
+  expect_match(legend, "Trusted")
   expect_match(legend, "1 of 4 answers (25%)", fixed = TRUE)
 
   empty <- as.character(timeline_legend(hit_rate(list())))

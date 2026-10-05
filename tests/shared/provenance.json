@@ -125,7 +125,7 @@
     "description": "Word-for-word copy both UIs render. `icon` is null when the provenance marker has no icon.",
     "tags": {
       "A": {
-        "label": "Verified answer",
+        "label": "Trusted",
         "icon": "trusted-icon.svg",
         "body": "This answer comes from a trusted calculation.",
         "pill_class": "trusted"
