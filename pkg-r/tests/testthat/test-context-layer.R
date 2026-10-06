@@ -57,6 +57,7 @@ test_that("augment_context_layer matches the shared cases", {
 })
 
 test_that("context_layer indexes files and finds relevant chunks", {
+  skip_if_duckdb_extensions_unavailable()
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
     c(
@@ -77,6 +78,7 @@ test_that("context_layer indexes files and finds relevant chunks", {
 })
 
 test_that("context_search returns empty when nothing matches or store is empty", {
+  skip_if_duckdb_extensions_unavailable()
   expect_length(context_search(context_layer(), "anything"), 0)
 
   path <- withr::local_tempfile(fileext = ".md")
@@ -85,6 +87,7 @@ test_that("context_search returns empty when nothing matches or store is empty",
 })
 
 test_that("context_layer strips YAML frontmatter before indexing", {
+  skip_if_duckdb_extensions_unavailable()
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
     c(
@@ -104,6 +107,7 @@ test_that("context_layer strips YAML frontmatter before indexing", {
 })
 
 test_that("context_layer leaves a body thematic break intact", {
+  skip_if_duckdb_extensions_unavailable()
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
     c(
@@ -137,6 +141,7 @@ test_that("context_layer skips a frontmatter-only file", {
 })
 
 test_that("the context store persists on disk and is shared across layers", {
+  skip_if_duckdb_extensions_unavailable()
   withr::local_options(commons.context_cache = withr::local_tempdir())
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
@@ -161,6 +166,7 @@ test_that("the context store persists on disk and is shared across layers", {
 })
 
 test_that("commons.context_cache = FALSE builds the store in memory", {
+  skip_if_duckdb_extensions_unavailable()
   withr::local_options(commons.context_cache = FALSE)
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
@@ -174,6 +180,7 @@ test_that("commons.context_cache = FALSE builds the store in memory", {
 })
 
 test_that("an unwritable cache dir warns once and falls back to a tempdir", {
+  skip_if_duckdb_extensions_unavailable()
   # A file where the cache dir should be makes dir.create() fail.
   blocker <- withr::local_tempfile()
   writeLines("occupied", blocker)
@@ -337,6 +344,7 @@ test_that("prune_context_cache() reaps stale .build-* temp files only", {
 })
 
 test_that("context_store() warns and rebuilds when the cached store won't open", {
+  skip_if_duckdb_extensions_unavailable()
   layer <- new_context_layer(c("Some context about widgets."))
   path <- context_store_path(context_layer_state(layer)$docs)
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)

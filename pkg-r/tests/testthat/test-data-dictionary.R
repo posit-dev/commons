@@ -459,6 +459,7 @@ test_that("queries that touch no documented table append nothing", {
 })
 
 test_that("dictionary prose is searchable via the context layer", {
+  skip_if_duckdb_extensions_unavailable()
   skip_if_not_installed("yaml")
   layer <- augment_context_layer(NULL, list(local_dict_source()))
 

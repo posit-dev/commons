@@ -50,6 +50,20 @@ skip_if_ellmer_streaming_hooks_unavailable <- function() {
   )
 }
 
+# The context store's full-text index needs DuckDB's fts extension, which
+# duckdb disables on some builds (e.g. libc++ Linux).
+skip_if_duckdb_extensions_unavailable <- function() {
+  resolve <- get0(
+    "resolve_allow_extensions",
+    envir = asNamespace("duckdb"),
+    inherits = FALSE
+  )
+  skip_if(
+    !is.null(resolve) && !resolve(NULL)$allow,
+    "DuckDB extensions are unavailable."
+  )
+}
+
 # A board_temp() holding the given named values, each written as an rds pin.
 board_with_pins <- function(...) {
   values <- rlang::list2(...)
