@@ -64,7 +64,7 @@
     <p>When answering questions, commons agents first search through a pool of trusted code. If the agent finds an appropriate piece of trusted code, it can invoke it directly, and its response displays a green shield provenance marker <img src="assets/trusted-icon.svg" class="commons-inline-icon" alt="">. If it doesn't, it will search through relevant context before writing its own SQL, R, or Python. If the agent can find trusted context that justifies its approach, it can provide a citation to it at the end of its answer, displayed with a blue provenance marker <img src="assets/citation-mark.svg" class="commons-inline-icon" alt="">, which will be deterministically checked by commons. Otherwise, the answer displays a yellow warning provenance marker <img src="assets/warning-icon.svg" class="commons-inline-icon" alt="">.</p>
 
     <div class="media-card figure-card trust-flow">
-      <img src="assets/trust-flow.svg" alt="Flow diagram. A commons agent searches trusted calculations. If it finds a relevant calculation, it runs the trusted calculation and returns a verified answer. Otherwise, it searches context, writes SQL or R, and returns either a cited or untrusted answer." loading="lazy">
+      <img src="assets/trust-flow.svg" alt="Flow diagram. A commons agent searches trusted calculations. If it finds a relevant calculation, it runs the trusted calculation and displays the Trusted outcome. Otherwise, it searches context, writes SQL or R, and returns either a cited or untrusted answer." loading="lazy">
     </div>
 
     <p>Notably, the agent itself does not decide how to label a response. commons instead labels answers deterministically, based on the path the agent takes to get it to its answer.</p>
