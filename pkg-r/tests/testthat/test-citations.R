@@ -216,6 +216,8 @@ test_that("both packages agree on which turns reset the citation request", {
 })
 
 test_that("search_context requests a citation for fallback answers", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
     "Regeneration units are tracked separately until they close canopy.",

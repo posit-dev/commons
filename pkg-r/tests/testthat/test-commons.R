@@ -415,6 +415,8 @@ test_that("commons() errors on injection parameters matching no name", {
 
 
 test_that("prewarm() builds the context store ahead of the first search", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
   cache_dir <- withr::local_tempdir()
   withr::local_options(commons.context_cache = cache_dir)
   path <- withr::local_tempfile(fileext = ".md")
@@ -449,6 +451,8 @@ test_that("prewarm() propagates failures", {
 })
 
 test_that("prewarm() records a cache-miss build and its own span", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
   skip_if_not_installed("otelsdk")
   # A fresh cache root guarantees a cold build regardless of test order.
   withr::local_options(commons.context_cache = withr::local_tempdir())
@@ -470,6 +474,8 @@ test_that("prewarm() records a cache-miss build and its own span", {
 })
 
 test_that("prewarm() records a cache hit without a build span", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
   skip_if_not_installed("otelsdk")
   withr::local_options(commons.context_cache = withr::local_tempdir())
 

@@ -1,3 +1,6 @@
+# requires duckdb extensions via ragnar (#400)
+skip_on_cran()
+
 test_that("strip_frontmatter matches the shared cases", {
   cases <- shared_fixture("context_layer")$strip_frontmatter$cases
 
