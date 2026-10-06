@@ -13,9 +13,9 @@ semantic views, or Databricks metric views.
 
 ![A screencast of a commons biodiversity agent. It identifies the site
 with the greatest biodiversity using a trusted calculation and shows the
-green marker for the Verified answer outcome. It then lists the species
-observed there using a direct data query and shows the yellow marker for
-the Untrusted
+green marker for the Trusted outcome. It then lists the species observed
+there using a direct data query and shows the yellow marker for the
+Untrusted
 outcome.](https://github.com/user-attachments/assets/3a22c3cd-ae73-4177-a9c2-241f497b430d)
 
 ## Installation
@@ -86,10 +86,10 @@ vignette.
 
 ![Flow diagram. A question first searches trusted calculations. The
 high-trust path runs a relevant trusted calculation and ends with a
-green check-shield marker for the Verified answer outcome. The
-lower-trust path searches context and writes custom SQL, R, or Python,
-ending with either a blue quote-mark citation marker for the Cited
-outcome or a yellow exclamation marker for the Untrusted
+green check-shield marker for the Trusted outcome. The lower-trust path
+searches context and writes custom SQL, R, or Python, ending with either
+a blue quote-mark citation marker for the Cited outcome or a yellow
+exclamation marker for the Untrusted
 outcome.](reference/figures/trust-flow.svg)
 
 ## Evaluation
