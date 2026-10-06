@@ -1,7 +1,7 @@
 """M5's acceptance bar: one agent, all three layers, through the public API.
 
 The pieces underneath have their own tests. What this file asserts is that
-they agree once assembled: a question the measures cover comes back verified,
+they agree once assembled: a question the measures cover is marked Trusted,
 a question they do not comes back untrusted or cited, and a citation reaches
 the consumer as server-rendered HTML rather than as the model's own markup.
 

@@ -536,7 +536,7 @@ viewer_ui <- function(summary) {
 trust_choices <- function() {
   c(
     "All answers" = "all",
-    "Verified" = "A",
+    "Trusted" = "A",
     "Cited" = "B",
     "Untrusted" = "C",
     "No data tool" = "none"

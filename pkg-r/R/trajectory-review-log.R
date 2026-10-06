@@ -556,7 +556,7 @@ review_trust_label <- function(tag) {
   }
   switch(
     tag,
-    A = "Verified (A)",
+    A = "Trusted (A)",
     B = "Cited (B)",
     C = "Untrusted (C)",
     sprintf("Unknown (%s)", tag)

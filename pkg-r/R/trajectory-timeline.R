@@ -1,5 +1,5 @@
 viewer_levels <- c(
-  A = "Verified",
+  A = "Trusted",
   B = "Cited",
   C = "Untrusted",
   none = "No data tool"

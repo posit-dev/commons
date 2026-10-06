@@ -48,7 +48,7 @@ agent = commons.Commons(
 agent.chat("What is EMEA revenue?")
 ```
 
-`region_revenue` is trusted code, so an answer that runs it is tagged `Tag.A` and displays the verified marker. A question no measure covers sends the agent to `run_sql` or the context layer instead, and the answer comes back cited or untrusted depending on whether it quotes something the context layer can verify.
+`region_revenue` is trusted code, so an answer that runs it is tagged `Tag.A` and displays the Trusted marker. A question no measure covers sends the agent to `run_sql` or the context layer instead, and the answer comes back cited or untrusted depending on whether it quotes something the context layer can verify.
 
 Use `stream_async()` in place of `chat()` to stream an answer as it arrives. Its signature is chatlas's, so a chat UI can drive the agent directly.
 

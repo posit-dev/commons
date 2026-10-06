@@ -232,7 +232,7 @@ def agent() -> commons.Commons:
 
 
 QUESTIONS = [
-    # Covered by a measure, so the answer should come back verified.
+    # Covered by a measure, so the answer should have the Trusted outcome.
     "Which county has the most canopy cover?",
     "Which stands have the least canopy cover?",
     # Covered by a measure that draws its own card.
