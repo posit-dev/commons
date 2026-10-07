@@ -10,9 +10,7 @@ artifact_render_queued <- function(store, dir) {
   promises::catch(chain, function(err) list(error = conditionMessage(err)))
 }
 
-# Resolves to `list(html = )` on success and `list(error = )` otherwise. The
-# source directory is copied into the worker's own, so rendering writes
-# nothing next to the saved version but its HTML.
+# Rendering in a copy leaves nothing beside the saved version but its HTML.
 render_artifact <- function(
   dir,
   network = "none",
@@ -157,8 +155,7 @@ quarto_binary <- function() {
   normalizePath(path)
 }
 
-# The sandbox must let the worker read Quarto's whole installation: its
-# launcher script, Deno, Pandoc, and their resources.
+# Quarto's launcher runs Deno, Pandoc, and Sass from its own installation.
 quarto_root <- function(quarto) {
   dirname(dirname(quarto))
 }

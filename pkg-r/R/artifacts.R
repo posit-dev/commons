@@ -102,8 +102,6 @@ artifact_latest_dir <- function(artifact) {
   artifact$versions[[length(artifact$versions)]]$dir
 }
 
-# The scanner's artifact handler: forwards streaming events to the listener,
-# commits a closed element, and returns the chip that replaces it in the chat.
 artifact_scan_handler <- function(store) {
   function(event) {
     switch(
@@ -177,8 +175,6 @@ artifact_render_reminder <- function(id, version, error) {
   )
 }
 
-# Validate and save a new version, then render it. Returns the version and a
-# promise for the render, or the reason the source was rejected.
 artifact_commit <- function(store, id, title, source) {
   doc <- tryCatch(
     parse_artifact_document(source),
@@ -330,8 +326,6 @@ artifact_edit_result <- function(store, artifact, version, result) {
   )
 }
 
-# The chip that stands in for a document in the chat. Clicking it reopens the
-# document in the drawer through `link_input`, when commons_server() set one.
 artifact_link_html <- function(store, id, version = NULL) {
   artifact <- artifact_get(store, id)
   version <- version %||% length(artifact$versions)
@@ -638,7 +632,6 @@ is_mapping <- function(x) {
 
 # --- inputs and files ------------------------------------------------------------
 
-# Inputs whose call hasn't changed since the last version reuse its result.
 resolve_artifact_inputs <- function(store, artifact, inputs) {
   data <- list()
   for (input in inputs) {
@@ -666,8 +659,7 @@ resolve_artifact_inputs <- function(store, artifact, inputs) {
   data
 }
 
-# Runs an input through the same implementation as its tool, with a private
-# handle store so the result isn't advertised to run_r.
+# A private handle store, so the result isn't advertised to run_r.
 resolve_artifact_input <- function(private, input) {
   handles <- new_handle_store(max_rows = Inf)
   args <- input$call

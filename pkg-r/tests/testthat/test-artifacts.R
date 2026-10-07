@@ -231,3 +231,23 @@ test_that("a document's cells can't reach the network or the host's files", {
   expect_false(is.null(result$error))
   expect_no_match(result$error, "^secret$")
 })
+
+test_that("outside Shiny, a turn's documents are rendered and reported", {
+  skip_if_no_quarto()
+  agent <- orders_agent()
+  turn <- ellmer::AssistantTurn(list(ellmer::ContentText(paste0(
+    "Done.\n<commons-artifact id=\"orders\" title=\"Orders\">",
+    orders_document(),
+    "</commons-artifact>"
+  ))))
+
+  expect_message(
+    save_turn_artifacts(agent$artifact_store(), turn),
+    "report.html"
+  )
+  expect_match(
+    artifact_get(agent$artifact_store(), "orders")$html,
+    "There are 6 orders.",
+    fixed = TRUE
+  )
+})

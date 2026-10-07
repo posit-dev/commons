@@ -89,8 +89,7 @@ artifact_view_ui <- function(view, download_id) {
   )
 }
 
-# Everything the view needs to show an artifact again from scratch. Empty
-# strings rather than NULLs, which would arrive as truthy empty objects.
+# Empty strings rather than NULLs, which would arrive as truthy empty objects.
 artifact_select_event <- function(artifact) {
   version <- length(artifact$versions)
   failed <- identical(artifact$failed_version, version)
