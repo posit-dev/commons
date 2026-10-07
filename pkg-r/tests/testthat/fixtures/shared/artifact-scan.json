@@ -1,0 +1,334 @@
+{
+  "description": "How the streaming scanner handles a <commons-artifact> element. Its body goes to an artifact handler, not to the chat: the handler receives an open event, delta events carrying the body as it streams, then a close event with the whole body, and whatever it returns for the close event takes the element's place in the projected text. A malformed element, one whose body passes the cap, and one left open at the end of the stream are swallowed and reported as an error event instead. Output and events must not depend on where chunk boundaries fall, so a runner merges consecutive deltas for the same artifact before comparing and drops the deltas of an artifact that ends in an error (how much streamed before a failure depends on the chunking), and feeds each case the ways the citation_scan cases in citations.json are fed. '{{pad}}' expands to 'pad.char' repeated so the first artifact's body is exactly 'pad.artifact_body_length' characters, and '{{split}}' marks the case's own feed boundaries.",
+  "artifact_body_cap": 200000,
+  "artifact_header_cap": 1024,
+  "exhaustive_split_max_chars": 400,
+  "close_result": "[artifact:{id}]",
+  "cases": [
+    {
+      "name": "an artifact streams its body and leaves the close handler's text",
+      "why": "The body never reaches the chat; the surrounding prose keeps its exact separators.",
+      "text": "Here it is.\n\n<commons-artifact id=\"sales-report\" title=\"Sales report\">\n---\ntitle: Sales\n---\n\nBody.\n</commons-artifact>\n\nDone.",
+      "expected_text": "Here it is.\n\n[artifact:sales-report]\n\nDone.",
+      "events": [
+        {
+          "type": "open",
+          "id": "sales-report",
+          "title": "Sales report"
+        },
+        {
+          "type": "delta",
+          "id": "sales-report",
+          "text": "\n---\ntitle: Sales\n---\n\nBody.\n"
+        },
+        {
+          "type": "close",
+          "id": "sales-report",
+          "title": "Sales report",
+          "body": "\n---\ntitle: Sales\n---\n\nBody.\n"
+        }
+      ]
+    },
+    {
+      "name": "feed boundaries inside the tags do not change the result",
+      "why": "Partial open and close tags are held until they resolve.",
+      "text": "<commons-art{{split}}ifact id=\"a\">x</commons-{{split}}artifact>",
+      "expected_text": "[artifact:a]",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "delta",
+          "id": "a",
+          "text": "x"
+        },
+        {
+          "type": "close",
+          "id": "a",
+          "title": "a",
+          "body": "x"
+        }
+      ]
+    },
+    {
+      "name": "the title defaults to the id",
+      "why": "Every artifact needs a label for its chip and drawer.",
+      "text": "<commons-artifact id=\"q3\">b</commons-artifact>",
+      "expected_text": "[artifact:q3]",
+      "events": [
+        {
+          "type": "open",
+          "id": "q3",
+          "title": "q3"
+        },
+        {
+          "type": "delta",
+          "id": "q3",
+          "text": "b"
+        },
+        {
+          "type": "close",
+          "id": "q3",
+          "title": "q3",
+          "body": "b"
+        }
+      ]
+    },
+    {
+      "name": "single quotes and unknown attributes are accepted",
+      "why": "Attribute order and quoting style are the model's choice; unknown names are ignored.",
+      "text": "<commons-artifact kind='report' title='Q3 review' id='q3'>b</commons-artifact>",
+      "expected_text": "[artifact:q3]",
+      "events": [
+        {
+          "type": "open",
+          "id": "q3",
+          "title": "Q3 review"
+        },
+        {
+          "type": "delta",
+          "id": "q3",
+          "text": "b"
+        },
+        {
+          "type": "close",
+          "id": "q3",
+          "title": "Q3 review",
+          "body": "b"
+        }
+      ]
+    },
+    {
+      "name": "tags match case-insensitively",
+      "why": "Matches how every other reserved element is found.",
+      "text": "<COMMONS-ARTIFACT id=\"a\">b</Commons-Artifact>",
+      "expected_text": "[artifact:a]",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "delta",
+          "id": "a",
+          "text": "b"
+        },
+        {
+          "type": "close",
+          "id": "a",
+          "title": "a",
+          "body": "b"
+        }
+      ]
+    },
+    {
+      "name": "an open tag mid-line is prose",
+      "why": "Like a citation, an artifact starts only at the beginning of a line, so a mention in a sentence is not one.",
+      "text": "Use <commons-artifact id=\"a\"> to start.",
+      "expected_text": "Use <commons-artifact id=\"a\"> to start.",
+      "events": []
+    },
+    {
+      "name": "a citation inside an artifact body is part of the body",
+      "why": "The body is a document, not chat prose, so nothing in it is projected.",
+      "text": "<commons-artifact id=\"a\">\n<commons-citation>\n> q\n</commons-citation>\n</commons-artifact>",
+      "expected_text": "[artifact:a]",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "delta",
+          "id": "a",
+          "text": "\n<commons-citation>\n> q\n</commons-citation>\n"
+        },
+        {
+          "type": "close",
+          "id": "a",
+          "title": "a",
+          "body": "\n<commons-citation>\n> q\n</commons-citation>\n"
+        }
+      ]
+    },
+    {
+      "name": "two artifacts in one response each get their events",
+      "why": "A response can create more than one artifact.",
+      "text": "<commons-artifact id=\"a\">1</commons-artifact>\n<commons-artifact id=\"b\">2</commons-artifact>",
+      "expected_text": "[artifact:a]\n[artifact:b]",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "delta",
+          "id": "a",
+          "text": "1"
+        },
+        {
+          "type": "close",
+          "id": "a",
+          "title": "a",
+          "body": "1"
+        },
+        {
+          "type": "open",
+          "id": "b",
+          "title": "b"
+        },
+        {
+          "type": "delta",
+          "id": "b",
+          "text": "2"
+        },
+        {
+          "type": "close",
+          "id": "b",
+          "title": "b",
+          "body": "2"
+        }
+      ]
+    },
+    {
+      "name": "a stray close tag is dropped",
+      "why": "Reserved markup never reaches the display.",
+      "text": "Text </commons-artifact> more.",
+      "expected_text": "Text  more.",
+      "events": []
+    },
+    {
+      "name": "a longer element name is not an artifact",
+      "why": "Only the exact element name opens an artifact; the chip element passes through.",
+      "text": "<commons-artifact-link artifact=\"a\">A</commons-artifact-link>",
+      "expected_text": "<commons-artifact-link artifact=\"a\">A</commons-artifact-link>",
+      "events": []
+    },
+    {
+      "name": "a bare open tag has no id and is swallowed",
+      "why": "An id is required, so the element is malformed; its body is never shown.",
+      "text": "Before.\n<commons-artifact>body</commons-artifact>\nAfter.",
+      "expected_text": "Before.\n\nAfter.",
+      "events": [
+        {
+          "type": "error",
+          "id": null,
+          "reason": "malformed"
+        }
+      ]
+    },
+    {
+      "name": "an id that is not a lowercase slug is malformed",
+      "why": "The id names a directory, so it is restricted to lowercase letters, digits, and single hyphens.",
+      "text": "<commons-artifact id=\"Sales Report\">body</commons-artifact>",
+      "expected_text": "",
+      "events": [
+        {
+          "type": "error",
+          "id": null,
+          "reason": "malformed"
+        }
+      ]
+    },
+    {
+      "name": "an unquoted attribute is malformed",
+      "why": "Only quoted attributes are part of the grammar.",
+      "text": "<commons-artifact id=a>body</commons-artifact>",
+      "expected_text": "",
+      "events": [
+        {
+          "type": "error",
+          "id": null,
+          "reason": "malformed"
+        }
+      ]
+    },
+    {
+      "name": "a header broken across lines is malformed",
+      "why": "The open tag sits on one line; a newline before '>' means it never closed.",
+      "text": "<commons-artifact id=\"a\"\ntitle=\"T\">body</commons-artifact>\nAfter.",
+      "expected_text": "\nAfter.",
+      "events": [
+        {
+          "type": "error",
+          "id": null,
+          "reason": "malformed"
+        }
+      ]
+    },
+    {
+      "name": "an artifact left open at the end of the stream is reported",
+      "why": "Incomplete documents are never committed; the handler hears why.",
+      "text": "Start.\n<commons-artifact id=\"a\">partial body",
+      "expected_text": "Start.\n",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "error",
+          "id": "a",
+          "reason": "unclosed"
+        }
+      ]
+    },
+    {
+      "name": "a body at the cap is accepted",
+      "why": "The cap bounds what one response can stream into the drawer.",
+      "pad": {
+        "char": "x",
+        "artifact_body_length": 200000
+      },
+      "text": "<commons-artifact id=\"a\">{{pad}}</commons-artifact>",
+      "expected_text": "[artifact:a]",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "delta",
+          "id": "a",
+          "text": "{{pad}}"
+        },
+        {
+          "type": "close",
+          "id": "a",
+          "title": "a",
+          "body": "{{pad}}"
+        }
+      ]
+    },
+    {
+      "name": "a body past the cap is swallowed and reported",
+      "why": "What streamed before the cap was passed is abandoned with the rest.",
+      "pad": {
+        "char": "x",
+        "artifact_body_length": 200001
+      },
+      "text": "<commons-artifact id=\"a\">{{pad}}</commons-artifact>\nAfter.",
+      "expected_text": "\nAfter.",
+      "events": [
+        {
+          "type": "open",
+          "id": "a",
+          "title": "a"
+        },
+        {
+          "type": "error",
+          "id": "a",
+          "reason": "too_long"
+        }
+      ]
+    }
+  ]
+}

@@ -19,8 +19,17 @@ CITATION_CLOSE <- "</commons-citation>"
 ASIDE_OPEN <- "<shiny-aside"
 ASIDE_CLOSE <- "</shiny-aside>"
 ELEMENT_BODY_CAP <- 16384L
+# An open tag with attributes and a bare one are separate literals, so neither
+# matches a longer element name such as the chip's.
+ARTIFACT_OPEN <- "<commons-artifact "
+ARTIFACT_OPEN_BARE <- "<commons-artifact>"
+ARTIFACT_CLOSE <- "</commons-artifact>"
+ARTIFACT_HEADER_CAP <- 1024L
+ARTIFACT_BODY_CAP <- 200000L
 
-citation_scanner <- function(corpus = list()) {
+# `on_artifact` receives artifact events as they stream; whatever it returns
+# for a `close` event takes the element's place in the projected text.
+citation_scanner <- function(corpus = list(), on_artifact = NULL) {
   resolve <- function(parsed) {
     if (is.null(parsed)) {
       return(list(
@@ -36,6 +45,7 @@ citation_scanner <- function(corpus = list()) {
   decisions <- list()
   out <- character(0)
   discard_close <- NULL
+  artifact <- NULL
 
   emit <- function(text) {
     if (nzchar(text)) out[[length(out) + 1]] <<- text
@@ -57,6 +67,18 @@ citation_scanner <- function(corpus = list()) {
     discard_close <<- close_literal
   }
 
+  notify <- function(event) {
+    if (is.null(on_artifact)) {
+      return("")
+    }
+    on_artifact(event) %||% ""
+  }
+
+  fail_artifact <- function(reason) {
+    notify(list(type = "error", id = artifact$id, reason = reason))
+    artifact <<- NULL
+  }
+
   step <- function() {
     if (mode == "text") {
       event <- find_text_event(buf, at_line_start)
@@ -70,6 +92,12 @@ citation_scanner <- function(corpus = list()) {
           mode <<- "citation"
         } else if (identical(event$mode, "aside")) {
           begin_discard(ASIDE_CLOSE)
+        } else if (identical(event$mode, "artifact")) {
+          mode <<- "artifact_header"
+          # The bare literal has already consumed the header's closing `>`.
+          if (identical(tolower(literal), ARTIFACT_OPEN_BARE)) {
+            buf <<- paste0(">", buf)
+          }
         } else {
           note_line_start(literal)
         }
@@ -112,6 +140,14 @@ citation_scanner <- function(corpus = list()) {
       return(FALSE)
     }
 
+    if (mode == "artifact_header") {
+      return(step_artifact_header())
+    }
+
+    if (mode == "artifact") {
+      return(step_artifact())
+    }
+
     pos <- find_ci(buf, discard_close)
     if (!is.na(pos)) {
       consumed <- substr(buf, 1, pos + nchar(discard_close) - 1L)
@@ -136,6 +172,70 @@ citation_scanner <- function(corpus = list()) {
     FALSE
   }
 
+  step_artifact_header <- function() {
+    end <- regexpr(">", buf, fixed = TRUE)
+    newline <- regexpr("\n", buf, fixed = TRUE)
+    if (end == -1L) {
+      if (newline != -1L || nchar(buf) > ARTIFACT_HEADER_CAP) {
+        fail_artifact("malformed")
+        begin_discard(ARTIFACT_CLOSE)
+        return(TRUE)
+      }
+      return(FALSE)
+    }
+    header <- substr(buf, 1L, end - 1L)
+    buf <<- substr(buf, end + 1L, nchar(buf))
+    attrs <- parse_artifact_attributes(header)
+    if (
+      (newline != -1L && newline < end) ||
+        nchar(header) > ARTIFACT_HEADER_CAP ||
+        is.null(attrs)
+    ) {
+      fail_artifact("malformed")
+      begin_discard(ARTIFACT_CLOSE)
+      return(TRUE)
+    }
+    artifact <<- c(attrs, list(body = character(), length = 0L))
+    notify(list(type = "open", id = attrs$id, title = attrs$title))
+    mode <<- "artifact"
+    TRUE
+  }
+
+  step_artifact <- function() {
+    pos <- find_ci(buf, ARTIFACT_CLOSE)
+    take <- if (is.na(pos)) {
+      nchar(buf) - longest_valid_suffix(buf, ARTIFACT_CLOSE, function(start) TRUE)
+    } else {
+      pos - 1L
+    }
+    if (artifact$length + take > ARTIFACT_BODY_CAP) {
+      fail_artifact("too_long")
+      begin_discard(ARTIFACT_CLOSE)
+      return(TRUE)
+    }
+    if (take > 0L) {
+      text <- substr(buf, 1L, take)
+      artifact$body <<- c(artifact$body, text)
+      artifact$length <<- artifact$length + take
+      notify(list(type = "delta", id = artifact$id, text = text))
+    }
+    if (is.na(pos)) {
+      buf <<- substr(buf, take + 1L, nchar(buf))
+      return(FALSE)
+    }
+    buf <<- substr(buf, pos + nchar(ARTIFACT_CLOSE), nchar(buf))
+    emit(notify(list(
+      type = "close",
+      id = artifact$id,
+      title = artifact$title,
+      body = paste(artifact$body, collapse = "")
+    )))
+    artifact <<- NULL
+    mode <<- "text"
+    at_line_start <<- FALSE
+    TRUE
+  }
+
   close_citation <- function(body) {
     result <- resolve(parse_commons_citation(body))
     emit(result$html)
@@ -157,6 +257,9 @@ citation_scanner <- function(corpus = list()) {
         return(flushed)
       }
       # Never expose incomplete model-authored markup.
+      if (mode %in% c("artifact_header", "artifact")) {
+        fail_artifact("unclosed")
+      }
       buf <<- ""
       mode <<- "text"
       discard_close <<- NULL
@@ -172,50 +275,52 @@ project_citation_text <- function(text, corpus) {
   list(text = out, decisions = s$decisions())
 }
 
-find_text_event <- function(buf, at_line_start) {
-  citation_pattern <- if (at_line_start) {
-    "(?:^|(?<=\n))<commons-citation>"
-  } else {
-    "(?<=\n)<commons-citation>"
-  }
-  citation_pos <- regexpr(
-    citation_pattern,
-    buf,
-    perl = TRUE,
-    ignore.case = TRUE
+# Opening tags that only count at the start of a line, and literals that count
+# anywhere.
+anchored_literals <- function() {
+  list(
+    list(literal = CITATION_OPEN, mode = "citation"),
+    list(literal = ARTIFACT_OPEN, mode = "artifact"),
+    list(literal = ARTIFACT_OPEN_BARE, mode = "artifact")
   )
-  aside_pos <- regexpr(tolower(ASIDE_OPEN), tolower(buf), fixed = TRUE)
+}
 
+unanchored_literals <- function() {
+  list(
+    list(literal = ASIDE_OPEN, mode = "aside"),
+    list(literal = CITATION_CLOSE, mode = "drop"),
+    list(literal = ASIDE_CLOSE, mode = "drop"),
+    list(literal = ARTIFACT_CLOSE, mode = "drop")
+  )
+}
+
+find_text_event <- function(buf, at_line_start) {
   candidates <- list()
-  if (citation_pos != -1) {
-    candidates[[length(candidates) + 1]] <- list(
-      pos = as.integer(citation_pos),
-      len = nchar(CITATION_OPEN),
-      mode = "citation"
+  for (entry in anchored_literals()) {
+    pattern <- paste0(
+      if (at_line_start) "(?:^|(?<=\n))" else "(?<=\n)",
+      "\\Q",
+      entry$literal,
+      "\\E"
     )
+    pos <- regexpr(pattern, buf, perl = TRUE, ignore.case = TRUE)
+    if (pos != -1) {
+      candidates[[length(candidates) + 1]] <- list(
+        pos = as.integer(pos),
+        len = nchar(entry$literal),
+        mode = entry$mode
+      )
+    }
   }
-  if (aside_pos != -1) {
-    candidates[[length(candidates) + 1]] <- list(
-      pos = as.integer(aside_pos),
-      len = nchar(ASIDE_OPEN),
-      mode = "aside"
-    )
-  }
-  citation_close_pos <- find_ci(buf, CITATION_CLOSE)
-  if (!is.na(citation_close_pos)) {
-    candidates[[length(candidates) + 1]] <- list(
-      pos = citation_close_pos,
-      len = nchar(CITATION_CLOSE),
-      mode = "drop"
-    )
-  }
-  aside_close_pos <- find_ci(buf, ASIDE_CLOSE)
-  if (!is.na(aside_close_pos)) {
-    candidates[[length(candidates) + 1]] <- list(
-      pos = aside_close_pos,
-      len = nchar(ASIDE_CLOSE),
-      mode = "drop"
-    )
+  for (entry in unanchored_literals()) {
+    pos <- find_ci(buf, entry$literal)
+    if (!is.na(pos)) {
+      candidates[[length(candidates) + 1]] <- list(
+        pos = pos,
+        len = nchar(entry$literal),
+        mode = entry$mode
+      )
+    }
   }
   if (length(candidates) == 0) {
     return(NULL)
@@ -254,7 +359,7 @@ confirmed_body_len <- function(buf, close_literal) {
 }
 
 holdback_length <- function(buf, at_line_start) {
-  citation_anchor <- function(start) {
+  line_anchor <- function(start) {
     if (start == 1) {
       at_line_start
     } else {
@@ -262,10 +367,18 @@ holdback_length <- function(buf, at_line_start) {
     }
   }
   max(
-    longest_valid_suffix(buf, CITATION_OPEN, citation_anchor),
-    longest_valid_suffix(buf, ASIDE_OPEN, function(start) TRUE),
-    longest_valid_suffix(buf, CITATION_CLOSE, function(start) TRUE),
-    longest_valid_suffix(buf, ASIDE_CLOSE, function(start) TRUE)
+    vapply(
+      anchored_literals(),
+      function(entry) longest_valid_suffix(buf, entry$literal, line_anchor),
+      integer(1)
+    ),
+    vapply(
+      unanchored_literals(),
+      function(entry) {
+        longest_valid_suffix(buf, entry$literal, function(start) TRUE)
+      },
+      integer(1)
+    )
   )
 }
 
@@ -289,4 +402,32 @@ longest_valid_suffix <- function(buf, literal, anchor_ok) {
 
 is_ci_prefix <- function(suffix, literal, len) {
   identical(tolower(suffix), tolower(substr(literal, 1, len)))
+}
+
+# The header is everything between `<commons-artifact` and `>`: quoted
+# attributes only. An id is required and becomes a directory name, so it is a
+# lowercase slug.
+parse_artifact_attributes <- function(header) {
+  pattern <- "([A-Za-z][A-Za-z0-9_-]*)[ \t]*=[ \t]*(\"[^\"]*\"|'[^']*')"
+  found <- regmatches(header, gregexpr(pattern, header, perl = TRUE))[[1]]
+  leftover <- gsub(pattern, "", header, perl = TRUE)
+  if (grepl("[^ \t]", leftover)) {
+    return(NULL)
+  }
+  names <- tolower(sub(pattern, "\\1", found, perl = TRUE))
+  values <- sub(pattern, "\\2", found, perl = TRUE)
+  values <- substr(values, 2L, nchar(values) - 1L)
+  attrs <- as.list(rlang::set_names(values, names))
+  id <- attrs$id
+  if (!is_artifact_id(id)) {
+    return(NULL)
+  }
+  title <- trimws(attrs$title %||% "")
+  list(id = id, title = if (nzchar(title)) title else id)
+}
+
+is_artifact_id <- function(id) {
+  rlang::is_string(id) &&
+    nchar(id) <= 64L &&
+    grepl("^[a-z0-9]+(-[a-z0-9]+)*$", id)
 }
