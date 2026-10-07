@@ -1,0 +1,108 @@
+commons-artifact-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100%;
+  min-height: 24rem;
+}
+
+commons-artifact-view[empty] {
+  display: none;
+}
+
+.commons-artifact-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+commons-artifact-view:not([saved]) .commons-artifact-download {
+  visibility: hidden;
+}
+
+.commons-artifact-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.commons-artifact-trust {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.commons-artifact-trust img {
+  width: 1em;
+  height: 1em;
+}
+
+.commons-artifact-notice:empty {
+  display: none;
+}
+
+.commons-artifact-notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--bs-border-radius, 0.375rem);
+  background: var(--bs-warning-bg-subtle, #fff3cd);
+  color: var(--bs-warning-text-emphasis, #664d03);
+  font-size: 0.875rem;
+}
+
+.commons-artifact-notice p {
+  margin: 0;
+}
+
+.commons-artifact-notice pre {
+  margin: 0.5rem 0 0;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.8125rem;
+}
+
+.commons-artifact-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.commons-artifact-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.commons-artifact-preview {
+  max-width: 48rem;
+  line-height: 1.6;
+}
+
+.commons-artifact-preview table {
+  margin-bottom: 1rem;
+}
+
+.commons-artifact-preview th,
+.commons-artifact-preview td {
+  padding: 0.25rem 0.75rem 0.25rem 0;
+}
+
+.commons-artifact-cell {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed var(--bs-border-color, #dee2e6);
+  border-radius: var(--bs-border-radius, 0.375rem);
+  color: var(--bs-secondary-color, #6c757d);
+  font-size: 0.875rem;
+}
+
+.commons-artifact-inline {
+  color: var(--bs-secondary-color, #6c757d);
+}

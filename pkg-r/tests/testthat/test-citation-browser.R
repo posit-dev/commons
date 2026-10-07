@@ -387,3 +387,48 @@ test_that("Shiny Chat preserves Markdown blocks around citations", {
     FALSE
   )
 })
+
+test_that("a streamed document opens in the drawer and reopens from its chip", {
+  skip_on_cran()
+  skip_if_not_installed("shinytest2")
+  skip_if_not_installed("chromote")
+  skip_if_browser_tests_disabled()
+  skip_if_ellmer_streaming_hooks_unavailable()
+  skip_if(is.null(quarto_binary()), "Quarto is not installed.")
+
+  app <- shinytest2::AppDriver$new(
+    browser_test_app("artifact-stream"),
+    name = "artifact-stream",
+    timeout = 30 * 1000,
+    load_timeout = 30 * 1000
+  )
+  withr::defer(app$stop())
+
+  frame <- "document.querySelector('commons-artifact-view iframe')"
+  app$wait_for_js(paste0("!!", frame), timeout = 120 * 1000)
+  expect_true(app$get_js(paste0(
+    frame,
+    ".srcdoc.includes('There are 4 orders across')"
+  )))
+  expect_identical(
+    app$get_js("document.querySelector('commons-artifact-link').textContent"),
+    "Orders by region · v1"
+  )
+  expect_false(app$get_js(
+    "document.body.innerText.includes('measure: orders')"
+  ))
+
+  app$run_js(paste0(
+    frame,
+    ".remove();",
+    "document.querySelector('commons-artifact-link')",
+    ".shadowRoot.querySelector('button').click();"
+  ))
+  app$wait_for_js(paste0("!!", frame), timeout = 30 * 1000)
+
+  zip <- app$get_download("chat_artifact_download")
+  expect_setequal(
+    utils::unzip(zip, list = TRUE)$Name,
+    c("_quarto.yml", "report.qmd", "report.html", "data/orders.csv")
+  )
+})

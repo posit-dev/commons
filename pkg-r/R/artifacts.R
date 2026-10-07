@@ -250,6 +250,8 @@ artifact_settle <- function(store, artifact, version, result) {
       html = result$html
     ))
   } else {
+    artifact$failed_version <- version
+    artifact$error <- result$error
     artifact_notify(store, list(
       type = "failed",
       id = artifact$id,
@@ -732,7 +734,26 @@ artifact_qmd <- function(doc) {
     yaml::as.yaml(doc$frontmatter),
     "---\n\n",
     artifact_inputs_callout(doc$inputs),
+    artifact_inputs_setup(doc$inputs),
     doc$body
+  )
+}
+
+# Loading inputs ahead of the document's own cells means inline expressions
+# can use them anywhere.
+artifact_inputs_setup <- function(inputs) {
+  if (length(inputs) == 0) {
+    return("")
+  }
+  reads <- vapply(
+    inputs,
+    function(input) sprintf("`%s` <- read.csv(\"%s\")", input$name, input$path),
+    character(1)
+  )
+  paste0(
+    "```{r}\n#| include: false\n",
+    paste(reads, collapse = "\n"),
+    "\n```\n\n"
   )
 }
 

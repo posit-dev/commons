@@ -118,7 +118,7 @@ commons:
 - `calculation` with optional `arguments` and `source`, as for `call_calculation`.
 {% endif %}
 
-commons runs each input before rendering and writes its result to `data/<name>.csv`, which a cell reads with `read.csv("data/revenue.csv")`. The document tells readers which inputs it used. A document without inputs is marked Untrusted.
+commons runs each input before rendering, writes its result to `data/<name>.csv`, and loads it as a data frame named after the input, such as `revenue`, before the document's first cell. The document tells readers which inputs it used. A document without inputs is marked Untrusted.
 
 - Run the calculations with tools first, so you know what the inputs return before you write about them.
 - Every number in the document must come from an input or a cell that runs when it renders. Write key figures in prose as inline R expressions, such as `` `r nrow(revenue)` ``, rather than typing them.

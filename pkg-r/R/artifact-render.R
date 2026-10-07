@@ -104,7 +104,10 @@ quarto_error_text <- function(output, timed_out = FALSE) {
   }
   lines <- strsplit(cli::ansi_strip(output %||% ""), "\n", fixed = TRUE)[[1]]
   lines <- lines[nzchar(trimws(lines))]
-  paste(c("Quarto reported:", utils::tail(lines, 30)), collapse = "\n")
+  paste(
+    c("Quarto couldn't render the document.", utils::tail(lines, 30)),
+    collapse = "\n"
+  )
 }
 
 quarto_binary <- function() {

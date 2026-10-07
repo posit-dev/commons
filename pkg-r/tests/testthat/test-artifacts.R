@@ -91,6 +91,7 @@ test_that("the written document carries its inputs and commons' scaffold", {
   expect_no_match(qmd, "commons:", fixed = TRUE)
   expect_match(qmd, "title=\"Trusted inputs\"", fixed = TRUE)
   expect_match(qmd, "`data/orders.csv`: measure", fixed = TRUE)
+  expect_match(qmd, "`orders` <- read.csv(\"data/orders.csv\")", fixed = TRUE)
 })
 
 test_that("an edit that breaks the frontmatter makes no version", {
@@ -152,7 +153,6 @@ orders_document <- function(cell = "nrow(orders)") {
   paste0(
     "\n---\ntitle: Orders\ncommons:\n  inputs:\n    orders:\n",
     "      measure: orders\n---\n\n",
-    "```{r}\norders <- read.csv(\"data/orders.csv\")\n```\n\n",
     "There are `r ", cell, "` orders.\n"
   )
 }

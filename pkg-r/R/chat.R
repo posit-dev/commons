@@ -114,6 +114,7 @@ commons_server <- function(id, client, ...) {
   prewarm_on_idle(client)
 
   chat <- shinychat::chat_server(id, client = client, ...)
+  artifact_drawer_server(id, client)
   # shinychat owns the conversation identity (it sets the client's
   # `conversation_id` binding, which ellmer stamps on its spans); commons
   # only needs to know that a restore happened.
@@ -179,8 +180,8 @@ commons_chat_dependency <- function() {
     name = "commons-chat",
     version = paste0("0.0.0.9000.", as.integer(stamp)),
     src = c(file = src),
-    script = "commons-chat.js",
-    stylesheet = "commons-chat.css",
+    script = c("commons-chat.js", "commons-artifact.js"),
+    stylesheet = c("commons-chat.css", "commons-artifact.css"),
     all_files = TRUE
   )
 }
