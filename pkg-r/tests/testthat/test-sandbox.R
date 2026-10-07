@@ -218,7 +218,7 @@ sandboxed_worker_probes <- function(
           }
         },
         exec = denied({
-          status <- system2("/bin/true")
+          status <- system2("true")
           if (!identical(status, 0L)) {
             warning("subprocess failed")
           }
@@ -295,8 +295,8 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
+  expect_equal(probes$exec, "allowed")
   if (identical(Sys.info()[["sysname"]], "Linux")) {
-    expect_equal(probes$exec, "allowed")
     expect_lte(probes$address_space, 8 * 1024^2)
     expect_local_peer(probes$local_peer, screened = TRUE)
   }
