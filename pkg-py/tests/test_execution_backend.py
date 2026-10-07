@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -27,6 +28,7 @@ from commons._execution._backend import (
     LocalSession,
     WorkerSession,
     _read_tail,
+    _signal_tree,
     _terminate,
 )
 from commons._execution._sandbox import protection_mode
@@ -344,3 +346,14 @@ async def test_the_local_backend_satisfies_the_backend_interface(tmp_path) -> No
 def test_the_default_grace_is_the_documented_constant() -> None:
     assert LocalBackend()._terminate_grace == TERMINATE_GRACE
 
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX")
+def test_a_group_left_with_only_a_zombie_can_still_be_signalled() -> None:
+    # The worker can exit before its exit is observed, and a close then
+    # signals a group whose only member is a zombie, which macOS refuses
+    # with EPERM. A Popen is used so that no child watcher reaps it first.
+    process = subprocess.Popen(["/bin/sh", "-c", "exit 0"], start_new_session=True)
+    os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)  # pyrefly: ignore[missing-attribute]
+    _signal_tree(cast(Any, process), signal.SIGTERM)
+    assert process.wait() == 0

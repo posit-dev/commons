@@ -314,8 +314,10 @@ def _signal_tree(process: asyncio.subprocess.Process, sig: signal.Signals) -> No
         try:
             os.killpg(process.pid, sig)
             return
-        except ProcessLookupError:
-            pass  # The group is gone or never had a session; signal directly.
+        except (ProcessLookupError, PermissionError):
+            # The group is gone, never had a session, or (on macOS) has
+            # only a zombie left in it; signal the child directly.
+            pass
     if sig == signal.SIGTERM:
         process.terminate()
     elif sig == signal.SIGINT:
