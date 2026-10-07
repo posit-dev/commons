@@ -105,11 +105,11 @@ The Linux sandbox also caps the subprocess’s virtual address space at 8
 GiB; a lower limit inherited from Connect still applies.
 
 By default, the subprocess cannot create network sockets. An application
-author can opt in to unrestricted network access with
-`commons(network = "full")`; the filesystem sandbox remains in place,
-but R code can then contact services reachable from the deployment and
-transmit data from result handles. Only enable network access when that
-egress is required and acceptable.
+author can opt in to network access with `commons(network = "full")`;
+the filesystem sandbox remains in place, but R code can then contact
+services reachable from the deployment and transmit data from result
+handles. Only enable network access when that egress is required and
+acceptable.
 
 For local development on macOS, commons applies a similar filesystem and
 network policy using Seatbelt. Windows has no OS-level sandbox for the
