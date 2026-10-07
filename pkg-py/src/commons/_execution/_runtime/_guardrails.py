@@ -113,9 +113,11 @@ def _canonical(path: str) -> str:
 def _entry(path: str) -> str:
     """``path`` with its directory canonicalized and its final name kept.
 
-    This names the directory entry itself, so a symlink is not followed.
+    This names the directory entry itself, so a symlink is not followed. A
+    trailing separator makes the operation follow the link, so such a path
+    is canonicalized whole.
     """
-    head, tail = os.path.split(os.path.join(os.getcwd(), path).rstrip("/"))
+    head, tail = os.path.split(os.path.join(os.getcwd(), path))
     if tail in ("", ".", ".."):
         return _canonical(path)
     return os.path.join(_canonical(head), tail)

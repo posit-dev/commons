@@ -110,6 +110,19 @@ async def test_a_symlink_in_scratch_can_be_renamed_and_removed(guarded):
         assert list(reply.value) == []
 
 
+async def test_a_symlink_named_with_a_trailing_slash_is_followed(guarded, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    async with guarded() as worker:
+        reply = await worker.run("import os; os.getcwd()")
+        assert isinstance(reply, Result)
+        os.symlink(outside, os.path.join(reply.value, "link"))
+        for code in ("import os; os.rmdir('link/')", "import shutil; shutil.rmtree('link/')"):
+            message = await denied(worker, code)
+            assert "denied write access" in message
+    assert outside.is_dir()
+
+
 async def test_a_hard_link_to_a_file_that_is_only_readable_is_denied(guarded):
     async with guarded() as worker:
         message = await denied(worker, "import os; os.link(os.__file__, 'alias')")
