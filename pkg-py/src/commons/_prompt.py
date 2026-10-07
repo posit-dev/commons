@@ -250,11 +250,13 @@ def prompt_date() -> str:
     return datetime.datetime.now().astimezone().date().isoformat()
 
 
-_CLAUDE_5 = re.compile(r"(^|[./:_-])claude-[^-]+-5($|[./:@_-])")
+_CLAUDE_5 = re.compile(
+    r"(^|[./:_-])claude-[^-]+-5(?:[.-][01])?(?![.-][0-9])($|[./:@_-])"
+)
 
 
 def is_claude_5_model(model: str | None) -> bool:
-    """Whether a model id names a Claude 5 model, whatever the provider."""
+    """Whether a model id names a Claude 5.0 or 5.1 model, whatever the provider."""
     if not isinstance(model, str):
         return False
     return _CLAUDE_5.search(model.lower()) is not None

@@ -59,7 +59,7 @@ is_claude_5_model <- function(model) {
     return(FALSE)
   }
   grepl(
-    "(^|[./:_-])claude-[^-]+-5($|[./:@_-])",
+    "(^|[./:_-])claude-[^-]+-5(?:[.-][01])?(?![.-][0-9])($|[./:@_-])",
     tolower(model),
     perl = TRUE
   )

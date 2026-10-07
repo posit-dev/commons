@@ -20,6 +20,15 @@ test_that("append_turn_reminder matches the shared fixture", {
   }
 })
 
+test_that("the extra brevity prompting is temporary", {
+  skip_on_cran()
+  expect_lt(
+    Sys.Date(),
+    as.Date("2027-04-06"),
+    label = "The deadline to remove Claude 5.0 and 5.1 brevity prompting"
+  )
+})
+
 test_that("the restored-conversation reminder renders the shared wording", {
   spec <- shared_fixture("turn-reminders")$restored_conversation_reminder
   values <- spec$substitutions$r
