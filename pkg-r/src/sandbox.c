@@ -109,6 +109,7 @@
 #define LL_RULE_PATH_BENEATH 1
 
 #define FS_EXECUTE (1ULL << 0)
+#define FS_WRITE_FILE (1ULL << 1)
 #define FS_READ_FILE (1ULL << 2)
 #define FS_READ_DIR (1ULL << 3)
 #define FS_V1_ALL ((1ULL << 13) - 1)
@@ -116,6 +117,9 @@
 #define FS_TRUNCATE (1ULL << 14)
 #define FS_IOCTL_DEV (1ULL << 15)
 #define FS_READ_ONLY (FS_EXECUTE | FS_READ_FILE | FS_READ_DIR)
+/* The only rights a rule on a file rather than a directory may carry. */
+#define FS_FILE_RIGHTS (FS_EXECUTE | FS_WRITE_FILE | FS_READ_FILE | \
+                        FS_TRUNCATE | FS_IOCTL_DEV)
 
 /* Landlock leaves undeclared rights unrestricted. */
 static uint64_t landlock_handled(long abi) {
@@ -161,8 +165,15 @@ static void add_roots(int ruleset_fd, SEXP roots, uint64_t access,
       close(ruleset_fd);
       Rf_error("cannot open %s root '%s': %s", what, path, strerror(errno));
     }
+    struct stat st;
+    if (fstat(parent, &st) != 0) {
+      int err = errno;
+      close(parent);
+      close(ruleset_fd);
+      Rf_error("cannot inspect %s root '%s': %s", what, path, strerror(err));
+    }
     struct ll_path_beneath_attr pb = {
-      .allowed_access = access,
+      .allowed_access = S_ISDIR(st.st_mode) ? access : access & FS_FILE_RIGHTS,
       .parent_fd = parent
     };
     long r = syscall(__NR_landlock_add_rule, ruleset_fd, LL_RULE_PATH_BENEATH,
@@ -429,7 +440,23 @@ static void userns_bind(const char *root, int rdonly, const char **submounts,
       snprintf(dst, sizeof(dst), "%s", root) >= (int) sizeof(dst)) {
     Rf_error("sandbox root path too long: '%s'", root);
   }
-  mkdir_p(dst);
+  struct stat st;
+  if (stat(src, &st) == 0 && !S_ISDIR(st.st_mode)) {
+    /* A file root, such as a device node, binds onto an empty file. */
+    char *slash = strrchr(dst, '/');
+    if (slash != NULL && slash != dst) {
+      *slash = '\0';
+      mkdir_p(dst);
+      *slash = '/';
+    }
+    int fd = open(dst, O_WRONLY | O_CREAT | O_CLOEXEC, 0644);
+    if (fd < 0) {
+      Rf_error("cannot create '%s': %s", dst, strerror(errno));
+    }
+    close(fd);
+  } else {
+    mkdir_p(dst);
+  }
   if (mount(src, dst, NULL, MS_BIND | MS_REC, NULL) != 0) {
     Rf_error("cannot bind '%s' into the sandbox: %s", root, strerror(errno));
   }

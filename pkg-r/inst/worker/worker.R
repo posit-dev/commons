@@ -378,7 +378,10 @@ worker_init <- function(
   network = "none",
   protection = "sandbox",
   sandbox_mode = "auto",
-  extra_read_roots = character()
+  extra_read_roots = character(),
+  extra_rw_roots = character(),
+  # 8 GiB leaves ample headroom for light R; a lower Connect limit still applies.
+  memory_limit = 8 * 1024^3
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
@@ -451,7 +454,7 @@ worker_init <- function(
   read_roots <- unique(c(read_roots, resolve(read_roots)))
   # callr writes its per-call result files into the parent's tempdir, so the
   # worker must be able to write there for results to make it back.
-  write_roots <- c(parent_tmp, work_dir)
+  write_roots <- c(parent_tmp, work_dir, extra_rw_roots)
   write_roots <- unique(c(write_roots, resolve(write_roots)))
   # callr reports status on fd 3 and saves stdout/stderr while a call runs.
   callr_data <- as.environment("tools:callr")[["__callr_data__"]]
@@ -464,8 +467,7 @@ worker_init <- function(
     getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons"),
     read_roots,
     write_roots,
-    # 8 GiB leaves ample headroom for light R; a lower Connect limit still applies.
-    8 * 1024^3,
+    memory_limit,
     sandbox_mode,
     preserve_fds,
     network

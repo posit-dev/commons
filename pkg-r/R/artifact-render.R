@@ -20,11 +20,11 @@ render_artifact <- function(
   timeout = getOption("commons.artifact_render_timeout", 120)
 ) {
   quarto <- quarto_binary()
-  if (is.null(quarto)) {
+  unavailable <- render_unavailable_reason(quarto, protection)
+  if (!is.null(unavailable)) {
     return(promises::promise_resolve(list(error = paste(
-      "Quarto is not installed where this app runs, so documents can't be",
-      "rendered. This is not a problem with the document; don't change it",
-      "to fix this."
+      unavailable,
+      "This is not a problem with the document; don't change it to fix this."
     ))))
   }
 
@@ -58,7 +58,10 @@ render_artifact <- function(
             dll_path = commons_dll_path(),
             network = network,
             protection = protection,
-            extra_read_roots = quarto_root(quarto)
+            extra_read_roots = c(quarto_root(quarto), render_devices$read),
+            extra_rw_roots = render_devices$rw,
+            # V8 reserves tens of GiB of address space up front.
+            memory_limit = 64 * 1024^3
           )
         )
       )
@@ -96,6 +99,39 @@ render_artifact <- function(
     }
   )
   promises::finally(rendered, cleanup)
+}
+
+# macOS's sandbox already grants these; Linux's grants only directories
+# unless asked, and Quarto's launcher and Deno need them.
+render_devices <- if (identical(Sys.info()[["sysname"]], "Linux")) {
+  list(read = c("/dev/zero", "/dev/random", "/dev/urandom"), rw = "/dev/null")
+} else {
+  list(read = character(), rw = character())
+}
+
+# Deno needs /proc/self/exe, which Landlock leaves resolvable but the
+# user-namespace sandbox does not mount; mounting the host's /proc would
+# expose the app's environment to document code.
+render_unavailable_reason <- function(
+  quarto,
+  protection,
+  sysname = Sys.info()[["sysname"]],
+  capabilities = sandbox_capabilities()
+) {
+  if (is.null(quarto)) {
+    return("Quarto is not installed where this app runs, so documents can't be rendered.")
+  }
+  if (
+    identical(sysname, "Linux") &&
+      identical(protection, "sandbox") &&
+      capabilities$landlock_abi < 1
+  ) {
+    return(paste(
+      "Documents can't be rendered on this server: its kernel doesn't offer",
+      "Landlock, which the sandbox needs to run Quarto."
+    ))
+  }
+  NULL
 }
 
 quarto_error_text <- function(output, timed_out = FALSE) {
