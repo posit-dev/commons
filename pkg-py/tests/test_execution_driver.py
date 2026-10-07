@@ -1038,13 +1038,14 @@ async def test_handles_too_large_for_one_message_all_reach_the_worker(monkeypatc
     from commons._execution import _protocol
 
     monkeypatch.setattr(_protocol, "STREAM_LIMIT", 150_000)
-    frame = pd.DataFrame({"x": np.random.default_rng(0).integers(0, 2**62, 20000)})
+    # About 107 KB each once encoded: one fits the lowered limit, two do not.
+    frame = pd.DataFrame({"x": np.random.default_rng(0).integers(0, 2**62, 10000)})
     store = HandleStore()
     store.register(frame)
     store.register(frame.copy())
     async with make_worker() as worker:
-        reply = await worker.run(
-            "type(r1).__name__, type(r2).__name__, len(r2)", handles=store
-        )
+        # A shrunk handle keeps its type's name, so a value is compared.
+        reply = await worker.run("int(r1['x'].iloc[-1]), int(r2['x'].iloc[-1])", handles=store)
         assert isinstance(reply, Result)
-        assert list(reply.value) == ["DataFrame", "DataFrame", len(store.get("r2"))]
+        last = int(frame["x"].iloc[-1])
+        assert list(reply.value) == [last, last]
