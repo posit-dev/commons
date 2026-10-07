@@ -909,7 +909,8 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   off = append_str(profile, size, off,
     ")\n"
     "(deny file-read*)\n"
-    "(allow file-read*");
+    /* dyld aborts every exec'd child that cannot read the root directory. */
+    "(allow file-read* (literal \"/\")");
   off = append_subpaths(profile, size, off, read_roots);
   off = append_subpaths(profile, size, off, rw_roots);
   off = append_str(profile, size, off,
