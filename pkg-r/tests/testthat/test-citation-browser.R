@@ -425,10 +425,4 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
     ".shadowRoot.querySelector('button').click();"
   ))
   app$wait_for_js(paste0("!!", frame), timeout = 30 * 1000)
-
-  zip <- app$get_download("chat_artifact_download")
-  expect_setequal(
-    utils::unzip(zip, list = TRUE)$Name,
-    c("_quarto.yml", "report.qmd", "report.html", "data/orders.csv")
-  )
 })

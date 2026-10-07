@@ -36,6 +36,7 @@ commons_app <- function(client, ...) {
       "commons",
       id = "chat",
       theme = commons_theme(),
+      drawer = shinychat::chat_drawer(width = 640, open = FALSE),
       toolbar_global = if (rlang::is_interactive()) {
         bslib::toolbar(
           bslib::input_dark_mode(),
@@ -68,7 +69,8 @@ commons_app <- function(client, ...) {
 #' Documents the agent writes open in the chat's drawer, which
 #' [shinychat::page_chat()] and [shinychat::chat_ui()] enable by default. An app
 #' that passes `drawer = FALSE` gets no documents in view, though the agent
-#' still writes them.
+#' still writes them. Documents read best in a wider drawer than the default,
+#' e.g. `drawer = shinychat::chat_drawer(width = 640, open = FALSE)`.
 #'
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it

@@ -74,7 +74,7 @@ test_that("frontmatter reads booleans as YAML 1.2 does", {
   expect_identical(doc$inputs[[1]]$call$arguments, list(n = 3L, y = "on"))
 })
 
-test_that("the written document carries its inputs and commons' scaffold", {
+test_that("the written document loads its inputs under commons' scaffold", {
   doc <- parse_artifact_document(paste0(
     "---\ntitle: Orders\ncommons:\n  inputs:\n    orders:\n",
     "      measure: orders\n---\n\nBody.\n"
@@ -89,8 +89,6 @@ test_that("the written document carries its inputs and commons' scaffold", {
   expect_equal(read.csv(file.path(dir, "data", "orders.csv")), test_sales())
   qmd <- read_utf8(file.path(dir, "report.qmd"))
   expect_no_match(qmd, "commons:", fixed = TRUE)
-  expect_match(qmd, "title=\"Trusted inputs\"", fixed = TRUE)
-  expect_match(qmd, "`data/orders.csv`: measure", fixed = TRUE)
   expect_match(qmd, "`orders` <- read.csv(\"data/orders.csv\")", fixed = TRUE)
 })
 
@@ -175,7 +173,6 @@ test_that("a streamed document renders from its trusted inputs", {
   wait_for_promise(store$tail)
   html <- artifact_get(store, "orders")$html
   expect_match(html, "There are 6 orders.", fixed = TRUE)
-  expect_match(html, "Trusted inputs", fixed = TRUE)
   types <- vapply(events, `[[`, character(1), "type")
   expect_identical(types[c(1, length(types))], c("open", "rendered"))
   expect_true(all(c("delta", "version") %in% types))
@@ -185,13 +182,6 @@ test_that("a streamed document renders from its trusted inputs", {
   )
   expect_match(result@value, "Saved and rendered version 2", fixed = TRUE)
   expect_match(artifact_get(store, "orders")$html, "There are 5 orders.", fixed = TRUE)
-
-  zip <- withr::local_tempfile(fileext = ".zip")
-  artifact_zip(store, "orders", zip)
-  expect_setequal(
-    utils::unzip(zip, list = TRUE)$Name,
-    c("_quarto.yml", "report.qmd", "report.html", "data/orders.csv")
-  )
 })
 
 test_that("a failed render keeps the last good version and is reported", {

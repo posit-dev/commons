@@ -5,9 +5,6 @@
 // rather than in the element, because the drawer can replace its content and
 // the element must be able to redraw from scratch.
 (() => {
-  const assetRoot = new URL(".", document.currentScript.src);
-  const figure = (file) => new URL(`figs/${file}`, assetRoot).href;
-
   const views = new Map();
   const connected = new Set();
 
@@ -23,7 +20,6 @@
         title: id,
         source: "",
         version: 0,
-        trusted: null,
         status: "streaming",
         html: null,
         htmlVersion: 0,
@@ -61,7 +57,6 @@
         Object.assign(a, {
           title: msg.title,
           version: msg.version,
-          trusted: msg.trusted,
           source: msg.source,
           status: "rendering",
           error: null,
@@ -88,7 +83,6 @@
         Object.assign(a, {
           title: msg.title,
           version: msg.version,
-          trusted: msg.trusted,
           source: msg.source,
           html: msg.html,
           htmlVersion: msg.html_version,
@@ -264,19 +258,7 @@
         return;
       }
 
-      this.toggleAttribute("saved", a.version > 0);
-      const parts = [];
-      if (a.version) parts.push(`<span class="commons-artifact-version">v${a.version}</span>`);
-      if (a.trusted !== null) {
-        parts.push(
-          a.trusted
-            ? `<span class="commons-artifact-trust"><img src="${figure("trusted-icon.svg")}" alt="">Trusted inputs</span>`
-            : `<span class="commons-artifact-trust"><img src="${figure("warning-icon.svg")}" alt="">Untrusted</span>`
-        );
-      }
-      const text = statusText[a.status];
-      if (text) parts.push(`<span class="commons-artifact-state">${text}</span>`);
-      status.innerHTML = parts.join("");
+      status.textContent = statusText[a.status];
 
       if (a.error) {
         const [summary, ...details] = a.error.split("\n");

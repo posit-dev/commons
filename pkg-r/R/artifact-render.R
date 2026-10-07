@@ -163,18 +163,3 @@ quarto_root <- function(quarto) {
 read_utf8 <- function(path) {
   paste(readLines(path, warn = FALSE, encoding = "UTF-8"), collapse = "\n")
 }
-
-artifact_zip <- function(store, id, file) {
-  artifact <- artifact_get(store, id)
-  if (is.null(artifact)) {
-    cli::cli_abort("There is no document with id {.val {id}}.")
-  }
-  dir <- artifact_latest_dir(artifact)
-  old <- setwd(dir)
-  on.exit(setwd(old), add = TRUE)
-  utils::zip(
-    normalizePath(file, mustWork = FALSE),
-    files = list.files(".", recursive = TRUE, all.files = FALSE),
-    flags = "-r9Xq"
-  )
-}

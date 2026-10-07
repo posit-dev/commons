@@ -9,12 +9,13 @@ tool_edit_artifact <- function(private) {
       artifact_edit(private$artifacts, id, old_string, new_string, replace_all)
     },
     paste(
-      "Edit a document you wrote in a <commons-artifact> tag. `old_string`",
-      "must appear exactly once in the document's current source, unless",
-      "`replace_all` is true; it is replaced with `new_string`. Edits can",
-      "change the frontmatter. Each edit saves and renders a new version, and",
-      "the result says whether it rendered. To rewrite most of a document,",
-      "write the tag again with the same id instead."
+      "Edit a document that already exists. This tool can't create one:",
+      "create a document by writing it in a <commons-artifact> tag in your",
+      "reply. `old_string` must appear exactly once in the document's current",
+      "source, unless `replace_all` is true; it is replaced with `new_string`.",
+      "Edits can change the frontmatter. Each edit saves and renders a new",
+      "version, and the result says whether it rendered. To rewrite most of a",
+      "document, write the tag again with the same id instead."
     ),
     arguments = list(
       id = ellmer::type_string("The document's id."),
@@ -203,17 +204,12 @@ artifact_commit <- function(store, id, title, source) {
   doc$frontmatter$title <- artifact$title
   version <- length(artifact$versions) + 1L
   dir <- file.path(store$root, id, paste0("v", version))
-  artifact$versions[[version]] <- list(
-    source = source,
-    dir = dir,
-    trusted = length(doc$inputs) > 0
-  )
+  artifact$versions[[version]] <- list(source = source, dir = dir)
   artifact_notify(store, list(
     type = "version",
     id = id,
     title = artifact$title,
     version = version,
-    trusted = length(doc$inputs) > 0,
     source = source
   ))
 
@@ -272,11 +268,11 @@ artifact_edit <- function(
     cli::cli_abort(
       c(
         "There is no document with id {.val {id}}.",
-        i = if (length(ids)) {
-          "Documents in this conversation: {.val {ids}}."
-        } else {
-          "No documents have been written in this conversation."
-        }
+        i = if (length(ids)) "Documents in this conversation: {.val {ids}}.",
+        i = paste(
+          "To create a document, write it in a",
+          "{.code <commons-artifact>} tag in your reply."
+        )
       ),
       call = call
     )
@@ -725,7 +721,6 @@ artifact_qmd <- function(doc) {
     "---\n",
     yaml::as.yaml(doc$frontmatter),
     "---\n\n",
-    artifact_inputs_callout(doc$inputs),
     artifact_inputs_setup(doc$inputs),
     doc$body
   )
@@ -749,34 +744,6 @@ artifact_inputs_setup <- function(inputs) {
   )
 }
 
-# Stays with the document when it's deployed, so readers can see which
-# numbers came from trusted calculations.
-artifact_inputs_callout <- function(inputs) {
-  if (length(inputs) == 0) {
-    return("")
-  }
-  items <- vapply(
-    inputs,
-    function(input) {
-      args <- drop_nulls(input$call)
-      args <- args[lengths(args) > 0]
-      sprintf(
-        "- `%s`: %s %s",
-        input$path,
-        input$kind,
-        jsonlite::toJSON(args, auto_unbox = TRUE)
-      )
-    },
-    character(1)
-  )
-  paste0(
-    "::: {.callout-note collapse=\"true\" title=\"Trusted inputs\"}\n",
-    "These results of trusted calculations were computed before rendering:\n\n",
-    paste(items, collapse = "\n"),
-    "\n:::\n\n"
-  )
-}
-
 artifact_quarto_yml <- function() {
   c(
     "project:",
@@ -787,6 +754,7 @@ artifact_quarto_yml <- function() {
     "    code-fold: true",
     "    code-summary: \"Code\"",
     "    df-print: kable",
+    "    fontsize: 0.9em",
     "execute:",
     "  warning: false",
     "  message: false"

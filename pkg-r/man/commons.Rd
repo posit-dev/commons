@@ -149,10 +149,9 @@ drawer as it's written and is then rendered to HTML; outside Shiny,
 \code{agent$chat()} renders it and reports where.
 
 A document gets its data by declaring trusted calculations as inputs, which
-commons runs before rendering and saves as CSV files beside the document.
-The saved directory is ordinary Quarto source: a downloaded document
-deploys to Posit Connect as it stands, with no credentials and no commons
-dependency. Documents without inputs are marked Untrusted.
+commons runs before rendering and saves as CSV files beside the document,
+so the saved directory is ordinary Quarto source with no credentials and no
+commons dependency.
 
 Rendering needs Quarto, found through the \code{QUARTO_PATH} environment
 variable or the \code{PATH}. The document's code runs in a fresh sandboxed R

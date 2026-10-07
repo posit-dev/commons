@@ -37,7 +37,8 @@ with \code{\link[shinychat:page_chat]{shinychat::page_chat()}} or \code{\link[sh
 Documents the agent writes open in the chat's drawer, which
 \code{\link[shinychat:page_chat]{shinychat::page_chat()}} and \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} enable by default. An app
 that passes \code{drawer = FALSE} gets no documents in view, though the agent
-still writes them.
+still writes them. Documents read best in a wider drawer than the default,
+e.g. \code{drawer = shinychat::chat_drawer(width = 640, open = FALSE)}.
 
 \code{commons_theme()} bundles the commons chat CSS and JavaScript into an
 ordinary \code{\link[bslib:bs_theme]{bslib::bs_theme()}} (via \code{\link[shinychat:page_chat_theme]{shinychat::page_chat_theme()}}), so it
