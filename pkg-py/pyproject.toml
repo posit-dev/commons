@@ -55,6 +55,8 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# A test still running after this many seconds prints every thread's stack.
+faulthandler_timeout = 300
 
 [tool.ruff]
 src = ["src", "tests"]
