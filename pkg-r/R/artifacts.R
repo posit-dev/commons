@@ -48,6 +48,7 @@ new_artifact_store <- function(
 ) {
   store <- new.env(parent = emptyenv())
   store$artifacts <- new.env(parent = emptyenv())
+  store$streams <- new.env(parent = emptyenv())
   store$root <- tempfile("commons-artifacts-")
   store$resolve_input <- resolve_input
   store$network <- network
@@ -55,12 +56,15 @@ new_artifact_store <- function(
   store$listener <- NULL
   store$link_input <- NULL
   store$reminders <- character()
-  store$tail <- NULL
   store
 }
 
 artifact_store_reset <- function(store) {
+  for (id in ls(store$streams)) {
+    artifact_run_cancel(store$streams[[id]])
+  }
   store$artifacts <- new.env(parent = emptyenv())
+  store$streams <- new.env(parent = emptyenv())
   store$reminders <- character()
   artifact_notify(store, list(type = "reset"))
   invisible(store)
@@ -92,11 +96,32 @@ take_artifact_reminders <- function(store) {
   )
 }
 
+# An artifact exists from the moment its tag opens, so a streaming run can
+# cache its inputs, but only counts as a document once it has a version.
 artifact_get <- function(store, id) {
   if (!rlang::is_string(id)) {
     return(NULL)
   }
-  store$artifacts[[id]]
+  artifact <- store$artifacts[[id]]
+  if (is.null(artifact) || length(artifact$versions) == 0) NULL else artifact
+}
+
+artifact_ensure <- function(store, id) {
+  artifact <- store$artifacts[[id]]
+  if (is.null(artifact)) {
+    artifact <- new.env(parent = emptyenv())
+    artifact$id <- id
+    artifact$title <- id
+    artifact$versions <- list()
+    artifact$inputs <- list()
+    artifact$units <- list()
+    artifact$unit_inputs <- NULL
+    artifact$html <- character()
+    artifact$errors <- character()
+    artifact$status <- "writing"
+    assign(id, artifact, envir = store$artifacts)
+  }
+  artifact
 }
 
 artifact_latest_dir <- function(artifact) {
@@ -107,10 +132,30 @@ artifact_scan_handler <- function(store) {
   function(event) {
     switch(
       event$type,
-      open = ,
-      delta = artifact_notify(store, event),
+      open = {
+        artifact <- artifact_ensure(store, event$id)
+        if (!is.null(store$streams[[event$id]])) {
+          artifact_run_cancel(store$streams[[event$id]])
+        }
+        assign(event$id, new_artifact_run(store, artifact), envir = store$streams)
+        store$streams[[event$id]]$source <- ""
+        artifact_notify(store, event)
+      },
+      delta = {
+        run <- store$streams[[event$id]]
+        run$source <- paste0(run$source, event$text)
+        artifact_run_update(run, run$source)
+      },
       close = {
-        committed <- artifact_commit(store, event$id, event$title, event$body)
+        run <- store$streams[[event$id]]
+        rm(list = event$id, envir = store$streams)
+        committed <- artifact_commit(
+          store,
+          event$id,
+          event$title,
+          event$body,
+          run = run
+        )
         if (!is.null(committed$error)) {
           artifact_remind(
             store,
@@ -119,17 +164,21 @@ artifact_scan_handler <- function(store) {
           return("")
         }
         promises::then(committed$rendered, function(result) {
-          if (!is.null(result$error)) {
-            artifact_remind(store, artifact_render_reminder(
+          if (length(result$errors)) {
+            artifact_remind(store, artifact_errors_reminder(
               event$id,
               committed$version,
-              result$error
+              result$errors
             ))
           }
         })
         artifact_link_html(store, event$id)
       },
       error = {
+        if (!is.null(event$id) && !is.null(store$streams[[event$id]])) {
+          artifact_run_cancel(store$streams[[event$id]])
+          rm(list = event$id, envir = store$streams)
+        }
         artifact_notify(store, event)
         artifact_remind(store, artifact_scan_reminder(event))
       }
@@ -164,24 +213,30 @@ artifact_rejected_reminder <- function(id, error) {
   )
 }
 
-artifact_render_reminder <- function(id, version, error) {
+artifact_errors_reminder <- function(id, version, errors) {
   sprintf(
     paste(
-      "Version %d of the document `%s` failed to render, so the user still",
-      "sees the previous version. Fix it with edit_artifact.\n\n%s"
+      "Version %d of the document `%s` ran with errors, which the user sees",
+      "in the document. Fix them with edit_artifact.\n\n%s"
     ),
     version,
     id,
-    error
+    paste0("- ", errors, collapse = "\n")
   )
 }
 
-artifact_commit <- function(store, id, title, source) {
+# Validates and saves a version, then finishes running it: a streamed
+# version's run has been going since its frontmatter arrived, and an edited
+# one gets a new run that reuses outputs when code and inputs are unchanged.
+artifact_commit <- function(store, id, title, source, run = NULL) {
   doc <- tryCatch(
     parse_artifact_document(source),
     commons_artifact_invalid = function(cnd) cnd
   )
   if (inherits(doc, "condition")) {
+    if (!is.null(run)) {
+      artifact_run_cancel(run)
+    }
     artifact_notify(store, list(
       type = "rejected",
       id = id,
@@ -190,16 +245,7 @@ artifact_commit <- function(store, id, title, source) {
     return(list(error = conditionMessage(doc)))
   }
 
-  artifact <- artifact_get(store, id)
-  if (is.null(artifact)) {
-    artifact <- new.env(parent = emptyenv())
-    artifact$id <- id
-    artifact$versions <- list()
-    artifact$inputs <- list()
-    artifact$html <- NULL
-    artifact$html_version <- 0L
-    assign(id, artifact, envir = store$artifacts)
-  }
+  artifact <- artifact_ensure(store, id)
   artifact$title <- doc$frontmatter$title %||% title
   doc$frontmatter$title <- artifact$title
   version <- length(artifact$versions) + 1L
@@ -209,48 +255,73 @@ artifact_commit <- function(store, id, title, source) {
     type = "version",
     id = id,
     title = artifact$title,
-    version = version,
-    source = source
+    version = version
   ))
 
   rendered <- tryCatch(
     {
       data <- resolve_artifact_inputs(store, artifact, doc$inputs)
       write_artifact_dir(dir, doc, data)
-      artifact_render_queued(store, dir)
+      run <- run %||% artifact_rerun(store, artifact, doc, source)
+      artifact_run_finish(run, source)
     },
     error = function(err) {
-      promises::promise_resolve(list(error = conditionMessage(err)))
+      if (!is.null(run)) {
+        artifact_run_cancel(run)
+      }
+      promises::promise_resolve(list(
+        html = character(),
+        errors = conditionMessage(err)
+      ))
     }
   )
   rendered <- promises::then(rendered, function(result) {
-    artifact_settle(store, artifact, version, result)
+    artifact_settle(store, artifact, version, doc, run, result)
   })
   list(version = version, rendered = rendered)
 }
 
-artifact_settle <- function(store, artifact, version, result) {
-  if (is.null(result$error)) {
-    if (version > artifact$html_version) {
-      artifact$html <- result$html
-      artifact$html_version <- version
-    }
-    artifact_notify(store, list(
-      type = "rendered",
-      id = artifact$id,
-      version = version,
-      html = result$html
-    ))
-  } else {
-    artifact$failed_version <- version
-    artifact$error <- result$error
-    artifact_notify(store, list(
-      type = "failed",
-      id = artifact$id,
-      version = version,
-      error = result$error
-    ))
+artifact_rerun <- function(store, artifact, doc, source) {
+  run <- new_artifact_run(store, artifact)
+  units <- artifact_units(segment_artifact_body(doc$body))
+  signature <- function(units) lapply(units, `[`, c("kind", "text"))
+  if (
+    identical(signature(units), signature(artifact$units)) &&
+      identical(input_signature(doc$inputs), artifact$unit_inputs)
+  ) {
+    run$units <- artifact$units
+    run$queued <- length(units)
   }
+  run
+}
+
+input_signature <- function(inputs) {
+  lapply(inputs, `[`, c("name", "kind", "call"))
+}
+
+artifact_settle <- function(store, artifact, version, doc, run, result) {
+  if (version == length(artifact$versions)) {
+    artifact$html <- result$html
+    artifact$errors <- result$errors
+    artifact$status <- "ready"
+    if (!is.null(run)) {
+      artifact$units <- run$units
+      artifact$unit_inputs <- input_signature(doc$inputs)
+    }
+  }
+  writeLines(
+    artifact_document_html(artifact$title, result$html),
+    file.path(artifact$versions[[version]]$dir, "report.html"),
+    useBytes = TRUE
+  )
+  artifact_notify(store, list(
+    type = "status",
+    id = artifact$id,
+    status = "ready",
+    error = if (length(result$errors) && !length(result$html)) {
+      result$errors[[1]]
+    }
+  ))
   result
 }
 
@@ -264,7 +335,7 @@ artifact_edit <- function(
 ) {
   artifact <- artifact_get(store, id)
   if (is.null(artifact)) {
-    ids <- ls(store$artifacts)
+    ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
     cli::cli_abort(
       c(
         "There is no document with id {.val {id}}.",
@@ -298,20 +369,12 @@ artifact_edit <- function(
 }
 
 artifact_edit_result <- function(store, artifact, version, result) {
-  value <- if (is.null(result$error)) {
-    sprintf("Saved and rendered version %d of `%s`.", version, artifact$id)
-  } else {
-    shown <- if (artifact$html_version > 0) {
-      sprintf("The user still sees version %d.", artifact$html_version)
-    } else {
-      "The user sees no rendered version yet."
-    }
-    sprintf(
-      "Saved version %d of `%s`, but it failed to render. %s\n\n%s",
-      version,
-      artifact$id,
-      shown,
-      result$error
+  value <- sprintf("Saved version %d of `%s`.", version, artifact$id)
+  if (length(result$errors)) {
+    value <- paste0(
+      value,
+      " It ran with errors, which the user sees in the document:\n\n",
+      paste0("- ", result$errors, collapse = "\n")
     )
   }
   tool_result(
@@ -328,7 +391,7 @@ artifact_link_html <- function(store, id, version = NULL) {
   sprintf(
     paste0(
       "<commons-artifact-link artifact=\"%s\" version=\"%d\"%s>",
-      "%s \u00b7 v%d</commons-artifact-link>"
+      "%s · v%d</commons-artifact-link>"
     ),
     escape_attr(id),
     version,
@@ -347,6 +410,22 @@ artifact_link_html <- function(store, id, version = NULL) {
 artifact_allowed_keys <- c("title", "subtitle", "date", "format", "commons")
 
 parse_artifact_document <- function(source, call = rlang::caller_env()) {
+  split <- split_artifact_source(source)
+  if (is.null(split)) {
+    artifact_invalid(
+      "missing_frontmatter",
+      "The document must start with YAML frontmatter between `---` lines.",
+      call = call
+    )
+  }
+  c(
+    validate_artifact_frontmatter(split$yaml, call = call),
+    list(body = split$body)
+  )
+}
+
+# NULL until the frontmatter's closing `---` has arrived.
+split_artifact_source <- function(source) {
   text <- sub("^(?:[ \t]*\n)+", "", gsub("\r\n", "\n", source), perl = TRUE)
   match <- regexec(
     "(?s)^---[ \t]*\n(?:(.*?)\n)??(?:---|\\.\\.\\.)[ \t]*(?:\n|$)",
@@ -354,19 +433,20 @@ parse_artifact_document <- function(source, call = rlang::caller_env()) {
     perl = TRUE
   )[[1]]
   if (match[[1]] == -1L) {
-    artifact_invalid(
-      "missing_frontmatter",
-      "The document must start with YAML frontmatter between `---` lines.",
-      call = call
-    )
+    return(NULL)
   }
-  yaml_text <- if (attr(match, "match.length")[[2]] > 0) {
+  yaml <- if (attr(match, "match.length")[[2]] > 0) {
     substr(text, match[[2]], match[[2]] + attr(match, "match.length")[[2]] - 1L)
   } else {
     ""
   }
-  body <- substr(text, attr(match, "match.length")[[1]] + 1L, nchar(text))
+  list(
+    yaml = yaml,
+    body = substr(text, attr(match, "match.length")[[1]] + 1L, nchar(text))
+  )
+}
 
+validate_artifact_frontmatter <- function(yaml_text, call = rlang::caller_env()) {
   front <- tryCatch(
     yaml::yaml.load(yaml_text, eval.expr = FALSE, handlers = yaml12_booleans()),
     error = function(err) err
@@ -426,8 +506,7 @@ parse_artifact_document <- function(source, call = rlang::caller_env()) {
   front$commons <- NULL
   list(
     frontmatter = front,
-    inputs = normalize_artifact_inputs(commons$inputs, call = call),
-    body = body
+    inputs = normalize_artifact_inputs(commons$inputs, call = call)
   )
 }
 
@@ -732,16 +811,20 @@ artifact_inputs_setup <- function(inputs) {
   if (length(inputs) == 0) {
     return("")
   }
+  paste0(
+    "```{r}\n#| include: false\n",
+    artifact_inputs_code(inputs),
+    "\n```\n\n"
+  )
+}
+
+artifact_inputs_code <- function(inputs) {
   reads <- vapply(
     inputs,
     function(input) sprintf("`%s` <- read.csv(\"%s\")", input$name, input$path),
     character(1)
   )
-  paste0(
-    "```{r}\n#| include: false\n",
-    paste(reads, collapse = "\n"),
-    "\n```\n\n"
-  )
+  paste(reads, collapse = "\n")
 }
 
 artifact_quarto_yml <- function() {
@@ -762,7 +845,7 @@ artifact_quarto_yml <- function() {
 }
 
 # Outside a stream nothing projects the reply, so `$chat()` saves the
-# documents in its last turn after the fact and says where they rendered.
+# documents in its last turn after the fact and says where they were written.
 save_turn_artifacts <- function(store, turn) {
   text <- if (!is.null(turn)) {
     paste(
@@ -797,18 +880,21 @@ save_turn_artifacts <- function(store, turn) {
       next
     }
     result <- wait_for_promise(item$rendered)
-    dir <- artifact_latest_dir(artifact_get(store, item$id))
-    if (is.null(result$error)) {
-      cli::cli_inform("Rendered {.val {item$id}} to {.file {file.path(dir, 'report.html')}}.")
-    } else {
+    path <- file.path(
+      artifact_latest_dir(artifact_get(store, item$id)),
+      "report.html"
+    )
+    if (length(result$errors)) {
       artifact_remind(
         store,
-        artifact_render_reminder(item$id, item$version, result$error)
+        artifact_errors_reminder(item$id, item$version, result$errors)
       )
       cli::cli_warn(c(
-        "Document {.val {item$id}} failed to render; its source is in {.file {dir}}.",
-        i = "{result$error}"
+        "Document {.val {item$id}} ran with errors; see {.file {path}}.",
+        rlang::set_names(gsub("([{}])", "\\1\\1", result$errors), "x")
       ))
+    } else {
+      cli::cli_inform("Knitted {.val {item$id}} to {.file {path}}.")
     }
   }
   invisible()

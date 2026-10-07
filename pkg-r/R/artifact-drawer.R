@@ -74,23 +74,15 @@ artifact_view_ui <- function(view) {
 
 # Empty strings rather than NULLs, which would arrive as truthy empty objects.
 artifact_select_event <- function(artifact) {
-  version <- length(artifact$versions)
-  failed <- identical(artifact$failed_version, version)
   list(
     type = "select",
     id = artifact$id,
     title = artifact$title,
-    version = version,
-    source = artifact$versions[[version]]$source,
-    html = artifact$html %||% "",
-    html_version = artifact$html_version,
-    status = if (failed) {
-      "failed"
-    } else if (artifact$html_version == version) {
-      "ready"
-    } else {
-      "rendering"
-    },
-    error = if (failed) artifact$error else ""
+    pieces = lapply(seq_along(artifact$html), function(i) {
+      list(index = i - 1L, html = artifact$html[[i]])
+    }),
+    count = length(artifact$html),
+    status = artifact$status,
+    error = ""
   )
 }

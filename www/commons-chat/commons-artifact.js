@@ -1,10 +1,13 @@
 // The drawer view for document artifacts and the chip that reopens one.
 //
 // The server shows the drawer once with a <commons-artifact-view> and streams
-// everything else as "commons-artifact" custom messages. State lives here
-// rather than in the element, because the drawer can replace its content and
-// the element must be able to redraw from scratch.
+// everything else as "commons-artifact" custom messages: the document arrives
+// as HTML pieces, each replaced when its text grows or its code finishes
+// running. State lives here rather than in the element, because the drawer
+// can replace its content and the element must be able to redraw from scratch.
 (() => {
+  const assetRoot = new URL(".", document.currentScript.src);
+
   const views = new Map();
   const connected = new Set();
 
@@ -15,16 +18,7 @@
 
   const artifactFor = (state, id) => {
     if (!state.artifacts.has(id)) {
-      state.artifacts.set(id, {
-        id,
-        title: id,
-        source: "",
-        version: 0,
-        status: "streaming",
-        html: null,
-        htmlVersion: 0,
-        error: null,
-      });
+      state.artifacts.set(id, { id, pieces: [], status: "writing", error: null });
     }
     return state.artifacts.get(id);
   };
@@ -33,6 +27,11 @@
     malformed: "The document's opening tag was malformed, so it wasn't saved.",
     too_long: "The document was too long, so it wasn't saved.",
     unclosed: "The document was never finished, so it wasn't saved.",
+  };
+
+  const patch = (a, msg) => {
+    for (const piece of msg.pieces || []) a.pieces[piece.index] = piece.html;
+    a.pieces.length = msg.count;
   };
 
   const apply = (msg) => {
@@ -47,48 +46,28 @@
     switch (msg.type) {
       case "open":
         state.current = a.id;
-        Object.assign(a, { title: msg.title, source: "", status: "streaming", error: null });
-        break;
-      case "delta":
-        a.source += msg.text;
+        Object.assign(a, { pieces: [], status: "writing", error: null });
         break;
       case "version":
         state.current = a.id;
-        Object.assign(a, {
-          title: msg.title,
-          version: msg.version,
-          source: msg.source,
-          status: "rendering",
-          error: null,
-        });
+        Object.assign(a, { status: "running", error: null });
         break;
-      case "rendered":
-        if (msg.version >= a.htmlVersion) {
-          a.html = msg.html;
-          a.htmlVersion = msg.version;
-        }
-        if (msg.version === a.version) a.status = "ready";
+      case "pieces":
+        patch(a, msg);
         break;
-      case "failed":
-        if (msg.version === a.version) Object.assign(a, { status: "failed", error: msg.error });
+      case "status":
+        Object.assign(a, { status: msg.status, error: msg.error || null });
         break;
       case "rejected":
-        Object.assign(a, { status: "rejected", error: msg.error });
+        Object.assign(a, { status: "failed", error: msg.error });
         break;
       case "error":
-        Object.assign(a, { status: "rejected", error: scanErrors[msg.reason] });
+        Object.assign(a, { status: "failed", error: scanErrors[msg.reason] });
         break;
       case "select":
         state.current = a.id;
-        Object.assign(a, {
-          title: msg.title,
-          version: msg.version,
-          source: msg.source,
-          html: msg.html,
-          htmlVersion: msg.html_version,
-          status: msg.status,
-          error: msg.error,
-        });
+        Object.assign(a, { pieces: [], status: msg.status, error: msg.error || null });
+        patch(a, msg);
         break;
     }
   };
@@ -97,7 +76,7 @@
     window.Shiny.addCustomMessageHandler("commons-artifact", (msg) => {
       apply(msg);
       for (const el of connected) {
-        if (el.getAttribute("view") === msg.view) el.scheduleRender();
+        if (el.getAttribute("view") === msg.view) el.render();
       }
     });
   };
@@ -107,121 +86,34 @@
     document.addEventListener("DOMContentLoaded", register);
   }
 
-  // --- streaming preview ------------------------------------------------------
-
-  // A preview of a document still being written: prose renders as Markdown
-  // with any raw HTML escaped, and code cells become placeholders, since
-  // they only run when the finished document renders.
   const escape = (text) =>
-    text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+    text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const inline = (text) =>
-    text
-      .split(/(`[^`\n]*`)/)
-      .map((part, i) => {
-        if (i % 2) {
-          const code = part.slice(1, -1);
-          if (/^\{?(r|python)\}?\s/.test(code)) {
-            return '<span class="commons-artifact-inline" title="Computed when the document renders">&hellip;</span>';
-          }
-          return `<code>${escape(code)}</code>`;
-        }
-        return escape(part)
-          .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-          .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-          .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
-      })
-      .join("");
+  // The document is model-written HTML, so it lives in a sandboxed frame with
+  // an opaque origin. The frame patches the pieces it is sent rather than
+  // reloading, so streaming text and finished cells don't flicker.
+  const frameSource = `<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="${new URL("commons-document.css", assetRoot)}">
+</head><body><main id="doc"></main><script>
+const doc = document.getElementById("doc");
+window.addEventListener("message", (event) => {
+  if (event.source !== window.parent) return;
+  const msg = event.data;
+  const root = document.scrollingElement;
+  const following = root.scrollHeight - root.scrollTop - root.clientHeight < 40;
+  if (msg.reset) doc.replaceChildren();
+  for (const piece of msg.pieces) {
+    while (doc.children.length <= piece.index) doc.append(document.createElement("section"));
+    doc.children[piece.index].innerHTML = piece.html;
+  }
+  while (doc.children.length > msg.count) doc.lastElementChild.remove();
+  if (msg.follow && following) root.scrollTop = root.scrollHeight;
+});
+parent.postMessage("ready", "*");
+</script></body></html>`;
 
-  const listItem = /^\s*([-*+]|\d+[.)])\s+/;
-
-  const renderMarkdown = (source) => {
-    let text = source.replace(/\r\n/g, "\n").replace(/^\s+/, "");
-    const out = [];
-    if (text.startsWith("---")) {
-      const closed = text.match(/^---[ \t]*\n([\s\S]*?)\n(?:---|\.\.\.)[ \t]*(?:\n|$)/);
-      const front = closed ? closed[1] : text;
-      const title = front.match(/^title:[ \t]*(.+)$/m);
-      if (title) out.push(`<h1>${inline(title[1].replace(/^(["'])(.*)\1$/, "$2"))}</h1>`);
-      text = closed ? text.slice(closed[0].length) : "";
-    }
-
-    const lines = text.split("\n");
-    let paragraph = [];
-    const flush = () => {
-      if (paragraph.length) out.push(`<p>${inline(paragraph.join(" "))}</p>`);
-      paragraph = [];
-    };
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const fence = line.match(/^(`{3,}|~{3,})\s*(.*)$/);
-      if (fence) {
-        flush();
-        const body = [];
-        for (i++; i < lines.length && !lines[i].startsWith(fence[1]); i++) body.push(lines[i]);
-        i++;
-        out.push(
-          fence[2].startsWith("{")
-            ? '<div class="commons-artifact-cell">Code runs when the document renders</div>'
-            : `<pre><code>${escape(body.join("\n"))}</code></pre>`
-        );
-        continue;
-      }
-      const heading = line.match(/^(#{1,6})\s+(.*)$/);
-      if (heading) {
-        flush();
-        const n = heading[1].length;
-        out.push(`<h${n}>${inline(heading[2].replace(/\s*\{[^}]*\}\s*$/, ""))}</h${n}>`);
-        i++;
-      } else if (listItem.test(line)) {
-        flush();
-        const tag = /^\s*\d/.test(line) ? "ol" : "ul";
-        const items = [];
-        for (; i < lines.length && listItem.test(lines[i]); i++) {
-          items.push(`<li>${inline(lines[i].replace(listItem, ""))}</li>`);
-        }
-        out.push(`<${tag}>${items.join("")}</${tag}>`);
-      } else if (/^>/.test(line)) {
-        flush();
-        const quoted = [];
-        for (; i < lines.length && /^>/.test(lines[i]); i++) quoted.push(lines[i].replace(/^>\s?/, ""));
-        out.push(`<blockquote>${inline(quoted.join(" "))}</blockquote>`);
-      } else if (/^\|/.test(line)) {
-        flush();
-        const rows = [];
-        for (; i < lines.length && /^\|/.test(lines[i]); i++) {
-          if (/^\|[\s:|-]+$/.test(lines[i])) continue;
-          const cells = lines[i].replace(/^\||\|\s*$/g, "").split("|");
-          const tag = rows.length ? "td" : "th";
-          rows.push(`<tr>${cells.map((c) => `<${tag}>${inline(c.trim())}</${tag}>`).join("")}</tr>`);
-        }
-        out.push(`<table>${rows.join("")}</table>`);
-      } else if (/^:::/.test(line) || !line.trim()) {
-        flush();
-        i++;
-      } else {
-        paragraph.push(line);
-        i++;
-      }
-    }
-    flush();
-    return out.join("\n");
-  };
-
-  // --- the drawer view --------------------------------------------------------
-
-  const statusText = {
-    streaming: "Writing…",
-    rendering: "Rendering…",
-    ready: "",
-    failed: "This version didn't render",
-    rejected: "Not saved",
-  };
+  const statusText = { writing: "Writing…", running: "Running…" };
 
   class CommonsArtifactView extends HTMLElement {
     connectedCallback() {
@@ -233,13 +125,26 @@
       connected.delete(this);
     }
 
-    scheduleRender() {
-      if (this.pending) return;
-      this.pending = true;
-      requestAnimationFrame(() => {
-        this.pending = false;
-        this.render();
-      });
+    frame() {
+      const body = this.querySelector(".commons-artifact-body");
+      let frame = body.querySelector("iframe");
+      if (!frame) {
+        frame = document.createElement("iframe");
+        frame.setAttribute("sandbox", "allow-scripts");
+        frame.className = "commons-artifact-frame";
+        this.ready = false;
+        this.shown = { id: null, pieces: [] };
+        const onReady = (event) => {
+          if (event.source !== frame.contentWindow || event.data !== "ready") return;
+          window.removeEventListener("message", onReady);
+          this.ready = true;
+          this.render();
+        };
+        window.addEventListener("message", onReady);
+        frame.srcdoc = frameSource;
+        body.replaceChildren(frame);
+      }
+      return frame;
     }
 
     render() {
@@ -247,57 +152,27 @@
       const a = state.current ? state.artifacts.get(state.current) : null;
       const status = this.querySelector(".commons-artifact-status");
       const notice = this.querySelector(".commons-artifact-notice");
-      const body = this.querySelector(".commons-artifact-body");
-      if (!status || !body || !notice) return;
+      if (!status || !notice) return;
 
       this.toggleAttribute("empty", !a);
-      if (!a) {
-        status.replaceChildren();
-        notice.replaceChildren();
-        body.replaceChildren();
-        return;
-      }
+      if (!a) return;
+      status.textContent = statusText[a.status] ?? "";
+      notice.innerHTML = a.error ? `<p>${escape(a.error)}</p>` : "";
 
-      status.textContent = statusText[a.status];
-
-      if (a.error) {
-        const [summary, ...details] = a.error.split("\n");
-        const shown = a.htmlVersion ? ` Showing version ${a.htmlVersion}.` : "";
-        notice.innerHTML =
-          `<p>${escape(summary)}${shown}</p>` +
-          (details.length
-            ? `<details><summary>Details</summary><pre>${escape(details.join("\n"))}</pre></details>`
-            : "");
-      } else {
-        notice.replaceChildren();
-      }
-
-      if (a.html && a.status !== "streaming") {
-        let frame = body.querySelector("iframe");
-        if (!frame) {
-          frame = document.createElement("iframe");
-          frame.setAttribute("sandbox", "allow-scripts");
-          frame.className = "commons-artifact-frame";
-          body.replaceChildren(frame);
-        }
-        const key = `${a.id}:${a.htmlVersion}`;
-        if (frame.dataset.key !== key) {
-          frame.dataset.key = key;
-          frame.title = a.title;
-          frame.srcdoc = a.html;
-        }
-        return;
-      }
-
-      let preview = body.querySelector(".commons-artifact-preview");
-      if (!preview) {
-        preview = document.createElement("div");
-        preview.className = "commons-artifact-preview";
-        body.replaceChildren(preview);
-      }
-      const following = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
-      preview.innerHTML = renderMarkdown(a.source);
-      if (a.status === "streaming" && following) body.scrollTop = body.scrollHeight;
+      const frame = this.frame();
+      if (!this.ready) return;
+      const reset = this.shown.id !== a.id;
+      const old = reset ? [] : this.shown.pieces;
+      const pieces = [];
+      a.pieces.forEach((html, index) => {
+        if (old[index] !== html) pieces.push({ index, html });
+      });
+      if (!reset && !pieces.length && old.length === a.pieces.length) return;
+      frame.contentWindow.postMessage(
+        { reset, pieces, count: a.pieces.length, follow: a.status === "writing" },
+        "*"
+      );
+      this.shown = { id: a.id, pieces: [...a.pieces] };
     }
   }
 

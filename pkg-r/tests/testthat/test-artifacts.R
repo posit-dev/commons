@@ -92,14 +92,42 @@ test_that("the written document loads its inputs under commons' scaffold", {
   expect_match(qmd, "`orders` <- read.csv(\"data/orders.csv\")", fixed = TRUE)
 })
 
+test_that("documents split into prose blocks and cells as they arrive", {
+  body <- paste0(
+    "Intro with `r n`.\n\n::: {.callout-note}\nA note.\n\nStill the note.\n:::\n\n",
+    "```{r}\n#| label: totals\nsum(x)\n```\n\nAfter."
+  )
+  pieces <- segment_artifact_body(body)
+  expect_identical(
+    vapply(pieces, `[[`, character(1), "kind"),
+    c("prose", "prose", "cell", "prose")
+  )
+  expect_identical(pieces[[3]]$label, "totals")
+  units <- artifact_units(pieces)
+  expect_identical(
+    vapply(units, `[[`, character(1), "text"),
+    c("n", "```{r}\n#| label: totals\nsum(x)\n```")
+  )
+
+  partial <- segment_artifact_body("Done.\n\n```{r}\nsum(x)\n``", complete = FALSE)
+  expect_false(partial[[2]]$complete)
+  expect_length(artifact_units(partial), 0)
+})
+
+test_that("callouts keep their Markdown", {
+  html <- markdown_fragment_html(convert_divs(
+    "::: {.callout-warning title=\"Careful\"}\nSmall **samples**.\n:::"
+  ))
+  expect_match(html, "<div class=\"callout callout-warning\">", fixed = TRUE)
+  expect_match(html, "<p class=\"callout-title\">Careful</p>", fixed = TRUE)
+  expect_match(html, "<strong>samples</strong>", fixed = TRUE)
+})
+
 test_that("an edit that breaks the frontmatter makes no version", {
   store <- new_artifact_store(resolve_input = function(input) NULL)
-  local_mocked_bindings(
-    artifact_render_queued = function(store, dir) {
-      promises::promise_resolve(list(html = "<p>ok</p>"))
-    }
+  wait_for_promise(
+    artifact_commit(store, "doc", "Doc", "---\ntitle: Doc\n---\nBody.\n")$rendered
   )
-  artifact_commit(store, "doc", "Doc", "---\ntitle: Doc\n---\nBody.\n")
 
   expect_error(
     artifact_edit(store, "doc", "title: Doc", "title: Doc\nfilters: [x.lua]"),
@@ -114,7 +142,7 @@ test_that("restoring or clearing a conversation drops its artifacts", {
   store <- agent$artifact_store()
   events <- list()
   store$listener <- function(event) events[[length(events) + 1L]] <<- event
-  assign("doc", new.env(), envir = store$artifacts)
+  artifact_ensure(store, "doc")
 
   agent$set_turns(list())
 
@@ -124,13 +152,11 @@ test_that("restoring or clearing a conversation drops its artifacts", {
 
 # --- the live path ---------------------------------------------------------------
 
-skip_if_no_quarto <- function() {
+skip_if_no_sandbox <- function() {
   skip_on_cran()
-  skip_if(is.null(quarto_binary()), "Quarto is not installed.")
-  skip_if_not_installed("rmarkdown")
   skip_if_not(
     identical(run_r_protection_mode(), "sandbox"),
-    "This host can't sandbox the render."
+    "This host can't sandbox document code."
   )
 }
 
@@ -151,60 +177,99 @@ orders_document <- function(cell = "nrow(orders)") {
   paste0(
     "\n---\ntitle: Orders\ncommons:\n  inputs:\n    orders:\n",
     "      measure: orders\n---\n\n",
-    "There are `r ", cell, "` orders.\n"
+    "There are `r ", cell, "` orders.\n\n",
+    "```{r}\n#| label: by-region\ntable(orders$region)\nplot(orders$revenue)\n```\n"
   )
 }
 
-test_that("a streamed document renders from its trusted inputs", {
-  skip_if_no_quarto()
+wait_until_ready <- function(store, id) {
+  wait_for_promise(promises::promise(function(resolve, reject) {
+    check <- function() {
+      if (identical(store$artifacts[[id]]$status, "ready")) {
+        resolve(TRUE)
+      } else {
+        later::later(check, 0.05)
+      }
+    }
+    check()
+  }))
+}
+
+test_that("a streamed document knits from its trusted inputs as it arrives", {
+  skip_if_no_sandbox()
   agent <- orders_agent()
   store <- agent$artifact_store()
   events <- list()
   store$listener <- function(event) events[[length(events) + 1L]] <<- event
 
   scanner <- citation_scanner(on_artifact = artifact_scan_handler(store))
-  out <- scanner$feed(paste0(
+  source <- paste0(
     "Here.\n<commons-artifact id=\"orders\" title=\"Orders\">",
     orders_document(),
     "</commons-artifact>\nDone."
-  ))
+  )
+  starts <- seq(1, nchar(source), by = 20)
+  out <- paste(
+    vapply(substring(source, starts, starts + 19), scanner$feed, character(1)),
+    collapse = ""
+  )
   expect_match(out, "<commons-artifact-link artifact=\"orders\" version=\"1\"", fixed = TRUE)
 
-  wait_for_promise(store$tail)
-  html <- artifact_get(store, "orders")$html
+  wait_until_ready(store, "orders")
+  html <- paste(artifact_get(store, "orders")$html, collapse = "\n")
   expect_match(html, "There are 6 orders.", fixed = TRUE)
+  expect_match(html, "<img src=\"data:image/png;base64,", fixed = TRUE)
+  expect_match(html, "<details class=\"commons-code\">", fixed = TRUE)
   types <- vapply(events, `[[`, character(1), "type")
-  expect_identical(types[c(1, length(types))], c("open", "rendered"))
-  expect_true(all(c("delta", "version") %in% types))
+  expect_identical(types[[1]], "open")
+  expect_true(all(c("pieces", "version", "status") %in% types))
 
   result <- wait_for_promise(
     artifact_edit(store, "orders", "nrow(orders)", "nrow(orders) - 1")
   )
-  expect_match(result@value, "Saved and rendered version 2", fixed = TRUE)
-  expect_match(artifact_get(store, "orders")$html, "There are 5 orders.", fixed = TRUE)
+  expect_identical(result@value, "Saved version 2 of `orders`.")
+  expect_match(
+    paste(artifact_get(store, "orders")$html, collapse = ""),
+    "There are 5 orders.",
+    fixed = TRUE
+  )
 })
 
-test_that("a failed render keeps the last good version and is reported", {
-  skip_if_no_quarto()
-  agent <- orders_agent()
-  store <- agent$artifact_store()
-
+test_that("a prose edit reuses every code result", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
   first <- artifact_commit(store, "orders", "Orders", orders_document())
-  expect_null(wait_for_promise(first$rendered)$error)
+  wait_for_promise(first$rendered)
+  units <- artifact_get(store, "orders")$units
+
+  wait_for_promise(artifact_edit(store, "orders", "There are", "We count"))
+
+  artifact <- artifact_get(store, "orders")
+  expect_identical(artifact$units, units)
+  expect_match(paste(artifact$html, collapse = ""), "We count 6 orders.", fixed = TRUE)
+})
+
+test_that("errors stay in the document and are reported by cell", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  wait_for_promise(
+    artifact_commit(store, "orders", "Orders", orders_document())$rendered
+  )
 
   result <- wait_for_promise(
-    artifact_edit(store, "orders", "nrow(orders)", "stop('boom')")
+    artifact_edit(store, "orders", "table(orders$region)", "stop('boom')")
   )
-  expect_match(result@value, "failed to render", fixed = TRUE)
-  expect_match(result@value, "boom", fixed = TRUE)
-  expect_match(result@value, "still sees version 1", fixed = TRUE)
-  expect_identical(artifact_get(store, "orders")$html_version, 1L)
+  expect_match(result@value, "Cell 1 (`by-region`): boom", fixed = TRUE)
+  expect_match(
+    paste(artifact_get(store, "orders")$html, collapse = ""),
+    "<div class=\"commons-cell-error\">",
+    fixed = TRUE
+  )
 })
 
-test_that("a document's cells can't reach the network or the host's files", {
-  skip_if_no_quarto()
-  agent <- orders_agent()
-  store <- agent$artifact_store()
+test_that("a document's cells can't read the host's files", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
   secret <- withr::local_tempfile(tmpdir = path.expand("~"))
   writeLines("secret", secret)
 
@@ -218,12 +283,12 @@ test_that("a document's cells can't reach the network or the host's files", {
     )
   )
   result <- wait_for_promise(committed$rendered)
-  expect_false(is.null(result$error))
-  expect_no_match(result$error, "^secret$")
+  expect_length(result$errors, 1)
+  expect_no_match(paste(result$html, collapse = ""), "secret\"")
 })
 
-test_that("outside Shiny, a turn's documents are rendered and reported", {
-  skip_if_no_quarto()
+test_that("outside Shiny, a turn's documents are knitted and reported", {
+  skip_if_no_sandbox()
   agent <- orders_agent()
   turn <- ellmer::AssistantTurn(list(ellmer::ContentText(paste0(
     "Done.\n<commons-artifact id=\"orders\" title=\"Orders\">",
@@ -236,7 +301,7 @@ test_that("outside Shiny, a turn's documents are rendered and reported", {
     "report.html"
   )
   expect_match(
-    artifact_get(agent$artifact_store(), "orders")$html,
+    paste(artifact_get(agent$artifact_store(), "orders")$html, collapse = ""),
     "There are 6 orders.",
     fixed = TRUE
   )

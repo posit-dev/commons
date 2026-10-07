@@ -22,6 +22,7 @@ Imports:
     bslib (>= 0.11.0),
     callr,
     cli,
+    commonmark,
     coro,
     DBI,
     duckdb (>= 1.5.4.2),

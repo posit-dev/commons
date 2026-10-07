@@ -377,11 +377,7 @@ worker_init <- function(
   dll_path,
   network = "none",
   protection = "sandbox",
-  sandbox_mode = "auto",
-  extra_read_roots = character(),
-  extra_rw_roots = character(),
-  # 8 GiB leaves ample headroom for light R; a lower Connect limit still applies.
-  memory_limit = 8 * 1024^3
+  sandbox_mode = "auto"
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
@@ -447,14 +443,13 @@ worker_init <- function(
     R.home(),
     .libPaths(),
     pkg_targets,
-    os_roots,
-    extra_read_roots
+    os_roots
   ))
   read_roots <- read_roots[dir.exists(read_roots)]
   read_roots <- unique(c(read_roots, resolve(read_roots)))
   # callr writes its per-call result files into the parent's tempdir, so the
   # worker must be able to write there for results to make it back.
-  write_roots <- c(parent_tmp, work_dir, extra_rw_roots)
+  write_roots <- c(parent_tmp, work_dir)
   write_roots <- unique(c(write_roots, resolve(write_roots)))
   # callr reports status on fd 3 and saves stdout/stderr while a call runs.
   callr_data <- as.environment("tools:callr")[["__callr_data__"]]
@@ -467,7 +462,8 @@ worker_init <- function(
     getNativeSymbolInfo("c_sandbox_engage", PACKAGE = "commons"),
     read_roots,
     write_roots,
-    memory_limit,
+    # 8 GiB leaves ample headroom for light R; a lower Connect limit still applies.
+    8 * 1024^3,
     sandbox_mode,
     preserve_fds,
     network
@@ -598,57 +594,8 @@ worker_run_code <- function(
     }
   )
 
-  guardrails <- if ("commons:guardrails" %in% search()) {
-    get(
-      ".commons_guardrails",
-      envir = as.environment("commons:guardrails"),
-      inherits = FALSE
-    )
-  }
-  if (!is.null(guardrails)) {
-    restore <- list()
-    on.exit({
-      for (item in rev(restore)) {
-        if (bindingIsLocked(item$name, item$environment)) {
-          unlockBinding(item$name, item$environment)
-        }
-        assign(item$name, item$original, envir = item$environment)
-        if (item$locked) {
-          lockBinding(item$name, item$environment)
-        }
-      }
-    }, add = TRUE)
-    for (hook in guardrails) {
-      namespace <- asNamespace(hook$package)
-      environments <- list(namespace)
-      attached_name <- paste0("package:", hook$package)
-      # Attached exports are copied bindings rather than namespace lookups.
-      if (attached_name %in% search()) {
-        attached <- as.environment(attached_name)
-        if (!identical(attached, namespace) &&
-          exists(hook$name, envir = attached, inherits = FALSE)) {
-          environments <- c(environments, list(attached))
-        }
-      }
-      for (environment in environments) {
-        original <- get(hook$name, envir = environment, inherits = FALSE)
-        locked <- bindingIsLocked(hook$name, environment)
-        if (locked) {
-          unlockBinding(hook$name, environment)
-        }
-        assign(hook$name, hook$replacement, envir = environment)
-        if (locked) {
-          lockBinding(hook$name, environment)
-        }
-        restore[[length(restore) + 1L]] <- list(
-          name = hook$name,
-          environment = environment,
-          original = original,
-          locked = locked
-        )
-      }
-    }
-  }
+  restore <- worker_engage_guardrails()
+  on.exit(restore(), add = TRUE)
 
   evaluate(
     code,
@@ -662,20 +609,136 @@ worker_run_code <- function(
   list(segments = segments)
 }
 
-# Quarto runs as a child of the sandboxed worker, so the sandbox's
-# restrictions carry over to Quarto and the R session that knits the cells.
-worker_render_quarto <- function(quarto, doc_dir, timeout) {
-  result <- processx::run(
-    quarto,
-    c("render", "report.qmd"),
-    wd = doc_dir,
-    error_on_status = FALSE,
-    stderr_to_stdout = TRUE,
-    timeout = timeout
+# Swaps in the guardrail hooks, when the worker has them, and returns the
+# function that restores the originals.
+worker_engage_guardrails <- function() {
+  guardrails <- if ("commons:guardrails" %in% search()) {
+    get(
+      ".commons_guardrails",
+      envir = as.environment("commons:guardrails"),
+      inherits = FALSE
+    )
+  }
+  restore <- list()
+  for (hook in guardrails) {
+    namespace <- asNamespace(hook$package)
+    environments <- list(namespace)
+    attached_name <- paste0("package:", hook$package)
+    # Attached exports are copied bindings rather than namespace lookups.
+    if (attached_name %in% search()) {
+      attached <- as.environment(attached_name)
+      if (!identical(attached, namespace) &&
+        exists(hook$name, envir = attached, inherits = FALSE)) {
+        environments <- c(environments, list(attached))
+      }
+    }
+    for (environment in environments) {
+      original <- get(hook$name, envir = environment, inherits = FALSE)
+      locked <- bindingIsLocked(hook$name, environment)
+      if (locked) {
+        unlockBinding(hook$name, environment)
+      }
+      assign(hook$name, hook$replacement, envir = environment)
+      if (locked) {
+        lockBinding(hook$name, environment)
+      }
+      restore[[length(restore) + 1L]] <- list(
+        name = hook$name,
+        environment = environment,
+        original = original,
+        locked = locked
+      )
+    }
+  }
+  function() {
+    for (item in rev(restore)) {
+      if (bindingIsLocked(item$name, item$environment)) {
+        unlockBinding(item$name, item$environment)
+      }
+      assign(item$name, item$original, envir = item$environment)
+      if (item$locked) {
+        lockBinding(item$name, item$environment)
+      }
+    }
+  }
+}
+
+# Documents knit a piece at a time in the document's own directory, so cells
+# can read `data/` as the deployed document does. Code is folded and data
+# frames print as tables; errors are kept in the output and recorded.
+worker_knit_init <- function(dir, setup) {
+  setwd(dir)
+  state <- attach(NULL, name = "commons:knit")
+  state$errors <- character()
+  state$figs <- file.path(dir, "figs")
+  escape <- function(x) {
+    x <- gsub("&", "&amp;", x, fixed = TRUE)
+    x <- gsub("<", "&lt;", x, fixed = TRUE)
+    gsub(">", "&gt;", x, fixed = TRUE)
+  }
+  knitr::render_markdown()
+  knitr::opts_knit$set(progress = FALSE, verbose = FALSE)
+  knitr::opts_chunk$set(
+    fig.path = file.path(state$figs, "fig-"),
+    dev = "ragg_png",
+    dpi = 144,
+    fig.width = 7,
+    fig.height = 4.2,
+    fig.show = "hold",
+    results = "hold",
+    error = TRUE,
+    warning = FALSE,
+    message = FALSE,
+    comment = "#>"
+  )
+  knitr::knit_hooks$set(
+    source = function(x, options) {
+      paste0(
+        "\n<details class=\"commons-code\"><summary>Code</summary>\n\n```r\n",
+        paste(x, collapse = "\n"),
+        "\n```\n\n</details>\n"
+      )
+    },
+    error = function(x, options) {
+      message <- gsub("(^|\n)#> ?(! )?", "\\1", trimws(x))
+      message <- sub("^Error[^:\n]*:\\s*", "", message)
+      state$errors <- c(state$errors, trimws(message))
+      paste0("\n<div class=\"commons-cell-error\">", escape(x), "</div>\n")
+    }
+  )
+  registerS3method(
+    "knit_print",
+    "data.frame",
+    function(x, ...) {
+      knitr::asis_output(paste(
+        c("", knitr::kable(utils::head(as.data.frame(x), 50)), "", ""),
+        collapse = "\n"
+      ))
+    },
+    envir = asNamespace("knitr")
+  )
+  eval(parse(text = setup), envir = globalenv())
+  invisible(TRUE)
+}
+
+worker_knit_unit <- function(kind, text) {
+  state <- as.environment("commons:knit")
+  state$errors <- character()
+  unlink(list.files(state$figs, full.names = TRUE))
+  restore <- worker_engage_guardrails()
+  on.exit(restore(), add = TRUE)
+
+  source <- if (kind == "inline") paste0("`r ", text, "`") else text
+  output <- tryCatch(
+    knitr::knit(text = source, quiet = TRUE, envir = globalenv()),
+    error = function(err) {
+      state$errors <- c(state$errors, conditionMessage(err))
+      ""
+    }
   )
   list(
-    status = result$status,
-    output = result$stdout,
-    timeout = isTRUE(result$timeout)
+    output = output,
+    figures = list.files(state$figs, full.names = TRUE),
+    errors = state$errors
   )
 }

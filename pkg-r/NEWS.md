@@ -1,8 +1,8 @@
 # commons (development version)
 
 * Agents write reports as Quarto documents. In `commons_server()`, a document
-  streams into the chat's drawer as the agent writes it, then renders in a
-  sandboxed R session. Documents get their data from trusted calculations
+  streams into the chat's drawer as the agent writes it, with each R cell
+  knitted in a sandboxed R session as soon as it arrives. Documents get their data from trusted calculations
   declared as inputs, and the agent revises them with a new `edit_artifact`
   tool.
 
