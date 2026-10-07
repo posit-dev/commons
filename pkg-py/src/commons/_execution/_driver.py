@@ -395,7 +395,8 @@ class Worker:
 
         ``_commons_define_source`` is seeded into every worker's session at
         startup: it compiles with annotations deferred and replaces each
-        default that cannot be evaluated with a placeholder, because a
+        default whose evaluation raises an ``Exception`` with a placeholder,
+        because a
         harvested source's own module imports and globals do not exist in
         the session.
         """
