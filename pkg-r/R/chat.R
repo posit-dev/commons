@@ -65,6 +65,11 @@ commons_app <- function(client, ...) {
 #' with [shinychat::page_chat()] or [shinychat::chat_ui()], passing
 #' `theme = commons_theme()` so the commons chat assets are on the page.
 #'
+#' Documents the agent writes open in the chat's drawer, which
+#' [shinychat::page_chat()] and [shinychat::chat_ui()] enable by default. An app
+#' that passes `drawer = FALSE` gets no documents in view, though the agent
+#' still writes them.
+#'
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
 #' works anywhere a bslib theme does.

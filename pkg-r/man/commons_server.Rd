@@ -34,6 +34,11 @@ with \code{\link[shinychat:page_chat]{shinychat::page_chat()}} or \code{\link[sh
 \code{theme = commons_theme()} so the commons chat assets are on the page.
 }
 \details{
+Documents the agent writes open in the chat's drawer, which
+\code{\link[shinychat:page_chat]{shinychat::page_chat()}} and \code{\link[shinychat:chat_ui]{shinychat::chat_ui()}} enable by default. An app
+that passes \code{drawer = FALSE} gets no documents in view, though the agent
+still writes them.
+
 \code{commons_theme()} bundles the commons chat CSS and JavaScript into an
 ordinary \code{\link[bslib:bs_theme]{bslib::bs_theme()}} (via \code{\link[shinychat:page_chat_theme]{shinychat::page_chat_theme()}}), so it
 works anywhere a bslib theme does.

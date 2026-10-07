@@ -106,6 +106,24 @@
 #' * `run_sql` executes a read-only SQL query.
 #' * `run_r` executes R code to analyze results and render plots in the agent's
 #'   R session.
+#' * `edit_artifact` edits a document the agent wrote.
+#'
+#' @section Documents:
+#' When a user asks for a report, the agent writes a Quarto document instead
+#' of a chat reply. In [commons_server()], the document streams into the chat's
+#' drawer as it's written and is then rendered to HTML; outside Shiny,
+#' `agent$chat()` renders it and reports where.
+#'
+#' A document gets its data by declaring trusted calculations as inputs, which
+#' commons runs before rendering and saves as CSV files beside the document.
+#' The saved directory is ordinary Quarto source: a downloaded document
+#' deploys to Posit Connect as it stands, with no credentials and no commons
+#' dependency. Documents without inputs are marked Untrusted.
+#'
+#' Rendering needs Quarto, found through the `QUARTO_PATH` environment
+#' variable or the `PATH`. The document's code runs in a fresh sandboxed R
+#' session, with the same restrictions as `run_r`; on Linux, that requires
+#' Landlock.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,
