@@ -28,23 +28,26 @@ __all__ = ["Guardrails", "engage"]
 
 # Audit events naming a path, mapped to the access each argument needs.
 # https://docs.python.org/3/library/audit_events.html lists them all.
+# "entry" is a write to the directory that lists the path, for operations
+# that act on a symlink itself rather than on its target. A hard link is a
+# second name for its source, through which the source can be written.
 _PATH_EVENTS: dict[str, tuple[str, ...]] = {
     "os.listdir": ("read",),
     "os.scandir": ("read",),
     "os.chdir": ("read",),
     "os.listxattr": ("read",),
     "os.getxattr": ("read",),
-    "os.mkdir": ("write",),
-    "os.remove": ("write",),
-    "os.rmdir": ("write",),
-    "os.rename": ("write", "write"),
-    "os.link": ("read", "write"),
-    "os.symlink": ("read", "write"),
+    "os.mkdir": ("entry",),
+    "os.remove": ("entry",),
+    "os.rmdir": ("entry",),
+    "os.rename": ("entry", "entry"),
+    "os.link": ("write", "entry"),
+    "os.symlink": ("read", "entry"),
     "os.truncate": ("write",),
     "os.chmod": ("write",),
     "os.chown": ("write",),
     "os.chflags": ("write",),
-    "os.lchflags": ("write",),
+    "os.lchflags": ("entry",),
     "os.utime": ("write",),
     "os.setxattr": ("write",),
     "os.removexattr": ("write",),
@@ -52,8 +55,8 @@ _PATH_EVENTS: dict[str, tuple[str, ...]] = {
     "shutil.copymode": ("read", "write"),
     "shutil.copystat": ("read", "write"),
     "shutil.copytree": ("read", "write"),
-    "shutil.move": ("write", "write"),
-    "shutil.rmtree": ("write",),
+    "shutil.move": ("entry", "entry"),
+    "shutil.rmtree": ("entry",),
     "shutil.chown": ("write",),
     "sqlite3.connect": ("write",),
 }
@@ -105,6 +108,17 @@ def _canonical(path: str) -> str:
     a file beneath it that has yet to be created.
     """
     return os.path.realpath(os.path.join(os.getcwd(), path))
+
+
+def _entry(path: str) -> str:
+    """``path`` with its directory canonicalized and its final name kept.
+
+    This names the directory entry itself, so a symlink is not followed.
+    """
+    head, tail = os.path.split(os.path.join(os.getcwd(), path).rstrip("/"))
+    if tail in ("", ".", ".."):
+        return _canonical(path)
+    return os.path.join(_canonical(head), tail)
 
 
 def _within(path: str, roots: Iterable[str]) -> bool:
@@ -164,8 +178,12 @@ class Guardrails:
             # A file descriptor was opened, and checked, by an earlier call.
             return
         name = os.fsdecode(os.fspath(path))
-        roots = self.write_roots if access == "write" else self.read_roots
-        if not _within(_canonical(name), roots):
+        if access == "entry":
+            resolved, roots, access = _entry(name), self.write_roots, "write"
+        else:
+            resolved = _canonical(name)
+            roots = self.write_roots if access == "write" else self.read_roots
+        if not _within(resolved, roots):
             _deny(f"{access} access", name)
 
     def _network(self, target: str | None = None) -> None:

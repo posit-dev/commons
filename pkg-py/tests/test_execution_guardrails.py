@@ -96,6 +96,26 @@ async def test_a_symlink_out_of_the_scratch_directory_is_followed(guarded, tmp_p
     assert not (outside / "new.txt").exists()
 
 
+async def test_a_symlink_in_scratch_can_be_renamed_and_removed(guarded):
+    async with guarded() as worker:
+        code = (
+            "import os\n"
+            "os.symlink(os.__file__, 'link')\n"
+            "os.rename('link', 'moved')\n"
+            "os.remove('moved')\n"
+            "os.listdir('.')\n"
+        )
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert list(reply.value) == []
+
+
+async def test_a_hard_link_to_a_file_that_is_only_readable_is_denied(guarded):
+    async with guarded() as worker:
+        message = await denied(worker, "import os; os.link(os.__file__, 'alias')")
+        assert "denied write access" in message
+
+
 async def test_processes_are_denied(guarded):
     async with guarded() as worker:
         for code in (
