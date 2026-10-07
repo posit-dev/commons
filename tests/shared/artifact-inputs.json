@@ -1,0 +1,131 @@
+{
+  "description": "The trusted inputs an artifact declares under `commons.inputs` in its frontmatter. Each input names one trusted path, `measure`, `metrics`, or `calculation`, with literal arguments. Before rendering, the host runs it through the same implementation as call_measure, call_metrics, or call_calculation and writes the result to `path`, where the document's cells read it. Cases give the inputs mapping as it parses from YAML and either the normalized inputs, in declaration order, or the slug of the first problem found; slugs rather than messages, since the wording belongs to each language. A sequence of one string and a bare string are the same `metrics` value, because YAML readers differ on whether they simplify a sequence.",
+  "max_inputs": 20,
+  "cases": [
+    {
+      "name": "no inputs",
+      "inputs": null,
+      "expected": []
+    },
+    {
+      "name": "a measure with arguments",
+      "inputs": {"richness": {"measure": "species_richness", "arguments": {"by": "site"}}},
+      "expected": [
+        {"name": "richness", "kind": "measure", "call": {"name": "species_richness", "arguments": {"by": "site"}}, "path": "data/richness.csv"}
+      ]
+    },
+    {
+      "name": "a measure without arguments",
+      "inputs": {"orders": {"measure": "order_count"}},
+      "expected": [
+        {"name": "orders", "kind": "measure", "call": {"name": "order_count", "arguments": {}}, "path": "data/orders.csv"}
+      ]
+    },
+    {
+      "name": "metrics with dimensions, filters, a where clause, and a source",
+      "inputs": {
+        "revenue": {
+          "metrics": ["net_revenue", "order_count"],
+          "dimensions": ["region"],
+          "filters": ["emea"],
+          "where": [{"column": "order_date", "op": ">=", "value": "2026-01-01"}],
+          "source": "sales_db"
+        }
+      },
+      "expected": [
+        {
+          "name": "revenue",
+          "kind": "metrics",
+          "call": {
+            "metrics": ["net_revenue", "order_count"],
+            "dimensions": ["region"],
+            "filters": ["emea"],
+            "where": [{"column": "order_date", "op": ">=", "value": "2026-01-01"}],
+            "arguments": {},
+            "source": "sales_db"
+          },
+          "path": "data/revenue.csv"
+        }
+      ]
+    },
+    {
+      "name": "a single metric may be a bare string",
+      "inputs": {"revenue": {"metrics": "net_revenue"}},
+      "expected": [
+        {
+          "name": "revenue",
+          "kind": "metrics",
+          "call": {"metrics": ["net_revenue"], "dimensions": [], "filters": [], "where": [], "arguments": {}, "source": null},
+          "path": "data/revenue.csv"
+        }
+      ]
+    },
+    {
+      "name": "a calculation",
+      "inputs": {"top": {"calculation": "top_customers", "arguments": {"n": 10}}},
+      "expected": [
+        {"name": "top", "kind": "calculation", "call": {"name": "top_customers", "arguments": {"n": 10}, "source": null}, "path": "data/top.csv"}
+      ]
+    },
+    {
+      "name": "inputs keep their declared order",
+      "inputs": {"b": {"measure": "m2"}, "a": {"measure": "m1"}},
+      "expected": [
+        {"name": "b", "kind": "measure", "call": {"name": "m2", "arguments": {}}, "path": "data/b.csv"},
+        {"name": "a", "kind": "measure", "call": {"name": "m1", "arguments": {}}, "path": "data/a.csv"}
+      ]
+    },
+    {
+      "name": "inputs must be a mapping",
+      "inputs": ["richness"],
+      "error": "invalid_inputs"
+    },
+    {
+      "name": "an input name becomes a file name, so it is a lowercase identifier",
+      "inputs": {"Rich ness": {"measure": "species_richness"}},
+      "error": "invalid_input_name"
+    },
+    {
+      "name": "an input names exactly one trusted path",
+      "inputs": {"x": {"measure": "a", "calculation": "b"}},
+      "error": "invalid_input_kind"
+    },
+    {
+      "name": "an input must name a trusted path",
+      "inputs": {"x": {"sql": "SELECT 1"}},
+      "error": "invalid_input_kind"
+    },
+    {
+      "name": "an input that is not a mapping is rejected",
+      "inputs": {"x": "species_richness"},
+      "error": "invalid_input_kind"
+    },
+    {
+      "name": "a key the path does not take is rejected",
+      "inputs": {"x": {"measure": "a", "dimensions": ["region"]}},
+      "error": "invalid_input_key"
+    },
+    {
+      "name": "a measure name must be a string",
+      "inputs": {"x": {"measure": ["a", "b"]}},
+      "error": "invalid_input_value"
+    },
+    {
+      "name": "arguments must be a mapping",
+      "inputs": {"x": {"measure": "a", "arguments": ["site"]}},
+      "error": "invalid_input_value"
+    },
+    {
+      "name": "too many inputs are rejected",
+      "inputs": {
+        "i01": {"measure": "m"}, "i02": {"measure": "m"}, "i03": {"measure": "m"}, "i04": {"measure": "m"},
+        "i05": {"measure": "m"}, "i06": {"measure": "m"}, "i07": {"measure": "m"}, "i08": {"measure": "m"},
+        "i09": {"measure": "m"}, "i10": {"measure": "m"}, "i11": {"measure": "m"}, "i12": {"measure": "m"},
+        "i13": {"measure": "m"}, "i14": {"measure": "m"}, "i15": {"measure": "m"}, "i16": {"measure": "m"},
+        "i17": {"measure": "m"}, "i18": {"measure": "m"}, "i19": {"measure": "m"}, "i20": {"measure": "m"},
+        "i21": {"measure": "m"}
+      },
+      "error": "too_many_inputs"
+    }
+  ]
+}

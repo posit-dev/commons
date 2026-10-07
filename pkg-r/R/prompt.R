@@ -47,6 +47,7 @@ system_prompt_data <- function(
     ),
     tool_availability(tool_names),
     list(
+      has_edit_artifact = "edit_artifact" %in% tool_names,
       execution_tool = execution_tool,
       has_instructions = nzchar(instructions %||% ""),
       instructions = instructions %||% ""

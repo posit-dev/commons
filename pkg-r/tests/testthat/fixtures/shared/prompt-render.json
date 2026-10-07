@@ -33,6 +33,7 @@
           "has_call_metrics": false,
           "has_call_calculation": false,
           "has_execution_tool": false,
+          "has_edit_artifact": false,
           "execution_tool": "run_code",
           "has_definitions": false,
           "has_complete_definitions": false
@@ -64,6 +65,7 @@
           "has_call_metrics": true,
           "has_call_calculation": false,
           "has_execution_tool": true,
+          "has_edit_artifact": true,
           "execution_tool": "run_code",
           "has_definitions": true,
           "has_complete_definitions": true
@@ -95,6 +97,7 @@
           "has_call_metrics": false,
           "has_call_calculation": false,
           "has_execution_tool": false,
+          "has_edit_artifact": false,
           "execution_tool": "run_code",
           "has_definitions": false,
           "has_complete_definitions": false
@@ -126,6 +129,7 @@
           "has_call_metrics": false,
           "has_call_calculation": false,
           "has_execution_tool": false,
+          "has_edit_artifact": false,
           "execution_tool": "run_code",
           "has_definitions": true,
           "has_complete_definitions": false
@@ -157,6 +161,7 @@
           "has_call_metrics": false,
           "has_call_calculation": true,
           "has_execution_tool": true,
+          "has_edit_artifact": false,
           "execution_tool": "run_code",
           "has_definitions": true,
           "has_complete_definitions": false

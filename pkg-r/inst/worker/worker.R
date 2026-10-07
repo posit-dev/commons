@@ -377,7 +377,8 @@ worker_init <- function(
   dll_path,
   network = "none",
   protection = "sandbox",
-  sandbox_mode = "auto"
+  sandbox_mode = "auto",
+  extra_read_roots = character()
 ) {
   setwd(work_dir)
   options(width = 80, cli.num_colors = 1)
@@ -443,7 +444,8 @@ worker_init <- function(
     R.home(),
     .libPaths(),
     pkg_targets,
-    os_roots
+    os_roots,
+    extra_read_roots
   ))
   read_roots <- read_roots[dir.exists(read_roots)]
   read_roots <- unique(c(read_roots, resolve(read_roots)))
@@ -656,4 +658,22 @@ worker_run_code <- function(
   flush_plot()
 
   list(segments = segments)
+}
+
+# Quarto runs as a child of the sandboxed worker, so the sandbox's
+# restrictions carry over to Quarto and the R session that knits the cells.
+worker_render_quarto <- function(quarto, doc_dir, timeout) {
+  result <- processx::run(
+    quarto,
+    c("render", "report.qmd"),
+    wd = doc_dir,
+    error_on_status = FALSE,
+    stderr_to_stdout = TRUE,
+    timeout = timeout
+  )
+  list(
+    status = result$status,
+    output = result$stdout,
+    timeout = isTRUE(result$timeout)
+  )
 }
