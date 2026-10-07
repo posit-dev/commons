@@ -348,7 +348,9 @@ def test_the_default_grace_is_the_documented_constant() -> None:
 
 
 
-@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX")
+@pytest.mark.skipif(
+    not hasattr(os, "waitid"), reason="os.waitid is POSIX, and on macOS 3.13+"
+)
 def test_a_group_left_with_only_a_zombie_can_still_be_signalled() -> None:
     # The worker can exit before its exit is observed, and a close then
     # signals a group whose only member is a zombie, which macOS refuses
