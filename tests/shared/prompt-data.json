@@ -7,7 +7,7 @@
   },
   "fields": [
     "date",
-    "is_claude_5",
+    "needs_brevity_prompting",
     "has_multiple_sources",
     "has_catalog_search",
     "has_dictionary_context",
@@ -36,7 +36,7 @@
       "name": "one source lists its tables and switches every section off",
       "sources": [{ "name": "sales_db", "tables": ["orders", "customers"] }],
       "expect": {
-        "is_claude_5": false,
+        "needs_brevity_prompting": false,
         "has_multiple_sources": false,
         "has_catalog_search": false,
         "has_dictionary_context": false,
@@ -343,7 +343,7 @@
       "tools": ["run_sql", "call_measure"],
       "model": "claude-sonnet-5",
       "expect": {
-        "is_claude_5": true,
+        "needs_brevity_prompting": true,
         "has_instructions": true,
         "instructions": "Prefer weekly grain.",
         "has_run_sql": true,

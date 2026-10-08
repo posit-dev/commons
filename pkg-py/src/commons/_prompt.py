@@ -81,7 +81,7 @@ def system_prompt_data(
 
     return {
         "date": prompt_date(),
-        "is_claude_5": is_claude_5_model(model),
+        "needs_brevity_prompting": needs_brevity_prompting(model),
         "has_multiple_sources": len(sources) > 1,
         "has_catalog_search": any(
             _catalog_searchable(source) for source in sources.values()
@@ -250,16 +250,18 @@ def prompt_date() -> str:
     return datetime.datetime.now().astimezone().date().isoformat()
 
 
-_CLAUDE_5 = re.compile(
+# Claude 5.0 and 5.1 are verbose without extra prompting; Claude 5.5 and later
+# are not, so this matches those two versions alone.
+_VERBOSE_CLAUDE_MODEL = re.compile(
     r"(^|[./:_-])claude-[^-]+-5(?:[.-][01])?(?![.-][0-9])($|[./:@_-])"
 )
 
 
-def is_claude_5_model(model: str | None) -> bool:
+def needs_brevity_prompting(model: str | None) -> bool:
     """Whether a model id names a Claude 5.0 or 5.1 model, whatever the provider."""
     if not isinstance(model, str):
         return False
-    return _CLAUDE_5.search(model.lower()) is not None
+    return _VERBOSE_CLAUDE_MODEL.search(model.lower()) is not None
 
 
 _INSTRUCTION_EXTENSIONS = ("md", "rmd", "txt", "prompt")

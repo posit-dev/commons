@@ -13,7 +13,7 @@
         "description": "No dictionary, no definitions, no instructions, and no trusted-calculation tool.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": false,
@@ -44,7 +44,7 @@
         "description": "Every optional section present, with multiple sources and a complete definition index.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "has_multiple_sources": true,
           "has_catalog_search": true,
           "has_dictionary_context": true,
@@ -71,11 +71,11 @@
         "expected": "prompt-render/everything.md"
       },
       {
-        "name": "claude-5-concise",
-        "description": "A Claude 5 model adds the concise-responses section.",
+        "name": "brevity-prompting",
+        "description": "A Claude 5.0 or 5.1 model adds the concise-responses section.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": true,
+          "needs_brevity_prompting": true,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": true,
@@ -99,14 +99,14 @@
           "has_definitions": false,
           "has_complete_definitions": false
         },
-        "expected": "prompt-render/claude-5-concise.md"
+        "expected": "prompt-render/brevity-prompting.md"
       },
       {
         "name": "definitions-incomplete",
         "description": "A definition index that does not yet hold every definition.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": false,
@@ -137,7 +137,7 @@
         "description": "No definition index yet, so the section appears with its overflow note. Instructions containing brace syntax must survive verbatim.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": false,

@@ -400,7 +400,7 @@ def test_the_model_decides_which_reminder_the_prompt_expects(source: Any) -> Non
     five = prompt(Commons(scripted_chat(model="claude-opus-5"), source))
     later = prompt(Commons(scripted_chat(model="claude-opus-5-5"), source))
 
-    # is_claude_5_model() drives one prompt section, so the two differ.
+    # needs_brevity_prompting() drives one prompt section, so the two differ.
     assert five != later
 
 

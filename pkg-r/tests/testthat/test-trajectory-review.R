@@ -141,7 +141,7 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
       ellmer::AssistantTurn("Welcome!"),
       ellmer::UserTurn(list(
         ellmer::ContentText("How many orders?"),
-        ellmer::ContentText(claude_5_turn_reminder)
+        ellmer::ContentText(brevity_turn_reminder)
       ))
     ),
     test_tool_turns("run_sql"),

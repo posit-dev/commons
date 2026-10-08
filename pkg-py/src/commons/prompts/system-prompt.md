@@ -103,7 +103,7 @@ Do not announce tool calls; before your final response to the user, you should o
 - Refrain from excessive text formatting. If the answer is shorter than a few sentences, it should not contain bolding or italicization.
 - Your response is rendered as GitHub Flavored Markdown, without a math extension. Backslash-escape Markdown punctuation that should appear literally, or enclose literal syntax in code spans or fenced code blocks.
 
-{% if is_claude_5 %}
+{% if needs_brevity_prompting %}
 ## Concise responses
 
 The user has opted in to concise responses. **Be brief.**
