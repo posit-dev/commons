@@ -90,12 +90,16 @@
     text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
   // The document is model-written HTML, so it lives in a sandboxed frame with
-  // an opaque origin. The frame patches the pieces it is sent rather than
-  // reloading, so streaming text and finished cells don't flicker.
+  // an opaque origin, and its policy lets only the frame's own script run and
+  // nothing but the stylesheet load from the network. The frame patches the
+  // pieces it is sent rather than reloading, so streaming text and finished
+  // cells don't flicker.
+  const nonce = crypto.randomUUID();
   const frameSource = `<!doctype html>
 <html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${assetRoot.origin} 'unsafe-inline'; img-src data:">
 <link rel="stylesheet" href="${new URL("commons-document.css", assetRoot)}">
-</head><body><main id="doc"></main><script>
+</head><body><main id="doc"></main><script nonce="${nonce}">
 const doc = document.getElementById("doc");
 window.addEventListener("message", (event) => {
   if (event.source !== window.parent) return;

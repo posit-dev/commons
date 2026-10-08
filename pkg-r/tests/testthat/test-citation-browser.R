@@ -418,6 +418,7 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
     timeout = 60 * 1000
   )
   expect_true(app$get_js(paste0("!!", frame)))
+  app$wait_for_js("document.querySelector('commons-artifact-view').ready")
   expect_true(app$get_js(
     "window.commonsPieces.some((html) => html.includes('commons-code'))"
   ))

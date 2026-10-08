@@ -342,9 +342,10 @@ Commons <- R6::R6Class(
       }
       restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
+      n_turns <- length(self$get_turns())
       result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
       private$consume_restore_reminder(restore_reminder_pending)
-      save_turn_artifacts(private$artifacts, self$last_turn())
+      save_turn_artifacts(private$artifacts, self$get_turns()[-seq_len(n_turns)])
       if (result$visible) result$value else invisible(result$value)
     },
 

@@ -141,7 +141,7 @@ test_that("the saved document reads each trusted result from its file", {
 
   dir <- withr::local_tempdir()
   doc <- parse_artifact_document(paste0("---\ntitle: Big\n---\n\n", body))
-  write_artifact_dir(dir, doc, run$calls, artifact)
+  write_artifact_dir(dir, doc, run$calls, run$replacements, artifact)
 
   expect_setequal(
     list.files(dir, recursive = TRUE),
@@ -159,6 +159,21 @@ test_that("the saved document reads each trusted result from its file", {
   expect_identical(manifest$big.csv$call$metrics, "big_revenue")
   expect_match(manifest$big.csv$sql, "^SELECT")
   expect_match(manifest$big.csv$resolved, "^\\d{4}-\\d{2}-\\d{2}T")
+})
+
+test_that("a saved result reads back as the tool returned it", {
+  value <- data.frame(
+    month = as.Date(c("2024-01-01", "2024-02-01")),
+    code = c("007", "010"),
+    `net revenue` = c(1.5, 2),
+    check.names = FALSE
+  )
+  dir <- withr::local_tempdir()
+  dir.create(file.path(dir, "data"))
+  write_trusted_result(value, file.path(dir, "data", "x.csv"))
+  read <- trusted_call_read(list(file = "x.csv"), list(value = value))
+
+  expect_identical(withr::with_dir(dir, eval(str2lang(read))), value)
 })
 
 test_that("a cell whose trusted call can't resolve shows the error", {
@@ -359,6 +374,23 @@ test_that("errors stay in the document and are reported by cell", {
   )
 })
 
+test_that("cells after one that times out still run", {
+  skip_if_no_sandbox()
+  withr::local_options(commons.run_r_timeout = 1)
+  store <- orders_agent()$artifact_store()
+  committed <- artifact_commit(
+    store,
+    "slow",
+    "Slow",
+    "---\ntitle: Slow\n---\n\n```{r}\nSys.sleep(30)\n```\n\n```{r}\n1 + 41\n```\n"
+  )
+  result <- wait_for_promise(committed$rendered)
+
+  expect_length(result$errors, 1)
+  expect_match(result$errors, "^Cell 1: ")
+  expect_match(paste(result$html, collapse = ""), "[1] 42", fixed = TRUE)
+})
+
 test_that("a document's cells can't read the host's files", {
   skip_if_no_sandbox()
   store <- orders_agent()$artifact_store()
@@ -379,17 +411,21 @@ test_that("a document's cells can't read the host's files", {
   expect_no_match(paste(result$html, collapse = ""), "secret\"")
 })
 
-test_that("outside Shiny, a turn's documents are knitted and reported", {
+test_that("outside Shiny, a call's documents are knitted and reported", {
   skip_if_no_sandbox()
   agent <- orders_agent()
-  turn <- ellmer::AssistantTurn(list(ellmer::ContentText(paste0(
-    "Done.\n<commons-artifact id=\"orders\" title=\"Orders\">",
-    orders_document(),
-    "</commons-artifact>"
-  ))))
+  turns <- list(
+    ellmer::AssistantTurn(list(ellmer::ContentText(paste0(
+      "<commons-artifact id=\"orders\" title=\"Orders\">",
+      orders_document(),
+      "</commons-artifact>"
+    )))),
+    ellmer::UserTurn(list(ellmer::ContentText("A tool result."))),
+    ellmer::AssistantTurn(list(ellmer::ContentText("Done.")))
+  )
 
   expect_message(
-    save_turn_artifacts(agent$artifact_store(), turn),
+    save_turn_artifacts(agent$artifact_store(), turns),
     "report.html"
   )
   expect_match(

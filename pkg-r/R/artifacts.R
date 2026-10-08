@@ -118,6 +118,7 @@ artifact_ensure <- function(store, id) {
     artifact$results <- list()
     artifact$units <- list()
     artifact$calls <- list()
+    artifact$replacements <- character()
     artifact$html <- character()
     artifact$errors <- character()
     artifact$status <- "writing"
@@ -288,6 +289,7 @@ artifact_rerun <- function(store, artifact, doc) {
   if (identical(signature(units), signature(artifact$units))) {
     run$units <- artifact$units
     run$calls <- artifact$calls
+    run$replacements <- artifact$replacements
     run$queued <- length(units)
   }
   run
@@ -301,10 +303,17 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     if (!is.null(run)) {
       artifact$units <- run$units
       artifact$calls <- run$calls
+      artifact$replacements <- run$replacements
     }
   }
   dir <- artifact$versions[[version]]$dir
-  write_artifact_dir(dir, doc, run$calls %||% list(), artifact)
+  write_artifact_dir(
+    dir,
+    doc,
+    run$calls %||% list(),
+    run$replacements %||% character(),
+    artifact
+  )
   writeLines(
     artifact_document_html(artifact$title, result$html),
     file.path(dir, "report.html"),
@@ -619,11 +628,11 @@ resolve_artifact_input <- function(private, input) {
   )
 }
 
-write_artifact_dir <- function(dir, doc, calls, artifact) {
+write_artifact_dir <- function(dir, doc, calls, replacements, artifact) {
   dir.create(file.path(dir, "data"), recursive = TRUE, showWarnings = FALSE)
   writeLines(artifact_quarto_yml(), file.path(dir, "_quarto.yml"))
   writeLines(
-    artifact_qmd(doc$frontmatter, rewrite_artifact_body(doc$body, calls, artifact)),
+    artifact_qmd(doc$frontmatter, rewrite_trusted_text(doc$body, replacements)),
     file.path(dir, "report.qmd"),
     useBytes = TRUE
   )
@@ -664,23 +673,11 @@ artifact_quarto_yml <- function() {
 }
 
 # Outside a stream nothing projects the reply, so `$chat()` saves the
-# documents in its last turn after the fact and says where they were written.
-save_turn_artifacts <- function(store, turn) {
-  text <- if (!is.null(turn)) {
-    paste(
-      vapply(
-        Filter(function(x) S7::S7_inherits(x, ellmer::ContentText), turn@contents),
-        function(x) x@text,
-        character(1)
-      ),
-      collapse = ""
-    )
-  }
-  if (!nzchar(text %||% "")) {
-    return(invisible())
-  }
+# documents in the turns it added after the fact and says where they were
+# written.
+save_turn_artifacts <- function(store, turns) {
   committed <- list()
-  scanner <- citation_scanner(on_artifact = function(event) {
+  on_artifact <- function(event) {
     if (identical(event$type, "close")) {
       committed[[length(committed) + 1L]] <<- c(
         list(id = event$id),
@@ -688,9 +685,12 @@ save_turn_artifacts <- function(store, turn) {
       )
     }
     NULL
-  })
-  scanner$feed(text)
-  scanner$finish()
+  }
+  for (turn in Filter(function(x) S7::S7_inherits(x, ellmer::AssistantTurn), turns)) {
+    scanner <- citation_scanner(on_artifact = on_artifact)
+    scanner$feed(turn_text(turn))
+    scanner$finish()
+  }
 
   for (item in committed) {
     if (!is.null(item$error)) {
@@ -717,6 +717,11 @@ save_turn_artifacts <- function(store, turn) {
     }
   }
   invisible()
+}
+
+turn_text <- function(turn) {
+  texts <- Filter(function(x) S7::S7_inherits(x, ellmer::ContentText), turn@contents)
+  paste(vapply(texts, function(x) x@text, character(1)), collapse = "")
 }
 
 wait_for_promise <- function(promise) {

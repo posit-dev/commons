@@ -33,6 +33,7 @@ new_artifact_run <- function(store, artifact) {
   run$front_error <- NULL
   run$units <- list()
   run$calls <- list()
+  run$replacements <- character()
   run$queued <- 0L
   run$sent <- character()
   run$cache <- new.env(parent = emptyenv())
@@ -131,7 +132,14 @@ artifact_run_queue <- function(run, i) {
     if (run$cancelled || !identical(run$units[[i]]$status, "pending")) {
       return(NULL)
     }
-    promises::then(artifact_run_unit(run, run$units[[i]]), function(result) {
+    ran <- promises::then(promises::promise_resolve(NULL), function(...) {
+      artifact_run_unit(run, run$units[[i]])
+    })
+    ran <- promises::catch(ran, function(err) {
+      artifact_run_close(run)
+      artifact_unit_failure(conditionMessage(err))
+    })
+    promises::then(ran, function(result) {
       run$units[[i]] <- c(
         run$units[[i]][c("kind", "text", "engine", "label", "ordinal")],
         result
@@ -179,6 +187,8 @@ artifact_run_unit <- function(run, unit) {
     worker_await(worker, getOption("commons.run_r_timeout", 60)),
     function(res) {
       if (!is.null(res$failure)) {
+        # The worker is gone, so later units start a fresh one.
+        artifact_run_close(run)
         return(artifact_unit_failure(res$failure))
       }
       error <- if (length(res$errors)) res$errors[[1]]
@@ -199,7 +209,8 @@ artifact_run_unit <- function(run, unit) {
 }
 
 # Resolves the unit's trusted calls and returns its text with each replaced by
-# a read of the file its result was written to.
+# a read of the file its result was written to. The run keeps every
+# replacement, so the saved document reads the same files.
 artifact_run_prepare <- function(run, unit) {
   replacements <- character()
   for (found in find_trusted_calls(unit_code(unit))) {
@@ -212,6 +223,7 @@ artifact_run_prepare <- function(run, unit) {
       write_trusted_result(result$value, path)
     }
     replacements[[found$text]] <- trusted_call_read(entry, result)
+    run$replacements[[found$text]] <- replacements[[found$text]]
   }
   rewrite_trusted_text(unit$text, replacements)
 }
@@ -540,14 +552,17 @@ artifact_error_inline <- function(message) {
   )
 }
 
-# A standalone page for `$chat()`, which has no drawer to show the pieces in.
+# A standalone page for `$chat()`, which has no drawer to show the pieces in,
+# under the same policy as the drawer's frame.
 artifact_document_html <- function(title, pieces) {
   css <- read_utf8(system.file(
     "www", "commons-chat", "commons-document.css",
     package = "commons"
   ))
   paste0(
-    "<!doctype html>\n<html><head><meta charset=\"utf-8\"><title>",
+    "<!doctype html>\n<html><head><meta charset=\"utf-8\">",
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src ",
+    "'none'; style-src 'unsafe-inline'; img-src data:\"><title>",
     html_escape(title),
     "</title><style>\n", css, "\n</style></head><body><main>\n",
     paste(pieces, collapse = "\n"),

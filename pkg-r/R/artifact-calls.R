@@ -260,10 +260,42 @@ resolve_trusted_call <- function(store, artifact, found) {
 
 trusted_call_read <- function(entry, result) {
   sprintf(
-    "read.csv(\"data/%s\")%s",
+    "read.csv(\"data/%s\"%s)%s",
     entry$file,
+    csv_read_options(result$value),
     if (isTRUE(result$scalar)) "$value" else ""
   )
+}
+
+# read.csv() guesses each column's type from its text, so the read spells out
+# whatever it would get wrong: dates, text that looks like numbers, and names
+# that aren't syntactic.
+csv_read_options <- function(value) {
+  classes <- vapply(value, csv_column_class, character(1))
+  classes <- classes[!is.na(classes)]
+  paste(
+    c(
+      if (!identical(make.names(names(value), unique = TRUE), names(value))) {
+        ", check.names = FALSE"
+      },
+      if (length(classes)) paste0(", colClasses = ", deparse1(classes))
+    ),
+    collapse = ""
+  )
+}
+
+csv_column_class <- function(x) {
+  if (inherits(x, "Date")) {
+    return("Date")
+  }
+  if (inherits(x, "POSIXct")) {
+    return("POSIXct")
+  }
+  text <- is.character(x) || is.factor(x)
+  if (text && !is.character(utils::type.convert(as.character(x), as.is = TRUE))) {
+    return("character")
+  }
+  NA_character_
 }
 
 # Calls are replaced by their text, so every occurrence of an identical call
@@ -281,20 +313,6 @@ unit_code <- function(unit) {
   }
   lines <- strsplit(unit$text, "\n", fixed = TRUE)[[1]]
   paste(lines[-c(1, length(lines))], collapse = "\n")
-}
-
-rewrite_artifact_body <- function(body, calls, artifact) {
-  replacements <- character()
-  for (unit in artifact_units(segment_artifact_body(body))) {
-    found <- tryCatch(find_trusted_calls(unit_code(unit)), error = function(err) list())
-    for (x in found) {
-      key <- trusted_call_key(x)
-      if (!is.null(calls[[key]])) {
-        replacements[[x$text]] <- trusted_call_read(calls[[key]], artifact$results[[key]])
-      }
-    }
-  }
-  rewrite_trusted_text(body, replacements)
 }
 
 write_trusted_result <- function(value, path) {
