@@ -73,6 +73,8 @@
   };
 
   const register = () => {
+    // A shared copy is a static page with no Shiny.
+    if (!window.Shiny?.addCustomMessageHandler) return;
     window.Shiny.addCustomMessageHandler("commons-artifact", (msg) => {
       apply(msg);
       for (const el of connected) {
@@ -207,6 +209,12 @@ parent.postMessage("ready", "*");
       const root = this.attachShadow({ mode: "open" });
       root.innerHTML = `<style>${chipStyle}</style><button type="button" part="button">${documentIcon}<slot></slot></button>`;
       root.querySelector("button").addEventListener("click", () => {
+        const shared = document.getElementById("commons-shared-documents");
+        if (shared) {
+          const path = JSON.parse(shared.textContent)[this.getAttribute("artifact")];
+          if (path) window.open(path, "_blank", "noopener");
+          return;
+        }
         const input = this.getAttribute("input");
         if (!input || !window.Shiny?.setInputValue) return;
         window.Shiny.setInputValue(
