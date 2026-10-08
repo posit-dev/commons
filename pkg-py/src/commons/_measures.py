@@ -858,14 +858,10 @@ _LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
 
 
 def _exec_ready(source: str) -> str:
-    """``source`` as a definition that stands alone: dedented, decorators dropped.
+    """Return ``source`` dedented with decorators dropped, ready for ``exec``.
 
-    The worker execs the harvested text in a session where the ``measure``
-    decorator, and whatever a helper was decorated with, do not exist. The
-    indent is removed from code lines only: a line that begins inside a
-    multi-line string keeps its text, so a flush-left SQL string in a nested
-    function neither blocks the dedent nor changes value. Raises
-    ``SyntaxError`` for source that does not parse as a definition.
+    Lines inside multi-line strings keep their text. Raises ``SyntaxError``
+    if the source does not parse.
     """
     lines = _LINE.findall(source)
     if not lines:

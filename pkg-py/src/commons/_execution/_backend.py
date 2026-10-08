@@ -135,9 +135,8 @@ class LocalBackend:
     argument: the only way to accept weaker protection is the environment
     opt-in that ``protection_mode()`` consults.
 
-    The lifecycle is POSIX-shaped. On Windows ``terminate()`` and ``kill()``
-    are both ``TerminateProcess``, so the grace window does not exist, and
-    ``protection_mode()`` refuses the host anyway.
+    The lifecycle assumes POSIX signals; ``protection_mode()`` refuses
+    Windows hosts.
     """
 
     def __init__(

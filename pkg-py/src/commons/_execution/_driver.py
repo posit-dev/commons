@@ -5,9 +5,8 @@ A ``Worker`` owns one persistent Python session, started through an
 is closed, and the next call starts a fresh one. Calls are serialized
 through an ``asyncio.Lock``, because the single session can only run one
 piece of code at a time. A call that outruns its time limit is interrupted
-first and restarted only if the interrupt goes unanswered, because the two
-outcomes mean different things: an interrupted session keeps its variables,
-a restarted one has lost them.
+first and restarted only if the interrupt goes unanswered. An interrupted
+session keeps its variables; a restarted one will lose them.
 
 The R package runs the same lifecycle in pkg-r/R/run-r.R
 (``worker_ensure()``, ``run_r_tool()``, ``worker_await()``, and
@@ -32,14 +31,11 @@ __all__ = ["Failure", "Worker"]
 CALL_TIMEOUT = 60.0
 IDLE_TIMEOUT = 600.0
 
-# How long an interrupted worker gets to answer before it is restarted. The
-# interrupt raises KeyboardInterrupt in the worker's call, so a responsive
-# one answers almost immediately.
+# How long an interrupted worker gets to answer before it is restarted.
 INTERRUPT_GRACE = 5.0
 
-# Startup is interpreter boot plus the sandbox engage, neither of which
-# should take seconds; the bound exists so a wedged start fails the call
-# rather than hanging it.
+# Startup is interpreter boot plus the sandbox engage; a start that
+# never finishes should fail the call rather than hang.
 SPAWN_TIMEOUT = 30.0
 
 
