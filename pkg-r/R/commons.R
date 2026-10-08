@@ -382,10 +382,15 @@ Commons <- R6::R6Class(
         if (tracing) {
           span <- local_conversation_turn_span()
         }
-        scanner <- citation_scanner(
-          corpus,
-          on_artifact = artifact_scan_handler(artifacts)
-        )
+        on_artifact <- artifact_scan_handler(artifacts)
+        links <- character()
+        scanner <- citation_scanner(corpus, on_artifact = function(event) {
+          out <- on_artifact(event)
+          if (identical(event$type, "close")) {
+            links[[length(links) + 1L]] <<- out %||% ""
+          }
+          out
+        })
 
         for (chunk in coro::await_each(raw_stream)) {
           if (is.character(chunk)) {
@@ -444,6 +449,9 @@ Commons <- R6::R6Class(
         if (nzchar(aside)) {
           yield(if (as_content) ellmer::ContentText(aside) else aside)
         }
+        super$set_turns(
+          with_display_text(turns, from_index, corpus, links, aside)
+        )
         coro::exhausted()
       })()
     },

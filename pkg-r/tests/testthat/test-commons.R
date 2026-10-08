@@ -705,6 +705,32 @@ test_that("stream_async projects citations without touching stored turns", {
   expect_identical(stored_text, raw)
 })
 
+test_that("saved history displays an answer as it streamed", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Canopy cover is always acre-weighted for reporting.", path)
+  agent <- test_agent(context_layer = context_layer(files = path))
+  raw <- paste0(
+    "Answer sentence.\n\n",
+    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "> Canopy cover is always acre-weighted for reporting.\n\n",
+    "</commons-citation>\n\nEnd."
+  )
+
+  chunks <- stream_citations_fixture(agent, raw, split_at = 30)
+
+  # shinychat's file store records turns and replays them on restore.
+  turns <- lapply(lapply(agent$get_turns(), ellmer::contents_record), ellmer::contents_replay)
+  restored <- test_agent(context_layer = context_layer(files = path))
+  restored$set_turns(turns)
+  messages <- shinychat::contents_shinychat(restored)
+  # The stream ends with a newline that the turn doesn't store.
+  expect_identical(
+    messages[[length(messages)]]$content,
+    trimws(paste(unlist(chunks), collapse = ""), "right")
+  )
+  expect_identical(turns[[length(turns)]]@contents[[1]]@text, raw)
+})
+
 test_that("stream_async preserves structured provider content", {
   skip_if_ellmer_streaming_hooks_unavailable()
   structured <- ellmer::ContentThinking("provider citation metadata")

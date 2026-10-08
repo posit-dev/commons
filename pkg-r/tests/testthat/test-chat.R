@@ -68,6 +68,47 @@ test_that("commons_server queues a restore reminder when history is restored", {
   )
 })
 
+test_that("a conversation's documents are saved and restored with it", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  shiny::testServer(
+    function(input, output, session) {
+      agent <- test_agent()
+      commons_server("chat", client = agent)
+    },
+    {
+      store <- agent$artifact_store()
+      artifact <- artifact_ensure(store, "orders")
+      artifact$title <- "Orders"
+      artifact$versions <- list(list(source = "v1"), list(source = "v2"))
+      artifact$html <- c("<p>One</p>", "<p>Two</p>")
+      artifact$status <- "ready"
+
+      controller <- shinychat:::get_session_chat_bookmark_info(
+        session,
+        "chat.history-controller"
+      )
+      values <- controller$.__enclos_env__$private$capture_app_state()
+      # shinychat's file store writes values as JSON and reads them back.
+      values <- jsonlite::fromJSON(
+        shinychat:::history_json(values),
+        simplifyVector = FALSE
+      )
+      agent$set_turns(list())
+      expect_null(artifact_get(store, "orders"))
+
+      controller$restore_app_state(values)
+
+      restored <- artifact_get(store, "orders")
+      expect_identical(restored$title, "Orders")
+      expect_identical(restored$html, c("<p>One</p>", "<p>Two</p>"))
+      expect_identical(restored$versions[[2]]$source, "v2")
+      expect_identical(restored$status, "ready")
+    }
+  )
+})
+
 test_that("commons_theme() bundles the commons chat assets", {
   theme <- commons_theme()
 

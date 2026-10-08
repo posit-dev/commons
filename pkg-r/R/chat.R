@@ -125,8 +125,13 @@ commons_server <- function(id, client, ...) {
   # shinychat owns the conversation identity (it sets the client's
   # `conversation_id` binding, which ellmer stamps on its spans); commons
   # only needs to know that a restore happened.
+  chat$history$on_save(function(values) {
+    values$commons_documents <- artifact_store_snapshot(client$artifact_store())
+    values
+  })
   chat$history$on_restore(function(values) {
     client$queue_restore_reminder()
+    artifact_store_restore(client$artifact_store(), values$commons_documents)
   })
   chat
 }

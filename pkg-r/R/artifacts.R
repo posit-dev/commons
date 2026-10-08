@@ -72,6 +72,38 @@ artifact_store_reset <- function(store) {
   invisible(store)
 }
 
+# A conversation's documents, saved with it in shinychat's history so they open
+# again after a restore. Rendered output is kept rather than rerun, and only
+# the latest version's: older version chips open the latest one, as they do
+# live.
+artifact_store_snapshot <- function(store) {
+  ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
+  lapply(ids, function(id) {
+    artifact <- store$artifacts[[id]]
+    list(
+      id = id,
+      title = artifact$title,
+      sources = lapply(artifact$versions, `[[`, "source"),
+      html = as.list(artifact$html),
+      errors = as.list(artifact$errors)
+    )
+  })
+}
+
+artifact_store_restore <- function(store, documents) {
+  for (document in documents) {
+    artifact <- artifact_ensure(store, document$id)
+    artifact$title <- document$title
+    artifact$versions <- lapply(document$sources, function(source) {
+      list(source = source, dir = NULL)
+    })
+    artifact$html <- as.character(unlist(document$html))
+    artifact$errors <- as.character(unlist(document$errors))
+    artifact$status <- "ready"
+  }
+  invisible(store)
+}
+
 artifact_notify <- function(store, event) {
   if (!is.null(store$listener)) {
     tryCatch(
