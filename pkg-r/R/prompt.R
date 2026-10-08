@@ -28,7 +28,7 @@ system_prompt_data <- function(
   c(
     list(
       date = as.character(Sys.Date()),
-      is_claude_5 = is_claude_5_model(model),
+      needs_brevity_prompting = needs_brevity_prompting(model),
       has_multiple_sources = length(sources) > 1,
       has_catalog_search = any(vapply(sources, catalog_searchable, logical(1))),
       has_dictionary_context = nzchar(dictionary_context) ||
@@ -54,12 +54,14 @@ system_prompt_data <- function(
   )
 }
 
-is_claude_5_model <- function(model) {
+# Claude 5.0 and 5.1 are verbose without extra prompting; Claude 5.5 and later
+# are not, so this matches those two versions alone.
+needs_brevity_prompting <- function(model) {
   if (!rlang::is_string(model)) {
     return(FALSE)
   }
   grepl(
-    "(^|[./:_-])claude-[^-]+-5($|[./:@_-])",
+    "(^|[./:_-])claude-[^-]+-5(?:[.-][01])?(?![.-][0-9])($|[./:@_-])",
     tolower(model),
     perl = TRUE
   )

@@ -398,10 +398,10 @@ def test_the_prompt_describes_the_tools_the_agent_actually_has(
 
 def test_the_model_decides_which_reminder_the_prompt_expects(source: Any) -> None:
     five = prompt(Commons(scripted_chat(model="claude-opus-5"), source))
-    four = prompt(Commons(scripted_chat(model="claude-sonnet-4-5"), source))
+    later = prompt(Commons(scripted_chat(model="claude-opus-5-5"), source))
 
-    # is_claude_5_model() drives one prompt section, so the two differ.
-    assert five != four
+    # needs_brevity_prompting() drives one prompt section, so the two differ.
+    assert five != later
 
 
 def test_the_context_layer_gains_the_sources_prose(
