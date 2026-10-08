@@ -344,7 +344,7 @@ def test_an_agent_registers_the_tools_its_composition_earns(
         "search_context",
         "describe_table",
         "run_sql",
-        "describe_trust_system",
+        "load_skill",
     ]
 
 

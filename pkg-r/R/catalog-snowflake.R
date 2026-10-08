@@ -499,7 +499,6 @@ snowflake_read_semantic_model <- function(
   con,
   call = rlang::caller_env()
 ) {
-  rlang::check_installed("yaml", call = call)
   label <- as.character(DBI::dbQuoteIdentifier(con, view$id))
   sql <- paste0(
     "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(",

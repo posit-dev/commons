@@ -117,7 +117,6 @@ test_that("build_citation_corpus matches the shared fixture", {
 
 
 test_that("dataset-level dictionary prose is citable", {
-  skip_if_not_installed("yaml")
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
     c(
