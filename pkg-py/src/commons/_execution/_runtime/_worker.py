@@ -175,7 +175,8 @@ def _on_interrupt(signum: int, frame: object) -> None:
 
 
 # Seeded into the session namespace at startup. Harvested measure sources
-# are reference material: they come without their module's imports and
+# are reference material, which the model reads back with
+# inspect.getsource(). They come without their module's imports and
 # globals, and a default argument naming one (``def m(region=DEFAULT)``)
 # would otherwise fail the define, where R's lazy defaults define fine.
 # Each default expression is therefore evaluated behind a guard, and one
@@ -184,6 +185,8 @@ def _on_interrupt(signum: int, frame: object) -> None:
 # value computed from it.
 _DEFINE_SOURCE = '''
 import ast as _ast
+import itertools as _itertools
+import linecache as _linecache
 
 
 class _CommonsMissing:
@@ -221,7 +224,7 @@ def _commons_default(thunk, what):
         return _CommonsMissing(what)
 
 
-def _commons_define_source(source):
+def _commons_define_source(source, _files=_itertools.count(1)):
     import __future__
 
     def guard(default):
@@ -266,9 +269,14 @@ def _commons_define_source(source):
             guard(d) if d is not None else None for d in node.args.kw_defaults
         ]
     _ast.fix_missing_locations(tree)
+    # Lets inspect.getsource() read it back; a None mtime is never evicted.
+    filename = f"<measure-source-{next(_files)}>"
+    _linecache.cache[filename] = (
+        len(source), None, source.splitlines(keepends=True), filename
+    )
     code = compile(
         tree,
-        "<measure-source>",
+        filename,
         "exec",
         flags=__future__.annotations.compiler_flag,
         dont_inherit=True,

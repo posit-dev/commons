@@ -511,6 +511,16 @@ async def test_harvested_measure_sources_define_their_names():
         assert reply.value == "total_x"
 
 
+async def test_the_model_can_read_each_measure_source_back():
+    # The sources are reference material, so each must be readable by name.
+    layer = semantic_layer([total_x, region_count])
+    async with make_worker(measure_sources=list(layer.source_text.values())) as worker:
+        for name, source in layer.source_text.items():
+            reply = await worker.run(f"import inspect; inspect.getsource({name})")
+            assert isinstance(reply, Result), reply
+            assert reply.value == source
+
+
 async def test_a_measure_default_naming_an_unharvested_global_still_defines():
     # DEFAULT_REGION is a module global rather than a function, so the
     # harvest never includes it; the define must not fail on it.
