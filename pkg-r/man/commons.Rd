@@ -149,10 +149,12 @@ drawer as it's written, with each R cell knitted as soon as it arrives;
 outside Shiny, \code{agent$chat()} knits it and reports where it wrote the
 result.
 
-A document gets its data by declaring trusted calculations as inputs, which
-commons runs before rendering and saves as CSV files beside the document,
-so the saved directory is ordinary Quarto source with no credentials and no
-commons dependency.
+A document gets its data by calling trusted calculations in its code.
+commons runs each call before the cell does, saves the result as a CSV file
+beside the document, and replaces the call with a read of that file, so the
+saved directory is ordinary Quarto source with no credentials and no
+commons dependency. A manifest beside the data records the call behind each
+file and, for metrics and calculations, the SQL it ran.
 
 The document's code runs in a fresh sandboxed R session, with the same
 restrictions as \code{run_r}. Quarto isn't needed to show documents, only to
