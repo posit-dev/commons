@@ -4,6 +4,8 @@
 
 ## commons 0.1.1
 
+CRAN release: 2026-10-07
+
 - Fixes an issue with the R code sandbox where the generated policy
   would be too long when there were thousands of R packages installed.
 

@@ -173,8 +173,8 @@ commons agent receives some combination of these tools:
 
 - `search_context` retrieves relevant business context.
 
-- `describe_trust_system` explains how commons determines and displays
-  answer trust.
+- `load_skill` loads instructions for a task, such as explaining how
+  commons determines and displays answer trust.
 
 - `describe_table` inspects a table or semantic model.
 
