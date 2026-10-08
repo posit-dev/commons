@@ -38,6 +38,7 @@ new_artifact_run <- function(store, artifact) {
   run$sent <- character()
   run$cache <- new.env(parent = emptyenv())
   run$cancelled <- FALSE
+  assign(run$dir, run, envir = store$runs)
   run
 }
 
@@ -115,6 +116,14 @@ artifact_run_finish <- function(run, source) {
 artifact_run_cancel <- function(run) {
   run$cancelled <- TRUE
   artifact_run_close(run)
+  artifact_run_unregister(run)
+  invisible(run)
+}
+
+artifact_run_unregister <- function(run) {
+  if (exists(run$dir, envir = run$store$runs, inherits = FALSE)) {
+    rm(list = run$dir, envir = run$store$runs)
+  }
   invisible(run)
 }
 
@@ -202,7 +211,7 @@ artifact_run_unit <- function(run, unit) {
       list(
         status = if (is.null(error)) "done" else "error",
         error = error,
-        html = markdown_fragment_html(embed_figures(res$output, res$figures))
+        html = markdown_fragment_html(res$output)
       )
     }
   )
@@ -265,6 +274,9 @@ artifact_run_errors <- function(run) {
 }
 
 artifact_run_status <- function(run, status, error = NULL) {
+  if (run$cancelled) {
+    return(invisible(NULL))
+  }
   artifact_notify(run$store, list(
     type = "status",
     id = run$artifact$id,
@@ -509,19 +521,6 @@ div_open_html <- function(line) {
 
 markdown_fragment_html <- function(markdown) {
   commonmark::markdown_html(markdown, extensions = TRUE, footnotes = TRUE)
-}
-
-# Only figures the worker reports writing are embedded; a path the model typed
-# stays a plain link the sandboxed view can't load.
-embed_figures <- function(markdown, figures) {
-  for (path in figures) {
-    uri <- paste0(
-      "data:image/png;base64,",
-      gsub("\n", "", jsonlite::base64_enc(readBin(path, "raw", file.size(path))))
-    )
-    markdown <- gsub(path, uri, markdown, fixed = TRUE)
-  }
-  markdown
 }
 
 artifact_header_html <- function(frontmatter) {

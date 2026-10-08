@@ -51,6 +51,8 @@ new_artifact_store <- function(
   store <- new.env(parent = emptyenv())
   store$artifacts <- new.env(parent = emptyenv())
   store$streams <- new.env(parent = emptyenv())
+  # A closed stream or an edit can still be rendering when the chat is cleared.
+  store$runs <- new.env(parent = emptyenv())
   store$root <- tempfile("commons-artifacts-")
   store$resolve_input <- resolve_input
   store$network <- network
@@ -62,8 +64,8 @@ new_artifact_store <- function(
 }
 
 artifact_store_reset <- function(store) {
-  for (id in ls(store$streams)) {
-    artifact_run_cancel(store$streams[[id]])
+  for (key in ls(store$runs)) {
+    artifact_run_cancel(store$runs[[key]])
   }
   store$artifacts <- new.env(parent = emptyenv())
   store$streams <- new.env(parent = emptyenv())
@@ -168,6 +170,9 @@ artifact_scan_handler <- function(store) {
           return("")
         }
         promises::then(committed$rendered, function(result) {
+          if (run$cancelled || !identical(store$artifacts[[event$id]], run$artifact)) {
+            return(NULL)
+          }
           if (length(result$errors)) {
             artifact_remind(store, artifact_errors_reminder(
               event$id,
@@ -297,6 +302,13 @@ artifact_rerun <- function(store, artifact, doc) {
 }
 
 artifact_settle <- function(store, artifact, version, doc, run, result) {
+  if (!is.null(run)) {
+    artifact_run_unregister(run)
+  }
+  if (!identical(store$artifacts[[artifact$id]], artifact) ||
+      (!is.null(run) && run$cancelled)) {
+    return(result)
+  }
   if (version == length(artifact$versions)) {
     artifact$html <- result$html
     artifact$errors <- result$errors
@@ -375,6 +387,12 @@ artifact_edit <- function(
 }
 
 artifact_edit_result <- function(store, artifact, version, result) {
+  if (!identical(store$artifacts[[artifact$id]], artifact)) {
+    return(tool_result(
+      "The conversation was cleared before the edit finished.",
+      title = "Cancelled edit"
+    ))
+  }
   value <- sprintf("Saved version %d of `%s`.", version, artifact$id)
   if (length(result$errors)) {
     value <- paste0(

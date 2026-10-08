@@ -411,6 +411,145 @@ test_that("a document's cells can't read the host's files", {
   expect_no_match(paste(result$html, collapse = ""), "secret\"")
 })
 
+test_that("embedding a figure respects the document's sandbox", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  secret <- withr::local_tempfile(tmpdir = path.expand("~"))
+  writeLines("figure-sandbox-probe", secret)
+  source <- paste0(
+    "---\ntitle: Probe\n---\n\n",
+    "```{r, echo=FALSE, results='asis'}\n",
+    "path <- file.path(as.environment('commons:knit')$figs, 'probe.png')\n",
+    "file.symlink(", deparse(secret), ", path)\n",
+    "cat(paste0('![](', path, ')'))\n",
+    "```\n"
+  )
+
+  result <- wait_for_promise(
+    artifact_commit(store, "probe", "Probe", source)$rendered
+  )
+
+  expect_length(result$errors, 1)
+  encoded <- jsonlite::base64_enc(charToRaw("figure-sandbox-probe\n"))
+  expect_match(
+    paste(result$html, collapse = ""), "class=\"commons-cell-error\"", fixed = TRUE
+  )
+  expect_false(grepl(encoded, paste(result$html, collapse = ""), fixed = TRUE))
+  report <- read_utf8(file.path(
+    artifact_latest_dir(artifact_get(store, "probe")), "report.html"
+  ))
+  expect_false(grepl(encoded, report, fixed = TRUE))
+})
+
+test_that("the first chat saves its documents and later chats save only new turns", {
+  skip_if_no_sandbox()
+  agent <- orders_agent()
+  source <- paste0(
+    "<artifact id=\"orders\" title=\"Orders\">",
+    orders_document(),
+    "</artifact>"
+  )
+  # Supply a response while exercising ellmer's parsing and chat.
+  local_mocked_bindings(
+    chat_perform = function(...) {
+      httr2::response(
+        status_code = 200,
+        headers = list("content-type" = "application/json"),
+        body = charToRaw(jsonlite::toJSON(list(
+          content = list(list(type = "text", text = source)),
+          stop_reason = "end_turn",
+          usage = list(input_tokens = 0, output_tokens = 0)
+        ), auto_unbox = TRUE))
+      )
+    },
+    .package = "ellmer"
+  )
+
+  expect_length(agent$get_turns(), 0)
+  for (version in 1:2) {
+    expect_message(agent$chat("Write a report.", echo = "none"), "report.html")
+    artifact <- artifact_get(agent$artifact_store(), "orders")
+    expect_length(artifact$versions, version)
+    expect_match(
+      paste(artifact$html, collapse = ""),
+      "There are 6 orders.",
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("clearing a closed stream cancels its render and its callbacks", {
+  skip_if_no_sandbox()
+  agent <- orders_agent()
+  store <- agent$artifact_store()
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+  scanner <- citation_scanner(on_artifact = artifact_scan_handler(store))
+  source <- "---\ntitle: Old\n---\n\n```{r}\nSys.sleep(2)\nstop('old render')\n```\n"
+  scanner$feed(paste0("<artifact id=\"doc\" title=\"Old\">\n", source))
+  run <- store$streams$doc
+  scanner$feed("</artifact>")
+  while (is.null(run$worker)) {
+    later::run_now(0.01)
+  }
+  worker <- run$worker$rs
+  expect_length(ls(store$streams), 0)
+
+  agent$set_turns(list())
+  expect_true(run$cancelled)
+  expect_false(worker$is_alive())
+  expect_length(ls(store$runs), 0)
+  events <- list()
+  scanner <- citation_scanner(on_artifact = artifact_scan_handler(store))
+  scanner$feed(paste0(
+    "<artifact id=\"doc\" title=\"New\">\n",
+    "---\ntitle: New\n---\n\nNew document.\n</artifact>"
+  ))
+  wait_until_ready(store, "doc")
+  wait_for_promise(run$tail)
+  # Drain the finish and reminder callbacks chained after the last unit.
+  later::run_now(0.1)
+
+  pieces <- Filter(function(event) identical(event$type, "pieces"), events)
+  html <- paste(vapply(
+    pieces[[length(pieces)]]$pieces, `[[`, character(1), "html"
+  ), collapse = "")
+  expect_match(html, "New document.", fixed = TRUE)
+  expect_identical(artifact_get(store, "doc")$title, "New")
+  expect_length(store$reminders, 0)
+  expect_length(ls(store$runs), 0)
+  expect_match(
+    read_utf8(file.path(
+      artifact_latest_dir(artifact_get(store, "doc")), "report.qmd"
+    )),
+    "title: New",
+    fixed = TRUE
+  )
+})
+
+test_that("clearing a conversation also cancels an edit's render", {
+  store <- new_artifact_store(resolve_input = function(input) NULL)
+  wait_for_promise(artifact_commit(
+    store, "doc", "Doc", "---\ntitle: Doc\n---\n\nOriginal.\n"
+  )$rendered)
+  edited <- artifact_edit(store, "doc", "Original.", "Revised.")
+  run <- store$runs[[ls(store$runs)[[1]]]]
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+
+  artifact_store_reset(store)
+  result <- wait_for_promise(edited)
+
+  expect_true(run$cancelled)
+  expect_length(ls(store$runs), 0)
+  expect_null(artifact_get(store, "doc"))
+  expect_identical(vapply(events, `[[`, character(1), "type"), "reset")
+  expect_false(dir.exists(file.path(store$root, "doc", "v2")))
+  expect_identical(
+    result@value, "The conversation was cleared before the edit finished."
+  )
+})
+
 test_that("outside Shiny, a call's documents are knitted and reported", {
   skip_if_no_sandbox()
   agent <- orders_agent()

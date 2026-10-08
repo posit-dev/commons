@@ -729,15 +729,29 @@ worker_knit_unit <- function(kind, text) {
 
   source <- if (kind == "inline") paste0("`r ", text, "`") else text
   output <- tryCatch(
-    knitr::knit(text = source, quiet = TRUE, envir = globalenv()),
+    {
+      output <- knitr::knit(text = source, quiet = TRUE, envir = globalenv())
+      worker_embed_figures(output, list.files(state$figs, full.names = TRUE))
+    },
     error = function(err) {
-      state$errors <- c(state$errors, conditionMessage(err))
-      ""
+      knitr::knit_hooks$get("error")(conditionMessage(err), list())
     }
   )
   list(
     output = output,
-    figures = list.files(state$figs, full.names = TRUE),
     errors = state$errors
   )
+}
+
+# Read figures inside the sandbox: a model-written path may be a symlink to
+# a file the worker can't read. Other paths stay links the view can't load.
+worker_embed_figures <- function(markdown, figures) {
+  for (path in figures) {
+    uri <- paste0(
+      "data:image/png;base64,",
+      gsub("\n", "", jsonlite::base64_enc(readBin(path, "raw", file.size(path))))
+    )
+    markdown <- gsub(path, uri, markdown, fixed = TRUE)
+  }
+  markdown
 }
