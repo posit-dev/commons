@@ -1,6 +1,8 @@
 ---
 name: trust-system
 description: How commons determines and displays answer trust. Load it when the user asks about green shields, blue quotation marks, yellow warning circles, trusted code, trusted context, or how answer trust is determined.
+metadata:
+  topic: answer trust
 ---
 
 Trusted calculations use code selected and maintained by the app authors. Trusted context is documentation supplied and vetted by the app authors.

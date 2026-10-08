@@ -6,7 +6,7 @@ tool_load_skill <- function() {
       if (is.null(skill)) {
         cli::cli_abort("There is no skill named {.val {name}}.")
       }
-      tool_result(skill$body, title = paste("Loaded the", name, "skill"))
+      tool_result(skill$body, title = paste("Read up on", skill$topic))
     },
     load_skill_description(skills),
     name = "load_skill",
@@ -14,7 +14,7 @@ tool_load_skill <- function() {
       name = ellmer::type_enum(names(skills), "The skill to load.")
     ),
     annotations = ellmer::tool_annotations(
-      title = "Loading a skill",
+      title = "Reading up",
       read_only_hint = TRUE
     )
   )
@@ -56,6 +56,7 @@ read_skill <- function(path) {
   list(
     name = meta$name,
     description = meta$description,
+    topic = meta$metadata$topic,
     body = trimws(paste(lines[-seq_len(end)], collapse = "\n"))
   )
 }

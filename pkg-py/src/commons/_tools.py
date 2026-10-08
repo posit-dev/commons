@@ -239,7 +239,7 @@ def _load_skill() -> Tool:
     def load_skill(name: str) -> ContentToolResult:
         if name not in skills:
             raise ValueError(f"There is no skill named {name!r}.")
-        return tool_result(skills[name].body, title=f"Loaded the {name} skill")
+        return tool_result(skills[name].body, title=f"Read up on {skills[name].topic}")
 
     return _tool(
         load_skill,
@@ -255,7 +255,7 @@ def _load_skill() -> Tool:
             },
             ["name"],
         ),
-        "Loading a skill",
+        "Reading up",
     )
 
 

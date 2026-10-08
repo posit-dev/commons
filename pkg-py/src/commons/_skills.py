@@ -18,6 +18,7 @@ from ._prompt import _PROMPTS
 class Skill:
     name: str
     description: str
+    topic: str
     body: str
 
 
@@ -36,4 +37,9 @@ def builtin_skills() -> dict[str, Skill]:
 def _read_skill(text: str) -> Skill:
     _, frontmatter, body = text.split("---\n", 2)
     meta = yaml.safe_load(frontmatter)
-    return Skill(name=meta["name"], description=meta["description"], body=body.strip())
+    return Skill(
+        name=meta["name"],
+        description=meta["description"],
+        topic=meta["metadata"]["topic"],
+        body=body.strip(),
+    )
