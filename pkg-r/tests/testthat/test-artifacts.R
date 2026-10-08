@@ -243,7 +243,7 @@ test_that("restoring or clearing a conversation drops its artifacts", {
 skip_if_no_sandbox <- function() {
   skip_on_cran()
   skip_if_not(
-    identical(run_r_protection_mode(), "sandbox"),
+    identical(run_r_protection_mode(allow_guardrails = TRUE), "sandbox"),
     "This host can't sandbox document code."
   )
 }
