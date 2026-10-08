@@ -605,7 +605,7 @@ stream_citations_fixture <- function(agent, raw, split_at) {
   sync_promise(coro::async_collect(agent$stream_async(!!!user_input)))
 }
 
-test_that("Claude 5 user turns contain one hidden reminder", {
+test_that("models needing brevity prompting add one hidden reminder", {
   withr::local_options(commons.allow_unsafe_fallback = TRUE)
   agent <- commons(
     ellmer::chat_anthropic(model = "claude-sonnet-5"),
