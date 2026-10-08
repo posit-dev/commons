@@ -10,7 +10,7 @@ test_that("commons() registers only the tools the agent's composition earns", {
       "describe_table",
       "run_sql",
       "run_r",
-      "describe_trust_system",
+      "load_skill",
       "edit_artifact"
     )
   )
@@ -28,7 +28,7 @@ test_that("commons() registers only the tools the agent's composition earns", {
       "describe_table",
       "run_sql",
       "run_r",
-      "describe_trust_system",
+      "load_skill",
       "edit_artifact"
     )
   )

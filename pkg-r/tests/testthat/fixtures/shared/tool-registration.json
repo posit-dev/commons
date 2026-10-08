@@ -90,7 +90,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -102,7 +102,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -113,7 +113,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -123,7 +123,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -135,7 +135,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -148,7 +148,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -159,7 +159,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       },
       {
@@ -170,7 +170,7 @@
           "search_context",
           "describe_table",
           "run_sql",
-          "describe_trust_system"
+          "load_skill"
         ]
       }
     ]
@@ -191,10 +191,10 @@
         "text": "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table. The sample summary covers the sampled rows only, so it cannot show which values the whole table holds. Before you report that a value is absent, query for it."
       },
       {
-        "name": "describe_trust_system",
+        "name": "load_skill",
         "shape": "bare",
-        "tool": "describe_trust_system",
-        "text": "Answer questions about the trust system. Call this tool when the user asks about green shields, blue quotation marks, yellow warning circles, trusted code, trusted context, or how answer trust is determined."
+        "tool": "load_skill",
+        "text": "Load a skill's instructions. When a request matches one of these skills, load it before you respond:\n\n- trust-system: How commons determines and displays answer trust. Load it when the user asks about green shields, blue quotation marks, yellow warning circles, trusted code, trusted context, or how answer trust is determined."
       },
       {
         "name": "run_sql with nothing to fall back from",

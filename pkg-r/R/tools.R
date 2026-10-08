@@ -35,30 +35,8 @@ build_commons_tools <- function(self, private) {
       tool_describe_table(private),
       tool_run_sql(private),
       tool_run_r(private),
-      tool_describe_trust_system(),
+      tool_load_skill(),
       tool_edit_artifact(private)
-    )
-  )
-}
-
-tool_describe_trust_system <- function() {
-  body <- read_prompt("trust-system.md")
-  ellmer::tool(
-    function() {
-      tool_result(
-        body,
-        title = "Explained answer trust"
-      )
-    },
-    paste(
-      "Answer questions about the trust system. Call this tool when the user",
-      "asks about green shields, blue quotation marks, yellow warning circles,",
-      "trusted code, trusted context, or how answer trust is determined."
-    ),
-    name = "describe_trust_system",
-    annotations = ellmer::tool_annotations(
-      title = "Explaining answer trust",
-      read_only_hint = TRUE
     )
   )
 }
