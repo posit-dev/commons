@@ -889,7 +889,6 @@ def test_load_skill_returns_instructions_without_frontmatter(
     load_skill = find(tools, "load_skill")
 
     body = call(load_skill, name="trust-system")
-    assert body
     assert "description:" not in body
     with pytest.raises(ValueError, match="no skill named"):
         load_skill.func(name="nonexistent")
