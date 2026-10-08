@@ -52,10 +52,10 @@ from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
-from ._prompt import read_prompt
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
+from ._skills import Skill, builtin_skills
 
 __all__ = [
     "FirstTouch",
@@ -161,7 +161,7 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
             _search_context(context),
             _describe_table(context),
             _run_sql(context),
-            _describe_trust_system(),
+            _load_skill(),
         ]
     )
     return tools
@@ -233,21 +233,43 @@ def tool_description(tool: Tool) -> str:
     return str(tool.schema["function"]["description"])
 
 
-def _describe_trust_system() -> Tool:
-    def describe_trust_system() -> ContentToolResult:
-        return tool_result(
-            read_prompt("trust-system.md"),
-            title="Explained answer trust",
-        )
+def _load_skill() -> Tool:
+    skills = builtin_skills()
+
+    def load_skill(name: str) -> ContentToolResult:
+        if name not in skills:
+            raise ValueError(f"There is no skill named {name!r}.")
+        return tool_result(skills[name].body, title=f"Loaded the {name} skill")
 
     return _tool(
-        describe_trust_system,
-        "describe_trust_system",
-        "Answer questions about the trust system. Call this tool when the user "
-        "asks about green shields, blue quotation marks, yellow warning circles, "
-        "trusted code, trusted context, or how answer trust is determined.",
-        _parameters({}, []),
-        "Explaining answer trust",
+        load_skill,
+        "load_skill",
+        _load_skill_description(skills),
+        _parameters(
+            {
+                "name": {
+                    "type": "string",
+                    "enum": list(skills),
+                    "description": "The skill to load.",
+                }
+            },
+            ["name"],
+        ),
+        "Loading a skill",
+    )
+
+
+def _load_skill_description(skills: Mapping[str, Skill]) -> str:
+    listing = [f"- {skill.name}: {skill.description}" for skill in skills.values()]
+    return "\n".join(
+        [
+            (
+                "Load a skill's instructions. When a request matches one of these "
+                "skills, load it before you respond:"
+            ),
+            "",
+            *listing,
+        ]
     )
 
 

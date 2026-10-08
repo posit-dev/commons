@@ -158,7 +158,7 @@ def test_a_bare_agent_registers_only_the_tools_every_source_earns(
         "search_context",
         "describe_table",
         "run_sql",
-        "describe_trust_system",
+        "load_skill",
     ]
 
 
@@ -880,3 +880,16 @@ def test_ensure_loaded_is_a_no_op_for_a_source_with_no_pins(
     plain.ensure_loaded()
 
     assert plain.query("SELECT count(*) AS n FROM sales") == [{"n": 3}]
+
+
+def test_load_skill_returns_instructions_without_frontmatter(
+    plain: DataSource,
+) -> None:
+    tools = build_commons_tools(ToolContext(sources={"sales_db": plain}))
+    load_skill = find(tools, "load_skill")
+
+    body = call(load_skill, name="trust-system")
+    assert body
+    assert "description:" not in body
+    with pytest.raises(ValueError, match="no skill named"):
+        load_skill.func(name="nonexistent")

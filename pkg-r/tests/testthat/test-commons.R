@@ -10,7 +10,7 @@ test_that("commons() registers only the tools the agent's composition earns", {
       "describe_table",
       "run_sql",
       "run_r",
-      "describe_trust_system"
+      "load_skill"
     )
   )
   expect_no_match(agent$get_system_prompt(), "search_pool")
@@ -27,7 +27,7 @@ test_that("commons() registers only the tools the agent's composition earns", {
       "describe_table",
       "run_sql",
       "run_r",
-      "describe_trust_system"
+      "load_skill"
     )
   )
 })
