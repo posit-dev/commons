@@ -58,6 +58,7 @@ new_artifact_store <- function(
   store$listener <- NULL
   store$link_input <- NULL
   store$reminders <- character()
+  store$shares <- list()
   store
 }
 
@@ -68,6 +69,7 @@ artifact_store_reset <- function(store) {
   store$artifacts <- new.env(parent = emptyenv())
   store$streams <- new.env(parent = emptyenv())
   store$reminders <- character()
+  store$shares <- list()
   artifact_notify(store, list(type = "reset"))
   invisible(store)
 }

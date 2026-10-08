@@ -369,3 +369,174 @@ connect_add_collaborator <- function(client, guid, principal_guid) {
     httr2::req_perform()
   invisible(NULL)
 }
+
+# --- sharing as the viewer ------------------------------------------------------
+
+# Sharing publishes with a Connect API key acting as the viewer, traded for
+# their session token through a "Visitor API Key" integration. A deployer turns
+# sharing on by associating one with this content; a `Viewer` max role can't
+# publish, so it doesn't count.
+connect_share_audience <- function() {
+  if (!exists("audience", envir = share_cache)) {
+    share_cache$audience <- tryCatch(
+      connect_visitor_integration(connect_client(), connect_content_guid()),
+      error = function(err) {
+        cli::cli_warn(
+          "Couldn't check this content's integrations, so sharing is off.",
+          parent = err
+        )
+        NULL
+      }
+    )
+  }
+  share_cache$audience
+}
+
+share_cache <- new.env(parent = emptyenv())
+
+connect_visitor_integration <- function(client, guid) {
+  if (!nzchar(guid)) {
+    return(NULL)
+  }
+  associations <- connect_req(
+    client, "content", guid, "oauth", "integrations", "associations"
+  ) |>
+    httr2::req_perform() |>
+    httr2::resp_body_json()
+  for (association in associations) {
+    if (
+      !identical(association$oauth_integration_template, "connect") ||
+        !identical(association$oauth_integration_auth_type, "Visitor API Key")
+    ) {
+      next
+    }
+    integration <- connect_req(
+      client, "oauth", "integrations", association$oauth_integration_guid
+    ) |>
+      httr2::req_perform() |>
+      httr2::resp_body_json()
+    if (!identical(integration$config$max_role, "Viewer")) {
+      return(association$oauth_integration_guid)
+    }
+  }
+  NULL
+}
+
+# Publishes a static bundle as the viewer, updating `guid` when the viewer
+# still owns it. `on_created` hears of new content before its first deploy, so
+# a retry after a failure updates it rather than making another.
+connect_share <- coro::async(function(
+  token,
+  audience,
+  archive,
+  title,
+  guid = NULL,
+  on_created = function(content) NULL
+) {
+  owner <- connect_client()
+  key <- await(connect_visitor_key(owner, token, audience))
+  visitor <- list(server = owner$server, api_key = key)
+
+  user <- await(connect_json(connect_req(visitor, "user")))
+  if (identical(user$user_role, "viewer")) {
+    share_abort("role")
+  }
+
+  content <- NULL
+  if (!is.null(guid)) {
+    content <- await(connect_owned_content(visitor, guid, user$guid))
+  }
+  if (is.null(content)) {
+    content <- await(connect_json(
+      connect_req(visitor, "content") |>
+        httr2::req_body_json(list(title = title))
+    ))
+    on_created(content)
+  }
+
+  bundle <- await(connect_json(
+    connect_req(visitor, "content", content$guid, "bundles") |>
+      httr2::req_body_file(archive, type = "application/gzip")
+  ))
+  deploy <- await(connect_json(
+    connect_req(visitor, "content", content$guid, "deploy") |>
+      httr2::req_body_json(list(bundle_id = bundle$id))
+  ))
+  await(connect_wait_task(visitor, deploy$task_id))
+  content
+})
+
+connect_visitor_key <- function(client, token, audience) {
+  req <- httr2::request(client$server) |>
+    httr2::req_url_path_append(
+      "__api__", "v1", "oauth", "integrations", "credentials"
+    ) |>
+    httr2::req_headers_redacted(Authorization = paste("Key", client$api_key)) |>
+    httr2::req_body_form(
+      grant_type = "urn:ietf:params:oauth:grant-type:token-exchange",
+      subject_token_type = "urn:posit:connect:user-session-token",
+      subject_token = token,
+      requested_token_type = "urn:posit:connect:api-key",
+      audience = audience
+    )
+  promises::then(
+    connect_json(req),
+    function(body) body$access_token,
+    function(err) {
+      # Connect reports an expired or foreign session token as error 215.
+      body <- tryCatch(httr2::resp_body_json(err$resp), error = function(e) NULL)
+      if (identical(body$error_code, 215L)) {
+        share_abort("session", parent = err)
+      }
+      stop(err)
+    }
+  )
+}
+
+connect_owned_content <- function(client, guid, user_guid) {
+  req <- connect_req(client, "content", guid) |>
+    httr2::req_error(is_error = function(resp) FALSE)
+  promises::then(httr2::req_perform_promise(req), function(resp) {
+    if (httr2::resp_status(resp) != 200) {
+      return(NULL)
+    }
+    content <- httr2::resp_body_json(resp)
+    if (identical(content$owner_guid, user_guid)) content else NULL
+  })
+}
+
+# A deploy's task can briefly 404 before it is registered.
+connect_wait_task <- coro::async(function(client, id, timeout = 300) {
+  deadline <- Sys.time() + timeout
+  repeat {
+    resp <- await(httr2::req_perform_promise(
+      connect_req(client, "tasks", id) |>
+        httr2::req_error(is_error = function(resp) FALSE)
+    ))
+    if (httr2::resp_status(resp) == 200) {
+      task <- httr2::resp_body_json(resp)
+      if (isTRUE(task$finished)) {
+        if (!identical(task$code, 0L)) {
+          share_abort("deploy")
+        }
+        return(task)
+      }
+    } else if (httr2::resp_status(resp) != 404) {
+      httr2::resp_check_status(resp)
+    }
+    if (Sys.time() > deadline) {
+      share_abort("timeout")
+    }
+    await(promise_sleep(1))
+  }
+})
+
+connect_json <- function(req) {
+  promises::then(httr2::req_perform_promise(req), httr2::resp_body_json)
+}
+
+promise_sleep <- function(seconds) {
+  promises::promise(function(resolve, reject) {
+    later::later(function() resolve(NULL), seconds)
+  })
+}

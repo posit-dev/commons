@@ -37,12 +37,15 @@ commons_app <- function(client, ...) {
       id = "chat",
       theme = commons_theme(),
       drawer = shinychat::chat_drawer(width = 640, open = FALSE),
-      toolbar_global = if (rlang::is_interactive()) {
-        bslib::toolbar(
-          bslib::input_dark_mode(),
-          shiny::actionButton("close_btn", label = "", class = "btn-close")
-        )
-      }
+      toolbar_global = bslib::toolbar(
+        commons_share_button("chat"),
+        if (rlang::is_interactive()) {
+          htmltools::tagList(
+            bslib::input_dark_mode(),
+            shiny::actionButton("close_btn", label = "", class = "btn-close")
+          )
+        }
+      )
     )
   }
 
@@ -71,6 +74,9 @@ commons_app <- function(client, ...) {
 #' that passes `drawer = FALSE` gets no documents in view, though the agent
 #' still writes them. Documents read best in a wider drawer than the default,
 #' e.g. `drawer = shinychat::chat_drawer(width = 640, open = FALSE)`.
+#'
+#' On Posit Connect, viewers can share a read-only copy of a conversation or
+#' document; see [commons_share_button()].
 #'
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
@@ -121,17 +127,26 @@ commons_server <- function(id, client, ...) {
   prewarm_on_idle(client)
 
   chat <- shinychat::chat_server(id, client = client, ...)
-  artifact_drawer_server(id, client)
+  share_input <- share_server(
+    id,
+    client,
+    chat,
+    session = shiny::getDefaultReactiveDomain()
+  )
+  artifact_drawer_server(id, client, share_input = share_input)
   # shinychat owns the conversation identity (it sets the client's
   # `conversation_id` binding, which ellmer stamps on its spans); commons
   # only needs to know that a restore happened.
+  store <- client$artifact_store()
   chat$history$on_save(function(values) {
-    values$commons_documents <- artifact_store_snapshot(client$artifact_store())
+    values$commons_documents <- artifact_store_snapshot(store)
+    values$commons_shares <- store$shares
     values
   })
   chat$history$on_restore(function(values) {
     client$queue_restore_reminder()
-    artifact_store_restore(client$artifact_store(), values$commons_documents)
+    artifact_store_restore(store, values$commons_documents)
+    store$shares <- values$commons_shares %||% list()
   })
   chat
 }

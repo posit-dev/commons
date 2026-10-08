@@ -5,6 +5,7 @@
 artifact_drawer_server <- function(
   id,
   client,
+  share_input = NULL,
   session = shiny::getDefaultReactiveDomain()
 ) {
   store <- client$artifact_store()
@@ -27,7 +28,7 @@ artifact_drawer_server <- function(
     } else {
       shinychat::chat_drawer_show(
         id,
-        content = artifact_view_ui(view),
+        content = artifact_view_ui(view, share_input),
         title = title,
         session = session
       )
@@ -60,12 +61,24 @@ artifact_drawer_server <- function(
   invisible(NULL)
 }
 
-artifact_view_ui <- function(view) {
+artifact_view_ui <- function(view, share_input = NULL) {
   htmltools::tag(
     "commons-artifact-view",
     list(
       view = view,
-      htmltools::div(class = "commons-artifact-status"),
+      `share-input` = share_input,
+      htmltools::div(
+        class = "commons-artifact-actions",
+        htmltools::div(class = "commons-artifact-status"),
+        if (!is.null(share_input)) {
+          htmltools::tags$button(
+            type = "button",
+            class = "btn btn-sm btn-outline-secondary commons-artifact-share",
+            hidden = NA,
+            "Share"
+          )
+        }
+      ),
       htmltools::div(class = "commons-artifact-notice"),
       htmltools::div(class = "commons-artifact-body")
     )

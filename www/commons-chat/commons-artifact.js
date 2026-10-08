@@ -124,6 +124,19 @@ parent.postMessage("ready", "*");
   class CommonsArtifactView extends HTMLElement {
     connectedCallback() {
       connected.add(this);
+      const share = this.querySelector(".commons-artifact-share");
+      if (share && !share.dataset.bound) {
+        share.dataset.bound = "true";
+        share.addEventListener("click", () => {
+          const state = stateFor(this.getAttribute("view"));
+          if (!state.current || !window.Shiny?.setInputValue) return;
+          window.Shiny.setInputValue(
+            this.getAttribute("share-input"),
+            { artifact: state.current, nonce: Date.now() },
+            { priority: "event" }
+          );
+        });
+      }
       this.render();
     }
 
@@ -163,6 +176,8 @@ parent.postMessage("ready", "*");
       this.toggleAttribute("empty", !a);
       if (!a) return;
       status.textContent = statusText[a.status] ?? "";
+      const share = this.querySelector(".commons-artifact-share");
+      if (share) share.hidden = a.status !== "ready";
       notice.innerHTML = a.error ? `<p>${escape(a.error)}</p>` : "";
 
       const frame = this.frame();
