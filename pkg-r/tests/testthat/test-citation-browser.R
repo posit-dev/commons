@@ -177,7 +177,7 @@ test_that("Shiny Chat renders streamed citations as icon markers", {
   expect_no_match(answer_html, "commons-citation", fixed = TRUE)
 })
 
-test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
+test_that("Shiny Chat distinguishes trusted, cited, and untrusted asides", {
   skip_on_cran()
   skip_if_not_installed("shinytest2")
   skip_if_not_installed("chromote")
@@ -193,7 +193,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
 
   app$wait_for_js(
     paste0(
-      "document.querySelector('button[aria-label=\"Verified answer\"]') && ",
+      "document.querySelector('button[aria-label=\"Trusted\"]') && ",
       "document.querySelector(",
       "'button.shiny-aside-pill[aria-label=\"documentation\"]') && ",
       "document.querySelector('button[aria-label=\"Untrusted\"]');"
@@ -204,18 +204,18 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   expect_identical(
     app$get_js(
       paste0(
-        "['Verified answer', 'Untrusted']",
+        "['Trusted', 'Untrusted']",
         ".map((label) => document.querySelector(",
         "`button[aria-label=\"${label}\"]`",
         ").textContent).join('|');"
       )
     ),
-    "Verified answer|Untrusted"
+    "Trusted|Untrusted"
   )
   expect_identical(
     app$get_js(
       paste0(
-        "['Verified answer', 'Untrusted']",
+        "['Trusted', 'Untrusted']",
         ".map((label) => getComputedStyle(document.querySelector(",
         "`button[aria-label=\"${label}\"]`",
         ")).fontWeight).join('|');"
@@ -238,7 +238,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
       paste0(
         "(() => {",
         "const trusted = document.querySelector(",
-        "'button[aria-label=\"Verified answer\"]');",
+        "'button[aria-label=\"Trusted\"]');",
         "const warning = document.querySelector(",
         "'button[aria-label=\"Untrusted\"]');",
         "return trusted && warning && ",
@@ -250,27 +250,27 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   )
 
   app$get_js(
-    'document.querySelector(\'button[aria-label="Verified answer"]\').click();'
+    'document.querySelector(\'button[aria-label="Trusted"]\').click();'
   )
-  verified_dialog <- '[role="dialog"][aria-label="Verified answer"]'
+  trusted_dialog <- '[role="dialog"][aria-label="Trusted"]'
   app$wait_for_js(
-    paste0("document.querySelector('", verified_dialog, "') !== null;"),
+    paste0("document.querySelector('", trusted_dialog, "') !== null;"),
     timeout = 30 * 1000
   )
-  verified <- app$get_js(
-    paste0("document.querySelector('", verified_dialog, "').innerText;")
+  trusted <- app$get_js(
+    paste0("document.querySelector('", trusted_dialog, "').innerText;")
   )
-  expect_no_match(verified, "Verified answer", fixed = TRUE)
-  expect_no_match(verified, "How answer trust is determined", fixed = TRUE)
+  expect_no_match(trusted, "Trusted", fixed = TRUE)
+  expect_no_match(trusted, "How answer trust is determined", fixed = TRUE)
   expect_match(
-    verified,
+    trusted,
     "This answer comes from a trusted calculation.",
     fixed = TRUE
   )
   app$wait_for_js(
     paste0(
       "document.querySelector('",
-      verified_dialog,
+      trusted_dialog,
       " .commons-provenance-info-trigger') !== null;"
     ),
     timeout = 30 * 1000
@@ -279,7 +279,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     app$get_js(
       paste0(
         "(() => { const control = document.querySelector('",
-        verified_dialog,
+        trusted_dialog,
         " .commons-provenance-info'); return ",
         "control.previousSibling.textContent.endsWith('calculation. ') && ",
         "getComputedStyle(control).display === 'inline-flex'; })()"
@@ -289,7 +289,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
   app$get_js(
     paste0(
       "document.querySelector('",
-      verified_dialog,
+      trusted_dialog,
       " .commons-provenance-info-trigger').click();"
     )
   )
@@ -315,7 +315,7 @@ test_that("Shiny Chat distinguishes verified, cited, and untrusted asides", {
     app$get_js(
       paste0(
         "document.querySelector('",
-        verified_dialog,
+        trusted_dialog,
         "').contains(",
         "document.querySelector('",
         info_modal,

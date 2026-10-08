@@ -3,7 +3,7 @@
 Register only the tools the agent's composition earns: nothing about its
 surface should imply operations it does not have. `pkg-r/R/tools.R` decides
 the same thing for R, and `tests/shared/tool-registration.json` pins the
-conditions and the tool descriptions both packages must agree on.
+registration, descriptions, and responses both packages must agree on.
 
 `build_commons_tools()` returns tool objects rather than registering them on a
 chat client, so an agent's surface can be built and inspected before there is
@@ -55,6 +55,7 @@ from ._pool import call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
+from ._skills import Skill, builtin_skills
 
 __all__ = [
     "FirstTouch",
@@ -160,6 +161,7 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
             _search_context(context),
             _describe_table(context),
             _run_sql(context),
+            _load_skill(),
         ]
     )
     return tools
@@ -229,6 +231,46 @@ def tool_description(tool: Tool) -> str:
     back has one spelling rather than one per caller.
     """
     return str(tool.schema["function"]["description"])
+
+
+def _load_skill() -> Tool:
+    skills = builtin_skills()
+
+    def load_skill(name: str) -> ContentToolResult:
+        if name not in skills:
+            raise ValueError(f"There is no skill named {name!r}.")
+        return tool_result(skills[name].body, title=f"Read up on {skills[name].topic}")
+
+    return _tool(
+        load_skill,
+        "load_skill",
+        _load_skill_description(skills),
+        _parameters(
+            {
+                "name": {
+                    "type": "string",
+                    "enum": list(skills),
+                    "description": "The skill to load.",
+                }
+            },
+            ["name"],
+        ),
+        "Reading up",
+    )
+
+
+def _load_skill_description(skills: Mapping[str, Skill]) -> str:
+    listing = [f"- {skill.name}: {skill.description}" for skill in skills.values()]
+    return "\n".join(
+        [
+            (
+                "Load a skill's instructions. When a request matches one of these "
+                "skills, load it before you respond:"
+            ),
+            "",
+            *listing,
+        ]
+    )
 
 
 def _resolve_source(

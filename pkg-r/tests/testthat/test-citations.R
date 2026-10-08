@@ -117,7 +117,6 @@ test_that("build_citation_corpus matches the shared fixture", {
 
 
 test_that("dataset-level dictionary prose is citable", {
-  skip_if_not_installed("yaml")
   path <- withr::local_tempfile(fileext = ".yaml")
   writeLines(
     c(
@@ -216,6 +215,8 @@ test_that("both packages agree on which turns reset the citation request", {
 })
 
 test_that("search_context requests a citation for fallback answers", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
   path <- withr::local_tempfile(fileext = ".md")
   writeLines(
     "Regeneration units are tracked separately until they close canopy.",
@@ -256,28 +257,6 @@ test_that("citation instructions describe only available tool outputs", {
   expect_match(with_measures, "Result values from `call_measure`", fixed = TRUE)
   expect_no_match(with_measures, "`call_metrics`", fixed = TRUE)
   expect_no_match(with_measures, "Native semantic-model", fixed = TRUE)
-})
-
-test_that("citation trust exception names trusted calculation tools", {
-  expect_equal(citation_trust_exception(character()), "")
-  expect_equal(
-    citation_trust_exception("call_measure"),
-    " that is not based solely on output from `call_measure`"
-  )
-  expect_equal(
-    citation_trust_exception("call_calculation"),
-    " that is not based solely on output from `call_calculation`"
-  )
-  expect_equal(
-    citation_trust_exception(
-      c("search_pool", "call_measure", "call_metrics")
-    ),
-    paste0(
-      " that is not based solely on output from `search_pool`",
-      " or `call_measure`",
-      " or `call_metrics`"
-    )
-  )
 })
 
 test_that("user messages reset citation requests but tool results do not", {

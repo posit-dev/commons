@@ -82,7 +82,12 @@
       {
         "name": "a source alone earns only the tools every source earns",
         "shape": "bare",
-        "tools": ["search_context", "describe_table", "run_sql"]
+        "tools": [
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "load_skill"
+        ]
       },
       {
         "name": "measures earn the pool and the measure call",
@@ -92,7 +97,8 @@
           "call_measure",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "load_skill"
         ]
       },
       {
@@ -102,13 +108,19 @@
           "call_metrics",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "load_skill"
         ]
       },
       {
         "name": "definitions that are not metrics earn neither",
         "shape": "definitions_without_a_metric",
-        "tools": ["search_context", "describe_table", "run_sql"]
+        "tools": [
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "load_skill"
+        ]
       },
       {
         "name": "an index past the prompt's cap earns the pool",
@@ -118,7 +130,8 @@
           "call_metrics",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "load_skill"
         ]
       },
       {
@@ -130,7 +143,8 @@
           "call_metrics",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "load_skill"
         ]
       },
       {
@@ -140,7 +154,8 @@
           "search_catalog",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "load_skill"
         ]
       },
       {
@@ -150,7 +165,8 @@
           "search_catalog",
           "search_context",
           "describe_table",
-          "run_sql"
+          "run_sql",
+          "load_skill"
         ]
       }
     ]
@@ -169,6 +185,12 @@
         "shape": "bare",
         "tool": "describe_table",
         "text": "Describe a table: columns, types, and sample rows. Use this before writing SQL against an unfamiliar table. The sample summary covers the sampled rows only, so it cannot show which values the whole table holds. Before you report that a value is absent, query for it."
+      },
+      {
+        "name": "load_skill",
+        "shape": "bare",
+        "tool": "load_skill",
+        "text": "Load a skill's instructions. When a request matches one of these skills, load it before you respond:\n\n- trust-system: How commons determines and displays answer trust. Load it when the user asks about green shields, blue quotation marks, yellow warning circles, trusted code, trusted context, or how answer trust is determined."
       },
       {
         "name": "run_sql with nothing to fall back from",

@@ -147,6 +147,8 @@ commons agent receives some combination of these tools:
 \item \code{call_metrics} invokes governed or warehouse-native metrics.
 \item \code{call_calculation} invokes an exact trusted query.
 \item \code{search_context} retrieves relevant business context.
+\item \code{load_skill} loads instructions for a task, such as explaining how commons
+determines and displays answer trust.
 \item \code{describe_table} inspects a table or semantic model.
 \item \code{run_sql} executes a read-only SQL query.
 \item \code{run_r} executes R code to analyze results and render plots in the agent's

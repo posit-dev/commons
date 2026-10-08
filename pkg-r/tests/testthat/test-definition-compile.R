@@ -26,7 +26,6 @@ definition_mock_source <- function(table = "values", bindings = NULL) {
 }
 
 test_that("definitions compile and compose for a DuckDB source", {
-  skip_if_not_installed("yaml")
   source <- data_source(
     orders = data.frame(
       status_cd = c(10, 90),
@@ -67,7 +66,6 @@ test_that("definitions compile and compose for a DuckDB source", {
 })
 
 test_that("composed SQL and notes match the shared contract", {
-  skip_if_not_installed("yaml")
   fixture <- shared_fixture("definitions")$composed
   checked <- 0L
   for (path in definition_fixture_paths("valid")) {
@@ -113,7 +111,6 @@ test_that("source compilation rejects metrics over mixed-grain definitions", {
 })
 
 test_that("warehouse lowering matches the shared contract", {
-  skip_if_not_installed("yaml")
   spec <- shared_fixture("definition-warehouse-sql")
   cases <- spec$cases
   expect_gt(length(cases), 0)
@@ -204,7 +201,6 @@ test_that("warehouse lowering matches the shared contract", {
 })
 
 test_that("warehouse refusals match the shared contract", {
-  skip_if_not_installed("yaml")
   unsupported <- shared_fixture("definition-warehouse-sql")[["unsupported"]]
   expect_gt(length(unsupported), 0)
   checked <- 0
@@ -269,7 +265,6 @@ test_that("warehouse refusals match the shared contract", {
 })
 
 test_that("source selection binds authored warehouse identifiers", {
-  skip_if_not_installed("yaml")
   local_mocked_bindings(
     is_snowflake_connection = function(con) TRUE,
     is_databricks_connection = function(con) FALSE
@@ -307,7 +302,6 @@ test_that("source selection binds authored warehouse identifiers", {
 })
 
 test_that("missing warehouse bindings fail before SQL can run", {
-  skip_if_not_installed("yaml")
   local_mocked_bindings(
     is_snowflake_connection = function(con) TRUE,
     is_databricks_connection = function(con) FALSE
@@ -334,7 +328,6 @@ test_that("missing warehouse bindings fail before SQL can run", {
 })
 
 test_that("the source backend selects the destination target", {
-  skip_if_not_installed("yaml")
   local_mocked_bindings(
     is_snowflake_connection = function(con) FALSE,
     is_databricks_connection = function(con) TRUE

@@ -53,7 +53,6 @@ catalog_test_columns <- function() {
 }
 
 test_that("data_dictionary() reads and keys tables and columns", {
-  skip_if_not_installed("yaml")
   dict <- data_dictionary(local_dict_path())
 
   expect_s3_class(dict, "commons_data_dictionary")
@@ -105,7 +104,6 @@ test_that("unknown fields and missing sections are tolerated", {
 })
 
 test_that("data_source() accepts a dictionary path", {
-  skip_if_not_installed("yaml")
   src <- data_source(sales = test_sales(), dictionary = local_dict_path())
   expect_s3_class(data_source_state(src)$dictionary, "commons_data_dictionary")
 })
@@ -118,7 +116,6 @@ test_that("data_source() rejects other dictionary inputs", {
 })
 
 test_that("dictionary content lands in the system prompt", {
-  skip_if_not_installed("yaml")
   src <- local_dict_source()
   prompt <- commons_system_prompt(list(src))
 
@@ -130,7 +127,6 @@ test_that("dictionary content lands in the system prompt", {
 })
 
 test_that("multi-source prompts label dictionary blocks by source", {
-  skip_if_not_installed("yaml")
   sources <- list(
     sales_db = local_dict_source(),
     crm = data_source(accounts = data.frame(id = 1))
@@ -164,7 +160,6 @@ test_that("glossary entries past the cap are co-resolved at first touch", {
 })
 
 test_that("describe_table merges the dictionary with the live schema", {
-  skip_if_not_installed("yaml")
   res <- describe_table_tool(local_dict_source(), "sales")
 
   expect_match(res@value, "One row per order line", fixed = TRUE)
@@ -398,7 +393,6 @@ test_that("physical column names do not redefine the authored namespace", {
 })
 
 test_that("a SQL query delivers a table's entry once", {
-  skip_if_not_installed("yaml")
   src <- local_dict_source()
   tracker <- new.env(parent = emptyenv())
 
@@ -411,7 +405,6 @@ test_that("a SQL query delivers a table's entry once", {
 })
 
 test_that("describing a table forestalls the SQL-side delivery", {
-  skip_if_not_installed("yaml")
   src <- local_dict_source()
   tracker <- new.env(parent = emptyenv())
 
@@ -422,7 +415,6 @@ test_that("describing a table forestalls the SQL-side delivery", {
 })
 
 test_that("first-touch state is keyed by source", {
-  skip_if_not_installed("yaml")
   tracker <- new.env(parent = emptyenv())
 
   first <- run_sql_tool(
@@ -443,7 +435,6 @@ test_that("first-touch state is keyed by source", {
 })
 
 test_that("queries that touch no documented table append nothing", {
-  skip_if_not_installed("yaml")
   src <- local_dict_source()
 
   expect_no_match(
@@ -459,7 +450,8 @@ test_that("queries that touch no documented table append nothing", {
 })
 
 test_that("dictionary prose is searchable via the context layer", {
-  skip_if_not_installed("yaml")
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
   layer <- augment_context_layer(NULL, list(local_dict_source()))
 
   hits <- context_search(layer, "average order value")
@@ -475,7 +467,6 @@ test_that("dictionary prose is searchable via the context layer", {
 
 
 test_that("agent tools share first-touch state", {
-  skip_if_not_installed("yaml")
   agent <- test_agent(
     data_sources = list(
       sales_db = data_source(

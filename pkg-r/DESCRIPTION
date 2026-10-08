@@ -1,6 +1,6 @@
 Package: commons
 Title: AI Agents for Data Analysis
-Version: 0.1.0.9000
+Version: 0.1.1.9000
 Authors@R: c(
     person("Simon", "Couch", , "simon.couch@posit.co", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0001-5676-5107")),
@@ -44,7 +44,8 @@ Imports:
     S7,
     sass,
     shinychat (>= 0.5.0),
-    utils
+    utils,
+    yaml
 Suggests:
     bit64,
     bsicons,
@@ -66,8 +67,7 @@ Suggests:
     shinytest2,
     testthat (>= 3.0.0),
     vitals,
-    withr,
-    yaml
+    withr
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/testthat/parallel: true

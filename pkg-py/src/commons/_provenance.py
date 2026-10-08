@@ -61,7 +61,7 @@ class ProvenanceDisplay:
 
 PROVENANCE_DISPLAY: dict[Tag, ProvenanceDisplay] = {
     Tag.A: ProvenanceDisplay(
-        label="Verified answer",
+        label="Trusted",
         icon="trusted-icon.svg",
         body="This answer comes from a trusted calculation.",
         pill_class="trusted",

@@ -37,10 +37,8 @@ _BLANK_LINES = re.compile(r"\n[ \t]*\n(?:[ \t]*\n)+")
 # this is the tool name that earns the flag here.
 EXECUTION_TOOL = "run_python"
 
-# The trusted-calculation tools, in the order the citation sentence names them,
-# and every tool the citable and non-citable lists branch on. The last entry is
-# the flag stem for whichever tool EXECUTION_TOOL names.
-TRUSTED_TOOLS = ("search_pool", "call_measure", "call_metrics", "call_calculation")
+# Every tool the citable and non-citable lists branch on. The last entry is the
+# flag stem for whichever tool EXECUTION_TOOL names.
 CITED_TOOLS = (
     "search_pool",
     "search_context",
@@ -83,7 +81,7 @@ def system_prompt_data(
 
     return {
         "date": prompt_date(),
-        "is_claude_5": is_claude_5_model(model),
+        "needs_brevity_prompting": needs_brevity_prompting(model),
         # The shared template can drop the fallback path; this package's
         # agents always have one.
         "trusted_only": False,
@@ -103,7 +101,6 @@ def system_prompt_data(
         "dictionary_context": dictionary_context,
         "glossary_context": glossary_context,
         "definition_index": definition_index,
-        "citation_trust_exception": citation_trust_exception(tool_names),
         **tool_availability(tool_names),
         "execution_tool": EXECUTION_TOOL,
         "has_instructions": bool(instructions),
@@ -251,33 +248,23 @@ def tool_availability(tools: Iterable[str]) -> dict[str, bool]:
     return {f"has_{tool}": tool in registered for tool in CITED_TOOLS}
 
 
-def citation_trust_exception(tools: Iterable[str]) -> str:
-    """The clause naming the tools whose output is trusted on its own.
-
-    It is spliced into a sentence, so it carries its own leading space and is
-    empty when the agent registered no trusted-calculation tool.
-    """
-    registered = set(tools)
-    trusted = [tool for tool in TRUSTED_TOOLS if tool in registered]
-    if not trusted:
-        return ""
-    named = " or ".join(f"`{tool}`" for tool in trusted)
-    return f" that is not based solely on output from {named}"
-
-
 def prompt_date() -> str:
     """Today's date where the agent runs, matching the R package's local date."""
     return datetime.datetime.now().astimezone().date().isoformat()
 
 
-_CLAUDE_5 = re.compile(r"(^|[./:_-])claude-[^-]+-5($|[./:@_-])")
+# Claude 5.0 and 5.1 are verbose without extra prompting; Claude 5.5 and later
+# are not, so this matches those two versions alone.
+_VERBOSE_CLAUDE_MODEL = re.compile(
+    r"(^|[./:_-])claude-[^-]+-5(?:[.-][01])?(?![.-][0-9])($|[./:@_-])"
+)
 
 
-def is_claude_5_model(model: str | None) -> bool:
-    """Whether a model id names a Claude 5 model, whatever the provider."""
+def needs_brevity_prompting(model: str | None) -> bool:
+    """Whether a model id names a Claude 5.0 or 5.1 model, whatever the provider."""
     if not isinstance(model, str):
         return False
-    return _CLAUDE_5.search(model.lower()) is not None
+    return _VERBOSE_CLAUDE_MODEL.search(model.lower()) is not None
 
 
 _INSTRUCTION_EXTENSIONS = ("md", "rmd", "txt", "prompt")

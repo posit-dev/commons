@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import errno
 import functools
-import importlib.util
 import json
 import pathlib
 import platform
@@ -22,29 +21,20 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-if TYPE_CHECKING:
-    from commons._execution._runtime import _seccomp
-else:
-    # Loaded by absolute path, the way the worker loads it: the 32-bit CI
-    # legs run this file on a bare interpreter, where importing commons
-    # would drag in dependencies that publish no 32-bit wheels.
-    _spec = importlib.util.spec_from_file_location(
-        "_seccomp",
-        pathlib.Path(__file__).parent.parent
-        / "src"
-        / "commons"
-        / "_execution"
-        / "_runtime"
-        / "_seccomp.py",
-    )
-    assert _spec is not None and _spec.loader is not None
-    _seccomp = importlib.util.module_from_spec(_spec)
-    # Dataclasses resolve their module through sys.modules, so the module
-    # has to be registered before it executes.
-    sys.modules["_seccomp"] = _seccomp
-    _spec.loader.exec_module(_seccomp)
+RUNTIME_DIR = str(
+    pathlib.Path(__file__).parent.parent / "src" / "commons" / "_execution" / "_runtime"
+)
 
-RUNTIME_DIR = str(pathlib.Path(_seccomp.__file__).parent)
+if TYPE_CHECKING:
+    from commons._execution._runtime import _seccomp, _userns
+else:
+    # Imported by bare name from the runtime directory, the way the worker
+    # imports them. The 32-bit CI legs run this file on a bare interpreter,
+    # where importing commons would drag in dependencies that publish no
+    # 32-bit wheels.
+    sys.path.insert(0, RUNTIME_DIR)
+    import _seccomp
+    import _userns
 
 ARCH_NAMES = ["x86_64", "aarch64", "i386", "arm"]
 
@@ -57,14 +47,25 @@ def test_every_screened_syscall_has_a_number_on_every_arch(name: str) -> None:
 
 
 def run_filter(
-    program: list[_seccomp.SockFilter], *, arch: int, nr: int, arg0: int = 0
+    program: list[_seccomp.SockFilter],
+    *,
+    arch: int,
+    nr: int,
+    arg0: int = 0,
+    arg4: int = 0,
 ) -> int:
     """Return what the filter decides for one syscall.
 
     A reading of the BPF subset the filter is built from, which is how the
     tables for architectures this machine is not can still be checked.
     """
-    data = {_seccomp.DATA_NR: nr, _seccomp.DATA_ARCH: arch, _seccomp.DATA_ARG0: arg0}
+    data = {
+        _seccomp.DATA_NR: nr,
+        _seccomp.DATA_ARCH: arch,
+        _seccomp.DATA_ARG0: arg0,
+        _seccomp.DATA_ARG4: arg4 & 0xFFFFFFFF,
+        _seccomp.DATA_ARG4 + 4: (arg4 >> 32) & 0xFFFFFFFF,
+    }
     accumulator = 0
     index = 0
     while True:
@@ -97,11 +98,34 @@ def test_the_network_filter_refuses_to_open_a_socket(
     name: str, syscall: str
 ) -> None:
     arch = _seccomp.ARCHES[name]
-    if syscall not in arch.syscalls:
-        # socketcall exists only on the i386 table.
-        pytest.skip(f"the {name} table has no {syscall}")
     program = _seccomp.build_network_filter(arch)
     decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls[syscall])
+    assert decision == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("call", sorted(_seccomp.SOCKETCALL_ALLOWED.values()))
+def test_the_network_filter_allows_a_listed_socketcall(call: int) -> None:
+    arch = _seccomp.ARCHES["i386"]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["socketcall"],
+        arg0=call,
+    )
+    assert decision == _seccomp.SECCOMP_RET_ALLOW
+
+
+# socket, bind, connect, listen, accept, sendto, sendmsg, accept4, sendmmsg,
+# and two numbers outside the table.
+@pytest.mark.parametrize("call", [1, 2, 3, 4, 5, 11, 16, 18, 20, 0, 21])
+def test_the_network_filter_denies_any_other_socketcall(call: int) -> None:
+    arch = _seccomp.ARCHES["i386"]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["socketcall"],
+        arg0=call,
+    )
     assert decision == _seccomp.DENY_EPERM
 
 
@@ -152,6 +176,52 @@ def test_the_network_filter_leaves_reading_a_file_alone(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize("syscall", _seccomp.LOCAL_PEER_SCREENED)
+def test_the_network_filter_refuses_to_aim_a_socket_at_a_peer(
+    name: str, syscall: str
+) -> None:
+    arch = _seccomp.ARCHES[name]
+    program = _seccomp.build_network_filter(arch)
+    decision = run_filter(program, arch=arch.audit_arch, nr=arch.syscalls[syscall])
+    assert decision == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_network_filter_refuses_an_addressed_sendto(name: str) -> None:
+    arch = _seccomp.ARCHES[name]
+    program = _seccomp.build_network_filter(arch)
+    nr = arch.syscalls["sendto"]
+    for address in (0x7FFF00001000, 1 << 32, 1):
+        decision = run_filter(program, arch=arch.audit_arch, nr=nr, arg4=address)
+        assert decision == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_network_filter_permits_a_send_with_no_address(name: str) -> None:
+    """libc implements send() as sendto() with a NULL address."""
+    arch = _seccomp.ARCHES[name]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["sendto"],
+        arg4=0,
+    )
+    assert decision == _seccomp.SECCOMP_RET_ALLOW
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_network_filter_leaves_socketpair_open(name: str) -> None:
+    """asyncio's self-pipe is a socketpair."""
+    arch = _seccomp.ARCHES[name]
+    decision = run_filter(
+        _seccomp.build_network_filter(arch),
+        arch=arch.audit_arch,
+        nr=arch.syscalls["socketpair"],
+    )
+    assert decision == _seccomp.SECCOMP_RET_ALLOW
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
 @pytest.mark.parametrize("syscall", _seccomp.SCREENED)
 def test_the_sandbox_filter_denies_every_screened_syscall(
     name: str, syscall: str
@@ -192,14 +262,31 @@ def test_clone3_reports_itself_missing_rather_than_forbidden(name: str) -> None:
     assert decision == _seccomp.DENY_ENOSYS
 
 
+# Every namespace flag the clone screen must refuse, pinned one by one so a
+# flag dropped from the mask fails under its own name.
+NAMESPACE_FLAGS = {
+    "CLONE_NEWTIME": _seccomp.CLONE_NEWTIME,
+    "CLONE_NEWNS": _seccomp.CLONE_NEWNS,
+    "CLONE_NEWCGROUP": _seccomp.CLONE_NEWCGROUP,
+    "CLONE_NEWUTS": _seccomp.CLONE_NEWUTS,
+    "CLONE_NEWIPC": _seccomp.CLONE_NEWIPC,
+    "CLONE_NEWUSER": _seccomp.CLONE_NEWUSER,
+    "CLONE_NEWPID": _seccomp.CLONE_NEWPID,
+    "CLONE_NEWNET": _seccomp.CLONE_NEWNET,
+}
+
+
 @pytest.mark.parametrize("name", ARCH_NAMES)
-def test_clone_is_denied_when_it_asks_for_a_new_namespace(name: str) -> None:
+@pytest.mark.parametrize("flag", NAMESPACE_FLAGS.values(), ids=NAMESPACE_FLAGS.keys())
+def test_clone_is_denied_when_it_asks_for_a_new_namespace(
+    name: str, flag: int
+) -> None:
     arch = _seccomp.ARCHES[name]
     decision = run_filter(
         _seccomp.build_sandbox_filter(arch),
         arch=arch.audit_arch,
         nr=arch.syscalls["clone"],
-        arg0=_seccomp.CLONE_NEWUSER,
+        arg0=flag,
     )
     assert decision == _seccomp.DENY_EPERM
 
@@ -365,6 +452,71 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
     assert result["family"] == int(socket.AF_INET)
 
 
+@needs_seccomp
+def test_a_socketpair_end_cannot_be_connected_to_an_abstract_name() -> None:
+    result = engage_in_child(
+        """
+import socket
+a, b = socket.socketpair()
+try:
+    a.connect("\\0commons-test")
+    result['error'] = None
+except PermissionError as exc:
+    result['error'] = exc.errno
+""",
+        network="none",
+    )
+    assert result["error"] == errno.EPERM
+
+
+@needs_seccomp
+def test_a_datagram_socketpair_end_cannot_sendto_an_abstract_name() -> None:
+    """sendto() can reach an abstract name without connect()."""
+    result = engage_in_child(
+        """
+import socket
+a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_DGRAM)
+try:
+    a.sendto(b"x", "\\0commons-test")
+    result['error'] = None
+except PermissionError as exc:
+    result['error'] = exc.errno
+""",
+        network="none",
+    )
+    assert result["error"] == errno.EPERM
+
+
+@needs_seccomp
+def test_a_socketpair_still_round_trips_under_no_network() -> None:
+    """libc implements send() as sendto() with a NULL address."""
+    result = engage_in_child(
+        """
+import socket
+a, b = socket.socketpair()
+a.sendall(b"ping")
+result['heard'] = b.recv(4).decode()
+""",
+        network="none",
+    )
+    assert result["heard"] == "ping"
+
+
+@needs_seccomp
+def test_asyncio_still_runs_under_no_network() -> None:
+    """The selector event loop's self-pipe is a socketpair."""
+    result = engage_in_child(
+        """
+import asyncio
+async def main():
+    return 42
+result['ran'] = asyncio.run(main())
+""",
+        network="none",
+    )
+    assert result["ran"] == 42
+
+
 UNSHARE = """
 import ctypes
 libc = ctypes.CDLL(None, use_errno=True)
@@ -398,6 +550,89 @@ def test_a_new_namespace_cannot_be_unshared(network: str) -> None:
     result = engage_in_child(UNSHARE, network=network)
     assert result["rc"] == -1
     assert result["errno"] == errno.EPERM
+
+
+CLONE_NEWTIME_PROBE = """
+import ctypes, json, os, sys
+sys.path.insert(0, {runtime!r})
+import _seccomp, _userns
+
+CLONE_NEWTIME = 0x00000080
+SIGCHLD = 17
+STACK_SIZE = 65536
+
+libc = _seccomp._libc()
+stack = ctypes.create_string_buffer(STACK_SIZE)
+stack_top = ctypes.addressof(stack) + STACK_SIZE
+clone_fn = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
+
+
+def leave_immediately(_):
+    os._exit(0)
+    return 0
+
+
+def clone_with_newtime_bit():
+    ctypes.set_errno(0)
+    # The glibc clone() wrapper rather than the raw syscall, so the cloned
+    # child is handed a working stack and can leave through the callback.
+    pid = libc.clone(
+        clone_fn(leave_immediately),
+        ctypes.c_void_p(stack_top),
+        CLONE_NEWTIME | SIGCHLD,
+        None,
+    )
+    if pid > 0:
+        # CLONE_NEWTIME (0x80) sits inside the low byte of clone's flags,
+        # which is the exit signal, so the child reports signal 0x91 rather
+        # than SIGCHLD and only __WALL will reap it.
+        os.waitpid(pid, 0x40000000)
+        return 0
+    return ctypes.get_errno()
+
+
+_userns.map_ids()
+result = {{}}
+result['unfiltered'] = clone_with_newtime_bit()
+_seccomp.engage(network='full')
+result['filtered'] = clone_with_newtime_bit()
+json.dump(result, sys.stdout)
+"""
+
+
+@needs_seccomp
+def test_clone_with_the_newtime_bit_set_is_refused() -> None:
+    """The flag the namespace mask was missing, against the live kernel.
+
+    The legacy clone ABI cannot create a time namespace: the kernel strips
+    the CSIGNAL byte, the 0x80 bit included, from the flags before the
+    namespace logic runs, so the live paths are unshare (screened outright)
+    and clone3 (denied ENOSYS). What this test pins is the mask itself: a
+    clone whose flags word has the CLONE_NEWTIME bit set is refused,
+    whatever the kernel would have made of it. The probe still enters a
+    user namespace first, so the test keeps its meaning on any kernel that
+    honours the bit, where an unprivileged clone would earn the kernel's
+    own EPERM and the filter's answer could not be told apart from it. The
+    unfiltered clone has to succeed for the filtered one's EPERM to mean
+    anything.
+    """
+    if not _userns.available():
+        pytest.skip("this host does not offer unprivileged user namespaces")
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", CLONE_NEWTIME_PROBE.format(runtime=RUNTIME_DIR)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    result = json.loads(completed.stdout)
+    if result["unfiltered"] != 0:
+        # A restrictive container profile can refuse the clone outright, and
+        # on such a host the filter's effect cannot be shown.
+        pytest.skip(
+            "this host refuses the clone with no filter on "
+            f"(errno {result['unfiltered']})"
+        )
+    assert result["filtered"] == errno.EPERM
 
 
 @needs_seccomp

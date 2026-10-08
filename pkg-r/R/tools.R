@@ -36,7 +36,8 @@ build_commons_tools <- function(self, private) {
       tool_describe_table(private)
     ),
     # A trusted-only agent has no fallback path of its own.
-    if (!trusted_only) list(tool_run_sql(private), tool_run_r(private))
+    if (!trusted_only) list(tool_run_sql(private), tool_run_r(private)),
+    list(tool_load_skill())
   )
 }
 

@@ -442,7 +442,6 @@ databricks_read_semantic_model <- function(
   con,
   call = rlang::caller_env()
 ) {
-  rlang::check_installed("yaml", call = call)
   id <- databricks_complete_relation(con, view$id, call = call)
   label <- table_id_label(id, call = call)
   metadata <- NULL

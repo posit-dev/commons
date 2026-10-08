@@ -13,7 +13,7 @@
         "description": "No dictionary, no definitions, no instructions, and no trusted-calculation tool.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
@@ -35,7 +35,6 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": "",
           "has_definitions": false,
           "has_complete_definitions": false
         },
@@ -46,7 +45,7 @@
         "description": "Every optional section present, with multiple sources and a complete definition index.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "trusted_only": false,
           "has_multiple_sources": true,
           "has_catalog_search": true,
@@ -68,18 +67,17 @@
           "has_call_calculation": false,
           "has_execution_tool": true,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_measure` or `call_metrics`",
           "has_definitions": true,
           "has_complete_definitions": true
         },
         "expected": "prompt-render/everything.md"
       },
       {
-        "name": "claude-5-concise",
-        "description": "A Claude 5 model adds the concise-responses section.",
+        "name": "brevity-prompting",
+        "description": "A Claude 5.0 or 5.1 model adds the concise-responses section.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": true,
+          "needs_brevity_prompting": true,
           "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
@@ -101,18 +99,17 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `call_measure`",
           "has_definitions": false,
           "has_complete_definitions": false
         },
-        "expected": "prompt-render/claude-5-concise.md"
+        "expected": "prompt-render/brevity-prompting.md"
       },
       {
         "name": "definitions-incomplete",
         "description": "A definition index that does not yet hold every definition.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
@@ -134,7 +131,6 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `search_pool`",
           "has_definitions": true,
           "has_complete_definitions": false
         },
@@ -145,7 +141,7 @@
         "description": "No definition index yet, so the section appears with its overflow note. Instructions containing brace syntax must survive verbatim.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
@@ -167,7 +163,6 @@
           "has_call_calculation": true,
           "has_execution_tool": true,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `call_calculation`",
           "has_definitions": true,
           "has_complete_definitions": false
         },
@@ -178,7 +173,7 @@
         "description": "A trusted-only agent: no fallback path, so no citation section, and definitions point at call_metrics. Multiple sources exercise the source sentence's trusted-only wording.",
         "data": {
           "date": "2026-01-15",
-          "is_claude_5": false,
+          "needs_brevity_prompting": false,
           "trusted_only": true,
           "has_multiple_sources": true,
           "has_catalog_search": false,
@@ -200,7 +195,6 @@
           "has_call_calculation": false,
           "has_execution_tool": false,
           "execution_tool": "run_code",
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_measure` or `call_metrics`",
           "has_definitions": true,
           "has_complete_definitions": true
         },
@@ -245,7 +239,7 @@
     ]
   },
   "tool_data": {
-    "description": "Prompt data derived from the names of the tools an agent registered. `has_*` drives the citable and non-citable lists in the template; `citation_trust_exception` is a clause spliced into a sentence, so it carries its own leading space and is empty when no trusted-calculation tool is registered. A tools entry of `$execution_tool` stands for the runner's own code-execution tool (`run_r` in R, `run_python` in Python), so the neutral `has_execution_tool` flag is pinned without the fixture picking a language.",
+    "description": "Prompt data derived from the names of the tools an agent registered. `has_*` drives the citable and non-citable lists in the template. A tools entry of `$execution_tool` stands for the runner's own code-execution tool (`run_r` in R, `run_python` in Python), so the neutral `has_execution_tool` flag is pinned without the fixture picking a language.",
     "cases": [
       {
         "name": "no trusted tools",
@@ -261,8 +255,7 @@
           "has_call_measure": false,
           "has_call_metrics": false,
           "has_call_calculation": false,
-          "has_execution_tool": false,
-          "citation_trust_exception": ""
+          "has_execution_tool": false
         }
       },
       {
@@ -285,8 +278,7 @@
           "has_call_measure": true,
           "has_call_metrics": true,
           "has_call_calculation": true,
-          "has_execution_tool": true,
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_measure` or `call_metrics` or `call_calculation`"
+          "has_execution_tool": true
         }
       },
       {
@@ -303,8 +295,7 @@
           "has_call_measure": false,
           "has_call_metrics": false,
           "has_call_calculation": true,
-          "has_execution_tool": true,
-          "citation_trust_exception": " that is not based solely on output from `call_calculation`"
+          "has_execution_tool": true
         }
       },
       {
@@ -322,8 +313,7 @@
           "has_call_measure": false,
           "has_call_metrics": true,
           "has_call_calculation": false,
-          "has_execution_tool": false,
-          "citation_trust_exception": " that is not based solely on output from `search_pool` or `call_metrics`"
+          "has_execution_tool": false
         }
       },
       {
@@ -337,8 +327,7 @@
           "has_call_measure": false,
           "has_call_metrics": false,
           "has_call_calculation": false,
-          "has_execution_tool": false,
-          "citation_trust_exception": ""
+          "has_execution_tool": false
         }
       }
     ]

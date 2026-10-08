@@ -1,6 +1,6 @@
 provenance_display <- list(
   A = list(
-    label = "Verified answer",
+    label = "Trusted",
     icon = "trusted-icon.svg",
     body = "This answer comes from a trusted calculation.",
     pill_class = "trusted"

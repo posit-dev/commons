@@ -3,7 +3,6 @@
 # today; when other formats arrive (a dbt manifest, harvested catalog
 # metadata), this is where the format is inferred and dispatched.
 data_dictionary <- function(path) {
-  rlang::check_installed("yaml")
   rlang::check_string(path, allow_empty = FALSE)
   new_data_dictionary(yaml::read_yaml(path))
 }

@@ -19,7 +19,7 @@ test_that("a trusted-only agent registers no fallback tools", {
 
   expect_identical(
     unname(vapply(agent$get_tools(), tool_name, character(1))),
-    c("search_pool", "call_measure", "search_context", "describe_table")
+    c("search_pool", "call_measure", "search_context", "describe_table", "load_skill")
   )
   expect_null(private$worker)
   expect_null(private$handles)
@@ -30,7 +30,7 @@ test_that("a trusted-only agent registers no fallback tools", {
   )
   expect_identical(
     unname(vapply(metrics$get_tools(), tool_name, character(1))),
-    c("call_metrics", "search_context", "describe_table")
+    c("call_metrics", "search_context", "describe_table", "load_skill")
   )
 })
 

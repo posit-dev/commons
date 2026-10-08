@@ -55,7 +55,7 @@ The high-trust "happy path" occurs when the user asks a question that correspond
 
 > How many total animals were observed at Oak Bluff?
 
-The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result with the green check-shield provenance marker for the `Verified answer` outcome.
+The agent then searches for a trusted calculation that can answer the question. If it finds one, it runs that code and then reports the result with the green check-shield provenance marker for the `Trusted` outcome.
 
 > At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. `r documentation_marker("A")`
 
@@ -85,14 +85,14 @@ file.copy(skill, ".claude/skills", recursive = TRUE)
 
 ## Trust flow
 
-commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer displays the green check-shield provenance marker for the `Verified answer` outcome.
+commons agents will use trusted calculations whenever possible. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it then calls that calculation and the resulting answer displays the green check-shield provenance marker for the `Trusted` outcome.
 
 If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or R code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 ```{r trust-flow}
 #| echo: false
 #| eval: true
-#| fig-alt: "Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Verified answer outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome."
+#| fig-alt: "Flow diagram. A question first searches trusted calculations. The high-trust path runs a relevant trusted calculation and ends with a green check-shield marker for the Trusted outcome. The lower-trust path searches context and writes custom SQL, R, or Python, ending with either a blue quote-mark citation marker for the Cited outcome or a yellow exclamation marker for the Untrusted outcome."
 #| out-width: 100%
 
 knitr::include_graphics("../man/figures/trust-flow.svg")
@@ -104,9 +104,9 @@ The following table details the various ways each provenance outcome can occur:
 
 | How the answer is produced | Provenance outcome |
 |---|---|
-| A trusted R [measure](#semantic-layer) | Verified answer `r documentation_marker("A", alt = "")` |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | Verified answer `r documentation_marker("A", alt = "")` |
-| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | Verified answer `r documentation_marker("A", alt = "")` |
+| A trusted R [measure](#semantic-layer) | Trusted `r documentation_marker("A", alt = "")` |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with [definitions](#data-dictionaries) | Trusted `r documentation_marker("A", alt = "")` |
+| A [Snowflake semantic-view or Databricks metric-view metric](#warehouse-semantic-layers) | Trusted `r documentation_marker("A", alt = "")` |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | Cited `r documentation_marker("B", alt = "")` or Untrusted `r documentation_marker("C", alt = "")` |
 | Custom R | Cited `r documentation_marker("B", alt = "")` or Untrusted `r documentation_marker("C", alt = "")` |
 | No data tool used (e.g., because the agent already had sufficient information or the question could not be answered from accessible information) | No provenance outcome |
@@ -181,7 +181,7 @@ Observed individuals reflect organisms recorded during surveys. They should not 
 
 ### Warehouse semantic layers
 
-If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Verified answer` provenance outcome and display the green check-shield provenance marker.
+If you have trusted metrics in [Snowflake semantic views](https://docs.snowflake.com/en/user-guide/views-semantic/overview) or [Databricks metric views](https://docs.databricks.com/aws/en/uc-semantics/metric-views), you can use those calculations directly with commons. It can also group or filter metrics by approved fields from the warehouse. Answers based on these warehouse-defined metrics have the `Trusted` provenance outcome and display the green check-shield provenance marker.
 
 ## Data sources
 
@@ -238,7 +238,7 @@ There are three kinds of definitions. Definitions can participate in trusted met
 
 commons infers the definition kind from its expression. Aggregate and constant expressions are categorized as metrics, row-level Boolean expressions as filters, and other row-level expressions as derived values.
 
-[^definition-sql]: commons expands definitions used in custom SQL to expressions compiled for the data source. Because this is still custom SQL, the provenance outcome is `Cited` or `Untrusted`, rather than `Verified answer`.
+[^definition-sql]: commons expands definitions used in custom SQL to expressions compiled for the data source. Because this is still custom SQL, the provenance outcome is `Cited` or `Untrusted`, rather than `Trusted`.
 
 See the [DevRel Agent `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 

@@ -113,6 +113,8 @@
 #' * `call_metrics` invokes governed or warehouse-native metrics.
 #' * `call_calculation` invokes an exact trusted query.
 #' * `search_context` retrieves relevant business context.
+#' * `load_skill` loads instructions for a task, such as explaining how commons
+#'   determines and displays answer trust.
 #' * `describe_table` inspects a table or semantic model.
 #' * `run_sql` executes a read-only SQL query.
 #' * `run_r` executes R code to analyze results and render plots in the agent's

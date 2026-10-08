@@ -332,7 +332,7 @@ is_internal_turn_reminder <- function(content) {
   S7::S7_inherits(content, ellmer::ContentText) &&
     content@text %in%
       c(
-        claude_5_turn_reminder,
+        brevity_turn_reminder,
         restored_conversation_turn_reminder
       )
 }
@@ -536,7 +536,7 @@ viewer_ui <- function(summary) {
 trust_choices <- function() {
   c(
     "All answers" = "all",
-    "Verified" = "A",
+    "Trusted" = "A",
     "Cited" = "B",
     "Untrusted" = "C",
     "No data tool" = "none"

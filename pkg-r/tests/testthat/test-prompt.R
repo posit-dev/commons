@@ -155,17 +155,14 @@ test_that("both packages render the shared prompt cases the same way", {
   }
 })
 
-test_that("tool availability and the trust exception follow the shared cases", {
+test_that("tool availability follows the shared cases", {
   cases <- shared_fixture("prompt-render")$tool_data$cases
   expect_gt(length(cases), 0)
 
   for (case in cases) {
     tools <- as.character(unlist(case$tools))
     tools[tools == "$execution_tool"] <- execution_tool
-    data <- c(
-      tool_availability(tools),
-      list(citation_trust_exception = citation_trust_exception(tools))
-    )
+    data <- tool_availability(tools)
     expect_equal(data[names(case$expected)], case$expected, info = case$name)
   }
 })
@@ -292,13 +289,13 @@ test_that("prompt data renders the packaged template", {
 })
 
 test_that("Claude 5 model IDs are recognized across providers", {
-  expect_true(is_claude_5_model("claude-sonnet-5"))
-  expect_true(is_claude_5_model("anthropic/claude-opus-5"))
-  expect_true(is_claude_5_model("us.anthropic.claude-fable-5"))
-  expect_true(is_claude_5_model("databricks-claude-sonnet-5"))
-  expect_false(is_claude_5_model("claude-sonnet-4-5"))
-  expect_false(is_claude_5_model("gpt-5.4"))
-  expect_false(is_claude_5_model(NULL))
+  expect_true(needs_brevity_prompting("claude-sonnet-5"))
+  expect_true(needs_brevity_prompting("anthropic/claude-opus-5"))
+  expect_true(needs_brevity_prompting("us.anthropic.claude-fable-5"))
+  expect_true(needs_brevity_prompting("databricks-claude-sonnet-5"))
+  expect_false(needs_brevity_prompting("claude-sonnet-4-5"))
+  expect_false(needs_brevity_prompting("gpt-5.4"))
+  expect_false(needs_brevity_prompting(NULL))
 })
 
 test_that("instructions are not interpreted as prompt template expressions", {

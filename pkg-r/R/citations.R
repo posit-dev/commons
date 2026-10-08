@@ -158,34 +158,12 @@ citation_reminder_text <- function() {
   read_prompt("citation-request.md")
 }
 
-citation_trust_exception <- function(tools) {
-  trusted_path_tools <- intersect(trusted_tools, tools)
-  if (!length(trusted_path_tools)) {
-    return("")
-  }
-  names <- sprintf("`%s`", trusted_path_tools)
-  paste0(
-    " that is not based solely on output from ",
-    paste(names, collapse = " or ")
-  )
-}
-
 available_tool_names <- function(tools) {
   if (is.character(tools)) {
     return(tools)
   }
   vapply(tools, tool_name, character(1))
 }
-
-# Which outputs are citable depends on which tools the agent registered, so the
-# template branches on one flag per tool. The order here is the order the
-# citation sections read in, not the order tools are registered.
-trusted_tools <- c(
-  "search_pool",
-  "call_measure",
-  "call_metrics",
-  "call_calculation"
-)
 
 # This package's name for its code-execution tool. The shared template and its
 # flag stay language-neutral (`{{ execution_tool }}`, `has_execution_tool`);

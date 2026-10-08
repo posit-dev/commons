@@ -161,7 +161,7 @@ async def test_an_answer_with_no_data_tool_carries_no_marker(source: Any) -> Non
     assert await collect(agent, "How many orders?") == ["I cannot say."]
 
 
-async def test_a_trusted_calculation_is_marked_verified(source: Any) -> None:
+async def test_a_trusted_calculation_is_marked_trusted(source: Any) -> None:
     agent = Commons(
         scripted_chat(
             [

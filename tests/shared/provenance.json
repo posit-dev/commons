@@ -73,7 +73,7 @@
     ]
   },
   "collect_appended_tags": {
-    "description": "Which tags collect_appended_tags(turns, from_index) gathers from one exchange. Each case builds a conversation from `turns`: a turn has a `role` (`user` or `assistant`) and `contents`, where a content item is {\"type\": \"tool_result\", \"tag\": ...} or {\"type\": \"text\", \"text\": ...}. A tool result's `tag` is the commons_tag value the tool set; an absent `tag` key or a null value means the result carries no tag. `skip` counts the turns already present when the exchange began: Python passes it as from_index, R passes skip + 1. `expected` lists the tags collected, in turn order. A tag value outside A, B, and C is deliberately not pinned: Python drops it at collection, R returns it, and the only consumer, derive_provenance_tag, ignores anything but A and B either way.",
+    "description": "Which tags collect_appended_tags(turns, from_index) gathers from one exchange. Each case builds a conversation from `turns`: a turn has a `role` (`user` or `assistant`) and `contents`, where a content item is {\"type\": \"tool_result\", \"tag\": ...} or {\"type\": \"text\", \"text\": ...}. A tool result's `tag` is the commons_tag value the tool set; an absent `tag` key or a null value means the result carries no tag. `skip` counts the turns already present when the exchange began: Python passes it as from_index, R passes skip + 1. `expected` lists the tags collected, in turn order. A case with `expected_outcome` also passes the collected tags and `verified` value to derive_provenance_tag(), covering their composition. A tag value outside A, B, and C is deliberately not pinned: Python drops it at collection, R returns it, and the only consumer, derive_provenance_tag, ignores anything but A and B either way.",
     "cases": [
       {
         "name": "tags are collected across the appended turns",
@@ -102,7 +102,7 @@
         "expected": []
       },
       {
-        "name": "content without a tag is skipped",
+        "name": "untagged tool results do not disqualify a governed calculation",
         "turns": [
           {
             "role": "user",
@@ -115,7 +115,9 @@
           }
         ],
         "skip": 0,
-        "expected": ["A"]
+        "expected": ["A"],
+        "verified": false,
+        "expected_outcome": "A"
       }
     ]
   },
@@ -123,7 +125,7 @@
     "description": "Word-for-word copy both UIs render. `icon` is null when the provenance marker has no icon.",
     "tags": {
       "A": {
-        "label": "Verified answer",
+        "label": "Trusted",
         "icon": "trusted-icon.svg",
         "body": "This answer comes from a trusted calculation.",
         "pill_class": "trusted"
@@ -146,7 +148,7 @@
     "description": "The provenance marker appended after a classified answer. A live answer omits the \"Cited\" marker, because the verified citation's own aside already says as much; a review context asks for every outcome by passing include_cited. `emits` is false when nothing is rendered at all. A rendered marker carries that tag's label and body from provenance_display verbatim. The icon is not pinned here: its URL comes from each package's own served asset bundle.",
     "cases": [
       {
-        "name": "a verified answer renders its marker",
+        "name": "a trusted answer renders its marker",
         "tag": "A",
         "include_cited": false,
         "emits": true

@@ -14,8 +14,7 @@ When no trusted calculations are available, search context for relevant tables, 
 
 ## Citations
 
-Any answer in this conversation that is not based solely on output from `search_pool` is presented to the
-user as "Untrusted" unless you cite trusted text that supports your approach.
+An answer that includes ad hoc analysis is presented to the user as "Untrusted" unless it includes a verified citation to trusted text that supports its approach.
 
 Only the following text is citable:
 

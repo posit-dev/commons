@@ -100,9 +100,13 @@ def test_collection_matches_the_shared_fixture(case: dict[str, Any]) -> None:
         for turn in case["turns"]
     ]
 
-    assert collect_appended_tags(turns, case["skip"]) == [
-        Tag(tag) for tag in case["expected"]
-    ]
+    tags = collect_appended_tags(turns, case["skip"])
+    assert tags == [Tag(tag) for tag in case["expected"]]
+
+    if "expected_outcome" in case:
+        assert derive_provenance_tag(tags, verified=case["verified"]) is Tag(
+            case["expected_outcome"]
+        )
 
 
 def test_the_shared_fixture_covers_collection_edges() -> None:
