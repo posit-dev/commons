@@ -17,9 +17,9 @@ The high-trust path occurs when a question matches one of these **trusted calcul
 
 > How many total animals were observed at Oak Bluff?
 
-The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the `Verified answer` outcome.
+The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the `Trusted` outcome.
 
-> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" alt="Verified answer" />
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" alt="Trusted" />
 
 Although the agent had to decide *which* trusted calculation to run. It did not have to decide *what code to write*, reducing degrees of freedom and allowing the agent to use code that you already vetted.
 
@@ -28,7 +28,7 @@ However, we also expect users to ask questions that stray from the "happy path."
 
 # Trust flow
 
-A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Verified answer` outcome.
+A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Trusted` outcome.
 
 If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
@@ -38,8 +38,8 @@ The table below lists how each provenance outcome can occur:
 
 | How the answer is produced | Provenance outcome |
 |----|----|
-| A trusted Python [measure](#semantic-layer) | `Verified answer` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Verified answer` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
+| A trusted Python [measure](#semantic-layer) | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> or `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
 
@@ -324,4 +324,4 @@ app = App(app_ui, app_server)
 ## Footnotes
 
 
-[^1]: In custom SQL, the agent writes a definition as a `{name}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Verified answer`.
+[^1]: In custom SQL, the agent writes a definition as a `{name}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Trusted`.

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head><meta name="robots" content="noindex, nofollow">
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.10.18">
+<meta name="generator" content="quarto-1.10.19">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -79,7 +79,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-64a204ab8560d761af7679ceaba22944.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bf27225e3a48a9273f3daa8f8e829971.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
 <link href="../site_libs/bootstrap/bootstrap-c4d708d4e441993890320f2eab87994c.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
@@ -233,7 +233,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="57" data-forks="2"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="58" data-forks="2"></div>
     </span>
   </li>  
 </ul>
@@ -340,16 +340,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <blockquote class="blockquote">
 <p>How many total animals were observed at Oak Bluff?</p>
 </blockquote>
-<p>The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the <code>Verified answer</code> outcome.</p>
+<p>The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the <code>Trusted</code> outcome.</p>
 <blockquote class="blockquote">
-<p>At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt="Verified answer"></p>
+<p>At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt="Trusted"></p>
 </blockquote>
 <p>Although the agent had to decide <em>which</em> trusted calculation to run. It did not have to decide <em>what code to write</em>, reducing degrees of freedom and allowing the agent to use code that you already vetted.</p>
 <p>However, we also expect users to ask questions that stray from the “happy path.” For those, the agent searches for additional context and writes custom code (currently SQL, but soon custom Python code as well). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an <code>Untrusted</code> outcome.</p>
 </section>
 <section id="trust-flow" class="level1">
 <h1>Trust flow</h1>
-<p>A <code>commons</code> agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the <code>Verified answer</code> outcome.</p>
+<p>A <code>commons</code> agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the <code>Trusted</code> outcome.</p>
 <p>If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user’s question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an <code>Untrusted</code> outcome.</p>
 <p>The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If <code>commons</code> verifies that the quoted text appears in that source, the provenance outcome is <code>Cited</code> and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is <code>Untrusted</code> and the answer displays the yellow exclamation provenance marker</p>
 <p>The table below lists how each provenance outcome can occur:</p>
@@ -363,11 +363,11 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td>A trusted Python <a href="#semantic-layer">measure</a></td>
-<td><code>Verified answer</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
+<td><code>Trusted</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
 </tr>
 <tr class="even">
 <td>A <a href="#definitions">data dictionary metric</a>, possibly grouped or filtered with definitions</td>
-<td><code>Verified answer</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
+<td><code>Trusted</code> <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""></td>
 </tr>
 <tr class="odd">
 <td>Custom SQL, including SQL that uses <a href="#definitions">data dictionary definitions</a></td>
@@ -626,7 +626,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div id="quarto-appendix" class="default"><section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><h2 class="anchored quarto-appendix-heading">Footnotes</h2>
 
 <ol>
-<li id="fn1"><p>In custom SQL, the agent writes a definition as a <code>{name}</code> token, and <code>commons</code> expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is <code>Cited</code> or <code>Untrusted</code>, not <code>Verified answer</code>.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
+<li id="fn1"><p>In custom SQL, the agent writes a definition as a <code>{name}</code> token, and <code>commons</code> expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is <code>Cited</code> or <code>Untrusted</code>, not <code>Trusted</code>.<a href="#fnref1" class="footnote-back" role="doc-backlink">↩︎</a></p></li>
 </ol>
 </section></div></main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">

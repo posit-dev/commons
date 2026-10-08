@@ -411,9 +411,9 @@ The high-trust path occurs when a question matches one of these **trusted calcul
 
 > How many total animals were observed at Oak Bluff?
 
-The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the `Verified answer` outcome.
+The agent searches for a trusted calculation that answers the question. If it finds one, it runs that calculation and reports the result with the green check-shield provenance marker for the `Trusted` outcome.
 
-> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt="Verified answer">
+> At Oak Bluff, 59 individual animals were observed across 5 species, based on 28 hours of survey effort. Note this reflects observed individuals during surveys, not necessarily a full census of every animal present at the site. <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt="Trusted">
 
 Although the agent had to decide *which* trusted calculation to run. It did not have to decide *what code to write*, reducing degrees of freedom and allowing the agent to use code that you already vetted.
 
@@ -421,7 +421,7 @@ However, we also expect users to ask questions that stray from the “happy path
 
 ## Trust flow
 
-A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Verified answer` outcome.
+A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Trusted` outcome.
 
 If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user’s question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
@@ -431,8 +431,8 @@ The table below lists how each provenance outcome can occur:
 
 | How the answer is produced | Provenance outcome |
 |---|---|
-| A trusted Python [measure](#semantic-layer) | `Verified answer` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
-| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Verified answer` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| A trusted Python [measure](#semantic-layer) | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
+| A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img class="commons-documentation-marker" src="assets/figs/citation-mark.svg" alt=""> or `Untrusted` <img class="commons-documentation-marker" src="assets/figs/warning-icon.svg" alt=""> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
 
@@ -606,7 +606,7 @@ There are three kinds of definition. A definition can take part in a trusted met
 
 `commons` infers the kind from the expression. An aggregate or constant expression is a metric. A row-level Boolean expression is a filter. Every other row-level expression is a derived value.
 
-[^definition-sql]: In custom SQL, the agent writes a definition as a `{{name}}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Verified answer`.
+[^definition-sql]: In custom SQL, the agent writes a definition as a `{{name}}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Trusted`.
 
 See the [DevRel Agent's `data-dict.yaml`](https://github.com/posit-dev/devrel-agent/blob/main/dictionaries/devrel.data-dict.yaml) for examples of definitions.
 
@@ -761,7 +761,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |---|---|
-| Snowflake semantic views and Databricks metric views as trusted calculations, answered `Verified answer` | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
+| Snowflake semantic views and Databricks metric views as trusted calculations, with the `Trusted` outcome | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
 | Custom R code from the agent, run in a sandboxed worker process | Writes custom SQL only, with Python execution coming soon |
 | `gt` tables and `ggplot` figures returned by measures, rendered in the chat | Renders data-frame results as tables, with no current plot support |
 | `trajectory_read()` and `trajectory_review()`, for reading and annotating logged conversations | No equivalent yet |

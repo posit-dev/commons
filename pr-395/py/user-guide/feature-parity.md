@@ -4,7 +4,7 @@ While both Python and R packages are first-class implementations of `commons`, t
 
 | R-only feature | What a Python agent does instead |
 |----|----|
-| Snowflake semantic views and Databricks metric views as trusted calculations, answered `Verified answer` | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
+| Snowflake semantic views and Databricks metric views as trusted calculations, with the `Trusted` outcome | Imports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so `Cited` or `Untrusted` |
 | Custom R code from the agent, run in a sandboxed worker process | Writes custom SQL only, with Python execution coming soon |
 | `gt` tables and `ggplot` figures returned by measures, rendered in the chat | Renders data-frame results as tables, with no current plot support |
 | `trajectory_read()` and `trajectory_review()`, for reading and annotating logged conversations | No equivalent yet |

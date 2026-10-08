@@ -37,7 +37,7 @@
     "href": "user-guide/feature-parity.html",
     "title": "Feature parity with the R package",
     "section": "",
-    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\n\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\nSnowflake semantic views and Databricks metric views as trusted calculations, answered Verified answer\nImports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so Cited or Untrusted\n\n\nCustom R code from the agent, run in a sandboxed worker process\nWrites custom SQL only, with Python execution coming soon\n\n\ngt tables and ggplot figures returned by measures, rendered in the chat\nRenders data-frame results as tables, with no current plot support\n\n\ntrajectory_read() and trajectory_review(), for reading and annotating logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
+    "text": "While both Python and R packages are first-class implementations of commons, the R implementation was developed first, and the Python package does not yet implement everything the R package does. This page lists the gaps that remain as of the current version and what a Python agent does instead.\n\n\n\n\n\n\n\nR-only feature\nWhat a Python agent does instead\n\n\n\n\nSnowflake semantic views and Databricks metric views as trusted calculations, with the Trusted outcome\nImports the catalog of a Snowflake or Databricks engine, but answers these questions with custom SQL, so Cited or Untrusted\n\n\nCustom R code from the agent, run in a sandboxed worker process\nWrites custom SQL only, with Python execution coming soon\n\n\ngt tables and ggplot figures returned by measures, rendered in the chat\nRenders data-frame results as tables, with no current plot support\n\n\ntrajectory_read() and trajectory_review(), for reading and annotating logged conversations\nNo equivalent yet\n\n\nThe commons agent skill for coding agents\nShips with the R package only\n\n\n\nThis page will shrink (and eventually disappear) as the Python package matures.",
     "crumbs": [
       "User Guide",
       "Feature parity with the R package"
@@ -323,7 +323,7 @@
     "href": "package-info.html",
     "title": "Package Info",
     "section": "",
-    "text": "Package\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nchatlas\n&gt;=0.22.0\n2026-09-04\n\n\n\nhtmltools\n&gt;=0.6\n2026-05-21\n\n\n\nopentelemetry-api\n&gt;=1.0\n2026-09-25\n\n\n\npydantic\n&gt;=2\n2026-08-28\n\n\n\nduckdb\n&gt;=1.0\n2026-09-28\n\n\n\nraghilda\n&gt;=0.2.1\n2026-09-02\n\n\n\nsqlalchemy\n&gt;=2.0\n2026-09-25\n\n\n\npyyaml\n&gt;=6\n2025-09-25\n\n\n\njinja2\n&gt;=3\n2025-03-05\n\n\n\npyarrow\n&gt;=17\n2026-08-10\n\n\n\nsqlglot\n&gt;=25\n2026-09-27\n\n\n\ngoogle-re2\n&gt;=1.1.20251105\n2025-11-05"
+    "text": "Package\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nchatlas\n&gt;=0.22.0\n2026-09-04\n\n\n\nhtmltools\n&gt;=0.6\n2026-05-21\n\n\n\nopentelemetry-api\n&gt;=1.0\n2026-10-06\n\n\n\npydantic\n&gt;=2\n2026-10-08\n\n\n\nduckdb\n&gt;=1.0\n2026-09-28\n\n\n\nraghilda\n&gt;=0.2.1\n2026-09-02\n\n\n\nsqlalchemy\n&gt;=2.0\n2026-10-07\n\n\n\npyyaml\n&gt;=6\n2025-09-25\n\n\n\njinja2\n&gt;=3\n2025-03-05\n\n\n\npyarrow\n&gt;=17\n2026-08-10\n\n\n\nsqlglot\n&gt;=25\n2026-09-30\n\n\n\ngoogle-re2\n&gt;=1.1.20251105\n2025-11-05"
   },
   {
     "objectID": "package-info.html#shiny",
@@ -337,7 +337,7 @@
     "href": "package-info.html#tracing",
     "title": "Package Info",
     "section": "tracing",
-    "text": "tracing\n\n\n\nPackage\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nopentelemetry-sdk\n&gt;=1.39\n2026-09-25\n\n\n\nopentelemetry-exporter-otlp-json-file\n—\n2026-09-25\n\n\n\nhttpx\n&gt;=0.27\n2024-12-06"
+    "text": "tracing\n\n\n\nPackage\nVersion Constraint\nLast Published\nPyPI\n\n\n\n\nopentelemetry-sdk\n&gt;=1.39\n2026-10-06\n\n\n\nopentelemetry-exporter-otlp-json-file\n—\n2026-10-06\n\n\n\nhttpx\n&gt;=0.27\n2024-12-06"
   },
   {
     "objectID": "index.html",
@@ -740,7 +740,7 @@
     "href": "user-guide/get-started.html#footnotes",
     "title": "Introduction to commons",
     "section": "Footnotes",
-    "text": "Footnotes\n\n\nIn custom SQL, the agent writes a definition as a {name} token, and commons expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is Cited or Untrusted, not Verified answer.↩︎",
+    "text": "Footnotes\n\n\nIn custom SQL, the agent writes a definition as a {name} token, and commons expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is Cited or Untrusted, not Trusted.↩︎",
     "crumbs": [
       "User Guide",
       "Introduction to commons"
