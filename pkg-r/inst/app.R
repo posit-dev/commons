@@ -92,7 +92,8 @@ ui <- page_chat(
   id = "chat",
   greeting = greeting,
   theme = commons_theme(),
-  drawer = chat_drawer(width = 640, open = FALSE)
+  drawer = chat_drawer(width = 640, open = FALSE),
+  toolbar_global = bslib::toolbar(commons_share_button("chat"), input_dark_mode())
 )
 
 server <- function(input, output, session) {

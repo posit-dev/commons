@@ -7,6 +7,15 @@
   beside the document, and the agent revises them with a new `edit_artifact`
   tool.
 
+* On Posit Connect, viewers share a read-only copy of a conversation or a
+  document as static content they own, from a new `commons_share_button()`
+  or the document drawer. `commons_app()` includes the button. Sharing is
+  available when the app's deployer associates a Connect "Visitor API Key"
+  integration.
+
+* Restored conversations show answers as they were displayed, with their
+  documents, citations, and provenance markers.
+
 # commons 0.1.1
 
 * Fixes an issue with the R code sandbox where the generated policy would be

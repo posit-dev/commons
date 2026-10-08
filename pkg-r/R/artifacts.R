@@ -74,9 +74,8 @@ artifact_store_reset <- function(store) {
   invisible(store)
 }
 
-# A conversation's documents, saved with it in shinychat's history so they open
-# again after a restore. Rendered output is kept rather than rerun, and only
-# the latest version's: older version chips open the latest one, as they do
+# Saved with the conversation so its documents open again after a restore.
+# Only the latest rendering is kept; older version chips open it, as they do
 # live.
 artifact_store_snapshot <- function(store) {
   ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))

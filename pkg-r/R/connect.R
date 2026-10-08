@@ -370,12 +370,6 @@ connect_add_collaborator <- function(client, guid, principal_guid) {
   invisible(NULL)
 }
 
-# --- sharing as the viewer ------------------------------------------------------
-
-# Sharing publishes with a Connect API key acting as the viewer, traded for
-# their session token through a "Visitor API Key" integration. A deployer turns
-# sharing on by associating one with this content; a `Viewer` max role can't
-# publish, so it doesn't count.
 connect_share_audience <- function() {
   if (!exists("audience", envir = share_cache)) {
     share_cache$audience <- tryCatch(
@@ -394,6 +388,7 @@ connect_share_audience <- function() {
 
 share_cache <- new.env(parent = emptyenv())
 
+# An integration capped at the Viewer role can't publish.
 connect_visitor_integration <- function(client, guid) {
   if (!nzchar(guid)) {
     return(NULL)

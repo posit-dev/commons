@@ -137,7 +137,7 @@ truncate_title <- function(text, max_chars = 80) {
   if (nchar(text) <= max_chars) {
     return(text)
   }
-  paste0(substr(text, 1, max_chars - 1), "…")
+  paste0(substr(text, 1, max_chars - 1), "\u2026")
 }
 
 write_static_manifest <- function(dir) {

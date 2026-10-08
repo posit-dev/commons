@@ -104,7 +104,7 @@ share_server <- function(id, client, chat, session) {
       write_document_bundle(artifact_get(store, target$id), dir)
     }
     task$invoke(target, bundle_archive(dir))
-    share_modal(target$heading, "Publishing to Posit Connect…")
+    share_modal(target$heading, "Publishing to Posit Connect\u2026")
   })
 
   shiny::observeEvent(task$status(), {
@@ -180,7 +180,12 @@ share_confirm_modal <- function(target, confirm_id) {
     if (update) {
       htmltools::p(
         "This updates ",
-        htmltools::a("the copy you shared before", href = target$receipt$url, target = "_blank"),
+        htmltools::a(
+          "the copy you shared before",
+          href = target$receipt$url,
+          target = "_blank",
+          .noWS = "after"
+        ),
         "."
       )
     },
@@ -208,7 +213,8 @@ share_done_modal <- function(target, receipt) {
       htmltools::a(
         "give others access",
         href = paste0(receipt$dashboard_url, "/access"),
-        target = "_blank"
+        target = "_blank",
+        .noWS = "after"
       ),
       "."
     ),
