@@ -6,7 +6,11 @@ tool_load_skill <- function() {
       if (is.null(skill)) {
         cli::cli_abort("There is no skill named {.val {name}}.")
       }
-      tool_result(skill$body, title = paste("Read up on", skill$topic))
+      tool_result(
+        skill$body,
+        title = paste("Read up on", skill$topic),
+        icon = maybe_icon("book")
+      )
     },
     load_skill_description(skills),
     name = "load_skill",
@@ -15,6 +19,7 @@ tool_load_skill <- function() {
     ),
     annotations = ellmer::tool_annotations(
       title = "Reading up",
+      icon = maybe_icon("book"),
       read_only_hint = TRUE
     )
   )
