@@ -215,7 +215,7 @@ tool_call_metrics <- function(private) {
       paste(
         "Compute trusted calculations from governed metrics, optionally",
         "grouped and filtered. Metric, grouping, and filter names come from",
-        "%s; commons compiles and runs the query."
+        "%s; the query is compiled and run for you."
       ),
       if (pool_searchable(
         private$registry,

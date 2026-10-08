@@ -1,4 +1,4 @@
-# Artifacts are Quarto documents the agent writes inside a <commons-artifact>
+# Artifacts are Quarto documents the agent writes inside a <artifact>
 # tag (see citation_scanner()) and changes with the edit_artifact tool. Each
 # saved version is written to its own directory, which is ordinary Quarto
 # source a user could deploy as it stands, and rendered in a sandboxed worker.
@@ -11,7 +11,7 @@ tool_edit_artifact <- function(private) {
     paste(
       "Edit a document that already exists. Load the artifacts skill before",
       "you use this tool. This tool can't create a document: create one by",
-      "writing it in a <commons-artifact> tag in your reply. `old_string`",
+      "writing it in a <artifact> tag in your reply. `old_string`",
       "must appear exactly once in the document's current source, unless",
       "`replace_all` is true; it is replaced with `new_string`.",
       "Edits can change the frontmatter. Each edit saves and renders a new",
@@ -200,11 +200,11 @@ artifact_scan_reminder <- function(event) {
     event$reason,
     malformed = paste(
       "had a malformed opening tag. Start it on its own line as",
-      "`<commons-artifact id=\"short-id\" title=\"Title\">`, with a",
+      "`<artifact id=\"short-id\" title=\"Title\">`, with a",
       "lowercase id."
     ),
     too_long = "was too long.",
-    unclosed = "was never closed with `</commons-artifact>`."
+    unclosed = "was never closed with `</artifact>`."
   )
   paste(what, why, "It was not saved.")
 }
@@ -348,7 +348,7 @@ artifact_edit <- function(
         i = if (length(ids)) "Documents in this conversation: {.val {ids}}.",
         i = paste(
           "To create a document, write it in a",
-          "{.code <commons-artifact>} tag in your reply."
+          "{.code <artifact>} tag in your reply."
         )
       ),
       call = call
@@ -478,8 +478,8 @@ validate_artifact_frontmatter <- function(yaml_text, call = rlang::caller_env())
     artifact_invalid(
       "disallowed_key",
       "The frontmatter may only set {.field {artifact_allowed_keys}}, not
-       {.field {disallowed}}. commons sets the format, theme, and execution
-       options.",
+       {.field {disallowed}}. The format, theme, and execution options are
+       set for you.",
       call = call
     )
   }
@@ -495,8 +495,8 @@ validate_artifact_frontmatter <- function(yaml_text, call = rlang::caller_env())
   if (!is.null(front$format) && !identical(front$format, "html")) {
     artifact_invalid(
       "disallowed_format",
-      "The frontmatter's {.field format} can only be {.val html}; commons sets
-       its options.",
+      "The frontmatter's {.field format} can only be {.val html}; its options are set
+       for you.",
       call = call
     )
   }

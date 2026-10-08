@@ -8,23 +8,23 @@ metadata:
 
 When the user asks for a report or another document they will read on its own, keep, or share, write it as a Quarto document. It opens in a panel beside the chat as you write it: each R cell runs as soon as you finish writing it, and the user sees the knitted result rather than source. Answer ordinary questions in the chat.
 
-Start the document on its own line with `<commons-artifact id="sales-by-region" title="Sales by region">` and end it with `</commons-artifact>`. Between them goes the full `.qmd` source: YAML frontmatter, then Markdown and R code cells. The id is a short lowercase slug. Writing the tag again with the same id replaces that document; a new id makes a new one. In the chat, the document is replaced by a link to it, so don't repeat its contents in your reply.
+Start the document on its own line with `<artifact id="sales-by-region" title="Sales by region">` and end it with `</artifact>`. Between them goes the full `.qmd` source: YAML frontmatter, then Markdown and R code cells. The id is a short lowercase slug. Writing the tag again with the same id replaces that document; a new id makes a new one. In the chat, the document is replaced by a link to it, so don't repeat its contents in your reply.
 
-In the frontmatter, set `title` and, if useful, `subtitle` or `date`; commons sets the format, theme, and execution options.
+In the frontmatter, set `title` and, if useful, `subtitle` or `date`; the format, theme, and execution options are set for you.
 
-Documents can't reach your data sources, your R session, or earlier tool results. Get data in a cell by calling a trusted calculation through `commons`, with the same arguments as its tool:
+Documents can't reach your data sources, your R session, or earlier tool results. Get data in a cell by calling a trusted calculation through the `trusted` object, with the same arguments as its tool:
 
 ```r
-revenue <- commons$metrics(metrics = "net_revenue", dimensions = "region")
+revenue <- trusted$metrics(metrics = "net_revenue", dimensions = "region")
 ```
 
 Each trusted-calculation tool you have has a counterpart:
 
-- `commons$measure(name, arguments)`, as for `call_measure`.
-- `commons$metrics(metrics, dimensions, filters, where, arguments, source)`, as for `call_metrics`.
-- `commons$calculation(name, arguments, source)`, as for `call_calculation`.
+- `trusted$measure(name, arguments)`, as for `call_measure`.
+- `trusted$metrics(metrics, dimensions, filters, where, arguments, source)`, as for `call_metrics`.
+- `trusted$calculation(name, arguments, source)`, as for `call_calculation`.
 
-Write arguments out as literals: strings, numbers, and `c()` or `list()` of them, not variables or computed values. Each call returns a data frame, or a vector for a measure that returns a value. Before the cell runs, commons runs the call, saves its result with the document, and replaces the call with a read of the saved file.
+Write arguments out as literals: strings, numbers, and `c()` or `list()` of them, not variables or computed values. Each call returns a data frame, or a vector for a measure that returns a value. Before the cell runs, each call is run, its result is saved with the document, and the call is replaced with a read of the saved file.
 
 - Run the calculations with tools first, so you know what they return before you write about them.
 - Every number in the document must come from a trusted call or a cell that runs when it renders. Write key figures in prose as inline R expressions, such as `` `r nrow(revenue)` ``, rather than typing them.

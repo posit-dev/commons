@@ -1,5 +1,5 @@
-# Documents get data by calling `commons$measure()`, `commons$metrics()`, or
-# `commons$calculation()` in their code. Nothing defines `commons` where that
+# Documents get data by calling `trusted$measure()`, `trusted$metrics()`, or
+# `trusted$calculation()` in their code. Nothing defines `trusted` where that
 # code runs: before a unit is knitted, each call is resolved through its
 # trusted path, its result is written under `data/`, and the call is replaced
 # with a read of that file, so the saved document is plain R beside a
@@ -36,7 +36,7 @@ find_trusted_calls <- function(code, call = rlang::caller_env()) {
     return(list())
   }
   data <- utils::getParseData(exprs, includeText = NA)
-  uses <- data$parent[data$token == "SYMBOL" & data$text == "commons"]
+  uses <- data$parent[data$token == "SYMBOL" & data$text == "trusted"]
   lapply(uses, trusted_call_at, data = data, call = call)
 }
 
@@ -50,8 +50,8 @@ trusted_call_at <- function(data, symbol_expr, call = rlang::caller_env()) {
   ) {
     artifact_invalid(
       "reserved_name",
-      "{.code commons} can only be used to call {.code commons$measure()},
-       {.code commons$metrics()}, or {.code commons$calculation()}.",
+      "{.code trusted} can only be used to call {.code trusted$measure()},
+       {.code trusted$metrics()}, or {.code trusted$calculation()}.",
       call = call
     )
   }
@@ -62,8 +62,8 @@ trusted_call_at <- function(data, symbol_expr, call = rlang::caller_env()) {
   if (is.null(signature)) {
     artifact_invalid(
       "unknown_method",
-      "{.code commons${method}()} doesn't exist. Use {.code commons$measure()},
-       {.code commons$metrics()}, or {.code commons$calculation()}.",
+      "{.code trusted${method}()} doesn't exist. Use {.code trusted$measure()},
+       {.code trusted$metrics()}, or {.code trusted$calculation()}.",
       call = call
     )
   }
@@ -71,7 +71,7 @@ trusted_call_at <- function(data, symbol_expr, call = rlang::caller_env()) {
   if (inherits(matched, "error")) {
     artifact_invalid(
       "invalid_arguments",
-      "{.code {text}} doesn't match {.code commons${method}()}'s arguments:
+      "{.code {text}} doesn't match {.code trusted${method}()}'s arguments:
        {conditionMessage(matched)}",
       call = call
     )
@@ -135,14 +135,14 @@ normalize_trusted_call <- function(method, args, call = rlang::caller_env()) {
   if (length(extra)) {
     artifact_invalid(
       "invalid_arguments",
-      "{.code commons${method}()} has no argument {.arg {extra}}.",
+      "{.code trusted${method}()} has no argument {.arg {extra}}.",
       call = call
     )
   }
   invalid_value <- function(field) {
     artifact_invalid(
       "invalid_argument_value",
-      "{.code commons${method}()} has an invalid {.arg {field}}.",
+      "{.code trusted${method}()} has an invalid {.arg {field}}.",
       call = call
     )
   }
@@ -247,7 +247,7 @@ resolve_trusted_call <- function(store, artifact, found) {
       store$resolve_input(found[c("kind", "call")]),
       error = function(err) {
         cli::cli_abort(
-          "{.code commons${found$kind}()} failed: {conditionMessage(err)}",
+          "{.code trusted${found$kind}()} failed: {conditionMessage(err)}",
           call = NULL
         )
       }

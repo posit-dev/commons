@@ -89,15 +89,15 @@ test_that("trusted calls get files as the shared cases say", {
 test_that("trusted calls are found in R code with literal arguments", {
   found <- find_trusted_calls(paste(
     "#| label: totals",
-    "revenue <- commons$metrics(\"net_revenue\", dimensions = c(\"region\"))",
-    "nrow(commons$measure(\"orders\", arguments = list(n = -2)))",
+    "revenue <- trusted$metrics(\"net_revenue\", dimensions = c(\"region\"))",
+    "nrow(trusted$measure(\"orders\", arguments = list(n = -2)))",
     sep = "\n"
   ))
   expect_identical(
     vapply(found, `[[`, character(1), "text"),
     c(
-      "commons$metrics(\"net_revenue\", dimensions = c(\"region\"))",
-      "commons$measure(\"orders\", arguments = list(n = -2))"
+      "trusted$metrics(\"net_revenue\", dimensions = c(\"region\"))",
+      "trusted$measure(\"orders\", arguments = list(n = -2))"
     )
   )
   expect_identical(found[[1]]$target, "revenue")
@@ -106,17 +106,17 @@ test_that("trusted calls are found in R code with literal arguments", {
   expect_length(find_trusted_calls("not R ("), 0)
 
   expect_identical(
-    artifact_slug(find_trusted_calls("commons$measure(paste0(\"or\", \"ders\"))")),
+    artifact_slug(find_trusted_calls("trusted$measure(paste0(\"or\", \"ders\"))")),
     "non_literal_argument"
   )
   expect_identical(
-    artifact_slug(find_trusted_calls("x <- \"orders\"\ncommons$measure(x)")),
+    artifact_slug(find_trusted_calls("x <- \"orders\"\ntrusted$measure(x)")),
     "non_literal_argument"
   )
-  expect_identical(artifact_slug(find_trusted_calls("f <- commons$measure")), "reserved_name")
-  expect_identical(artifact_slug(find_trusted_calls("commons$query(1)")), "unknown_method")
+  expect_identical(artifact_slug(find_trusted_calls("f <- trusted$measure")), "reserved_name")
+  expect_identical(artifact_slug(find_trusted_calls("trusted$query(1)")), "unknown_method")
   expect_identical(
-    artifact_slug(find_trusted_calls("commons$measure(\"a\", by = 1)")),
+    artifact_slug(find_trusted_calls("trusted$measure(\"a\", by = 1)")),
     "invalid_arguments"
   )
 })
@@ -132,7 +132,7 @@ test_that("the saved document reads each trusted result from its file", {
   artifact <- artifact_ensure(store, "doc")
   run <- new_artifact_run(store, artifact)
   body <- paste0(
-    "```{r}\nbig <- commons$metrics(\"big_revenue\", dimensions = \"region\")\n```\n\n",
+    "```{r}\nbig <- trusted$metrics(\"big_revenue\", dimensions = \"region\")\n```\n\n",
     "EMEA had `r big$big_revenue[big$region == \"EMEA\"]`.\n"
   )
   for (unit in artifact_units(segment_artifact_body(body))) {
@@ -149,7 +149,7 @@ test_that("the saved document reads each trusted result from its file", {
   )
   qmd <- read_utf8(file.path(dir, "report.qmd"))
   expect_match(qmd, "big <- read.csv(\"data/big.csv\")", fixed = TRUE)
-  expect_no_match(qmd, "commons", fixed = TRUE)
+  expect_no_match(qmd, "trusted$", fixed = TRUE)
   big <- read.csv(file.path(dir, "data", "big.csv"))
   expect_equal(big$big_revenue[big$region == "EMEA"], 1950)
 
@@ -182,11 +182,11 @@ test_that("a cell whose trusted call can't resolve shows the error", {
     store,
     "doc",
     "Doc",
-    "---\ntitle: Doc\n---\n\n```{r}\nx <- commons$measure(\"missing\")\n```\n"
+    "---\ntitle: Doc\n---\n\n```{r}\nx <- trusted$measure(\"missing\")\n```\n"
   )
   result <- wait_for_promise(committed$rendered)
 
-  expect_match(result$errors, "Cell 1: `commons$measure()` failed", fixed = TRUE)
+  expect_match(result$errors, "Cell 1: `trusted$measure()` failed", fixed = TRUE)
   expect_match(
     paste(result$html, collapse = ""),
     "<div class=\"commons-cell-error\">",
@@ -279,7 +279,7 @@ orders_agent <- function() {
 orders_document <- function(cell = "nrow(orders)") {
   paste0(
     "\n---\ntitle: Orders\n---\n\n",
-    "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
+    "```{r}\norders <- trusted$measure(\"orders\")\n```\n\n",
     "There are `r ", cell, "` orders.\n\n",
     "```{r}\n#| label: by-region\ntable(orders$region)\nplot(orders$revenue)\n```\n"
   )
@@ -307,9 +307,9 @@ test_that("a streamed document knits from its trusted calls as it arrives", {
 
   scanner <- citation_scanner(on_artifact = artifact_scan_handler(store))
   source <- paste0(
-    "Here.\n<commons-artifact id=\"orders\" title=\"Orders\">",
+    "Here.\n<artifact id=\"orders\" title=\"Orders\">",
     orders_document(),
-    "</commons-artifact>\nDone."
+    "</artifact>\nDone."
   )
   starts <- seq(1, nchar(source), by = 20)
   out <- paste(
@@ -416,9 +416,9 @@ test_that("outside Shiny, a call's documents are knitted and reported", {
   agent <- orders_agent()
   turns <- list(
     ellmer::AssistantTurn(list(ellmer::ContentText(paste0(
-      "<commons-artifact id=\"orders\" title=\"Orders\">",
+      "<artifact id=\"orders\" title=\"Orders\">",
       orders_document(),
-      "</commons-artifact>"
+      "</artifact>"
     )))),
     ellmer::UserTurn(list(ellmer::ContentText("A tool result."))),
     ellmer::AssistantTurn(list(ellmer::ContentText("Done.")))

@@ -3,17 +3,17 @@ library(commons)
 document <- paste0(
   "---\ntitle: Orders by region\n---\n\n",
   "## Summary\n\n",
-  "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
+  "```{r}\norders <- trusted$measure(\"orders\")\n```\n\n",
   "There are `r nrow(orders)` orders across **three** regions.\n\n",
   "```{r}\ntable(orders$region)\n```\n\n",
   "- EMEA leads.\n- APAC trails.\n"
 )
 response_chunks <- c(
-  "I wrote the report.\n\n<commons-arti",
+  "I wrote the report.\n\n<arti",
   paste0("fact id=\"orders\" title=\"Orders by region\">\n", substr(document, 1, 80)),
   substr(document, 81, 160),
   substr(document, 161, nchar(document)),
-  "</commons-artifact>\n\nIt covers every region."
+  "</artifact>\n\nIt covers every region."
 )
 raw_response <- paste0(response_chunks, collapse = "")
 

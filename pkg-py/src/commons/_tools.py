@@ -551,7 +551,7 @@ def _call_metrics(context: ToolContext) -> Tool:
         "call_metrics",
         "Compute trusted calculations from governed metrics, optionally "
         "grouped and filtered. Metric, grouping, and filter names come from "
-        f"{named}; commons compiles and runs the query.",
+        f"{named}; the query is compiled and run for you.",
         _parameters(
             {
                 "metrics": _string_array(

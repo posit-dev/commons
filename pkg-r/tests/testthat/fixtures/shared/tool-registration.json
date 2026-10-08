@@ -194,7 +194,7 @@
         "name": "load_skill",
         "shape": "bare",
         "tool": "load_skill",
-        "text": "Load a skill's instructions. When a request matches one of these skills, load it before you respond:\n\n- trust-system: How commons determines and displays answer trust. Load it when the user asks about green shields, blue quotation marks, yellow warning circles, trusted code, trusted context, or how answer trust is determined."
+        "text": "Load a skill's instructions. When a request matches one of these skills, load it before you respond:\n\n- trust-system: How the app determines and displays answer trust. Load it when the user asks about green shields, blue quotation marks, yellow warning circles, trusted code, trusted context, or how answer trust is determined."
       },
       {
         "name": "run_sql with nothing to fall back from",
@@ -248,13 +248,13 @@
         "name": "call_metrics with no pool to search",
         "shape": "definitions_visible",
         "tool": "call_metrics",
-        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt; commons compiles and runs the query."
+        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt; the query is compiled and run for you."
       },
       {
         "name": "call_metrics beside a searchable pool",
         "shape": "measures_and_definitions",
         "tool": "call_metrics",
-        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt or search_pool; commons compiles and runs the query."
+        "text": "Compute trusted calculations from governed metrics, optionally grouped and filtered. Metric, grouping, and filter names come from the system prompt or search_pool; the query is compiled and run for you."
       },
       {
         "name": "search_catalog",

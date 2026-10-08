@@ -21,9 +21,9 @@ ASIDE_CLOSE <- "</shiny-aside>"
 ELEMENT_BODY_CAP <- 16384L
 # An open tag with attributes and a bare one are separate literals, so neither
 # matches a longer element name such as the chip's.
-ARTIFACT_OPEN <- "<commons-artifact "
-ARTIFACT_OPEN_BARE <- "<commons-artifact>"
-ARTIFACT_CLOSE <- "</commons-artifact>"
+ARTIFACT_OPEN <- "<artifact "
+ARTIFACT_OPEN_BARE <- "<artifact>"
+ARTIFACT_CLOSE <- "</artifact>"
 ARTIFACT_HEADER_CAP <- 1024L
 ARTIFACT_BODY_CAP <- 200000L
 
@@ -404,7 +404,7 @@ is_ci_prefix <- function(suffix, literal, len) {
   identical(tolower(suffix), tolower(substr(literal, 1, len)))
 }
 
-# The header is everything between `<commons-artifact` and `>`: quoted
+# The header is everything between `<artifact` and `>`: quoted
 # attributes only. An id is required and becomes a directory name, so it is a
 # lowercase slug.
 parse_artifact_attributes <- function(header) {

@@ -427,7 +427,7 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
     "Orders by region · v1"
   )
   expect_false(app$get_js(
-    "document.body.innerText.includes('commons$measure')"
+    "document.body.innerText.includes('trusted$measure')"
   ))
 
   app$run_js(paste0(
