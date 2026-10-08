@@ -387,7 +387,7 @@ artifact_link_html <- function(store, id, version = NULL) {
   sprintf(
     paste0(
       "<commons-artifact-link artifact=\"%s\" version=\"%d\"%s>",
-      "%s · v%d</commons-artifact-link>"
+      "%s \u00b7 v%d</commons-artifact-link>"
     ),
     escape_attr(id),
     version,

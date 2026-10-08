@@ -296,17 +296,17 @@ artifact_piece_html <- function(run, piece) {
   if (piece$kind == "cell") {
     unit <- if (!is.null(piece[["unit"]])) run$units[[piece[["unit"]]]]
     if (is.null(unit)) {
-      return(artifact_pending_html("Writing code…"))
+      return(artifact_pending_html("Writing code\u2026"))
     }
     if (identical(unit$status, "pending")) {
-      return(artifact_pending_html("Running…"))
+      return(artifact_pending_html("Running\u2026"))
     }
     return(unit$html)
   }
   values <- lapply(piece$units, function(i) {
     unit <- run$units[[i]]
     if (is.null(unit) || identical(unit$status, "pending")) {
-      "<span class=\"commons-pending\">…</span>"
+      "<span class=\"commons-pending\">\u2026</span>"
     } else {
       unit$value
     }
