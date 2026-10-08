@@ -135,8 +135,9 @@ class LocalBackend:
     argument: the only way to accept weaker protection is the environment
     opt-in that ``protection_mode()`` consults.
 
-    The lifecycle assumes POSIX signals; ``protection_mode()`` refuses
-    Windows hosts.
+    The lifecycle assumes POSIX signals. Windows is reached only through the
+    unsafe opt-in, and there ``terminate()`` and ``kill()`` are the same
+    call, so a shutdown has no grace window.
     """
 
     def __init__(
