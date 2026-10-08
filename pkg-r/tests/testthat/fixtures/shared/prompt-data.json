@@ -27,7 +27,6 @@
     "has_call_metrics",
     "has_call_calculation",
     "has_execution_tool",
-    "has_edit_artifact",
     "execution_tool",
     "has_instructions",
     "instructions"

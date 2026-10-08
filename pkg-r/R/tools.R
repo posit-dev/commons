@@ -1,7 +1,7 @@
 # Register only the tools the agent's composition earns; nothing about its
 # surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
-  c(
+  tools <- c(
     if (pool_searchable(
       private$registry,
       private$definitions,
@@ -34,11 +34,11 @@ build_commons_tools <- function(self, private) {
       tool_search_context(private),
       tool_describe_table(private),
       tool_run_sql(private),
-      tool_run_r(private),
-      tool_load_skill(),
-      tool_edit_artifact(private)
-    )
+      tool_run_r(private)
+    ),
+    if (!is.null(private$artifacts)) list(tool_edit_artifact(private))
   )
+  c(tools, list(tool_load_skill(vapply(tools, tool_name, character(1)))))
 }
 
 tool_search_catalog <- function(private) {

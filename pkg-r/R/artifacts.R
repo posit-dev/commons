@@ -9,10 +9,11 @@ tool_edit_artifact <- function(private) {
       artifact_edit(private$artifacts, id, old_string, new_string, replace_all)
     },
     paste(
-      "Edit a document that already exists. This tool can't create one:",
-      "create a document by writing it in a <commons-artifact> tag in your",
-      "reply. `old_string` must appear exactly once in the document's current",
-      "source, unless `replace_all` is true; it is replaced with `new_string`.",
+      "Edit a document that already exists. Load the artifacts skill before",
+      "you use this tool. This tool can't create a document: create one by",
+      "writing it in a <commons-artifact> tag in your reply. `old_string`",
+      "must appear exactly once in the document's current source, unless",
+      "`replace_all` is true; it is replaced with `new_string`.",
       "Edits can change the frontmatter. Each edit saves and renders a new",
       "version, and the result says whether it rendered. To rewrite most of a",
       "document, write the tag again with the same id instead."

@@ -99,7 +99,6 @@ def system_prompt_data(
         "glossary_context": glossary_context,
         "definition_index": definition_index,
         **tool_availability(tool_names),
-        "has_edit_artifact": "edit_artifact" in tool_names,
         "execution_tool": EXECUTION_TOOL,
         "has_instructions": bool(instructions),
         "instructions": instructions,
