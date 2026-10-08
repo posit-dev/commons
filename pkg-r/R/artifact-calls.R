@@ -105,7 +105,6 @@ parse_tokens <- function(data, id) {
   children$token
 }
 
-# `x <- commons$metrics(...)` or `x = ...` assigns to `x`.
 assignment_target <- function(data, id) {
   parent <- parse_parent(data, id)
   children <- data[data$parent == parent, ]
@@ -131,7 +130,6 @@ is_literal <- function(x) {
     all(vapply(as.list(x)[-1], is_literal, logical(1)))
 }
 
-# `args` are a call's arguments by name, as literal values.
 normalize_trusted_call <- function(method, args, call = rlang::caller_env()) {
   extra <- setdiff(names(args), names(formals(trusted_call_signatures[[method]])))
   if (length(extra)) {
@@ -277,8 +275,6 @@ rewrite_trusted_text <- function(text, replacements) {
   text
 }
 
-# The R code of a unit: a cell's lines between its fences, or an inline
-# expression.
 unit_code <- function(unit) {
   if (unit$kind == "inline") {
     return(unit$text)
@@ -287,7 +283,6 @@ unit_code <- function(unit) {
   paste(lines[-c(1, length(lines))], collapse = "\n")
 }
 
-# The saved body, with each call that resolved replaced by its read.
 rewrite_artifact_body <- function(body, calls, artifact) {
   replacements <- character()
   for (unit in artifact_units(segment_artifact_body(body))) {
