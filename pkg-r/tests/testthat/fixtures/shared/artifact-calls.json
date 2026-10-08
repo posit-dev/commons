@@ -1,0 +1,162 @@
+{
+  "description": "The trusted calls a document makes in its code: `commons.measure()`, `commons.metrics()`, or `commons.calculation()`, spelled `commons$...` in R. Before a cell runs, the host resolves each call through the same implementation as call_measure, call_metrics, or call_calculation, writes the result to `data/<file>`, and replaces the call with a read of that file, so the saved document never calls commons. `methods` pins each call's argument names, which mirror the tools'. `calls` gives a call's arguments by name, as literal values, and either its normalized call or the slug of the first problem found; slugs rather than messages, since the wording belongs to each language. Finding calls in code and requiring literal arguments are each language's own, since each parses its own syntax. `files` pins the file each call in a document gets: the name it's assigned to, or its kind, made unique ignoring case, with identical calls sharing one file. A sequence of one string and a bare string are the same `metrics` value.",
+  "max_calls": 20,
+  "methods": {
+    "measure": ["name", "arguments"],
+    "metrics": ["metrics", "dimensions", "filters", "where", "arguments", "source"],
+    "calculation": ["name", "arguments", "source"]
+  },
+  "calls": [
+    {
+      "name": "a measure with arguments",
+      "method": "measure",
+      "arguments": {"name": "species_richness", "arguments": {"by": "site"}},
+      "expected": {"kind": "measure", "call": {"name": "species_richness", "arguments": {"by": "site"}}}
+    },
+    {
+      "name": "a measure without arguments",
+      "method": "measure",
+      "arguments": {"name": "order_count"},
+      "expected": {"kind": "measure", "call": {"name": "order_count", "arguments": {}}}
+    },
+    {
+      "name": "metrics with dimensions, filters, a where clause, and a source",
+      "method": "metrics",
+      "arguments": {
+        "metrics": ["net_revenue", "order_count"],
+        "dimensions": ["region"],
+        "filters": ["emea"],
+        "where": [{"column": "order_date", "op": ">=", "value": "2026-01-01"}],
+        "source": "sales_db"
+      },
+      "expected": {
+        "kind": "metrics",
+        "call": {
+          "metrics": ["net_revenue", "order_count"],
+          "dimensions": ["region"],
+          "filters": ["emea"],
+          "where": [{"column": "order_date", "op": ">=", "value": "2026-01-01"}],
+          "arguments": {},
+          "source": "sales_db"
+        }
+      }
+    },
+    {
+      "name": "a single metric may be a bare string",
+      "method": "metrics",
+      "arguments": {"metrics": "net_revenue"},
+      "expected": {
+        "kind": "metrics",
+        "call": {"metrics": ["net_revenue"], "dimensions": [], "filters": [], "where": [], "arguments": {}, "source": null}
+      }
+    },
+    {
+      "name": "a single where clause may be a bare mapping",
+      "method": "metrics",
+      "arguments": {"metrics": ["net_revenue"], "where": {"column": "region", "op": "=", "value": "EMEA"}},
+      "expected": {
+        "kind": "metrics",
+        "call": {"metrics": ["net_revenue"], "dimensions": [], "filters": [], "where": [{"column": "region", "op": "=", "value": "EMEA"}], "arguments": {}, "source": null}
+      }
+    },
+    {
+      "name": "a calculation",
+      "method": "calculation",
+      "arguments": {"name": "top_customers", "arguments": {"n": 10}},
+      "expected": {"kind": "calculation", "call": {"name": "top_customers", "arguments": {"n": 10}, "source": null}}
+    },
+    {
+      "name": "an argument the method does not take is rejected",
+      "method": "measure",
+      "arguments": {"name": "a", "dimensions": ["region"]},
+      "error": "invalid_arguments"
+    },
+    {
+      "name": "a measure name must be a string",
+      "method": "measure",
+      "arguments": {"name": ["a", "b"]},
+      "error": "invalid_argument_value"
+    },
+    {
+      "name": "a measure must be named",
+      "method": "measure",
+      "arguments": {},
+      "error": "invalid_argument_value"
+    },
+    {
+      "name": "metrics are required",
+      "method": "metrics",
+      "arguments": {"dimensions": ["region"]},
+      "error": "invalid_argument_value"
+    },
+    {
+      "name": "arguments must be a mapping",
+      "method": "measure",
+      "arguments": {"name": "a", "arguments": ["site"]},
+      "error": "invalid_argument_value"
+    },
+    {
+      "name": "a source must be a string",
+      "method": "calculation",
+      "arguments": {"name": "a", "source": ["x", "y"]},
+      "error": "invalid_argument_value"
+    }
+  ],
+  "files": [
+    {
+      "name": "a call assigned to a name gets that name",
+      "calls": [
+        {"target": "revenue", "method": "metrics", "arguments": {"metrics": ["net_revenue"]}}
+      ],
+      "expected": ["revenue.csv"]
+    },
+    {
+      "name": "an unassigned call is named for its kind",
+      "calls": [
+        {"target": null, "method": "measure", "arguments": {"name": "order_count"}},
+        {"target": null, "method": "measure", "arguments": {"name": "species_richness"}}
+      ],
+      "expected": ["measure.csv", "measure-2.csv"]
+    },
+    {
+      "name": "identical calls share a file",
+      "calls": [
+        {"target": "orders", "method": "measure", "arguments": {"name": "order_count"}},
+        {"target": "again", "method": "measure", "arguments": {"name": "order_count"}}
+      ],
+      "expected": ["orders.csv"]
+    },
+    {
+      "name": "names are unique ignoring case",
+      "calls": [
+        {"target": "revenue", "method": "metrics", "arguments": {"metrics": ["net_revenue"]}},
+        {"target": "Revenue", "method": "metrics", "arguments": {"metrics": ["gross_revenue"]}}
+      ],
+      "expected": ["revenue.csv", "Revenue-2.csv"]
+    },
+    {
+      "name": "a name that can't be a file name falls back to the kind",
+      "calls": [
+        {"target": "rev.by.region", "method": "metrics", "arguments": {"metrics": ["net_revenue"]}}
+      ],
+      "expected": ["metrics.csv"]
+    },
+    {
+      "name": "a document makes at most max_calls different calls",
+      "calls": [
+        {"target": null, "method": "measure", "arguments": {"name": "m01"}}, {"target": null, "method": "measure", "arguments": {"name": "m02"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m03"}}, {"target": null, "method": "measure", "arguments": {"name": "m04"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m05"}}, {"target": null, "method": "measure", "arguments": {"name": "m06"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m07"}}, {"target": null, "method": "measure", "arguments": {"name": "m08"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m09"}}, {"target": null, "method": "measure", "arguments": {"name": "m10"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m11"}}, {"target": null, "method": "measure", "arguments": {"name": "m12"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m13"}}, {"target": null, "method": "measure", "arguments": {"name": "m14"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m15"}}, {"target": null, "method": "measure", "arguments": {"name": "m16"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m17"}}, {"target": null, "method": "measure", "arguments": {"name": "m18"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m19"}}, {"target": null, "method": "measure", "arguments": {"name": "m20"}},
+        {"target": null, "method": "measure", "arguments": {"name": "m21"}}
+      ],
+      "error": "too_many_calls"
+    }
+  ]
+}

@@ -269,7 +269,8 @@ call_semantic_metrics <- function(
     metrics,
     dimensions,
     filters,
-    metadata = semantic_metric_metadata(metric_members)
+    metadata = semantic_metric_metadata(metric_members),
+    bindings = unname(arguments)
   )
 }
 
@@ -287,9 +288,10 @@ metric_tool_result <- function(
     dimensions = dimensions,
     filters = filters
   )),
-  metadata = NULL
+  metadata = NULL,
+  bindings = NULL
 ) {
-  tool_result(
+  out <- tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
@@ -298,6 +300,16 @@ metric_tool_result <- function(
     tag = "A",
     show_tag = FALSE
   )
+  with_query_extra(out, sql, bindings)
+}
+
+# Keeps the query with the result, for the manifest beside a document's data.
+with_query_extra <- function(result, sql, bindings = NULL) {
+  result@extra$sql <- sql
+  if (length(bindings)) {
+    result@extra$bindings <- bindings
+  }
+  result
 }
 
 metric_definition_metadata <- function(definitions) {

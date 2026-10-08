@@ -44,52 +44,140 @@ test_that("documents are validated as the shared cases say", {
   }
 })
 
-test_that("inputs are normalized as the shared cases say", {
-  spec <- shared_fixture("artifact-inputs")
-  expect_gt(length(spec$cases), 0)
-  expect_identical(ARTIFACT_MAX_INPUTS, as.integer(spec$max_inputs))
+test_that("trusted calls are normalized as the shared cases say", {
+  spec <- shared_fixture("artifact-calls")
+  expect_gt(length(spec$calls), 0)
+  expect_identical(
+    lapply(trusted_call_signatures, function(f) names(formals(f))),
+    lapply(spec$methods, unlist)
+  )
 
-  for (case in spec$cases) {
+  for (case in spec$calls) {
+    run <- function() normalize_trusted_call(case$method, case$arguments)
     if (is.null(case$error)) {
-      expect_identical(
-        normalize_artifact_inputs(case$inputs),
-        case$expected,
-        info = case$name
-      )
+      expect_identical(run(), case$expected, info = case$name)
     } else {
-      expect_identical(
-        artifact_slug(normalize_artifact_inputs(case$inputs)),
-        case$error,
-        info = case$name
-      )
+      expect_identical(artifact_slug(run()), case$error, info = case$name)
     }
   }
 })
 
-test_that("frontmatter reads booleans as YAML 1.2 does", {
-  doc <- parse_artifact_document(paste0(
-    "---\ntitle: Top\ncommons:\n  inputs:\n    top:\n      measure: top\n",
-    "      arguments: {n: 3, y: on}\n---\nBody.\n"
-  ))
-  expect_identical(doc$inputs[[1]]$call$arguments, list(n = 3L, y = "on"))
+test_that("trusted calls get files as the shared cases say", {
+  spec <- shared_fixture("artifact-calls")
+  expect_identical(ARTIFACT_MAX_CALLS, as.integer(spec$max_calls))
+
+  for (case in spec$files) {
+    run <- function() {
+      calls <- list()
+      for (x in case$calls) {
+        found <- c(
+          list(target = x$target),
+          normalize_trusted_call(x$method, x$arguments)
+        )
+        calls <- register_trusted_call(calls, found)
+      }
+      unname(vapply(calls, `[[`, character(1), "file"))
+    }
+    if (is.null(case$error)) {
+      expect_identical(run(), unlist(case$expected), info = case$name)
+    } else {
+      expect_identical(artifact_slug(run()), case$error, info = case$name)
+    }
+  }
 })
 
-test_that("the written document loads its inputs under commons' scaffold", {
-  doc <- parse_artifact_document(paste0(
-    "---\ntitle: Orders\ncommons:\n  inputs:\n    orders:\n",
-    "      measure: orders\n---\n\nBody.\n"
+test_that("trusted calls are found in R code with literal arguments", {
+  found <- find_trusted_calls(paste(
+    "#| label: totals",
+    "revenue <- commons$metrics(\"net_revenue\", dimensions = c(\"region\"))",
+    "nrow(commons$measure(\"orders\", arguments = list(n = -2)))",
+    sep = "\n"
   ))
+  expect_identical(
+    vapply(found, `[[`, character(1), "text"),
+    c(
+      "commons$metrics(\"net_revenue\", dimensions = c(\"region\"))",
+      "commons$measure(\"orders\", arguments = list(n = -2))"
+    )
+  )
+  expect_identical(found[[1]]$target, "revenue")
+  expect_null(found[[2]]$target)
+  expect_identical(found[[2]]$call$arguments, list(n = -2))
+  expect_length(find_trusted_calls("not R ("), 0)
+
+  expect_identical(
+    artifact_slug(find_trusted_calls("commons$measure(paste0(\"or\", \"ders\"))")),
+    "non_literal_argument"
+  )
+  expect_identical(
+    artifact_slug(find_trusted_calls("x <- \"orders\"\ncommons$measure(x)")),
+    "non_literal_argument"
+  )
+  expect_identical(artifact_slug(find_trusted_calls("f <- commons$measure")), "reserved_name")
+  expect_identical(artifact_slug(find_trusted_calls("commons$query(1)")), "unknown_method")
+  expect_identical(
+    artifact_slug(find_trusted_calls("commons$measure(\"a\", by = 1)")),
+    "invalid_arguments"
+  )
+})
+
+test_that("frontmatter reads booleans as YAML 1.2 does", {
+  doc <- parse_artifact_document("---\ntitle: Top\nsubtitle: On\n---\nBody.\n")
+  expect_identical(doc$frontmatter$subtitle, "On")
+})
+
+test_that("the saved document reads each trusted result from its file", {
+  agent <- test_agent(data_sources = list(sales_db = definitions_source()))
+  store <- agent$artifact_store()
+  artifact <- artifact_ensure(store, "doc")
+  run <- new_artifact_run(store, artifact)
+  body <- paste0(
+    "```{r}\nbig <- commons$metrics(\"big_revenue\", dimensions = \"region\")\n```\n\n",
+    "EMEA had `r big$big_revenue[big$region == \"EMEA\"]`.\n"
+  )
+  for (unit in artifact_units(segment_artifact_body(body))) {
+    artifact_run_prepare(run, unit)
+  }
+
   dir <- withr::local_tempdir()
-  write_artifact_dir(dir, doc, list(orders = test_sales()))
+  doc <- parse_artifact_document(paste0("---\ntitle: Big\n---\n\n", body))
+  write_artifact_dir(dir, doc, run$calls, artifact)
 
   expect_setequal(
     list.files(dir, recursive = TRUE),
-    c("_quarto.yml", "report.qmd", "data/orders.csv")
+    c("_quarto.yml", "report.qmd", "data/big.csv", "data/manifest.yaml")
   )
-  expect_equal(read.csv(file.path(dir, "data", "orders.csv")), test_sales())
   qmd <- read_utf8(file.path(dir, "report.qmd"))
-  expect_no_match(qmd, "commons:", fixed = TRUE)
-  expect_match(qmd, "`orders` <- read.csv(\"data/orders.csv\")", fixed = TRUE)
+  expect_match(qmd, "big <- read.csv(\"data/big.csv\")", fixed = TRUE)
+  expect_no_match(qmd, "commons", fixed = TRUE)
+  big <- read.csv(file.path(dir, "data", "big.csv"))
+  expect_equal(big$big_revenue[big$region == "EMEA"], 1950)
+
+  manifest <- yaml::read_yaml(file.path(dir, "data", "manifest.yaml"))
+  expect_named(manifest, "big.csv")
+  expect_identical(manifest$big.csv$kind, "metrics")
+  expect_identical(manifest$big.csv$call$metrics, "big_revenue")
+  expect_match(manifest$big.csv$sql, "^SELECT")
+  expect_match(manifest$big.csv$resolved, "^\\d{4}-\\d{2}-\\d{2}T")
+})
+
+test_that("a cell whose trusted call can't resolve shows the error", {
+  store <- test_agent()$artifact_store()
+  committed <- artifact_commit(
+    store,
+    "doc",
+    "Doc",
+    "---\ntitle: Doc\n---\n\n```{r}\nx <- commons$measure(\"missing\")\n```\n"
+  )
+  result <- wait_for_promise(committed$rendered)
+
+  expect_match(result$errors, "Cell 1: `commons$measure()` failed", fixed = TRUE)
+  expect_match(
+    paste(result$html, collapse = ""),
+    "<div class=\"commons-cell-error\">",
+    fixed = TRUE
+  )
+  expect_length(artifact_get(store, "doc")$calls, 0)
 })
 
 test_that("documents split into prose blocks and cells as they arrive", {
@@ -175,8 +263,8 @@ orders_agent <- function() {
 
 orders_document <- function(cell = "nrow(orders)") {
   paste0(
-    "\n---\ntitle: Orders\ncommons:\n  inputs:\n    orders:\n",
-    "      measure: orders\n---\n\n",
+    "\n---\ntitle: Orders\n---\n\n",
+    "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
     "There are `r ", cell, "` orders.\n\n",
     "```{r}\n#| label: by-region\ntable(orders$region)\nplot(orders$revenue)\n```\n"
   )
@@ -195,7 +283,7 @@ wait_until_ready <- function(store, id) {
   }))
 }
 
-test_that("a streamed document knits from its trusted inputs as it arrives", {
+test_that("a streamed document knits from its trusted calls as it arrives", {
   skip_if_no_sandbox()
   agent <- orders_agent()
   store <- agent$artifact_store()
@@ -247,6 +335,10 @@ test_that("a prose edit reuses every code result", {
   artifact <- artifact_get(store, "orders")
   expect_identical(artifact$units, units)
   expect_match(paste(artifact$html, collapse = ""), "We count 6 orders.", fixed = TRUE)
+  expect_equal(
+    read.csv(file.path(artifact_latest_dir(artifact), "data", "orders.csv")),
+    test_sales()
+  )
 })
 
 test_that("errors stay in the document and are reported by cell", {
@@ -259,7 +351,7 @@ test_that("errors stay in the document and are reported by cell", {
   result <- wait_for_promise(
     artifact_edit(store, "orders", "table(orders$region)", "stop('boom')")
   )
-  expect_match(result@value, "Cell 1 (`by-region`): boom", fixed = TRUE)
+  expect_match(result@value, "Cell 2 (`by-region`): boom", fixed = TRUE)
   expect_match(
     paste(artifact_get(store, "orders")$html, collapse = ""),
     "<div class=\"commons-cell-error\">",

@@ -39,8 +39,9 @@ tool_edit_artifact <- function(private) {
 
 # --- the store -----------------------------------------------------------------
 
-# `resolve_input` runs one normalized input through its trusted path and
-# returns the result; the store never touches data sources itself.
+# `resolve_input` runs one normalized trusted call and returns its result as
+# a data frame, with the SQL or provenance behind it; the store never touches
+# data sources itself.
 new_artifact_store <- function(
   resolve_input,
   network = "none",
@@ -97,7 +98,8 @@ take_artifact_reminders <- function(store) {
 }
 
 # An artifact exists from the moment its tag opens, so a streaming run can
-# cache its inputs, but only counts as a document once it has a version.
+# cache its trusted results, but only counts as a document once it has a
+# version.
 artifact_get <- function(store, id) {
   if (!rlang::is_string(id)) {
     return(NULL)
@@ -113,9 +115,9 @@ artifact_ensure <- function(store, id) {
     artifact$id <- id
     artifact$title <- id
     artifact$versions <- list()
-    artifact$inputs <- list()
+    artifact$results <- list()
     artifact$units <- list()
-    artifact$unit_inputs <- NULL
+    artifact$calls <- list()
     artifact$html <- character()
     artifact$errors <- character()
     artifact$status <- "writing"
@@ -227,7 +229,7 @@ artifact_errors_reminder <- function(id, version, errors) {
 
 # Validates and saves a version, then finishes running it: a streamed
 # version's run has been going since its frontmatter arrived, and an edited
-# one gets a new run that reuses outputs when code and inputs are unchanged.
+# one gets a new run that reuses outputs when its code is unchanged.
 artifact_commit <- function(store, id, title, source, run = NULL) {
   doc <- tryCatch(
     parse_artifact_document(source),
@@ -260,9 +262,7 @@ artifact_commit <- function(store, id, title, source, run = NULL) {
 
   rendered <- tryCatch(
     {
-      data <- resolve_artifact_inputs(store, artifact, doc$inputs)
-      write_artifact_dir(dir, doc, data)
-      run <- run %||% artifact_rerun(store, artifact, doc, source)
+      run <- run %||% artifact_rerun(store, artifact, doc)
       artifact_run_finish(run, source)
     },
     error = function(err) {
@@ -281,22 +281,16 @@ artifact_commit <- function(store, id, title, source, run = NULL) {
   list(version = version, rendered = rendered)
 }
 
-artifact_rerun <- function(store, artifact, doc, source) {
+artifact_rerun <- function(store, artifact, doc) {
   run <- new_artifact_run(store, artifact)
   units <- artifact_units(segment_artifact_body(doc$body))
   signature <- function(units) lapply(units, `[`, c("kind", "text"))
-  if (
-    identical(signature(units), signature(artifact$units)) &&
-      identical(input_signature(doc$inputs), artifact$unit_inputs)
-  ) {
+  if (identical(signature(units), signature(artifact$units))) {
     run$units <- artifact$units
+    run$calls <- artifact$calls
     run$queued <- length(units)
   }
   run
-}
-
-input_signature <- function(inputs) {
-  lapply(inputs, `[`, c("name", "kind", "call"))
 }
 
 artifact_settle <- function(store, artifact, version, doc, run, result) {
@@ -306,12 +300,14 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     artifact$status <- "ready"
     if (!is.null(run)) {
       artifact$units <- run$units
-      artifact$unit_inputs <- input_signature(doc$inputs)
+      artifact$calls <- run$calls
     }
   }
+  dir <- artifact$versions[[version]]$dir
+  write_artifact_dir(dir, doc, run$calls %||% list(), artifact)
   writeLines(
     artifact_document_html(artifact$title, result$html),
-    file.path(artifact$versions[[version]]$dir, "report.html"),
+    file.path(dir, "report.html"),
     useBytes = TRUE
   )
   artifact_notify(store, list(
@@ -407,7 +403,7 @@ artifact_link_html <- function(store, id, version = NULL) {
 
 # --- documents -----------------------------------------------------------------
 
-artifact_allowed_keys <- c("title", "subtitle", "date", "format", "commons")
+artifact_allowed_keys <- c("title", "subtitle", "date", "format")
 
 parse_artifact_document <- function(source, call = rlang::caller_env()) {
   split <- split_artifact_source(source)
@@ -494,147 +490,7 @@ validate_artifact_frontmatter <- function(yaml_text, call = rlang::caller_env())
       call = call
     )
   }
-  commons <- front$commons %||% list()
-  if (!is_mapping(commons) || length(setdiff(names(commons), "inputs"))) {
-    artifact_invalid(
-      "disallowed_key",
-      "The frontmatter's {.field commons} key may only set {.field inputs}.",
-      call = call
-    )
-  }
-
-  front$commons <- NULL
-  list(
-    frontmatter = front,
-    inputs = normalize_artifact_inputs(commons$inputs, call = call)
-  )
-}
-
-ARTIFACT_MAX_INPUTS <- 20L
-
-artifact_input_keys <- list(
-  measure = c("measure", "arguments"),
-  metrics = c("metrics", "dimensions", "filters", "where", "arguments", "source"),
-  calculation = c("calculation", "arguments", "source")
-)
-
-normalize_artifact_inputs <- function(inputs, call = rlang::caller_env()) {
-  if (length(inputs) == 0) {
-    return(list())
-  }
-  if (!is_mapping(inputs)) {
-    artifact_invalid(
-      "invalid_inputs",
-      "{.field commons.inputs} must map input names to trusted calculations.",
-      call = call
-    )
-  }
-  if (length(inputs) > ARTIFACT_MAX_INPUTS) {
-    artifact_invalid(
-      "too_many_inputs",
-      "A document can declare at most {ARTIFACT_MAX_INPUTS} inputs.",
-      call = call
-    )
-  }
-  Map(
-    normalize_artifact_input,
-    names(inputs),
-    inputs,
-    MoreArgs = list(call = call),
-    USE.NAMES = FALSE
-  )
-}
-
-normalize_artifact_input <- function(name, spec, call = rlang::caller_env()) {
-  if (!grepl("^[a-z][a-z0-9_]{0,63}$", name)) {
-    artifact_invalid(
-      "invalid_input_name",
-      "Input name {.val {name}} must be a lowercase identifier, such as
-       {.val revenue_by_region}.",
-      call = call
-    )
-  }
-  kind <- if (is_mapping(spec)) {
-    intersect(names(artifact_input_keys), names(spec))
-  }
-  if (length(kind) != 1L) {
-    artifact_invalid(
-      "invalid_input_kind",
-      "Input {.val {name}} must name exactly one of {.field measure},
-       {.field metrics}, or {.field calculation}.",
-      call = call
-    )
-  }
-  extra <- setdiff(names(spec), artifact_input_keys[[kind]])
-  if (length(extra)) {
-    artifact_invalid(
-      "invalid_input_key",
-      "Input {.val {name}} can't set {.field {extra}} for a {kind} input.",
-      call = call
-    )
-  }
-  invalid_value <- function(field) {
-    artifact_invalid(
-      "invalid_input_value",
-      "Input {.val {name}} has an invalid {.field {field}}.",
-      call = call
-    )
-  }
-
-  arguments <- spec$arguments %||% structure(list(), names = character())
-  if (!is_mapping(arguments)) {
-    invalid_value("arguments")
-  }
-  if (!is.null(spec$source) && !rlang::is_string(spec$source)) {
-    invalid_value("source")
-  }
-  strings <- function(field, required = FALSE) {
-    value <- unlist(spec[[field]])
-    if (
-      (is.null(value) && !required) ||
-        (is.character(value) && length(value) > 0 && !anyNA(value))
-    ) {
-      return(as.list(value))
-    }
-    invalid_value(field)
-  }
-
-  fn_call <- switch(
-    kind,
-    measure = ,
-    calculation = {
-      if (!rlang::is_string(spec[[kind]])) {
-        invalid_value(kind)
-      }
-      c(
-        list(name = spec[[kind]], arguments = arguments),
-        if (identical(kind, "calculation")) list(source = spec$source)
-      )
-    },
-    metrics = {
-      where <- spec$where
-      if (is_mapping(where)) {
-        where <- list(where)
-      }
-      if (!is.null(where) && !all(vapply(where, is_mapping, logical(1)))) {
-        invalid_value("where")
-      }
-      list(
-        metrics = strings("metrics", required = TRUE),
-        dimensions = strings("dimensions"),
-        filters = strings("filters"),
-        where = unname(as.list(where %||% list())),
-        arguments = arguments,
-        source = spec$source
-      )
-    }
-  )
-  list(
-    name = name,
-    kind = kind,
-    call = fn_call,
-    path = paste0("data/", name, ".csv")
-  )
+  list(frontmatter = front)
 }
 
 apply_artifact_edit <- function(
@@ -689,8 +545,8 @@ artifact_invalid <- function(slug, message, call = rlang::caller_env()) {
   )
 }
 
-# YAML 1.1 reads `n`, `y`, `on`, and `off` as booleans, which would turn an
-# argument named `n` into `FALSE`. Quarto reads YAML 1.2, where only true and
+# YAML 1.1 reads `n`, `y`, `on`, and `off` as booleans, which would turn a
+# subtitle of `On` into `TRUE`. Quarto reads YAML 1.2, where only true and
 # false are.
 yaml12_booleans <- function() {
   list(
@@ -705,40 +561,13 @@ is_mapping <- function(x) {
     (length(x) == 0 || (!is.null(names(x)) && all(nzchar(names(x)))))
 }
 
-# --- inputs and files ------------------------------------------------------------
-
-resolve_artifact_inputs <- function(store, artifact, inputs) {
-  data <- list()
-  for (input in inputs) {
-    cached <- artifact$inputs[[input$name]]
-    value <- if (
-      !is.null(cached) &&
-        identical(cached$kind, input$kind) &&
-        identical(cached$call, input$call)
-    ) {
-      cached$value
-    } else {
-      tryCatch(
-        store$resolve_input(input),
-        error = function(err) {
-          cli::cli_abort(
-            "Input {.val {input$name}} failed: {conditionMessage(err)}",
-            call = NULL
-          )
-        }
-      )
-    }
-    artifact$inputs[[input$name]] <- c(input, list(value = value))
-    data[[input$name]] <- value
-  }
-  data
-}
+# --- trusted results and files -------------------------------------------------
 
 # A private handle store, so the result isn't advertised to run_r.
 resolve_artifact_input <- function(private, input) {
   handles <- new_handle_store(max_rows = Inf)
   args <- input$call
-  switch(
+  result <- switch(
     input$kind,
     measure = call_measure_tool(
       private$registry,
@@ -771,60 +600,50 @@ resolve_artifact_input <- function(private, input) {
   )
   ids <- handle_ids(handles)
   value <- if (length(ids)) get_handle(handles, ids[[1]])
-  if (is.atomic(value) && !is.null(value)) {
+  scalar <- is.atomic(value) && !is.null(value)
+  if (scalar) {
     value <- data.frame(value = value)
   }
   if (!is.data.frame(value)) {
     cli::cli_abort("It must return a table or a value, not a plot or nothing.")
   }
-  value
+  provenance <- if (identical(input$kind, "measure")) {
+    private$measure_provenance[[args$name]]
+  }
+  list(
+    value = value,
+    scalar = scalar,
+    sql = result@extra$sql,
+    bindings = result@extra$bindings,
+    provenance = if (length(provenance)) as.list(provenance)
+  )
 }
 
-write_artifact_dir <- function(dir, doc, data) {
+write_artifact_dir <- function(dir, doc, calls, artifact) {
   dir.create(file.path(dir, "data"), recursive = TRUE, showWarnings = FALSE)
   writeLines(artifact_quarto_yml(), file.path(dir, "_quarto.yml"))
-  writeLines(artifact_qmd(doc), file.path(dir, "report.qmd"), useBytes = TRUE)
-  for (input in doc$inputs) {
-    utils::write.csv(
-      data[[input$name]],
-      file.path(dir, input$path),
-      row.names = FALSE,
-      fileEncoding = "UTF-8"
+  writeLines(
+    artifact_qmd(doc$frontmatter, rewrite_artifact_body(doc$body, calls, artifact)),
+    file.path(dir, "report.qmd"),
+    useBytes = TRUE
+  )
+  for (key in names(calls)) {
+    write_trusted_result(
+      artifact$results[[key]]$value,
+      file.path(dir, "data", calls[[key]]$file)
+    )
+  }
+  if (length(calls)) {
+    yaml::write_yaml(
+      trusted_call_manifest(calls, artifact),
+      file.path(dir, "data", "manifest.yaml")
     )
   }
   invisible(dir)
 }
 
-artifact_qmd <- function(doc) {
-  paste0(
-    "---\n",
-    yaml::as.yaml(doc$frontmatter),
-    "---\n\n",
-    artifact_inputs_setup(doc$inputs),
-    doc$body
-  )
-}
-
-# Loading inputs ahead of the document's own cells means inline expressions
-# can use them anywhere.
-artifact_inputs_setup <- function(inputs) {
-  if (length(inputs) == 0) {
-    return("")
-  }
-  paste0(
-    "```{r}\n#| include: false\n",
-    artifact_inputs_code(inputs),
-    "\n```\n\n"
-  )
-}
-
-artifact_inputs_code <- function(inputs) {
-  reads <- vapply(
-    inputs,
-    function(input) sprintf("`%s` <- read.csv(\"%s\")", input$name, input$path),
-    character(1)
-  )
-  paste(reads, collapse = "\n")
+artifact_qmd <- function(frontmatter, body) {
+  paste0("---\n", yaml::as.yaml(frontmatter), "---\n\n", body)
 }
 
 artifact_quarto_yml <- function() {

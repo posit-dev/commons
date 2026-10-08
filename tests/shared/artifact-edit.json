@@ -1,6 +1,6 @@
 {
-  "description": "How an artifact's source is edited and validated. `edits` pins edit_artifact's matching: old_string must occur exactly once in the current version unless replace_all is set, and a failed edit reports which way it failed as a slug rather than a message, since the wording belongs to each language. `documents` pins which sources become a version at all: the frontmatter must open the source, parse as a YAML mapping, and use only the allowed keys, so a model cannot reach Quarto options that execute code (filters, includes, engines) or change how cells run. An edit is validated the same way as a new document, so an edit that breaks the frontmatter makes no version. Accepted documents pin the frontmatter commons writes back for Quarto, without the commons key, which Quarto does not read.",
-  "allowed_keys": ["title", "subtitle", "date", "format", "commons"],
+  "description": "How an artifact's source is edited and validated. `edits` pins edit_artifact's matching: old_string must occur exactly once in the current version unless replace_all is set, and a failed edit reports which way it failed as a slug rather than a message, since the wording belongs to each language. `documents` pins which sources become a version at all: the frontmatter must open the source, parse as a YAML mapping, and use only the allowed keys, so a model cannot reach Quarto options that execute code (filters, includes, engines) or change how cells run. An edit is validated the same way as a new document, so an edit that breaks the frontmatter makes no version. Accepted documents pin the frontmatter commons writes back for Quarto. Data comes from trusted calls in the code (see artifact-calls.json), not the frontmatter.",
+  "allowed_keys": ["title", "subtitle", "date", "format"],
   "edits": [
     {
       "name": "a unique match is replaced",
@@ -93,14 +93,6 @@
       }
     },
     {
-      "name": "the commons key is read and not written back",
-      "source": "---\ntitle: Sales\ncommons:\n  inputs:\n    orders:\n      measure: order_count\n---\nBody.\n",
-      "expected": {
-        "frontmatter": {"title": "Sales"},
-        "body": "Body.\n"
-      }
-    },
-    {
       "name": "a document without frontmatter is rejected",
       "source": "# Sales\n\nBody.\n",
       "error": "missing_frontmatter"
@@ -131,8 +123,8 @@
       "error": "disallowed_key"
     },
     {
-      "name": "an unknown commons key is rejected",
-      "source": "---\ntitle: Sales\ncommons:\n  live: true\n---\nBody.\n",
+      "name": "data isn't declared in the frontmatter",
+      "source": "---\ntitle: Sales\ncommons:\n  inputs:\n    orders:\n      measure: order_count\n---\nBody.\n",
       "error": "disallowed_key"
     },
     {

@@ -666,7 +666,7 @@ worker_engage_guardrails <- function() {
 # Documents knit a piece at a time in the document's own directory, so cells
 # can read `data/` as the deployed document does. Code is folded and data
 # frames print as tables; errors are kept in the output and recorded.
-worker_knit_init <- function(dir, setup) {
+worker_knit_init <- function(dir) {
   setwd(dir)
   state <- attach(NULL, name = "commons:knit")
   state$errors <- character()
@@ -717,7 +717,6 @@ worker_knit_init <- function(dir, setup) {
     },
     envir = asNamespace("knitr")
   )
-  eval(parse(text = setup), envir = globalenv())
   invisible(TRUE)
 }
 

@@ -19,18 +19,20 @@
 
 # A run executes one version of a document. Outputs are kept per code unit (a
 # cell or an inline expression, in document order), so a later version whose
-# code and inputs are unchanged can reuse them.
+# code is unchanged can reuse them.
 new_artifact_run <- function(store, artifact) {
   run <- new.env(parent = emptyenv())
   run$store <- store
   run$artifact <- artifact
   run$dir <- tempfile("commons-run-")
   dir.create(file.path(run$dir, "figs"), recursive = TRUE)
+  dir.create(file.path(run$dir, "data"))
   run$worker <- NULL
   run$tail <- promises::promise_resolve(NULL)
   run$front <- NULL
   run$front_error <- NULL
   run$units <- list()
+  run$calls <- list()
   run$queued <- 0L
   run$sent <- character()
   run$cache <- new.env(parent = emptyenv())
@@ -39,7 +41,7 @@ new_artifact_run <- function(store, artifact) {
 }
 
 # Brings the run up to date with the source received so far: validates the
-# frontmatter and loads inputs once it closes, queues every newly complete
+# frontmatter once it closes, queues every newly complete
 # code unit, and sends the pieces whose HTML changed.
 artifact_run_update <- function(run, source, complete = FALSE) {
   if (run$cancelled) {
@@ -51,7 +53,7 @@ artifact_run_update <- function(run, source, complete = FALSE) {
       return(invisible(run))
     }
     run$front <- tryCatch(
-      artifact_run_load(run, split$yaml),
+      validate_artifact_frontmatter(split$yaml),
       error = function(err) {
         run$front_error <- conditionMessage(err)
         NULL
@@ -123,24 +125,6 @@ artifact_run_close <- function(run) {
   invisible(run)
 }
 
-# Inputs are written where the deployed document keeps them and loaded under
-# the same names, so the session matches what Quarto would run.
-artifact_run_load <- function(run, yaml_text) {
-  front <- validate_artifact_frontmatter(yaml_text)
-  data <- resolve_artifact_inputs(run$store, run$artifact, front$inputs)
-  dir.create(file.path(run$dir, "data"), showWarnings = FALSE)
-  for (input in front$inputs) {
-    utils::write.csv(
-      data[[input$name]],
-      file.path(run$dir, input$path),
-      row.names = FALSE,
-      fileEncoding = "UTF-8"
-    )
-  }
-  run$setup <- artifact_inputs_code(front$inputs)
-  front
-}
-
 artifact_run_queue <- function(run, i) {
   force(i)
   run$tail <- promises::then(run$tail, function(...) {
@@ -170,13 +154,17 @@ artifact_run_unit <- function(run, unit) {
       ))
     )))
   }
+  text <- tryCatch(
+    artifact_run_prepare(run, unit),
+    error = function(err) err
+  )
+  if (inherits(text, "error")) {
+    return(promises::promise_resolve(artifact_unit_failure(conditionMessage(text))))
+  }
   if (is.null(run$worker)) {
     run$worker <- new_r_worker(run$store$network, run$store$protection)
     worker_ensure(run$worker)
-    worker_runtime_call(run$worker, "worker_knit_init", list(
-      dir = run$dir,
-      setup = run$setup
-    ))
+    worker_runtime_call(run$worker, "worker_knit_init", list(dir = run$dir))
   }
   worker <- run$worker
   worker$rs$call(
@@ -184,19 +172,14 @@ artifact_run_unit <- function(run, unit) {
     args = list(
       runtime = worker$runtime,
       name = "worker_knit_unit",
-      args = list(kind = unit$kind, text = unit$text)
+      args = list(kind = unit$kind, text = text)
     )
   )
   promises::then(
     worker_await(worker, getOption("commons.run_r_timeout", 60)),
     function(res) {
       if (!is.null(res$failure)) {
-        return(list(
-          status = "error",
-          error = res$failure,
-          html = artifact_error_html(res$failure),
-          value = artifact_error_inline(res$failure)
-        ))
+        return(artifact_unit_failure(res$failure))
       }
       error <- if (length(res$errors)) res$errors[[1]]
       if (unit$kind == "inline") {
@@ -212,6 +195,33 @@ artifact_run_unit <- function(run, unit) {
         html = markdown_fragment_html(embed_figures(res$output, res$figures))
       )
     }
+  )
+}
+
+# Resolves the unit's trusted calls and returns its text with each replaced by
+# a read of the file its result was written to.
+artifact_run_prepare <- function(run, unit) {
+  replacements <- character()
+  for (found in find_trusted_calls(unit_code(unit))) {
+    calls <- register_trusted_call(run$calls, found)
+    result <- resolve_trusted_call(run$store, run$artifact, found)
+    run$calls <- calls
+    entry <- calls[[trusted_call_key(found)]]
+    path <- file.path(run$dir, "data", entry$file)
+    if (!file.exists(path)) {
+      write_trusted_result(result$value, path)
+    }
+    replacements[[found$text]] <- trusted_call_read(entry, result)
+  }
+  rewrite_trusted_text(unit$text, replacements)
+}
+
+artifact_unit_failure <- function(message) {
+  list(
+    status = "error",
+    error = message,
+    html = artifact_error_html(message),
+    value = artifact_error_inline(message)
   )
 }
 
