@@ -11,12 +11,12 @@ tool is registered, so `Commons.chat()` swaps in the sync tool for the call.
 from __future__ import annotations
 
 import base64
+import functools
 import html
-import importlib.util
 import io
 import keyword
-import os
-import site
+import subprocess
+import sys
 import tokenize
 from collections.abc import Sequence
 from typing import Any
@@ -49,6 +49,9 @@ __all__ = [
 HANDLE_TOOLS = ("call_measure", "call_metrics", "run_sql")
 
 NO_OUTPUT = "(The code ran but produced no output.)"
+
+# How long to wait for the session's interpreter to say what it can import.
+PROBE_TIMEOUT = 10.0
 
 
 def run_python_description(
@@ -140,17 +143,26 @@ def run_python_description(
     return " ".join(parts) + "\n\nRules:" + "".join(f"\n- {rule}" for rule in rules)
 
 
+@functools.cache
 def session_can_import(module: str) -> bool:
-    """Whether the session's interpreter can import the top-level ``module``.
+    """Whether the session's interpreter can find the top-level ``module``.
 
     The session runs this interpreter under ``-I``, which leaves out the user
-    site directory, so a module found only there does not count.
+    site directory, ``PYTHONPATH``, and the current directory, so the answer
+    comes from asking that interpreter the same way. It is cached, since the
+    interpreter's packages do not change while it runs.
     """
-    spec = importlib.util.find_spec(module)
-    if spec is None or spec.origin is None:
-        return spec is not None
-    user_site = os.path.abspath(site.getusersitepackages()) + os.sep
-    return not os.path.abspath(spec.origin).startswith(user_site)
+    probe = "import importlib.util, sys; sys.exit(importlib.util.find_spec(sys.argv[1]) is None)"
+    try:
+        completed = subprocess.run(
+            [sys.executable, "-I", "-c", probe, module],
+            capture_output=True,
+            timeout=PROBE_TIMEOUT,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
 
 
 def _listed(names: Sequence[str]) -> str:
