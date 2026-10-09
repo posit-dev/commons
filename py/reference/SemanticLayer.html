@@ -606,7 +606,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </div>
 <div class="doc-usage-source">
 <p>Usage</p>
-<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_measures.py#L417-L449" target="_blank" rel="noopener">Source</a></p>
+<p><a href="https://github.com/posit-dev/commons/blob/main/pkg-py/src/commons/_measures.py#L418-L451" target="_blank" rel="noopener">Source</a></p>
 </div>
 <div class="doc-signature doc-Kind.CLASS">
 <div class="sourceCode" id="cb1"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="sig-name">SemanticLayer</span>(
@@ -615,7 +615,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 )</span></code></pre></div>
 </div>
 <div class="doc-text">
-<p><code>source_text</code> holds the source of the measures and the module-level helpers they call, keyed by Python function name. Only text is kept: the agent’s worker session reads measure definitions but never receives a callable. Two functions that share a Python name share one entry, and the first definition collected wins, so a measure whose function shares its name with an earlier one is shown that earlier function’s source instead. The R implementation sources a path’s files into one shared environment, so there the last definition of a same-named helper wins instead, and is what every measure calling it actually runs.</p>
+<p><code>source_text</code> holds the source of the measures and the module-level helpers they call, keyed by Python function name, dedented and without decorator lines so the worker can exec it as-is. Only text is kept: the agent’s worker session reads measure definitions but never receives a callable. Two functions that share a Python name share one entry, and the first definition collected wins, so a measure whose function shares its name with an earlier one is shown that earlier function’s source instead. The R implementation sources a path’s files into one shared environment, so there the last definition of a same-named helper wins instead, and is what every measure calling it actually runs.</p>
 <p>The layout of this object is internal and may change without notice.</p>
 </div>
 <section id="parameter-attributes" class="level2 doc-parameter-attributes">

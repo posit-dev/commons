@@ -200,7 +200,8 @@ SemanticLayer(measures: 'Mapping[str, Measure]', source_text: 'Mapping[str, str]
 The trusted calculations an agent can run.
 
 ``source_text`` holds the source of the measures and the module-level
-helpers they call, keyed by Python function name. Only text is kept:
+helpers they call, keyed by Python function name, dedented and without
+decorator lines so the worker can exec it as-is. Only text is kept:
 the agent's worker session reads measure definitions but never receives
 a callable. Two functions that share a Python name share one entry, and
 the first definition collected wins, so a measure whose function shares
