@@ -69,6 +69,7 @@ sys.path.insert(0, _HERE)
 # Imported by bare name from directories put on sys.path at runtime, which
 # static analysis cannot follow.
 import _limits  # pyrefly: ignore[missing-import]
+import _plots  # pyrefly: ignore[missing-import]
 import _protocol  # pyrefly: ignore[missing-import]
 import _repl  # pyrefly: ignore[missing-import]
 
@@ -287,12 +288,19 @@ def _commons_define_source(source, _files=_itertools.count(1)):
 
 
 def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
-    """Run one call in the session namespace and render its reply."""
+    """Run one call in the session namespace and render its reply.
+
+    The call's figures are rendered inside the interruptible window, because
+    drawing a figure runs model code and can take as long as the call did.
+    """
     global _in_call
     namespace.update(call.handles)
+    evaluation = None
+    plots, plot_notes = (), ""
     _in_call = True
     try:
         evaluation = _repl.run(call.code, namespace)
+        plots, plot_notes = _plots.collect()
     except KeyboardInterrupt:
         # The driver's SIGINT broke the call out of its computation. The
         # session and its variables survive; the driver reports the
@@ -301,16 +309,23 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
     finally:
         _in_call = False
     if evaluation is None:
+        # Outside the interruptible window, so a second SIGINT cannot
+        # escape here. The half-drawn figures go with the call.
+        _plots.discard()
         return _protocol.Error(id=call.id, message="KeyboardInterrupt")
     if evaluation.error:
         return _protocol.Error(
-            id=call.id, message=evaluation.error, traceback=evaluation.traceback
+            id=call.id,
+            message=evaluation.error,
+            traceback=evaluation.traceback + plot_notes,
+            plots=plots,
         )
     return _protocol.Result(
         id=call.id,
         value=evaluation.value,
         stdout=evaluation.stdout,
-        stderr=evaluation.stderr,
+        stderr=evaluation.stderr + plot_notes,
+        plots=plots,
     )
 
 
@@ -329,6 +344,9 @@ def _call_id(line: bytes) -> str | None:
 
 def main() -> None:
     network, protection = sys.argv[1], sys.argv[2]
+    # Read by matplotlib when pyplot first needs a backend, so it must be set
+    # before model code can import pyplot.
+    os.environ["MPLBACKEND"] = _plots.BACKEND
     _engage_sandbox(network, protection)
     # Installed explicitly, so a worker whose parent ignores SIGINT, as a
     # shell does for a background job, can still be interrupted.

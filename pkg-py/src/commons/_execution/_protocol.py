@@ -37,12 +37,14 @@ from typing import Any
 
 __all__ = [
     "FRAME_BYTES_LIMIT",
+    "PLOT_LIMIT",
     "STREAM_LIMIT",
     "Call",
     "ChannelError",
     "Error",
     "Message",
     "OpaqueValue",
+    "Plot",
     "ProtocolError",
     "Ready",
     "Result",
@@ -89,6 +91,14 @@ _TEXT_CLIP_LIMIT = 1024 * 1024
 _FRAME_WIRE_LIMIT = (STREAM_LIMIT - 2 * _TEXT_CLIP_LIMIT - 4096) * 3 // 4
 
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
+
+# Most plots one reply may carry; matplotlib's own warning about open figures
+# starts at the same count.
+PLOT_LIMIT = 20
+
+_PLOT_DROP_NOTE = "\n[commons: the plots were dropped; they exceeded the channel limit]"
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 # Arrow IPC header types and the buffer-less field type, numbered per the
 # format's flatbuffer schemas.
@@ -144,6 +154,30 @@ class OpaqueValue:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Plot:
+    """A figure the call drew, rendered once for the model and once for display.
+
+    ``display_png`` has twice the pixels of ``png`` and is meant to be shown
+    at ``png``'s size, so text stays sharp on high-density screens. Both
+    images came from the worker; the decode side checks that each is a PNG
+    and nothing more.
+    """
+
+    png: bytes
+    display_png: bytes
+
+    @property
+    def width(self) -> int:
+        """The model image's width in pixels, read from its header."""
+        return int.from_bytes(self.png[16:20], "big")
+
+    @property
+    def height(self) -> int:
+        """The model image's height in pixels, read from its header."""
+        return int.from_bytes(self.png[20:24], "big")
+
+
+@dataclass(frozen=True, kw_only=True)
 class Ready:
     """Sent by the worker to the driver once the sandbox is up and running."""
 
@@ -170,15 +204,20 @@ class Result:
     value: Any = None
     stdout: str = ""
     stderr: str = ""
+    plots: tuple[Plot, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
 class Error:
-    """Sent by the worker to the driver: the code raised, and this is what it said."""
+    """Sent by the worker to the driver: the code raised, and this is what it said.
+
+    ``plots`` are the figures the code drew before it raised.
+    """
 
     id: str
     message: str
     traceback: str = ""
+    plots: tuple[Plot, ...] = ()
 
 
 Message = Ready | Call | Result | Error
@@ -810,7 +849,8 @@ def encode_message(message: Message) -> bytes:
     """Render ``message`` as the single line that carries it.
 
     A message that would exceed ``STREAM_LIMIT`` is shrunk first: printed
-    output is clipped, then values are replaced by their reprs. Raises
+    output is clipped, then plots are dropped with a note, then values are
+    replaced by their reprs. Raises
     ``ProtocolError`` when nothing is left to shrink — a ``Call`` carrying
     megabytes of code, say — because a line no reader can consume would
     wedge the channel.
@@ -818,7 +858,12 @@ def encode_message(message: Message) -> bytes:
     line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line
-    line = _encode_line(_shrink_text(message))
+    message = _shrink_text(message)
+    line = _encode_line(message)
+    if len(line) <= STREAM_LIMIT:
+        return line
+    message = _drop_plots(message)
+    line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line
     line = _encode_line(_shrink_values(message))
@@ -859,6 +904,7 @@ def _message_body(message: Message) -> dict[str, Any]:
                 "value": encode_value(message.value),
                 "stdout": message.stdout,
                 "stderr": message.stderr,
+                "plots": [_plot_body(plot) for plot in message.plots],
             }
         case Error():
             return {
@@ -866,11 +912,20 @@ def _message_body(message: Message) -> dict[str, Any]:
                 "id": message.id,
                 "message": message.message,
                 "traceback": message.traceback,
+                "plots": [_plot_body(plot) for plot in message.plots],
             }
         case _:
             raise ProtocolError(
                 f"not a message this protocol defines: {type(message).__name__}"
             )
+
+
+def _plot_body(plot: Plot) -> dict[str, str]:
+    """The JSON object for ``plot``, its images in base64."""
+    return {
+        "png": base64.b64encode(plot.png).decode("ascii"),
+        "display_png": base64.b64encode(plot.display_png).decode("ascii"),
+    }
 
 
 def _shrink_text(message: Message) -> Message:
@@ -887,6 +942,19 @@ def _shrink_text(message: Message) -> Message:
                 message,
                 message=_clip(message.message),
                 traceback=_clip(message.traceback),
+            )
+        case _:
+            return message
+
+
+def _drop_plots(message: Message) -> Message:
+    """The same message without its plots, saying so where the model reads it."""
+    match message:
+        case Result() if message.plots:
+            return replace(message, plots=(), stderr=message.stderr + _PLOT_DROP_NOTE)
+        case Error() if message.plots:
+            return replace(
+                message, plots=(), traceback=message.traceback + _PLOT_DROP_NOTE
             )
         case _:
             return message
@@ -963,20 +1031,24 @@ def decode_message(line: bytes | str, *, max_frame_bytes: int = FRAME_BYTES_LIMI
             )
         case "result":
             _refuse_unknown_fields(
-                body, "result", {"type", "id", "value", "stdout", "stderr"}
+                body, "result", {"type", "id", "value", "stdout", "stderr", "plots"}
             )
             return Result(
                 id=_required_text(body, "id", "result"),
                 value=_decode_result_value(body, max_frame_bytes),
                 stdout=_optional_text(body, "stdout", "result"),
                 stderr=_optional_text(body, "stderr", "result"),
+                plots=_decode_plots(body, "result"),
             )
         case "error":
-            _refuse_unknown_fields(body, "error", {"type", "id", "message", "traceback"})
+            _refuse_unknown_fields(
+                body, "error", {"type", "id", "message", "traceback", "plots"}
+            )
             return Error(
                 id=_required_text(body, "id", "error"),
                 message=_required_text(body, "message", "error"),
                 traceback=_optional_text(body, "traceback", "error"),
+                plots=_decode_plots(body, "error"),
             )
         case _:
             raise ProtocolError(f"unknown message type: {kind!r}")
@@ -1020,6 +1092,36 @@ def _decode_handles(body: dict[str, Any], max_frame_bytes: int) -> dict[str, Any
         key: decode_value(item, max_frame_bytes=max_frame_bytes)
         for key, item in raw.items()
     }
+
+
+def _decode_plots(body: dict[str, Any], kind: str) -> tuple[Plot, ...]:
+    """The ``plots`` of a result or error body, each image checked to be a PNG."""
+    raw = body.get("plots", [])
+    if not isinstance(raw, list) or len(raw) > PLOT_LIMIT:
+        raise ProtocolError(
+            f"malformed {kind} message: plots must be a list of at most {PLOT_LIMIT}"
+        )
+    return tuple(_decode_plot(item) for item in raw)
+
+
+def _decode_plot(item: Any) -> Plot:
+    """One plot of a reply, refusing anything but two base64 PNGs."""
+    if not isinstance(item, dict) or set(item) != {"png", "display_png"}:
+        raise ProtocolError("malformed plot: expected exactly png and display_png")
+    images = []
+    for name in ("png", "display_png"):
+        text = item[name]
+        if not isinstance(text, str):
+            raise ProtocolError(f"malformed plot: {name} must be a string")
+        try:
+            data = base64.b64decode(text, validate=True)
+        except ValueError as error:
+            raise ProtocolError(f"malformed plot: {name} is not base64") from error
+        # The signature, then the IHDR chunk the size is read from.
+        if not data.startswith(_PNG_SIGNATURE) or data[12:16] != b"IHDR":
+            raise ProtocolError(f"malformed plot: {name} is not a PNG image")
+        images.append(data)
+    return Plot(png=images[0], display_png=images[1])
 
 
 def _decode_result_value(body: dict[str, Any], max_frame_bytes: int) -> Any:
