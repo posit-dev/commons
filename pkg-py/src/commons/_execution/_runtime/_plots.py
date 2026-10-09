@@ -13,7 +13,6 @@ figures, and the worker does not pay for the import on its behalf.
 
 from __future__ import annotations
 
-import contextlib
 import io
 import sys
 from typing import Any
@@ -61,13 +60,25 @@ def collect() -> tuple[tuple[_protocol.Plot, ...], str]:
             f"first {_protocol.PLOT_LIMIT} came back]"
         )
     plots = []
+    size = 0
     for index, figure in enumerate(figures[: _protocol.PLOT_LIMIT], start=1):
         try:
-            plots.append(_render(figure))
+            plot = _render(figure)
         except KeyboardInterrupt:
             raise
         except BaseException as exc:  # noqa: BLE001 - one figure, not the call
             notes.append(f"[commons: figure {index} could not be rendered: {exc!r}]")
+            continue
+        size += len(plot.png) + len(plot.display_png)
+        if size > _protocol.PLOT_BYTES_LIMIT:
+            # Checked as each figure renders, so at most one figure past the
+            # budget is ever held in memory.
+            notes.append(
+                f"[commons: figures {index} onward were dropped; their images "
+                "exceeded the channel's room for plots]"
+            )
+            break
+        plots.append(plot)
     discard()
     return tuple(plots), "".join(note + "\n" for note in notes)
 
@@ -77,9 +88,13 @@ def discard() -> None:
     pyplot = sys.modules.get("matplotlib.pyplot")
     if pyplot is None:
         return
-    # Model code can break pyplot; a figure left open costs nothing more.
-    with contextlib.suppress(Exception):
+    try:
         pyplot.close("all")
+    except KeyboardInterrupt:
+        raise
+    except BaseException:  # noqa: BLE001, S110 - model code can break pyplot
+        # A figure left open costs nothing more than the figure.
+        pass
 
 
 def _render(figure: Any) -> _protocol.Plot:

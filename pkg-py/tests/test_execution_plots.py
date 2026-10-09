@@ -193,3 +193,40 @@ plt.get_fignums = lambda: 1 / 0
         follow_up = await worker.run("x + 1")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
+
+
+async def test_figures_too_large_for_the_channel_are_dropped_with_a_note():
+    # Noise does not compress, so each display image is tens of megabytes.
+    code = """
+import numpy as np
+import matplotlib.pyplot as plt
+for _ in range(2):
+    plt.figure(figsize=(16, 16), dpi=98)
+    plt.imshow(np.random.default_rng(0).random((1600, 1600, 3)))
+    plt.axis("off")
+x = 42
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert reply.plots == ()
+        assert "figures 1 onward were dropped" in reply.stderr
+        follow_up = await worker.run("x")
+        assert isinstance(follow_up, Result)
+        assert follow_up.value == 42
+
+
+async def test_a_pyplot_whose_close_raises_systemexit_keeps_the_session():
+    code = """
+import matplotlib.pyplot as plt
+import sys
+x = 41
+plt.figure()
+plt.close = lambda *args: sys.exit(1)
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        follow_up = await worker.run("x + 1")
+        assert isinstance(follow_up, Result)
+        assert follow_up.value == 42

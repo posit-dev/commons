@@ -19,6 +19,7 @@ import pytest
 from commons._execution import _protocol
 from commons._execution._env import worker_command, worker_env
 from commons._execution._protocol import (
+    PLOT_BYTES_LIMIT,
     PLOT_LIMIT,
     STREAM_LIMIT,
     Call,
@@ -1411,3 +1412,12 @@ def test_plots_too_large_for_the_channel_are_dropped_with_a_note():
     assert crossed.value == 42
     assert crossed.plots == ()
     assert "plot" in crossed.stderr
+
+
+def test_plots_past_their_byte_budget_are_dropped_before_encoding():
+    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
+    result = Result(id="c1", value=42, plots=(Plot(png=big, display_png=big),))
+    crossed = decode_message(encode_message(result))
+    assert isinstance(crossed, Result)
+    assert crossed.plots == ()
+    assert "plots were dropped" in crossed.stderr
