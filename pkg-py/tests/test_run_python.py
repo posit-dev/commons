@@ -132,17 +132,17 @@ def test_the_plot_rule_says_whether_the_session_can_draw() -> None:
     assert "the session cannot draw plots" in rules(False)
 
 
-def test_a_module_only_in_the_user_site_is_not_importable_in_the_session(
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_module_the_isolated_session_cannot_see_is_not_importable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     assert session_can_import("pytest")
     assert not session_can_import("no_such_module_for_commons")
-    spec = importlib.util.find_spec("pytest")
-    assert spec is not None and spec.origin is not None
-    # The session's -I drops the user site; pretend pytest was found there.
-    site_dir = str(Path(spec.origin).parent.parent)
-    monkeypatch.setattr("site.getusersitepackages", lambda: site_dir)
-    assert not session_can_import("pytest")
+    # On PYTHONPATH and so on this process's path, but -I ignores both.
+    (tmp_path / "only_on_pythonpath.py").write_text("")
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path))
+    monkeypatch.syspath_prepend(str(tmp_path))
+    assert importlib.util.find_spec("only_on_pythonpath") is not None
+    assert not session_can_import("only_on_pythonpath")
 
 
 # ---- the result -------------------------------------------------------------
