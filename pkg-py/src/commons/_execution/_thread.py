@@ -22,10 +22,12 @@ from ._protocol import Error, Result
 __all__ = ["WorkerThread"]
 
 # How long close() waits for the worker's shutdown, which is itself bounded
-# by its grace periods; the margin covers a loop slow to get to it.
+# by its grace periods once the calls in flight are cancelled.
 CLOSE_TIMEOUT = 30.0
 
 _CLOSED = Failure(message="the Python session is closed.")
+
+_Reply = Result | Error | Failure
 
 
 class WorkerThread:
@@ -35,12 +37,13 @@ class WorkerThread:
         self._worker = worker
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
-        self._start_lock = threading.Lock()
+        # Guards the lifecycle: a call is either submitted before close()
+        # begins, and so cancelled by it, or refused as closed.
+        self._lock = threading.Lock()
         self._closed = False
+        self._calls: set[concurrent.futures.Future[_Reply]] = set()
 
-    async def run(
-        self, code: str, handles: HandleStore | None = None
-    ) -> Result | Error | Failure:
+    async def run(self, code: str, handles: HandleStore | None = None) -> _Reply:
         """Run ``code`` without blocking the caller's event loop.
 
         Cancelling the caller cancels the call, which shuts the worker down
@@ -49,55 +52,81 @@ class WorkerThread:
         future = self._submit(code, handles)
         if future is None:
             return _CLOSED
-        return await asyncio.wrap_future(future)
+        try:
+            return await asyncio.wrap_future(future)
+        except asyncio.CancelledError:
+            task = asyncio.current_task()
+            if self._closed and future.cancelled() and not (task and task.cancelling()):
+                return _CLOSED
+            raise
 
-    def run_sync(
-        self, code: str, handles: HandleStore | None = None
-    ) -> Result | Error | Failure:
+    def run_sync(self, code: str, handles: HandleStore | None = None) -> _Reply:
         """Run ``code``, blocking the calling thread until the reply arrives."""
         if threading.current_thread() is self._thread:
             raise RuntimeError("run_sync() would deadlock on the worker's own loop")
         future = self._submit(code, handles)
         if future is None:
             return _CLOSED
-        return future.result()
+        try:
+            return future.result()
+        except concurrent.futures.CancelledError:
+            if self._closed:
+                return _CLOSED
+            raise
 
     def close(self) -> None:
-        """Close the worker, then stop the loop and its thread. Safe to repeat."""
-        with self._start_lock:
+        """Close the worker, then stop the loop and its thread. Safe to repeat.
+
+        Calls in flight are cancelled first, so the worker shuts down within
+        its grace periods rather than after a call's timeout. A shutdown that
+        still overruns ``CLOSE_TIMEOUT`` finishes in the background, and the
+        loop stops only once it has.
+        """
+        with self._lock:
             if self._closed:
                 return
             self._closed = True
             loop, thread = self._loop, self._thread
+            calls = list(self._calls)
         if loop is None or thread is None:
             return
+        for call in calls:
+            call.cancel()
         closing = asyncio.run_coroutine_threadsafe(self._worker.aclose(), loop)
-        with contextlib.suppress(concurrent.futures.TimeoutError, RuntimeError):
+        closing.add_done_callback(lambda _: loop.call_soon_threadsafe(loop.stop))
+        with contextlib.suppress(TimeoutError):
             closing.result(CLOSE_TIMEOUT)
-        loop.call_soon_threadsafe(loop.stop)
         thread.join(CLOSE_TIMEOUT)
         if not thread.is_alive():
             loop.close()
 
     def _submit(
         self, code: str, handles: HandleStore | None
-    ) -> concurrent.futures.Future[Result | Error | Failure] | None:
-        loop = self._ensure_loop()
-        if loop is None:
-            return None
-        # The store is read from the worker's thread while the caller waits.
-        # A store only ever grows, and each read is a single dict operation.
-        return asyncio.run_coroutine_threadsafe(self._worker.run(code, handles), loop)
-
-    def _ensure_loop(self) -> asyncio.AbstractEventLoop | None:
-        with self._start_lock:
+    ) -> concurrent.futures.Future[_Reply] | None:
+        with self._lock:
             if self._closed:
                 return None
-            if self._loop is None:
-                loop = asyncio.new_event_loop()
-                thread = threading.Thread(
-                    target=loop.run_forever, name="commons-python-session", daemon=True
-                )
-                thread.start()
-                self._loop, self._thread = loop, thread
-            return self._loop
+            loop = self._ensure_loop()
+            # The store is read from the worker's thread while the caller
+            # waits. A store only grows, and each read is one dict operation.
+            future = asyncio.run_coroutine_threadsafe(
+                self._worker.run(code, handles), loop
+            )
+            self._calls.add(future)
+        future.add_done_callback(self._forget)
+        return future
+
+    def _forget(self, future: concurrent.futures.Future[_Reply]) -> None:
+        with self._lock:
+            self._calls.discard(future)
+
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        """The loop, started on first use. Called with the lock held."""
+        if self._loop is None:
+            loop = asyncio.new_event_loop()
+            thread = threading.Thread(
+                target=loop.run_forever, name="commons-python-session", daemon=True
+            )
+            thread.start()
+            self._loop, self._thread = loop, thread
+        return self._loop
