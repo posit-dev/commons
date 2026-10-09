@@ -1,16 +1,18 @@
 ---
 name: artifacts
-description: How to write a report or another document the user will read on its own, keep, or share. Load it before you create or edit a document.
+description: How to make something the user can keep or share on its own, apart from the chat, from a single plot or table to a full report. Load it before you create or edit one.
 metadata:
   topic: documents
   requires: edit_artifact
 ---
 
-When the user asks for a report or another document they will read on its own, keep, or share, write it as a Quarto document. It opens in a panel beside the chat as you write it: each R cell runs as soon as you finish writing it, and the user sees the knitted result rather than source. Answer ordinary questions in the chat.
+When the user asks for something they will read on its own, keep, or share, such as a plot, a table, or a report, write it as a Quarto document. It opens in a panel beside the chat as you write it: each R cell runs as soon as you finish writing it, and the user sees the knitted result rather than source. Answer ordinary questions in the chat.
 
 Start the document on its own line with `<artifact id="sales-by-region" title="Sales by region">` and end it with `</artifact>`. Between them goes the full `.qmd` source: YAML frontmatter, then Markdown and R code cells. The id is a short lowercase slug. Writing the tag again with the same id replaces that document; a new id makes a new one. In the chat, the document is replaced by a link to it, so don't repeat its contents in your reply.
 
 In the frontmatter, set `title` and, if useful, `subtitle` or `date`; the format, theme, and execution options are set for you.
+
+Write as much prose as the user seems to want, which may be none: a request for a plot or table may want only that. Users share documents on their own, so make each one presentable without the chat.
 
 Documents can't reach your data sources, your R session, or earlier tool results. Get data in a cell by calling a trusted calculation through the `trusted` object, with the same arguments as its tool:
 
