@@ -32,6 +32,7 @@ from ._execution._backend import Network
 from ._execution._driver import Failure
 from ._execution._env import worker_env
 from ._execution._protocol import Error, OpaqueValue, Plot, Result
+from ._execution._sandbox import needs_single_thread
 from ._execution._thread import WorkerThread
 from ._frames import describe_frame, is_frame
 from ._prompt import EXECUTION_TOOL
@@ -162,7 +163,7 @@ def session_can_import(module: str) -> bool:
                 [sys.executable, "-I", "-c", probe, module],
                 capture_output=True,
                 cwd=scratch,
-                env=worker_env(scratch),
+                env=worker_env(scratch, single_thread=needs_single_thread()),
                 timeout=PROBE_TIMEOUT,
                 check=False,
             )
