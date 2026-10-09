@@ -1435,3 +1435,12 @@ def test_the_note_about_dropped_plots_survives_clipped_output():
     assert isinstance(crossed, Result)
     assert crossed.plots == ()
     assert crossed.stderr.endswith("plots were dropped; they exceeded the channel limit]")
+
+
+def test_dropping_plots_leaves_output_that_fits_unclipped():
+    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
+    printed = "e" * (2 * 1024 * 1024)
+    result = Result(id="c1", stderr=printed, plots=(Plot(png=big, display_png=big),))
+    crossed = decode_message(encode_message(result))
+    assert isinstance(crossed, Result)
+    assert crossed.stderr.startswith(printed)
