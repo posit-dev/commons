@@ -14,6 +14,10 @@ Two details come from Jupyter:
 - stdout and stderr are captured for the duration of the call. The worker's
   protocol with its parent uses the process's stdout, so a ``print()`` from
   model code would corrupt the channel.
+
+Both streams are captured into one ``Transcript``, which keeps their writes
+in order, so the reply can show a warning between the two prints it came
+between. The worker inserts plots into the same transcript.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["Evaluation", "run"]
+__all__ = ["Evaluation", "Transcript", "run"]
 
 # The filename tracebacks show for a frame of model-written code, named for
 # the tool the model calls.
@@ -40,6 +44,13 @@ _FILENAME = "<run_python>"
 _CAPTURE_LIMIT = 1024 * 1024
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
 
+# The most text segments one call's output may have. A segment starts only
+# when the output switches streams, so this is reached only by output that
+# alternates thousands of times. `commons._execution._protocol.OUTPUT_LIMIT`
+# leaves room past it for plots and the worker's notes.
+_SEGMENT_LIMIT = 9_000
+_SEGMENT_NOTE = "\n[truncated by commons: the output switched streams too often]"
+
 # The compiler flags a `from __future__ import ...` can set, which persist
 # across calls as they do in codeop.CommandCompiler.
 _FEATURES = [getattr(__future__, name) for name in __future__.all_feature_names]
@@ -51,30 +62,91 @@ for _feature in _FEATURES:
 _FLAGS_KEY = "__commons_future_flags__"
 
 
-class _BoundedCapture:
-    """An append-only, bounded stand-in for ``sys.stdout`` during a call.
+class Transcript:
+    """A call's output in order: runs of text tagged by stream, and inserted items.
 
-    The class wraps a list of chunks and subclasses no stream type, so no
-    base-class method (``io.StringIO.write(sys.stdout, ...)``) can write past
-    the bound. It has no ``seek``, as a pipe has none.
+    Consecutive writes to one stream join into one run. Each stream keeps at
+    most ``_CAPTURE_LIMIT`` characters, note included, so a runaway print
+    loop cannot exhaust the worker's memory; writes past it succeed and are
+    discarded, and the stream's text ends with a truncation note. Memory
+    that model code allocates directly is bounded by the worker's rlimits.
 
-    Writes past the limit succeed and are discarded, and the output ends
-    with a truncation note. ``close()`` does nothing, because the worker
-    reads the buffer after the call. ``fileno()`` raises
-    ``io.UnsupportedOperation``, as ``io.StringIO`` and ipykernel's stream do,
-    so libraries that probe for a descriptor fall back cleanly.
+    ``insert`` places an item (a plot) between the runs, and ``note`` adds
+    the worker's own text past both bounds, so a note is never lost.
+    """
 
-    Memory that model code allocates directly is bounded by the worker's
-    rlimits.
+    def __init__(self) -> None:
+        # Each entry is [stream, chunks] for a run of text, or ["item", item].
+        self._entries: list[list[Any]] = []
+        self._sizes = {"stdout": 0, "stderr": 0}
+        self._truncated: set[str] = set()
+        self._segments = 0
+        self._full = False
+
+    def write(self, stream: str, text: str) -> None:
+        """Record ``text`` written to ``stream``, within the stream's bound."""
+        if not text or stream in self._truncated or self._full:
+            return
+        room = _CAPTURE_LIMIT - len(_TRUNCATION_NOTE) - self._sizes[stream]
+        if room >= len(text):
+            self._append(stream, text)
+            self._sizes[stream] += len(text)
+            return
+        if room > 0:
+            self._append(stream, text[:room])
+        self._append(stream, _TRUNCATION_NOTE)
+        self._sizes[stream] = _CAPTURE_LIMIT
+        self._truncated.add(stream)
+
+    def note(self, stream: str, text: str) -> None:
+        """Record the worker's own ``text`` on ``stream``, past both bounds."""
+        self._append(stream, text, bounded=False)
+
+    def insert(self, item: Any) -> None:
+        """Place ``item`` after everything recorded so far."""
+        self._entries.append(["item", item])
+
+    def entries(self) -> tuple[tuple[str, Any], ...]:
+        """The output in order: ``(stream, text)`` runs and ``("item", item)``."""
+        return tuple(
+            (kind, body if kind == "item" else "".join(body))
+            for kind, body in self._entries
+        )
+
+    def _append(self, stream: str, text: str, *, bounded: bool = True) -> None:
+        last = self._entries[-1] if self._entries else None
+        if last is not None and last[0] == stream:
+            last[1].append(text)
+            return
+        if bounded and self._segments >= _SEGMENT_LIMIT:
+            if not self._full:
+                self._entries.append([stream, [_SEGMENT_NOTE]])
+                self._full = True
+            return
+        self._entries.append([stream, [text]])
+        self._segments += 1
+
+
+class _StreamView:
+    """An append-only stand-in for ``sys.stdout`` or ``sys.stderr`` during a call.
+
+    Writes go to the call's ``Transcript``, tagged with this view's stream.
+    The class subclasses no stream type, so no base-class method
+    (``io.StringIO.write(sys.stdout, ...)``) can write around the
+    transcript's bound. It has no ``seek``, as a pipe has none.
+
+    ``close()`` does nothing, because the worker reads the transcript after
+    the call. ``fileno()`` raises ``io.UnsupportedOperation``, as
+    ``io.StringIO`` and ipykernel's stream do, so libraries that probe for a
+    descriptor fall back cleanly.
     """
 
     encoding = "utf-8"
     errors = "strict"
 
-    def __init__(self) -> None:
-        self._chunks: list[str] = []
-        self._size = 0
-        self._truncated = False
+    def __init__(self, transcript: Transcript, stream: str) -> None:
+        self._transcript = transcript
+        self._stream = stream
 
     @property
     def closed(self) -> bool:
@@ -115,49 +187,34 @@ class _BoundedCapture:
             # true contents into an exact str, where a plain slice would call
             # the subclass's own __getitem__.
             text = str.__getitem__(text, slice(None))
-        if not text:
-            # Skipped so that empty writes cannot grow the chunk list.
-            return 0
-        if self._truncated:
-            return len(text)
-        room = _CAPTURE_LIMIT - len(_TRUNCATION_NOTE) - self._size
-        if room >= len(text):
-            self._chunks.append(text)
-            self._size += len(text)
-            return len(text)
-        if room > 0:
-            self._chunks.append(text[:room])
-        self._chunks.append(_TRUNCATION_NOTE)
-        self._size = _CAPTURE_LIMIT
-        self._truncated = True
+        self._transcript.write(self._stream, text)
         return len(text)
-
-    def getvalue(self) -> str:
-        """The captured output; the worker's read-back after the call."""
-        return "".join(self._chunks)
 
 
 @dataclass(frozen=True, kw_only=True)
 class Evaluation:
-    """The outcome of one call: what it evaluated to, what it printed, and how it failed.
+    """The outcome of one call: what it evaluated to, what it output, and how it failed.
 
     ``value`` is ``None`` both when the code ended in a statement and when it
     ended in an expression that evaluated to ``None``; the model sees no
     difference between the two.
 
+    ``output`` is the transcript's entries (see ``Transcript.entries``).
     ``error`` and ``traceback`` are empty when the call succeeded. On a
-    failure, ``stdout`` and ``stderr`` contain what was printed before the
-    exception, and the worker loop decides whether to relay them.
+    failure, ``output`` is what was written before the exception.
     """
 
     value: Any = None
-    stdout: str = ""
-    stderr: str = ""
+    output: tuple[tuple[str, Any], ...] = ()
     error: str = ""
     traceback: str = ""
 
 
-def run(code: str, namespace: dict[str, Any] | None = None) -> Evaluation:
+def run(
+    code: str,
+    namespace: dict[str, Any] | None = None,
+    transcript: Transcript | None = None,
+) -> Evaluation:
     """Run ``code`` in ``namespace`` the way a REPL would, and report the outcome.
 
     The namespace is the session: the worker passes the same mapping on every
@@ -170,14 +227,21 @@ def run(code: str, namespace: dict[str, Any] | None = None) -> Evaluation:
     driver's interrupt escalation can stop a long computation.
 
     The capture replaces ``sys.stdout``, ``sys.stderr``, and their
-    ``__stdout__``/``__stderr__`` names. Writes to file descriptor 1, or
-    through a stream reference saved before the call, still reach the real
-    stream; the worker loop owns that channel and guards it.
+    ``__stdout__``/``__stderr__`` names with views onto ``transcript``,
+    which the caller passes when it inserts into the output itself. Writes
+    to file descriptor 1, or through a stream reference saved before the
+    call, still reach the real stream; the worker loop owns that channel and
+    guards it.
     """
     if namespace is None:
         namespace = {}
-    stdout = _BoundedCapture()
-    stderr = _BoundedCapture()
+    if transcript is None:
+        transcript = Transcript()
+    # Bound before model code runs, which can reach the transcript through
+    # the views and replace its methods.
+    read_back = transcript.entries
+    stdout = _StreamView(transcript, "stdout")
+    stderr = _StreamView(transcript, "stderr")
     value: Any = None
     error = ""
     tb = ""
@@ -193,22 +257,15 @@ def run(code: str, namespace: dict[str, Any] | None = None) -> Evaluation:
             error, tb = _render_error(exc)
         finally:
             sys.__stdout__, sys.__stderr__ = real_dunder
-    # Model code had access to the capture objects, so the read-back may
-    # fail; that loses the output and keeps the answer.
+    # Model code had access to the transcript, so the read-back may fail;
+    # that loses the output and keeps the answer.
     try:
-        captured_out = stdout.getvalue()
-        captured_err = stderr.getvalue()
+        output = read_back()
     except KeyboardInterrupt:
         raise
     except BaseException:  # noqa: BLE001 - lost output is not a lost answer
-        captured_out, captured_err = "", ""
-    return Evaluation(
-        value=value,
-        stdout=captured_out,
-        stderr=captured_err,
-        error=error,
-        traceback=tb,
-    )
+        output = ()
+    return Evaluation(value=value, output=output, error=error, traceback=tb)
 
 
 def _render_error(exc: BaseException) -> tuple[str, str]:

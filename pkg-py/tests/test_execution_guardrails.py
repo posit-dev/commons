@@ -188,4 +188,4 @@ async def test_a_plot_comes_back_under_guardrails(guarded):
             "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3])\n"
         )
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == 1
+        assert len(reply.output) == 1

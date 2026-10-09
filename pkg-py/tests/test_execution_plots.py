@@ -12,7 +12,7 @@ import os
 import pytest
 
 from commons._execution._driver import Failure, Worker
-from commons._execution._protocol import PLOT_LIMIT, Error, Result
+from commons._execution._protocol import PLOT_LIMIT, Error, Plot, Result, Text
 from commons._execution._sandbox import protection_mode
 
 pytest.importorskip("matplotlib")
@@ -43,6 +43,21 @@ def make_worker(**kwargs) -> Worker:
     return Worker(**kwargs)
 
 
+def plots(reply) -> list[Plot]:
+    return [segment for segment in reply.output if isinstance(segment, Plot)]
+
+
+def printed(reply, stream: str = "stdout") -> str:
+    return "".join(
+        s.text for s in reply.output if isinstance(s, Text) and s.stream == stream
+    )
+
+
+def shape(reply) -> list[str]:
+    """The reply's output as a list of ``"plot"`` and the text of each run."""
+    return ["plot" if isinstance(s, Plot) else s.text for s in reply.output]
+
+
 PLOT = """
 import matplotlib.pyplot as plt
 plt.plot([1, 2, 3], [1, 4, 9])
@@ -53,7 +68,7 @@ async def test_a_figure_the_call_draws_comes_back_as_a_plot():
     async with make_worker() as worker:
         reply = await worker.run(PLOT)
         assert isinstance(reply, Result), reply
-        [plot] = reply.plots
+        [plot] = plots(reply)
         assert plot.png.startswith(PNG_SIGNATURE)
         assert plot.display_png.startswith(PNG_SIGNATURE)
         # matplotlib's default figure is 6.4 x 4.8 inches at 100 dpi.
@@ -64,7 +79,7 @@ async def test_the_display_image_has_twice_the_pixels_of_the_model_image():
     async with make_worker() as worker:
         reply = await worker.run(PLOT)
         assert isinstance(reply, Result), reply
-        [plot] = reply.plots
+        [plot] = plots(reply)
         display_width = int.from_bytes(plot.display_png[16:20], "big")
         display_height = int.from_bytes(plot.display_png[20:24], "big")
         assert (display_width, display_height) == (2 * plot.width, 2 * plot.height)
@@ -76,8 +91,8 @@ async def test_showing_a_figure_is_quiet_and_still_returns_it():
     async with make_worker() as worker:
         reply = await worker.run(PLOT + "plt.show()\n")
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == 1
-        assert reply.stderr == ""
+        assert len(plots(reply)) == 1
+        assert printed(reply, "stderr") == ""
 
 
 async def test_a_figure_comes_back_once_and_not_with_the_next_call():
@@ -85,7 +100,7 @@ async def test_a_figure_comes_back_once_and_not_with_the_next_call():
         await worker.run(PLOT)
         reply = await worker.run("1 + 1")
         assert isinstance(reply, Result), reply
-        assert reply.plots == ()
+        assert plots(reply) == []
 
 
 async def test_several_figures_come_back_in_the_order_they_were_made():
@@ -97,17 +112,17 @@ plt.figure(figsize=(3, 1))
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert [plot.width for plot in reply.plots] == [200, 300]
+        assert [plot.width for plot in plots(reply)] == [200, 300]
 
 
 async def test_a_call_that_raises_still_returns_what_it_drew():
     async with make_worker() as worker:
         reply = await worker.run(PLOT + "raise ValueError('after the plot')\n")
         assert isinstance(reply, Error), reply
-        assert len(reply.plots) == 1
+        assert len(plots(reply)) == 1
         follow_up = await worker.run("1")
         assert isinstance(follow_up, Result)
-        assert follow_up.plots == ()
+        assert plots(follow_up) == []
 
 
 async def test_figures_past_the_limit_are_dropped_with_a_note():
@@ -119,8 +134,8 @@ for _ in range({PLOT_LIMIT + 3}):
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == PLOT_LIMIT
-        assert f"{PLOT_LIMIT + 3} figures" in reply.stderr
+        assert len(plots(reply)) == PLOT_LIMIT
+        assert f"figures {PLOT_LIMIT + 1} onward" in printed(reply, "stderr")
 
 
 async def test_a_huge_figure_is_scaled_down_for_the_model():
@@ -133,7 +148,7 @@ plt.figure(figsize=(40, 10), dpi=300)
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        [plot] = reply.plots
+        [plot] = plots(reply)
         assert plot.width == 1568
         assert plot.height == 392
 
@@ -153,11 +168,11 @@ plt.figure()
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == 1
-        assert "cannot draw this" in reply.stderr
+        assert len(plots(reply)) == 1
+        assert "cannot draw this" in printed(reply, "stderr")
         follow_up = await worker.run("1")
         assert isinstance(follow_up, Result)
-        assert follow_up.plots == ()
+        assert plots(follow_up) == []
 
 
 async def test_an_interrupted_call_leaves_no_figure_for_the_next_one():
@@ -171,7 +186,7 @@ async def test_an_interrupted_call_leaves_no_figure_for_the_next_one():
         reply = await worker.run("x")
         assert isinstance(reply, Result), reply
         assert reply.value == 5
-        assert reply.plots == ()
+        assert plots(reply) == []
 
 
 async def test_a_figure_that_draws_forever_can_be_interrupted():
@@ -196,7 +211,7 @@ plt.figure().add_artist(Endless())
         reply = await worker.run("x")
         assert isinstance(reply, Result), reply
         assert reply.value == 5
-        assert reply.plots == ()
+        assert plots(reply) == []
 
 
 async def test_code_that_never_plots_does_not_load_matplotlib():
@@ -215,8 +230,8 @@ plt.get_fignums = lambda: 1 / 0
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert reply.plots == ()
-        assert "ZeroDivisionError" in reply.stderr
+        assert plots(reply) == []
+        assert "ZeroDivisionError" in printed(reply, "stderr")
         follow_up = await worker.run("x + 1")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
@@ -236,8 +251,8 @@ x = 42
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == 1
-        assert "figures 2 onward were dropped" in reply.stderr
+        assert len(plots(reply)) == 1
+        assert "figures 2 onward were dropped" in printed(reply, "stderr")
         follow_up = await worker.run("x")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
@@ -289,8 +304,8 @@ async def test_a_figure_whose_draw_fails_badly_costs_only_that_figure(body):
     async with make_worker() as worker:
         reply = await worker.run(BROKEN_DRAW.format(body=body))
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == 1
-        assert "figure 1 could not be rendered" in reply.stderr
+        assert len(plots(reply)) == 1
+        assert "figure 1 could not be rendered" in printed(reply, "stderr")
         follow_up = await worker.run("x + 1")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
@@ -307,8 +322,8 @@ plt.figure()
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert len(reply.plots) == 1
-        assert "figure 1 could not be rendered" in reply.stderr
+        assert len(plots(reply)) == 1
+        assert "figure 1 could not be rendered" in printed(reply, "stderr")
         follow_up = await worker.run("x + 1")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
@@ -325,14 +340,83 @@ ax.text(40, 0.5, "far", transform=ax.transAxes)
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        [plot] = reply.plots
+        [plot] = plots(reply)
         assert (plot.width, plot.height) == (640, 480)
 
 
-async def test_a_call_that_raises_notes_a_dropped_figure_in_its_traceback():
+async def test_a_call_that_raises_notes_a_dropped_figure_in_its_output():
     code = BROKEN_DRAW.format(body="raise RuntimeError('no')") + "1 / 0\n"
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Error), reply
-        assert len(reply.plots) == 1
-        assert "figure 1 could not be rendered" in reply.traceback
+        assert len(plots(reply)) == 1
+        assert "figure 1 could not be rendered" in printed(reply, "stderr")
+
+
+async def test_show_puts_the_figure_between_the_text_around_it():
+    code = """
+import matplotlib.pyplot as plt
+print("before")
+plt.plot([1, 2])
+plt.show()
+print("after")
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert shape(reply) == ["before\n", "plot", "after\n"]
+
+
+async def test_a_figure_never_shown_comes_after_all_the_text():
+    code = """
+import matplotlib.pyplot as plt
+print("before")
+plt.plot([1, 2])
+print("after")
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert shape(reply) == ["before\nafter\n", "plot"]
+
+
+async def test_each_show_places_the_figures_drawn_since_the_last():
+    code = """
+import matplotlib.pyplot as plt
+plt.figure(figsize=(2, 1))
+plt.show()
+print("between")
+plt.figure(figsize=(3, 1))
+plt.show()
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert shape(reply) == ["plot", "between\n", "plot"]
+        assert [plot.width for plot in plots(reply)] == [200, 300]
+
+
+async def test_a_note_about_a_figure_sits_where_the_figure_would_have():
+    code = BROKEN_DRAW.format(body="raise RuntimeError('no')") + (
+        "plt.show()\nprint('after')\n"
+    )
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        note, plot, after = shape(reply)
+        assert "figure 1 could not be rendered" in note
+        assert (plot, after) == ("plot", "after\n")
+
+
+async def test_figures_shown_before_an_error_keep_their_place():
+    code = """
+import matplotlib.pyplot as plt
+plt.plot([1, 2])
+plt.show()
+print("then")
+1 / 0
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Error), reply
+        assert shape(reply) == ["plot", "then\n"]

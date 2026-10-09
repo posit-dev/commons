@@ -28,6 +28,11 @@ def run(code: str, namespace: dict | None = None) -> _repl.Evaluation:
     return _repl.run(code, namespace)
 
 
+def printed(evaluation: _repl.Evaluation, stream: str = "stdout") -> str:
+    """Everything ``evaluation`` wrote to ``stream``."""
+    return "".join(text for kind, text in evaluation.output if kind == stream)
+
+
 class TestResultValue:
     def test_trailing_expression_is_the_result(self):
         assert run("x = 1 + 2\nx").value == 3
@@ -135,40 +140,40 @@ class TestNamespace:
 class TestOutputCapture:
     def test_stdout_is_captured_not_printed(self, capsys):
         evaluation = run("print('hello')")
-        assert evaluation.stdout == "hello\n"
+        assert printed(evaluation) == "hello\n"
         assert capsys.readouterr().out == ""
 
     def test_stderr_is_captured_not_printed(self, capsys):
         evaluation = run("import sys\nprint('oops', file=sys.stderr)")
-        assert evaluation.stderr == "oops\n"
+        assert printed(evaluation, "stderr") == "oops\n"
         assert capsys.readouterr().err == ""
 
     def test_trailing_expression_prints_too(self, capsys):
         evaluation = run("print('working')\n40 + 2")
-        assert evaluation.stdout == "working\n"
+        assert printed(evaluation) == "working\n"
         assert evaluation.value == 42
         assert capsys.readouterr().out == ""
 
     def test_output_before_an_error_is_still_captured(self):
         evaluation = run("print('before')\n1 / 0")
-        assert evaluation.stdout == "before\n"
+        assert printed(evaluation) == "before\n"
         assert "ZeroDivisionError" in evaluation.error
 
     def test_output_is_bounded(self):
         # A runaway print loop stops at the channel limit, with a note.
         evaluation = run(f"print('x' * {2 * _repl._CAPTURE_LIMIT})")
-        assert len(evaluation.stdout) <= _repl._CAPTURE_LIMIT
-        assert evaluation.stdout.endswith("exceeded the channel limit]")
+        assert len(printed(evaluation)) <= _repl._CAPTURE_LIMIT
+        assert printed(evaluation).endswith("exceeded the channel limit]")
 
     def test_the_bound_is_exact(self):
         # A write that fills the capacity exactly is kept whole, note and
         # all; one byte more clips to exactly the limit.
         exact = _repl._CAPTURE_LIMIT - len(_repl._TRUNCATION_NOTE)
         evaluation = run(f"import sys\nsys.stdout.write('x' * {exact})")
-        assert evaluation.stdout == "x" * exact
+        assert printed(evaluation) == "x" * exact
         evaluation = run(f"import sys\nsys.stdout.write('x' * {exact + 1})")
-        assert len(evaluation.stdout) == _repl._CAPTURE_LIMIT
-        assert evaluation.stdout.endswith(_repl._TRUNCATION_NOTE)
+        assert len(printed(evaluation)) == _repl._CAPTURE_LIMIT
+        assert printed(evaluation).endswith(_repl._TRUNCATION_NOTE)
 
     def test_discarded_writes_do_not_fail(self):
         evaluation = run(
@@ -179,7 +184,7 @@ class TestOutputCapture:
     def test_closing_a_capture_stream_changes_nothing(self):
         evaluation = run("import sys\nsys.stdout.close()\nprint('still here')")
         assert evaluation.error == ""
-        assert evaluation.stdout == "still here\n"
+        assert printed(evaluation) == "still here\n"
 
     def test_base_class_methods_cannot_bypass_the_bound(self):
         # The capture wraps its buffer instead of subclassing StringIO, so
@@ -190,7 +195,7 @@ class TestOutputCapture:
         )
         evaluation = run(code)
         assert "TypeError" in evaluation.error
-        assert len(evaluation.stdout) <= _repl._CAPTURE_LIMIT
+        assert len(printed(evaluation)) <= _repl._CAPTURE_LIMIT
 
     def test_a_lying_str_subclass_cannot_bypass_the_bound(self):
         # write() accounts by len(text), so a subclass reporting zero is
@@ -204,26 +209,79 @@ class TestOutputCapture:
             f"sys.stdout.write(S('y' * {2 * _repl._CAPTURE_LIMIT}))"
         )
         evaluation = run(code)
-        assert len(evaluation.stdout) <= _repl._CAPTURE_LIMIT
-        assert evaluation.stdout.endswith("exceeded the channel limit]")
+        assert len(printed(evaluation)) <= _repl._CAPTURE_LIMIT
+        assert printed(evaluation).endswith("exceeded the channel limit]")
 
     def test_empty_writes_do_not_accumulate(self):
         code = "for _ in range(100_000):\n    print(end='')\n40 + 2"
         evaluation = run(code)
         assert evaluation.value == 42
-        assert evaluation.stdout == ""
+        assert printed(evaluation) == ""
 
     def test_a_sabotaged_capture_costs_output_not_the_answer(self):
-        code = "import sys\nsys.stdout._chunks = None\n40 + 2"
+        code = "import sys\nsys.stdout._transcript._entries = None\n40 + 2"
         evaluation = run(code)
         assert evaluation.value == 42
-        assert evaluation.stdout == ""
+        assert printed(evaluation) == ""
+
+    def test_the_streams_keep_the_order_they_were_written_in(self):
+        code = (
+            "import sys\n"
+            "print('one')\n"
+            "print('two')\n"
+            "print('warn', file=sys.stderr)\n"
+            "print('three')"
+        )
+        assert run(code).output == (
+            ("stdout", "one\ntwo\n"),
+            ("stderr", "warn\n"),
+            ("stdout", "three\n"),
+        )
+
+    def test_an_inserted_item_sits_between_the_writes_around_it(self):
+        transcript = _repl.Transcript()
+        namespace = {"insert": transcript.insert}
+        evaluation = _repl.run(
+            "print('before')\ninsert('plot')\nprint('after')", namespace, transcript
+        )
+        assert evaluation.output == (
+            ("stdout", "before\n"),
+            ("item", "plot"),
+            ("stdout", "after\n"),
+        )
+
+    def test_switching_streams_endlessly_is_bounded_with_a_note(self):
+        code = (
+            "import sys\n"
+            f"for _ in range({_repl._SEGMENT_LIMIT}):\n"
+            "    sys.stdout.write('o')\n"
+            "    sys.stderr.write('e')\n"
+            "40 + 2"
+        )
+        evaluation = run(code)
+        assert evaluation.value == 42
+        assert len(evaluation.output) == _repl._SEGMENT_LIMIT + 1
+        assert evaluation.output[-1][1] == _repl._SEGMENT_NOTE
+
+    def test_a_note_is_kept_past_both_bounds(self):
+        transcript = _repl.Transcript()
+        transcript.write("stdout", "x" * (2 * _repl._CAPTURE_LIMIT))
+        transcript.note("stdout", "[note]")
+        [(_, text)] = transcript.entries()
+        assert text.endswith(_repl._TRUNCATION_NOTE + "[note]")
+
+    def test_the_segment_bound_leaves_room_in_the_protocol(self):
+        # Past the text segments, a reply still needs room for every plot
+        # and a note for each, plus the notes about limits.
+        assert _repl._SEGMENT_LIMIT + 2 * _protocol.PLOT_LIMIT + 10 <= (
+            _protocol.OUTPUT_LIMIT
+        )
 
     def test_dunder_stdout_is_redirected_too(self, capsys):
         # sys.__stdout__ names the real stream directly; it stands in for
         # the capture like sys.stdout does.
         evaluation = run("import sys\nsys.__stdout__.write('x\\n')")
-        assert evaluation.stdout == "x\n"
+        assert printed(evaluation) == "x\n"
         assert capsys.readouterr().out == ""
 
     def test_dunder_streams_are_restored_after_the_call(self):
@@ -368,19 +426,25 @@ class TestErrors:
     def test_a_sabotaged_readback_raising_generator_exit_keeps_the_answer(self):
         code = (
             "import sys\n"
-            "sys.stdout.getvalue = lambda: (_ for _ in ()).throw(GeneratorExit)\n"
+            "class Entries(list):\n"
+            "    def __iter__(self):\n"
+            "        raise GeneratorExit\n"
+            "sys.stdout._transcript._entries = Entries()\n"
             "40 + 2"
         )
         evaluation = run(code)
         assert evaluation.value == 42
-        assert evaluation.stdout == ""
+        assert printed(evaluation) == ""
 
     def test_an_interrupt_during_readback_still_propagates(self):
-        # A sabotaged capture can raise from getvalue(); a KeyboardInterrupt
-        # there is an interrupt, not lost output.
+        # A sabotaged transcript can raise from its read-back; a
+        # KeyboardInterrupt there is an interrupt, not lost output.
         code = (
             "import sys\n"
-            "sys.stdout.getvalue = lambda: (_ for _ in ()).throw(KeyboardInterrupt)\n"
+            "class Entries(list):\n"
+            "    def __iter__(self):\n"
+            "        raise KeyboardInterrupt\n"
+            "sys.stdout._transcript._entries = Entries()\n"
         )
         with pytest.raises(KeyboardInterrupt):
             run(code)
@@ -397,7 +461,7 @@ def test_the_module_stands_alone():
             (
                 "import _repl, json, sys; "
                 "e = _repl.run('print(1)\\n40 + 2'); "
-                "json.dump({'value': e.value, 'stdout': e.stdout}, sys.stdout)"
+                "json.dump({'value': e.value, 'output': e.output}, sys.stdout)"
             ),
         ],
         env={**os.environ, "PYTHONPATH": RUNTIME_DIR},
@@ -405,4 +469,4 @@ def test_the_module_stands_alone():
         text=True,
         check=True,
     )
-    assert json.loads(completed.stdout) == {"value": 42, "stdout": "1\n"}
+    assert json.loads(completed.stdout) == {"value": 42, "output": [["stdout", "1\n"]]}
