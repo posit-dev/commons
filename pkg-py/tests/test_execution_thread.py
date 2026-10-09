@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 
 import pytest
 
@@ -82,3 +83,21 @@ def test_close_ends_the_thread_and_later_calls_fail(runner: WorkerThread) -> Non
     reply = runner.run_sync("1")
     assert isinstance(reply, Failure)
     assert "closed" in reply.message
+
+
+def test_close_cancels_a_running_call_rather_than_waiting_it_out() -> None:
+    worker_thread = WorkerThread(Worker(call_timeout=60))
+    worker_thread.run_sync("1")
+    replies: list[object] = []
+    caller = threading.Thread(
+        target=lambda: replies.append(
+            worker_thread.run_sync("import time; time.sleep(60)")
+        )
+    )
+    caller.start()
+    time.sleep(1)
+    started = time.monotonic()
+    worker_thread.close()
+    caller.join(10)
+    assert time.monotonic() - started < 15
+    assert replies == [Failure(message="the Python session is closed.")]
