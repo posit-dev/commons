@@ -506,26 +506,14 @@ call_measure_tool <- function(
   measure_provenance = list(),
   measure_display = list()
 ) {
+  run <- run_measure(registry, name, arguments, injections, sources)
   td <- registry[[name]]
-  if (is.null(td)) {
-    detail <- if (length(registry)) {
-      cli::format_inline("Registered measures: {.val {names(registry)}}.")
-    } else {
-      "No measures are registered."
-    }
-    cli::cli_abort(c("No measure named {.val {name}}.", i = detail))
-  }
+  args <- run$args
+  value <- run$value
   footer <- measure_source_footer(
     measure_provenance[[name]] %||% character()
   )
   metadata <- measure_metadata(td, measure_display[[name]])
-  args <- validate_measure_args(td, parse_json_args(arguments))
-  # A measure takes a source's connection by the source's name; a board source
-  # must have its pins loaded before that connection can answer a query.
-  for (source_name in names(injections[[name]])) {
-    source_ensure_all(sources[[source_name]])
-  }
-  value <- do.call(td, c(args, injections[[name]]))
   if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
     return(measure_content_tool_result(
       args,
@@ -569,6 +557,32 @@ call_measure_tool <- function(
     tag = "A",
     show_tag = FALSE
   )
+}
+
+run_measure <- function(
+  registry,
+  name,
+  arguments,
+  injections = list(),
+  sources = list(),
+  call = rlang::caller_env()
+) {
+  td <- registry[[name]]
+  if (is.null(td)) {
+    detail <- if (length(registry)) {
+      cli::format_inline("Registered measures: {.val {names(registry)}}.")
+    } else {
+      "No measures are registered."
+    }
+    cli::cli_abort(c("No measure named {.val {name}}.", i = detail), call = call)
+  }
+  args <- validate_measure_args(td, parse_json_args(arguments), call = call)
+  # A measure takes a source's connection by the source's name; a board source
+  # must have its pins loaded before that connection can answer a query.
+  for (source_name in names(injections[[name]])) {
+    source_ensure_all(sources[[source_name]])
+  }
+  list(args = args, value = do.call(td, c(args, injections[[name]])))
 }
 
 measure_content_tool_result <- function(

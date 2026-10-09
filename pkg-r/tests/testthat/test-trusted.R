@@ -1,16 +1,10 @@
-test_that("trusted() runs measures and records the call", {
+test_that("trusted() runs measures", {
   tr <- trusted(
-    list(sales_db = test_source()),
+    data_sources = list(sales_db = test_source()),
     semantic_layer = semantic_layer(count_measure_tool())
   )
 
-  n <- tr$measure("order_count", arguments = list(region = "EMEA"))
-  expect_equal(unclass(n)[[1]], 3)
-  expect_equal(
-    attr(n, "commons_trusted_call"),
-    list(kind = "measure", name = "order_count", arguments = list(region = "EMEA"))
-  )
-  expect_snapshot(print(n))
+  expect_equal(tr$measure("order_count", arguments = list(region = "EMEA")), 3)
 })
 
 test_that("commons() builds an agent around a trusted() object", {

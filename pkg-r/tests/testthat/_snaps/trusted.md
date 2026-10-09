@@ -1,11 +1,3 @@
-# trusted() runs measures and records the call
-
-    Code
-      print(n)
-    Output
-      [1] 3
-      # trusted: measure order_count(region = "EMEA")
-
 # commons() builds an agent around a trusted() object
 
     Code

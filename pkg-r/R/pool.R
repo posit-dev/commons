@@ -13,6 +13,38 @@ call_metrics_impl <- function(
   source_name = NULL,
   arguments = "{}"
 ) {
+  query <- query_metrics(
+    registry,
+    sources,
+    metrics,
+    dimensions,
+    filters,
+    where,
+    source_name,
+    arguments
+  )
+  metric_tool_result(
+    query$result,
+    query$sql,
+    handles,
+    metrics,
+    dimensions,
+    filters,
+    note = query$note,
+    metadata = query$metadata
+  )
+}
+
+query_metrics <- function(
+  registry,
+  sources,
+  metrics,
+  dimensions = NULL,
+  filters = NULL,
+  where = NULL,
+  source_name = NULL,
+  arguments = "{}"
+) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
   source_hydrate_semantic_models(source, metrics)
@@ -27,9 +59,8 @@ call_metrics_impl <- function(
     )
   }
   if (identical(origins[[1]], "semantic_model")) {
-    return(call_semantic_metrics(
+    return(query_semantic_metrics(
       source,
-      handles,
       semantic_members,
       metrics,
       dimensions,
@@ -112,28 +143,15 @@ call_metrics_impl <- function(
   }
 
   result <- source_query(source, sql)
-  advert <- register_handle(handles, result)
   dimension_defs <- on_table[
     match(dim_names, on_table$name, nomatch = 0L),
   ]
   applied <- rbind(metric_defs, dimension_defs, filter_defs)
   applied <- applied[!duplicated(applied[c("name", "table", "source")]), ]
-  note <- applied_definitions_text(applied)
-  args <- drop_nulls(list(
-    metrics = metrics,
-    dimensions = dimensions,
-    filters = filters
-  ))
-  metric_tool_result(
-    result,
-    sql,
-    handles,
-    metrics,
-    dimensions,
-    filters,
-    note = note,
-    advert = advert,
-    args = args,
+  list(
+    result = result,
+    sql = sql,
+    note = applied_definitions_text(applied),
     metadata = metric_definition_metadata(metric_defs)
   )
 }
@@ -199,9 +217,8 @@ metric_origin <- function(name, definitions, semantic_members) {
   }
 }
 
-call_semantic_metrics <- function(
+query_semantic_metrics <- function(
   source,
-  handles,
   members,
   metrics,
   dimensions,
@@ -261,14 +278,10 @@ call_semantic_metrics <- function(
       "Unsupported native semantic-model backend {.val {model$backend}}."
     )
   )
-  result <- source_query_bind(source, sql, unname(arguments))
-  metric_tool_result(
-    result,
-    sql,
-    handles,
-    metrics,
-    dimensions,
-    filters,
+  list(
+    result = source_query_bind(source, sql, unname(arguments)),
+    sql = sql,
+    note = NULL,
     metadata = semantic_metric_metadata(metric_members)
   )
 }

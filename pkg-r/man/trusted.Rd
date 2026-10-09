@@ -2,7 +2,7 @@
 % Please edit documentation in R/trusted.R
 \name{trusted}
 \alias{trusted}
-\title{Trusted calculations and context for any R session}
+\title{Trusted calculations and context}
 \usage{
 trusted(data_sources, semantic_layer = NULL, context_layer = NULL)
 }
@@ -29,9 +29,6 @@ computes governed metrics.
 \item \verb{$connection(source)} returns a source's DBI connection, for queries
 that no trusted calculation answers.
 }
-
-Results from \verb{$measure()}, \verb{$metrics()}, and \verb{$calculation()} record the
-call that produced them, and print it below the result.
 }
 \description{
 \code{trusted()} gathers a team's data sources, semantic layer, and context layer

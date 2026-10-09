@@ -1,4 +1,4 @@
-#' Trusted calculations and context for any R session
+#' Trusted calculations and context
 #'
 #' `trusted()` gathers a team's data sources, semantic layer, and context layer
 #' into one object that code can call directly, without a model. It's the part
@@ -19,9 +19,6 @@
 #' * `$describe(table, source)` describes a table.
 #' * `$connection(source)` returns a source's DBI connection, for queries
 #'   that no trusted calculation answers.
-#'
-#' Results from `$measure()`, `$metrics()`, and `$calculation()` record the
-#' call that produced them, and print it below the result.
 #'
 #' @examples
 #' \dontrun{
@@ -81,21 +78,7 @@ Trusted <- R6::R6Class(
 
     measure = function(name, arguments = list()) {
       s <- private$state
-      trusted_call(
-        list(kind = "measure", name = name, arguments = arguments),
-        function(handles) {
-          call_measure_tool(
-            s$registry,
-            name,
-            arguments,
-            injections = s$injections,
-            handles = handles,
-            sources = s$sources,
-            measure_provenance = s$measure_provenance,
-            measure_display = s$measure_display
-          )
-        }
-      )
+      run_measure(s$registry, name, arguments, s$injections, s$sources)$value
     },
 
     metrics = function(
@@ -107,44 +90,20 @@ Trusted <- R6::R6Class(
       source = NULL
     ) {
       s <- private$state
-      trusted_call(
-        list(
-          kind = "metrics",
-          metrics = metrics,
-          dimensions = dimensions,
-          filters = filters,
-          source = source
-        ),
-        function(handles) {
-          call_metrics_impl(
-            s$definitions,
-            s$sources,
-            handles,
-            metrics = metrics,
-            dimensions = dimensions,
-            filters = filters,
-            where = where,
-            source_name = source,
-            arguments = arguments
-          )
-        }
-      )
+      query_metrics(
+        s$definitions,
+        s$sources,
+        metrics = metrics,
+        dimensions = dimensions,
+        filters = filters,
+        where = where,
+        source_name = source,
+        arguments = arguments
+      )$result
     },
 
     calculation = function(name, arguments = list(), source = NULL) {
-      s <- private$state
-      trusted_call(
-        list(kind = "calculation", name = name, arguments = arguments),
-        function(handles) {
-          call_calculation_impl(
-            s$sources,
-            handles,
-            name,
-            arguments,
-            source_name = source
-          )
-        }
-      )
+      run_calculation(private$state$sources, name, arguments, source)$result
     },
 
     context = function(query) {
@@ -213,50 +172,12 @@ trusted_overview <- function(state) {
       sprintf("Exact trusted queries: %d.", length(state$calculations))
     },
     if (state$has_context_layer) "Business context is available.",
-    "",
-    "These calculations are the team's vetted definitions. Before writing",
-    "your own analysis code or SQL, look for one with `$search()` and run it",
+    "This object provides access to trusted code and context. Before writing",
+    "your own analysis code or SQL, look for existing code with `$search()` and run it",
     "with `$measure()`, `$metrics()`, or `$calculation()`. When none fits,",
-    "check `$context()` for guidance on the approach, and say in your answer",
+    "check `$context()` for guidance on the approach. Say in your answer",
     "which numbers came from trusted calculations and which didn't."
   )
-}
-
-# Each call gets its own handle store, so its result is the store's only entry.
-trusted_call <- function(call, run) {
-  handles <- new_handle_store()
-  run(handles)
-  ids <- handle_ids(handles)
-  if (!length(ids)) {
-    cli::cli_abort("{.code {call$kind}} returned nothing.")
-  }
-  value <- get_handle(handles, ids[[1]])
-  attr(value, "commons_trusted_call") <- call
-  class(value) <- c("commons_trusted_result", class(value))
-  value
-}
-
-#' @export
-print.commons_trusted_result <- function(x, ...) {
-  call <- attr(x, "commons_trusted_call")
-  attr(x, "commons_trusted_call") <- NULL
-  class(x) <- setdiff(class(x), "commons_trusted_result")
-  print(x, ...)
-  cat(sprintf("# trusted: %s\n", format_trusted_call(call)))
-  invisible(x)
-}
-
-format_trusted_call <- function(call) {
-  name <- call$name %||% paste(call$metrics, collapse = ", ")
-  args <- call[setdiff(names(call), c("kind", "name", "metrics"))]
-  args <- c(args$arguments, args[names(args) != "arguments"])
-  args <- Filter(length, args)
-  arg_text <- vapply(
-    names(args),
-    function(nm) sprintf("%s = %s", nm, deparse1(args[[nm]])),
-    character(1)
-  )
-  sprintf("%s %s(%s)", call$kind, name, paste(arg_text, collapse = ", "))
 }
 
 tool_result_text <- function(result) {

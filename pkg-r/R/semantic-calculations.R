@@ -162,6 +162,31 @@ call_calculation_impl <- function(
   arguments = "{}",
   source_name = NULL
 ) {
+  run <- run_calculation(sources, name, arguments, source_name)
+  result <- run$result
+  prepared <- run$prepared
+  advert <- register_handle(handles, result)
+  tool_result(
+    paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
+    title = "Ran a trusted calculation",
+    icon = maybe_icon("shield-check"),
+    markdown = sprintf(
+      "```sql\n%s\n```\n\n%s",
+      prepared$sql,
+      df_to_markdown(result)
+    ),
+    html = measure_display_html(prepared$arguments, result),
+    tag = "A",
+    show_tag = FALSE
+  )
+}
+
+run_calculation <- function(
+  sources,
+  name,
+  arguments = "{}",
+  source_name = NULL
+) {
   source <- resolve_sql_source(sources, source_name)
   source_label <- source_name %||% rlang::names2(sources)[[1]]
   source_hydrate_semantic_models(source, name)
@@ -177,20 +202,9 @@ call_calculation_impl <- function(
     parse_json_args(arguments),
     data_source_state(source)$con
   )
-  result <- source_query_bind(source, prepared$sql, prepared$bindings)
-  advert <- register_handle(handles, result)
-  tool_result(
-    paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
-    title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
-    markdown = sprintf(
-      "```sql\n%s\n```\n\n%s",
-      prepared$sql,
-      df_to_markdown(result)
-    ),
-    html = measure_display_html(prepared$arguments, result),
-    tag = "A",
-    show_tag = FALSE
+  list(
+    result = source_query_bind(source, prepared$sql, prepared$bindings),
+    prepared = prepared
   )
 }
 

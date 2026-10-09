@@ -19,14 +19,14 @@ navbar:
 
 reference:
 - title: Main functions
-  description: The main agent constructor, plus the building blocks for a commons agent.
+  description: The main constructor, plus the building blocks for a commons agent.
   contents:
+  - trusted
   - commons
   - data_source
   - semantic_layer
   - measure
   - context_layer
-  - trusted
 - title: Shiny UI and server
   description: Put a commons agent inside of an interactive chat app.
   contents: starts_with("commons_")
