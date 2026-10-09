@@ -19,11 +19,13 @@ import pytest
 from commons._execution import _protocol
 from commons._execution._env import worker_command, worker_env
 from commons._execution._protocol import (
+    PLOT_LIMIT,
     STREAM_LIMIT,
     Call,
     ChannelError,
     Error,
     OpaqueValue,
+    Plot,
     ProtocolError,
     Ready,
     Result,
@@ -1326,3 +1328,86 @@ def test_a_frame_the_named_library_refuses_to_hold_is_refused():
 def test_a_malformed_arrow_payload_is_refused(data):
     with pytest.raises(ProtocolError, match="malformed value payload"):
         decode_value({"encoding": "arrow", "library": "pandas", "data": data})
+
+
+# --- plots ------------------------------------------------------------------
+
+
+def _png(width: int, height: int) -> bytes:
+    """The smallest byte string a plot accepts: a signature and an IHDR chunk."""
+    ihdr = (
+        b"IHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+        + b"\x08\x06\x00\x00\x00"
+    )
+    return b"\x89PNG\r\n\x1a\n" + len(ihdr[4:]).to_bytes(4, "big") + ihdr + b"\x00" * 4
+
+
+def _plot_line(**fields) -> bytes:
+    body = {"type": "result", "id": "c1", "plots": [fields]}
+    return json.dumps(body).encode() + b"\n"
+
+
+def _b64(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def test_a_result_carries_its_plots():
+    plot = Plot(png=_png(640, 480), display_png=_png(1280, 960))
+    result = Result(id="c1", plots=(plot,))
+    assert round_trip(result) == result
+
+
+def test_an_error_carries_the_plots_drawn_before_it():
+    # What was drawn before the exception is still worth showing, as in R.
+    plot = Plot(png=_png(640, 480), display_png=_png(1280, 960))
+    error = Error(id="c1", message="ValueError: late", plots=(plot,))
+    assert round_trip(error) == error
+
+
+def test_a_plot_reports_the_size_of_its_model_image():
+    plot = Plot(png=_png(640, 480), display_png=_png(1280, 960))
+    assert (plot.width, plot.height) == (640, 480)
+
+
+def test_a_plot_that_is_not_a_png_is_refused():
+    with pytest.raises(ProtocolError, match="malformed plot"):
+        decode_message(_plot_line(png=_b64(b"<svg/>"), display_png=_b64(_png(2, 2))))
+
+
+def test_a_plot_whose_data_is_not_base64_is_refused():
+    with pytest.raises(ProtocolError, match="malformed plot"):
+        decode_message(_plot_line(png="not base64!", display_png=_b64(_png(2, 2))))
+
+
+def test_a_plot_with_a_field_it_does_not_have_is_refused():
+    with pytest.raises(ProtocolError, match="malformed plot"):
+        decode_message(
+            _plot_line(png=_b64(_png(2, 2)), display_png=_b64(_png(2, 2)), alt="hi")
+        )
+
+
+def test_plots_that_are_not_a_list_are_refused():
+    line = b'{"type": "result", "id": "c1", "plots": "no"}\n'
+    with pytest.raises(ProtocolError, match="malformed result message"):
+        decode_message(line)
+
+
+def test_more_plots_than_a_call_may_draw_are_refused():
+    plot = {"png": _b64(_png(2, 2)), "display_png": _b64(_png(2, 2))}
+    body = {"type": "result", "id": "c1", "plots": [plot] * (PLOT_LIMIT + 1)}
+    with pytest.raises(ProtocolError, match="malformed result message"):
+        decode_message(json.dumps(body).encode() + b"\n")
+
+
+def test_plots_too_large_for_the_channel_are_dropped_with_a_note():
+    # The answer is worth more than the pictures: a result whose plots would
+    # overrun the line keeps its value and says what it lost.
+    big = _png(2, 2) + os.urandom(STREAM_LIMIT // 2)
+    result = Result(id="c1", value=42, plots=(Plot(png=big, display_png=big),))
+    crossed = decode_message(encode_message(result))
+    assert isinstance(crossed, Result)
+    assert crossed.value == 42
+    assert crossed.plots == ()
+    assert "plot" in crossed.stderr
