@@ -1,0 +1,54 @@
+# Security and governance for commons agents
+
+`commons` allows users to build and deploy agents that can run SQL queries against live databases and (soon) execute arbitrary Python code. This raises several security and governance questions: How do you make sure that an agent cannot delete production data? Can model-generated Python code interfere with a [Posit Connect](https://posit.co/products/enterprise/connect) deployment? Can an agent show users tables, rows, or business context that they shouldn't be able to see?
+
+This page explains the boundaries that `commons` provides and the responsibilities that remain with the application author and server administrator.
+
+
+# The `commons` harness
+
+A `commons` agent is a `chatlas.Chat` object that carries a system prompt and a set of tools. The system prompt lists the available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, or run a SQL query.
+
+We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like "never reveal sensitive data." Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider. The agent must therefore not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
+
+
+# SQL code execution
+
+
+## Destructive actions
+
+The agent can run one read-only statement at a time. `commons` parses each statement with [sqlglot](https://github.com/tobymao/sqlglot) and checks its structure against an allowlist of statement forms that only read, such as `SELECT` and the set operations. `commons` refuses every other form, stacked statements, and statements that `sqlglot` cannot parse, so it fails safe/closed.
+
+For data frames and pins, which `commons` loads into its own DuckDB database, it also hardens the connection. It disables community and unsigned extensions, automatic extension install and load, external access, and the local filesystem. Then it sets `lock_configuration`, so a query cannot turn those settings back on.
+
+These checks provide defense in depth, but they are not a database sandbox. When you supply a database connection, `commons` queries it as-is, and a statement that the parser accepts runs with all the permissions of that connection. The primary safeguard against destructive SQL is therefore database-enforced read-only access, and you should open the connection as a read-only user or role.
+
+
+## Data access
+
+The `tables` argument to [data_source()](../reference/data_source.md#commons.data_source) controls which tables `commons` describes to the model, but it is not an authorization boundary. SQL written by the agent can query any object that the connection can reach.
+
+On Posit Connect, [viewer OAuth integrations](https://docs.posit.co/connect/admin/access-controls/) can give an interactive application the current viewer's Snowflake or Databricks credentials. If the application creates its engine from those credentials, the warehouse continues to enforce that viewer's existing access policies, including row-level and column-level security.
+
+For a Snowflake or Databricks source, `commons` snapshots the connection's principal and namespace when it creates a Snowflake or Databricks data source, and its active and secondary roles as well on Snowflake, and rejects subsequent operations if that identity changes.
+
+Viewer credentials are not automatic. `commons` uses the engine that the application supplies. When using viewer credentials, you should create the engine and the `commons` agent inside the Shiny server function so that each session has the correct database identity.
+
+When viewer credentials are not available, it is recommended to use a service account with access only to the data that the application needs. Every viewer then has the same database permissions, so share the application only with users who are allowed that access.
+
+
+# Python code execution
+
+The Python agent currently has no tool that runs code written by the model, but this feature is expected in the near future. Currently, there is no concern for Python `commons` agents executing arbitrary Python code. When the feature is added, it will generally follow the R package's [R code execution](https://posit-dev.github.io/commons/r/articles/governance.html#r-code-execution) design.
+
+
+# Permissioning facts
+
+The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.
+
+Because of this, you should only include facts that you can share with both the application's viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information.
+
+
+# Telemetry
+
+The Python implementation of `commons` currently does not support telemetry or conversation logging, though this feature is planned to be added in the near future. When it is added, it will generally follow the R package's [Logging trajectories](https://posit-dev.github.io/commons/r/articles/governance.html#logging-trajectories) design.
