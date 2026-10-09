@@ -1,11 +1,13 @@
-"""Plot capture: the figures a call leaves open, rendered as PNGs and closed.
+"""Plot capture: the figures a call shows or leaves open, rendered as PNGs and closed.
 
-matplotlib keeps every figure until it is closed, so after each call the
-worker renders the figures pyplot is tracking and then closes them all, as
-Jupyter's inline backend does. Each figure is rendered twice: once for the
-model, at its own size, and once at twice the pixels for display. Figures
-built without pyplot (``matplotlib.figure.Figure()``) are not tracked and
-do not come back.
+matplotlib keeps every figure until it is closed. ``flush`` renders the
+figures pyplot is tracking into the call's transcript and closes them, as
+Jupyter's inline backend does. ``plt.show()`` flushes at that point in the
+output, and the worker flushes once more when the call ends, so a plot sits
+between the text written before and after it. Each figure is rendered twice:
+once for the model, at its own size, and once at twice the pixels for
+display. Figures built without pyplot (``matplotlib.figure.Figure()``) are
+not tracked and do not come back.
 
 Nothing here imports matplotlib. A call that never imported pyplot has no
 figures, and the worker does not pay for the import on its behalf.
@@ -19,7 +21,7 @@ from typing import Any
 
 import _protocol  # pyrefly: ignore[missing-import]
 
-__all__ = ["BACKEND", "collect", "discard"]
+__all__ = ["BACKEND", "begin", "end", "flush"]
 
 # The value for MPLBACKEND, naming the sibling module by its import name.
 BACKEND = "module://_figure_backend"
@@ -32,61 +34,100 @@ _MODEL_LONG_EDGE = 1568
 _DISPLAY_SCALE = 2
 
 
-def collect() -> tuple[tuple[_protocol.Plot, ...], str]:
-    """Render and close every open figure, and say what did not come back.
+class _Call:
+    """The plot state of the call in flight: where plots go, and what they used."""
 
-    Returns the plots in the order the figures were made, and a note for the
-    call's stderr naming any figure that failed to render or fell past
-    ``PLOT_LIMIT``. Model code can run inside ``savefig`` (an artist's
-    ``draw``) and can replace pyplot's own functions, so no failure here
-    may escape: a broken figure costs that figure, and a broken pyplot
-    costs the plots, never the session.
-    ``KeyboardInterrupt`` propagates; the caller then discards the figures.
+    def __init__(self, transcript: Any) -> None:
+        self.transcript = transcript
+        self.figures = 0
+        self.plots = 0
+        self.size = 0
+        self.full = False
+
+
+_call: _Call | None = None
+
+
+def begin(transcript: Any) -> None:
+    """Send the next call's plots, and notes about them, to ``transcript``."""
+    global _call
+    _call = _Call(transcript)
+
+
+def end() -> None:
+    """Close whatever figures remain, so none carries into the next call."""
+    global _call
+    _call = None
+    _close_all()
+
+
+def flush() -> None:
+    """Render every open figure into the call's transcript, then close them all.
+
+    Model code can run inside ``savefig`` (an artist's ``draw``) and can
+    replace pyplot's own functions, so no failure here may escape: a broken
+    figure costs that figure, and a broken pyplot costs the plots, never the
+    session. Each failure, and the point where the call ran past
+    ``PLOT_LIMIT`` or ``PLOT_BYTES_LIMIT``, is noted on stderr where it
+    happened. ``KeyboardInterrupt`` propagates; the worker then discards the
+    figures.
     """
+    call = _call
     pyplot = sys.modules.get("matplotlib.pyplot")
-    if pyplot is None:
-        return (), ""
+    if call is None or pyplot is None:
+        return
     try:
         figures = [pyplot.figure(number) for number in pyplot.get_fignums()]
     except KeyboardInterrupt:
         raise
     except BaseException as exc:  # noqa: BLE001 - model code can break pyplot
-        discard()
-        return (), f"[commons: the figures could not be collected: {_describe(exc)}]\n"
-    notes = []
-    if len(figures) > _protocol.PLOT_LIMIT:
-        notes.append(
-            f"[commons: the call left {len(figures)} figures open; only the "
-            f"first {_protocol.PLOT_LIMIT} came back]"
-        )
-    plots = []
-    size = 0
-    for index, figure in enumerate(figures[: _protocol.PLOT_LIMIT], start=1):
+        _note(call, f"the figures could not be collected: {_describe(exc)}")
+        _close_all()
+        return
+    for figure in figures:
+        call.figures += 1
+        if call.full:
+            break
+        if call.plots >= _protocol.PLOT_LIMIT:
+            _note(
+                call,
+                f"figures {call.figures} onward were dropped; a call returns "
+                f"at most {_protocol.PLOT_LIMIT}",
+            )
+            call.full = True
+            break
         try:
             plot = _render(figure)
         except KeyboardInterrupt:
             raise
         except BaseException as exc:  # noqa: BLE001 - one figure, not the call
-            notes.append(
-                f"[commons: figure {index} could not be rendered: {_describe(exc)}]"
+            _note(
+                call, f"figure {call.figures} could not be rendered: {_describe(exc)}"
             )
             continue
-        size += len(plot.png) + len(plot.display_png)
-        if size > _protocol.PLOT_BYTES_LIMIT:
+        size = len(plot.png) + len(plot.display_png)
+        if call.size + size > _protocol.PLOT_BYTES_LIMIT:
             # Checked as each figure renders, so at most one figure past the
             # budget is ever held in memory.
-            notes.append(
-                f"[commons: figures {index} onward were dropped; their images "
-                "exceeded the channel's room for plots]"
+            _note(
+                call,
+                f"figures {call.figures} onward were dropped; their images "
+                "exceeded the channel's room for plots",
             )
+            call.full = True
             break
-        plots.append(plot)
-    discard()
-    return tuple(plots), "".join(note + "\n" for note in notes)
+        call.size += size
+        call.plots += 1
+        call.transcript.insert(plot)
+    _close_all()
 
 
-def discard() -> None:
-    """Close every open figure, so none carries into the next call."""
+def _note(call: _Call, text: str) -> None:
+    call.transcript.note("stderr", f"[commons: {text}]\n")
+
+
+def _close_all() -> None:
+    """Close every open figure."""
     pyplot = sys.modules.get("matplotlib.pyplot")
     if pyplot is None:
         return

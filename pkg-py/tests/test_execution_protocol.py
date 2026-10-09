@@ -19,6 +19,7 @@ import pytest
 from commons._execution import _protocol
 from commons._execution._env import worker_command, worker_env
 from commons._execution._protocol import (
+    OUTPUT_LIMIT,
     PLOT_BYTES_LIMIT,
     PLOT_EDGE_LIMIT,
     PLOT_LIMIT,
@@ -31,6 +32,7 @@ from commons._execution._protocol import (
     ProtocolError,
     Ready,
     Result,
+    Text,
     decode_message,
     decode_value,
     encode_message,
@@ -42,6 +44,25 @@ from commons._execution._protocol import (
 
 def round_trip(message):
     return decode_message(encode_message(message))
+
+
+def out(text: str) -> Text:
+    return Text(stream="stdout", text=text)
+
+
+def err(text: str) -> Text:
+    return Text(stream="stderr", text=text)
+
+
+def printed(message, stream: str = "stdout") -> str:
+    """Everything ``message``'s output wrote to ``stream``."""
+    return "".join(
+        s.text for s in message.output if isinstance(s, Text) and s.stream == stream
+    )
+
+
+def plots(message) -> list:
+    return [s for s in message.output if isinstance(s, Plot)]
 
 
 def test_a_call_carries_its_code_and_id():
@@ -62,7 +83,7 @@ def test_a_ready_announcement_round_trips():
 
 
 def test_a_result_carries_what_the_call_printed():
-    result = Result(id="c1", value=42, stdout="hello\n", stderr="oops\n")
+    result = Result(id="c1", value=42, output=(out("hello\n"), err("oops\n")))
     assert round_trip(result) == result
 
 
@@ -442,11 +463,11 @@ def test_a_frame_comes_back_as_the_result_of_a_call():
 def test_a_frame_too_large_for_the_channel_crosses_as_its_repr():
     pd = pytest.importorskip("pandas")
     frame = pd.DataFrame({"n": range(10_000_000)})  # ~80 MB as Arrow
-    crossed = decode_message(encode_message(Result(id="c1", value=frame, stdout="kept\n")))
+    crossed = decode_message(encode_message(Result(id="c1", value=frame, output=(out("kept\n"),))))
     assert isinstance(crossed, Result)
     assert isinstance(crossed.value, OpaqueValue)
     assert crossed.value.type_name == "DataFrame"
-    assert crossed.stdout == "kept\n"
+    assert printed(crossed) == "kept\n"
 
 
 def test_a_frame_that_cannot_fit_the_line_is_not_encoded_for_it():
@@ -459,24 +480,24 @@ def test_a_frame_that_cannot_fit_the_line_is_not_encoded_for_it():
     pd = pytest.importorskip("pandas")
     frame = pd.DataFrame({"n": range(6_200_000)})  # ~47 MiB as Arrow
     assert encode_value(frame)["encoding"] == "repr"
-    printed = "o" * (_protocol._TEXT_CLIP_LIMIT + 1000)
-    line = encode_message(Result(id="c1", value=frame, stdout=printed))
+    text = "o" * (_protocol._TEXT_CLIP_LIMIT + 1000)
+    line = encode_message(Result(id="c1", value=frame, output=(out(text),)))
     assert len(line) <= STREAM_LIMIT
     crossed = decode_message(line)
     assert isinstance(crossed, Result)
-    assert crossed.stdout == printed
+    assert printed(crossed) == text
 
 
 def test_output_too_large_for_the_channel_is_clipped():
     # stdout holds unbounded model output, so this is reachable without any
     # adversary. The value survives; the output is clipped, and says so.
-    result = Result(id="c1", value=42, stdout="x" * (STREAM_LIMIT + 1000))
+    result = Result(id="c1", value=42, output=(out("x" * (STREAM_LIMIT + 1000)),))
     line = encode_message(result)
     assert len(line) <= STREAM_LIMIT
     crossed = decode_message(line)
     assert isinstance(crossed, Result)
     assert crossed.value == 42
-    assert crossed.stdout.endswith("channel limit]")
+    assert printed(crossed).endswith("channel limit]")
 
 
 def test_a_handle_too_large_for_the_channel_crosses_as_its_repr():
@@ -1332,7 +1353,7 @@ def test_a_malformed_arrow_payload_is_refused(data):
         decode_value({"encoding": "arrow", "library": "pandas", "data": data})
 
 
-# --- plots ------------------------------------------------------------------
+# --- output -----------------------------------------------------------------
 
 
 def _png(width: int, height: int) -> bytes:
@@ -1346,120 +1367,188 @@ def _png(width: int, height: int) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + len(ihdr[4:]).to_bytes(4, "big") + ihdr + b"\x00" * 4
 
 
-def _plot_line(**fields) -> bytes:
-    body = {"type": "result", "id": "c1", "plots": [fields]}
-    return json.dumps(body).encode() + b"\n"
-
-
 def _b64(data: bytes) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
-def test_a_result_carries_its_plots():
-    plot = Plot(png=_png(640, 480), display_png=_png(1280, 960))
-    result = Result(id="c1", plots=(plot,))
+def _output_line(*segments, kind: str = "result") -> bytes:
+    body = {"type": kind, "id": "c1", "output": list(segments)}
+    if kind == "error":
+        body["message"] = "x"
+    return json.dumps(body).encode() + b"\n"
+
+
+def _plot_segment(png=None, display_png=None, **extra) -> dict:
+    image = _b64(_png(2, 2))
+    return {
+        "type": "plot",
+        "png": image if png is None else png,
+        "display_png": image if display_png is None else display_png,
+        **extra,
+    }
+
+
+SMALL_PLOT = Plot(png=_png(640, 480), display_png=_png(1280, 960))
+
+
+def _big_plot(size: int) -> Plot:
+    data = _png(2, 2) + b"\x00" * size
+    return Plot(png=data, display_png=data)
+
+
+def test_output_keeps_text_and_plots_in_the_order_they_happened():
+    result = Result(
+        id="c1", output=(out("before\n"), SMALL_PLOT, err("warn\n"), out("after\n"))
+    )
     assert round_trip(result) == result
 
 
-def test_an_error_carries_the_plots_drawn_before_it():
-    # What was drawn before the exception is still worth showing, as in R.
-    plot = Plot(png=_png(640, 480), display_png=_png(1280, 960))
-    error = Error(id="c1", message="ValueError: late", plots=(plot,))
+def test_an_error_carries_the_output_from_before_it():
+    # What was written and drawn before the exception is still worth
+    # showing, as in R.
+    error = Error(id="c1", message="ValueError: late", output=(out("x\n"), SMALL_PLOT))
     assert round_trip(error) == error
 
 
 def test_a_plot_reports_the_size_of_its_model_image():
-    plot = Plot(png=_png(640, 480), display_png=_png(1280, 960))
-    assert (plot.width, plot.height) == (640, 480)
+    assert (SMALL_PLOT.width, SMALL_PLOT.height) == (640, 480)
 
 
-def test_a_plot_that_is_not_a_png_is_refused():
-    with pytest.raises(ProtocolError, match="malformed plot"):
-        decode_message(_plot_line(png=_b64(b"<svg/>"), display_png=_b64(_png(2, 2))))
+@pytest.mark.parametrize("kind", ["result", "error"])
+@pytest.mark.parametrize(
+    "segment",
+    [
+        {"type": "text", "stream": "stdin", "text": "x"},
+        {"type": "text", "stream": "stdout", "text": 3},
+        {"type": "text", "stream": "stdout", "text": "x", "extra": 1},
+        {"type": "image"},
+        "text",
+    ],
+    ids=["bad-stream", "bad-text", "extra-field", "unknown-type", "not-a-mapping"],
+)
+def test_an_output_segment_of_the_wrong_shape_is_refused(kind, segment):
+    with pytest.raises(ProtocolError, match="malformed"):
+        decode_message(_output_line(segment, kind=kind))
 
 
-def test_a_plot_whose_data_is_not_base64_is_refused():
-    with pytest.raises(ProtocolError, match="malformed plot"):
-        decode_message(_plot_line(png="not base64!", display_png=_b64(_png(2, 2))))
-
-
-def test_a_plot_with_a_field_it_does_not_have_is_refused():
-    with pytest.raises(ProtocolError, match="malformed plot"):
-        decode_message(
-            _plot_line(png=_b64(_png(2, 2)), display_png=_b64(_png(2, 2)), alt="hi")
-        )
-
-
-def test_plots_that_are_not_a_list_are_refused():
-    line = b'{"type": "result", "id": "c1", "plots": "no"}\n'
+def test_output_that_is_not_a_list_is_refused():
+    line = b'{"type": "result", "id": "c1", "output": "no"}\n'
     with pytest.raises(ProtocolError, match="malformed result message"):
         decode_message(line)
 
 
-def test_more_plots_than_a_call_may_draw_are_refused():
-    plot = {"png": _b64(_png(2, 2)), "display_png": _b64(_png(2, 2))}
-    body = {"type": "result", "id": "c1", "plots": [plot] * (PLOT_LIMIT + 1)}
+def test_more_output_segments_than_a_reply_may_have_are_refused():
+    segment = {"type": "text", "stream": "stdout", "text": "x"}
     with pytest.raises(ProtocolError, match="malformed result message"):
-        decode_message(json.dumps(body).encode() + b"\n")
+        decode_message(_output_line(*[segment] * (OUTPUT_LIMIT + 1)))
 
 
-def test_plots_too_large_for_the_channel_are_dropped_with_a_note():
-    # The answer is worth more than the pictures: a result whose plots would
-    # overrun the line keeps its value and says what it lost.
-    big = _png(2, 2) + os.urandom(STREAM_LIMIT // 2)
-    result = Result(id="c1", value=42, plots=(Plot(png=big, display_png=big),))
-    crossed = decode_message(encode_message(result))
-    assert isinstance(crossed, Result)
-    assert crossed.value == 42
-    assert crossed.plots == ()
-    assert "plot" in crossed.stderr
+def test_more_plots_than_a_call_may_draw_are_refused():
+    with pytest.raises(ProtocolError, match="more than"):
+        decode_message(_output_line(*[_plot_segment()] * (PLOT_LIMIT + 1)))
+
+
+@pytest.mark.parametrize("kind", ["result", "error"])
+@pytest.mark.parametrize(
+    "png",
+    [
+        "iVBORw0KGgo=",
+        _b64(b"<svg/>"),
+        "not base64!",
+        _b64(_png(0, 10)),
+        _b64(_png(PLOT_EDGE_LIMIT + 1, 10)),
+        12,
+    ],
+    ids=[
+        "signature-only",
+        "not-a-png",
+        "not-base64",
+        "zero-width",
+        "too-wide",
+        "not-a-string",
+    ],
+)
+def test_a_plot_image_the_protocol_cannot_vouch_for_is_refused(kind, png):
+    with pytest.raises(ProtocolError, match="malformed plot"):
+        decode_message(_output_line(_plot_segment(png=png), kind=kind))
+
+
+def test_a_plot_with_a_field_it_does_not_have_is_refused():
+    with pytest.raises(ProtocolError, match="malformed plot"):
+        decode_message(_output_line(_plot_segment(alt="hi")))
+
+
+def test_plots_past_the_byte_budget_are_refused_at_decode():
+    # The worker keeps to the budget, but it runs model code.
+    image = _b64(_png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2))
+    with pytest.raises(ProtocolError, match="plots exceed"):
+        decode_message(_output_line(_plot_segment(png=image, display_png=image)))
 
 
 def test_plots_past_their_byte_budget_are_dropped_before_encoding():
-    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
-    result = Result(id="c1", value=42, plots=(Plot(png=big, display_png=big),))
-    crossed = decode_message(encode_message(result))
-    assert isinstance(crossed, Result)
-    assert crossed.plots == ()
-    assert "plots were dropped" in crossed.stderr
-
-
-def test_the_note_about_dropped_plots_survives_clipped_output():
-    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
+    # The answer is worth more than the pictures: the value and the text
+    # stay, in order, and a note at the end says what was lost.
     result = Result(
         id="c1",
-        stderr="e" * (STREAM_LIMIT // 2),
-        stdout="o" * (STREAM_LIMIT // 2),
-        plots=(Plot(png=big, display_png=big),),
+        value=42,
+        output=(out("a\n"), _big_plot(PLOT_BYTES_LIMIT // 2), out("b\n")),
     )
     crossed = decode_message(encode_message(result))
     assert isinstance(crossed, Result)
-    assert crossed.plots == ()
-    assert crossed.stderr.endswith("plots were dropped; they exceeded the channel limit]")
+    assert crossed.value == 42
+    assert crossed.output[:2] == (out("a\n"), out("b\n"))
+    assert crossed.output[-1] == err(_protocol._PLOT_DROP_NOTE)
 
 
 def test_dropping_plots_leaves_output_that_fits_unclipped():
-    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
-    printed = "e" * (2 * 1024 * 1024)
-    result = Result(id="c1", stderr=printed, plots=(Plot(png=big, display_png=big),))
+    text = "e" * (2 * 1024 * 1024)
+    result = Result(id="c1", output=(err(text), _big_plot(PLOT_BYTES_LIMIT // 2)))
+    crossed = decode_message(encode_message(result))
+    assert printed(crossed, "stderr").startswith(text)
+
+
+def test_each_stream_is_clipped_on_its_own_and_in_place():
+    # Clipping cuts a stream where it crosses the limit and drops its later
+    # text; the other stream, and what came after, keep their places.
+    big = "o" * (STREAM_LIMIT // 2)
+    result = Result(
+        id="c1",
+        output=(out(big), err("warn\n"), out(big), SMALL_PLOT, err("late\n")),
+    )
     crossed = decode_message(encode_message(result))
     assert isinstance(crossed, Result)
-    assert crossed.stderr.startswith(printed)
+    first, warn, plot, late = crossed.output
+    assert isinstance(first, Text)
+    assert first.text.endswith(_protocol._TRUNCATION_NOTE)
+    assert len(first.text) == _protocol._TEXT_CLIP_LIMIT + len(_protocol._TRUNCATION_NOTE)
+    assert (warn, plot, late) == (err("warn\n"), SMALL_PLOT, err("late\n"))
 
 
+def test_the_note_about_dropped_plots_survives_clipped_output():
+    result = Result(
+        id="c1",
+        output=(
+            err("e" * (STREAM_LIMIT // 2)),
+            out("o" * (STREAM_LIMIT // 2)),
+            _big_plot(PLOT_BYTES_LIMIT // 2),
+        ),
+    )
+    crossed = decode_message(encode_message(result))
+    assert isinstance(crossed, Result)
+    assert plots(crossed) == []
+    assert crossed.output[-1] == err(_protocol._PLOT_DROP_NOTE)
 
-def test_an_error_whose_plots_are_dropped_says_so_in_its_traceback():
-    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
+
+def test_an_error_whose_plots_are_dropped_says_so_in_its_output():
     error = Error(
         id="c1",
         message="ValueError: x",
         traceback="t" * (STREAM_LIMIT // 2),
-        plots=(Plot(png=big, display_png=big),),
+        output=(_big_plot(PLOT_BYTES_LIMIT // 2),),
     )
     crossed = decode_message(encode_message(error))
     assert isinstance(crossed, Error)
-    assert crossed.plots == ()
-    assert crossed.traceback.endswith("plots were dropped; they exceeded the channel limit]")
+    assert crossed.output == (err(_protocol._PLOT_DROP_NOTE),)
 
 
 def test_plots_within_budget_give_way_to_a_value_that_would_overflow():
@@ -1470,36 +1559,7 @@ def test_plots_within_budget_give_way_to_a_value_that_would_overflow():
     plot = Plot(png=plot_bytes, display_png=plot_bytes)
     # About 37 MB: it fits the line alone, and not alongside the plots.
     frame = pd.DataFrame({"b": [os.urandom(1024).hex() for _ in range(18_000)]})
-    crossed = decode_message(encode_message(Result(id="c1", value=frame, plots=(plot,))))
+    crossed = decode_message(encode_message(Result(id="c1", value=frame, output=(plot,))))
     assert isinstance(crossed, Result)
-    assert crossed.plots == ()
+    assert plots(crossed) == []
     pd.testing.assert_frame_equal(crossed.value, frame)
-
-
-@pytest.mark.parametrize("kind", ["result", "error"])
-@pytest.mark.parametrize(
-    "png",
-    [
-        "iVBORw0KGgo=",
-        base64.b64encode(_png(0, 10)).decode(),
-        base64.b64encode(_png(PLOT_EDGE_LIMIT + 1, 10)).decode(),
-        12,
-    ],
-    ids=["signature-only", "zero-width", "too-wide", "not-a-string"],
-)
-def test_a_plot_image_the_protocol_cannot_vouch_for_is_refused(kind, png):
-    body = {"type": kind, "id": "c1", "plots": [{"png": png, "display_png": png}]}
-    if kind == "error":
-        body["message"] = "x"
-    with pytest.raises(ProtocolError, match="malformed plot"):
-        decode_message(json.dumps(body).encode() + b"\n")
-
-
-def test_plots_past_the_byte_budget_are_refused_at_decode():
-    # The worker keeps to the budget, but it runs model code.
-    image = _b64(_png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2))
-    line = json.dumps(
-        {"type": "result", "id": "c1", "plots": [{"png": image, "display_png": image}]}
-    ).encode() + b"\n"
-    with pytest.raises(ProtocolError, match="plots exceed"):
-        decode_message(line)

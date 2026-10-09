@@ -290,17 +290,22 @@ def _commons_define_source(source, _files=_itertools.count(1)):
 def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
     """Run one call in the session namespace and render its reply.
 
-    The call's figures are rendered inside the interruptible window, because
-    drawing a figure runs model code and can take as long as the call did.
+    The figures still open when the code finishes are flushed inside the
+    interruptible window, because drawing a figure runs model code and can
+    take as long as the call did.
     """
     global _in_call
     namespace.update(call.handles)
+    transcript = _repl.Transcript()
+    # Bound before model code runs, which can reach the transcript and the
+    # plot module and replace their methods.
+    read_back, flush = transcript.entries, _plots.flush
+    _plots.begin(transcript)
     evaluation = None
-    plots, plot_notes = (), ""
     _in_call = True
     try:
-        evaluation = _repl.run(call.code, namespace)
-        plots, plot_notes = _plots.collect()
+        evaluation = _repl.run(call.code, namespace, transcript)
+        _guarded(flush)
     except KeyboardInterrupt:
         # The driver's SIGINT broke the call out of its computation. The
         # session and its variables survive; the driver reports the
@@ -308,25 +313,57 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
         evaluation = None
     finally:
         _in_call = False
+    # Outside the interruptible window, so a second SIGINT cannot escape
+    # here. Figures still open, half-drawn after an interrupt, go with it.
+    _guarded(_plots.end)
     if evaluation is None:
-        # Outside the interruptible window, so a second SIGINT cannot
-        # escape here. The half-drawn figures go with the call.
-        _plots.discard()
         return _protocol.Error(id=call.id, message="KeyboardInterrupt")
+    output = _segments(_guarded(read_back) or ())
     if evaluation.error:
         return _protocol.Error(
             id=call.id,
             message=evaluation.error,
-            traceback=evaluation.traceback + plot_notes,
-            plots=plots,
+            traceback=evaluation.traceback,
+            output=output,
         )
-    return _protocol.Result(
-        id=call.id,
-        value=evaluation.value,
-        stdout=evaluation.stdout,
-        stderr=evaluation.stderr + plot_notes,
-        plots=plots,
-    )
+    return _protocol.Result(id=call.id, value=evaluation.value, output=output)
+
+
+def _guarded(step):
+    """``step()``'s result, or ``None`` when model code made it fail."""
+    try:
+        return step()
+    except KeyboardInterrupt:
+        raise
+    except BaseException:  # noqa: BLE001 - a broken step costs its output only
+        return None
+
+
+def _segments(entries) -> tuple:
+    """The transcript's entries as protocol segments, skipping any that are not."""
+    segments = []
+    for entry in entries:
+        try:
+            kind, body = entry
+        except (TypeError, ValueError):
+            continue
+        if kind in ("stdout", "stderr") and type(body) is str:
+            segments.append(_protocol.Text(stream=kind, text=body))
+        elif kind == "item" and _is_plot(body):
+            segments.append(body)
+    return tuple(segments)
+
+
+def _is_plot(item) -> bool:
+    """Whether ``item`` is a plot whose images the driver will accept."""
+    if type(item) is not _protocol.Plot:
+        return False
+    try:
+        _protocol.png_size(item.png)
+        _protocol.png_size(item.display_png)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _call_id(line: bytes) -> str | None:
