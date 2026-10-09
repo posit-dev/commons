@@ -1,0 +1,146 @@
+{
+  "description": "How an artifact's source is edited and validated. `edits` pins edit_artifact's matching: old_string must occur exactly once in the current version unless replace_all is set, and a failed edit reports which way it failed as a slug rather than a message, since the wording belongs to each language. `documents` pins which sources become a version at all: the frontmatter must open the source, parse as a YAML mapping, and use only the allowed keys, so a model cannot reach Quarto options that execute code (filters, includes, engines) or change how cells run. An edit is validated the same way as a new document, so an edit that breaks the frontmatter makes no version. Accepted documents pin the frontmatter commons writes back for Quarto. Data comes from trusted calls in the code (see artifact-calls.json), not the frontmatter.",
+  "allowed_keys": ["title", "subtitle", "date", "format"],
+  "edits": [
+    {
+      "name": "a unique match is replaced",
+      "source": "---\ntitle: Sales\n---\n\nRevenue rose.\n",
+      "old_string": "rose",
+      "new_string": "fell",
+      "expected": "---\ntitle: Sales\n---\n\nRevenue fell.\n"
+    },
+    {
+      "name": "an edit can change the frontmatter",
+      "source": "---\ntitle: Sales\n---\n\nBody.\n",
+      "old_string": "title: Sales",
+      "new_string": "title: Sales by region",
+      "expected": "---\ntitle: Sales by region\n---\n\nBody.\n"
+    },
+    {
+      "name": "no match is an error",
+      "source": "---\ntitle: Sales\n---\n\nBody.\n",
+      "old_string": "Revenue",
+      "new_string": "Income",
+      "error": "no_match"
+    },
+    {
+      "name": "matching is case-sensitive",
+      "source": "---\ntitle: Sales\n---\n\nBody.\n",
+      "old_string": "body.",
+      "new_string": "Text.",
+      "error": "no_match"
+    },
+    {
+      "name": "several matches are an error without replace_all",
+      "source": "---\ntitle: Sales\n---\n\nA and A.\n",
+      "old_string": "A",
+      "new_string": "B",
+      "error": "multiple_matches"
+    },
+    {
+      "name": "replace_all replaces every match",
+      "source": "---\ntitle: Sales\n---\n\nA and A.\n",
+      "old_string": "A",
+      "new_string": "B",
+      "replace_all": true,
+      "expected": "---\ntitle: Sales\n---\n\nB and B.\n"
+    },
+    {
+      "name": "matches do not overlap",
+      "source": "---\ntitle: T\n---\n\naaa\n",
+      "old_string": "aa",
+      "new_string": "b",
+      "replace_all": true,
+      "expected": "---\ntitle: T\n---\n\nba\n"
+    },
+    {
+      "name": "old_string is literal text, not a pattern",
+      "source": "---\ntitle: T\n---\n\nCost (USD): $5.\n",
+      "old_string": "(USD): $5.",
+      "new_string": "(EUR): 4.",
+      "expected": "---\ntitle: T\n---\n\nCost (EUR): 4.\n"
+    },
+    {
+      "name": "an edit that changes nothing is an error",
+      "source": "---\ntitle: T\n---\n\nBody.\n",
+      "old_string": "Body.",
+      "new_string": "Body.",
+      "error": "unchanged"
+    },
+    {
+      "name": "an empty old_string is an error",
+      "source": "---\ntitle: T\n---\n\nBody.\n",
+      "old_string": "",
+      "new_string": "x",
+      "error": "no_match"
+    }
+  ],
+  "documents": [
+    {
+      "name": "the allowed keys are accepted",
+      "source": "---\ntitle: Sales\nsubtitle: By region\ndate: 2026-10-07\nformat: html\n---\n\nBody.\n",
+      "expected": {
+        "frontmatter": {"title": "Sales", "subtitle": "By region", "date": "2026-10-07", "format": "html"},
+        "body": "\nBody.\n"
+      }
+    },
+    {
+      "name": "leading blank lines before the frontmatter are ignored",
+      "source": "\n\n---\ntitle: Sales\n---\nBody.\n",
+      "expected": {
+        "frontmatter": {"title": "Sales"},
+        "body": "Body.\n"
+      }
+    },
+    {
+      "name": "a document without frontmatter is rejected",
+      "source": "# Sales\n\nBody.\n",
+      "error": "missing_frontmatter"
+    },
+    {
+      "name": "unterminated frontmatter is rejected",
+      "source": "---\ntitle: Sales\n\nBody.\n",
+      "error": "missing_frontmatter"
+    },
+    {
+      "name": "frontmatter that does not parse is rejected",
+      "source": "---\ntitle: [Sales\n---\nBody.\n",
+      "error": "invalid_yaml"
+    },
+    {
+      "name": "frontmatter that is not a mapping is rejected",
+      "source": "---\n- title\n---\nBody.\n",
+      "error": "invalid_yaml"
+    },
+    {
+      "name": "a key that can run code is rejected",
+      "source": "---\ntitle: Sales\nfilters:\n  - evil.lua\n---\nBody.\n",
+      "error": "disallowed_key"
+    },
+    {
+      "name": "execution options are commons' to set",
+      "source": "---\ntitle: Sales\nexecute:\n  echo: false\n---\nBody.\n",
+      "error": "disallowed_key"
+    },
+    {
+      "name": "data isn't declared in the frontmatter",
+      "source": "---\ntitle: Sales\ncommons:\n  inputs:\n    orders:\n      measure: order_count\n---\nBody.\n",
+      "error": "disallowed_key"
+    },
+    {
+      "name": "html is the only format",
+      "source": "---\ntitle: Sales\nformat: pdf\n---\nBody.\n",
+      "error": "disallowed_format"
+    },
+    {
+      "name": "format options are commons' to set",
+      "source": "---\ntitle: Sales\nformat:\n  html:\n    include-in-header: x.html\n---\nBody.\n",
+      "error": "disallowed_format"
+    },
+    {
+      "name": "a title must be text",
+      "source": "---\ntitle:\n  text: Sales\n---\nBody.\n",
+      "error": "invalid_value"
+    }
+  ]
+}

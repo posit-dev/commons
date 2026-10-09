@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -161,9 +161,9 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
             _search_context(context),
             _describe_table(context),
             _run_sql(context),
-            _load_skill(),
         ]
     )
+    tools.append(_load_skill([tool.name for tool in tools]))
     return tools
 
 
@@ -233,8 +233,8 @@ def tool_description(tool: Tool) -> str:
     return str(tool.schema["function"]["description"])
 
 
-def _load_skill() -> Tool:
-    skills = builtin_skills()
+def _load_skill(tool_names: Collection[str]) -> Tool:
+    skills = builtin_skills(tool_names)
 
     def load_skill(name: str) -> ContentToolResult:
         if name not in skills:
@@ -551,7 +551,7 @@ def _call_metrics(context: ToolContext) -> Tool:
         "call_metrics",
         "Compute trusted calculations from governed metrics, optionally "
         "grouped and filtered. Metric, grouping, and filter names come from "
-        f"{named}; commons compiles and runs the query.",
+        f"{named}; the query is compiled and run for you.",
         _parameters(
             {
                 "metrics": _string_array(

@@ -36,6 +36,7 @@ commons_app <- function(client, ...) {
       "commons",
       id = "chat",
       theme = commons_theme(),
+      drawer = shinychat::chat_drawer(width = 640, open = FALSE),
       toolbar_global = if (rlang::is_interactive()) {
         bslib::toolbar(
           bslib::input_dark_mode(),
@@ -64,6 +65,12 @@ commons_app <- function(client, ...) {
 #' app; for local development, use [commons_app()]. Pair `commons_server()`
 #' with [shinychat::page_chat()] or [shinychat::chat_ui()], passing
 #' `theme = commons_theme()` so the commons chat assets are on the page.
+#'
+#' Documents the agent writes open in the chat's drawer, which
+#' [shinychat::page_chat()] and [shinychat::chat_ui()] enable by default. An app
+#' that passes `drawer = FALSE` gets no documents in view, though the agent
+#' still writes them. Documents read best in a wider drawer than the default,
+#' e.g. `drawer = shinychat::chat_drawer(width = 640, open = FALSE)`.
 #'
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
@@ -114,6 +121,7 @@ commons_server <- function(id, client, ...) {
   prewarm_on_idle(client)
 
   chat <- shinychat::chat_server(id, client = client, ...)
+  artifact_drawer_server(id, client)
   # shinychat owns the conversation identity (it sets the client's
   # `conversation_id` binding, which ellmer stamps on its spans); commons
   # only needs to know that a restore happened.
@@ -179,8 +187,8 @@ commons_chat_dependency <- function() {
     name = "commons-chat",
     version = paste0("0.0.0.9000.", as.integer(stamp)),
     src = c(file = src),
-    script = "commons-chat.js",
-    stylesheet = "commons-chat.css",
+    script = c("commons-chat.js", "commons-artifact.js"),
+    stylesheet = c("commons-chat.css", "commons-artifact.css"),
     all_files = TRUE
   )
 }

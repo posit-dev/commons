@@ -106,6 +106,25 @@
 #' * `run_sql` executes a read-only SQL query.
 #' * `run_r` executes R code to analyze results and render plots in the agent's
 #'   R session.
+#' * `edit_artifact` edits a document the agent wrote.
+#'
+#' @section Documents:
+#' When a user asks for a report, the agent writes a Quarto document instead
+#' of a chat reply. In [commons_server()], the document streams into the chat's
+#' drawer as it's written, with each R cell knitted as soon as it arrives;
+#' outside Shiny, `agent$chat()` knits it and reports where it wrote the
+#' result.
+#'
+#' A document gets its data by calling trusted calculations in its code.
+#' commons runs each call before the cell does, saves the result as a CSV file
+#' beside the document, and replaces the call with a read of that file, so the
+#' saved directory is ordinary Quarto source with no credentials and no
+#' commons dependency. A manifest beside the data records the call behind each
+#' file and, for metrics and calculations, the SQL it ran.
+#'
+#' The document's code runs in a fresh sandboxed R session, with the same
+#' restrictions as `run_r`. Quarto isn't needed to show documents, only to
+#' render the saved source elsewhere.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,
@@ -281,6 +300,11 @@ Commons <- R6::R6Class(
       private$citation_request <- new.env(parent = emptyenv())
       private$citation_request$reminder <- citation_reminder_text()
       private$restore_reminder_pending <- FALSE
+      private$artifacts <- new_artifact_store(
+        resolve_input = function(input) resolve_artifact_input(private, input),
+        network = network,
+        protection = protection
+      )
 
       commons_tools <- build_commons_tools(self, private)
       self$register_tools(commons_tools)
@@ -304,6 +328,11 @@ Commons <- R6::R6Class(
 
     set_turns = function(value) {
       private$restore_reminder_pending <- FALSE
+      # Artifacts live for one conversation; a restored or cleared one starts
+      # without them.
+      if (!is.null(private$artifacts)) {
+        artifact_store_reset(private$artifacts)
+      }
       super$set_turns(value)
     },
 
@@ -313,8 +342,11 @@ Commons <- R6::R6Class(
       }
       restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
+      n_turns <- length(self$get_turns())
       result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
       private$consume_restore_reminder(restore_reminder_pending)
+      turns <- self$get_turns()
+      save_turn_artifacts(private$artifacts, turns[seq_along(turns) > n_turns])
       if (result$visible) result$value else invisible(result$value)
     },
 
@@ -342,6 +374,7 @@ Commons <- R6::R6Class(
 
       tracing <- private$tracing
       corpus <- private$corpus
+      artifacts <- private$artifacts
       as_content <- identical(stream, "content")
 
       # Always project citations so reserved model markup cannot reach the browser.
@@ -350,7 +383,10 @@ Commons <- R6::R6Class(
         if (tracing) {
           span <- local_conversation_turn_span()
         }
-        scanner <- citation_scanner(corpus)
+        scanner <- citation_scanner(
+          corpus,
+          on_artifact = artifact_scan_handler(artifacts)
+        )
 
         for (chunk in coro::await_each(raw_stream)) {
           if (is.character(chunk)) {
@@ -417,6 +453,10 @@ Commons <- R6::R6Class(
       private$corpus
     },
 
+    artifact_store = function() {
+      private$artifacts
+    },
+
     queue_restore_reminder = function() {
       private$restore_reminder_pending <- TRUE
       invisible(self)
@@ -480,9 +520,11 @@ Commons <- R6::R6Class(
     corpus = NULL,
     citation_request = NULL,
     restore_reminder_pending = FALSE,
+    artifacts = NULL,
 
     prepare_turn_inputs = function(inputs) {
       inputs <- append_turn_reminder(inputs, self$get_model())
+      inputs <- c(inputs, take_artifact_reminders(private$artifacts))
       if (private$restore_reminder_pending) {
         inputs <- append_restored_conversation_reminder(inputs)
       }

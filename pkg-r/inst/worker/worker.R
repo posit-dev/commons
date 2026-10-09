@@ -594,57 +594,8 @@ worker_run_code <- function(
     }
   )
 
-  guardrails <- if ("commons:guardrails" %in% search()) {
-    get(
-      ".commons_guardrails",
-      envir = as.environment("commons:guardrails"),
-      inherits = FALSE
-    )
-  }
-  if (!is.null(guardrails)) {
-    restore <- list()
-    on.exit({
-      for (item in rev(restore)) {
-        if (bindingIsLocked(item$name, item$environment)) {
-          unlockBinding(item$name, item$environment)
-        }
-        assign(item$name, item$original, envir = item$environment)
-        if (item$locked) {
-          lockBinding(item$name, item$environment)
-        }
-      }
-    }, add = TRUE)
-    for (hook in guardrails) {
-      namespace <- asNamespace(hook$package)
-      environments <- list(namespace)
-      attached_name <- paste0("package:", hook$package)
-      # Attached exports are copied bindings rather than namespace lookups.
-      if (attached_name %in% search()) {
-        attached <- as.environment(attached_name)
-        if (!identical(attached, namespace) &&
-          exists(hook$name, envir = attached, inherits = FALSE)) {
-          environments <- c(environments, list(attached))
-        }
-      }
-      for (environment in environments) {
-        original <- get(hook$name, envir = environment, inherits = FALSE)
-        locked <- bindingIsLocked(hook$name, environment)
-        if (locked) {
-          unlockBinding(hook$name, environment)
-        }
-        assign(hook$name, hook$replacement, envir = environment)
-        if (locked) {
-          lockBinding(hook$name, environment)
-        }
-        restore[[length(restore) + 1L]] <- list(
-          name = hook$name,
-          environment = environment,
-          original = original,
-          locked = locked
-        )
-      }
-    }
-  }
+  restore <- worker_engage_guardrails()
+  on.exit(restore(), add = TRUE)
 
   evaluate(
     code,
@@ -656,4 +607,151 @@ worker_run_code <- function(
   flush_plot()
 
   list(segments = segments)
+}
+
+# Swaps in the guardrail hooks, when the worker has them, and returns the
+# function that restores the originals.
+worker_engage_guardrails <- function() {
+  guardrails <- if ("commons:guardrails" %in% search()) {
+    get(
+      ".commons_guardrails",
+      envir = as.environment("commons:guardrails"),
+      inherits = FALSE
+    )
+  }
+  restore <- list()
+  for (hook in guardrails) {
+    namespace <- asNamespace(hook$package)
+    environments <- list(namespace)
+    attached_name <- paste0("package:", hook$package)
+    # Attached exports are copied bindings rather than namespace lookups.
+    if (attached_name %in% search()) {
+      attached <- as.environment(attached_name)
+      if (!identical(attached, namespace) &&
+        exists(hook$name, envir = attached, inherits = FALSE)) {
+        environments <- c(environments, list(attached))
+      }
+    }
+    for (environment in environments) {
+      original <- get(hook$name, envir = environment, inherits = FALSE)
+      locked <- bindingIsLocked(hook$name, environment)
+      if (locked) {
+        unlockBinding(hook$name, environment)
+      }
+      assign(hook$name, hook$replacement, envir = environment)
+      if (locked) {
+        lockBinding(hook$name, environment)
+      }
+      restore[[length(restore) + 1L]] <- list(
+        name = hook$name,
+        environment = environment,
+        original = original,
+        locked = locked
+      )
+    }
+  }
+  function() {
+    for (item in rev(restore)) {
+      if (bindingIsLocked(item$name, item$environment)) {
+        unlockBinding(item$name, item$environment)
+      }
+      assign(item$name, item$original, envir = item$environment)
+      if (item$locked) {
+        lockBinding(item$name, item$environment)
+      }
+    }
+  }
+}
+
+# Documents knit a piece at a time in the document's own directory, so cells
+# can read `data/` as the deployed document does. Code is folded and data
+# frames print as tables; errors are kept in the output and recorded.
+worker_knit_init <- function(dir) {
+  setwd(dir)
+  state <- attach(NULL, name = "commons:knit")
+  state$errors <- character()
+  state$figs <- file.path(dir, "figs")
+  escape <- function(x) {
+    x <- gsub("&", "&amp;", x, fixed = TRUE)
+    x <- gsub("<", "&lt;", x, fixed = TRUE)
+    gsub(">", "&gt;", x, fixed = TRUE)
+  }
+  knitr::render_markdown()
+  knitr::opts_knit$set(progress = FALSE, verbose = FALSE)
+  knitr::opts_chunk$set(
+    fig.path = file.path(state$figs, "fig-"),
+    dev = "ragg_png",
+    dpi = 144,
+    fig.width = 7,
+    fig.height = 4.2,
+    fig.show = "hold",
+    results = "hold",
+    error = TRUE,
+    warning = FALSE,
+    message = FALSE,
+    comment = "#>"
+  )
+  knitr::knit_hooks$set(
+    source = function(x, options) {
+      paste0(
+        "\n<details class=\"commons-code\"><summary>Code</summary>\n\n```r\n",
+        paste(x, collapse = "\n"),
+        "\n```\n\n</details>\n"
+      )
+    },
+    error = function(x, options) {
+      message <- gsub("(^|\n)#> ?(! )?", "\\1", trimws(x))
+      message <- sub("^Error[^:\n]*:\\s*", "", message)
+      state$errors <- c(state$errors, trimws(message))
+      paste0("\n<div class=\"commons-cell-error\">", escape(x), "</div>\n")
+    }
+  )
+  registerS3method(
+    "knit_print",
+    "data.frame",
+    function(x, ...) {
+      knitr::asis_output(paste(
+        c("", knitr::kable(utils::head(as.data.frame(x), 50)), "", ""),
+        collapse = "\n"
+      ))
+    },
+    envir = asNamespace("knitr")
+  )
+  invisible(TRUE)
+}
+
+worker_knit_unit <- function(kind, text) {
+  state <- as.environment("commons:knit")
+  state$errors <- character()
+  unlink(list.files(state$figs, full.names = TRUE))
+  restore <- worker_engage_guardrails()
+  on.exit(restore(), add = TRUE)
+
+  source <- if (kind == "inline") paste0("`r ", text, "`") else text
+  output <- tryCatch(
+    {
+      output <- knitr::knit(text = source, quiet = TRUE, envir = globalenv())
+      worker_embed_figures(output, list.files(state$figs, full.names = TRUE))
+    },
+    error = function(err) {
+      knitr::knit_hooks$get("error")(conditionMessage(err), list())
+    }
+  )
+  list(
+    output = output,
+    errors = state$errors
+  )
+}
+
+# Read figures inside the sandbox: a model-written path may be a symlink to
+# a file the worker can't read. Other paths stay links the view can't load.
+worker_embed_figures <- function(markdown, figures) {
+  for (path in figures) {
+    uri <- paste0(
+      "data:image/png;base64,",
+      gsub("\n", "", jsonlite::base64_enc(readBin(path, "raw", file.size(path))))
+    )
+    markdown <- gsub(path, uri, markdown, fixed = TRUE)
+  }
+  markdown
 }

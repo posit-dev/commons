@@ -77,8 +77,14 @@ test_that("commons_theme() bundles the commons chat assets", {
   expect_true("commons-chat" %in% names)
 
   commons_dep <- deps[[which(names == "commons-chat")]]
-  expect_identical(commons_dep$stylesheet, "commons-chat.css")
-  expect_identical(commons_dep$script, "commons-chat.js")
+  expect_identical(
+    commons_dep$stylesheet,
+    c("commons-chat.css", "commons-artifact.css")
+  )
+  expect_identical(
+    commons_dep$script,
+    c("commons-chat.js", "commons-artifact.js")
+  )
 })
 
 test_that("icon URLs resolve inside the commons-chat dependency", {

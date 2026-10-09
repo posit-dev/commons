@@ -137,7 +137,28 @@ determines and displays answer trust.
 \item \code{run_sql} executes a read-only SQL query.
 \item \code{run_r} executes R code to analyze results and render plots in the agent's
 R session.
+\item \code{edit_artifact} edits a document the agent wrote.
 }
+}
+
+\section{Documents}{
+
+When a user asks for a report, the agent writes a Quarto document instead
+of a chat reply. In \code{\link[=commons_server]{commons_server()}}, the document streams into the chat's
+drawer as it's written, with each R cell knitted as soon as it arrives;
+outside Shiny, \code{agent$chat()} knits it and reports where it wrote the
+result.
+
+A document gets its data by calling trusted calculations in its code.
+commons runs each call before the cell does, saves the result as a CSV file
+beside the document, and replaces the call with a read of that file, so the
+saved directory is ordinary Quarto source with no credentials and no
+commons dependency. A manifest beside the data records the call behind each
+file and, for metrics and calculations, the SQL it ran.
+
+The document's code runs in a fresh sandboxed R session, with the same
+restrictions as \code{run_r}. Quarto isn't needed to show documents, only to
+render the saved source elsewhere.
 
 These model-facing tools should be considered private. Their constructors
 are intentionally not exported, and their names, arguments, availability,

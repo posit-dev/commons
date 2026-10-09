@@ -179,7 +179,7 @@ call_calculation_impl <- function(
   )
   result <- source_query_bind(source, prepared$sql, prepared$bindings)
   advert <- register_handle(handles, result)
-  tool_result(
+  out <- tool_result(
     paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
@@ -192,6 +192,7 @@ call_calculation_impl <- function(
     tag = "A",
     show_tag = FALSE
   )
+  with_query_extra(out, prepared$sql, prepared$bindings)
 }
 
 prepare_calculation <- function(calculation, arguments, con) {
