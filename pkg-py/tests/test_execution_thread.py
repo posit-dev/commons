@@ -101,3 +101,17 @@ def test_close_cancels_a_running_call_rather_than_waiting_it_out() -> None:
     caller.join(10)
     assert time.monotonic() - started < 15
     assert replies == [Failure(message="the Python session is closed.")]
+
+
+def test_an_async_call_running_when_the_thread_closes_is_told_it_closed() -> None:
+    worker_thread = WorkerThread(Worker(call_timeout=60))
+
+    async def caller() -> object:
+        await worker_thread.run("1")
+        call = asyncio.ensure_future(worker_thread.run("import time; time.sleep(60)"))
+        await asyncio.sleep(1)
+        # close() blocks, so it runs off this loop, which keeps serving the call.
+        await asyncio.to_thread(worker_thread.close)
+        return await asyncio.wait_for(call, 10)
+
+    assert asyncio.run(caller()) == Failure(message="the Python session is closed.")
