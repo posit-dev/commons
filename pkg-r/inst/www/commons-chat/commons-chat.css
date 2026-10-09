@@ -558,12 +558,12 @@ shiny-chat-container
 
 /* ---- run_r display ---------------------------------------------------- */
 
-.commons-run-r-display {
+.commons-run-display {
   display: grid;
   gap: 0.6rem;
 }
 
-.commons-run-r-details > summary {
+.commons-run-details > summary {
   align-items: center;
   color: inherit;
   cursor: pointer;
@@ -574,11 +574,11 @@ shiny-chat-container
   width: fit-content;
 }
 
-.commons-run-r-details > summary::-webkit-details-marker {
+.commons-run-details > summary::-webkit-details-marker {
   display: none;
 }
 
-.commons-run-r-details > summary::before {
+.commons-run-details > summary::before {
   border-bottom: 1px solid currentColor;
   border-right: 1px solid currentColor;
   content: "";
@@ -590,90 +590,90 @@ shiny-chat-container
   width: 0.45em;
 }
 
-.commons-run-r-details[open] > summary::before {
+.commons-run-details[open] > summary::before {
   transform: rotate(45deg);
 }
 
-.commons-run-r-details > summary:focus-visible {
+.commons-run-details > summary:focus-visible {
   border-radius: var(--bs-border-radius-sm, 0.25rem);
   outline: 2px solid var(--bs-primary, #007bc2);
   outline-offset: 2px;
 }
 
-.commons-run-r-details[open] > .commons-run-r-code {
-  animation: commons-run-r-details-reveal 0.2s ease-out;
+.commons-run-details[open] > .commons-run-code {
+  animation: commons-run-details-reveal 0.2s ease-out;
 }
 
-@keyframes commons-run-r-details-reveal {
+@keyframes commons-run-details-reveal {
   from {
     opacity: 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .commons-run-r-details > summary::before {
+  .commons-run-details > summary::before {
     transition: none;
   }
 
-  .commons-run-r-details[open] > .commons-run-r-code {
+  .commons-run-details[open] > .commons-run-code {
     animation: none;
   }
 }
 
-.commons-run-r-display .commons-run-r-code {
+.commons-run-display .commons-run-code {
   margin: 0;
   overflow-x: auto;
   white-space: pre;
 }
 
-.commons-run-r-code .hl.com {
+.commons-run-code .hl.com {
   color: #a0a1a7;
   font-style: italic;
 }
 
-.commons-run-r-code .hl.kwa {
+.commons-run-code .hl.kwa {
   color: #a626a4;
 }
 
-.commons-run-r-code .hl.kwc,
-.commons-run-r-code .hl.num {
+.commons-run-code .hl.kwc,
+.commons-run-code .hl.num {
   color: #986801;
 }
 
-.commons-run-r-code .hl.kwd {
+.commons-run-code .hl.kwd {
   color: #4078f2;
 }
 
-.commons-run-r-code .hl.sng {
+.commons-run-code .hl.sng {
   color: #50a14f;
 }
 
-[data-bs-theme="dark"] .commons-run-r-code .hl.com {
+[data-bs-theme="dark"] .commons-run-code .hl.com {
   color: #5c6370;
 }
 
-[data-bs-theme="dark"] .commons-run-r-code .hl.kwa {
+[data-bs-theme="dark"] .commons-run-code .hl.kwa {
   color: #c678dd;
 }
 
-[data-bs-theme="dark"] .commons-run-r-code .hl.kwc,
-[data-bs-theme="dark"] .commons-run-r-code .hl.num {
+[data-bs-theme="dark"] .commons-run-code .hl.kwc,
+[data-bs-theme="dark"] .commons-run-code .hl.num {
   color: #d19a66;
 }
 
-[data-bs-theme="dark"] .commons-run-r-code .hl.kwd {
+[data-bs-theme="dark"] .commons-run-code .hl.kwd {
   color: #61aeee;
 }
 
-[data-bs-theme="dark"] .commons-run-r-code .hl.sng {
+[data-bs-theme="dark"] .commons-run-code .hl.sng {
   color: #98c379;
 }
 
-.commons-run-r-details > .commons-run-r-code {
+.commons-run-details > .commons-run-code {
   margin-top: 0.4rem;
 }
 
-.commons-run-r-plot {
+.commons-run-plot {
   border: 1px solid var(--bs-border-color, #dee2e6);
   border-radius: 0.5rem;
   height: auto;
