@@ -17,6 +17,7 @@ import io
 import keyword
 import subprocess
 import sys
+import tempfile
 import tokenize
 from collections.abc import Sequence
 from typing import Any
@@ -29,6 +30,7 @@ from ._citations import tool_result
 from ._display import CODE_ANALYSIS, visible_result_note
 from ._execution._backend import Network
 from ._execution._driver import Failure
+from ._execution._env import worker_env
 from ._execution._protocol import Error, OpaqueValue, Plot, Result
 from ._execution._thread import WorkerThread
 from ._frames import describe_frame, is_frame
@@ -149,17 +151,21 @@ def session_can_import(module: str) -> bool:
 
     The session runs this interpreter under ``-I``, which leaves out the user
     site directory, ``PYTHONPATH``, and the current directory, so the answer
-    comes from asking that interpreter the same way. It is cached, since the
+    comes from asking that interpreter the same way, with the session's
+    environment and an empty scratch directory. It is cached, since the
     interpreter's packages do not change while it runs.
     """
     probe = "import importlib.util, sys; sys.exit(importlib.util.find_spec(sys.argv[1]) is None)"
     try:
-        completed = subprocess.run(
-            [sys.executable, "-I", "-c", probe, module],
-            capture_output=True,
-            timeout=PROBE_TIMEOUT,
-            check=False,
-        )
+        with tempfile.TemporaryDirectory(prefix="commons-probe-") as scratch:
+            completed = subprocess.run(
+                [sys.executable, "-I", "-c", probe, module],
+                capture_output=True,
+                cwd=scratch,
+                env=worker_env(scratch),
+                timeout=PROBE_TIMEOUT,
+                check=False,
+            )
     except (OSError, subprocess.SubprocessError):
         return False
     return completed.returncode == 0
