@@ -131,33 +131,46 @@ def _note(call: _Call, text: str) -> None:
 
 
 def _close_all() -> None:
-    """Close every open figure."""
+    """Close every open figure, through pyplot's registry if pyplot is broken.
+
+    A figure left open would come back with the next call, so when model
+    code has broken ``pyplot.close`` the figures are destroyed in
+    ``Gcf``, the registry pyplot keeps them in.
+    """
     pyplot = sys.modules.get("matplotlib.pyplot")
     if pyplot is None:
         return
     try:
         pyplot.close("all")
-    except KeyboardInterrupt:
-        raise
-    except BaseException:  # noqa: BLE001, S110 - model code can break pyplot
-        # A figure left open costs nothing more than the figure.
+    except BaseException as exc:  # model code can break pyplot
+        # An interrupt still propagates, once the figures are gone.
+        _destroy_all()
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+
+
+def _destroy_all() -> None:
+    """Destroy every figure in pyplot's registry, ignoring any failure."""
+    try:
+        sys.modules["matplotlib._pylab_helpers"].Gcf.destroy_all()
+    except BaseException:  # noqa: BLE001, S110 - both broken costs the figures
         pass
 
 
 def _describe(exc: BaseException) -> str:
-    """``exc``'s repr, clipped, or its type's name when model code made it fail."""
+    """``exc``'s repr, or its type's name when model code made it fail, clipped."""
     try:
         text = str(repr(exc))
-        if len(text) > _DESCRIPTION_LIMIT:
-            return text[:_DESCRIPTION_LIMIT] + "…"
-        return text
     except KeyboardInterrupt:
         raise
     except BaseException:  # noqa: BLE001 - the fallback is the type name
         try:
-            return str(type(exc).__name__)
+            text = str(type(exc).__name__)
         except BaseException:  # noqa: BLE001 - the fallback is a fixed text
-            return "an exception"
+            text = "an exception"
+    if len(text) > _DESCRIPTION_LIMIT:
+        return text[:_DESCRIPTION_LIMIT] + "…"
+    return text
 
 
 def _render(figure: Any) -> _protocol.Plot:
