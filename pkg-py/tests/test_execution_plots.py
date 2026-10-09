@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from commons._execution._driver import Worker
+from commons._execution._driver import Failure, Worker
 from commons._execution._protocol import PLOT_LIMIT, Error, Result
 from commons._execution._sandbox import protection_mode
 
@@ -161,14 +161,41 @@ plt.figure()
 
 
 async def test_an_interrupted_call_leaves_no_figure_for_the_next_one():
-    async with make_worker() as worker:
+    async with make_worker(call_timeout=3) as worker:
         # Pay the font cache in a call of its own, so the timeout below
         # interrupts the loop rather than the import.
-        await worker.run("import matplotlib.pyplot as plt")
-        worker._call_timeout = 1
-        await worker.run(PLOT + "while True:\n    pass\n")
-        reply = await worker.run("1")
+        await worker.run("import matplotlib.pyplot as plt\nx = 5")
+        reply = await worker.run(PLOT + "while True:\n    pass\n")
+        assert isinstance(reply, Failure)
+        assert "interrupted" in reply.message
+        reply = await worker.run("x")
         assert isinstance(reply, Result), reply
+        assert reply.value == 5
+        assert reply.plots == ()
+
+
+async def test_a_figure_that_draws_forever_can_be_interrupted():
+    # Drawing runs model code, so it has to stay inside the window the
+    # driver's interrupt can reach.
+    code = """
+import matplotlib.pyplot as plt
+from matplotlib.artist import Artist
+
+class Endless(Artist):
+    def draw(self, renderer):
+        while True:
+            pass
+
+plt.figure().add_artist(Endless())
+"""
+    async with make_worker(call_timeout=3) as worker:
+        await worker.run("import matplotlib.pyplot as plt\nx = 5")
+        reply = await worker.run(code)
+        assert isinstance(reply, Failure)
+        assert "interrupted" in reply.message
+        reply = await worker.run("x")
+        assert isinstance(reply, Result), reply
+        assert reply.value == 5
         assert reply.plots == ()
 
 
@@ -195,22 +222,22 @@ plt.get_fignums = lambda: 1 / 0
         assert follow_up.value == 42
 
 
-async def test_figures_too_large_for_the_channel_are_dropped_with_a_note():
-    # Noise does not compress, so each display image is tens of megabytes.
+async def test_figures_past_the_byte_budget_are_dropped_with_a_note():
+    # Noise does not compress: drawn pixel for pixel at the display size,
+    # the second figure's display image alone is past the budget.
     code = """
 import numpy as np
 import matplotlib.pyplot as plt
-for _ in range(2):
-    plt.figure(figsize=(16, 16), dpi=98)
-    plt.imshow(np.random.default_rng(0).random((1600, 1600, 3)))
-    plt.axis("off")
+plt.figure()
+plt.figure(figsize=(16, 16), dpi=98)
+plt.figimage(np.random.default_rng(0).random((3136, 3136, 3)), resize=False)
 x = 42
 """
     async with make_worker() as worker:
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
-        assert reply.plots == ()
-        assert "figures 1 onward were dropped" in reply.stderr
+        assert len(reply.plots) == 1
+        assert "figures 2 onward were dropped" in reply.stderr
         follow_up = await worker.run("x")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
@@ -230,3 +257,82 @@ plt.close = lambda *args: sys.exit(1)
         follow_up = await worker.run("x + 1")
         assert isinstance(follow_up, Result)
         assert follow_up.value == 42
+
+
+BROKEN_DRAW = """
+import matplotlib.pyplot as plt
+from matplotlib.artist import Artist
+x = 41
+
+class Broken(Artist):
+    def draw(self, renderer):
+        {body}
+
+plt.figure().add_artist(Broken())
+plt.figure()
+"""
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "raise SystemExit(3)",
+        # An exception whose repr fails cannot be named in the note.
+        (
+            "class E(Exception):\n            def __repr__(self): raise RuntimeError\n"
+            "        raise E()"
+        ),
+    ],
+    ids=["systemexit", "unrepresentable"],
+)
+async def test_a_figure_whose_draw_fails_badly_costs_only_that_figure(body):
+    async with make_worker() as worker:
+        reply = await worker.run(BROKEN_DRAW.format(body=body))
+        assert isinstance(reply, Result), reply
+        assert len(reply.plots) == 1
+        assert "figure 1 could not be rendered" in reply.stderr
+        follow_up = await worker.run("x + 1")
+        assert isinstance(follow_up, Result)
+        assert follow_up.value == 42
+
+
+async def test_a_savefig_that_writes_no_png_costs_only_that_figure():
+    code = """
+import matplotlib.pyplot as plt
+x = 41
+fig = plt.figure()
+fig.savefig = lambda target, **kwargs: target.write(b"junk")
+plt.figure()
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert len(reply.plots) == 1
+        assert "figure 1 could not be rendered" in reply.stderr
+        follow_up = await worker.run("x + 1")
+        assert isinstance(follow_up, Result)
+        assert follow_up.value == 42
+
+
+async def test_a_tight_bounding_box_cannot_grow_the_model_image():
+    code = """
+import matplotlib.pyplot as plt
+plt.rcParams["savefig.bbox"] = "tight"
+plt.rcParams["savefig.pad_inches"] = 30
+fig, ax = plt.subplots()
+ax.text(40, 0.5, "far", transform=ax.transAxes)
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        [plot] = reply.plots
+        assert (plot.width, plot.height) == (640, 480)
+
+
+async def test_a_call_that_raises_notes_a_dropped_figure_in_its_traceback():
+    code = BROKEN_DRAW.format(body="raise RuntimeError('no')") + "1 / 0\n"
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Error), reply
+        assert len(reply.plots) == 1
+        assert "figure 1 could not be rendered" in reply.traceback

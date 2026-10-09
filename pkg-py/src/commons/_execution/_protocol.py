@@ -38,6 +38,7 @@ from typing import Any
 __all__ = [
     "FRAME_BYTES_LIMIT",
     "PLOT_BYTES_LIMIT",
+    "PLOT_EDGE_LIMIT",
     "PLOT_LIMIT",
     "STREAM_LIMIT",
     "Call",
@@ -53,6 +54,7 @@ __all__ = [
     "decode_value",
     "encode_message",
     "encode_value",
+    "png_size",
     "read_message",
     "write_message",
 ]
@@ -100,6 +102,11 @@ PLOT_LIMIT = 20
 # Most PNG bytes one reply's plots may total, before base64. A quarter of the
 # line leaves the rest for the value and the printed output.
 PLOT_BYTES_LIMIT = STREAM_LIMIT // 4
+
+# Longest edge either image of a plot may have. The worker's own images stay
+# well inside it; the bound is for an image the worker did not make, which
+# a provider or a browser would otherwise be asked to decode.
+PLOT_EDGE_LIMIT = 4096
 
 _PLOT_DROP_NOTE = "\n[commons: the plots were dropped; they exceeded the channel limit]"
 
@@ -1119,14 +1126,46 @@ def _decode_handles(body: dict[str, Any], max_frame_bytes: int) -> dict[str, Any
     }
 
 
+def png_size(data: bytes) -> tuple[int, int]:
+    """The ``(width, height)`` a PNG's header declares, refusing anything else.
+
+    Raises ``ValueError`` unless ``data`` starts with the PNG signature and a
+    well-formed IHDR chunk whose edges are between 1 and ``PLOT_EDGE_LIMIT``.
+    The pixel data is not decoded; the bound on the declared size is what
+    keeps a later decode from allocating more than a plot's worth.
+    """
+    if (
+        len(data) < 33
+        or not data.startswith(_PNG_SIGNATURE)
+        or data[8:16] != b"\x00\x00\x00\x0dIHDR"
+    ):
+        raise ValueError("not a PNG image")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    if not (1 <= width <= PLOT_EDGE_LIMIT and 1 <= height <= PLOT_EDGE_LIMIT):
+        raise ValueError(
+            f"a {width}x{height} image is outside 1..{PLOT_EDGE_LIMIT} pixels a side"
+        )
+    return width, height
+
+
 def _decode_plots(body: dict[str, Any], kind: str) -> tuple[Plot, ...]:
-    """The ``plots`` of a result or error body, each image checked to be a PNG."""
+    """The ``plots`` of a result or error body, each image checked to be a PNG.
+
+    The count and byte bounds are the worker's own, enforced again here
+    because the worker runs model code and cannot be relied on to keep them.
+    """
     raw = body.get("plots", [])
     if not isinstance(raw, list) or len(raw) > PLOT_LIMIT:
         raise ProtocolError(
             f"malformed {kind} message: plots must be a list of at most {PLOT_LIMIT}"
         )
-    return tuple(_decode_plot(item) for item in raw)
+    plots = tuple(_decode_plot(item) for item in raw)
+    if sum(len(p.png) + len(p.display_png) for p in plots) > PLOT_BYTES_LIMIT:
+        raise ProtocolError(
+            f"malformed {kind} message: plots exceed {PLOT_BYTES_LIMIT:,} bytes"
+        )
+    return plots
 
 
 def _decode_plot(item: Any) -> Plot:
@@ -1142,9 +1181,10 @@ def _decode_plot(item: Any) -> Plot:
             data = base64.b64decode(text, validate=True)
         except ValueError as error:
             raise ProtocolError(f"malformed plot: {name} is not base64") from error
-        # The signature, then the IHDR chunk the size is read from.
-        if not data.startswith(_PNG_SIGNATURE) or data[12:16] != b"IHDR":
-            raise ProtocolError(f"malformed plot: {name} is not a PNG image")
+        try:
+            png_size(data)
+        except ValueError as error:
+            raise ProtocolError(f"malformed plot: {name}: {error}") from error
         images.append(data)
     return Plot(png=images[0], display_png=images[1])
 
