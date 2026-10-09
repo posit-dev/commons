@@ -54,10 +54,11 @@ class Failure:
 class Worker:
     """One persistent Python session in a sandboxed worker.
 
-    Constructing a ``Worker`` starts nothing; the first ``run()`` does.
-    ``measure_sources`` are exec'd as text at every start, ahead of any
-    model call, so a restarted worker is defined exactly the way the first
-    one was. ``backend`` decides where the worker runs; the default
+    Construction defers startup to the first ``run()`` call.
+    ``measure_sources`` are the trusted measures as source text.
+    The worker is a fresh interpreter and shares no objects with this process,
+    so each start execs ``measure_sources`` to install the definitions
+    into the worker. ``backend`` decides where the worker runs; the default
     ``LocalBackend`` decides its protection at construction, so a host
     commons cannot protect fails here, ahead of any model asking to run code.
     """
@@ -138,12 +139,13 @@ class Worker:
     async def aclose(self) -> None:
         """Close the worker, cancelling the idle reap.
 
-        The close takes the lock, which a call, and with it any start in
-        flight, holds; once it is acquired no worker can be started after
-        this close returns. The close runs in its own task, so cancelling
-        ``aclose()`` while it waits out an in-flight call still closes the
-        worker, and the caller still receives the ``CancelledError``. The
-        backend's shutdowns, the reaper's included, are waited for last.
+        The close waits to acquire the lock until any running call, and
+        any start under way, releases it; after the close acquires the
+        lock, no worker starts. The close runs in its own task, so
+        cancelling ``aclose()`` while it waits out a running call still
+        closes the worker, and the caller still receives the
+        ``CancelledError``. The close waits for the backend's shutdowns,
+        the reaper's included, last.
         """
         self._closed = True
         if self._reap_task is not None:
@@ -305,9 +307,8 @@ class Worker:
 
         The interrupt raises KeyboardInterrupt inside the worker's call,
         which breaks it out of the computation and leaves the session alive.
-        A worker that answers within the grace window was interrupted; one
-        that does not is stuck, in C code that never checks for signals,
-        say, and is restarted instead.
+        A worker that answers within the grace window was interrupted; if
+        the worker does not respond, it is hard-restarted instead.
 
         The grace-window reply must meet the same contract as any other:
         only this call's own ``Result`` or ``Error`` proves the session
@@ -386,15 +387,14 @@ class Worker:
     async def _define(self, session: WorkerSession, index: int, source: str) -> None:
         """Define one measure source in a freshly started worker.
 
-        A source that raises is skipped, so one bad harvest cannot fail
+        A source that raises an error is skipped, so one bad harvest cannot fail
         every start. Only a worker that stops answering fails the start.
 
         ``_commons_define_source`` is seeded into every worker's session at
         startup: it compiles with annotations deferred and replaces each
         default whose evaluation raises an ``Exception`` with a placeholder,
-        because a
-        harvested source's own module imports and globals do not exist in
-        the session.
+        because a harvested source's own module imports and globals do not exist
+        in the session.
         """
         payload = f"_commons_define_source({source!r})"
         await asyncio.wait_for(
