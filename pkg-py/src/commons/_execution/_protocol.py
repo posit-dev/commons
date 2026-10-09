@@ -862,8 +862,9 @@ def encode_message(message: Message) -> bytes:
     """
     if _plot_bytes(message) > PLOT_BYTES_LIMIT:
         # Dropped before encoding, so oversized plots are never copied into
-        # base64 only to be thrown away.
-        message = _drop_plots(message)
+        # base64 only to be thrown away. The text is clipped first, so a
+        # later clip cannot cut off the note saying the plots were dropped.
+        message = _drop_plots(_shrink_text(message))
     line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line

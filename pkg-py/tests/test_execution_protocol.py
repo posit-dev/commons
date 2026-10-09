@@ -1421,3 +1421,17 @@ def test_plots_past_their_byte_budget_are_dropped_before_encoding():
     assert isinstance(crossed, Result)
     assert crossed.plots == ()
     assert "plots were dropped" in crossed.stderr
+
+
+def test_the_note_about_dropped_plots_survives_clipped_output():
+    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
+    result = Result(
+        id="c1",
+        stderr="e" * (STREAM_LIMIT // 2),
+        stdout="o" * (STREAM_LIMIT // 2),
+        plots=(Plot(png=big, display_png=big),),
+    )
+    crossed = decode_message(encode_message(result))
+    assert isinstance(crossed, Result)
+    assert crossed.plots == ()
+    assert crossed.stderr.endswith("plots were dropped; they exceeded the channel limit]")
