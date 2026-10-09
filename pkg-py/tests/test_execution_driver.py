@@ -20,7 +20,7 @@ import pytest
 from pydantic import Field
 
 from commons import measure, semantic_layer
-from commons._execution._backend import LocalBackend, LocalSession
+from commons._execution._backend import WORKER_SCRIPT, LocalBackend, LocalSession
 from commons._execution._driver import Failure, Worker
 from commons._execution._protocol import Error, Result
 from commons._execution._sandbox import protection_mode
@@ -482,6 +482,27 @@ async def test_a_measure_source_that_ends_the_worker_stops_the_spawn():
         assert isinstance(reply, Failure)
         assert "exited while defining" in reply.message
         assert worker._session is None
+
+
+async def test_a_session_seed_that_fails_is_reported_at_the_start(tmp_path):
+    # The real worker with a broken seed: its traceback must reach the
+    # driver, so the seed has to run while fd 2 is still attached.
+    runtime = WORKER_SCRIPT.parent
+    script = tmp_path / "worker.py"
+    script.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, {str(runtime)!r})\n"
+        "import _worker\n"
+        "_worker._DEFINE_SOURCE = 'raise RuntimeError(\"the seed is broken\")'\n"
+        "_worker._PROTOCOL_IN, _worker._PROTOCOL_OUT = "
+        "_worker._claim_protocol_channel()\n"
+        "_worker.main()\n"
+    )
+    async with make_worker(backend=LocalBackend(worker_script=script)) as worker:
+        reply = await worker.run("1")
+        assert isinstance(reply, Failure)
+        assert "exited before it was ready" in reply.message
+        assert "the seed is broken" in reply.message
 
 
 async def test_a_worker_that_never_becomes_ready_fails_the_call(tmp_path):

@@ -7,14 +7,15 @@ model-written code and is deliberately kept free of the agent's dependencies.
 The sibling runtime modules and ``_protocol`` (one directory up) are imported
 by path.
 
-The protocol channel is claimed at the file-descriptor level before anything
-else happens: duplicates of fds 0 and 1 become the channel, and the
+The protocol channel is claimed at the file-descriptor level before any
+other startup step: duplicates of fds 0 and 1 become the channel, and the
 model-visible fds are pointed at sinks. Model code that writes straight to
 fd 1 (``os.write``, a C extension, a thread still printing after its call
 returned) goes to the sink rather than mid-message on the channel, and a
 thread reading fd 0 gets EOF rather than the next call's bytes. The
 sys-level redirection in ``_repl`` cannot close those holes; these are
-closed by construction, for the process's whole life.
+closed by construction, for the process's whole life. The sibling modules
+are imported before the claim, so none of them may print at import.
 
 fd 2 stays attached until the sandbox is engaged and the ready announcement
 is sent, so a startup failure can still reach the driver's diagnostics. Model
@@ -28,8 +29,8 @@ import os
 import signal
 import sys
 
-# The channel takeover runs before any import that could print, and before
-# the sandbox, which needs the protocol fds preserved across its fd sweep.
+# The channel takeover runs before the sandbox, which needs the protocol fds
+# preserved across its fd sweep.
 _PROTOCOL_IN = -1
 _PROTOCOL_OUT = -1
 
@@ -332,13 +333,14 @@ def main() -> None:
     # Installed explicitly, so a worker whose parent ignores SIGINT, as a
     # shell does for a background job, can still be interrupted.
     signal.signal(signal.SIGINT, _on_interrupt)
+    # The namespace is the session: the same mapping on every call, so a
+    # name one call binds is visible to the next. It is seeded before the
+    # ready announcement, while a failure can still reach fd 2.
+    namespace: dict = {"__name__": "__main__"}
+    exec(compile(_DEFINE_SOURCE, "<worker>", "exec"), namespace)  # noqa: S102
     _send(_protocol.Ready())
     _silence_stderr()
 
-    # The namespace is the session: the same mapping on every call, so a
-    # name one call binds is visible to the next.
-    namespace: dict = {"__name__": "__main__"}
-    exec(compile(_DEFINE_SOURCE, "<worker>", "exec"), namespace)  # noqa: S102
     calls = os.fdopen(_PROTOCOL_IN, "rb")
     while True:
         line = calls.readline()
