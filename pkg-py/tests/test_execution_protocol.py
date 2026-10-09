@@ -20,6 +20,7 @@ from commons._execution import _protocol
 from commons._execution._env import worker_command, worker_env
 from commons._execution._protocol import (
     PLOT_BYTES_LIMIT,
+    PLOT_EDGE_LIMIT,
     PLOT_LIMIT,
     STREAM_LIMIT,
     Call,
@@ -1444,3 +1445,61 @@ def test_dropping_plots_leaves_output_that_fits_unclipped():
     crossed = decode_message(encode_message(result))
     assert isinstance(crossed, Result)
     assert crossed.stderr.startswith(printed)
+
+
+
+def test_an_error_whose_plots_are_dropped_says_so_in_its_traceback():
+    big = _png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2)
+    error = Error(
+        id="c1",
+        message="ValueError: x",
+        traceback="t" * (STREAM_LIMIT // 2),
+        plots=(Plot(png=big, display_png=big),),
+    )
+    crossed = decode_message(encode_message(error))
+    assert isinstance(crossed, Error)
+    assert crossed.plots == ()
+    assert crossed.traceback.endswith("plots were dropped; they exceeded the channel limit]")
+
+
+def test_plots_within_budget_give_way_to_a_value_that_would_overflow():
+    # The answer is worth more than the pictures, even when the pictures
+    # alone would have fit.
+    pd = pytest.importorskip("pandas")
+    plot_bytes = _png(2, 2) + os.urandom(PLOT_BYTES_LIMIT // 2 - 64)
+    plot = Plot(png=plot_bytes, display_png=plot_bytes)
+    # About 37 MB: it fits the line alone, and not alongside the plots.
+    frame = pd.DataFrame({"b": [os.urandom(1024).hex() for _ in range(18_000)]})
+    crossed = decode_message(encode_message(Result(id="c1", value=frame, plots=(plot,))))
+    assert isinstance(crossed, Result)
+    assert crossed.plots == ()
+    pd.testing.assert_frame_equal(crossed.value, frame)
+
+
+@pytest.mark.parametrize("kind", ["result", "error"])
+@pytest.mark.parametrize(
+    "png",
+    [
+        "iVBORw0KGgo=",
+        base64.b64encode(_png(0, 10)).decode(),
+        base64.b64encode(_png(PLOT_EDGE_LIMIT + 1, 10)).decode(),
+        12,
+    ],
+    ids=["signature-only", "zero-width", "too-wide", "not-a-string"],
+)
+def test_a_plot_image_the_protocol_cannot_vouch_for_is_refused(kind, png):
+    body = {"type": kind, "id": "c1", "plots": [{"png": png, "display_png": png}]}
+    if kind == "error":
+        body["message"] = "x"
+    with pytest.raises(ProtocolError, match="malformed plot"):
+        decode_message(json.dumps(body).encode() + b"\n")
+
+
+def test_plots_past_the_byte_budget_are_refused_at_decode():
+    # The worker keeps to the budget, but it runs model code.
+    image = _b64(_png(2, 2) + b"\x00" * (PLOT_BYTES_LIMIT // 2))
+    line = json.dumps(
+        {"type": "result", "id": "c1", "plots": [{"png": image, "display_png": image}]}
+    ).encode() + b"\n"
+    with pytest.raises(ProtocolError, match="plots exceed"):
+        decode_message(line)

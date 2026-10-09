@@ -52,7 +52,7 @@ def collect() -> tuple[tuple[_protocol.Plot, ...], str]:
         raise
     except BaseException as exc:  # noqa: BLE001 - model code can break pyplot
         discard()
-        return (), f"[commons: the figures could not be collected: {exc!r}]\n"
+        return (), f"[commons: the figures could not be collected: {_describe(exc)}]\n"
     notes = []
     if len(figures) > _protocol.PLOT_LIMIT:
         notes.append(
@@ -67,7 +67,9 @@ def collect() -> tuple[tuple[_protocol.Plot, ...], str]:
         except KeyboardInterrupt:
             raise
         except BaseException as exc:  # noqa: BLE001 - one figure, not the call
-            notes.append(f"[commons: figure {index} could not be rendered: {exc!r}]")
+            notes.append(
+                f"[commons: figure {index} could not be rendered: {_describe(exc)}]"
+            )
             continue
         size += len(plot.png) + len(plot.display_png)
         if size > _protocol.PLOT_BYTES_LIMIT:
@@ -97,16 +99,44 @@ def discard() -> None:
         pass
 
 
+def _describe(exc: BaseException) -> str:
+    """``exc``'s repr, or its type's name when model code made the repr fail."""
+    try:
+        return str(repr(exc))
+    except KeyboardInterrupt:
+        raise
+    except BaseException:  # noqa: BLE001 - the fallback is the type name
+        try:
+            return str(type(exc).__name__)
+        except BaseException:  # noqa: BLE001 - the fallback is a fixed text
+            return "an exception"
+
+
 def _render(figure: Any) -> _protocol.Plot:
-    """``figure`` as a model PNG at its own size, scaled down to fit, and a display PNG."""
+    """``figure`` as a model PNG at its own size, scaled down to fit, and a display PNG.
+
+    Both images are checked before they are kept: model code can replace
+    ``savefig``, and a reply carrying something that is not a plot would
+    cost the session rather than the figure.
+    """
     width, height = figure.get_size_inches()
     dpi = min(float(figure.dpi), _MODEL_LONG_EDGE / max(width, height))
-    return _protocol.Plot(
+    plot = _protocol.Plot(
         png=_png(figure, dpi), display_png=_png(figure, dpi * _DISPLAY_SCALE)
     )
+    _protocol.png_size(plot.png)
+    _protocol.png_size(plot.display_png)
+    return plot
 
 
 def _png(figure: Any, dpi: float) -> bytes:
+    """``figure`` saved as a PNG at ``dpi``, at exactly its own size.
+
+    A tight bounding box or padding from rcParams would let the image grow
+    past the size ``dpi`` was chosen for, so both are reset for the save.
+    """
+    matplotlib = sys.modules["matplotlib"]
     buffer = io.BytesIO()
-    figure.savefig(buffer, format="png", dpi=dpi)
+    with matplotlib.rc_context({"savefig.bbox": "standard"}):
+        figure.savefig(buffer, format="png", dpi=dpi)
     return buffer.getvalue()
