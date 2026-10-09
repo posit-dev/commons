@@ -8,6 +8,7 @@
   "fields": [
     "date",
     "needs_brevity_prompting",
+    "trusted_only",
     "has_multiple_sources",
     "has_catalog_search",
     "has_dictionary_context",

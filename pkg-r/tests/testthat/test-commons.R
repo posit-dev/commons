@@ -807,3 +807,61 @@ test_that("stream_async records provenance at span creation and completion", {
     )
   )
 })
+
+test_that("a trusted-only agent streams no provenance or citation markers", {
+  skip_if_not_installed("otelsdk")
+  withr::local_envvar(
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Canopy cover is always acre-weighted for reporting.", path)
+  local_mocked_bindings(collect_appended_tags = function(...) "A")
+
+  raw <- paste0(
+    "Answer sentence.\n\n",
+    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "> Canopy cover is always acre-weighted for reporting.\n\n",
+    "</commons-citation>\n\nEnd."
+  )
+
+  recorded <- otelsdk::with_otel_record({
+    agent <- test_agent(
+      context_layer = context_layer(files = path),
+      semantic_layer = semantic_layer(count_measure_tool()),
+      mode = "trusted only",
+      log = TRUE
+    )
+    expect_true(
+      match_citation(
+        "Canopy cover is always acre-weighted for reporting.",
+        agent$citation_corpus()
+      )$kind == "prose"
+    )
+    agent$queue_restore_reminder()
+    first <- stream_citations_fixture(agent, raw, split_at = 30)
+    # A second user turn exercises add_turn() without a citation tracker.
+    second <- stream_citations_fixture(agent, raw, split_at = 12)
+  })
+
+  for (chunks in list(first, second)) {
+    text <- paste(unlist(chunks), collapse = "")
+    expect_no_match(text, "<shiny-aside", fixed = TRUE)
+    expect_no_match(text, "commons-citation", fixed = TRUE)
+    expect_match(text, "Answer sentence.", fixed = TRUE)
+  }
+
+  # The restore reminder is about run_r state, so the first turn skips it.
+  user_contents <- agent$get_turns()[[1]]@contents
+  expect_false(any(vapply(
+    user_contents,
+    function(content) S7::S7_inherits(content, ContentTurnReminder),
+    logical(1)
+  )))
+
+  names <- vapply(recorded$traces, `[[`, character(1), "name")
+  spans <- recorded$traces[names == "commons_conversation_turn"]
+  expect_length(spans, 2)
+  for (span in spans) {
+    expect_identical(span$attributes[["commons.provenance.tag"]], "A")
+  }
+})

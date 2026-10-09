@@ -129,13 +129,18 @@ dictionary_entry_text <- function(dictionary, table) {
   paste(parts, collapse = "\n\n")
 }
 
-dictionary_entry_parts <- function(dictionary, table, columns_text) {
+dictionary_entry_parts <- function(
+  dictionary,
+  table,
+  columns_text,
+  trusted_only = FALSE
+) {
   entry <- dictionary$tables[[table]]
   parts <- c(
     entry$description,
     entry$details,
     columns_text,
-    definitions_entry_text(entry$definitions),
+    definitions_entry_text(entry$definitions, trusted_only = trusted_only),
     dictionary_relationships_text(dictionary, table)
   )
   c(parts, dictionary_terms_text(dictionary, paste(parts, collapse = "\n")))

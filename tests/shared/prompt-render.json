@@ -14,6 +14,7 @@
         "data": {
           "date": "2026-01-15",
           "needs_brevity_prompting": false,
+          "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": false,
@@ -45,6 +46,7 @@
         "data": {
           "date": "2026-01-15",
           "needs_brevity_prompting": false,
+          "trusted_only": false,
           "has_multiple_sources": true,
           "has_catalog_search": true,
           "has_dictionary_context": true,
@@ -76,6 +78,7 @@
         "data": {
           "date": "2026-01-15",
           "needs_brevity_prompting": true,
+          "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": true,
@@ -107,6 +110,7 @@
         "data": {
           "date": "2026-01-15",
           "needs_brevity_prompting": false,
+          "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": false,
@@ -138,6 +142,7 @@
         "data": {
           "date": "2026-01-15",
           "needs_brevity_prompting": false,
+          "trusted_only": false,
           "has_multiple_sources": false,
           "has_catalog_search": false,
           "has_dictionary_context": false,
@@ -162,6 +167,38 @@
           "has_complete_definitions": false
         },
         "expected": "prompt-render/definitions-empty-and-incomplete.md"
+      },
+      {
+        "name": "trusted-only",
+        "description": "A trusted-only agent: no fallback path, so no citation section, and definitions point at call_metrics. Multiple sources exercise the source sentence's trusted-only wording.",
+        "data": {
+          "date": "2026-01-15",
+          "needs_brevity_prompting": false,
+          "trusted_only": true,
+          "has_multiple_sources": true,
+          "has_catalog_search": false,
+          "has_dictionary_context": false,
+          "has_glossary_context": false,
+          "definitions_complete": true,
+          "tables": "## sales_db\n\n- sales\n\n## warehouse\n\n- orders",
+          "dictionary_context": "",
+          "glossary_context": "",
+          "definition_index": "- sales: metrics `{{revenue}}`",
+          "has_instructions": false,
+          "instructions": "",
+          "has_search_pool": true,
+          "has_search_context": true,
+          "has_describe_table": true,
+          "has_run_sql": false,
+          "has_call_measure": true,
+          "has_call_metrics": true,
+          "has_call_calculation": false,
+          "has_execution_tool": false,
+          "execution_tool": "run_code",
+          "has_definitions": true,
+          "has_complete_definitions": true
+        },
+        "expected": "prompt-render/trusted-only.md"
       }
     ]
   },

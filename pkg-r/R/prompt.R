@@ -3,12 +3,20 @@ commons_system_prompt <- function(
   definitions = NULL,
   instructions = NULL,
   tools = list(),
-  model = NULL
+  model = NULL,
+  trusted_only = FALSE
 ) {
   definitions <- definitions %||% definitions_registry(sources)
   instructions <- read_instructions(instructions)
   template <- read_system_prompt()
-  data <- system_prompt_data(sources, definitions, instructions, tools, model)
+  data <- system_prompt_data(
+    sources,
+    definitions,
+    instructions,
+    tools,
+    model,
+    trusted_only = trusted_only
+  )
   render_system_prompt(template, data)
 }
 
@@ -17,7 +25,8 @@ system_prompt_data <- function(
   definitions,
   instructions = NULL,
   tools = list(),
-  model = NULL
+  model = NULL,
+  trusted_only = FALSE
 ) {
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
@@ -29,6 +38,7 @@ system_prompt_data <- function(
     list(
       date = as.character(Sys.Date()),
       needs_brevity_prompting = needs_brevity_prompting(model),
+      trusted_only = trusted_only,
       has_multiple_sources = length(sources) > 1,
       has_catalog_search = any(vapply(sources, catalog_searchable, logical(1))),
       has_dictionary_context = nzchar(dictionary_context) ||
