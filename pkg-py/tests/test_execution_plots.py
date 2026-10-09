@@ -446,3 +446,35 @@ plt.close = close
         follow_up = await worker.run("del plt.close\nx + 1")
         assert isinstance(follow_up, Result), follow_up
         assert follow_up.value == 42
+        # The figure was destroyed despite the broken close.
+        assert plots(follow_up) == []
+
+
+async def test_a_broken_close_leaves_no_figure_for_the_next_call():
+    code = """
+import matplotlib.pyplot as plt
+plt.figure()
+def close(*args):
+    raise RuntimeError("no")
+plt.close = close
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert len(plots(reply)) == 1
+        follow_up = await worker.run("del plt.close\n1")
+        assert isinstance(follow_up, Result), follow_up
+        assert plots(follow_up) == []
+
+
+async def test_a_note_naming_an_unrepresentable_exception_is_bounded():
+    code = BROKEN_DRAW.format(
+        body=(
+            "E = type('E' * 3_000_000, (Exception,), "
+            "{'__repr__': lambda self: 1 / 0})\n        raise E()"
+        )
+    )
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert len(printed(reply, "stderr")) < 1000
