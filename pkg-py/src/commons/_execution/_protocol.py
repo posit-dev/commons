@@ -37,6 +37,7 @@ from typing import Any
 
 __all__ = [
     "FRAME_BYTES_LIMIT",
+    "PLOT_BYTES_LIMIT",
     "PLOT_LIMIT",
     "STREAM_LIMIT",
     "Call",
@@ -95,6 +96,10 @@ _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel lim
 # Most plots one reply may carry; matplotlib's own warning about open figures
 # starts at the same count.
 PLOT_LIMIT = 20
+
+# Most PNG bytes one reply's plots may total, before base64. A quarter of the
+# line leaves the rest for the value and the printed output.
+PLOT_BYTES_LIMIT = STREAM_LIMIT // 4
 
 _PLOT_DROP_NOTE = "\n[commons: the plots were dropped; they exceeded the channel limit]"
 
@@ -855,6 +860,10 @@ def encode_message(message: Message) -> bytes:
     megabytes of code, say — because a line no reader can consume would
     wedge the channel.
     """
+    if _plot_bytes(message) > PLOT_BYTES_LIMIT:
+        # Dropped before encoding, so oversized plots are never copied into
+        # base64 only to be thrown away.
+        message = _drop_plots(message)
     line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line
@@ -945,6 +954,15 @@ def _shrink_text(message: Message) -> Message:
             )
         case _:
             return message
+
+
+def _plot_bytes(message: Message) -> int:
+    """The PNG bytes ``message``'s plots total, before base64."""
+    match message:
+        case Result() | Error():
+            return sum(len(p.png) + len(p.display_png) for p in message.plots)
+        case _:
+            return 0
 
 
 def _drop_plots(message: Message) -> Message:
