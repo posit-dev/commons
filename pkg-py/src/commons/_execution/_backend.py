@@ -16,6 +16,7 @@ import os
 import shutil
 import signal
 import tempfile
+import threading
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -234,6 +235,12 @@ class LocalSession:
         self._closing: asyncio.Task[None] | None = None
         self._exit = asyncio.ensure_future(process.wait())
         self._exit.add_done_callback(self._kill_group)
+        threading.Thread(
+            target=_kill_when_stopped,
+            args=(process.pid,),
+            name=f"commons-worker-stop-{process.pid}",
+            daemon=True,
+        ).start()
 
     @property
     def stdin(self) -> asyncio.StreamWriter:
@@ -299,6 +306,33 @@ class LocalSession:
         # The process is gone, so its files can be removed; model code may
         # have left some unreadable, which is not a reason to fail.
         shutil.rmtree(self.scratch, ignore_errors=True)
+
+
+def _kill_when_stopped(pid: int) -> None:
+    """Kill the worker's process group if the worker stops; return once it exits.
+
+    Nothing legitimate stops a worker, but model code can stop itself. On
+    macOS, Python 3.14's asyncio reads the stop as an exit and blocks the
+    event loop in ``waitpid()`` until the worker really exits, so a stopped
+    worker would freeze the host. Killing it ends that wait at once, and
+    the driver reports a crash on every platform. ``WNOWAIT`` leaves the
+    reaping to asyncio, which keeps the pid from being reused while this
+    thread can still signal it. Without ``os.waitid`` (macOS before 3.13)
+    a stopped worker is left to the call timeout.
+    """
+    if not hasattr(os, "waitid"):
+        return
+    try:
+        info = os.waitid(os.P_PID, pid, os.WEXITED | os.WSTOPPED | os.WNOWAIT)
+    except ChildProcessError:
+        return
+    if info is None or info.si_code != os.CLD_STOPPED:
+        return
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(pid, signal.SIGKILL)
+        return
+    with contextlib.suppress(ProcessLookupError):
+        os.kill(pid, signal.SIGKILL)
 
 
 def _signal_tree(process: asyncio.subprocess.Process, sig: signal.Signals) -> None:
