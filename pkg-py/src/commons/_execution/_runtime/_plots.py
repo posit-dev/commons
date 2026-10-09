@@ -33,6 +33,10 @@ _MODEL_LONG_EDGE = 1568
 # How many times the display image's pixels exceed the model image's.
 _DISPLAY_SCALE = 2
 
+# The most of an exception's repr a note keeps. Notes bypass the capture's
+# bound so they are never lost, which makes them bounded here instead.
+_DESCRIPTION_LIMIT = 500
+
 
 class _Call:
     """The plot state of the call in flight: where plots go, and what they used."""
@@ -141,9 +145,12 @@ def _close_all() -> None:
 
 
 def _describe(exc: BaseException) -> str:
-    """``exc``'s repr, or its type's name when model code made the repr fail."""
+    """``exc``'s repr, clipped, or its type's name when model code made it fail."""
     try:
-        return str(repr(exc))
+        text = str(repr(exc))
+        if len(text) > _DESCRIPTION_LIMIT:
+            return text[:_DESCRIPTION_LIMIT] + "…"
+        return text
     except KeyboardInterrupt:
         raise
     except BaseException:  # noqa: BLE001 - the fallback is the type name

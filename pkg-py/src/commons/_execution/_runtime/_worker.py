@@ -315,7 +315,12 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
         _in_call = False
     # Outside the interruptible window, so a second SIGINT cannot escape
     # here. Figures still open, half-drawn after an interrupt, go with it.
-    _guarded(_plots.end)
+    # Only model code can raise here, a KeyboardInterrupt included, and none
+    # of it may end the session.
+    try:
+        _plots.end()
+    except BaseException:  # noqa: BLE001, S110 - a figure left open costs nothing more
+        pass
     if evaluation is None:
         return _protocol.Error(id=call.id, message="KeyboardInterrupt")
     output = _segments(_guarded(read_back) or ())

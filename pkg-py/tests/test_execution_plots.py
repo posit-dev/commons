@@ -420,3 +420,29 @@ print("then")
         reply = await worker.run(code)
         assert isinstance(reply, Error), reply
         assert shape(reply) == ["plot", "then\n"]
+
+
+async def test_a_note_about_a_figure_is_bounded():
+    # Notes are kept past the capture's bound, so their own size is capped.
+    code = BROKEN_DRAW.format(body="raise ValueError('x' * 3_000_000)")
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert len(printed(reply, "stderr")) < 1000
+
+
+async def test_a_close_raising_keyboardinterrupt_keeps_the_session():
+    code = """
+import matplotlib.pyplot as plt
+x = 41
+def close(*args):
+    raise KeyboardInterrupt
+plt.figure()
+plt.close = close
+"""
+    async with make_worker() as worker:
+        await worker.run(code)
+        # The session, and x with it, survived; this call mends pyplot.
+        follow_up = await worker.run("del plt.close\nx + 1")
+        assert isinstance(follow_up, Result), follow_up
+        assert follow_up.value == 42
