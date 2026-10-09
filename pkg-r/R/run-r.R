@@ -226,7 +226,7 @@ run_r_html <- function(code, segments) {
       dims <- plot_dimensions()
       plot_html <- c(plot_html, sprintf(
         paste0(
-          "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" ",
+          "<img class=\"commons-run-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
         ),
         plot_image_data(seg$path),
@@ -241,18 +241,18 @@ run_r_html <- function(code, segments) {
     }
   }
   code_html <- sprintf(
-    "<pre class=\"commons-run-r-code\"><code class=\"language-r\">%s</code></pre>",
+    "<pre class=\"commons-run-code\"><code class=\"language-r\">%s</code></pre>",
     highlight_r_html(paste(c(code, output), collapse = "\n"))
   )
   if (length(plot_html)) {
     code_html <- paste0(
-      "<details class=\"commons-run-r-details\"><summary>Details</summary>",
+      "<details class=\"commons-run-details\"><summary>Details</summary>",
       code_html,
       "</details>"
     )
   }
   sprintf(
-    "<div class=\"commons-run-r-display\">%s</div>",
+    "<div class=\"commons-run-display\">%s</div>",
     paste(c(code_html, plot_html), collapse = "\n")
   )
 }

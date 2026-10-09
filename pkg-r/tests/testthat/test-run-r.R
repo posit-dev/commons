@@ -31,7 +31,7 @@ test_that("run_r executes code against stored handles", {
   expect_false(res@extra$display$open)
   expect_match(
     res@extra$display$html,
-    '<pre class="commons-run-r-code"><code class="language-r">',
+    '<pre class="commons-run-code"><code class="language-r">',
     fixed = TRUE
   )
   expect_match(
@@ -145,8 +145,8 @@ test_that("run_r returns plots as images and opens the display", {
     "data:image/png;base64,",
     fixed = TRUE
   )
-  expect_match(res@extra$display$html, "commons-run-r-details")
-  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-details")
+  expect_match(res@extra$display$html, "commons-run-code", fixed = TRUE)
   expect_match(res@extra$display$html, "<summary>Details</summary>", fixed = TRUE)
 })
 
@@ -165,7 +165,7 @@ test_that("run_r collapses code and output above plots", {
   expect_match(res@value[[1]]@text, "private warning")
   expect_match(
     res@extra$display$html,
-    '<details class="commons-run-r-details"><summary>Details</summary>',
+    '<details class="commons-run-details"><summary>Details</summary>',
     fixed = TRUE
   )
   expect_match(res@extra$display$html, "#&gt; private text", fixed = TRUE)
@@ -177,7 +177,7 @@ test_that("run_r collapses code and output above plots", {
     fixed = TRUE
   )
   expect_lt(
-    as.integer(regexpr("commons-run-r-details", res@extra$display$html)),
+    as.integer(regexpr("commons-run-details", res@extra$display$html)),
     as.integer(regexpr(
       "data:image/png;base64,",
       res@extra$display$html,
@@ -219,7 +219,7 @@ test_that("run_r surfaces errors from model code without failing the tool", {
   expect_match(res@value, "Error: boom")
   expect_false(res@extra$display$open)
   expect_match(res@extra$display$html, "#&gt; boom", fixed = TRUE)
-  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-code", fixed = TRUE)
   expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
 })
 
@@ -241,7 +241,7 @@ test_that("run_r displays code directly when it produces no output", {
     '<span class="hl num">1</span>',
     fixed = TRUE
   )
-  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-code", fixed = TRUE)
   expect_no_match(res@extra$display$html, "#&gt;", fixed = TRUE)
   expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
 })
@@ -263,7 +263,7 @@ test_that("run_r displays worker failures directly and escapes their HTML", {
   expect_false(res@extra$display$open)
   expect_match(res@extra$display$html, "'&lt;unsafe&gt;'", fixed = TRUE)
   expect_match(res@extra$display$html, "#&gt; worker &lt;broke&gt;", fixed = TRUE)
-  expect_match(res@extra$display$html, "commons-run-r-code", fixed = TRUE)
+  expect_match(res@extra$display$html, "commons-run-code", fixed = TRUE)
   expect_no_match(res@extra$display$html, "<details", fixed = TRUE)
 })
 
