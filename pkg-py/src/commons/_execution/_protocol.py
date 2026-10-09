@@ -862,9 +862,8 @@ def encode_message(message: Message) -> bytes:
     """
     if _plot_bytes(message) > PLOT_BYTES_LIMIT:
         # Dropped before encoding, so oversized plots are never copied into
-        # base64 only to be thrown away. The text is clipped first, so a
-        # later clip cannot cut off the note saying the plots were dropped.
-        message = _drop_plots(_shrink_text(message))
+        # base64 only to be thrown away.
+        message = _drop_plots(message)
     line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line
@@ -945,13 +944,13 @@ def _shrink_text(message: Message) -> Message:
             return replace(
                 message,
                 stdout=_clip(message.stdout),
-                stderr=_clip(message.stderr),
+                stderr=_clip_keeping_note(message.stderr),
             )
         case Error():
             return replace(
                 message,
                 message=_clip(message.message),
-                traceback=_clip(message.traceback),
+                traceback=_clip_keeping_note(message.traceback),
             )
         case _:
             return message
@@ -1005,6 +1004,13 @@ def _as_opaque(value: Any) -> Any:
     if isinstance(value, OpaqueValue):
         return value
     return OpaqueValue(type_name=type(value).__name__, text=_safe_repr(value))
+
+
+def _clip_keeping_note(text: str) -> str:
+    """``text`` clipped, keeping a trailing note that the plots were dropped."""
+    if text.endswith(_PLOT_DROP_NOTE):
+        return _clip(text[: -len(_PLOT_DROP_NOTE)]) + _PLOT_DROP_NOTE
+    return _clip(text)
 
 
 def _clip(text: str) -> str:
