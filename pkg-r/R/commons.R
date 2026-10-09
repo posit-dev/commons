@@ -18,7 +18,8 @@
 #'   commons' prompt.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
-#'   [semantic_layer()].
+#'   [semantic_layer()]. In `commons()`, this can also be a [trusted()] object,
+#'   in which case `semantic_layer` and `context_layer` must be `NULL`.
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
 #' @param ... These dots are for future extensions and must be empty.
@@ -190,10 +191,17 @@ commons <- function(
       )
     )
   }
-  data_sources <- as_data_sources(data_sources)
-  check_context_layer(context_layer)
-  semantic_layer <- semantic_layer %||% new_semantic_layer()
-  check_semantic_layer(semantic_layer)
+  if (inherits(data_sources, "commons_trusted")) {
+    if (!is.null(semantic_layer) || !is.null(context_layer)) {
+      cli::cli_abort(
+        "Pass {.arg semantic_layer} and {.arg context_layer} to {.fn trusted},
+         not {.fn commons}, when {.arg data_sources} is a {.fn trusted} object."
+      )
+    }
+    trusted <- data_sources
+  } else {
+    trusted <- new_trusted(data_sources, semantic_layer, context_layer)
+  }
   network <- rlang::arg_match(network)
   protection <- run_r_protection_mode()
   check_instructions(instructions)
@@ -202,9 +210,7 @@ commons <- function(
 
   Commons$new(
     client = client,
-    data_sources = data_sources,
-    context_layer = context_layer,
-    semantic_layer = semantic_layer,
+    trusted = trusted,
     network = network,
     protection = protection,
     instructions = instructions,
@@ -219,9 +225,7 @@ Commons <- R6::R6Class(
   public = list(
     initialize = function(
       client,
-      data_sources,
-      semantic_layer = NULL,
-      context_layer = NULL,
+      trusted,
       ...,
       instructions = NULL,
       network = c("none", "full"),
@@ -235,34 +239,30 @@ Commons <- R6::R6Class(
         model = client$get_model_object(),
         echo = "none"
       )
-      semantic_layer <- semantic_layer %||% new_semantic_layer()
       network <- rlang::arg_match(network)
 
-      sources <- as_data_sources(data_sources)
-
+      state <- trusted_state_of(trusted)
+      sources <- state$sources
+      private$trusted_obj <- trusted
       private$sources <- sources
-      private$context_layer <- augment_context_layer(context_layer, sources)
+      private$context_layer <- state$context_layer
       private$first_touch <- new.env(parent = emptyenv())
-      private$definitions <- definitions_registry(sources)
-      private$semantic_models <- semantic_models_registry(sources)
-      private$calculations <- calculations_registry(sources)
-      semantic_state <- semantic_layer_state(semantic_layer)
-      private$registry <- semantic_state$measures
-      private$fn_sources <- semantic_state$fn_sources
-      private$measure_provenance <- semantic_state$measure_provenance
-      private$measure_display <- semantic_state$measure_display
-      private$injections <- resolve_injections(
-        private$registry,
-        measure_injectables(sources)
-      )
+      private$definitions <- state$definitions
+      private$semantic_models <- state$semantic_models
+      private$calculations <- state$calculations
+      private$registry <- state$registry
+      private$fn_sources <- state$fn_sources
+      private$measure_provenance <- state$measure_provenance
+      private$measure_display <- state$measure_display
+      private$injections <- state$injections
       private$tracing <- new_trajectory_tracing(log, share_with)
 
       local_commons_span(
         "commons_agent_create",
         attributes = list(
           "commons.agent.n_data_sources" = length(sources),
-          "commons.agent.has_context_layer" = !is.null(context_layer),
-          "commons.agent.n_measures" = length(semantic_state$measures),
+          "commons.agent.has_context_layer" = state$has_context_layer,
+          "commons.agent.n_measures" = length(state$registry),
           "commons.agent.n_definitions" = nrow(private$definitions$defs),
           "commons.agent.n_semantic_members" = nrow(
             private$semantic_models$members
@@ -431,6 +431,9 @@ Commons <- R6::R6Class(
       invisible(self)
     }
   ),
+  active = list(
+    trusted = function() private$trusted_obj
+  ),
   private = list(
     prewarm_context = function() {
       layer <- private$context_layer
@@ -463,6 +466,7 @@ Commons <- R6::R6Class(
       invisible(self)
     },
 
+    trusted_obj = NULL,
     sources = NULL,
     context_layer = NULL,
     registry = NULL,

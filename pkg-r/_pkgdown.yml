@@ -26,6 +26,7 @@ reference:
   - semantic_layer
   - measure
   - context_layer
+  - trusted
 - title: Shiny UI and server
   description: Put a commons agent inside of an interactive chat app.
   contents: starts_with("commons_")

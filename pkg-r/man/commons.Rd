@@ -25,7 +25,8 @@ commons' prompt.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
-\code{\link[=semantic_layer]{semantic_layer()}}.}
+\code{\link[=semantic_layer]{semantic_layer()}}. In \code{commons()}, this can also be a \code{\link[=trusted]{trusted()}} object,
+in which case \code{semantic_layer} and \code{context_layer} must be \code{NULL}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
