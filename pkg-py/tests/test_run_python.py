@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -22,6 +23,7 @@ from commons._run_python import (
     highlight_python,
     run_python_description,
     run_python_result,
+    session_can_import,
 )
 
 from ._provider import scripted_chat, text
@@ -118,6 +120,29 @@ def test_the_network_rule_says_what_the_session_can_reach(
         ["run_sql"], has_measures=False, network=network, can_install=can_install
     )
     assert rule in description.split("\n\nRules:")[1]
+
+
+def test_the_plot_rule_says_whether_the_session_can_draw() -> None:
+    def rules(can_plot: bool) -> str:
+        return run_python_description(
+            ["run_sql"], has_measures=False, network="none", can_plot=can_plot
+        ).split("\n\nRules:")[1]
+
+    assert "at most one matplotlib figure per call" in rules(True)
+    assert "the session cannot draw plots" in rules(False)
+
+
+def test_a_module_only_in_the_user_site_is_not_importable_in_the_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert session_can_import("pytest")
+    assert not session_can_import("no_such_module_for_commons")
+    spec = importlib.util.find_spec("pytest")
+    assert spec is not None and spec.origin is not None
+    # The session's -I drops the user site; pretend pytest was found there.
+    site_dir = str(Path(spec.origin).parent.parent)
+    monkeypatch.setattr("site.getusersitepackages", lambda: site_dir)
+    assert not session_can_import("pytest")
 
 
 # ---- the result -------------------------------------------------------------

@@ -15,6 +15,8 @@ import html
 import importlib.util
 import io
 import keyword
+import os
+import site
 import tokenize
 from collections.abc import Sequence
 from typing import Any
@@ -54,17 +56,20 @@ def run_python_description(
     *,
     has_measures: bool,
     network: Network,
+    can_plot: bool | None = None,
     can_install: bool | None = None,
 ) -> str:
     """What `run_python` tells the model it is for.
 
     ``tool_names`` are the agent's other registered tools; the preloaded
-    handles are named after whichever of them store results. ``can_install``
-    says whether the session's interpreter has pip, and defaults to asking
-    this one, which is the interpreter the session runs.
+    handles are named after whichever of them store results. ``can_plot``
+    and ``can_install`` say whether the session can import matplotlib and
+    pip, and default to asking the interpreter the session runs.
     """
+    if can_plot is None:
+        can_plot = session_can_import("matplotlib")
     if can_install is None:
-        can_install = importlib.util.find_spec("pip") is not None
+        can_install = session_can_import("pip")
     handle_tools = [name for name in HANDLE_TOOLS if name in tool_names]
     parts = [
         (
@@ -102,8 +107,10 @@ def run_python_description(
             "calls for readability."
         ),
         (
-            "Create at most one matplotlib figure per call and leave it open rather "
-            "than saving it."
+            "Create at most one matplotlib figure per call and leave it open "
+            "rather than saving it."
+            if can_plot
+            else "matplotlib is not installed, so the session cannot draw plots."
         ),
         (
             "Do not use this tool to talk to the user; explanations belong in your "
@@ -131,6 +138,19 @@ def run_python_description(
             "already installed can be imported."
         )
     return " ".join(parts) + "\n\nRules:" + "".join(f"\n- {rule}" for rule in rules)
+
+
+def session_can_import(module: str) -> bool:
+    """Whether the session's interpreter can import the top-level ``module``.
+
+    The session runs this interpreter under ``-I``, which leaves out the user
+    site directory, so a module found only there does not count.
+    """
+    spec = importlib.util.find_spec(module)
+    if spec is None or spec.origin is None:
+        return spec is not None
+    user_site = os.path.abspath(site.getusersitepackages()) + os.sep
+    return not os.path.abspath(spec.origin).startswith(user_site)
 
 
 def _listed(names: Sequence[str]) -> str:
