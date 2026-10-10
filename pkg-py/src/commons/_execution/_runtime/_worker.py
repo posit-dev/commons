@@ -28,6 +28,7 @@ import json
 import os
 import signal
 import sys
+import warnings
 
 # The channel takeover runs before the sandbox, which needs the protocol fds
 # preserved across its fd sweep.
@@ -297,15 +298,15 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
     global _in_call
     namespace.update(call.handles)
     transcript = _repl.Transcript()
-    # Bound before model code runs, which can reach the transcript and the
-    # plot module and replace their methods.
-    read_back, flush = transcript.entries, _plots.flush
+    # Looked up before model code runs, which can replace it.
+    flush = _plots.flush
     _plots.begin(transcript)
     evaluation = None
     _in_call = True
     try:
-        evaluation = _repl.run(call.code, namespace, transcript)
-        _guarded(flush)
+        evaluation = _repl.run(
+            call.code, namespace, transcript, after=lambda: _guarded(flush)
+        )
     except KeyboardInterrupt:
         # The driver's SIGINT broke the call out of its computation. The
         # session and its variables survive; the driver reports the
@@ -323,7 +324,7 @@ def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
         pass
     if evaluation is None:
         return _protocol.Error(id=call.id, message="KeyboardInterrupt")
-    output = _segments(_guarded(read_back) or ())
+    output = _guarded(lambda: _segments(evaluation.output)) or ()
     if evaluation.error:
         return _protocol.Error(
             id=call.id,
@@ -345,17 +346,30 @@ def _guarded(step):
 
 
 def _segments(entries) -> tuple:
-    """The transcript's entries as protocol segments, skipping any that cannot convert."""
+    """The transcript's entries as protocol segments, within the driver's limits.
+
+    The transcript stays within these limits on its own. Model code can
+    still change it directly, so entries that are not text or a valid plot
+    are skipped, and output past ``OUTPUT_LIMIT`` segments or
+    ``PLOT_LIMIT`` plots is dropped. Without this, the driver would refuse
+    the reply and restart the session.
+    """
     segments = []
+    plots = 0
     for entry in entries:
+        if len(segments) >= _protocol.OUTPUT_LIMIT:
+            break
         try:
             kind, body = entry
         except (TypeError, ValueError):
             continue
+        if type(kind) is not str:
+            continue
         if kind in ("stdout", "stderr") and type(body) is str:
             segments.append(_protocol.Text(stream=kind, text=body))
-        elif kind == "item" and _is_plot(body):
+        elif kind == "item" and plots < _protocol.PLOT_LIMIT and _is_plot(body):
             segments.append(body)
+            plots += 1
     return tuple(segments)
 
 
@@ -389,6 +403,10 @@ def main() -> None:
     # Read by matplotlib when pyplot first needs a backend, so it must be set
     # before model code can import pyplot.
     os.environ["MPLBACKEND"] = _plots.BACKEND
+    # Model code often switches to the Agg backend itself. Its figures still
+    # come back at the end of the call, so the warning that Agg cannot show
+    # them would only mislead the model.
+    warnings.filterwarnings("ignore", message="FigureCanvasAgg is non-interactive")
     _engage_sandbox(network, protection)
     # Installed explicitly, so a worker whose parent ignores SIGINT, as a
     # shell does for a background job, can still be interrupted.

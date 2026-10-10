@@ -28,6 +28,7 @@ import contextlib
 import io
 import sys
 import traceback
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,14 +40,14 @@ _FILENAME = "<run_python>"
 
 # The most output one stream may keep, note included, so a runaway print loop
 # cannot exhaust the worker's memory. Both values equal their counterparts in
-# `commons._execution._protocol`, whose clip then never applies a second time
-# and whose note the model sees either way.
+# `commons._execution._protocol`, so text this capture keeps is not clipped
+# again there, and the model sees the same note either way.
 _CAPTURE_LIMIT = 1024 * 1024
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
 
-# The most text segments one call's output may have. A segment starts only
-# when the output switches streams, so this is reached only by output that
-# alternates thousands of times. `commons._execution._protocol.OUTPUT_LIMIT`
+# The most text segments one call's output may have. A new segment starts
+# when the output switches streams or follows a plot, so this is reached
+# only by output that alternates thousands of times. `commons._execution._protocol.OUTPUT_LIMIT`
 # leaves room past it for plots and the worker's notes.
 _SEGMENT_LIMIT = 9_000
 _SEGMENT_NOTE = "\n[truncated by commons: the output switched streams too often]"
@@ -215,6 +216,7 @@ def run(
     code: str,
     namespace: dict[str, Any] | None = None,
     transcript: Transcript | None = None,
+    after: Callable[[], object] | None = None,
 ) -> Evaluation:
     """Run ``code`` in ``namespace`` the way a REPL would, and report the outcome.
 
@@ -234,6 +236,12 @@ def run(
     to file descriptor 1, or through a stream reference saved before the
     call, still reach the real stream; the worker loop owns that channel and
     guards it.
+
+    ``after`` runs once the code has finished, whether or not it raised,
+    while output is still captured. The worker uses it to add the figures
+    the code left open, so anything printed while they are drawn is kept.
+    Any exception from it other than ``KeyboardInterrupt`` propagates, so
+    the caller should pass a function that does not raise.
     """
     if namespace is None:
         namespace = {}
@@ -252,11 +260,14 @@ def run(
         try:
             # Inside the try, so an interrupt mid-swap still restores them.
             sys.__stdout__, sys.__stderr__ = stdout, stderr  # type: ignore[bad-assignment]
-            value = _evaluate(code, namespace)
-        except KeyboardInterrupt:
-            raise
-        except BaseException as exc:  # noqa: BLE001 - any failure is the call's answer
-            error, tb = _render_error(exc)
+            try:
+                value = _evaluate(code, namespace)
+            except KeyboardInterrupt:
+                raise
+            except BaseException as exc:  # noqa: BLE001 - any failure is the call's answer
+                error, tb = _render_error(exc)
+            if after is not None:
+                after()
         finally:
             sys.__stdout__, sys.__stderr__ = real_dunder
     # Model code had access to the transcript, so the read-back may fail;
