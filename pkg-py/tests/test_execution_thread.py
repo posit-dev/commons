@@ -76,13 +76,16 @@ def test_run_sync_refuses_the_workers_own_thread(runner: WorkerThread) -> None:
 
 def test_ctrl_c_while_waiting_stops_the_call() -> None:
     worker_thread = WorkerThread(Worker(call_timeout=60))
+    main = threading.main_thread().ident
+    assert main is not None
+    interrupt = threading.Timer(1, signal.pthread_kill, (main, signal.SIGINT))
     try:
         worker_thread.run_sync("1")
-        main = threading.main_thread().ident
-        assert main is not None
-        threading.Timer(1, signal.pthread_kill, (main, signal.SIGINT)).start()
+        interrupt.start()
         with pytest.raises(KeyboardInterrupt):
             worker_thread.run_sync("import time; time.sleep(60)")
+        assert worker_thread.take_restart()
+        assert not worker_thread.take_restart()
         started = time.monotonic()
         # Without the cancel, this call would queue behind the sleep.
         reply = worker_thread.run_sync("1 + 1")
@@ -90,6 +93,8 @@ def test_ctrl_c_while_waiting_stops_the_call() -> None:
         assert isinstance(reply, Result)
         assert reply.value == 2
     finally:
+        # A call that returned early must not leave the signal for a later test.
+        interrupt.cancel()
         worker_thread.close()
 
 
@@ -104,19 +109,28 @@ def test_close_from_the_loops_own_thread_returns_and_the_thread_stops() -> None:
     assert loop.is_closed()
 
 
-def test_a_cancelled_caller_cancels_the_call(runner: WorkerThread) -> None:
+def test_a_cancelled_caller_cancels_the_call() -> None:
+    worker_thread = WorkerThread(Worker(call_timeout=60))
+
     async def cancel_midway() -> None:
-        call = asyncio.ensure_future(runner.run("import time; time.sleep(30)"))
+        call = asyncio.ensure_future(worker_thread.run("import time; time.sleep(60)"))
         await asyncio.sleep(1)
         call.cancel()
         with pytest.raises(asyncio.CancelledError):
             await call
 
-    asyncio.run(cancel_midway())
-    # The cancelled call's worker was shut down; the next one respawns.
-    reply = runner.run_sync("1 + 1")
-    assert isinstance(reply, Result)
-    assert reply.value == 2
+    try:
+        asyncio.run(cancel_midway())
+        assert worker_thread.take_restart()
+        started = time.monotonic()
+        # The cancelled call's worker was shut down, so the next one respawns
+        # rather than queue behind the sleep.
+        reply = worker_thread.run_sync("1 + 1")
+        assert time.monotonic() - started < 15
+        assert isinstance(reply, Result)
+        assert reply.value == 2
+    finally:
+        worker_thread.close()
 
 
 def test_close_ends_the_thread_and_later_calls_fail(runner: WorkerThread) -> None:
@@ -130,20 +144,23 @@ def test_close_ends_the_thread_and_later_calls_fail(runner: WorkerThread) -> Non
 
 def test_close_cancels_a_running_call_rather_than_waiting_it_out() -> None:
     worker_thread = WorkerThread(Worker(call_timeout=60))
-    worker_thread.run_sync("1")
-    replies: list[object] = []
-    caller = threading.Thread(
-        target=lambda: replies.append(
-            worker_thread.run_sync("import time; time.sleep(60)")
+    try:
+        worker_thread.run_sync("1")
+        replies: list[object] = []
+        caller = threading.Thread(
+            target=lambda: replies.append(
+                worker_thread.run_sync("import time; time.sleep(60)")
+            )
         )
-    )
-    caller.start()
-    time.sleep(1)
-    started = time.monotonic()
-    worker_thread.close()
-    caller.join(10)
-    assert time.monotonic() - started < 15
-    assert replies == [Failure(message="the Python session is closed.")]
+        caller.start()
+        time.sleep(1)
+        started = time.monotonic()
+        worker_thread.close()
+        caller.join(10)
+        assert time.monotonic() - started < 15
+        assert replies == [Failure(message="the Python session is closed.")]
+    finally:
+        worker_thread.close()
 
 
 def test_an_async_call_running_when_the_thread_closes_is_told_it_closed() -> None:
@@ -157,7 +174,12 @@ def test_an_async_call_running_when_the_thread_closes_is_told_it_closed() -> Non
         await asyncio.to_thread(worker_thread.close)
         return await asyncio.wait_for(call, 10)
 
-    assert asyncio.run(caller()) == Failure(message="the Python session is closed.")
+    try:
+        assert asyncio.run(caller()) == Failure(
+            message="the Python session is closed."
+        )
+    finally:
+        worker_thread.close()
 
 
 class FailingClose(Worker):
