@@ -312,19 +312,17 @@ def _kill_when_stopped(pid: int) -> None:
     """Kill the worker's process group if the worker is stopped.
 
     Waits until the worker stops or exits, and returns without acting if
-    it exits. Model code can stop its own process with SIGSTOP, and nothing
-    else has a reason to. On macOS, Python 3.14's asyncio mistakes a
+    it exits. Model code can stop its own process with SIGSTOP (nothing
+    else has a reason to). On macOS, Python 3.14's asyncio mistakes a
     stopped child for an exited one, then blocks the event loop in
     ``waitpid()`` until the child really exits, which freezes the host.
     Killing the worker lets that ``waitpid()`` return at once. This runs
     wherever ``os.waitid`` exists, so the driver reports a stopped worker
     as a crash on every such platform.
 
-    ``WNOWAIT`` leaves the exit status for asyncio to collect. Until it is
-    collected, the worker's pid cannot be given to another process, so this
-    thread cannot signal the wrong one. Without ``os.waitid`` (macOS before
-    Python 3.13), a stopped worker is not killed here, and the call fails
-    when its timeout runs out.
+    ``WNOWAIT`` leaves the exit status for asyncio to collect. Without
+    ``os.waitid`` (macOS before Python 3.13), a stopped worker is not
+    killed here, and the call fails when its timeout runs out.
     """
     if not hasattr(os, "waitid"):
         return
