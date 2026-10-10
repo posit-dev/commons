@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
-import sys
 import time
 from datetime import date
 from typing import Annotated
@@ -22,7 +21,7 @@ from pydantic import Field
 from commons import measure, semantic_layer
 from commons._execution._backend import WORKER_SCRIPT, LocalBackend, LocalSession
 from commons._execution._driver import Failure, Worker
-from commons._execution._protocol import Error, Result, Text
+from commons._execution._protocol import Error, Ready, Result, Text, encode_message
 from commons._execution._sandbox import protection_mode
 from commons._handles import HandleStore
 from commons._measures import Injected
@@ -355,18 +354,37 @@ async def test_a_child_ignoring_sigterm_does_not_outlive_the_close():
     )
 
 
-@pytest.mark.skipif(
-    sys.platform == "darwin" and sys.version_info >= (3, 14),
-    reason="asyncio on 3.14 reads macOS's waitid() report of a stopped child "
-    "as an exit and blocks the event loop in waitpid() until it really exits",
-)
-async def test_a_worker_that_stops_reading_fails_the_call_instead_of_hanging():
-    async with make_worker(call_timeout=0.5) as worker:
+@pytest.mark.skipif(not hasattr(os, "waitid"), reason="needs os.waitid")
+async def test_a_worker_that_stops_itself_is_killed_and_reported_as_a_crash():
+    async with make_worker(call_timeout=30) as worker:
         await worker.run("1")
         process = process_of(worker)
-        # A stopped worker cannot drain its stdin; a call bigger than the
-        # pipe buffer would block the write forever without a bound on it.
-        process.send_signal(signal.SIGSTOP)
+        started = time.monotonic()
+        reply = await worker.run(
+            "import os, signal\nos.kill(os.getpid(), signal.SIGSTOP)"
+        )
+        assert isinstance(reply, Failure)
+        assert "crashed" in reply.message
+        # Killed when it stopped, rather than when the call timed out.
+        assert time.monotonic() - started < 10
+        assert process.returncode == -signal.SIGKILL
+        reply = await worker.run("1 + 1")
+        assert isinstance(reply, Result)
+        assert reply.value == 2
+
+
+async def test_a_worker_that_stops_reading_fails_the_call_instead_of_hanging(tmp_path):
+    # A worker that says it is ready and then never reads stdin. Writing it a
+    # call bigger than the pipe buffer blocks until the write's time limit.
+    script = tmp_path / "worker.py"
+    script.write_text(
+        "import sys, time\n"
+        f"sys.stdout.buffer.write({encode_message(Ready())!r})\n"
+        "sys.stdout.flush()\n"
+        "time.sleep(60)\n"
+    )
+    backend = LocalBackend(worker_script=script, terminate_grace=0.1)
+    async with make_worker(backend=backend, call_timeout=0.5) as worker:
         reply = await worker.run("x = " + "1" * (1024 * 1024))
         assert isinstance(reply, Failure)
         assert "stopped reading" in reply.message
