@@ -374,8 +374,8 @@ async def test_a_worker_that_stops_itself_is_killed_and_reported_as_a_crash():
 
 
 async def test_a_worker_that_stops_reading_fails_the_call_instead_of_hanging(tmp_path):
-    # Ready, then never read stdin: a call bigger than the pipe buffer would
-    # block the write forever without a bound on it.
+    # A worker that says it is ready and then never reads stdin. Writing it a
+    # call bigger than the pipe buffer blocks until the write's time limit.
     script = tmp_path / "worker.py"
     script.write_text(
         "import sys, time\n"
