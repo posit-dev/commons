@@ -101,6 +101,7 @@ def test_close_from_the_loops_own_thread_returns_and_the_thread_stops() -> None:
     loop.call_soon_threadsafe(worker_thread.close)
     thread.join(15)
     assert not thread.is_alive()
+    assert loop.is_closed()
 
 
 def test_a_cancelled_caller_cancels_the_call(runner: WorkerThread) -> None:
