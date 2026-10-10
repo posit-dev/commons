@@ -290,9 +290,9 @@ def _commons_define_source(source, _files=_itertools.count(1)):
 def _execute(call: _protocol.Call, namespace: dict) -> _protocol.Message:
     """Run one call in the session namespace and render its reply.
 
-    The figures still open when the code finishes are flushed inside the
-    interruptible window, because drawing a figure runs model code and can
-    take as long as the call did.
+    The figures still open when the code finishes are flushed while the
+    call can still be interrupted, because drawing a figure runs model code
+    and can take as long as the call itself.
     """
     global _in_call
     namespace.update(call.handles)
@@ -345,7 +345,7 @@ def _guarded(step):
 
 
 def _segments(entries) -> tuple:
-    """The transcript's entries as protocol segments, skipping any that are not."""
+    """The transcript's entries as protocol segments, skipping any that cannot convert."""
     segments = []
     for entry in entries:
         try:
