@@ -1,18 +1,17 @@
-"""A worker on an event loop of its own, so any caller can reach one session.
+"""Runs the session's ``Worker`` in a background thread with its own event loop.
 
-chatlas runs an async tool only from ``stream_async()``, and a sync tool
-directly on the caller's event loop, where a long call would stall every
-other task on it. Keeping the ``Worker`` on a private loop in a background
-thread lets an async caller await a call without blocking its loop, and a
-sync caller block on the same session, so variables persist whichever way
-the agent is asked.
+chatlas runs an async tool only from ``stream_async()``, and runs a sync tool
+on the caller's event loop, where a long call would stop every other task on
+that loop. With the ``Worker`` in its own thread, an async caller can wait for
+a call without blocking its loop, and a sync caller can block on the same
+session. Variables therefore persist whether the agent is used through
+``chat()`` or ``stream_async()``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import contextlib
 import threading
 
 from .._handles import HandleStore
@@ -31,7 +30,7 @@ _Reply = Result | Error | Failure
 
 
 class WorkerThread:
-    """Runs ``worker`` on a loop in a daemon thread, started by the first call."""
+    """Runs ``worker`` in a background thread, which starts on the first call."""
 
     def __init__(self, worker: Worker) -> None:
         self._worker = worker
@@ -46,8 +45,8 @@ class WorkerThread:
     async def run(self, code: str, handles: HandleStore | None = None) -> _Reply:
         """Run ``code`` without blocking the caller's event loop.
 
-        Cancelling the caller cancels the call, which shuts the worker down
-        the way a cancelled ``Worker.run`` does.
+        If the caller is cancelled, the call is cancelled too, and the worker
+        shuts down as it does when ``Worker.run`` is cancelled.
         """
         future = self._submit(code, handles)
         if future is None:
@@ -73,14 +72,20 @@ class WorkerThread:
             if self._closed:
                 return _CLOSED
             raise
+        except BaseException:
+            # Ctrl-C while waiting stops the call, as cancelling an async
+            # caller does, rather than leaving it to run out its timeout.
+            future.cancel()
+            raise
 
     def close(self) -> None:
-        """Close the worker, then stop the loop and its thread. Safe to repeat.
+        """Close the worker, then stop the loop and its thread.
 
-        Calls in flight are cancelled first, so the worker shuts down within
-        its grace periods rather than after a call's timeout. A shutdown that
-        still overruns ``CLOSE_TIMEOUT`` finishes in the background, and the
-        loop stops only once it has.
+        Calling it again does nothing. Running calls are cancelled first, so
+        the worker stops quickly instead of waiting for a call to time out. If
+        the shutdown takes longer than ``CLOSE_TIMEOUT``, it continues in the
+        background, and the loop stops when it ends. When called from the
+        loop's own thread, it starts the shutdown and returns at once.
         """
         with self._lock:
             if self._closed:
@@ -94,11 +99,18 @@ class WorkerThread:
             call.cancel()
         closing = asyncio.run_coroutine_threadsafe(self._worker.aclose(), loop)
         closing.add_done_callback(lambda _: loop.call_soon_threadsafe(loop.stop))
-        with contextlib.suppress(TimeoutError):
+        # Waiting here on the loop's own thread would block the shutdown.
+        if threading.current_thread() is thread:
+            return
+        try:
             closing.result(CLOSE_TIMEOUT)
-        thread.join(CLOSE_TIMEOUT)
-        if not thread.is_alive():
-            loop.close()
+        except TimeoutError:
+            return
+        finally:
+            if closing.done():
+                thread.join(CLOSE_TIMEOUT)
+                if not thread.is_alive():
+                    loop.close()
 
     def _submit(
         self, code: str, handles: HandleStore | None
@@ -121,7 +133,7 @@ class WorkerThread:
             self._calls.discard(future)
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
-        """The loop, started on first use. Called with the lock held."""
+        """Return the loop, starting it and its thread if needed. Needs the lock."""
         if self._loop is None:
             loop = asyncio.new_event_loop()
             thread = threading.Thread(

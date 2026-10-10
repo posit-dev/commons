@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import signal
 import threading
 import time
 
@@ -55,10 +56,51 @@ def test_the_session_runs_off_the_callers_loop(runner: WorkerThread) -> None:
 
 
 def test_no_thread_starts_before_the_first_call() -> None:
-    before = threading.active_count()
     worker_thread = WorkerThread(Worker())
-    assert threading.active_count() == before
+    assert worker_thread._thread is None
     worker_thread.close()
+    assert worker_thread._thread is None
+
+
+def test_run_sync_refuses_the_workers_own_thread(runner: WorkerThread) -> None:
+    runner.run_sync("1")
+    assert runner._loop is not None
+
+    async def from_the_loop() -> None:
+        runner.run_sync("1")
+
+    future = asyncio.run_coroutine_threadsafe(from_the_loop(), runner._loop)
+    with pytest.raises(RuntimeError, match="deadlock"):
+        future.result(10)
+
+
+def test_ctrl_c_while_waiting_stops_the_call() -> None:
+    worker_thread = WorkerThread(Worker(call_timeout=60))
+    try:
+        worker_thread.run_sync("1")
+        main = threading.main_thread().ident
+        assert main is not None
+        threading.Timer(1, signal.pthread_kill, (main, signal.SIGINT)).start()
+        with pytest.raises(KeyboardInterrupt):
+            worker_thread.run_sync("import time; time.sleep(60)")
+        started = time.monotonic()
+        # Without the cancel, this call would queue behind the sleep.
+        reply = worker_thread.run_sync("1 + 1")
+        assert time.monotonic() - started < 15
+        assert isinstance(reply, Result)
+        assert reply.value == 2
+    finally:
+        worker_thread.close()
+
+
+def test_close_from_the_loops_own_thread_returns_and_the_thread_stops() -> None:
+    worker_thread = WorkerThread(Worker())
+    worker_thread.run_sync("1")
+    loop, thread = worker_thread._loop, worker_thread._thread
+    assert loop is not None and thread is not None
+    loop.call_soon_threadsafe(worker_thread.close)
+    thread.join(15)
+    assert not thread.is_alive()
 
 
 def test_a_cancelled_caller_cancels_the_call(runner: WorkerThread) -> None:
