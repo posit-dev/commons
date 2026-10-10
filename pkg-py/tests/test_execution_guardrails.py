@@ -177,3 +177,15 @@ async def test_the_workers_own_work_between_calls_is_not_checked(guarded):
         assert isinstance(reply, Result), reply
         assert reply.value == 6
 
+
+
+async def test_a_plot_comes_back_under_guardrails(guarded):
+    # matplotlib reads its fonts and writes its cache while the hook is on,
+    # so the roots have to cover both.
+    pytest.importorskip("matplotlib")
+    async with guarded() as worker:
+        reply = await worker.run(
+            "import matplotlib.pyplot as plt\nplt.plot([1, 2, 3])\n"
+        )
+        assert isinstance(reply, Result), reply
+        assert len(reply.output) == 1

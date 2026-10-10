@@ -22,7 +22,7 @@ from pydantic import Field
 from commons import measure, semantic_layer
 from commons._execution._backend import WORKER_SCRIPT, LocalBackend, LocalSession
 from commons._execution._driver import Failure, Worker
-from commons._execution._protocol import Error, Result
+from commons._execution._protocol import Error, Result, Text
 from commons._execution._sandbox import protection_mode
 from commons._handles import HandleStore
 from commons._measures import Injected
@@ -155,7 +155,7 @@ async def test_printed_output_comes_back_with_the_result():
     async with make_worker() as worker:
         reply = await worker.run("print('hello')")
         assert isinstance(reply, Result)
-        assert reply.stdout == "hello\n"
+        assert reply.output == (Text(stream="stdout", text="hello\n"),)
 
 
 async def test_calls_are_serialized_one_at_a_time():
@@ -812,7 +812,7 @@ async def test_a_worker_that_died_between_calls_loses_its_scratch_directory():
 # Model code can reach the worker's own module, and with it the protocol
 # channel; these tests use that to put a bad line on the channel on demand.
 WORKER_MODULE = "import sys, os; w = sys.modules['__main__']\n"
-BOGUS_REPLY = "w._send(w._protocol.Result(id='bogus', value=1, stdout='', stderr=''))\n"
+BOGUS_REPLY = "w._send(w._protocol.Result(id='bogus', value=1))\n"
 
 
 async def test_a_reply_that_does_not_parse_restarts_the_worker():
@@ -926,7 +926,7 @@ async def test_a_sync_answered_with_garbage_restarts_the_worker():
 async def test_a_sync_answered_out_of_turn_restarts_the_worker():
     store = HandleStore()
     async with make_worker() as worker:
-        bogus = "return w._protocol.Result(id='bogus', value=1, stdout='', stderr='')"
+        bogus = "return w._protocol.Result(id='bogus', value=1)"
         await worker.run(patch_sync(bogus))
         store.register(41)
         reply = await worker.run("r1", handles=store)

@@ -33,23 +33,31 @@ import numbers
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Literal
 
 __all__ = [
     "FRAME_BYTES_LIMIT",
+    "OUTPUT_LIMIT",
+    "PLOT_BYTES_LIMIT",
+    "PLOT_EDGE_LIMIT",
+    "PLOT_LIMIT",
     "STREAM_LIMIT",
     "Call",
     "ChannelError",
     "Error",
     "Message",
     "OpaqueValue",
+    "Plot",
     "ProtocolError",
     "Ready",
     "Result",
+    "Segment",
+    "Text",
     "decode_message",
     "decode_value",
     "encode_message",
     "encode_value",
+    "png_size",
     "read_message",
     "write_message",
 ]
@@ -89,6 +97,29 @@ _TEXT_CLIP_LIMIT = 1024 * 1024
 _FRAME_WIRE_LIMIT = (STREAM_LIMIT - 2 * _TEXT_CLIP_LIMIT - 4096) * 3 // 4
 
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
+
+# Most plots one reply may include; matplotlib's own warning about open
+# figures starts at the same count.
+PLOT_LIMIT = 20
+
+# Most PNG bytes one reply's plots may total, before base64. That is a
+# quarter of the line's length, or about a third once base64 adds its
+# overhead, which leaves the rest for the value and the printed output.
+PLOT_BYTES_LIMIT = STREAM_LIMIT // 4
+
+# Longest edge either image of a plot may have. The worker's own images stay
+# well inside it; the bound is for an image the worker did not make, which
+# a provider or a browser would otherwise be asked to decode.
+PLOT_EDGE_LIMIT = 4096
+
+# Most segments one reply's output may have, plots included. The worker's
+# capture starts a new text segment only when the stream changes or a plot
+# comes between, and refuses new ones well before this.
+OUTPUT_LIMIT = 10_000
+
+_PLOT_DROP_NOTE = "[commons: the plots were dropped; they exceeded the channel limit]\n"
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 # Arrow IPC header types and the buffer-less field type, numbered per the
 # format's flatbuffer schemas.
@@ -144,6 +175,47 @@ class OpaqueValue:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Plot:
+    """A figure the call drew, rendered once for the model and once for display.
+
+    ``display_png`` has twice the pixels of ``png`` and is meant to be shown
+    at ``png``'s size, so text stays sharp on high-density screens. Both
+    images came from the worker; the decode side checks that each is a PNG
+    and nothing more.
+    """
+
+    png: bytes
+    display_png: bytes
+
+    @property
+    def width(self) -> int:
+        """The model image's width in pixels, read from its header."""
+        return int.from_bytes(self.png[16:20], "big")
+
+    @property
+    def height(self) -> int:
+        """The model image's height in pixels, read from its header."""
+        return int.from_bytes(self.png[20:24], "big")
+
+
+@dataclass(frozen=True, kw_only=True)
+class Text:
+    """Text written to one stream, as a run of consecutive writes.
+
+    Most of it is what the call printed. The worker's own notes, such as
+    one saying a figure could not be drawn, are ``stderr`` text too.
+    """
+
+    stream: Literal["stdout", "stderr"]
+    text: str
+
+
+# One piece of a call's output. A reply's output lists them in the order they
+# happened, so a plot appears between the text written before and after it.
+Segment = Text | Plot
+
+
+@dataclass(frozen=True, kw_only=True)
 class Ready:
     """Sent by the worker to the driver once the sandbox is up and running."""
 
@@ -159,7 +231,7 @@ class Call:
 
 @dataclass(frozen=True, kw_only=True)
 class Result:
-    """Sent by the worker to the driver: what the code evaluated to, and what it printed.
+    """Sent by the worker to the driver: what the code evaluated to, and what it output.
 
     ``value`` is ``None`` both when the code ended in a statement and when it
     ended in an expression that evaluated to ``None``. The two are equivalent
@@ -168,17 +240,21 @@ class Result:
 
     id: str
     value: Any = None
-    stdout: str = ""
-    stderr: str = ""
+    output: tuple[Segment, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
 class Error:
-    """Sent by the worker to the driver: the code raised, and this is what it said."""
+    """Sent by the worker to the driver: the code raised, and this is what it said.
+
+    ``output`` is what the code wrote and drew before it raised. An
+    interrupted call is reported with an empty ``output``.
+    """
 
     id: str
     message: str
     traceback: str = ""
+    output: tuple[Segment, ...] = ()
 
 
 Message = Ready | Call | Result | Error
@@ -807,18 +883,28 @@ def _arrow_refusals(pyarrow: Any) -> tuple[type[BaseException], ...]:
 
 
 def encode_message(message: Message) -> bytes:
-    """Render ``message`` as the single line that carries it.
+    """Render ``message`` as the single line that contains it.
 
-    A message that would exceed ``STREAM_LIMIT`` is shrunk first: printed
-    output is clipped, then values are replaced by their reprs. Raises
-    ``ProtocolError`` when nothing is left to shrink — a ``Call`` carrying
-    megabytes of code, say — because a line no reader can consume would
-    wedge the channel.
+    When the plots total more than ``PLOT_BYTES_LIMIT``, all of them are
+    dropped, with a note, before anything is encoded. A message that would still exceed ``STREAM_LIMIT`` is
+    shrunk: text is clipped, then plots are dropped with a note, then
+    values are replaced by their reprs. Raises ``ProtocolError`` when
+    nothing is left to shrink (a ``Call`` with megabytes of code, say),
+    because a line no reader can consume would block the channel.
     """
+    if _plot_bytes(message) > PLOT_BYTES_LIMIT:
+        # Dropped before encoding, so oversized plots are never copied into
+        # base64 only to be thrown away.
+        message = _drop_plots(message)
     line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line
-    line = _encode_line(_shrink_text(message))
+    message = _shrink_text(message)
+    line = _encode_line(message)
+    if len(line) <= STREAM_LIMIT:
+        return line
+    message = _drop_plots(message)
+    line = _encode_line(message)
     if len(line) <= STREAM_LIMIT:
         return line
     line = _encode_line(_shrink_values(message))
@@ -857,8 +943,7 @@ def _message_body(message: Message) -> dict[str, Any]:
                 "type": "result",
                 "id": message.id,
                 "value": encode_value(message.value),
-                "stdout": message.stdout,
-                "stderr": message.stderr,
+                "output": [_segment_body(segment) for segment in message.output],
             }
         case Error():
             return {
@@ -866,6 +951,7 @@ def _message_body(message: Message) -> dict[str, Any]:
                 "id": message.id,
                 "message": message.message,
                 "traceback": message.traceback,
+                "output": [_segment_body(segment) for segment in message.output],
             }
         case _:
             raise ProtocolError(
@@ -873,21 +959,86 @@ def _message_body(message: Message) -> dict[str, Any]:
             )
 
 
+def _segment_body(segment: Segment) -> dict[str, str]:
+    """The JSON object for one output segment, with a plot's images in base64."""
+    match segment:
+        case Text():
+            return {"type": "text", "stream": segment.stream, "text": segment.text}
+        case Plot():
+            return {
+                "type": "plot",
+                "png": base64.b64encode(segment.png).decode("ascii"),
+                "display_png": base64.b64encode(segment.display_png).decode("ascii"),
+            }
+        case _:
+            raise ProtocolError(
+                f"not an output segment: {type(segment).__name__}"
+            )
+
+
 def _shrink_text(message: Message) -> Message:
-    """The same message with its printed output and traceback clipped."""
+    """The same message with its output, error message, and traceback clipped."""
     match message:
         case Result():
-            return replace(
-                message,
-                stdout=_clip(message.stdout),
-                stderr=_clip(message.stderr),
-            )
+            return replace(message, output=_clip_output(message.output))
         case Error():
             return replace(
                 message,
                 message=_clip(message.message),
                 traceback=_clip(message.traceback),
+                output=_clip_output(message.output),
             )
+        case _:
+            return message
+
+
+def _clip_output(output: tuple[Segment, ...]) -> tuple[Segment, ...]:
+    """``output`` with each stream's text clipped to ``_TEXT_CLIP_LIMIT`` in total.
+
+    The stream's text is cut where it exceeds the limit, and its later
+    segments are dropped. Plots and the note that plots were dropped are
+    kept where they are.
+    """
+    used = {"stdout": 0, "stderr": 0}
+    clipped: set[str] = set()
+    kept: list[Segment] = []
+    for segment in output:
+        if not isinstance(segment, Text) or segment.text == _PLOT_DROP_NOTE:
+            kept.append(segment)
+            continue
+        if segment.stream in clipped:
+            continue
+        room = _TEXT_CLIP_LIMIT - used[segment.stream]
+        if len(segment.text) <= room:
+            used[segment.stream] += len(segment.text)
+            kept.append(segment)
+            continue
+        kept.append(replace(segment, text=segment.text[:room] + _TRUNCATION_NOTE))
+        clipped.add(segment.stream)
+    return tuple(kept)
+
+
+def _plots_of(message: Message) -> list[Plot]:
+    """The plots in ``message``'s output, in order."""
+    match message:
+        case Result() | Error():
+            return [segment for segment in message.output if isinstance(segment, Plot)]
+        case _:
+            return []
+
+
+def _plot_bytes(message: Message) -> int:
+    """The PNG bytes ``message``'s plots total, before base64."""
+    return sum(len(p.png) + len(p.display_png) for p in _plots_of(message))
+
+
+def _drop_plots(message: Message) -> Message:
+    """The same message without its plots, saying so at the end of its output."""
+    match message:
+        case Result() | Error() if _plots_of(message):
+            output = tuple(s for s in message.output if not isinstance(s, Plot))
+            note = Text(stream="stderr", text=_PLOT_DROP_NOTE)
+            return replace(message, output=(*output, note))
         case _:
             return message
 
@@ -962,21 +1113,21 @@ def decode_message(line: bytes | str, *, max_frame_bytes: int = FRAME_BYTES_LIMI
                 handles=_decode_handles(body, max_frame_bytes),
             )
         case "result":
-            _refuse_unknown_fields(
-                body, "result", {"type", "id", "value", "stdout", "stderr"}
-            )
+            _refuse_unknown_fields(body, "result", {"type", "id", "value", "output"})
             return Result(
                 id=_required_text(body, "id", "result"),
                 value=_decode_result_value(body, max_frame_bytes),
-                stdout=_optional_text(body, "stdout", "result"),
-                stderr=_optional_text(body, "stderr", "result"),
+                output=_decode_output(body, "result"),
             )
         case "error":
-            _refuse_unknown_fields(body, "error", {"type", "id", "message", "traceback"})
+            _refuse_unknown_fields(
+                body, "error", {"type", "id", "message", "traceback", "output"}
+            )
             return Error(
                 id=_required_text(body, "id", "error"),
                 message=_required_text(body, "message", "error"),
                 traceback=_optional_text(body, "traceback", "error"),
+                output=_decode_output(body, "error"),
             )
         case _:
             raise ProtocolError(f"unknown message type: {kind!r}")
@@ -1020,6 +1171,91 @@ def _decode_handles(body: dict[str, Any], max_frame_bytes: int) -> dict[str, Any
         key: decode_value(item, max_frame_bytes=max_frame_bytes)
         for key, item in raw.items()
     }
+
+
+def png_size(data: bytes) -> tuple[int, int]:
+    """The ``(width, height)`` a PNG's header declares, refusing anything else.
+
+    Raises ``ValueError`` unless ``data`` starts with the PNG signature and a
+    well-formed IHDR chunk whose edges are between 1 and ``PLOT_EDGE_LIMIT``.
+    The pixel data is not decoded; the bound on the declared size is what
+    keeps a later decode from allocating more memory than a plot should need.
+    """
+    if (
+        len(data) < 33
+        or not data.startswith(_PNG_SIGNATURE)
+        or data[8:16] != b"\x00\x00\x00\x0dIHDR"
+    ):
+        raise ValueError("not a PNG image")
+    width = int.from_bytes(data[16:20], "big")
+    height = int.from_bytes(data[20:24], "big")
+    if not (1 <= width <= PLOT_EDGE_LIMIT and 1 <= height <= PLOT_EDGE_LIMIT):
+        raise ValueError(
+            f"a {width}x{height} image is outside 1..{PLOT_EDGE_LIMIT} pixels a side"
+        )
+    return width, height
+
+
+def _decode_output(body: dict[str, Any], kind: str) -> tuple[Segment, ...]:
+    """The ``output`` of a result or error body, each segment checked.
+
+    The worker enforces these same bounds on segments, plots, and plot
+    bytes. They are enforced again here because the worker runs model code
+    and cannot be relied on to enforce them.
+    """
+    raw = body.get("output", [])
+    if not isinstance(raw, list) or len(raw) > OUTPUT_LIMIT:
+        raise ProtocolError(
+            f"malformed {kind} message: output must be a list of at most "
+            f"{OUTPUT_LIMIT} segments"
+        )
+    output = tuple(_decode_segment(item) for item in raw)
+    plots = [segment for segment in output if isinstance(segment, Plot)]
+    if len(plots) > PLOT_LIMIT:
+        raise ProtocolError(
+            f"malformed {kind} message: more than {PLOT_LIMIT} plots"
+        )
+    if sum(len(p.png) + len(p.display_png) for p in plots) > PLOT_BYTES_LIMIT:
+        raise ProtocolError(
+            f"malformed {kind} message: plots exceed {PLOT_BYTES_LIMIT:,} bytes"
+        )
+    return output
+
+
+def _decode_segment(item: Any) -> Segment:
+    """One segment of a reply's output: a run of text, or a plot."""
+    kind = item.get("type") if isinstance(item, dict) else None
+    if kind == "text":
+        if set(item) != {"type", "stream", "text"}:
+            raise ProtocolError("malformed text segment: expected stream and text")
+        stream, text = item["stream"], item["text"]
+        if stream not in ("stdout", "stderr") or not isinstance(text, str):
+            raise ProtocolError("malformed text segment: bad stream or text")
+        return Text(stream=stream, text=text)
+    if kind == "plot":
+        return _decode_plot(item)
+    raise ProtocolError(f"malformed output segment: unknown type {kind!r}")
+
+
+def _decode_plot(item: dict[str, Any]) -> Plot:
+    """One plot segment, refusing anything but two base64 PNGs."""
+    if set(item) != {"type", "png", "display_png"}:
+        raise ProtocolError("malformed plot: expected exactly png and display_png")
+    images = []
+    for name in ("png", "display_png"):
+        text = item[name]
+        if not isinstance(text, str):
+            raise ProtocolError(f"malformed plot: {name} must be a string")
+        try:
+            data = base64.b64decode(text, validate=True)
+        except ValueError as error:
+            raise ProtocolError(f"malformed plot: {name} is not base64") from error
+        try:
+            png_size(data)
+        except ValueError as error:
+            raise ProtocolError(f"malformed plot: {name}: {error}") from error
+        images.append(data)
+    return Plot(png=images[0], display_png=images[1])
 
 
 def _decode_result_value(body: dict[str, Any], max_frame_bytes: int) -> Any:
