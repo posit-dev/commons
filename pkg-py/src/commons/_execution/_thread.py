@@ -109,8 +109,6 @@ class WorkerThread:
         finally:
             if closing.done():
                 thread.join(CLOSE_TIMEOUT)
-                if not thread.is_alive():
-                    loop.close()
 
     def _submit(
         self, code: str, handles: HandleStore | None
@@ -137,8 +135,19 @@ class WorkerThread:
         if self._loop is None:
             loop = asyncio.new_event_loop()
             thread = threading.Thread(
-                target=loop.run_forever, name="commons-python-session", daemon=True
+                target=_run_loop,
+                args=(loop,),
+                name="commons-python-session",
+                daemon=True,
             )
             thread.start()
             self._loop, self._thread = loop, thread
         return self._loop
+
+
+def _run_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Run ``loop`` until it is stopped, then close it, however close() was called."""
+    try:
+        loop.run_forever()
+    finally:
+        loop.close()
