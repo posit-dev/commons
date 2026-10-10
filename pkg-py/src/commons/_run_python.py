@@ -1,11 +1,13 @@
-"""The `run_python` tool: model-written Python run in the agent's sandboxed session.
+"""The `run_python` tool, which runs the model's code in a sandboxed session.
 
-`pkg-r/R/run-r.R` builds R's `run_r`, and the two tools describe themselves
-and shape their results the same way, each in its own language's idiom.
+`pkg-r/R/run-r.R` builds R's `run_r`. The two tools follow one contract for
+what they tell the model and what they return, each in its own language's
+idiom.
 
-The agent registers the async tool, which awaits the session without blocking
-the caller's event loop. chatlas refuses a synchronous `chat()` while any async
-tool is registered, so `Commons.chat()` swaps in the sync tool for the call.
+The agent registers the async version of the tool, which waits for the session
+without blocking the caller's event loop. chatlas refuses a synchronous
+`chat()` while any async tool is registered, so `Commons.chat()` registers the
+sync version for the length of the call.
 """
 
 from __future__ import annotations
@@ -65,16 +67,17 @@ def run_python_description(
     can_plot: bool | None = None,
     can_install: bool | None = None,
 ) -> str:
-    """What `run_python` tells the model it is for.
+    """The description that tells the model what `run_python` does.
 
-    ``tool_names`` are the agent's other registered tools; the preloaded
-    handles are named after whichever of them store results. ``can_plot``
-    and ``can_install`` say whether the session can import matplotlib and
-    pip, and default to asking the interpreter the session runs.
+    ``tool_names`` are the agent's other registered tools. The description
+    lists the results of those that store them as preloaded variables.
+    ``can_plot`` and ``can_install`` say whether the session can import
+    matplotlib and pip. When omitted, they are found by asking the session's
+    interpreter; pip is checked only when the session has network access.
     """
     if can_plot is None:
         can_plot = session_can_import("matplotlib")
-    if can_install is None:
+    if can_install is None and network != "none":
         can_install = session_can_import("pip")
     handle_tools = [name for name in HANDLE_TOOLS if name in tool_names]
     parts = [
@@ -82,6 +85,9 @@ def run_python_description(
             "Run Python code in your sandboxed Python session to analyze results or "
             "render plots. Python code and textual output are visible only to you; "
             "rendered plots are also shown to the user."
+            if can_plot
+            else "Run Python code in your sandboxed Python session to analyze "
+            "results. Python code and its output are visible only to you."
         ),
         (
             "The user cannot access or interact with this session. Never direct them "
@@ -150,13 +156,14 @@ def run_python_description(
 
 @functools.cache
 def session_can_import(module: str) -> bool:
-    """Whether the session's interpreter can find the top-level ``module``.
+    """Whether the session's interpreter can import the top-level ``module``.
 
-    The session runs this interpreter under ``-I``, which leaves out the user
-    site directory, ``PYTHONPATH``, and the current directory, so the answer
-    comes from asking that interpreter the same way, with the session's
-    environment and an empty scratch directory. It is cached, since the
-    interpreter's packages do not change while it runs.
+    The session starts Python in isolated mode (``-I``), which ignores the
+    user's site-packages directory, ``PYTHONPATH``, and the current directory.
+    The check therefore starts the same interpreter the same way, with the
+    session's environment variables and an empty temporary directory. The
+    answer is cached, because the installed packages do not change while the
+    process runs.
     """
     probe = "import importlib.util, sys; sys.exit(importlib.util.find_spec(sys.argv[1]) is None)"
     try:
@@ -183,7 +190,7 @@ def _listed(names: Sequence[str]) -> str:
 def run_python_tools(
     runner: WorkerThread, context: ToolContext, description: str, network: Network
 ) -> tuple[Tool, Tool]:
-    """The async tool the agent registers, and the sync one `chat()` swaps in."""
+    """The async tool the agent registers, and the sync tool `chat()` uses instead."""
 
     def finish(code: str, reply: Result | Error | Failure) -> ContentToolResult:
         result = run_python_result(code, reply)
@@ -224,11 +231,11 @@ def run_python_tools(
 
 
 def run_python_result(code: str, reply: Result | Error | Failure) -> ContentToolResult:
-    """The tool result for one call: the model's view and the reader's.
+    """The tool result for one call: one view for the model, one for the user.
 
-    The model gets what the call wrote, with each plot as an image in the
-    place it was drawn. The reader gets the code with its output, and the
-    plots at their size.
+    The model gets the call's output, with each plot as an image at the point
+    where it was drawn. The user sees the code and its output, followed by the
+    plots.
     """
     runs = _runs(reply)
     plots = [run for run in runs if isinstance(run, Plot)]
@@ -242,11 +249,11 @@ def run_python_result(code: str, reply: Result | Error | Failure) -> ContentTool
 
 
 def _runs(reply: Result | Error | Failure) -> list[str | Plot]:
-    """The reply's output in order, with adjacent text joined into one run.
+    """The reply's output in order, with consecutive text joined into one string.
 
-    Streams are joined as written, so a line split across two writes stays
-    one line. The value a call ended on, or its error, starts a line of its
-    own after everything the call wrote.
+    Text written to stdout and stderr is joined in the order it was written, so
+    a line printed in two parts stays one line. The call's final value, or its
+    error, goes on a new line after all the other output.
     """
     if isinstance(reply, Failure):
         return [f"Error: {reply.message}"]
@@ -272,7 +279,7 @@ def _runs(reply: Result | Error | Failure) -> list[str | Plot]:
 
 
 def _value_text(value: Any) -> str:
-    """The value a call ended on, as a REPL would show it; empty for None."""
+    """The call's final value as the Python REPL shows it; empty for None."""
     if value is None:
         return ""
     if isinstance(value, OpaqueValue):
@@ -339,11 +346,13 @@ _STRING_TOKENS = {
 
 
 def highlight_python(source: str) -> str:
-    """``source`` as escaped HTML, with its tokens wrapped for the stylesheet.
+    """``source`` as escaped HTML, with each token in a span the stylesheet colors.
 
-    Text that does not tokenize as Python is escaped and left plain.
+    Text that Python cannot tokenize is escaped without highlighting.
     """
-    lines = source.splitlines(keepends=True)
+    # Split as tokenize reads, on newlines only, so offsets line up with its
+    # rows even when the text holds a carriage return or a form feed.
+    lines = io.StringIO(source).readlines()
     starts = [0]
     for line in lines:
         starts.append(starts[-1] + len(line))

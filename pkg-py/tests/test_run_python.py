@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import base64
+import gc
+import html
 import importlib.util
+import re
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 import pandas as pd
 import pytest
@@ -249,6 +252,12 @@ def test_text_that_does_not_tokenize_is_escaped_plainly() -> None:
     assert highlight_python("'''<open") == "&#x27;&#x27;&#x27;&lt;open"
 
 
+def test_a_carriage_return_or_form_feed_does_not_shift_the_highlighting() -> None:
+    out = highlight_python('#> 50%\r100%\n# a\x0cb\ng("z")')
+    assert '<span class="hl kwd">g</span>(<span class="hl sng">&quot;z&quot;</span>)' in out
+    assert html.unescape(re.sub(r"<[^>]+>", "", out)) == '#> 50%\r100%\n# a\x0cb\ng("z")'
+
+
 # ---- through an agent -------------------------------------------------------
 
 
@@ -325,3 +334,62 @@ async def test_a_plot_reaches_the_model_as_an_image() -> None:
     last_request = agent.provider.requests[-1]  # type: ignore[attr-defined]
     sent = [content for turn in last_request for content in turn.contents]
     assert any(isinstance(content, ContentImageInline) for content in sent)
+
+
+def test_the_network_argument_reaches_the_description_and_annotations() -> None:
+    agent = Commons(scripted_chat(), data_source(sales=frame()), network="full")
+    tool = run_python_tool(agent)
+    rules = tool.schema["function"]["description"].split("\n\nRules:")[1]
+    assert "The session has network access" in rules
+    assert tool.annotations is not None
+    assert tool.annotations.get("openWorldHint") is True
+
+
+def test_a_network_other_than_none_or_full_is_refused() -> None:
+    with pytest.raises(ValueError):
+        Commons(scripted_chat(), data_source(sales=frame()), network="some")  # type: ignore[arg-type]
+
+
+def test_chat_restores_the_async_tool_when_the_turn_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = Commons(scripted_chat(), data_source(sales=frame()))
+
+    def unavailable(**_: Any) -> NoReturn:
+        raise ConnectionError("provider unavailable")
+
+    monkeypatch.setattr(agent.provider, "chat_perform", unavailable)
+    with pytest.raises(ConnectionError):
+        agent.chat("Hello?", echo="none")
+    assert run_python_tool(agent)._is_async
+
+
+def test_chat_leaves_a_removed_run_python_removed() -> None:
+    agent = Commons(scripted_chat([text("Hi.")]), data_source(sales=frame()))
+    agent.set_tools([tool for tool in agent.get_tools() if tool.name != "run_python"])
+    agent.chat("Hello?", echo="none")
+    assert "run_python" not in {tool.name for tool in agent.get_tools()}
+
+
+def test_the_first_run_python_result_of_a_turn_asks_for_citations() -> None:
+    agent = Commons(
+        scripted_chat([tool_request(code="1 + 1"), text("Done.")]),
+        data_source(sales=frame()),
+    )
+    agent.chat("What is one plus one?", echo="none")
+    run = tool_results(agent)[-1]
+    assert run.value == f"2\n\n{agent._citation_request.reminder}"
+
+
+def test_dropping_the_agent_stops_its_session_thread() -> None:
+    agent = Commons(
+        scripted_chat([tool_request(code="1"), text("Done.")]),
+        data_source(sales=frame()),
+    )
+    agent.chat("Go.", echo="none")
+    thread = agent._python._thread
+    assert thread is not None and thread.is_alive()
+    del agent
+    gc.collect()
+    thread.join(15)
+    assert not thread.is_alive()

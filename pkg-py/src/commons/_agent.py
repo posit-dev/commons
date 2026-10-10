@@ -30,12 +30,12 @@ from ._citations import (
 from ._context_layer import ContextLayer, augment_context_layer
 from ._data_source import DataSource
 from ._definitions import Registry, build_registry
-from ._execution._backend import Network
 from ._execution._driver import Worker
 from ._execution._thread import WorkerThread
 from ._handles import HandleStore
 from ._measures import SemanticLayer, resolve_injections, semantic_layer
 from ._prompt import (
+    EXECUTION_TOOL,
     check_instructions,
     read_instructions,
     render_system_prompt,
@@ -89,13 +89,13 @@ class Commons(Chat[Any, Any]):
     `## Additional instructions` heading at the end of commons' built-in
     system prompt, as a string or the path to a text or Markdown file.
 
-    The agent runs the Python code its model writes in a sandboxed session,
-    which starts on the first call. `network` is whether that session can
-    reach the network: `"none"` (the default) or `"full"`. The session is
-    sandboxed on Linux and macOS. On any other host, local development can
-    opt in to best-effort guardrails by setting the
-    `COMMONS_ALLOW_UNSAFE_FALLBACK` environment variable; these guardrails
-    are not a security boundary.
+    The agent can run Python code that its model writes. The code runs in a
+    separate, sandboxed Python process, which starts the first time the model
+    runs code. `network` sets whether that process can reach the network:
+    `"none"` (the default) or `"full"`. The sandbox works on Linux and macOS.
+    For local development on another system, set the
+    `COMMONS_ALLOW_UNSAFE_FALLBACK` environment variable to run the code with
+    limited checks instead. These checks are not a security boundary.
 
     Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
     an entry of `data_sources` is not a `DataSource`, or if a layer is not
@@ -114,7 +114,7 @@ class Commons(Chat[Any, Any]):
         context_layer: ContextLayer | None = None,
         *,
         instructions: str | None = None,
-        network: Network = "none",
+        network: Literal["none", "full"] = "none",
     ) -> None:
         if not isinstance(client, Chat):
             raise TypeError(
@@ -241,13 +241,16 @@ class Commons(Chat[Any, Any]):
         self._citation_request.reset()
         # chatlas refuses a synchronous chat while an async tool is
         # registered, so the sync run_python stands in for this call.
-        self.register_tool(self._run_python_sync, force=True)
+        swap = any(tool.name == EXECUTION_TOOL for tool in self.get_tools())
+        if swap:
+            self.register_tool(self._run_python_sync, force=True)
         try:
             response = super().chat(
                 *inputs, echo=echo, stream=stream, kwargs=kwargs
             )
         finally:
-            self.register_tool(self._run_python, force=True)
+            if swap:
+                self.register_tool(self._run_python, force=True)
         self._consume_restore_reminder(was_pending)
         return response
 
