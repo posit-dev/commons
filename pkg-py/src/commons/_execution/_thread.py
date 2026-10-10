@@ -113,6 +113,7 @@ class WorkerThread:
     def _submit(
         self, code: str, handles: HandleStore | None
     ) -> concurrent.futures.Future[_Reply] | None:
+        """Queue ``code`` on the worker's loop, or return ``None`` once closed."""
         with self._lock:
             if self._closed:
                 return None
@@ -127,6 +128,7 @@ class WorkerThread:
         return future
 
     def _forget(self, future: concurrent.futures.Future[_Reply]) -> None:
+        """Drop a finished call from the set that ``close()`` cancels."""
         with self._lock:
             self._calls.discard(future)
 

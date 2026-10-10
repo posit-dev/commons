@@ -5,9 +5,9 @@ what they tell the model and what they return, each in its own language's
 idiom.
 
 The agent registers the async version of the tool, which waits for the session
-without blocking the caller's event loop. chatlas refuses a synchronous
-`chat()` while any async tool is registered, so `Commons.chat()` registers the
-sync version for the length of the call.
+without blocking the caller's event loop. Because chatlas refuses a synchronous
+`chat()` while any async tool is registered, `Commons.chat()` dynamically swaps the
+sync version for the length of the call if required.
 """
 
 from __future__ import annotations

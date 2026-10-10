@@ -95,7 +95,8 @@ class Commons(Chat[Any, Any]):
     `"none"` (the default) or `"full"`. The sandbox works on Linux and macOS.
     For local development on another system, set the
     `COMMONS_ALLOW_UNSAFE_FALLBACK` environment variable to run the code with
-    limited checks instead. These checks are not a security boundary.
+    limited checks instead. Warning! These checks are not intended to be a
+    security boundary.
 
     Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
     an entry of `data_sources` is not a `DataSource`, or if a layer is not
@@ -147,7 +148,7 @@ class Commons(Chat[Any, Any]):
             measure_sources=list(semantic_layer.source_text.values()),
         )
 
-        # Share the provider, which carries the chosen model; shallow-copy
+        # Share the provider, which knows the chosen model; shallow-copy
         # the chat kwargs so later changes don't cross between the two.
         super().__init__(
             provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
@@ -186,7 +187,9 @@ class Commons(Chat[Any, Any]):
         )
         tools = build_commons_tools(context)
         self._python = WorkerThread(worker)
-        # The session's process and thread go with the agent.
+        # Close the session's process and thread when the agent is
+        # collected or the interpreter exits. The callback names only the
+        # WorkerThread, so the finalizer never keeps the agent alive.
         weakref.finalize(self, self._python.close)
         self._run_python, self._run_python_sync = run_python_tools(
             self._python,
@@ -239,8 +242,9 @@ class Commons(Chat[Any, Any]):
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
         self._citation_request.reset()
-        # chatlas refuses a synchronous chat while an async tool is
-        # registered, so the sync run_python stands in for this call.
+        # A synchronous chat cannot await an async tool, so chatlas
+        # refuses to run while the async run_python tool is registered.
+        # This workaround swaps in the sync variant of run_python for this call.
         swap = any(tool.name == EXECUTION_TOOL for tool in self.get_tools())
         if swap:
             self.register_tool(self._run_python_sync, force=True)
