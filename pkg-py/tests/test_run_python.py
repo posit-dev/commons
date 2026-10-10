@@ -23,6 +23,7 @@ from commons._execution._protocol import Error, OpaqueValue, Plot, Result, Text
 from commons._provenance import TAG_EXTRA_KEY, Tag
 from commons._run_python import (
     NO_OUTPUT,
+    RESTART_NOTE,
     highlight_python,
     run_python_description,
     run_python_result,
@@ -112,7 +113,7 @@ def test_measure_sources_are_described_only_when_there_are_measures() -> None:
     ("network", "can_install", "rule"),
     [
         ("none", True, "- The session has no network access."),
-        ("full", True, "`sys.executable -m pip install --target`"),
+        ("full", True, "`pip._internal.cli.main.main(["),
         ("full", False, "only packages that are already installed can be imported"),
     ],
 )
@@ -148,6 +149,16 @@ def test_a_module_the_isolated_session_cannot_see_is_not_importable(
     assert not session_can_import("only_on_pythonpath")
 
 
+def test_a_probe_that_fails_to_run_is_asked_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Too short for the interpreter to start, so the probe times out.
+    monkeypatch.setattr("commons._run_python.PROBE_TIMEOUT", 1e-6)
+    assert not session_can_import("email")
+    monkeypatch.undo()
+    assert session_can_import("email")
+
+
 # ---- the result -------------------------------------------------------------
 
 
@@ -167,6 +178,12 @@ def test_a_result_shows_what_was_printed_and_the_value() -> None:
     assert result.extra[TAG_EXTRA_KEY] == Tag.B
     assert display(result)["title"] == "Analyzed data"
     assert display(result)["open"] is False
+
+
+def test_a_restarted_session_is_noted_for_the_model_only() -> None:
+    result = run_python_result("x", Result(id="c1", value=2), restarted=True)
+    assert result.value == f"{RESTART_NOTE}\n2"
+    assert "restarted" not in str(display(result)["html"])
 
 
 def test_a_call_that_shows_nothing_says_so() -> None:
@@ -250,6 +267,11 @@ def test_highlighting_marks_tokens_with_the_stylesheets_classes() -> None:
 
 def test_text_that_does_not_tokenize_is_escaped_plainly() -> None:
     assert highlight_python("'''<open") == "&#x27;&#x27;&#x27;&lt;open"
+
+
+def test_a_carriage_return_before_non_ascii_text_is_escaped_plainly() -> None:
+    # Python 3.12+ tokenize raises UnicodeDecodeError on this input.
+    assert highlight_python("#> 50%\r\u00e9t\u00e9") == "#&gt; 50%\r\u00e9t\u00e9"
 
 
 def test_a_carriage_return_or_form_feed_does_not_shift_the_highlighting() -> None:
@@ -343,6 +365,7 @@ def test_the_network_argument_reaches_the_description_and_annotations() -> None:
     assert "The session has network access" in rules
     assert tool.annotations is not None
     assert tool.annotations.get("openWorldHint") is True
+    assert agent._python._worker._network == "full"
 
 
 def test_a_network_other_than_none_or_full_is_refused() -> None:

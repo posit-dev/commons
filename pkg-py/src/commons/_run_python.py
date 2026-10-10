@@ -13,7 +13,6 @@ sync version for the length of the call if required.
 from __future__ import annotations
 
 import base64
-import functools
 import html
 import io
 import keyword
@@ -54,6 +53,11 @@ __all__ = [
 HANDLE_TOOLS = ("call_measure", "call_metrics", "run_sql")
 
 NO_OUTPUT = "(The code ran but produced no output.)"
+
+RESTART_NOTE = (
+    "(A previous call was cancelled, so the Python session was restarted "
+    "before this call. Session variables were reset.)"
+)
 
 # How long to wait for the session's interpreter to say what it can import.
 PROBE_TIMEOUT = 10.0
@@ -141,10 +145,11 @@ def run_python_description(
         rules.append("The session has no network access.")
     elif can_install:
         rules.append(
-            "The session has network access. To use a package that is not "
-            "installed, run `sys.executable -m pip install --target` with the "
-            "temporary directory through subprocess, then add that directory "
-            "to sys.path."
+            "The session has network access. The sandbox stops subprocesses, so "
+            "to use a package that is not installed, run pip in the session: "
+            "call `pip._internal.cli.main.main(['install', '--no-cache-dir', "
+            "'--target', path, name])` with a path in the temporary directory, "
+            "then add that path to sys.path."
         )
     else:
         rules.append(
@@ -154,17 +159,24 @@ def run_python_description(
     return " ".join(parts) + "\n\nRules:" + "".join(f"\n- {rule}" for rule in rules)
 
 
-@functools.cache
+# Definite answers from the probe, by module. A probe that failed to run is
+# not kept, so a slow first start does not settle the answer for the process.
+_IMPORTABLE: dict[str, bool] = {}
+
+
 def session_can_import(module: str) -> bool:
     """Whether the session's interpreter can import the top-level ``module``.
 
     The session starts Python in isolated mode (``-I``), which ignores the
     user's site-packages directory, ``PYTHONPATH``, and the current directory.
-    The check therefore starts the same interpreter the same way, with the
-    session's environment variables and an empty temporary directory. The
-    answer is cached, because the installed packages do not change while the
-    process runs.
+    The check therefore starts the same interpreter with the same ``-I``
+    isolation, the session's environment variables, and an empty temporary
+    directory, though outside the sandbox. A definite answer is cached,
+    because the installed packages do not change while the process runs; a
+    probe that fails to run counts as no, and is asked again next time.
     """
+    if module in _IMPORTABLE:
+        return _IMPORTABLE[module]
     probe = "import importlib.util, sys; sys.exit(importlib.util.find_spec(sys.argv[1]) is None)"
     try:
         with tempfile.TemporaryDirectory(prefix="commons-probe-") as scratch:
@@ -178,7 +190,8 @@ def session_can_import(module: str) -> bool:
             )
     except (OSError, subprocess.SubprocessError):
         return False
-    return completed.returncode == 0
+    _IMPORTABLE[module] = completed.returncode == 0
+    return _IMPORTABLE[module]
 
 
 def _listed(names: Sequence[str]) -> str:
@@ -193,7 +206,7 @@ def run_python_tools(
     """The async tool the agent registers, and the sync tool `chat()` uses instead."""
 
     def finish(code: str, reply: Result | Error | Failure) -> ContentToolResult:
-        result = run_python_result(code, reply)
+        result = run_python_result(code, reply, restarted=runner.take_restart())
         if context.citation_request is None:
             return result
         return context.citation_request.add_request(result)
@@ -230,17 +243,20 @@ def run_python_tools(
     return build(run_python), build(run_python_sync)
 
 
-def run_python_result(code: str, reply: Result | Error | Failure) -> ContentToolResult:
+def run_python_result(
+    code: str, reply: Result | Error | Failure, *, restarted: bool = False
+) -> ContentToolResult:
     """The tool result for one call: one view for the model, one for the user.
 
     The model gets the call's output, with each plot as an image at the point
     where it was drawn. The user sees the code and its output, followed by the
-    plots.
+    plots. ``restarted`` says a cancelled call restarted the session before
+    this one, and the model is told so before the output.
     """
     runs = _runs(reply)
     plots = [run for run in runs if isinstance(run, Plot)]
     return tool_result(
-        _model_value(runs),
+        _model_value([RESTART_NOTE, *runs] if restarted else runs),
         ProvenanceTag.B,
         title=CODE_ANALYSIS.settled,
         html=_display_html(code, runs),
@@ -364,7 +380,9 @@ def highlight_python(source: str) -> str:
     spans: list[tuple[int, int, str]] = []
     try:
         tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
-    except (tokenize.TokenError, SyntaxError):
+    except (tokenize.TokenError, SyntaxError, UnicodeDecodeError):
+        # Python 3.12+ raises UnicodeDecodeError for a lone carriage return
+        # before non-ASCII text.
         return html.escape(source)
     for index, token in enumerate(tokens):
         kind = _token_class(
