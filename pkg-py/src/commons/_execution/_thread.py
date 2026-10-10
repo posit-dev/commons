@@ -41,9 +41,6 @@ class WorkerThread:
         self._lock = threading.Lock()
         self._closed = False
         self._calls: set[concurrent.futures.Future[_Reply]] = set()
-        # A cancelled call shuts the worker down, so the next call starts a
-        # fresh session; take_restart() reports that once.
-        self._restarted = False
 
     async def run(self, code: str, handles: HandleStore | None = None) -> _Reply:
         """Run ``code`` without blocking the caller's event loop.
@@ -60,7 +57,6 @@ class WorkerThread:
             task = asyncio.current_task()
             if self._closed and future.cancelled() and not (task and task.cancelling()):
                 return _CLOSED
-            self._restarted = True
             raise
 
     def run_sync(self, code: str, handles: HandleStore | None = None) -> _Reply:
@@ -75,19 +71,16 @@ class WorkerThread:
         except concurrent.futures.CancelledError:
             if self._closed:
                 return _CLOSED
-            self._restarted = True
             raise
         except BaseException:
             # Ctrl-C while waiting stops the call, as cancelling an async
             # caller does, rather than leaving it to run out its timeout.
             future.cancel()
-            self._restarted = True
             raise
 
     def take_restart(self) -> bool:
         """Whether a cancelled call restarted the session since the last ask."""
-        restarted, self._restarted = self._restarted, False
-        return restarted
+        return self._worker.take_restart()
 
     def close(self) -> None:
         """Close the worker, then stop the loop and its thread.

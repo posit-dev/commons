@@ -84,14 +84,14 @@ def test_ctrl_c_while_waiting_stops_the_call() -> None:
         interrupt.start()
         with pytest.raises(KeyboardInterrupt):
             worker_thread.run_sync("import time; time.sleep(60)")
-        assert worker_thread.take_restart()
-        assert not worker_thread.take_restart()
         started = time.monotonic()
         # Without the cancel, this call would queue behind the sleep.
         reply = worker_thread.run_sync("1 + 1")
         assert time.monotonic() - started < 15
         assert isinstance(reply, Result)
         assert reply.value == 2
+        assert worker_thread.take_restart()
+        assert not worker_thread.take_restart()
     finally:
         # A call that returned early must not leave the signal for a later test.
         interrupt.cancel()
@@ -121,7 +121,6 @@ def test_a_cancelled_caller_cancels_the_call() -> None:
 
     try:
         asyncio.run(cancel_midway())
-        assert worker_thread.take_restart()
         started = time.monotonic()
         # The cancelled call's worker was shut down, so the next one respawns
         # rather than queue behind the sleep.
@@ -129,6 +128,7 @@ def test_a_cancelled_caller_cancels_the_call() -> None:
         assert time.monotonic() - started < 15
         assert isinstance(reply, Result)
         assert reply.value == 2
+        assert worker_thread.take_restart()
     finally:
         worker_thread.close()
 
@@ -197,3 +197,28 @@ def test_a_shutdown_that_raises_still_stops_the_thread_and_closes_the_loop() -> 
         worker_thread.close()
     assert not thread.is_alive()
     assert loop.is_closed()
+
+
+def test_a_call_cancelled_while_it_waits_leaves_the_session_alone() -> None:
+    worker_thread = WorkerThread(Worker(call_timeout=60))
+
+    async def cancel_the_queued_one() -> object:
+        await worker_thread.run("x = 41")
+        running = asyncio.ensure_future(
+            worker_thread.run("import time; time.sleep(2)\nx + 1")
+        )
+        await asyncio.sleep(0.5)
+        queued = asyncio.ensure_future(worker_thread.run("1"))
+        await asyncio.sleep(0.5)
+        queued.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await queued
+        return await running
+
+    try:
+        reply = asyncio.run(cancel_the_queued_one())
+        assert isinstance(reply, Result)
+        assert reply.value == 42
+        assert not worker_thread.take_restart()
+    finally:
+        worker_thread.close()

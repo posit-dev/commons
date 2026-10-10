@@ -98,6 +98,9 @@ class Worker:
         self._last_used = 0.0
         self._lock = asyncio.Lock()
         self._ids = itertools.count(1)
+        # Set when a cancelled call shut the session down; take_restart()
+        # reports it once, so the model learns its variables were reset.
+        self._restarted = False
 
     async def __aenter__(self) -> Self:
         return self
@@ -135,6 +138,15 @@ class Worker:
         finally:
             self._pending -= 1
             self._schedule_reap()
+
+    def take_restart(self) -> bool:
+        """Whether a cancelled call restarted the session since the last ask.
+
+        Only a call cancelled while it ran counts; one cancelled while it
+        waited for the lock left the session as it was.
+        """
+        restarted, self._restarted = self._restarted, False
+        return restarted
 
     async def aclose(self) -> None:
         """Close the worker, cancelling the idle reap.
@@ -203,6 +215,7 @@ class Worker:
             # still running the code, or about to answer into a channel the
             # next call would misread as its own reply. Shut it down before
             # releasing the lock.
+            self._restarted = True
             await self._shutdown()
             raise
         except Exception as exc:  # noqa: BLE001 - any start or write failure fails the call
