@@ -556,7 +556,7 @@ shiny-chat-container
   white-space: normal;
 }
 
-/* ---- run_r display ---------------------------------------------------- */
+/* ---- run_r and run_python display -------------------------------------- */
 
 .commons-run-display {
   display: grid;
