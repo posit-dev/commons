@@ -1403,7 +1403,7 @@ def test_output_keeps_text_and_plots_in_the_order_they_happened():
     assert round_trip(result) == result
 
 
-def test_an_error_carries_the_output_from_before_it():
+def test_an_error_includes_the_output_from_before_it():
     # What was written and drawn before the exception is still worth
     # showing, as in R.
     error = Error(id="c1", message="ValueError: late", output=(out("x\n"), SMALL_PLOT))

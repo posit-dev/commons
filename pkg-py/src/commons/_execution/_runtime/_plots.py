@@ -117,7 +117,7 @@ def flush() -> None:
             _note(
                 call,
                 f"figures {call.figures} onward were dropped; their images "
-                "exceeded the channel's room for plots",
+                "exceeded the channel limit",
             )
             call.full = True
             break

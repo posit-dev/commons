@@ -10,9 +10,19 @@ backend.
 from __future__ import annotations
 
 import _plots  # pyrefly: ignore[missing-import]
+from matplotlib.backend_bases import FigureManagerBase
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 
-FigureCanvas = FigureCanvasAgg
+
+class FigureManager(FigureManagerBase):
+    """Shows a figure the way ``show()`` below does, for ``fig.show()``."""
+
+    def show(self) -> None:
+        _plots.flush()
+
+
+class FigureCanvas(FigureCanvasAgg):
+    manager_class = FigureManager
 
 
 def show(*args: object, **kwargs: object) -> None:

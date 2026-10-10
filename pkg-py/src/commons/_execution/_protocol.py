@@ -98,12 +98,13 @@ _FRAME_WIRE_LIMIT = (STREAM_LIMIT - 2 * _TEXT_CLIP_LIMIT - 4096) * 3 // 4
 
 _TRUNCATION_NOTE = "\n[truncated by commons: the output exceeded the channel limit]"
 
-# Most plots one reply may carry; matplotlib's own warning about open figures
-# starts at the same count.
+# Most plots one reply may include; matplotlib's own warning about open
+# figures starts at the same count.
 PLOT_LIMIT = 20
 
-# Most PNG bytes one reply's plots may total, before base64. A quarter of the
-# line leaves the rest for the value and the printed output.
+# Most PNG bytes one reply's plots may total, before base64. That is a
+# quarter of the line's length, or about a third once base64 adds its
+# overhead, which leaves the rest for the value and the printed output.
 PLOT_BYTES_LIMIT = STREAM_LIMIT // 4
 
 # Longest edge either image of a plot may have. The worker's own images stay
@@ -112,8 +113,8 @@ PLOT_BYTES_LIMIT = STREAM_LIMIT // 4
 PLOT_EDGE_LIMIT = 4096
 
 # Most segments one reply's output may have, plots included. The worker's
-# capture starts a text segment only when the stream changes, and refuses new
-# ones well before this.
+# capture starts a new text segment only when the stream changes or a plot
+# comes between, and refuses new ones well before this.
 OUTPUT_LIMIT = 10_000
 
 _PLOT_DROP_NOTE = "[commons: the plots were dropped; they exceeded the channel limit]\n"
@@ -199,7 +200,11 @@ class Plot:
 
 @dataclass(frozen=True, kw_only=True)
 class Text:
-    """Text the call wrote to one of its streams, as a run of consecutive writes."""
+    """Text written to one stream, as a run of consecutive writes.
+
+    Most of it is what the call printed. The worker's own notes, such as
+    one saying a figure could not be drawn, are ``stderr`` text too.
+    """
 
     stream: Literal["stdout", "stderr"]
     text: str
@@ -242,7 +247,8 @@ class Result:
 class Error:
     """Sent by the worker to the driver: the code raised, and this is what it said.
 
-    ``output`` is what the code wrote and drew before it raised.
+    ``output`` is what the code wrote and drew before it raised. An
+    interrupted call is reported with an empty ``output``.
     """
 
     id: str
@@ -879,8 +885,8 @@ def _arrow_refusals(pyarrow: Any) -> tuple[type[BaseException], ...]:
 def encode_message(message: Message) -> bytes:
     """Render ``message`` as the single line that contains it.
 
-    Plots past ``PLOT_BYTES_LIMIT`` are dropped with a note before anything
-    is encoded. A message that would still exceed ``STREAM_LIMIT`` is
+    When the plots total more than ``PLOT_BYTES_LIMIT``, all of them are
+    dropped, with a note, before anything is encoded. A message that would still exceed ``STREAM_LIMIT`` is
     shrunk: text is clipped, then plots are dropped with a note, then
     values are replaced by their reprs. Raises ``ProtocolError`` when
     nothing is left to shrink (a ``Call`` with megabytes of code, say),
@@ -964,6 +970,10 @@ def _segment_body(segment: Segment) -> dict[str, str]:
                 "png": base64.b64encode(segment.png).decode("ascii"),
                 "display_png": base64.b64encode(segment.display_png).decode("ascii"),
             }
+        case _:
+            raise ProtocolError(
+                f"not an output segment: {type(segment).__name__}"
+            )
 
 
 def _shrink_text(message: Message) -> Message:

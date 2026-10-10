@@ -478,3 +478,84 @@ async def test_a_note_naming_an_unrepresentable_exception_is_bounded():
         reply = await worker.run(code)
         assert isinstance(reply, Result), reply
         assert len(printed(reply, "stderr")) < 1000
+
+
+async def test_text_written_while_the_last_figures_are_drawn_is_kept():
+    # The figures still open when the code finishes are drawn while output
+    # is still captured, so a warning raised in a draw reaches the reply.
+    code = """
+import matplotlib.pyplot as plt
+from matplotlib.artist import Artist
+
+class Chatty(Artist):
+    def draw(self, renderer):
+        print("drawing now")
+
+plt.figure().add_artist(Chatty())
+print("code done")
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        # Each figure is drawn twice, once for each of its images.
+        assert printed(reply) == "code done\n" + "drawing now\n" * 2
+        assert len(plots(reply)) == 1
+
+
+async def test_fig_show_places_the_figure_like_plt_show():
+    code = """
+import matplotlib.pyplot as plt
+print("before")
+fig, ax = plt.subplots()
+ax.plot([1, 2])
+fig.show()
+print("after")
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert shape(reply) == ["before\n", "plot", "after\n"]
+
+
+async def test_switching_to_agg_still_returns_the_figure_quietly():
+    # Model code often selects Agg itself; show() then cannot place the
+    # figure, but it still comes back, with no warning to mislead the model.
+    code = """
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+plt.plot([1, 2])
+plt.show()
+print("after")
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        assert shape(reply) == ["after\n", "plot"]
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "for _ in range(25):\n    t.insert(plot)",
+        "t._entries.extend([['stdout', ['x']], ['stderr', ['y']]] * 6000)",
+    ],
+    ids=["too-many-plots", "too-many-segments"],
+)
+async def test_a_tampered_transcript_still_gives_a_reply_the_driver_accepts(tamper):
+    code = f"""
+import sys
+import matplotlib.pyplot as plt
+plt.plot([1, 2])
+plt.show()
+t = sys.stdout._transcript
+plot = [body for kind, body in t.entries() if kind == "item"][0]
+{tamper}
+x = 41
+"""
+    async with make_worker() as worker:
+        reply = await worker.run(code)
+        assert isinstance(reply, Result), reply
+        follow_up = await worker.run("x + 1")
+        assert isinstance(follow_up, Result)
+        assert follow_up.value == 42
