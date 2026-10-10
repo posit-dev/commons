@@ -24,6 +24,7 @@ from ._rows import MAX_MARKDOWN_ROWS, frame_rows, render_value
 _URL = re.compile(r"https?://", re.IGNORECASE)
 
 __all__ = [
+    "CODE_ANALYSIS",
     "CONTEXT_SEARCH",
     "DATA_RETRIEVAL",
     "DISPLAY_EXTRA_KEY",
@@ -60,6 +61,7 @@ TRUSTED_CALL = Title("Running a trusted calculation", "Ran a trusted calculation
 CONTEXT_SEARCH = Title("Searching context", "Searched context")
 TABLE_INSPECTION = Title("Inspecting a table", "Inspected a table")
 DATA_RETRIEVAL = Title("Retrieving data", "Retrieved data")
+CODE_ANALYSIS = Title("Analyzing data", "Analyzed data")
 
 
 def tool_display(
