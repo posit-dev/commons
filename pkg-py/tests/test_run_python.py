@@ -113,7 +113,7 @@ def test_measure_sources_are_described_only_when_there_are_measures() -> None:
     ("network", "can_install", "rule"),
     [
         ("none", True, "- The session has no network access."),
-        ("full", True, "`pip._internal.cli.main.main(["),
+        ("full", True, "`from pip._internal.cli.main import main`"),
         ("full", False, "only packages that are already installed can be imported"),
     ],
 )

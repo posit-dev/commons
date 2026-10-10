@@ -147,9 +147,10 @@ def run_python_description(
         rules.append(
             "The session has network access. The sandbox stops subprocesses, so "
             "to use a package that is not installed, run pip in the session: "
-            "call `pip._internal.cli.main.main(['install', '--no-cache-dir', "
-            "'--target', path, name])` with a path in the temporary directory, "
-            "then add that path to sys.path."
+            "`from pip._internal.cli.main import main`, then "
+            "`main(['install', '--no-cache-dir', '--target', path, name])` "
+            "with `path` a directory under `tempfile.gettempdir()`, then "
+            "`sys.path.insert(0, path)`."
         )
     else:
         rules.append(
