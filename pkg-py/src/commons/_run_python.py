@@ -113,8 +113,10 @@ def run_python_description(
             "calls for readability."
         ),
         (
-            "Create at most one matplotlib figure per call and leave it open "
-            "rather than saving it."
+            "Create at most one matplotlib figure per call. Draw it with pyplot "
+            "and do not call savefig, since a saved file reaches neither you nor "
+            "the user. The figure appears where you call plt.show(), or after "
+            "the call's text if you do not."
             if can_plot
             else "matplotlib is not installed, so the session cannot draw plots."
         ),
