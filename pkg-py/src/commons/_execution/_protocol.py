@@ -877,15 +877,14 @@ def _arrow_refusals(pyarrow: Any) -> tuple[type[BaseException], ...]:
 
 
 def encode_message(message: Message) -> bytes:
-    """Render ``message`` as the single line that carries it.
+    """Render ``message`` as the single line that contains it.
 
     Plots past ``PLOT_BYTES_LIMIT`` are dropped with a note before anything
-    is encoded. A message that would still exceed ``STREAM_LIMIT`` is shrunk:
-    text is clipped, then plots are dropped with a note, then values are
-    replaced by their reprs. Raises
-    ``ProtocolError`` when nothing is left to shrink — a ``Call`` carrying
-    megabytes of code, say — because a line no reader can consume would
-    wedge the channel.
+    is encoded. A message that would still exceed ``STREAM_LIMIT`` is
+    shrunk: text is clipped, then plots are dropped with a note, then
+    values are replaced by their reprs. Raises ``ProtocolError`` when
+    nothing is left to shrink (a ``Call`` with megabytes of code, say),
+    because a line no reader can consume would block the channel.
     """
     if _plot_bytes(message) > PLOT_BYTES_LIMIT:
         # Dropped before encoding, so oversized plots are never copied into
@@ -955,7 +954,7 @@ def _message_body(message: Message) -> dict[str, Any]:
 
 
 def _segment_body(segment: Segment) -> dict[str, str]:
-    """The JSON object for one output segment, a plot's images in base64."""
+    """The JSON object for one output segment, with a plot's images in base64."""
     match segment:
         case Text():
             return {"type": "text", "stream": segment.stream, "text": segment.text}
@@ -986,7 +985,7 @@ def _shrink_text(message: Message) -> Message:
 def _clip_output(output: tuple[Segment, ...]) -> tuple[Segment, ...]:
     """``output`` with each stream's text clipped to ``_TEXT_CLIP_LIMIT`` in total.
 
-    The stream's text is cut where it crosses the limit, and its later
+    The stream's text is cut where it exceeds the limit, and its later
     segments are dropped. Plots and the note that plots were dropped are
     kept where they are.
     """
@@ -1170,7 +1169,7 @@ def png_size(data: bytes) -> tuple[int, int]:
     Raises ``ValueError`` unless ``data`` starts with the PNG signature and a
     well-formed IHDR chunk whose edges are between 1 and ``PLOT_EDGE_LIMIT``.
     The pixel data is not decoded; the bound on the declared size is what
-    keeps a later decode from allocating more than a plot's worth.
+    keeps a later decode from allocating more memory than a plot should need.
     """
     if (
         len(data) < 33
@@ -1190,9 +1189,9 @@ def png_size(data: bytes) -> tuple[int, int]:
 def _decode_output(body: dict[str, Any], kind: str) -> tuple[Segment, ...]:
     """The ``output`` of a result or error body, each segment checked.
 
-    The segment, plot, and plot-byte bounds are the worker's own, enforced
-    again here because the worker runs model code and cannot be relied on
-    to keep them.
+    The worker enforces these same bounds on segments, plots, and plot
+    bytes. They are enforced again here because the worker runs model code
+    and cannot be relied on to enforce them.
     """
     raw = body.get("output", [])
     if not isinstance(raw, list) or len(raw) > OUTPUT_LIMIT:

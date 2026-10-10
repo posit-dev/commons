@@ -72,7 +72,8 @@ class Transcript:
     that model code allocates directly is bounded by the worker's rlimits.
 
     ``insert`` places an item (a plot) between the runs, and ``note`` adds
-    the worker's own text past both bounds, so a note is never lost.
+    the worker's own text without applying either bound, so a note is never
+    lost.
     """
 
     def __init__(self) -> None:
@@ -99,7 +100,7 @@ class Transcript:
         self._truncated.add(stream)
 
     def note(self, stream: str, text: str) -> None:
-        """Record the worker's own ``text`` on ``stream``, past both bounds."""
+        """Record the worker's own ``text`` on ``stream``, without applying the bounds."""
         self._append(stream, text, bounded=False)
 
     def insert(self, item: Any) -> None:
@@ -228,7 +229,8 @@ def run(
 
     The capture replaces ``sys.stdout``, ``sys.stderr``, and their
     ``__stdout__``/``__stderr__`` names with views onto ``transcript``,
-    which the caller passes when it inserts into the output itself. Writes
+    which the caller passes when it will insert items of its own (such as
+    plots) into the output. Writes
     to file descriptor 1, or through a stream reference saved before the
     call, still reach the real stream; the worker loop owns that channel and
     guards it.

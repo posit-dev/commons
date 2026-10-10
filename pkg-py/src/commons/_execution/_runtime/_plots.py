@@ -39,7 +39,8 @@ _DESCRIPTION_LIMIT = 500
 
 
 class _Call:
-    """The plot state of the call in flight: where plots go, and what they used."""
+    """The plot state of the running call: where its plots go, and how much of
+    the plot limits it has used."""
 
     def __init__(self, transcript: Any) -> None:
         self.transcript = transcript
@@ -59,7 +60,7 @@ def begin(transcript: Any) -> None:
 
 
 def end() -> None:
-    """Close whatever figures remain, so none carries into the next call."""
+    """Close whatever figures remain, so none survives into the next call."""
     global _call
     _call = None
     _close_all()
@@ -70,8 +71,8 @@ def flush() -> None:
 
     Model code can run inside ``savefig`` (an artist's ``draw``) and can
     replace pyplot's own functions, so no failure here may escape: a broken
-    figure costs that figure, and a broken pyplot costs the plots, never the
-    session. Each failure, and the point where the call ran past
+    figure loses only that figure, and a broken pyplot loses the plots, never
+    the session. Each failure, and the point where the call ran past
     ``PLOT_LIMIT`` or ``PLOT_BYTES_LIMIT``, is noted on stderr where it
     happened. ``KeyboardInterrupt`` propagates; the worker then discards the
     figures.
@@ -158,7 +159,7 @@ def _destroy_all() -> None:
 
 
 def _describe(exc: BaseException) -> str:
-    """``exc``'s repr, or its type's name when model code made it fail, clipped."""
+    """``exc``'s repr, or its type's name when model code made that fail, truncated."""
     try:
         text = str(repr(exc))
     except KeyboardInterrupt:
@@ -174,11 +175,12 @@ def _describe(exc: BaseException) -> str:
 
 
 def _render(figure: Any) -> _protocol.Plot:
-    """``figure`` as a model PNG at its own size, scaled down to fit, and a display PNG.
+    """Render ``figure`` as a pair of PNGs, one for the model and one for display.
 
-    Both images are checked before they are kept: model code can replace
-    ``savefig``, and a reply carrying something that is not a plot would
-    cost the session rather than the figure.
+    The model PNG is saved at the figure's own size, scaled down to fit the
+    model's limit. Both PNGs are validated before they are returned: model
+    code can replace ``savefig``, and returning something that is not a
+    valid plot would break the session, not just that figure.
     """
     width, height = figure.get_size_inches()
     dpi = min(float(figure.dpi), _MODEL_LONG_EDGE / max(width, height))
