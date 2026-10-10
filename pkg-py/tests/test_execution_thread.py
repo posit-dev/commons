@@ -157,3 +157,20 @@ def test_an_async_call_running_when_the_thread_closes_is_told_it_closed() -> Non
         return await asyncio.wait_for(call, 10)
 
     assert asyncio.run(caller()) == Failure(message="the Python session is closed.")
+
+
+class FailingClose(Worker):
+    async def aclose(self) -> None:
+        await super().aclose()
+        raise OSError("shutdown failed")
+
+
+def test_a_shutdown_that_raises_still_stops_the_thread_and_closes_the_loop() -> None:
+    worker_thread = WorkerThread(FailingClose())
+    worker_thread.run_sync("1")
+    loop, thread = worker_thread._loop, worker_thread._thread
+    assert loop is not None and thread is not None
+    with pytest.raises(OSError, match="shutdown failed"):
+        worker_thread.close()
+    assert not thread.is_alive()
+    assert loop.is_closed()
