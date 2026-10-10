@@ -115,8 +115,8 @@ def run_python_description(
         (
             "Create at most one matplotlib figure per call. Draw it with pyplot "
             "and do not call savefig, since a saved file reaches neither you nor "
-            "the user. The figure appears where you call plt.show(), or after "
-            "the call's text if you do not."
+            "the user. The figure appears where you call plt.show() or "
+            "fig.show(), or after the call's text if you call neither."
             if can_plot
             else "matplotlib is not installed, so the session cannot draw plots."
         ),
