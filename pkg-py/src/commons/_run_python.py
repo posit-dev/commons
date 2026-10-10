@@ -31,7 +31,7 @@ from ._display import CODE_ANALYSIS, visible_result_note
 from ._execution._backend import Network
 from ._execution._driver import Failure
 from ._execution._env import worker_env
-from ._execution._protocol import Error, OpaqueValue, Plot, Result
+from ._execution._protocol import Error, OpaqueValue, Plot, Result, Text
 from ._execution._sandbox import needs_single_thread
 from ._execution._thread import WorkerThread
 from ._frames import describe_frame, is_frame
@@ -224,33 +224,49 @@ def run_python_tools(
 def run_python_result(code: str, reply: Result | Error | Failure) -> ContentToolResult:
     """The tool result for one call: the model's view and the reader's.
 
-    The model gets the text the call produced and each plot as an image.
-    The reader gets the code with its output, and the plots at their size.
+    The model gets what the call wrote, with each plot as an image in the
+    place it was drawn. The reader gets the code with its output, and the
+    plots at their size.
     """
-    plots: tuple[Plot, ...] = ()
-    if isinstance(reply, Failure):
-        texts = [f"Error: {reply.message}"]
-    elif isinstance(reply, Error):
-        texts = [reply.traceback.strip() or f"Error: {reply.message}"]
-        plots = reply.plots
-    else:
-        texts = [
-            text
-            for text in (
-                reply.stdout.rstrip("\n"),
-                reply.stderr.rstrip("\n"),
-                _value_text(reply.value),
-            )
-            if text
-        ]
-        plots = reply.plots
+    runs = _runs(reply)
+    plots = [run for run in runs if isinstance(run, Plot)]
     return tool_result(
-        _model_value(texts, plots),
+        _model_value(runs),
         ProvenanceTag.B,
         title=CODE_ANALYSIS.settled,
-        html=_display_html(code, texts, plots),
+        html=_display_html(code, runs),
         open=bool(plots),
     )
+
+
+def _runs(reply: Result | Error | Failure) -> list[str | Plot]:
+    """The reply's output in order, with adjacent text joined into one run.
+
+    Streams are joined as written, so a line split across two writes stays
+    one line. The value a call ended on, or its error, starts a line of its
+    own after everything the call wrote.
+    """
+    if isinstance(reply, Failure):
+        return [f"Error: {reply.message}"]
+    if isinstance(reply, Error):
+        last = reply.traceback.strip() or f"Error: {reply.message}"
+    else:
+        last = _value_text(reply.value)
+    runs: list[str | Plot] = []
+    text = ""
+    for segment in reply.output:
+        if isinstance(segment, Text):
+            text += segment.text
+            continue
+        if text.strip("\n"):
+            runs.append(text.rstrip("\n"))
+        text = ""
+        runs.append(segment)
+    if last:
+        text += ("\n" if text and not text.endswith("\n") else "") + last
+    if text.strip("\n"):
+        runs.append(text.rstrip("\n"))
+    return runs
 
 
 def _value_text(value: Any) -> str:
@@ -265,24 +281,27 @@ def _value_text(value: Any) -> str:
     return repr(value)
 
 
-def _model_value(texts: list[str], plots: tuple[Plot, ...]) -> Any:
-    text = "\n".join(texts)
-    if not plots:
-        return text or NO_OUTPUT
-    parts: list[Any] = [ContentText(text=text)] if text else []
-    parts.extend(
+def _model_value(runs: list[str | Plot]) -> Any:
+    if not any(isinstance(run, Plot) for run in runs):
+        return "\n".join(run for run in runs if isinstance(run, str)) or NO_OUTPUT
+    parts: list[Any] = [
         ContentImageInline(
             image_content_type="image/png",
-            data=base64.b64encode(plot.png).decode("ascii"),
+            data=base64.b64encode(run.png).decode("ascii"),
         )
-        for plot in plots
-    )
+        if isinstance(run, Plot)
+        else ContentText(text=run)
+        for run in runs
+    ]
     parts.append(ContentText(text=visible_result_note("plot")))
     return parts
 
 
-def _display_html(code: str, texts: list[str], plots: tuple[Plot, ...]) -> Tag:
-    output = [f"#> {line}" for text in texts for line in text.split("\n")]
+def _display_html(code: str, runs: list[str | Plot]) -> Tag:
+    output = [
+        f"#> {line}" for run in runs if isinstance(run, str) for line in run.split("\n")
+    ]
+    plots = [run for run in runs if isinstance(run, Plot)]
     block: Tag = tags.pre(
         tags.code(
             HTML(highlight_python("\n".join([code, *output]))),

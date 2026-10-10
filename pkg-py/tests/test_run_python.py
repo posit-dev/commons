@@ -16,7 +16,7 @@ from commons import Injected, data_source, measure, semantic_layer
 from commons._agent import Commons
 from commons._display import DISPLAY_EXTRA_KEY
 from commons._execution._driver import Failure
-from commons._execution._protocol import Error, OpaqueValue, Plot, Result
+from commons._execution._protocol import Error, OpaqueValue, Plot, Result, Text
 from commons._provenance import TAG_EXTRA_KEY, Tag
 from commons._run_python import (
     NO_OUTPUT,
@@ -149,10 +149,17 @@ def test_a_module_the_isolated_session_cannot_see_is_not_importable(
 
 
 def test_a_result_shows_what_was_printed_and_the_value() -> None:
-    result = run_python_result(
-        "print('hi')\n1 + 1", Result(id="c1", value=2, stdout="hi\n", stderr="warn\n")
+    output = (
+        Text(stream="stdout", text="hi\n"),
+        Text(stream="stderr", text="warn\n"),
+        Text(stream="stdout", text="partial"),
+        Text(stream="stdout", text=" line\n"),
     )
-    assert result.value == "hi\nwarn\n2"
+    result = run_python_result(
+        "print('hi')\n1 + 1", Result(id="c1", value=2, output=output)
+    )
+    # Streams interleave as written; the value starts its own line.
+    assert result.value == "hi\nwarn\npartial line\n2"
     assert result.extra is not None
     assert result.extra[TAG_EXTRA_KEY] == Tag.B
     assert display(result)["title"] == "Analyzed data"
@@ -177,8 +184,12 @@ def test_an_error_shows_the_traceback_and_a_failure_its_message() -> None:
         id="c1",
         message="NameError: name 'y' is not defined",
         traceback="Traceback...\nNameError",
+        output=(Text(stream="stdout", text="got this far"),),
     )
-    assert run_python_result("y", error).value == "Traceback...\nNameError"
+    # What ran before the error is kept, so the model sees how far it got.
+    assert run_python_result("y", error).value == (
+        "got this far\nTraceback...\nNameError"
+    )
     failure = run_python_result("1", Failure(message="the Python session crashed."))
     assert failure.value == "Error: the Python session crashed."
     assert failure.extra is not None
@@ -186,15 +197,24 @@ def test_an_error_shows_the_traceback_and_a_failure_its_message() -> None:
 
 
 def test_plots_reach_the_model_as_images_and_the_reader_at_their_size() -> None:
-    result = run_python_result(
-        "fig", Result(id="c1", stdout="drawn\n", plots=(plot(),))
+    output = (
+        Text(stream="stdout", text="before\n"),
+        plot(),
+        Text(stream="stdout", text="after\n"),
     )
+    result = run_python_result("fig", Result(id="c1", value=3, output=output))
     parts = result.value
     assert isinstance(parts, list)
-    assert isinstance(parts[0], ContentText) and parts[0].text == "drawn"
-    image = parts[1]
-    assert isinstance(image, ContentImageInline)
-    assert base64.b64decode(image.data) == plot().png
+    # The plot keeps its place between the text written before and after it.
+    assert [type(part) for part in parts] == [
+        ContentText,
+        ContentImageInline,
+        ContentText,
+        ContentText,
+    ]
+    assert parts[0].text == "before"
+    assert base64.b64decode(parts[1].data) == plot().png
+    assert parts[2].text == "after\n3"
     assert "already visible to the user" in parts[-1].text
     shown = display(result)
     assert shown["open"] is True
