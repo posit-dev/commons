@@ -364,6 +364,9 @@ def test_an_agent_registers_run_python_with_the_measure_source_note() -> None:
 
 
 def test_chat_runs_code_against_a_preloaded_handle() -> None:
+    dated = frame().assign(
+        month=pd.to_datetime(["2024-01-01", "2024-02-01", "2024-03-01"]).date
+    )
     agent = Commons(
         scripted_chat(
             [
@@ -372,15 +375,19 @@ def test_chat_runs_code_against_a_preloaded_handle() -> None:
                         id="q", name="run_sql", arguments={"sql": "SELECT * FROM sales"}
                     )
                 ],
-                tool_request(code="sum(row['revenue'] for row in r1)"),
+                tool_request(
+                    code="f\"{type(r1).__name__} {r1['revenue'].sum()} "
+                    "{r1['month'].min()}\""
+                ),
                 text("Done."),
             ]
         ),
-        data_source(sales=frame()),
+        data_source(sales=dated),
     )
     agent.chat("Total revenue?", echo="none")
     run = tool_results(agent)[-1]
-    assert run.value.startswith("1700.0")
+    # A date column would leave a list of rows unable to cross as data.
+    assert run.value == "'DataFrame 1700.0 2024-01-01'"
     # The async tool is back in place for stream_async.
     assert run_python_tool(agent)._is_async
 

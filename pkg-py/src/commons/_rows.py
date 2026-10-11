@@ -17,13 +17,20 @@ reads that as readily as kable's `&#124;`.
 
 from __future__ import annotations
 
+import importlib
 import re
 from decimal import Decimal
 from typing import Any
 
 from ._sample_summary import _format_signif
 
-__all__ = ["MAX_MARKDOWN_ROWS", "frame_rows", "render_value", "rows_to_markdown"]
+__all__ = [
+    "MAX_MARKDOWN_ROWS",
+    "frame_rows",
+    "render_value",
+    "rows_frame",
+    "rows_to_markdown",
+]
 
 # Enough rows to reason over, few enough that one query cannot crowd the
 # conversation out of its context window. The handle store keeps the rest.
@@ -92,3 +99,27 @@ def frame_rows(frame: Any) -> list[dict[str, Any]] | None:
     else:
         return None
     return rows if isinstance(rows, list) else None
+
+
+def rows_frame(rows: list[dict[str, Any]]) -> Any:
+    """The rows as a data frame, or unchanged when no frame library can hold them.
+
+    A frame crosses into the Python session with its column types, dates
+    included, where a list of mappings holding a date would arrive only as
+    text. pandas is tried first, since it is what code most often expects,
+    then polars, then a pyarrow Table, which commons always has.
+    """
+    for library in ("pandas", "polars"):
+        try:
+            module = importlib.import_module(library)
+        except ImportError:
+            continue
+        try:
+            return module.DataFrame(rows)
+        except Exception:  # noqa: BLE001 - a column the library refuses keeps the rows
+            return rows
+    pyarrow = importlib.import_module("pyarrow")
+    try:
+        return pyarrow.Table.from_pylist(rows)
+    except (pyarrow.ArrowInvalid, pyarrow.ArrowTypeError):
+        return rows

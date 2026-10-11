@@ -827,7 +827,7 @@ def _run_sql(context: ToolContext) -> Tool:
             for part in (
                 rows_to_markdown(rows),
                 applied_text(applied),
-                context.handles.register(rows),
+                context.handles.register_rows(rows),
                 *_first_touch_entries(resolved, expanded, label, context.first_touch),
             )
             if part
