@@ -269,9 +269,11 @@ def test_text_that_does_not_tokenize_is_escaped_plainly() -> None:
     assert highlight_python("'''<open") == "&#x27;&#x27;&#x27;&lt;open"
 
 
-def test_a_carriage_return_before_non_ascii_text_is_escaped_plainly() -> None:
-    # Python 3.12+ tokenize raises UnicodeDecodeError on this input.
-    assert highlight_python("#> 50%\r\u00e9t\u00e9") == "#&gt; 50%\r\u00e9t\u00e9"
+def test_a_carriage_return_before_non_ascii_text_keeps_its_text() -> None:
+    # Python 3.12+ tokenize raises UnicodeDecodeError on this input, and
+    # earlier versions highlight it, so only the text is the same everywhere.
+    source = "#> 50%\r\u00e9t\u00e9"
+    assert html.unescape(re.sub(r"<[^>]+>", "", highlight_python(source))) == source
 
 
 def test_a_carriage_return_or_form_feed_does_not_shift_the_highlighting() -> None:
