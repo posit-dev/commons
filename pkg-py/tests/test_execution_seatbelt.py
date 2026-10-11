@@ -223,7 +223,7 @@ def run_sandboxed(
     """
     script = "\n".join(
         [
-            "import json, os, pathlib, socket, sys",
+            "import json, os, pathlib, socket, subprocess, sys",
             f"sys.path.insert(0, {RUNTIME_DIR!r})",
             "from _seatbelt import engage_seatbelt",
             (
@@ -390,3 +390,39 @@ def test_a_write_with_no_write_roots_is_denied(tmp_path) -> None:
 
     assert result == "PermissionError"
     assert not target.exists()
+
+
+def test_the_root_directory_is_readable_for_starting_processes() -> None:
+    profile = seatbelt_profile([], [])
+    assert profile.index("(deny file-read*)") < profile.index(
+        '(allow file-read-data (literal "/"))'
+    )
+
+
+@darwin_only
+def test_a_child_process_runs_under_the_sandbox(tmp_path) -> None:
+    result = run_sandboxed(
+        "done = subprocess.run(['/bin/echo', 'hi'], capture_output=True, text=True)\n"
+        "result = [done.returncode, done.stdout]",
+        read_roots=[str(tmp_path)],
+        write_roots=[str(tmp_path)],
+    )
+    assert result == [0, "hi\n"]
+
+
+@darwin_only
+def test_a_child_process_inherits_the_sandbox(tmp_path) -> None:
+    work = tmp_path / "work"
+    work.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("classified")
+
+    result = run_sandboxed(
+        f"done = subprocess.run(['/bin/cat', {str(secret)!r}], capture_output=True, text=True)\n"
+        "result = [done.returncode, done.stdout]",
+        read_roots=[str(work)],
+        write_roots=[str(work)],
+    )
+
+    assert result[0] != 0
+    assert result[1] == ""

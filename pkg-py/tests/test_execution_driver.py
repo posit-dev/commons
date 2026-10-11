@@ -107,6 +107,9 @@ def group_gone(pid: int):
             os.killpg(pid, 0)
         except ProcessLookupError:
             return True
+        except PermissionError:
+            # macOS answers EPERM while the group's last members are exiting.
+            return False
         return False
 
     return check

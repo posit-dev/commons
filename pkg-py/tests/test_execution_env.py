@@ -138,10 +138,22 @@ def test_the_worker_keeps_what_it_needs_to_run(tmp_path, monkeypatch) -> None:
     assert env["DYLD_LIBRARY_PATH"] == "/opt/lib"
 
 
+def test_matplotlib_uses_its_bundled_fonts_on_macos(tmp_path, monkeypatch) -> None:
+    # Listing the system's fonts runs system_profiler on macOS, which takes
+    # seconds on every session's first plot. Elsewhere it is quick, and the
+    # system's fonts stay available.
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert worker_env(str(tmp_path))["MPL_IGNORE_SYSTEM_FONTS"] == "1"
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert "MPL_IGNORE_SYSTEM_FONTS" not in worker_env(str(tmp_path))
+
+
 def test_variables_missing_from_the_parent_are_omitted(tmp_path, monkeypatch) -> None:
     # A variable the parent does not have is left out, not replaced with a
     # placeholder: the worker must not gain a value the parent never held.
     monkeypatch.setattr(os, "environ", {})
+    # On macOS the worker also gets a matplotlib setting commons chooses.
+    monkeypatch.setattr(sys, "platform", "linux")
 
     env = worker_env(str(tmp_path))
 

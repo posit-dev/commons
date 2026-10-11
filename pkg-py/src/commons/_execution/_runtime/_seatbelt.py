@@ -98,6 +98,10 @@ def seatbelt_profile(
         # comes after the deny, so with no roots the rule is omitted.
         lines.append("(allow file-read*" + _subpaths(grantable) + ")")
     lines.append("(allow file-read-metadata)")
+    # A new process reads the root directory while it starts, and aborts
+    # if it cannot. This exposes the names at the top level of the disk,
+    # not the contents of anything under them.
+    lines.append('(allow file-read-data (literal "/"))')
     return "\n".join(lines) + "\n"
 
 

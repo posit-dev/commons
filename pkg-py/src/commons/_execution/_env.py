@@ -42,6 +42,11 @@ def worker_env(scratch_dir: str, *, single_thread: bool = False) -> dict[str, st
     # of the user's dot files.
     env["HOME"] = scratch_dir
     env["TMPDIR"] = scratch_dir
+    if sys.platform == "darwin":
+        # On macOS, matplotlib lists the system's fonts by running
+        # system_profiler, which takes seconds on each session's first plot.
+        # Its bundled fonts are enough for a chart.
+        env["MPL_IGNORE_SYSTEM_FONTS"] = "1"
     if single_thread:
         # Values commons chooses rather than parent variables it passes on,
         # so they are set here rather than added to the allowlist.

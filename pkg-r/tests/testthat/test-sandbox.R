@@ -218,7 +218,7 @@ sandboxed_worker_probes <- function(
           }
         },
         exec = denied({
-          status <- system2("/bin/true")
+          status <- system2("/bin/sh", c("-c", shQuote("exit 0")))
           if (!identical(status, 0L)) {
             warning("subprocess failed")
           }
@@ -295,8 +295,8 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
+  expect_equal(probes$exec, "allowed")
   if (identical(Sys.info()[["sysname"]], "Linux")) {
-    expect_equal(probes$exec, "allowed")
     expect_lte(probes$address_space, 8 * 1024^2)
     expect_local_peer(probes$local_peer, screened = TRUE)
   }
@@ -331,8 +331,8 @@ test_that("full network access leaves the filesystem sandboxed", {
   probes <- sandboxed_worker_probes("auto", network = "full")
   expect_equal(probes$read, "denied")
   expect_equal(probes$socket, "allowed")
+  expect_equal(probes$exec, "allowed")
   if (identical(Sys.info()[["sysname"]], "Linux")) {
-    expect_equal(probes$exec, "allowed")
     expect_local_peer(probes$local_peer, screened = FALSE)
   }
   expect_equal(probes$compute, 55)

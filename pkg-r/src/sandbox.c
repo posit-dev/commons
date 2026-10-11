@@ -914,7 +914,11 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   off = append_subpaths(profile, size, off, rw_roots);
   off = append_str(profile, size, off,
     ")\n"
-    "(allow file-read-metadata)\n");
+    "(allow file-read-metadata)\n"
+    /* A new process reads the root directory while it starts, and aborts if
+     * it cannot. This exposes the names at the top level of the disk, not the
+     * contents of anything under them. */
+    "(allow file-read-data (literal \"/\"))\n");
 
   char *err = NULL;
   if (sandbox_init(profile, 0, &err) != 0) {
