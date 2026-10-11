@@ -6,7 +6,9 @@ import base64
 import gc
 import html
 import importlib.util
+import io
 import re
+import zipfile
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -15,11 +17,13 @@ import pytest
 from chatlas import ContentToolRequest, ContentToolResult, Tool
 from chatlas.types import ContentImageInline, ContentText
 
+import commons._run_python
 from commons import Injected, data_source, measure, semantic_layer
 from commons._agent import Commons
 from commons._display import DISPLAY_EXTRA_KEY
-from commons._execution._driver import Failure
+from commons._execution._driver import Failure, Worker
 from commons._execution._protocol import Error, OpaqueValue, Plot, Result, Text
+from commons._execution._sandbox import protection_mode
 from commons._provenance import TAG_EXTRA_KEY, Tag
 from commons._run_python import (
     NO_OUTPUT,
@@ -109,11 +113,74 @@ def test_measure_sources_are_described_only_when_there_are_measures() -> None:
     assert "inspect.getsource()" not in without
 
 
+def wheel(name: str, source: str) -> bytes:
+    """A pure-Python wheel holding one module, ``name``, with ``source``."""
+    buffer = io.BytesIO()
+    info = f"{name}-1.0.dist-info"
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(f"{name}.py", source)
+        archive.writestr(
+            f"{info}/METADATA", f"Metadata-Version: 2.1\nName: {name}\nVersion: 1.0\n"
+        )
+        archive.writestr(
+            f"{info}/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\n"
+            "Tag: py3-none-any\n",
+        )
+        archive.writestr(f"{info}/RECORD", "")
+    return buffer.getvalue()
+
+
+def sandboxed() -> bool:
+    """Whether this host runs the session in a sandbox rather than guardrails."""
+    try:
+        return protection_mode() == "sandbox"
+    except RuntimeError:
+        return False
+
+
+def test_guardrails_offer_no_install_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Guardrails deny the child process the install rule starts.
+    monkeypatch.setattr(commons._run_python, "protection_mode", lambda: "guardrails")
+    description = run_python_description(["run_sql"], has_measures=False, network="full")
+    rules = description.split("\n\nRules:")[1]
+    assert "only packages that are already installed can be imported" in rules
+
+
+@pytest.mark.skipif(not session_can_import("pip"), reason="the session has no pip")
+@pytest.mark.skipif(not sandboxed(), reason="only the sandbox allows child processes")
+async def test_the_install_rule_installs_a_package_in_the_sandbox() -> None:
+    description = run_python_description(
+        ["run_sql"], has_measures=False, network="full", can_install=True
+    )
+    snippet = re.search(r"`(import subprocess.*?)`", description)
+    assert snippet is not None
+    # A local wheel, so the test needs no index: the snippet is what is
+    # checked, and it runs in the sandbox the way the model would run it.
+    data = base64.b64encode(wheel("commons_probe", "VALUE = 42\n")).decode()
+    worker = Worker(network="full")
+    try:
+        staged = await worker.run(
+            "import base64, os, tempfile\n"
+            "package = os.path.join(tempfile.mkdtemp(), "
+            "'commons_probe-1.0-py3-none-any.whl')\n"
+            f"open(package, 'wb').write(base64.b64decode({data!r}))"
+        )
+        assert isinstance(staged, Result)
+        installed = await worker.run(snippet.group(1).replace("'PACKAGE'", "package"))
+        assert isinstance(installed, Result)
+        imported = await worker.run("import commons_probe\ncommons_probe.VALUE")
+        assert isinstance(imported, Result)
+        assert imported.value == 42
+    finally:
+        await worker.aclose()
+
+
 @pytest.mark.parametrize(
     ("network", "can_install", "rule"),
     [
         ("none", True, "- The session has no network access."),
-        ("full", True, "from pip._internal.cli.main import main"),
+        ("full", True, "'-m', 'pip', 'install'"),
         ("full", False, "only packages that are already installed can be imported"),
     ],
 )

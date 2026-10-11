@@ -33,7 +33,7 @@ from ._execution._backend import Network
 from ._execution._driver import Failure
 from ._execution._env import worker_env
 from ._execution._protocol import Error, OpaqueValue, Plot, Result, Text
-from ._execution._sandbox import needs_single_thread
+from ._execution._sandbox import needs_single_thread, protection_mode
 from ._execution._thread import WorkerThread
 from ._frames import describe_frame, is_frame
 from ._prompt import EXECUTION_TOOL
@@ -75,14 +75,17 @@ def run_python_description(
 
     ``tool_names`` are the agent's other registered tools. The description
     lists the results of those that store them as preloaded variables.
-    ``can_plot`` and ``can_install`` say whether the session can import
-    matplotlib and pip. When omitted, they are found by asking the session's
-    interpreter; pip is checked only when the session has network access.
+    ``can_plot`` and ``can_install`` say whether the session can draw with
+    matplotlib and install packages with pip. When omitted, they are found by
+    asking the session's interpreter; installing is checked only when the
+    session has network access and a sandbox that lets it start pip.
     """
     if can_plot is None:
         can_plot = session_can_import("matplotlib")
     if can_install is None and network != "none":
-        can_install = session_can_import("pip")
+        # The install rule starts pip as a child process, which guardrails
+        # deny.
+        can_install = protection_mode() == "sandbox" and session_can_import("pip")
     handle_tools = [name for name in HANDLE_TOOLS if name in tool_names]
     parts = [
         (
@@ -145,12 +148,15 @@ def run_python_description(
         rules.append("The session has no network access.")
     elif can_install:
         rules.append(
-            "The session has network access. The sandbox stops subprocesses, so "
-            "to use a package that is not installed, run pip in the session: "
-            "`import sys, tempfile; from pip._internal.cli.main import main; "
-            "path = tempfile.mkdtemp(); main(['install', '--no-cache-dir', "
-            "'--target', path, 'PACKAGE']); sys.path.insert(0, path)`, with "
-            "PACKAGE replaced by the package's name."
+            "The session has network access. To use a package that is not "
+            "installed, install it into a temporary directory and add that "
+            "directory to the import path: `import subprocess, sys, tempfile; "
+            "path = tempfile.mkdtemp(); done = subprocess.run([sys.executable, "
+            "'-m', 'pip', 'install', '--quiet', '--no-cache-dir', "
+            "'--disable-pip-version-check', '--target', path, 'PACKAGE'], "
+            "capture_output=True, text=True); print(done.stdout, done.stderr); "
+            "sys.path.insert(0, path)`, with PACKAGE replaced by the package's "
+            "name. Output from a subprocess is discarded unless you capture it."
         )
     else:
         rules.append(
