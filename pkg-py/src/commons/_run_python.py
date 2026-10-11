@@ -149,7 +149,8 @@ def run_python_description(
             "to use a package that is not installed, run pip in the session: "
             "`import sys, tempfile; from pip._internal.cli.main import main; "
             "path = tempfile.mkdtemp(); main(['install', '--no-cache-dir', "
-            "'--target', path, name]); sys.path.insert(0, path)`."
+            "'--target', path, 'PACKAGE']); sys.path.insert(0, path)`, with "
+            "PACKAGE replaced by the package's name."
         )
     else:
         rules.append(
