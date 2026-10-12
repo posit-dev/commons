@@ -222,3 +222,28 @@ def test_a_call_cancelled_while_it_waits_leaves_the_session_alone() -> None:
         assert not worker_thread.take_restart()
     finally:
         worker_thread.close()
+
+
+def test_a_stopped_call_says_so_and_the_session_restarts() -> None:
+    worker_thread = WorkerThread(Worker(call_timeout=60))
+    try:
+        worker_thread.run_sync("x = 41")
+        replies: list[object] = []
+        caller = threading.Thread(
+            target=lambda: replies.append(
+                worker_thread.run_sync("import time; time.sleep(60)")
+            )
+        )
+        caller.start()
+        time.sleep(1)
+        started = time.monotonic()
+        worker_thread.stop_calls()
+        caller.join(15)
+        assert time.monotonic() - started < 15
+        assert replies == [Failure(message="the user stopped this call before it finished.")]
+        reply = worker_thread.run_sync("'x' in globals()")
+        assert isinstance(reply, Result)
+        assert reply.value is False
+        assert worker_thread.take_restart()
+    finally:
+        worker_thread.close()

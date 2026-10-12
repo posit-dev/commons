@@ -25,6 +25,7 @@ __all__ = ["WorkerThread"]
 CLOSE_TIMEOUT = 30.0
 
 _CLOSED = Failure(message="the Python session is closed.")
+_STOPPED = Failure(message="the user stopped this call before it finished.")
 
 _Reply = Result | Error | Failure
 
@@ -41,6 +42,7 @@ class WorkerThread:
         self._lock = threading.Lock()
         self._closed = False
         self._calls: set[concurrent.futures.Future[_Reply]] = set()
+        self._stopped: set[concurrent.futures.Future[_Reply]] = set()
 
     async def run(self, code: str, handles: HandleStore | None = None) -> _Reply:
         """Run ``code`` without blocking the caller's event loop.
@@ -55,8 +57,11 @@ class WorkerThread:
             return await asyncio.wrap_future(future)
         except asyncio.CancelledError:
             task = asyncio.current_task()
-            if self._closed and future.cancelled() and not (task and task.cancelling()):
-                return _CLOSED
+            if future.cancelled() and not (task and task.cancelling()):
+                if self._closed:
+                    return _CLOSED
+                if self._was_stopped(future):
+                    return _STOPPED
             raise
 
     def run_sync(self, code: str, handles: HandleStore | None = None) -> _Reply:
@@ -71,12 +76,37 @@ class WorkerThread:
         except concurrent.futures.CancelledError:
             if self._closed:
                 return _CLOSED
+            if self._was_stopped(future):
+                return _STOPPED
             raise
         except BaseException:
             # Ctrl-C while waiting stops the call, as cancelling an async
             # caller does, rather than leaving it to run out its timeout.
             future.cancel()
             raise
+
+    def stop_calls(self) -> None:
+        """Cancel the calls in flight, as the chat's stop button asks.
+
+        Each one returns a failure saying the user stopped it. A running call
+        shuts the worker down, so the next call starts a fresh session.
+        """
+        with self._lock:
+            calls = list(self._calls)
+            self._stopped.update(calls)
+        for call in calls:
+            if not call.cancel():
+                # It finished first, so nothing will ask about it.
+                with self._lock:
+                    self._stopped.discard(call)
+
+    def _was_stopped(self, future: concurrent.futures.Future[_Reply]) -> bool:
+        """Whether ``stop_calls()`` cancelled ``future``, forgetting it if so."""
+        with self._lock:
+            if future in self._stopped:
+                self._stopped.discard(future)
+                return True
+            return False
 
     def take_restart(self) -> bool:
         """Whether a cancelled call restarted the session since the last ask."""

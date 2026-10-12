@@ -9,6 +9,7 @@ interaction without provenance and citation tracking.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import warnings
 import weakref
@@ -55,6 +56,9 @@ EchoOptions = Literal["output", "all", "none", "text"]
 # the model a `source` argument and never labels its prompt sections, so this
 # is only what the agent's own bookkeeping keys on.
 SOLE_SOURCE = "data"
+
+# How often a stream checks whether the stop button was pressed, in seconds.
+STOP_POLL_INTERVAL = 0.1
 
 # Frozen and empty, so every agent built without a semantic layer can share it.
 _NO_MEASURES = semantic_layer()
@@ -296,7 +300,7 @@ class Commons(Chat[Any, Any]):
             kwargs=kwargs,
             controller=controller,
         )
-        return self._projected(raw, from_index, was_pending)
+        return self._projected(raw, from_index, was_pending, controller)
 
     # Citations are always projected, so reserved model markup cannot reach
     # the browser whatever the display layer does with the stream.
@@ -305,8 +309,16 @@ class Commons(Chat[Any, Any]):
         raw: AsyncGenerator[Any, None],
         from_index: int,
         was_pending: bool,
+        controller: StreamController | None = None,
     ) -> AsyncGenerator[str | Content, None]:
         scanner = CitationScanner(self._corpus)
+        # chatlas checks the controller only between chunks, so a running
+        # run_python call would otherwise finish before a stop takes effect.
+        watch = (
+            asyncio.ensure_future(self._stop_python_when(controller))
+            if controller is not None
+            else None
+        )
         try:
             async for chunk in raw:
                 # A provider's structured content passes through untouched;
@@ -318,6 +330,8 @@ class Commons(Chat[Any, Any]):
                 if projected:
                     yield projected
         finally:
+            if watch is not None:
+                watch.cancel()
             # A consumer that walks away early without cancelling still
             # closes the provider's stream.
             await raw.aclose()
@@ -335,6 +349,12 @@ class Commons(Chat[Any, Any]):
         aside = provenance_aside(tag)
         if aside:
             yield aside
+
+    async def _stop_python_when(self, controller: StreamController) -> None:
+        """Stop the Python session's calls once ``controller`` is cancelled."""
+        while not controller.cancelled:
+            await asyncio.sleep(STOP_POLL_INTERVAL)
+        self._python.stop_calls()
 
     # ---- chatlas.Chat entry points a Commons agent does not support ----------------
 

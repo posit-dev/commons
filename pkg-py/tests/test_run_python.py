@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import gc
 import html
 import importlib.util
 import io
 import re
+import time
 import zipfile
 from pathlib import Path
 from typing import Any, NoReturn
 
 import pandas as pd
 import pytest
-from chatlas import ContentToolRequest, ContentToolResult, Tool
+from chatlas import ContentToolRequest, ContentToolResult, StreamController, Tool
 from chatlas.types import ContentImageInline, ContentText
 
 import commons._run_python
@@ -411,6 +413,46 @@ async def test_stream_async_keeps_session_state_and_reads_measure_sources() -> N
     run = tool_results(agent)[-1]
     assert "def total_revenue(sales" in run.value
     assert "\n42" in run.value
+
+
+async def test_the_stop_button_ends_a_running_call() -> None:
+    # shinychat's stop button only sets the controller's flag, which chatlas
+    # reads between chunks, so the agent has to stop the call itself.
+    agent = Commons(
+        scripted_chat(
+            [
+                tool_request(code="x = 41"),
+                tool_request(code="import time\ntime.sleep(60)"),
+                text("Done."),
+                tool_request(code="x"),
+                text("Done."),
+            ]
+        ),
+        data_source(sales=frame()),
+    )
+    controller = StreamController()
+
+    async def consume() -> None:
+        stream = await agent.stream_async("Go.", controller=controller)
+        [chunk async for chunk in stream]
+
+    started = time.monotonic()
+    consuming = asyncio.ensure_future(consume())
+    while len(tool_results(agent)) < 1:
+        await asyncio.sleep(0.05)
+    await asyncio.sleep(1)
+    controller.cancel()
+    await asyncio.wait_for(consuming, 30)
+    assert time.monotonic() - started < 30
+    assert "stopped this call" in tool_results(agent)[-1].value
+
+    controller.reset()
+    stream = await agent.stream_async("Again.", controller=controller)
+    [chunk async for chunk in stream]
+    # The stop shut the worker down, so x is gone and the model is told why.
+    after = tool_results(agent)[-1].value
+    assert after.startswith(RESTART_NOTE)
+    assert "NameError" in after
 
 
 @pytest.mark.skipif(
