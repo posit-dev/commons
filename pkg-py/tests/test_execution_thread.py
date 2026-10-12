@@ -80,17 +80,17 @@ def test_ctrl_c_while_waiting_stops_the_call() -> None:
     assert main is not None
     interrupt = threading.Timer(1, signal.pthread_kill, (main, signal.SIGINT))
     try:
-        worker_thread.run_sync("1")
+        worker_thread.run_sync("x = 1")
         interrupt.start()
         with pytest.raises(KeyboardInterrupt):
             worker_thread.run_sync("import time; time.sleep(60)")
         started = time.monotonic()
         # Without the cancel, this call would queue behind the sleep.
-        reply = worker_thread.run_sync("1 + 1")
+        reply = worker_thread.run_sync("x + 1")
         assert time.monotonic() - started < 15
         assert isinstance(reply, Result)
+        # The interrupt stopped the sleep and kept the session.
         assert reply.value == 2
-        assert worker_thread.take_restart()
         assert not worker_thread.take_restart()
     finally:
         # A call that returned early must not leave the signal for a later test.
@@ -113,6 +113,7 @@ def test_a_cancelled_caller_cancels_the_call() -> None:
     worker_thread = WorkerThread(Worker(call_timeout=60))
 
     async def cancel_midway() -> None:
+        await worker_thread.run("x = 1")
         call = asyncio.ensure_future(worker_thread.run("import time; time.sleep(60)"))
         await asyncio.sleep(1)
         call.cancel()
@@ -122,13 +123,13 @@ def test_a_cancelled_caller_cancels_the_call() -> None:
     try:
         asyncio.run(cancel_midway())
         started = time.monotonic()
-        # The cancelled call's worker was shut down, so the next one respawns
-        # rather than queue behind the sleep.
-        reply = worker_thread.run_sync("1 + 1")
+        # The cancelled call was interrupted, so the next one runs rather
+        # than queue behind the sleep, in the same session.
+        reply = worker_thread.run_sync("x + 1")
         assert time.monotonic() - started < 15
         assert isinstance(reply, Result)
         assert reply.value == 2
-        assert worker_thread.take_restart()
+        assert not worker_thread.take_restart()
     finally:
         worker_thread.close()
 
@@ -224,7 +225,7 @@ def test_a_call_cancelled_while_it_waits_leaves_the_session_alone() -> None:
         worker_thread.close()
 
 
-def test_a_stopped_call_says_so_and_the_session_restarts() -> None:
+def test_a_stopped_call_says_so_and_the_session_survives() -> None:
     worker_thread = WorkerThread(Worker(call_timeout=60))
     try:
         worker_thread.run_sync("x = 41")
@@ -241,9 +242,10 @@ def test_a_stopped_call_says_so_and_the_session_restarts() -> None:
         caller.join(15)
         assert time.monotonic() - started < 15
         assert replies == [Failure(message="the user stopped this call before it finished.")]
-        reply = worker_thread.run_sync("'x' in globals()")
+        # The interrupt stopped the sleep, so x is still defined.
+        reply = worker_thread.run_sync("x")
         assert isinstance(reply, Result)
-        assert reply.value is False
-        assert worker_thread.take_restart()
+        assert reply.value == 41
+        assert not worker_thread.take_restart()
     finally:
         worker_thread.close()

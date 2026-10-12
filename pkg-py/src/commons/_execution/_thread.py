@@ -48,7 +48,7 @@ class WorkerThread:
         """Run ``code`` without blocking the caller's event loop.
 
         If the caller is cancelled, the call is cancelled too, and the worker
-        shuts down as it does when ``Worker.run`` is cancelled.
+        stops it as it does when ``Worker.run`` is cancelled.
         """
         future = self._submit(code, handles)
         if future is None:
@@ -89,7 +89,8 @@ class WorkerThread:
         """Cancel the calls in flight, as the chat's stop button asks.
 
         Each one returns a failure saying the user stopped it. A running call
-        shuts the worker down, so the next call starts a fresh session.
+        is interrupted, and the session keeps its variables unless the
+        interrupt goes unanswered and the worker has to restart.
         """
         with self._lock:
             calls = list(self._calls)

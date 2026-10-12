@@ -449,10 +449,11 @@ async def test_the_stop_button_ends_a_running_call() -> None:
     controller.reset()
     stream = await agent.stream_async("Again.", controller=controller)
     [chunk async for chunk in stream]
-    # The stop shut the worker down, so x is gone and the model is told why.
+    # The stop interrupted the sleep and kept the session, so x survives
+    # and there is no restart to report.
     after = tool_results(agent)[-1].value
-    assert after.startswith(RESTART_NOTE)
-    assert "NameError" in after
+    assert not after.startswith(RESTART_NOTE)
+    assert after.startswith("41")
 
 
 @pytest.mark.skipif(

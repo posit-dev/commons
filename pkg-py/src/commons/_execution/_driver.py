@@ -4,9 +4,10 @@ A ``Worker`` owns one persistent Python session, started through an
 ``ExecBackend``. No process exists until the first call; one that sits idle
 is closed, and the next call starts a fresh one. Calls are serialized
 through an ``asyncio.Lock``, because the single session can only run one
-piece of code at a time. A call that outruns its time limit is interrupted
-first and restarted only if the interrupt goes unanswered. An interrupted
-session keeps its variables; a restarted one will lose them.
+piece of code at a time. A call that outruns its time limit, or whose
+caller cancels it, is interrupted first and restarted only if the
+interrupt goes unanswered. An interrupted session keeps its variables; a
+restarted one will lose them.
 
 The R package runs the same lifecycle in pkg-r/R/run-r.R
 (``worker_ensure()``, ``run_r_tool()``, ``worker_await()``, and
@@ -101,6 +102,9 @@ class Worker:
         # Set when a cancelled call shut the session down; take_restart()
         # reports it once, so the model learns its variables were reset.
         self._restarted = False
+        # The id of the message whose reply is being read, so a cancelled
+        # call knows which reply to wait for before keeping the session.
+        self._awaiting: str | None = None
 
     async def __aenter__(self) -> Self:
         return self
@@ -142,8 +146,9 @@ class Worker:
     def take_restart(self) -> bool:
         """Whether a cancelled call restarted the session since the last ask.
 
-        Only a call cancelled while it ran counts; one cancelled while it
-        waited for the lock left the session as it was.
+        Only a call whose cancel ended in a restart counts. One cancelled
+        while it waited for the lock, or one the interrupt stopped, left the
+        session and its variables in place.
         """
         restarted, self._restarted = self._restarted, False
         return restarted
@@ -177,6 +182,7 @@ class Worker:
         self, code: str, handles: HandleStore | None
     ) -> Result | Error | Failure:
         """One call, run under the lock with the worker up."""
+        self._awaiting = None
         try:
             session = await self._ensure()
             if handles is not None:
@@ -185,6 +191,7 @@ class Worker:
                     return failure
             call_id = f"c{next(self._ids)}"
             await self._send(session, Call(id=call_id, code=code))
+            self._awaiting = call_id
             return await self._await_reply(session, call_id)
         except _protocol.ProtocolError as exc:
             # The call did not fit the channel, and was refused before any
@@ -213,10 +220,21 @@ class Worker:
         except asyncio.CancelledError:
             # The caller gave up mid-call, but the worker has not: it is
             # still running the code, or about to answer into a channel the
-            # next call would misread as its own reply. Shut it down before
-            # releasing the lock.
-            self._restarted = True
-            await self._shutdown()
+            # next call would misread as its own reply. Interrupt it and
+            # read that reply before releasing the lock; shut it down if no
+            # reply comes, or if the cancel left the channel out of step.
+            awaiting, self._awaiting = self._awaiting, None
+            session = self._session
+            kept = False
+            if awaiting is not None and session is not None:
+                try:
+                    kept = await self._interrupt_for(session, awaiting)
+                except asyncio.CancelledError:
+                    # Cancelled again while waiting: stop waiting.
+                    kept = False
+            if not kept:
+                self._restarted = True
+                await self._shutdown()
             raise
         except Exception as exc:  # noqa: BLE001 - any start or write failure fails the call
             # A start or write failure leaves the worker's state unknown;
@@ -249,6 +267,7 @@ class Worker:
                 # fit the channel never will, so it is skipped.
                 self._synced += 1
                 continue
+            self._awaiting = sync_id
             try:
                 reply = await asyncio.wait_for(
                     _protocol.read_message(session.stdout), self._call_timeout
@@ -275,6 +294,8 @@ class Worker:
         writer in ``drain()`` forever, and no call timeout would ever
         start.
         """
+        # Until the write completes, there is no reply to wait for.
+        self._awaiting = None
         await asyncio.wait_for(
             _protocol.write_message(session.stdin, message), self._call_timeout
         )
@@ -314,6 +335,23 @@ class Worker:
                 "restarted. Session variables were reset."
             )
         return reply
+
+    async def _interrupt_for(self, session: WorkerSession, message_id: str) -> bool:
+        """Interrupt the worker and read the reply to ``message_id``.
+
+        Returns whether the reply came within the grace window, which
+        proves the session is alive and in step. The reply itself is
+        discarded: the caller that wanted it has gone. A worker that is
+        already idle ignores the interrupt.
+        """
+        session.interrupt()
+        try:
+            reply = await asyncio.wait_for(
+                _protocol.read_message(session.stdout), self._interrupt_grace
+            )
+        except (TimeoutError, _protocol.ProtocolError, _protocol.ChannelError):
+            return False
+        return isinstance(reply, (Result, Error)) and reply.id == message_id
 
     async def _escalate(self, session: WorkerSession, call_id: str) -> Failure:
         """Interrupt the in-flight call; restart the worker if it stays silent.

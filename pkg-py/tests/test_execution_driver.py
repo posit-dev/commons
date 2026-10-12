@@ -713,17 +713,42 @@ async def test_aclose_during_a_reap_still_kills_a_sigterm_ignoring_worker():
     assert process.returncode is not None
 
 
-async def test_cancelling_a_call_shuts_the_worker_down():
+async def test_cancelling_a_call_interrupts_it_and_keeps_the_session():
     async with make_worker() as worker:
         await worker.run("x = 5")
         call = asyncio.ensure_future(worker.run("import time; time.sleep(30)"))
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.5)
+        started = time.monotonic()
         call.cancel()
         with pytest.raises(asyncio.CancelledError):
             await call
-        # The cancelled call's worker is gone rather than still computing,
-        # so its late reply cannot poison the next call's channel.
+        # The interrupt stopped the sleep, and its reply was read before the
+        # lock was released, so the next call gets its own reply.
+        assert time.monotonic() - started < 5
+        assert worker._session is not None
+        reply = await worker.run("x")
+        assert isinstance(reply, Result)
+        assert reply.value == 5
+        assert not worker.take_restart()
+
+
+async def test_a_cancelled_call_that_ignores_the_interrupt_is_restarted():
+    async with make_worker(interrupt_grace=1) as worker:
+        await worker.run("x = 5")
+        code = (
+            "import signal, time\n"
+            "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+            "time.sleep(30)\n"
+        )
+        call = asyncio.ensure_future(worker.run(code))
+        await asyncio.sleep(0.5)
+        call.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await call
+        # No reply came within the grace window, so the worker was shut
+        # down rather than left to answer into the next call's channel.
         assert worker._session is None
+        assert worker.take_restart()
         reply = await worker.run("x")
         assert isinstance(reply, Error)
         assert "NameError" in reply.message
