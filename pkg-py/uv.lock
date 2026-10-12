@@ -3879,7 +3879,7 @@ wheels = [
 
 [[package]]
 name = "shinychat"
-version = "0.7.0"
+version = "0.7.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "htmltools" },
@@ -3887,9 +3887,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "shiny" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6a/f3/6c0602cec6577b2aeae489da37a01cc5de333779ecc3e1d27bed5a8ae898/shinychat-0.7.0.tar.gz", hash = "sha256:c3e7d52d421fcc6adf4fee9b6c55d0dab829c1bad9050067d2892e0bd99b92a1", size = 532088, upload-time = "2026-09-04T22:44:24.388Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/2c/709a1dac514c175ed4d286ee5efa796952ad9944b664464151adc7e62e9f/shinychat-0.7.2.tar.gz", hash = "sha256:de83aa829ef84c86f69dd9b76647d5630090264b5be977a2d2fe8ee37dbd71c0", size = 535461, upload-time = "2026-09-18T20:29:30.608Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5e/37/9d417996dc2a7a6b56ac612b3e0831104194e928a46f2f5fed48778a355d/shinychat-0.7.0-py3-none-any.whl", hash = "sha256:596f921fa170852f3946a3ffaa6b4adec68773846918ef5357430001ab19a158", size = 551285, upload-time = "2026-09-04T22:44:22.748Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/92/8976398c152b6984723abed71e315ca1b572b791cc8f05cdf1b17157e8f0/shinychat-0.7.2-py3-none-any.whl", hash = "sha256:a063b4cb789019f7dd1e897cf67f351915c00e2fc34b957a3824fcaab1c702b0", size = 554716, upload-time = "2026-09-18T20:29:29.082Z" },
 ]
 
 [[package]]
