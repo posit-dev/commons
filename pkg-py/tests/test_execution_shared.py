@@ -12,18 +12,30 @@ worker and ``run_python_result`` produce together.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
 
 from commons._execution import _driver
 from commons._execution._driver import Worker
+from commons._execution._sandbox import protection_mode
 from commons._run_python import NO_OUTPUT, run_python_result
 
 from ._shared import load_shared_fixture
 
 REPL: dict[str, Any] = load_shared_fixture("execution-repl")["cases"]
 LIFECYCLE: dict[str, Any] = load_shared_fixture("worker-lifecycle")
+
+try:
+    _PROTECTION = protection_mode()
+except RuntimeError:
+    _PROTECTION = None
+
+needs_worker = pytest.mark.skipif(
+    _PROTECTION is None or os.name != "posix",
+    reason="this host cannot sandbox the worker",
+)
 
 
 def for_python(value: Any) -> Any:
@@ -44,6 +56,7 @@ def test_a_call_with_no_output_says_so_in_the_shared_words() -> None:
     assert NO_OUTPUT == REPL["no_output"]
 
 
+@needs_worker
 @pytest.mark.parametrize("case", REPL["cases"], ids=lambda case: case["name"])
 async def test_run_python_output_follows_the_shared_fixture(
     case: dict[str, Any],
@@ -68,6 +81,7 @@ def test_the_worker_defaults_follow_the_shared_fixture() -> None:
     assert _driver.IDLE_TIMEOUT == defaults["idle_timeout"]
 
 
+@needs_worker
 @pytest.mark.parametrize(
     "case", LIFECYCLE["failures"]["cases"], ids=lambda case: case["name"]
 )
