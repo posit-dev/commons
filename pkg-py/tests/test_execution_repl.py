@@ -8,7 +8,7 @@ the interpreter's own.
 The behaviour the model sees in both packages (a trailing value, nothing for
 None, printed text in order, state across calls) is pinned by
 ``tests/shared/execution-repl.json`` and run in test_execution_shared.py. The
-cases here cover what is particular to this evaluator.
+cases here cover what is particular to the python idioms.
 """
 
 from __future__ import annotations
