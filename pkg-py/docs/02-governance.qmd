@@ -36,7 +36,7 @@ When viewer credentials are not available, it is recommended to use a service ac
 
 ## Python code execution
 
-Python code written by the agent does not run in the main application process. Each `commons` agent instead gets a persistent Python subprocess, created the first time the model runs code. Its variables remain available to later Python analysis by the same agent.
+Python code written by the agent does not run in the main application process. Each `commons` agent instead gets a persistent Python subprocess, created the first time the model runs code. Its variables remain available to later Python analysis by the same agent while the subprocess runs. A subprocess that sits idle for 10 minutes is closed, and one that crashes or stops answering is restarted; the next call then starts with no variables.
 
 ### OS-level sandboxing
 
@@ -56,7 +56,7 @@ export COMMONS_ALLOW_UNSAFE_FALLBACK=1
 
 `commons` always uses OS-level sandboxing when it is available. This variable cannot disable or bypass it; it only permits `commons` to fall back to best-effort guardrails when no OS-level sandbox is available.
 
-The fallback uses a Python audit hook that is active only while the agent's code runs. It limits filesystem reads to the same directories as the sandbox, limits writes to the scratch directory, denies starting other processes, and follows the requested network policy. A denied operation raises `PermissionError`. These checks reduce accidental access and damage, but native code and other Python mechanisms can bypass them. They are not a sandbox or security boundary and should not be enabled in a deployment.
+The fallback uses a Python audit hook that is active only while the agent's code runs. It limits filesystem reads to the same directories as the sandbox, limits writes to the scratch directory, denies starting other processes, and follows the requested network policy. Because it denies starting other processes, `network="full"` cannot install packages in this mode. A denied operation raises `PermissionError`. These checks reduce accidental access and damage, but native code and other Python mechanisms can bypass them. They are not a sandbox or security boundary and should not be enabled in a deployment.
 
 ### Communication with the main app process
 
