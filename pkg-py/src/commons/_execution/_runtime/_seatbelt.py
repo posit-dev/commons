@@ -83,6 +83,11 @@ def seatbelt_profile(
     # allowlist. file-read-metadata stays allowed for path traversal: it
     # exposes the existence of files outside the roots, but not contents.
     lines = ["(version 1)", "(allow default)"]
+    # A sandbox instance includes the worker and everything it starts, so the
+    # worker can signal its own children but not the host, nor another
+    # worker sandboxed separately.
+    lines.append("(deny signal)")
+    lines.append("(allow signal (target same-sandbox))")
     if network == "none":
         lines.append("(deny network*)")
     lines.append("(deny file-write*)")

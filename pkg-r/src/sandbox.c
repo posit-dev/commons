@@ -133,9 +133,12 @@ static uint64_t landlock_handled(long abi) {
 }
 
 /* ABI 6 (Linux 6.12) scoping: the worker can connect only to abstract AF_UNIX
- * sockets that it or its descendants bound, even under full network. The bit
- * is LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET, defined here for older headers. */
+ * sockets that it or its descendants bound, even under full network, and can
+ * signal only itself and its descendants. The bits are
+ * LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET and LANDLOCK_SCOPE_SIGNAL, defined here
+ * for older headers. */
 #define LL_SCOPE_ABSTRACT_UNIX_SOCKET (1ULL << 0)
+#define LL_SCOPE_SIGNAL (1ULL << 1)
 #define LL_SCOPE_MIN_ABI 6
 
 struct ll_ruleset_attr {
@@ -189,7 +192,7 @@ static int landlock_engage(SEXP read_roots, SEXP rw_roots) {
       .handled_access_fs = handled,
       /* Zero, so Landlock leaves network access alone. */
       .handled_access_net = 0,
-      .scoped = LL_SCOPE_ABSTRACT_UNIX_SOCKET
+      .scoped = LL_SCOPE_ABSTRACT_UNIX_SOCKET | LL_SCOPE_SIGNAL
     };
     fd = (int) syscall(__NR_landlock_create_ruleset, &attr, sizeof(attr), 0);
   } else {
@@ -896,9 +899,14 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
    * by its allowlist; rw roots appear in both, mirroring Landlock's FS_V1_ALL.
    * file-read-metadata stays allowed for path traversal: it exposes existence
    * of files outside the roots, but not contents. */
+  /* A sandbox instance includes the worker and everything it starts, so the
+   * worker can signal its own children but not the host, nor another worker
+   * sandboxed separately. */
   size_t off = append_str(profile, size, 0,
     "(version 1)\n"
-    "(allow default)\n");
+    "(allow default)\n"
+    "(deny signal)\n"
+    "(allow signal (target same-sandbox))\n");
   if (strcmp(network, "none") == 0) {
     off = append_str(profile, size, off, "(deny network*)\n");
   }
