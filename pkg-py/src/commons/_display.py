@@ -161,6 +161,34 @@ def measure_display_with_custom_html(
     )
 
 
+def measure_display_with_result_html(
+    args: Mapping[str, Any],
+    result: TagChild,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    value_class: str | None = None,
+) -> Tag:
+    """The standard measure card around a result commons rendered itself.
+
+    ``value_class`` is added to the result's container, so a plot, a styled
+    table, or a note that one could not be shown can be styled apart.
+    """
+    classes = "commons-measure-result-value"
+    if value_class is not None:
+        classes = f"{classes} {value_class}"
+    return div(
+        _metadata_html(title, description),
+        _args_html(args),
+        div(
+            tags.strong("Result"),
+            div(result, class_=classes),
+            class_="commons-measure-result",
+        ),
+        class_="commons-measure-display",
+    )
+
+
 def measure_source_footer(provenance: Iterable[str]) -> TagList | None:
     """Links back to wherever the measure's definition came from.
 

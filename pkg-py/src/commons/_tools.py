@@ -50,6 +50,7 @@ from ._display import (
 )
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
+from ._measure_results import rich_measure_result
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
@@ -353,6 +354,10 @@ def _call_measure(context: ToolContext) -> Tool:
         # what it alone knows.
         if isinstance(value, ContentToolResult):
             return _finish_measure_result(value, record, context, args)
+        footer = measure_source_footer(record.provenance)
+        rich = rich_measure_result(value, args, record, context.handles, footer)
+        if rich is not None:
+            return rich
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
@@ -364,7 +369,7 @@ def _call_measure(context: ToolContext) -> Tool:
             html=measure_display_html(
                 args, value, title=record.title, description=record.description
             ),
-            footer=measure_source_footer(record.provenance),
+            footer=footer,
         )
 
     return _tool(
