@@ -680,8 +680,13 @@ shiny-chat-container
   max-width: min(100%, 34rem);
 }
 
-/* shinychat dims finished tool cards, which would fade a plot meant for the
-   user. Opacity on the card cannot be undone on the image inside it. */
-shiny-chat-container .shiny-tool-card:has(.commons-run-plot):not([fullscreen]) {
+/* shinychat dims finished tool cards, which would fade a plot or table meant
+   for the user. Opacity on the card cannot be undone on the image inside it. */
+shiny-chat-container
+  .shiny-tool-card:has(
+    .commons-run-plot,
+    .commons-measure-plot,
+    .commons-measure-gt-table
+  ):not([fullscreen]) {
   opacity: 1;
 }

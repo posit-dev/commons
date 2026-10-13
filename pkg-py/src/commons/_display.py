@@ -174,7 +174,7 @@ def measure_display_with_result_html(
     ``value_class`` is added to the result's container, so a plot, a styled
     table, or a note that one could not be shown can be styled apart.
     """
-    classes = "commons-measure-result-value"
+    classes = "commons-measure-result-value commons-measure-result-value-authored"
     if value_class is not None:
         classes = f"{classes} {value_class}"
     return div(
