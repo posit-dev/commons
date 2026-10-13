@@ -45,12 +45,15 @@ def _signal_scoping() -> bool:
         return True
     if platform.system() != "Linux":
         return False
+    # Isolated and imported from the runtime directory, as the worker is.
+    runtime = os.path.dirname(_landlock.__file__)
     completed = subprocess.run(
         [
             sys.executable,
+            "-I",
             "-c",
             (
-                "from commons._execution._runtime import _landlock; "
+                f"import sys; sys.path.insert(0, {runtime!r}); import _landlock; "
                 "print(_landlock.engage([], []) or -1)"
             ),
         ],
