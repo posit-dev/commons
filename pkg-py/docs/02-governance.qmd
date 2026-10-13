@@ -42,7 +42,7 @@ Python code written by the agent does not run in the main application process. E
 
 On Linux (which underlies [Posit Connect](https://posit.co/products/enterprise/connect)), `commons` combines a filesystem sandbox with seccomp system-call filters. It uses Landlock when the kernel supports it and otherwise falls back to unprivileged user and mount namespaces. If neither filesystem mechanism is available, or if seccomp is unavailable, `commons` refuses to create an agent.
 
-The filesystem sandbox gives the subprocess read access to Python, installed packages, and required operating-system directories. It can write only to a temporary directory used by the subprocess. On macOS it can also list the names at the top level of the filesystem, which Python code needs in order to start other programs. The seccomp filters prevent it from inspecting another process's memory or changing mount and namespace configuration. The Linux sandbox also caps the subprocess's virtual address space at 8 GiB; a lower limit inherited from Connect still applies.
+The filesystem sandbox gives the subprocess read access to Python, installed packages, and required operating-system directories. It can write only to a temporary directory used by the subprocess. The seccomp filters prevent it from inspecting another process's memory or changing mount and namespace configuration. The Linux sandbox also caps the subprocess's virtual address space at 8 GiB; a lower limit inherited from Connect still applies.
 
 By default, the subprocess cannot create network sockets. An application author can opt in to network access with `Commons(network="full")`; the filesystem sandbox remains in place, but Python code can then contact services reachable from the deployment, transmit data from result handles, and install packages with pip into its temporary directory. Only enable network access when that egress is required and acceptable.
 
@@ -56,7 +56,7 @@ export COMMONS_ALLOW_UNSAFE_FALLBACK=1
 
 `commons` always uses OS-level sandboxing when it is available. This variable cannot disable or bypass it; it only permits `commons` to fall back to best-effort Python guardrails when no OS-level sandbox is available.
 
-The fallback checks file, process, and network operations while code evaluates in the agent's Python session. It limits filesystem reads to the directories the sandbox allows, limits writes to the temporary directory, denies starting other processes (so packages cannot be installed), and follows the requested network policy. These checks reduce accidental access and damage, but native code and other Python mechanisms can bypass them. They are not a sandbox or security boundary and should not be enabled in a deployment.
+The fallback checks file, process, and network operations while code evaluates in the agent's Python session. It limits filesystem reads to the directories the sandbox allows, limits writes to the temporary directory, denies starting other processes, and follows the requested network policy. These checks reduce accidental access and damage, but native code and other Python mechanisms can bypass them. They are not a sandbox or security boundary and should not be enabled in a deployment.
 
 ### Communication with the main app process
 
