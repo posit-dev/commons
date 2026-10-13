@@ -32,11 +32,11 @@ signal_scoping <- function() {
   }
   probe <- sprintf(
     paste0(
-      "info <- dyn.load('%s'); ",
+      "info <- dyn.load(%s); ",
       "cat(.Call(getNativeSymbolInfo('c_sandbox_engage', info), ",
       "character(), character(), NULL, 'landlock', integer(), 'full'))"
     ),
-    commons_dll_path()
+    encodeString(commons_dll_path(), quote = '"')
   )
   tier <- suppressWarnings(system2(
     file.path(R.home("bin"), "Rscript"),
