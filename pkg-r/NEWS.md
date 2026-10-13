@@ -4,6 +4,8 @@
 
 * On macOS, R code run by `run_r` can now start other programs, such as through `system()` or `system2()`. The sandbox previously stopped every program it started. Those programs run under the same sandbox as the R session.
 
+* R code run by `run_r` can no longer send a signal to the application process, or to any process group but its own. On Linux 6.12 and later, and on macOS, it can signal only itself and the programs it started. On Linux, those programs can also no longer start a session or process group of their own, so a call such as `system("setsid ...")` fails.
+
 * The CSS classes on `run_r`'s display are now `commons-run-display`, `commons-run-details`, `commons-run-code`, and `commons-run-plot`, without the `-r`, because the Python package's code tool uses the same classes. App CSS that targets the old `commons-run-r-*` names needs updating.
 
 # commons 0.1.1
