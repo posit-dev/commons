@@ -36,7 +36,7 @@ The lower-trust path has two possible provenance outcomes. When the agent writes
 
 The table below lists how each provenance outcome can occur:
 
-| How the answer is produced | Provenance outcome |
+| How the answer is produced | Provenance outcome[^mixed-answer] |
 |---|---|
 | A trusted Python [measure](#semantic-layer) | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
 | A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img class="commons-documentation-marker" src="assets/figs/trusted-icon.svg" alt=""> |
@@ -45,6 +45,8 @@ The table below lists how each provenance outcome can occur:
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
 
 The agent does not decide the provenance outcome. `commons` derives it from the tools the agent called and the citations it made.
+
+[^mixed-answer]: An answer that uses both a trusted calculation and custom SQL or Python gets the outcome for custom code: `Cited` or `Untrusted`, never `Trusted`.
 
 ## Information layers
 
