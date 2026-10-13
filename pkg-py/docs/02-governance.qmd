@@ -60,7 +60,7 @@ The fallback checks file, process, and network operations while code evaluates i
 
 ### Communication with the main app process
 
-The subprocess starts with a small allowlist of environment variables rather than inheriting the application's complete environment, and in Python's isolated mode, which ignores `PYTHON*` variables and the user's site directory. In particular, API keys, session tokens, and database URLs are not inherited.
+The subprocess starts with a small allowlist of environment variables rather than inheriting the application's complete environment. In particular, API keys, session tokens, and database URLs are not inherited. The subprocess also runs in Python's isolated mode, which ignores `PYTHON*` environment variables and the user's site directory.
 
 Communication happens through pipes between the two processes. `commons` copies registered result handles and measure source into the subprocess, then receives captured output and plots in return. Function objects and database connections are not transferred. A measure whose source cannot be defined in the subprocess is skipped.
 
