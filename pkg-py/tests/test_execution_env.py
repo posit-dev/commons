@@ -14,13 +14,7 @@ import sys
 
 import pytest
 
-from commons._execution import _env
-from commons._execution._env import (
-    in_container,
-    interpreter_warning,
-    worker_command,
-    worker_env,
-)
+from commons._execution._env import worker_command, worker_env
 
 READ_SECRET = "import os; print(os.environ.get('COMMONS_TEST_SECRET'))"
 
@@ -123,50 +117,6 @@ def test_startup_hooks_cannot_put_an_excluded_variable_back(
     assert guarded.stdout.strip() == "None"
 
 
-def test_a_virtual_environment_without_system_packages_is_accepted() -> None:
-    # The suite runs in exactly the kind of interpreter the design asks for.
-    assert interpreter_warning() is None
-
-
-def test_a_virtual_environment_that_includes_system_packages_is_flagged(
-    tmp_path,
-) -> None:
-    # Isolated mode drops the user site directory, not the global one, so a
-    # venv wired to the system site-packages is still exposed to anything
-    # installed there.
-    venv = tmp_path / "shared"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "venv",
-            "--system-site-packages",
-            "--without-pip",
-            str(venv),
-        ],
-        check=True,
-        capture_output=True,
-    )
-
-    warning = interpreter_warning(str(venv / "bin" / "python"), containerised=False)
-
-    assert warning is not None
-    assert "system" in warning
-
-
-def test_an_interpreter_outside_any_virtual_environment_is_flagged() -> None:
-    # The interpreter this virtual environment was built from, which is not
-    # itself inside one.
-    executable = getattr(sys, "_base_executable", None)
-    if executable is None:
-        pytest.skip("no non-virtual-environment interpreter to test against")
-
-    warning = interpreter_warning(executable, containerised=False)
-
-    assert warning is not None
-    assert executable in warning
-
-
 def test_the_worker_keeps_what_it_needs_to_run(tmp_path, monkeypatch) -> None:
     # An allowlist that is too narrow fails differently but just as badly: the
     # worker cannot find an interpreter or mangles non-ASCII output. Two LC_*
@@ -207,15 +157,6 @@ def test_a_scratch_directory_that_is_not_absolute_is_refused(scratch) -> None:
         worker_env(scratch)
 
 
-def test_a_container_image_is_accepted_even_outside_a_virtual_environment() -> None:
-    # In an image, the only person who can write to site-packages is whoever
-    # built it, so a bare system interpreter is the expected arrangement
-    # rather than a shared machine's.
-    executable = getattr(sys, "_base_executable", None) or sys.executable
-
-    assert interpreter_warning(executable, containerised=True) is None
-
-
 def test_the_launch_command_runs_isolated_and_unbuffered() -> None:
     # The behavioural tests prove -I through a planted usercustomize, but they
     # skip when no suitable interpreter exists, and nothing behavioural would
@@ -237,90 +178,3 @@ def test_the_launch_command_uses_the_given_interpreter() -> None:
         "-u",
         "worker.py",
     ]
-
-
-@pytest.mark.parametrize("present", [0, 1])
-def test_container_detection_follows_the_marker_files(
-    tmp_path, monkeypatch, present
-) -> None:
-    # Either marker alone must be enough; a single-element tuple could not
-    # tell that apart from checking only the first, or requiring all.
-    markers = (tmp_path / ".dockerenv", tmp_path / ".containerenv")
-    monkeypatch.setattr(_env, "_CONTAINER_MARKERS", tuple(str(m) for m in markers))
-
-    assert in_container() is False
-    markers[present].touch()
-    assert in_container() is True
-
-
-@pytest.mark.parametrize("present", [0, 1])
-def test_an_inferred_container_suppresses_the_warning(
-    tmp_path, monkeypatch, present
-) -> None:
-    # With containerised left to inference, the marker files are what stand
-    # between a shared machine and a silenced warning, so both outcomes need
-    # to be reachable from the default call.
-    executable = getattr(sys, "_base_executable", None)
-    if executable is None:
-        pytest.skip("no non-virtual-environment interpreter to test against")
-    markers = (tmp_path / ".dockerenv", tmp_path / ".containerenv")
-    monkeypatch.setattr(_env, "_CONTAINER_MARKERS", tuple(str(m) for m in markers))
-
-    assert interpreter_warning(executable) is not None
-    markers[present].touch()
-    assert interpreter_warning(executable) is None
-
-
-def test_a_pyvenv_cfg_that_is_not_text_means_unknown(tmp_path) -> None:
-    # A corrupted or locale-encoded config must degrade to "startup hooks
-    # unknown" — a warning — not raise out of an advisory check.
-    (tmp_path / "pyvenv.cfg").write_bytes(b"home = /usr\n\xff\xfe not text\n")
-
-    warning = interpreter_warning(str(tmp_path / "bin" / "python"), containerised=False)
-
-    assert warning is not None
-
-
-@pytest.mark.parametrize(
-    ("content", "expected"),
-    [
-        ("include-system-site-packages = true\n", True),
-        ("include-system-site-packages=true\n", True),
-        ("include-system-site-packages = TRUE\n", True),
-        ("include-system-site-packages = false\n", False),
-        ("include-system-site-packages = yes\n", False),
-        ("home = /usr/local\n", False),
-        ("a line without a separator\ninclude-system-site-packages = true\n", True),
-    ],
-)
-def test_pyvenv_cfg_parsing(tmp_path, content, expected) -> None:
-    # Real venvs are well-behaved; these pin the contract for configs written
-    # by hand or by other tools.
-    (tmp_path / "pyvenv.cfg").write_text(content)
-
-    assert _env._venv_includes_system_site(str(tmp_path / "bin" / "python")) is expected
-
-
-def test_a_missing_pyvenv_cfg_means_not_a_virtual_environment(tmp_path) -> None:
-    assert _env._venv_includes_system_site(str(tmp_path / "bin" / "python")) is None
-
-
-def test_a_bare_interpreter_name_is_found_on_path(tmp_path, monkeypatch) -> None:
-    # The warning must inspect the interpreter a launch would actually find,
-    # not a path relative to the caller's working directory.
-    binary = tmp_path / "bin" / "python"
-    binary.parent.mkdir()
-    binary.touch()
-    binary.chmod(0o755)
-    (tmp_path / "pyvenv.cfg").write_text("include-system-site-packages = false\n")
-    monkeypatch.setenv("PATH", str(tmp_path / "bin"))
-
-    assert interpreter_warning("python", containerised=False) is None
-
-
-def test_an_unfindable_interpreter_is_treated_as_unknown(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("PATH", str(tmp_path))
-
-    warning = interpreter_warning("no-such-interpreter", containerised=False)
-
-    assert warning is not None
