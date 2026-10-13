@@ -27,6 +27,7 @@ from ._display import (
     measure_display_with_result_html,
     visible_result_note,
 )
+from ._execution._protocol import PLOT_BYTES_LIMIT
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
 from ._measures import Measure
@@ -118,6 +119,10 @@ def _plot_result(
     try:
         figure = draw()
         png, display_png = _pngs(figure)
+        if len(png) + len(display_png) > PLOT_BYTES_LIMIT:
+            raise ValueError(
+                f"its images total more than {PLOT_BYTES_LIMIT // 2**20} MiB"
+            )
     except Exception as exc:  # noqa: BLE001 - any drawing failure is reported, not raised
         return card.failure("a plot", exc, advert, "commons-measure-plot-error")
     finally:

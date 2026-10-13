@@ -146,3 +146,22 @@ def test_a_pyplot_figure_is_closed_once_it_is_drawn() -> None:
     call_returning(figure, "Revenue plot")
 
     assert figure.number not in pyplot.get_fignums()
+
+
+def test_a_plot_too_large_to_send_says_so(monkeypatch) -> None:
+    # Lowering the limit stands in for a figure whose PNGs run to many
+    # megabytes, which would take seconds to draw.
+    import commons._measure_results
+
+    monkeypatch.setattr(commons._measure_results, "PLOT_BYTES_LIMIT", 1024)
+    from matplotlib.figure import Figure
+
+    figure = Figure()
+    figure.add_subplot().plot([1, 2], [3, 4])
+
+    result, _ = call_returning(figure, "Revenue plot")
+
+    text = model_text(result.value)
+    assert SPEC["notes"]["failure"].format(kind="a plot") in text
+    assert "MiB" in text
+    assert image_count(result.value) == 0
