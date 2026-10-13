@@ -4,6 +4,11 @@ These exercise the real evaluation path: ``_repl.run`` is called the way the
 worker loop will call it, against a namespace that persists across calls the
 way the session's will. Nothing is mocked, because the behavior under test is
 the interpreter's own.
+
+The behaviour the model sees in both packages (a trailing value, nothing for
+None, printed text in order, state across calls) is pinned by
+``tests/shared/execution-repl.json`` and run in test_execution_shared.py. The
+cases here cover what is particular to this evaluator.
 """
 
 from __future__ import annotations
@@ -34,20 +39,6 @@ def printed(evaluation: _repl.Evaluation, stream: str = "stdout") -> str:
 
 
 class TestResultValue:
-    def test_trailing_expression_is_the_result(self):
-        assert run("x = 1 + 2\nx").value == 3
-
-    def test_trailing_statement_returns_no_value(self):
-        evaluation = run("x = 1")
-        assert evaluation.value is None
-        assert evaluation.error == ""
-
-    def test_none_result_is_suppressed(self):
-        # A call like df.to_csv(...) ends in an expression whose value is
-        # None; the model gets no result rather than a meaningless one.
-        assert run("None").value is None
-        assert run("def f():\n    pass\nf()").value is None
-
     def test_earlier_expressions_are_discarded(self):
         assert run("1 + 1\n'kept'").value == "kept"
 
@@ -68,11 +59,6 @@ class TestResultValue:
 
 
 class TestNamespace:
-    def test_state_persists_across_calls(self):
-        namespace: dict = {}
-        run("x = 41", namespace)
-        assert run("x + 1", namespace).value == 42
-
     def test_trailing_expression_sees_earlier_statements(self):
         assert run("total = sum(range(10))\ntotal * 2").value == 90
 
@@ -147,17 +133,6 @@ class TestOutputCapture:
         evaluation = run("import sys\nprint('oops', file=sys.stderr)")
         assert printed(evaluation, "stderr") == "oops\n"
         assert capsys.readouterr().err == ""
-
-    def test_trailing_expression_prints_too(self, capsys):
-        evaluation = run("print('working')\n40 + 2")
-        assert printed(evaluation) == "working\n"
-        assert evaluation.value == 42
-        assert capsys.readouterr().out == ""
-
-    def test_output_before_an_error_is_still_captured(self):
-        evaluation = run("print('before')\n1 / 0")
-        assert printed(evaluation) == "before\n"
-        assert "ZeroDivisionError" in evaluation.error
 
     def test_output_is_bounded(self):
         # A runaway print loop stops at the channel limit, with a note.
