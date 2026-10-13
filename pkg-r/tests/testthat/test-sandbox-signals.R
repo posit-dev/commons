@@ -28,18 +28,25 @@ test_that("worker signals follow the shared fixture", {
   sysname <- tolower(Sys.info()[["sysname"]])
   # tools has no SIGURG, and its number differs between Linux and macOS.
   sigurg <- if (identical(sysname, "darwin")) 16L else 23L
+  # Where the sandbox confines signals to the worker and its descendants.
+  signal_scoping <- identical(sysname, "darwin") ||
+    sandbox_capabilities()$landlock_abi >= 6
 
   for (case in spec$cases) {
     if (!is.null(case$platforms) && !sysname %in% unlist(case$platforms)) {
       next
     }
-    code <- case$code$r
-    code <- gsub("{host_pid}", Sys.getpid(), code, fixed = TRUE)
-    code <- gsub("{host_group}", host_group(), code, fixed = TRUE)
-    code <- gsub("{sigurg}", sigurg, code, fixed = TRUE)
+    if (identical(case$requires, "signal_scoping") && !signal_scoping) {
+      next
+    }
 
     heard <- withr::local_tempfile()
     victim <- processx::process$new("sh", c("-c", spec$victim), stdout = heard)
+    code <- case$code$r
+    code <- gsub("{host_pid}", Sys.getpid(), code, fixed = TRUE)
+    code <- gsub("{host_group}", host_group(), code, fixed = TRUE)
+    code <- gsub("{victim_pid}", victim$get_pid(), code, fixed = TRUE)
+    code <- gsub("{sigurg}", sigurg, code, fixed = TRUE)
     worker <- new_r_worker()
     output <- sync_promise(run_r_tool(worker, new_handle_store(), code))@value
     worker_close(worker)

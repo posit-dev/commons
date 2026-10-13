@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from commons._execution._driver import Worker
+from commons._execution._runtime import _landlock
 from commons._execution._sandbox import protection_mode
 from commons._run_python import run_python_result
 
@@ -28,6 +29,11 @@ try:
     _PROTECTION = protection_mode()
 except RuntimeError:
     _PROTECTION = None
+
+# Where the sandbox confines signals to the worker and its descendants.
+SIGNAL_SCOPING = platform.system() == "Darwin" or (
+    platform.system() == "Linux" and _landlock.abi_version() >= _landlock.SCOPE_MIN_ABI
+)
 
 
 def test_the_fixture_has_cases() -> None:
@@ -41,15 +47,18 @@ def test_the_fixture_has_cases() -> None:
 async def test_worker_signals_follow_the_shared_fixture(case: dict[str, Any]) -> None:
     if "platforms" in case and platform.system().lower() not in case["platforms"]:
         pytest.skip(f"the case covers {', '.join(case['platforms'])} only")
+    if case.get("requires") == "signal_scoping" and not SIGNAL_SCOPING:
+        pytest.skip("this host's sandbox does not scope signals")
+
+    victim = await asyncio.create_subprocess_exec(
+        "sh", "-c", SPEC["victim"], stdout=asyncio.subprocess.PIPE
+    )
     code = (
         case["code"]["python"]
         .replace("{host_pid}", str(os.getpid()))
         .replace("{host_group}", str(os.getpgrp()))
+        .replace("{victim_pid}", str(victim.pid))
         .replace("{sigurg}", str(int(signal.SIGURG)))
-    )
-
-    victim = await asyncio.create_subprocess_exec(
-        "sh", "-c", SPEC["victim"], stdout=asyncio.subprocess.PIPE
     )
     try:
         async with Worker() as worker:
