@@ -189,7 +189,7 @@ run_r_value <- function(segments) {
       },
       warning = buffer <- c(buffer, paste0("Warning: ", seg$text)),
       error = buffer <- c(buffer, paste0("Error: ", seg$text)),
-      buffer <- c(buffer, sub("\n$", "", seg$text))
+      buffer <- c(buffer, seg$text)
     )
   }
   flush()
