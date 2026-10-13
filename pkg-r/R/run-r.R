@@ -189,8 +189,6 @@ run_r_value <- function(segments) {
       },
       warning = buffer <- c(buffer, paste0("Warning: ", seg$text)),
       error = buffer <- c(buffer, paste0("Error: ", seg$text)),
-      # Segments are joined with newlines, so a segment's own trailing
-      # newline is dropped rather than left as a blank line.
       buffer <- c(buffer, sub("\n$", "", seg$text))
     )
   }
