@@ -12,6 +12,8 @@ import asyncio
 import os
 import platform
 import signal
+import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -30,10 +32,38 @@ try:
 except RuntimeError:
     _PROTECTION = None
 
-# Where the sandbox confines signals to the worker and its descendants.
-SIGNAL_SCOPING = platform.system() == "Darwin" or (
-    platform.system() == "Linux" and _landlock.abi_version() >= _landlock.SCOPE_MIN_ABI
-)
+
+def _signal_scoping() -> bool:
+    """Whether the sandbox confines signals to the worker and its descendants.
+
+    The ABI the kernel reports is not enough on Linux: a policy can refuse
+    the ruleset, and the worker then falls back to user namespaces, which do
+    not scope signals. Engaging Landlock in a child gives the answer the
+    worker would get.
+    """
+    if platform.system() == "Darwin":
+        return True
+    if platform.system() != "Linux":
+        return False
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "from commons._execution._runtime import _landlock; "
+                "print(_landlock.engage([], []) or -1)"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return (
+        completed.returncode == 0 and int(completed.stdout) >= _landlock.SCOPE_MIN_ABI
+    )
+
+
+SIGNAL_SCOPING = _signal_scoping()
 
 
 def test_the_fixture_has_cases() -> None:

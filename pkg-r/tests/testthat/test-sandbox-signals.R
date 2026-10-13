@@ -16,6 +16,37 @@ host_group <- function() {
   as.integer(system2("ps", c("-o", "pgid=", "-p", Sys.getpid()), stdout = TRUE))
 }
 
+# Whether the sandbox confines signals to the worker and its descendants. The
+# ABI the kernel reports is not enough on Linux: a policy can refuse the
+# ruleset, and the worker then falls back to user namespaces, which do not
+# scope signals. Engaging Landlock in a child gives the answer the worker
+# would get.
+signal_scoping <- function() {
+  sysname <- Sys.info()[["sysname"]]
+  if (identical(sysname, "Darwin")) {
+    return(TRUE)
+  }
+  if (!identical(sysname, "Linux") ||
+    sandbox_capabilities()$landlock_abi < 6) {
+    return(FALSE)
+  }
+  probe <- sprintf(
+    paste0(
+      "info <- dyn.load('%s'); ",
+      "cat(.Call(getNativeSymbolInfo('c_sandbox_engage', info), ",
+      "character(), character(), NULL, 'landlock', integer(), 'full'))"
+    ),
+    commons_dll_path()
+  )
+  tier <- suppressWarnings(system2(
+    file.path(R.home("bin"), "Rscript"),
+    c("-e", shQuote(probe)),
+    stdout = TRUE,
+    stderr = FALSE
+  ))
+  identical(tier, "landlock")
+}
+
 test_that("worker signals follow the shared fixture", {
   spec <- shared_fixture("sandbox-signals")$cases
   expect_gt(length(spec$cases), 0)
@@ -28,15 +59,13 @@ test_that("worker signals follow the shared fixture", {
   sysname <- tolower(Sys.info()[["sysname"]])
   # tools has no SIGURG, and its number differs between Linux and macOS.
   sigurg <- if (identical(sysname, "darwin")) 16L else 23L
-  # Where the sandbox confines signals to the worker and its descendants.
-  signal_scoping <- identical(sysname, "darwin") ||
-    sandbox_capabilities()$landlock_abi >= 6
+  scoped <- signal_scoping()
 
   for (case in spec$cases) {
     if (!is.null(case$platforms) && !sysname %in% unlist(case$platforms)) {
       next
     }
-    if (identical(case$requires, "signal_scoping") && !signal_scoping) {
+    if (identical(case$requires, "signal_scoping") && !scoped) {
       next
     }
 
