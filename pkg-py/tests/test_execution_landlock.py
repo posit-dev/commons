@@ -111,6 +111,7 @@ def landlock_kernel() -> None:
             "no Landlock-capable kernel available, on this host or through Docker"
         )
 
+
 # Reporting the exception's type rather than a bare "denied" keeps a case
 # honest: a setup mistake surfaces as FileNotFoundError instead of passing as
 # the refusal the test was hoping for.
@@ -441,6 +442,37 @@ json.dump(result, sys.stdout)
 """
 
 
+# The probe runs without seccomp, so what refuses the signal is Landlock alone.
+SIGNAL_PROBE = """
+import json, os, signal, subprocess, sys, tempfile
+import _landlock
+
+scratch = tempfile.mkdtemp()
+# Started before the restriction, so it stands outside the domain the way the
+# host does. It exits when its stdin closes, since the probe cannot kill it.
+outsider = subprocess.Popen(
+    [sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE
+)
+
+abi = _landlock.engage(["/usr", "/lib", "/bin", sys.prefix, sys.base_prefix], [scratch])
+result = {"abi": abi}
+
+try:
+    os.kill(outsider.pid, signal.SIGURG)
+    result["outsider"] = "allowed"
+except OSError as error:
+    result["outsider"] = type(error).__name__
+
+own = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+own.terminate()
+result["own"] = own.wait()
+
+outsider.stdin.close()
+outsider.wait()
+json.dump(result, sys.stdout)
+"""
+
+
 def test_pathname_sockets_are_reachable_only_under_a_write_root(
     landlock_kernel: None,
 ) -> None:
@@ -452,6 +484,20 @@ def test_pathname_sockets_are_reachable_only_under_a_write_root(
         )
     assert reported["readable"] == "PermissionError"
     assert reported["scratch"] == "allowed"
+
+
+def test_processes_outside_the_domain_cannot_be_signalled(
+    landlock_kernel: None,
+) -> None:
+    reported = run_on_a_landlock_kernel(SIGNAL_PROBE)
+    if reported["abi"] is None or reported["abi"] < _landlock.SCOPE_MIN_ABI:
+        pytest.skip(
+            "signal scoping needs Landlock ABI "
+            f"{_landlock.SCOPE_MIN_ABI} (Linux 6.12); this kernel reports "
+            f"{reported['abi']}"
+        )
+    assert reported["outsider"] == "PermissionError"
+    assert reported["own"] == -15
 
 
 def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
