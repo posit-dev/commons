@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
@@ -97,6 +98,12 @@
 #define __NR_pidfd_getfd 438
 #endif
 
+#ifndef __NR_pidfd_send_signal
+#define __NR_pidfd_send_signal 424
+#endif
+#ifndef F_SETOWN_EX
+#define F_SETOWN_EX 15
+#endif
 #ifndef CLONE_NEWCGROUP
 #define CLONE_NEWCGROUP 0x02000000
 #endif
@@ -648,6 +655,99 @@ static void seccomp_engage(void) {
 #undef SANDBOX_DENY
 }
 
+/* Keeps the worker's signals and descendants in the process group it leads.
+ * The host and every process group but the worker's are refused, and no
+ * descendant can leave the group. Any other process of the same user stays
+ * reachable by pid: the filter cannot tell one from a descendant the worker
+ * started. On Landlock ABI 6 and later, signal scoping closes that too. */
+static void group_engage(void) {
+#define GROUP_DENY \
+  BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA))
+#define GROUP_ALLOW BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW)
+#define GROUP_SCREEN(nr) \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), 0, 1), GROUP_DENY
+#define GROUP_LOAD(arg) \
+  BPF_STMT(BPF_LD | BPF_W | BPF_ABS, \
+           (uint32_t) offsetof(struct seccomp_data, args[arg]))
+/* Deny a call when its first argument is the host. */
+#define GROUP_NOT_AT_HOST(nr) \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), 0, 4), GROUP_LOAD(0), \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, host, 1, 0), GROUP_ALLOW, GROUP_DENY
+/* Deny a call when its second argument is either of two values. */
+#define GROUP_NOT_EITHER(nr, a, b) \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (nr), 0, 5), GROUP_LOAD(1), \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (a), 2, 0), \
+  BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, (b), 1, 0), GROUP_ALLOW, GROUP_DENY
+
+  /* Read once, here: the host's pid cannot change while the worker lives,
+   * and the worker cannot change its group once this filter is on. Every
+   * architecture here is little-endian, so an argument's low word is the one
+   * at its offset, and the kernel reads a pid_t from that word alone. */
+  uint32_t host = (uint32_t) getppid();
+  int leads = getpgrp() == getpid();
+  /* A worker that leads no group shares one with processes outside it, so
+   * neither its group nor zero, the caller's own group, is allowed then. A
+   * value that is already denied stands in for the group. */
+  uint32_t own = leads ? (uint32_t) -getpid() : host;
+
+  struct sock_filter filt[] = {
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, arch)),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SANDBOX_AUDIT_ARCH, 1, 0),
+    GROUP_DENY,
+    BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
+             (uint32_t) offsetof(struct seccomp_data, nr)),
+#ifdef SANDBOX_X32_SYSCALL_BIT
+    BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, SANDBOX_X32_SYSCALL_BIT, 0, 1),
+    GROUP_DENY,
+#endif
+    /* Leaving the group puts a descendant out of reach of the group kill. */
+    GROUP_SCREEN(__NR_setsid),
+    GROUP_SCREEN(__NR_setpgid),
+    /* These name a thread by id alone or a process by descriptor, neither of
+     * which the filter can compare against the host. glibc signals its own
+     * threads through tgkill(); musl's raise() uses tkill() and fails. */
+    GROUP_SCREEN(__NR_tkill),
+    GROUP_SCREEN(__NR_pidfd_send_signal),
+    GROUP_NOT_AT_HOST(__NR_tgkill),
+    GROUP_NOT_AT_HOST(__NR_rt_sigqueueinfo),
+    GROUP_NOT_AT_HOST(__NR_rt_tgsigqueueinfo),
+    /* kill() names a process group as a negative pid, or as zero for the
+     * caller's own. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_kill, 0, 7),
+    GROUP_LOAD(0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, host, 4, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, own, 2, 0),
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, 0, leads ? 1 : 2, 0),
+    BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x80000000U, 1, 0),
+    GROUP_ALLOW,
+    GROUP_DENY,
+    /* These choose which process a descriptor's I/O signals, which F_SETSIG
+     * can make any signal. Denied outright, since F_SETOWN_EX and both
+     * ioctls take their target behind a pointer. */
+    GROUP_NOT_EITHER(__NR_fcntl, F_SETOWN, F_SETOWN_EX),
+#ifdef __NR_fcntl64
+    GROUP_NOT_EITHER(__NR_fcntl64, F_SETOWN, F_SETOWN_EX),
+#endif
+    GROUP_NOT_EITHER(__NR_ioctl, FIOSETOWN, SIOCSPGRP),
+    GROUP_ALLOW,
+  };
+  struct sock_fprog prog = {
+    .len = sizeof(filt) / sizeof(filt[0]),
+    .filter = filt
+  };
+  if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog)) {
+    Rf_error("process-group filter install failed: %s", strerror(errno));
+  }
+
+#undef GROUP_NOT_EITHER
+#undef GROUP_NOT_AT_HOST
+#undef GROUP_LOAD
+#undef GROUP_SCREEN
+#undef GROUP_ALLOW
+#undef GROUP_DENY
+}
+
 static void network_engage(void) {
   struct sock_filter filt[] = {
     BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
@@ -803,6 +903,7 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
   }
 
   seccomp_engage();
+  group_engage();
   if (strcmp(network, "none") == 0) {
     network_engage();
   }
