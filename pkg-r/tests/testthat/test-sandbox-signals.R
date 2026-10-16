@@ -67,6 +67,9 @@ for (case in spec$cases) {
         paste("the case covers", toString(unlist(case$platforms)), "only")
       )
     }
+    if (grepl("perl", case$code$r, fixed = TRUE)) {
+      skip_if_not(nzchar(Sys.which("perl")), "perl is not installed")
+    }
     if (identical(case$requires, "signal_scoping")) {
       skip_if_not(signal_scoping(), "this host's sandbox does not scope signals")
     }
