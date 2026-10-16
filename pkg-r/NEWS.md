@@ -4,7 +4,7 @@
 
 * On macOS, R code run by `run_r` can now start other programs, such as through `system()` or `system2()`. The sandbox previously stopped every program it started. Those programs run under the same sandbox as the R session.
 
-* On Linux 7.1 and later, R code run by `run_r` can no longer connect to Unix domain sockets that a process outside the sandbox created, such as a local database's socket. Sockets in the session's working and temporary directories still work.
+* On Linux 7.1 and later, R code run by `run_r` can no longer connect or send to Unix domain sockets that a process outside the sandbox created, such as a local database's socket. Sockets in the worker's working directory and the app's temporary directory still work.
 
 * The CSS classes on `run_r`'s display are now `commons-run-display`, `commons-run-details`, `commons-run-code`, and `commons-run-plot`, without the `-r`, because the Python package's code tool uses the same classes. App CSS that targets the old `commons-run-r-*` names needs updating.
 

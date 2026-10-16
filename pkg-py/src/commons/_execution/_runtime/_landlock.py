@@ -307,11 +307,10 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
 
     Read roots are granted execute, read-file and read-dir. Write roots are
     granted everything the ruleset handles. On ABI 6 and later the ruleset
-    also scopes abstract AF_UNIX sockets, and on ABI 9 and later the worker
-    can connect only to pathname AF_UNIX sockets under a write root or bound
-    by itself or its descendants. Once this returns, nothing can
-    widen the process's access again, including anything it goes on to
-    execute.
+    also scopes abstract AF_UNIX sockets. On ABI 9 and later the worker can
+    connect or send only to pathname AF_UNIX sockets under a write root or
+    bound by itself or its descendants. Once this returns, nothing can widen
+    the process's access again, including anything it goes on to execute.
     """
     abi = abi_version()
     if abi < 1:
