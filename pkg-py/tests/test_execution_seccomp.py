@@ -329,7 +329,8 @@ _KNOWN_MACHINES = frozenset(
 def elf_header(machine: int, elf_class: int, data: int = 1) -> bytes:
     """The first 20 bytes of an ELF file, as much as arch detection reads."""
     ident = b"\x7fELF" + bytes([elf_class, data, 1]) + bytes(9)
-    return ident + (2).to_bytes(2, "little") + machine.to_bytes(2, "little")
+    order = "big" if data == 2 else "little"
+    return ident + (2).to_bytes(2, order) + machine.to_bytes(2, order)
 
 
 @pytest.mark.parametrize(
@@ -386,6 +387,7 @@ def test_a_header_with_no_table_fails_closed(header: bytes) -> None:
     [
         (elf_header(243, 2), "ELF machine 243, 64-bit, little-endian"),
         (elf_header(40, 1, data=2), "ELF machine 40, 32-bit, big-endian"),
+        (elf_header(40, 1, data=3), "an ELF file of unknown byte order"),
         (b"#!/bin/sh\n" + bytes(10), "not an ELF file"),
     ],
 )

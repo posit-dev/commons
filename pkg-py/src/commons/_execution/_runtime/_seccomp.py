@@ -451,10 +451,16 @@ _ELF_MAGIC = b"\x7fELF"
 _ELFCLASS32 = 1
 _ELFCLASS64 = 2
 _ELFDATA2LSB = 1
+_ELFDATA2MSB = 2
 _EI_CLASS = 4
 _EI_DATA = 5
 _E_MACHINE = 18
 _ELF_HEADER_PREFIX = 20
+# How e_machine is encoded under each EI_DATA, for describing a header.
+_BYTE_ORDERS: Mapping[int, tuple[str, str]] = {
+    _ELFDATA2LSB: ("<H", "little-endian"),
+    _ELFDATA2MSB: (">H", "big-endian"),
+}
 
 # Each table by machine and class. x32 is EM_X86_64 in a 32-bit class, and it
 # belongs to neither table, since its calls have the x86_64 audit tag over
@@ -497,11 +503,14 @@ def describe_header(header: bytes) -> str:
     """What an ELF header names, for an error that has to say why it has no table."""
     if len(header) < _ELF_HEADER_PREFIX or not header.startswith(_ELF_MAGIC):
         return "not an ELF file"
-    (machine,) = struct.unpack_from("<H", header, _E_MACHINE)
+    encoding = _BYTE_ORDERS.get(header[_EI_DATA])
+    if encoding is None:
+        return "an ELF file of unknown byte order"
+    fmt, order = encoding
+    (machine,) = struct.unpack_from(fmt, header, _E_MACHINE)
     bits = {_ELFCLASS32: "32-bit", _ELFCLASS64: "64-bit"}.get(
         header[_EI_CLASS], "unknown class"
     )
-    order = "little-endian" if header[_EI_DATA] == _ELFDATA2LSB else "big-endian"
     return f"ELF machine {machine}, {bits}, {order}"
 
 
