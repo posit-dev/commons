@@ -114,14 +114,11 @@ jobs:
       - name: Engage Landlock and seccomp together
         # The pair the worker engages on a host with Landlock. The suite
         # below covers seccomp alone, and the Landlock tests import commons.
+        # Run once under each personality: setarch linux32 reports the
+        # 32-bit machine name a native 32-bit host does, so a gate that
+        # trusts uname fails there instead of passing on the host's name.
         run: |
-          docker run --rm \
-            --platform '${{ matrix.platform }}' \
-            --security-opt seccomp=unconfined \
-            -v "$GITHUB_WORKSPACE:/work" \
-            -w /work/pkg-py \
-            python:3.13-slim \
-            python -c "
+          script="
           import sys
           sys.path.insert(0, 'src/commons/_execution/_runtime')
           import _landlock, _seccomp
@@ -136,6 +133,15 @@ jobs:
           else:
               sys.exit('a write outside the write root went through')
           "
+          for personality in "" "setarch linux32"; do
+            docker run --rm \
+              --platform '${{ matrix.platform }}' \
+              --security-opt seccomp=unconfined \
+              -v "$GITHUB_WORKSPACE:/work" \
+              -w /work/pkg-py \
+              python:3.13-slim \
+              $personality python -c "$script"
+          done
       - name: Run the seccomp suite under a 32-bit personality
         # seccomp=unconfined lifts docker's own filter, which refuses some
         # of the calls these tests make unfiltered as a control (ptrace,
