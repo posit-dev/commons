@@ -47,43 +47,52 @@ signal_scoping <- function() {
   identical(tier, "landlock")
 }
 
-test_that("worker signals follow the shared fixture", {
-  spec <- shared_fixture("sandbox-signals")$cases
+spec <- shared_fixture("sandbox-signals")$cases
+
+test_that("the signal fixture has cases", {
   expect_gt(length(spec$cases), 0)
-  sandboxed <- tryCatch(
-    identical(run_r_protection_mode(), "sandbox"),
-    error = function(e) FALSE
-  )
-  skip_if_not(sandboxed, "this host cannot sandbox the worker")
+})
 
-  sysname <- tolower(Sys.info()[["sysname"]])
-  # tools has no SIGURG, and its number differs between Linux and macOS.
-  sigurg <- if (identical(sysname, "darwin")) 16L else 23L
-  scoped <- signal_scoping()
-
-  for (case in spec$cases) {
-    if (!is.null(case$platforms) && !sysname %in% unlist(case$platforms)) {
-      next
+for (case in spec$cases) {
+  test_that(paste("worker signals:", case$name), {
+    sandboxed <- tryCatch(
+      identical(run_r_protection_mode(), "sandbox"),
+      error = function(e) FALSE
+    )
+    skip_if_not(sandboxed, "this host cannot sandbox the worker")
+    sysname <- tolower(Sys.info()[["sysname"]])
+    if (!is.null(case$platforms)) {
+      skip_if_not(
+        sysname %in% unlist(case$platforms),
+        paste("the case covers", toString(unlist(case$platforms)), "only")
+      )
     }
-    if (identical(case$requires, "signal_scoping") && !scoped) {
-      next
+    if (identical(case$requires, "signal_scoping")) {
+      skip_if_not(signal_scoping(), "this host's sandbox does not scope signals")
     }
 
+    # tools has no SIGURG, and its number differs between Linux and macOS.
+    sigurg <- if (identical(sysname, "darwin")) 16L else 23L
+    stop_file <- withr::local_tempfile()
     heard <- withr::local_tempfile()
-    victim <- processx::process$new("sh", c("-c", spec$victim), stdout = heard)
+    victim <- processx::process$new(
+      "sh",
+      c("-c", spec$victim, "sh", stop_file),
+      stdout = heard
+    )
+    withr::defer(victim$kill())
     code <- case$code$r
     code <- gsub("{host_pid}", Sys.getpid(), code, fixed = TRUE)
     code <- gsub("{host_group}", host_group(), code, fixed = TRUE)
     code <- gsub("{victim_pid}", victim$get_pid(), code, fixed = TRUE)
     code <- gsub("{sigurg}", sigurg, code, fixed = TRUE)
     worker <- new_r_worker()
+    withr::defer(worker_close(worker))
     output <- sync_promise(run_r_tool(worker, new_handle_store(), code))@value
-    worker_close(worker)
-    # Long enough for the victim's trap to run between its sleeps.
-    Sys.sleep(0.3)
-    victim$kill()
+    file.create(stop_file)
+    victim$wait(10000)
 
-    expect_identical(trimws(output), case$output, label = case$name)
-    expect_identical(readLines(heard), character(), label = case$name)
-  }
-})
+    expect_identical(trimws(output), case$output)
+    expect_identical(readLines(heard), "stopped")
+  })
+}

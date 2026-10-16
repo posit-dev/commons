@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import pathlib
 import platform
 import signal
 import subprocess
@@ -77,14 +78,17 @@ def test_the_fixture_has_cases() -> None:
     _PROTECTION != "sandbox", reason="this host cannot sandbox the worker"
 )
 @pytest.mark.parametrize("case", SPEC["cases"], ids=lambda case: case["name"])
-async def test_worker_signals_follow_the_shared_fixture(case: dict[str, Any]) -> None:
+async def test_worker_signals_follow_the_shared_fixture(
+    case: dict[str, Any], tmp_path: pathlib.Path
+) -> None:
     if "platforms" in case and platform.system().lower() not in case["platforms"]:
         pytest.skip(f"the case covers {', '.join(case['platforms'])} only")
     if case.get("requires") == "signal_scoping" and not SIGNAL_SCOPING:
         pytest.skip("this host's sandbox does not scope signals")
 
+    stop = tmp_path / "stop"
     victim = await asyncio.create_subprocess_exec(
-        "sh", "-c", SPEC["victim"], stdout=asyncio.subprocess.PIPE
+        "sh", "-c", SPEC["victim"], "sh", str(stop), stdout=asyncio.subprocess.PIPE
     )
     code = (
         case["code"]["python"]
@@ -96,11 +100,13 @@ async def test_worker_signals_follow_the_shared_fixture(case: dict[str, Any]) ->
     try:
         async with Worker() as worker:
             output = run_python_result(code, await worker.run(code)).value
-        # Long enough for the victim's trap to run between its sleeps.
-        await asyncio.sleep(0.3)
     finally:
-        victim.terminate()
-        heard, _ = await victim.communicate()
+        stop.touch()
+        try:
+            heard, _ = await asyncio.wait_for(victim.communicate(), 10)
+        except TimeoutError:
+            victim.kill()
+            raise
 
     assert output.strip() == case["output"]
-    assert heard == b""
+    assert heard == b"stopped\n"
