@@ -6,15 +6,63 @@ test_that("data_source registers frames as queryable tables", {
   expect_equal(res$n, 6)
 })
 
-test_that("source_describe returns schema and samples", {
+test_that("source_describe returns the schema with each column's type", {
   src <- test_source()
-  d <- source_describe(src, "sales", n_sample = 2)
+  d <- source_describe(src, "sales")
 
-  expect_setequal(
-    d$schema$column,
-    c("order_id", "revenue", "region", "product_line", "rep")
+  expect_equal(
+    d$schema,
+    data.frame(
+      column = c("order_id", "revenue", "region", "product_line", "rep"),
+      type = c("VARCHAR", "DOUBLE", "VARCHAR", "VARCHAR", "VARCHAR")
+    )
   )
-  expect_equal(nrow(d$sample), 2)
+})
+
+test_that("fallback descriptions sample rows only to infer R column classes", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(
+    con,
+    paste(
+      "CREATE TABLE typed (",
+      "id INTEGER,",
+      "amount DECIMAL(12,2),",
+      "label VARCHAR",
+      ")"
+    )
+  )
+  DBI::dbExecute(con, "INSERT INTO typed VALUES (1, 12.34, 'secret')")
+
+  schema <- fallback_describe_relation(
+    con,
+    DBI::Id(table = "typed"),
+    n_fallback_rows = 5L
+  )
+
+  expect_equal(
+    schema,
+    data.frame(
+      column = c("id", "amount", "label"),
+      type = c("integer", "numeric", "character")
+    )
+  )
+})
+
+test_that("fallback description errors are contextualized", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+
+  error <- rlang::catch_cnd(
+    fallback_describe_relation(
+      con,
+      DBI::Id(table = "missing"),
+      n_fallback_rows = 5L
+    )
+  )
+  expect_s3_class(error, "error")
+  expect_s3_class(error$parent, "error")
+  expect_snapshot(writeLines(error$message))
 })
 
 test_that("source_describe errors informatively for unknown tables", {
@@ -47,7 +95,6 @@ test_that("data_source supports schema-qualified connection tables", {
   expect_equal(list_tables(src), "crm.sales")
   d <- source_describe(src, "crm.sales")
   expect_equal(d$schema$column, c("order_id", "revenue"))
-  expect_equal(d$sample$order_id, "o01")
 })
 
 test_that("data_source supports explicit DBI identifiers", {
@@ -64,7 +111,7 @@ test_that("data_source supports explicit DBI identifiers", {
 
   expect_equal(list_tables(src), "crm.sales")
   d <- source_describe(src, "crm.sales")
-  expect_equal(d$sample$order_id, "o01")
+  expect_equal(d$schema$column, c("order_id", "revenue"))
 })
 
 test_that("data_source keeps default connection discovery unvalidated", {
@@ -319,7 +366,7 @@ test_that("a failed pin read surfaces at use and is retried, not cached", {
   suppressMessages(
     pins::pin_write(board, data.frame(id = 1:5), "team-orders", type = "rds")
   )
-  expect_equal(nrow(source_describe(src, "orders")$sample), 5)
+  expect_equal(source_describe(src, "orders")$schema$column, "id")
 })
 
 test_that("a pin that isn't a data frame errors clearly", {

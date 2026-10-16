@@ -111,8 +111,7 @@ prose_field <- function(x) {
 
 # The full entry for one table, delivered when a SQL query touches a table
 # the conversation hasn't seen. describe_table composes its own body from
-# dictionary_entry_parts() so it can merge the live schema and keep sample
-# rows.
+# dictionary_entry_parts() so it can merge the live schema.
 dictionary_entry_text <- function(dictionary, table) {
   entry <- dictionary$tables[[table]]
   if (is.null(entry)) {

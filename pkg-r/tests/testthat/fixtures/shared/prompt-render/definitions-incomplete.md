@@ -25,7 +25,7 @@ Only the following text is citable:
 
 These parts of tool outputs are not citable:
 
-- Live relation metadata, inferred schema, and sample rows from `describe_table`.
+- Live relation metadata and inferred schema from `describe_table`.
 - Query result rows from `run_sql`.
 
 If exact citable text you have seen supports the way you computed an answer,

@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Annotated, Any
 
+import duckdb
 import pandas as pd
 import pytest
 from chatlas import ContentToolResult, Tool
@@ -22,7 +23,7 @@ from commons._definitions import ExportRecord, Registry
 from commons._handles import HandleStore
 from commons._measures import as_measure
 from commons._provenance import TAG_EXTRA_KEY, Tag
-from commons._sample_summary import SAMPLE_SUMMARY_HEADING
+from commons._rows import rows_to_markdown
 from commons._tools import (
     FirstTouch,
     ToolContext,
@@ -33,6 +34,7 @@ from commons._tools import (
     run_sql_description,
     tool_description,
 )
+from tests._shared import load_shared_fixture
 from tests._warehouse import FakeDatabricks, FakeWarehouse
 
 DICTIONARY = """
@@ -374,27 +376,55 @@ def test_a_context_hit_carries_the_turn_citation_request(plain: DataSource) -> N
 # ---- describe_table --------------------------------------------------------
 
 
-def test_describe_table_shows_columns_and_a_summary_of_the_sample(
-    plain: DataSource,
-) -> None:
-    tools = build_commons_tools(ToolContext(sources={"sales_db": plain}))
+def test_describe_table_reports_native_types_without_exposing_row_values() -> None:
+    spec = load_shared_fixture("describe-table")["duckdb"]
+    connection = duckdb.connect()
+    try:
+        connection.execute(spec["create_sql"])
+        connection.execute(spec["insert_sql"])
+        source = DataSource(
+            backend=DuckDBBackend(connection),
+            tables=[spec["table"]],
+            table_ids={spec["table"]: TableId(table=spec["table"])},
+        )
+        tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
+        body = call(find(tools, "describe_table"), table=spec["table"])
+    finally:
+        connection.close()
 
-    body = call(find(tools, "describe_table"), table="sales")
+    assert f"Columns of `{spec['table']}`:" in body
+    assert rows_to_markdown(spec["expected_columns"]) in body
+    # Values present only in rows reach the model through run_sql (#319).
+    for value in spec["excluded_values"]:
+        assert value not in body
 
-    assert "Columns of `sales`:" in body
-    assert "| revenue | DOUBLE |" in body
-    assert f"{SAMPLE_SUMMARY_HEADING}\n\nA data frame with 3 rows and 2 columns:" in body
-    assert "* revenue: float with range [300, 900], and 0 NAs" in body
 
+def test_describe_table_reports_every_column_in_wide_tables() -> None:
+    spec = load_shared_fixture("describe-table")["wide_duckdb"]
+    column_names = [
+        spec["column_name_template"] % index
+        for index in range(1, spec["column_count"] + 1)
+    ]
+    columns_sql = ", ".join(
+        f"{column} {spec['column_type']}" for column in column_names
+    )
+    connection = duckdb.connect()
+    try:
+        connection.execute(f"CREATE TABLE {spec['table']} ({columns_sql})")
+        source = DataSource(
+            backend=DuckDBBackend(connection),
+            tables=[spec["table"]],
+            table_ids={spec["table"]: TableId(table=spec["table"])},
+        )
+        tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
+        body = call(find(tools, "describe_table"), table=spec["table"])
+    finally:
+        connection.close()
 
-def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
-    source = data_source(sales=frame().head(0))
-    tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
-
-    body = call(find(tools, "describe_table"), table="sales")
-
-    assert "A data frame with 0 rows and 2 columns:" in body
-    assert "* revenue: unknown with 0 NAs" in body
+    expected = [
+        {"column": column, "type": spec["column_type"]} for column in column_names
+    ]
+    assert rows_to_markdown(expected, max_rows=len(expected)) in body
 
 
 def test_describe_table_delivers_the_dictionary_entry(documented: DataSource) -> None:
@@ -830,8 +860,8 @@ def test_call_metrics_runs_the_governed_query(documented: DataSource) -> None:
 def test_describe_table_loads_a_pin_before_reading_its_schema(
     tmp_path: Path,
 ) -> None:
-    # The sample query is what loads the pin, so the column read that follows
-    # it has a table to read from.
+    # The columns are read from the backend, not through `query()`, so the
+    # pin has to be loaded first or there is no table to read them from.
     pins = pytest.importorskip("pins")
     board = pins.board_folder(str(tmp_path))
     board.pin_write(frame(), "sales-pin", type="csv")
@@ -841,7 +871,6 @@ def test_describe_table_loads_a_pin_before_reading_its_schema(
     body = call(find(tools, "describe_table"), table="sales")
 
     assert "| revenue | DOUBLE |" in body
-    assert "* revenue: float with range [300, 900], and 0 NAs" in body
 
 
 def test_call_measure_reads_a_board_pin_before_the_measure_runs(

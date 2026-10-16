@@ -88,7 +88,7 @@ options(commons.test.snowflake.alternate_role = "REPORTER")
 ```
 
 Both warehouse tests exercise exact table selection, schema and catalog
-expansion, current-schema discovery, native column metadata, and sample rows.
+expansion, current-schema discovery, and native column metadata.
 The Snowflake semantic-view test imports the selected model and executes one of
 its public metrics. The Databricks test also uses a temporary view to exercise
 quoted relation and column names. If a backend's option is absent, its test
