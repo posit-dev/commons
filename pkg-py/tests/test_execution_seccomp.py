@@ -344,6 +344,7 @@ GROUP_FILTER_SYSCALLS = (
     "kill",
     "fcntl",
     "ioctl",
+    "clone",
 )
 
 
@@ -430,6 +431,21 @@ def test_ioctl_cannot_choose_who_a_descriptor_signals(name: str, request_: int) 
     assert group_decision(name, "ioctl", arg1=request_) == _seccomp.DENY_EPERM
     # TCGETS, which every isatty() makes.
     assert group_decision(name, "ioctl", arg1=0x5401) == _seccomp.SECCOMP_RET_ALLOW
+
+
+# What glibc passes for a thread and for fork(), neither naming CLONE_PARENT.
+THREAD_FLAGS = 0x003D0F00
+FORK_FLAGS = 0x01200011
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_clone_cannot_make_the_host_the_childs_parent(name: str) -> None:
+    flags = _seccomp.CLONE_PARENT | 17
+    assert group_decision(name, "clone", arg0=flags) == _seccomp.DENY_EPERM
+    for flags in (THREAD_FLAGS, FORK_FLAGS):
+        assert (
+            group_decision(name, "clone", arg0=flags) == _seccomp.SECCOMP_RET_ALLOW
+        )
 
 
 @pytest.mark.parametrize("name", ARCH_NAMES)
@@ -804,6 +820,32 @@ except PermissionError as exc:
         new_session=True,
     )
     assert result["error"] == errno.EPERM
+
+
+# Without the filter the clone succeeds and errno stays zero, so the test
+# fails rather than passing on a host that ignores the flag.
+@needs_seccomp
+def test_a_clone_cannot_make_the_host_its_parent() -> None:
+    result = engage_in_child(
+        """
+import ctypes, os
+CLONE_PARENT = 0x00008000
+SIGCHLD = 17
+libc = _seccomp._libc()
+stack = ctypes.create_string_buffer(65536)
+callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)(lambda _: os._exit(0))
+ctypes.set_errno(0)
+pid = libc.clone(
+    callback,
+    ctypes.c_void_p(ctypes.addressof(stack) + 65536),
+    CLONE_PARENT | SIGCHLD,
+    None,
+)
+result['errno'] = ctypes.get_errno() if pid < 0 else 0
+""",
+        new_session=True,
+    )
+    assert result["errno"] == errno.EPERM
 
 
 UNSHARE = """

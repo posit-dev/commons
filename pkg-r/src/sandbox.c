@@ -660,10 +660,12 @@ static void seccomp_engage(void) {
 }
 
 /* Keeps the worker's signals and descendants in the process group it leads.
- * The host and every process group but the worker's are refused, and no
- * descendant can leave the group. Any other process of the same user stays
- * reachable by pid: the filter cannot tell one from a descendant the worker
- * started. On Landlock ABI 6 and later, signal scoping closes that too. */
+ * The host's pid and every process group but the worker's are refused, no
+ * clone can make the host its parent, and no descendant can leave the group.
+ * Any other process of the same user stays reachable by pid, and the host by
+ * the id of any of its other threads: the filter cannot tell either from a
+ * descendant the worker started. On Landlock ABI 6 and later, signal scoping
+ * closes both. */
 static void group_engage(void) {
 #define GROUP_DENY \
   BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA))
@@ -705,12 +707,13 @@ static void group_engage(void) {
     BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, SANDBOX_X32_SYSCALL_BIT, 0, 1),
     GROUP_DENY,
 #endif
-    /* Leaving the group puts a descendant out of reach of the group kill. */
+    /* A descendant that leaves the group is missed by the group kill. */
     GROUP_SCREEN(__NR_setsid),
     GROUP_SCREEN(__NR_setpgid),
     /* These name a thread by id alone or a process by descriptor, neither of
      * which the filter can compare against the host. glibc signals its own
-     * threads through tgkill(); musl's raise() uses tkill() and fails. */
+     * threads through tgkill(); musl's raise() and pthread_kill() use tkill()
+     * and fail. */
     GROUP_SCREEN(__NR_tkill),
     GROUP_SCREEN(__NR_pidfd_send_signal),
     GROUP_NOT_AT_HOST(__NR_tgkill),
@@ -734,6 +737,12 @@ static void group_engage(void) {
     GROUP_NOT_EITHER(__NR_fcntl64, F_SETOWN, F_SETOWN_EX),
 #endif
     GROUP_NOT_EITHER(__NR_ioctl, FIOSETOWN, SIOCSPGRP),
+    /* A clone with CLONE_PARENT makes a child of the host, and the child's
+     * exit then signals the host. */
+    BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_clone, 0, 3),
+    GROUP_LOAD(0),
+    BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, CLONE_PARENT, 0, 1),
+    GROUP_DENY,
     GROUP_ALLOW,
   };
   struct sock_fprog prog = {

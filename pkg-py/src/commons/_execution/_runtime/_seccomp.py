@@ -88,14 +88,14 @@ SCREENED = (
 # Screened as well, on the architectures whose table still carries them.
 SCREENED_WHERE_PRESENT = ("umount",)
 
-# Syscalls that take a process out of the worker's process group, where the
-# driver's group kill no longer reaches it.
+# Syscalls that take a process out of the worker's process group, so the
+# driver's group kill would miss it.
 GROUP_LEAVING = ("setsid", "setpgid")
 
 # Syscalls that signal a thread by id alone or a process by descriptor,
 # neither of which the filter can compare against the host, so they are
 # denied outright. glibc signals its own threads through tgkill(); musl's
-# raise() uses tkill() and fails under this filter.
+# raise() and pthread_kill() use tkill() and fail under this filter.
 SIGNAL_UNADDRESSED = ("tkill", "pidfd_send_signal")
 
 # Syscalls whose first argument is the process they signal, denied when that
@@ -195,6 +195,7 @@ DENY_ENOSYS = _SECCOMP_RET_ERRNO | ENOSYS
 _NEGATIVE = 0x80000000
 
 CLONE_NEWTIME = 0x00000080
+CLONE_PARENT = 0x00008000
 CLONE_NEWNS = 0x00020000
 CLONE_NEWCGROUP = 0x02000000
 CLONE_NEWUTS = 0x04000000
@@ -565,11 +566,13 @@ def build_group_filter(
     """A filter that keeps the worker's signals and descendants in its group.
 
     ``parent`` is the host's pid and ``group`` the process group the worker
-    leads, or ``None`` if it leads none. The host and every process group
-    but the worker's are refused, and no descendant can leave the group the
-    driver kills. Any other process of the same user stays reachable by pid:
-    the filter cannot tell one from a descendant the worker started. On
-    Landlock ABI 6 and later, signal scoping closes that too.
+    leads, or ``None`` if it leads none. The host's pid and every process
+    group but the worker's are refused, no clone can make the host its
+    parent, and no descendant can leave the group the driver kills. Any other
+    process of the same user stays reachable by pid, and the host by the id
+    of any of its other threads: the filter cannot tell either from a
+    descendant the worker started. On Landlock ABI 6 and later, signal
+    scoping closes both.
     """
     program = _preamble(arch)
     for name in (*GROUP_LEAVING, *SIGNAL_UNADDRESSED):
@@ -585,6 +588,12 @@ def build_group_filter(
     _screen_arg_in(
         program, arch.syscalls["ioctl"], DATA_ARG1, list(OWNER_IOCTL.values())
     )
+    # A clone with CLONE_PARENT makes a child of the host, and the child's
+    # exit then signals the host.
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=3, k=arch.syscalls["clone"]))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=DATA_ARG0))
+    program.append(SockFilter(code=BPF_JSET_K, jt=0, jf=1, k=CLONE_PARENT))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
     return program
 
