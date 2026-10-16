@@ -1,16 +1,18 @@
 {
-  "description": "The DuckDB column types describe_table reports to the model. Both packages run the case against a real DuckDB table so SQL-native detail cannot be replaced by host-language classes, and the inserted value confirms that schema inspection does not expose row data.",
+  "description": "The DuckDB column types describe_table reports to the model. Both packages run the case against a real DuckDB table so SQL-native detail cannot be replaced by host-language classes, while row values and ENUM labels remain private.",
   "duckdb": {
     "table": "typed",
-    "create_sql": "CREATE TABLE typed (id INTEGER, amount DECIMAL(12,2), happened TIMESTAMP, active BOOLEAN, label VARCHAR)",
-    "insert_sql": "INSERT INTO typed VALUES (1, 12.34, TIMESTAMP '2026-10-16 12:00:00', TRUE, 'secret-value')",
+    "create_sql": "CREATE TABLE typed (id INTEGER, amount DECIMAL(12,2), happened TIMESTAMP, active BOOLEAN, label VARCHAR, owner ENUM('Alice Smith', 'Bob | Jones'), details STRUCT(owner ENUM('nested ) secret', 'O''Brien | secret'), n INTEGER))",
+    "insert_sql": "INSERT INTO typed VALUES (1, 12.34, TIMESTAMP '2026-10-16 12:00:00', TRUE, 'secret-value', 'Alice Smith', struct_pack(owner := 'nested ) secret', n := 1))",
     "expected_columns": [
       { "column": "id", "type": "INTEGER" },
       { "column": "amount", "type": "DECIMAL(12,2)" },
       { "column": "happened", "type": "TIMESTAMP" },
       { "column": "active", "type": "BOOLEAN" },
-      { "column": "label", "type": "VARCHAR" }
+      { "column": "label", "type": "VARCHAR" },
+      { "column": "owner", "type": "ENUM" },
+      { "column": "details", "type": "STRUCT(\"owner\" ENUM, n INTEGER)" }
     ],
-    "excluded_values": ["12.34", "2026-10-16", "secret-value"]
+    "excluded_values": ["12.34", "2026-10-16", "secret-value", "Alice Smith", "Bob | Jones", "nested ) secret", "O''Brien | secret"]
   }
 }

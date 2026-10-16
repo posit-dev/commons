@@ -847,7 +847,14 @@ describe_table_tool <- function(
   trusted_only = FALSE
 ) {
   source_state <- data_source_state(source)
-  d <- source_describe(source, table)
+  # Keep trusted-only inspection row-free. Other modes sample a few rows
+  # because some DBI drivers lose column classes on a zero-row result.
+  n_fallback_rows <- if (trusted_only) 0L else 5L
+  d <- source_describe(
+    source,
+    table,
+    n_fallback_rows = n_fallback_rows
+  )
   if (inherits(d, "commons_semantic_model_description")) {
     body <- semantic_model_description_text(d)
     return(tool_result(

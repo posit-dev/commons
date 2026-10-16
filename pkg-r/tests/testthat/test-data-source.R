@@ -34,7 +34,11 @@ test_that("fallback descriptions sample rows only to infer R column classes", {
   )
   DBI::dbExecute(con, "INSERT INTO typed VALUES (1, 12.34, 'secret')")
 
-  schema <- fallback_describe_relation(con, DBI::Id(table = "typed"))
+  schema <- fallback_describe_relation(
+    con,
+    DBI::Id(table = "typed"),
+    n_fallback_rows = 5L
+  )
 
   expect_equal(
     schema,
@@ -42,6 +46,22 @@ test_that("fallback descriptions sample rows only to infer R column classes", {
       column = c("id", "amount", "label"),
       type = c("integer", "numeric", "character")
     )
+  )
+})
+
+test_that("fallback description errors are contextualized", {
+  local_mocked_bindings(
+    dbGetQuery = function(...) stop("LIMIT is not supported", call. = FALSE),
+    .package = "DBI"
+  )
+
+  expect_snapshot(
+    fallback_describe_relation(
+      DBI::ANSI(),
+      DBI::Id(table = "typed"),
+      n_fallback_rows = 5L
+    ),
+    error = TRUE
   )
 })
 

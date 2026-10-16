@@ -601,6 +601,7 @@ pending_tables_in_error <- function(source, err) {
 source_describe <- function(
   source,
   table,
+  n_fallback_rows = 5L,
   call = rlang::caller_env()
 ) {
   state <- data_source_state(source)
@@ -631,7 +632,12 @@ source_describe <- function(
   } else if (inherits(state$con, "duckdb_connection")) {
     schema <- duckdb_describe_relation(state$con, id, call = call)
   } else {
-    schema <- fallback_describe_relation(state$con, id)
+    schema <- fallback_describe_relation(
+      state$con,
+      id,
+      n_fallback_rows,
+      call = call
+    )
   }
   if (!is.null(state$manifest) && is.null(relation$columns)) {
     relation$columns <- schema
@@ -661,18 +667,92 @@ duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {
   names(rows) <- tolower(names(rows))
   data.frame(
     column = rows$column_name,
-    type = rows$column_type,
+    type = duckdb_description_type(rows$column_type),
     row.names = NULL
   )
 }
 
-fallback_describe_relation <- function(con, id) {
-  sample <- DBI::dbGetQuery(
-    con,
-    sprintf(
-      "SELECT * FROM %s LIMIT 5",
-      DBI::dbQuoteIdentifier(con, id)
+# DuckDB includes ENUM labels in type strings, even when an ENUM is nested.
+# Remove each label list before the type reaches a model-facing description.
+duckdb_description_type <- function(type) {
+  vapply(type, duckdb_description_type_one, character(1), USE.NAMES = FALSE)
+}
+
+duckdb_description_type_one <- function(type) {
+  output <- ""
+  remainder <- type
+  repeat {
+    match <- regexpr(
+      "\\bENUM[[:space:]]*\\(",
+      remainder,
+      ignore.case = TRUE,
+      perl = TRUE
     )
+    start <- as.integer(match)
+    if (start == -1L) {
+      return(paste0(output, remainder))
+    }
+    output <- paste0(
+      output,
+      substr(remainder, 1L, start - 1L),
+      "ENUM"
+    )
+    labels_start <- start + attr(match, "match.length")
+    labels_end <- duckdb_enum_labels_end(remainder, labels_start)
+    if (is.na(labels_end)) {
+      return(output)
+    }
+    remainder <- substr(remainder, labels_end + 1L, nchar(remainder))
+  }
+}
+
+duckdb_enum_labels_end <- function(type, start) {
+  characters <- strsplit(type, "", fixed = TRUE)[[1]]
+  quoted <- FALSE
+  position <- start
+  while (position <= length(characters)) {
+    current <- characters[[position]]
+    if (
+      quoted &&
+        identical(current, "'") &&
+        position < length(characters) &&
+        identical(characters[[position + 1L]], "'")
+    ) {
+      position <- position + 2L
+      next
+    }
+    if (identical(current, "'")) {
+      quoted <- !quoted
+    } else if (!quoted && identical(current, ")")) {
+      return(position)
+    }
+    position <- position + 1L
+  }
+  NA_integer_
+}
+
+fallback_describe_relation <- function(
+  con,
+  id,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  sample <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      sprintf(
+        "SELECT * FROM %s LIMIT %d",
+        DBI::dbQuoteIdentifier(con, id),
+        n_fallback_rows
+      )
+    ),
+    error = function(err) {
+      cli::cli_abort(
+        "Failed to infer the selected relation's column types.",
+        parent = err,
+        call = call
+      )
+    }
   )
   data.frame(
     column = names(sample),

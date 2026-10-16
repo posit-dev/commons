@@ -451,10 +451,28 @@ test_that("format_measure_value collects a lazy dbplyr table", {
   expect_match(out, "EMEA")
 })
 
-test_that("describe_table_tool reports columns and their types", {
+test_that("describe_table_tool has an inspection display", {
   res <- describe_table_tool(test_source(), "sales")
   expect_equal(res@extra$display$title, "Inspected a table")
-  expect_match(res@value, "\\|order_id +\\|VARCHAR +\\|")
+})
+
+test_that("describe_table controls fallback sampling by trust mode", {
+  fallback_rows <- integer()
+  local_mocked_bindings(
+    source_describe = function(source, table, n_fallback_rows, ...) {
+      fallback_rows <<- c(fallback_rows, n_fallback_rows)
+      list(
+        schema = data.frame(column = "order_id", type = "VARCHAR"),
+        kind = NULL,
+        description = NULL
+      )
+    }
+  )
+
+  describe_table_tool(test_source(), "sales")
+  describe_table_tool(test_source(), "sales", trusted_only = TRUE)
+
+  expect_identical(fallback_rows, c(5L, 0L))
 })
 
 test_that("describe_table reports native types without exposing row values", {
