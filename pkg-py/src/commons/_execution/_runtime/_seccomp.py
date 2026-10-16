@@ -48,6 +48,7 @@ __all__ = [
     "build_network_filter",
     "build_sandbox_filter",
     "current_arch",
+    "describe_header",
     "engage",
     "seccomp_available",
     "set_no_new_privs",
@@ -492,20 +493,37 @@ def arch_for(header: bytes) -> Arch | None:
     return None if name is None else ARCHES[name]
 
 
-@functools.cache
-def current_arch() -> Arch | None:
-    """The table for the interpreter this process is running.
+def describe_header(header: bytes) -> str:
+    """What an ELF header names, for an error that has to say why it has no table."""
+    if len(header) < _ELF_HEADER_PREFIX or not header.startswith(_ELF_MAGIC):
+        return "not an ELF file"
+    (machine,) = struct.unpack_from("<H", header, _E_MACHINE)
+    bits = {_ELFCLASS32: "32-bit", _ELFCLASS64: "64-bit"}.get(
+        header[_EI_CLASS], "unknown class"
+    )
+    order = "little-endian" if header[_EI_DATA] == _ELFDATA2LSB else "big-endian"
+    return f"ELF machine {machine}, {bits}, {order}"
 
-    Read from the interpreter's binary, which the worker's filesystem
-    sandbox may hide, so the worker asks before engaging that sandbox and
-    the answer is cached. It cannot change during the process's life.
+
+@functools.cache
+def _interpreter_header() -> bytes | None:
+    """The start of the interpreter's binary, or ``None`` where it cannot be read.
+
+    The worker's filesystem sandbox may hide the binary, so the worker asks
+    before engaging that sandbox and the answer is cached. It cannot change
+    during the process's life.
     """
     try:
         with open("/proc/self/exe", "rb") as exe:
-            header = exe.read(_ELF_HEADER_PREFIX)
+            return exe.read(_ELF_HEADER_PREFIX)
     except OSError:
         return None
-    return arch_for(header)
+
+
+def current_arch() -> Arch | None:
+    """The table for the interpreter this process is running."""
+    header = _interpreter_header()
+    return None if header is None else arch_for(header)
 
 
 def _libc() -> ctypes.CDLL:
@@ -611,13 +629,18 @@ def engage(*, network: Literal["none", "full"]) -> None:
             "commons cannot install a seccomp filter on "
             f"{platform.system()}: seccomp is a Linux facility."
         )
-    arch = current_arch()
+    header = _interpreter_header()
+    if header is None:
+        raise RuntimeError(
+            "commons cannot install a seccomp filter: the interpreter's "
+            "binary could not be read from /proc/self/exe."
+        )
+    arch = arch_for(header)
     if arch is None:
         raise RuntimeError(
             "commons cannot install a seccomp filter: the syscall "
-            "numbers it would have to match are not known for the "
-            "architecture of this interpreter's binary, or the binary "
-            "could not be read."
+            "numbers it would have to match are not known for this "
+            f"interpreter's binary ({describe_header(header)})."
         )
     set_no_new_privs()
     _install(build_sandbox_filter(arch), what="seccomp filter")

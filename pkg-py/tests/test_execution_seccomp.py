@@ -317,6 +317,15 @@ def test_the_sandbox_filter_leaves_opening_a_socket_alone(name: str) -> None:
     assert decision == _seccomp.SECCOMP_RET_ALLOW
 
 
+# Every machine name a host with one of the four tables reports, under
+# either personality. The live test skips anywhere else, and uname is the
+# right check for that because it is independent of the header being tested.
+_KNOWN_MACHINES = frozenset(
+    {"x86_64", "amd64", "i386", "i486", "i586", "i686"}
+    | {"aarch64", "arm64", "armv6l", "armv7l", "armv8l"}
+)
+
+
 def elf_header(machine: int, elf_class: int, data: int = 1) -> bytes:
     """The first 20 bytes of an ELF file, as much as arch detection reads."""
     ident = b"\x7fELF" + bytes([elf_class, data, 1]) + bytes(9)
@@ -372,10 +381,26 @@ def test_a_header_with_no_table_fails_closed(header: bytes) -> None:
     assert _seccomp.arch_for(header) is None
 
 
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        (elf_header(243, 2), "ELF machine 243, 64-bit, little-endian"),
+        (elf_header(40, 1, data=2), "ELF machine 40, 32-bit, big-endian"),
+        (b"#!/bin/sh\n" + bytes(10), "not an ELF file"),
+    ],
+)
+def test_a_header_with_no_table_is_described_by_what_it_names(
+    header: bytes, expected: str
+) -> None:
+    assert _seccomp.describe_header(header) == expected
+
+
 def test_the_running_interpreter_finds_its_own_table() -> None:
     """Live: the table read from /proc/self/exe matches this process's pointers."""
     if platform.system() != "Linux":
         pytest.skip("/proc/self/exe is a Linux facility")
+    if platform.machine().lower() not in _KNOWN_MACHINES:
+        pytest.skip(f"commons has no seccomp table for {platform.machine()}")
     arch = _seccomp.current_arch()
     assert arch is not None
     pointer_size = 8 if arch.name in ("x86_64", "aarch64") else 4
