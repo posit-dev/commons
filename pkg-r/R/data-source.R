@@ -601,7 +601,6 @@ pending_tables_in_error <- function(source, err) {
 source_describe <- function(
   source,
   table,
-  n_fallback_rows = 5L,
   call = rlang::caller_env()
 ) {
   state <- data_source_state(source)
@@ -632,7 +631,7 @@ source_describe <- function(
   } else if (inherits(state$con, "duckdb_connection")) {
     schema <- duckdb_describe_relation(state$con, id, call = call)
   } else {
-    schema <- fallback_describe_relation(state$con, id, n_fallback_rows)
+    schema <- fallback_describe_relation(state$con, id)
   }
   if (!is.null(state$manifest) && is.null(relation$columns)) {
     relation$columns <- schema
@@ -667,13 +666,12 @@ duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {
   )
 }
 
-fallback_describe_relation <- function(con, id, n_fallback_rows) {
+fallback_describe_relation <- function(con, id) {
   sample <- DBI::dbGetQuery(
     con,
     sprintf(
-      "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(con, id),
-      n_fallback_rows
+      "SELECT * FROM %s LIMIT 5",
+      DBI::dbQuoteIdentifier(con, id)
     )
   )
   data.frame(

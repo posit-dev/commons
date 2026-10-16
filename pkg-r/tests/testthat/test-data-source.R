@@ -19,7 +19,7 @@ test_that("source_describe returns the schema with each column's type", {
   )
 })
 
-test_that("fallback descriptions infer R column classes", {
+test_that("fallback descriptions sample rows only to infer R column classes", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbExecute(
@@ -34,11 +34,7 @@ test_that("fallback descriptions infer R column classes", {
   )
   DBI::dbExecute(con, "INSERT INTO typed VALUES (1, 12.34, 'secret')")
 
-  schema <- fallback_describe_relation(
-    con,
-    DBI::Id(table = "typed"),
-    n_fallback_rows = 5L
-  )
+  schema <- fallback_describe_relation(con, DBI::Id(table = "typed"))
 
   expect_equal(
     schema,
