@@ -111,6 +111,31 @@ jobs:
           assert _seccomp.seccomp_available(), 'a filter does not install here'
           print(f'{arch.name}: a filter installs')
           "
+      - name: Engage Landlock and seccomp together
+        # The pair the worker engages on a host with Landlock. The suite
+        # below covers seccomp alone, and the Landlock tests import commons.
+        run: |
+          docker run --rm \
+            --platform '${{ matrix.platform }}' \
+            --security-opt seccomp=unconfined \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work/pkg-py \
+            python:3.13-slim \
+            python -c "
+          import sys
+          sys.path.insert(0, 'src/commons/_execution/_runtime')
+          import _landlock, _seccomp
+          abi = _landlock.engage(['/'], ['/tmp'])
+          assert abi is not None, 'Landlock is not available here'
+          _seccomp.engage(network='none')
+          open('/tmp/inside', 'w').close()
+          try:
+              open('/work/outside', 'w').close()
+          except PermissionError:
+              print(f'Landlock ABI {abi} and seccomp engaged')
+          else:
+              sys.exit('a write outside the write root went through')
+          "
       - name: Run the seccomp suite under a 32-bit personality
         # seccomp=unconfined lifts docker's own filter, which refuses some
         # of the calls these tests make unfiltered as a control (ptrace,

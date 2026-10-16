@@ -24,7 +24,9 @@ import warnings
 
 try:
     from . import _seccomp
-except ImportError:  # loaded by bare name, as the worker loads it
+except ImportError:
+    # The worker puts this directory on sys.path and imports this module by
+    # bare name, so the relative import above would fail on the worker
     import _seccomp  # pyrefly: ignore[missing-import]
 
 __all__ = [
