@@ -53,6 +53,7 @@ def run_filter(
     arch: int,
     nr: int,
     arg0: int = 0,
+    arg1: int = 0,
     arg4: int = 0,
 ) -> int:
     """Return what the filter decides for one syscall.
@@ -63,7 +64,8 @@ def run_filter(
     data = {
         _seccomp.DATA_NR: nr,
         _seccomp.DATA_ARCH: arch,
-        _seccomp.DATA_ARG0: arg0,
+        _seccomp.DATA_ARG0: arg0 & 0xFFFFFFFF,
+        _seccomp.DATA_ARG1: arg1 & 0xFFFFFFFF,
         _seccomp.DATA_ARG4: arg4 & 0xFFFFFFFF,
         _seccomp.DATA_ARG4 + 4: (arg4 >> 32) & 0xFFFFFFFF,
     }
@@ -317,6 +319,146 @@ def test_the_sandbox_filter_leaves_opening_a_socket_alone(name: str) -> None:
     assert decision == _seccomp.SECCOMP_RET_ALLOW
 
 
+# The host's pid and the worker's group, for the group filter's cases. Any
+# values do, since the filter only compares against them.
+HOST = 4242
+GROUP = 5151
+
+
+def group_decision(
+    name: str, syscall: str, *, group: int | None = GROUP, **args: int
+) -> int:
+    arch = _seccomp.ARCHES[name]
+    return run_filter(
+        _seccomp.build_group_filter(arch, parent=HOST, group=group),
+        arch=arch.audit_arch,
+        nr=arch.syscalls[syscall],
+        **args,
+    )
+
+
+GROUP_FILTER_SYSCALLS = (
+    *_seccomp.GROUP_LEAVING,
+    *_seccomp.SIGNAL_UNADDRESSED,
+    *_seccomp.SIGNAL_BY_PROCESS,
+    "kill",
+    "fcntl",
+    "ioctl",
+    "clone",
+)
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_every_group_filter_syscall_has_a_number_on_every_arch(name: str) -> None:
+    arch = _seccomp.ARCHES[name]
+    assert sorted(set(GROUP_FILTER_SYSCALLS) - set(arch.syscalls)) == []
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize(
+    "syscall", (*_seccomp.GROUP_LEAVING, *_seccomp.SIGNAL_UNADDRESSED)
+)
+def test_the_group_filter_denies_leaving_the_group_and_unaddressed_signals(
+    name: str, syscall: str
+) -> None:
+    assert group_decision(name, syscall) == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize("syscall", _seccomp.SIGNAL_BY_PROCESS)
+def test_a_signal_by_process_is_denied_only_at_the_host(
+    name: str, syscall: str
+) -> None:
+    assert group_decision(name, syscall, arg0=HOST) == _seccomp.DENY_EPERM
+    assert group_decision(name, syscall, arg0=HOST + 1) == _seccomp.SECCOMP_RET_ALLOW
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize(
+    "target, verdict",
+    [
+        (HOST, _seccomp.DENY_EPERM),
+        (-1, _seccomp.DENY_EPERM),
+        (-HOST, _seccomp.DENY_EPERM),
+        (-(GROUP + 1), _seccomp.DENY_EPERM),
+        (-GROUP, _seccomp.SECCOMP_RET_ALLOW),
+        (0, _seccomp.SECCOMP_RET_ALLOW),
+        (GROUP + 7, _seccomp.SECCOMP_RET_ALLOW),
+    ],
+    ids=["host", "everyone", "host-group", "other-group", "own-group", "zero", "child"],
+)
+def test_kill_reaches_the_workers_group_but_not_the_host_or_other_groups(
+    name: str, target: int, verdict: int
+) -> None:
+    assert group_decision(name, "kill", arg0=target) == verdict
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize("target", [0, -GROUP, -1])
+def test_kill_reaches_no_group_when_the_worker_leads_none(
+    name: str, target: int
+) -> None:
+    """A worker in a group it did not start shares that group with others."""
+    assert group_decision(name, "kill", group=None, arg0=target) == _seccomp.DENY_EPERM
+    assert (
+        group_decision(name, "kill", group=None, arg0=GROUP + 7)
+        == _seccomp.SECCOMP_RET_ALLOW
+    )
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_kill_check_reads_only_the_low_word_of_its_argument(name: str) -> None:
+    """The kernel reads a pid_t from the low word, so the high word cannot hide one."""
+    assert group_decision(name, "kill", arg0=(1 << 32) | HOST) == _seccomp.DENY_EPERM
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize("syscall", ["fcntl", "fcntl64"])
+@pytest.mark.parametrize("command", _seccomp.OWNER_FCNTL.values())
+def test_fcntl_cannot_choose_who_a_descriptor_signals(
+    name: str, syscall: str, command: int
+) -> None:
+    if syscall not in _seccomp.ARCHES[name].syscalls:
+        pytest.skip(f"{name} has no {syscall}")
+    assert group_decision(name, syscall, arg1=command) == _seccomp.DENY_EPERM
+    # F_GETFL, the call every open file sees.
+    assert group_decision(name, syscall, arg1=3) == _seccomp.SECCOMP_RET_ALLOW
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+@pytest.mark.parametrize("request_", _seccomp.OWNER_IOCTL.values())
+def test_ioctl_cannot_choose_who_a_descriptor_signals(name: str, request_: int) -> None:
+    assert group_decision(name, "ioctl", arg1=request_) == _seccomp.DENY_EPERM
+    # TCGETS, which every isatty() makes.
+    assert group_decision(name, "ioctl", arg1=0x5401) == _seccomp.SECCOMP_RET_ALLOW
+
+
+# What glibc passes for a thread and for fork(), neither naming CLONE_PARENT.
+THREAD_FLAGS = 0x003D0F00
+FORK_FLAGS = 0x01200011
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_clone_cannot_make_the_host_the_childs_parent(name: str) -> None:
+    flags = _seccomp.CLONE_PARENT | 17
+    assert group_decision(name, "clone", arg0=flags) == _seccomp.DENY_EPERM
+    for flags in (THREAD_FLAGS, FORK_FLAGS):
+        assert (
+            group_decision(name, "clone", arg0=flags) == _seccomp.SECCOMP_RET_ALLOW
+        )
+
+
+@pytest.mark.parametrize("name", ARCH_NAMES)
+def test_the_group_filter_denies_a_call_from_a_foreign_abi(name: str) -> None:
+    arch = _seccomp.ARCHES[name]
+    decision = run_filter(
+        _seccomp.build_group_filter(arch, parent=HOST, group=GROUP),
+        arch=arch.audit_arch ^ 1,
+        nr=arch.syscalls["kill"],
+    )
+    assert decision == _seccomp.DENY_EPERM
+
+
 # Every machine name a host with one of the four tables reports, under
 # either personality. The live test skips anywhere else, and uname is the
 # right check for that because it is independent of the header being tested.
@@ -472,7 +614,14 @@ json.dump(result, sys.stdout)
 """
 
 
-def engage_in_child(body: str, *, network: str = "none") -> dict[str, object]:
+def engage_in_child(
+    body: str, *, network: str = "none", new_session: bool = False
+) -> dict[str, object]:
+    """Engage in a fresh interpreter, leading its own group if ``new_session``.
+
+    The worker leads its own process group, and the group filter only lets
+    a process that does signal its group.
+    """
     completed = subprocess.run(
         [
             sys.executable,
@@ -483,6 +632,7 @@ def engage_in_child(body: str, *, network: str = "none") -> dict[str, object]:
         capture_output=True,
         text=True,
         check=True,
+        start_new_session=new_session,
     )
     return json.loads(completed.stdout)
 
@@ -586,6 +736,116 @@ result['ran'] = asyncio.run(main())
         network="none",
     )
     assert result["ran"] == 42
+
+# SIGURG is ignored by default, so a filter that let one through would leave
+# this test process, the host here, running.
+@needs_seccomp
+def test_the_host_cannot_be_signalled() -> None:
+    result = engage_in_child(
+        """
+import os, signal
+for name, call in [
+    ("kill", lambda: os.kill(os.getppid(), signal.SIGURG)),
+    ("host_group", lambda: os.killpg(os.getpgid(os.getppid()), signal.SIGURG)),
+    ("everyone", lambda: os.kill(-1, signal.SIGURG)),
+]:
+    try:
+        call()
+        result[name] = None
+    except PermissionError as exc:
+        result[name] = exc.errno
+""",
+        new_session=True,
+    )
+    assert result == {
+        "kill": errno.EPERM,
+        "host_group": errno.EPERM,
+        "everyone": errno.EPERM,
+    }
+
+
+@needs_seccomp
+def test_the_worker_can_signal_itself_and_its_own_children() -> None:
+    result = engage_in_child(
+        """
+import os, signal, subprocess, sys
+heard = []
+signal.signal(signal.SIGURG, lambda *_: heard.append("raise"))
+signal.raise_signal(signal.SIGURG)
+signal.signal(signal.SIGURG, lambda *_: heard.append("group"))
+os.killpg(os.getpgrp(), signal.SIGURG)
+result['heard'] = heard
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+child.terminate()
+result['child'] = child.wait()
+""",
+        new_session=True,
+    )
+    assert result == {"heard": ["raise", "group"], "child": -15}
+
+
+@needs_seccomp
+def test_a_child_cannot_leave_the_workers_process_group() -> None:
+    result = engage_in_child(
+        """
+import subprocess, sys
+for name, options in [
+    ("session", {"start_new_session": True}),
+    ("group", {"process_group": 0}),
+]:
+    try:
+        subprocess.run([sys.executable, "-c", "pass"], check=True, **options)
+        result[name] = None
+    except PermissionError as exc:
+        result[name] = exc.errno
+""",
+        new_session=True,
+    )
+    assert result == {"session": errno.EPERM, "group": errno.EPERM}
+
+
+@needs_seccomp
+def test_a_descriptor_cannot_be_told_to_signal_the_host() -> None:
+    """F_SETSIG would let F_SETOWN's SIGIO be any signal, SIGKILL included."""
+    result = engage_in_child(
+        """
+import fcntl, os
+read, _ = os.pipe()
+try:
+    fcntl.fcntl(read, fcntl.F_SETOWN, os.getppid())
+    result['error'] = None
+except PermissionError as exc:
+    result['error'] = exc.errno
+""",
+        new_session=True,
+    )
+    assert result["error"] == errno.EPERM
+
+
+# Without the filter the clone succeeds and errno stays zero, so the test
+# fails rather than passing on a host that ignores the flag.
+@needs_seccomp
+def test_a_clone_cannot_make_the_host_its_parent() -> None:
+    result = engage_in_child(
+        """
+import ctypes, os
+CLONE_PARENT = 0x00008000
+SIGCHLD = 17
+libc = _seccomp._libc()
+stack = ctypes.create_string_buffer(65536)
+callback = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)(lambda _: os._exit(0))
+ctypes.set_errno(0)
+pid = libc.clone(
+    callback,
+    ctypes.c_void_p(ctypes.addressof(stack) + 65536),
+    CLONE_PARENT | SIGCHLD,
+    None,
+)
+result['errno'] = ctypes.get_errno() if pid < 0 else 0
+""",
+        new_session=True,
+    )
+    assert result["errno"] == errno.EPERM
 
 
 UNSHARE = """
