@@ -9,7 +9,6 @@ are DuckDB-specific and gain nothing from it.
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -22,45 +21,6 @@ if TYPE_CHECKING:
     from ._data_source import TableId
 
 __all__ = ["Backend", "DuckDBBackend", "EngineBackend"]
-
-_DUCKDB_ENUM_START = re.compile(r"\bENUM\s*\(", re.IGNORECASE)
-
-
-def _duckdb_description_type(kind: object) -> str:
-    """Remove DuckDB ENUM labels, including ENUMs nested inside other types."""
-    type_name = str(kind)
-    output: list[str] = []
-    position = 0
-    while match := _DUCKDB_ENUM_START.search(type_name, position):
-        output.extend((type_name[position : match.start()], "ENUM"))
-        labels_end = _duckdb_enum_labels_end(type_name, match.end())
-        if labels_end is None:
-            return "".join(output)
-        position = labels_end + 1
-    output.append(type_name[position:])
-    return "".join(output)
-
-
-def _duckdb_enum_labels_end(type_name: str, start: int) -> int | None:
-    quoted = False
-    position = start
-    while position < len(type_name):
-        character = type_name[position]
-        if (
-            quoted
-            and character == "'"
-            and position + 1 < len(type_name)
-            and type_name[position + 1] == "'"
-        ):
-            position += 2
-            continue
-        if character == "'":
-            quoted = not quoted
-        elif not quoted and character == ")":
-            return position
-        position += 1
-    return None
-
 
 class Backend(Protocol):
     def query(self, sql: str) -> list[dict[str, Any]]: ...
@@ -119,10 +79,7 @@ class DuckDBBackend:
         # own type names and no round trip to a metadata table is needed.
         cursor = self._con.execute(f"SELECT * FROM {self.quote(table_id)} LIMIT 0")
         description = cursor.description or ()
-        return [
-            {"column": name, "type": _duckdb_description_type(kind)}
-            for name, kind, *_ in description
-        ]
+        return [{"column": name, "type": str(kind)} for name, kind, *_ in description]
 
     def dialect(self) -> str:
         return "duckdb"

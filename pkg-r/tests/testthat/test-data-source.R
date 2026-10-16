@@ -50,19 +50,19 @@ test_that("fallback descriptions sample rows only to infer R column classes", {
 })
 
 test_that("fallback description errors are contextualized", {
-  local_mocked_bindings(
-    dbGetQuery = function(...) stop("LIMIT is not supported", call. = FALSE),
-    .package = "DBI"
-  )
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
 
-  expect_snapshot(
+  error <- rlang::catch_cnd(
     fallback_describe_relation(
-      DBI::ANSI(),
-      DBI::Id(table = "typed"),
+      con,
+      DBI::Id(table = "missing"),
       n_fallback_rows = 5L
-    ),
-    error = TRUE
+    )
   )
+  expect_s3_class(error, "error")
+  expect_s3_class(error$parent, "error")
+  expect_snapshot(writeLines(error$message))
 })
 
 test_that("source_describe errors informatively for unknown tables", {

@@ -667,68 +667,9 @@ duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {
   names(rows) <- tolower(names(rows))
   data.frame(
     column = rows$column_name,
-    type = duckdb_description_type(rows$column_type),
+    type = rows$column_type,
     row.names = NULL
   )
-}
-
-# DuckDB includes ENUM labels in type strings, even when an ENUM is nested.
-# Remove each label list before the type reaches a model-facing description.
-duckdb_description_type <- function(type) {
-  vapply(type, duckdb_description_type_one, character(1), USE.NAMES = FALSE)
-}
-
-duckdb_description_type_one <- function(type) {
-  output <- ""
-  remainder <- type
-  repeat {
-    match <- regexpr(
-      "\\bENUM[[:space:]]*\\(",
-      remainder,
-      ignore.case = TRUE,
-      perl = TRUE
-    )
-    start <- as.integer(match)
-    if (start == -1L) {
-      return(paste0(output, remainder))
-    }
-    output <- paste0(
-      output,
-      substr(remainder, 1L, start - 1L),
-      "ENUM"
-    )
-    labels_start <- start + attr(match, "match.length")
-    labels_end <- duckdb_enum_labels_end(remainder, labels_start)
-    if (is.na(labels_end)) {
-      return(output)
-    }
-    remainder <- substr(remainder, labels_end + 1L, nchar(remainder))
-  }
-}
-
-duckdb_enum_labels_end <- function(type, start) {
-  characters <- strsplit(type, "", fixed = TRUE)[[1]]
-  quoted <- FALSE
-  position <- start
-  while (position <= length(characters)) {
-    current <- characters[[position]]
-    if (
-      quoted &&
-        identical(current, "'") &&
-        position < length(characters) &&
-        identical(characters[[position + 1L]], "'")
-    ) {
-      position <- position + 2L
-      next
-    }
-    if (identical(current, "'")) {
-      quoted <- !quoted
-    } else if (!quoted && identical(current, ")")) {
-      return(position)
-    }
-    position <- position + 1L
-  }
-  NA_integer_
 }
 
 fallback_describe_relation <- function(

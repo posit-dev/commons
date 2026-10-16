@@ -23,6 +23,7 @@ from commons._definitions import ExportRecord, Registry
 from commons._handles import HandleStore
 from commons._measures import as_measure
 from commons._provenance import TAG_EXTRA_KEY, Tag
+from commons._rows import rows_to_markdown
 from commons._tools import (
     FirstTouch,
     ToolContext,
@@ -375,14 +376,6 @@ def test_a_context_hit_carries_the_turn_citation_request(plain: DataSource) -> N
 # ---- describe_table --------------------------------------------------------
 
 
-def test_describe_table_labels_its_column_listing(plain: DataSource) -> None:
-    tools = build_commons_tools(ToolContext(sources={"sales_db": plain}))
-
-    body = call(find(tools, "describe_table"), table="sales")
-
-    assert "Columns of `sales`:" in body
-
-
 def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
     source = data_source(sales=frame().head(0))
     tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
@@ -409,11 +402,39 @@ def test_describe_table_reports_native_types_without_exposing_row_values() -> No
     finally:
         connection.close()
 
-    for column in spec["expected_columns"]:
-        assert f"| {column['column']} | {column['type']} |" in body
-    # Row values reach the model only through run_sql (#319).
+    assert f"Columns of `{spec['table']}`:" in body
+    assert rows_to_markdown(spec["expected_columns"]) in body
+    # Values present only in rows reach the model through run_sql (#319).
     for value in spec["excluded_values"]:
         assert value not in body
+
+
+def test_describe_table_reports_every_column_in_wide_tables() -> None:
+    spec = load_shared_fixture("describe-table")["wide_duckdb"]
+    column_names = [
+        spec["column_name_template"] % index
+        for index in range(1, spec["column_count"] + 1)
+    ]
+    columns_sql = ", ".join(
+        f"{column} {spec['column_type']}" for column in column_names
+    )
+    connection = duckdb.connect()
+    try:
+        connection.execute(f"CREATE TABLE {spec['table']} ({columns_sql})")
+        source = DataSource(
+            backend=DuckDBBackend(connection),
+            tables=[spec["table"]],
+            table_ids={spec["table"]: TableId(table=spec["table"])},
+        )
+        tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
+        body = call(find(tools, "describe_table"), table=spec["table"])
+    finally:
+        connection.close()
+
+    expected = [
+        {"column": column, "type": spec["column_type"]} for column in column_names
+    ]
+    assert rows_to_markdown(expected, max_rows=len(expected)) in body
 
 
 def test_describe_table_delivers_the_dictionary_entry(documented: DataSource) -> None:

@@ -754,7 +754,9 @@ def _describe_table_text(
         # Without an entry the catalog's own prose is all there is to say.
         if relation is not None and relation.description:
             parts.append(relation.description)
-        parts.append(f"Columns of `{table}`:\n\n{rows_to_markdown(schema)}")
+        parts.append(
+            f"Columns of `{table}`:\n\n{rows_to_markdown(schema, max_rows=len(schema))}"
+        )
     else:
         assert dictionary is not None
         columns = dictionary.columns_text(table, live=schema)

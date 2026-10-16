@@ -878,7 +878,11 @@ describe_table_tool <- function(
   if (is.null(entry)) {
     parts <- c(
       relation,
-      sprintf("Columns of `%s`:\n\n%s", table, df_to_markdown(d$schema)),
+      sprintf(
+        "Columns of `%s`:\n\n%s",
+        table,
+        df_to_markdown(d$schema, max_rows = nrow(d$schema))
+      ),
       context
     )
   } else {

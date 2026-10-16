@@ -1,13 +1,9 @@
 # fallback description errors are contextualized
 
     Code
-      fallback_describe_relation(DBI::ANSI(), DBI::Id(table = "typed"),
-      n_fallback_rows = 5L)
-    Condition
-      Error:
-      ! Failed to infer the selected relation's column types.
-      Caused by error:
-      ! LIMIT is not supported
+      writeLines(error$message)
+    Output
+      Failed to infer the selected relation's column types.
 
 # source_describe errors informatively for unknown tables
 

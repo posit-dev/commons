@@ -490,10 +490,36 @@ test_that("describe_table reports native types without exposing row values", {
   description <- describe_table_tool(src, spec$table)@value
 
   expect_match(description, df_to_markdown(expected), fixed = TRUE)
-  # Row values reach the model only through run_sql (#319).
+  # Values present only in rows reach the model through run_sql (#319).
   for (value in spec$excluded_values) {
     expect_no_match(description, value, fixed = TRUE)
   }
+})
+
+test_that("describe_table reports every column in wide tables", {
+  spec <- shared_fixture("describe-table")$wide_duckdb
+  column_names <- sprintf(spec$column_name_template, seq_len(spec$column_count))
+  create_sql <- sprintf(
+    "CREATE TABLE %s (%s)",
+    spec$table,
+    paste(column_names, spec$column_type, collapse = ", ")
+  )
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, create_sql)
+  src <- data_source(con, tables = spec$table)
+  expected <- data.frame(
+    column = column_names,
+    type = rep(spec$column_type, spec$column_count)
+  )
+
+  description <- describe_table_tool(src, spec$table)@value
+
+  expect_match(
+    description,
+    df_to_markdown(expected, max_rows = nrow(expected)),
+    fixed = TRUE
+  )
 })
 
 test_that("search_context_tool handles a missing context layer", {
