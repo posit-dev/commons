@@ -331,11 +331,18 @@ def test_the_handled_mask_covers_every_right_the_abi_defines() -> None:
     assert _landlock.handled_access(5) == (
         _landlock.handled_access(4) | _landlock.FS_IOCTL_DEV
     )
+    # ABI 6, 7 and 8 add no filesystem right.
+    assert _landlock.handled_access(8) == _landlock.handled_access(5)
+    assert _landlock.handled_access(9) == (
+        _landlock.handled_access(8) | _landlock.FS_RESOLVE_UNIX
+    )
+    # ABI 10 adds UDP rights and 11 a restrict_self flag.
+    assert _landlock.handled_access(11) == _landlock.handled_access(9)
 
 
 def test_an_abi_newer_than_this_code_knows_is_handled_as_the_newest_known(
 ) -> None:
-    assert _landlock.handled_access(99) == _landlock.handled_access(5)
+    assert _landlock.handled_access(99) == _landlock.handled_access(9)
 
 
 def test_the_rule_attribute_is_packed_as_the_kernel_reads_it() -> None:
@@ -403,6 +410,50 @@ def test_abstract_sockets_outside_the_domain_are_unreachable(
     assert reported["own"] == "allowed"
 
 
+PATHNAME_SOCKET_PROBE = """
+import json, os, socket, sys, tempfile
+import _landlock
+
+base = tempfile.mkdtemp()
+readable = os.path.join(base, "readable")
+scratch = os.path.join(base, "scratch")
+for directory in (readable, scratch):
+    os.makedirs(directory)
+
+# Each stands in for a host daemon listening before the worker starts.
+daemons = {}
+for where, directory in (("readable", readable), ("scratch", scratch)):
+    daemon = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    daemon.bind(os.path.join(directory, "daemon.sock"))
+    daemons[where] = daemon
+
+abi = _landlock.engage(["/usr", readable], [scratch])
+result = {"abi": abi}
+for where, directory in (("readable", readable), ("scratch", scratch)):
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        client.connect(os.path.join(directory, "daemon.sock"))
+        result[where] = "allowed"
+    except OSError as error:
+        result[where] = type(error).__name__
+
+json.dump(result, sys.stdout)
+"""
+
+
+def test_pathname_sockets_are_reachable_only_under_a_write_root(
+    landlock_kernel: None,
+) -> None:
+    reported = run_on_a_landlock_kernel(PATHNAME_SOCKET_PROBE)
+    if reported["abi"] is None or reported["abi"] < 9:
+        pytest.skip(
+            "pathname-socket restriction needs Landlock ABI 9 (Linux 7.1); "
+            f"this kernel reports {reported['abi']}"
+        )
+    assert reported["readable"] == "PermissionError"
+    assert reported["scratch"] == "allowed"
+
+
 def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
     assert _landlock.FS_READ_ONLY == (
         _landlock.FS_EXECUTE | _landlock.FS_READ_FILE | _landlock.FS_READ_DIR
@@ -410,6 +461,7 @@ def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
     assert _landlock.FS_READ_ONLY & _landlock.FS_WRITE_FILE == 0
     assert _landlock.FS_READ_ONLY & _landlock.FS_MAKE_REG == 0
     assert _landlock.FS_READ_ONLY & _landlock.FS_REMOVE_FILE == 0
+    assert _landlock.FS_READ_ONLY & _landlock.FS_RESOLVE_UNIX == 0
 
 
 def test_engage_reports_none_where_the_kernel_has_no_landlock(monkeypatch) -> None:

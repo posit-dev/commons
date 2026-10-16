@@ -115,6 +115,7 @@
 #define FS_REFER (1ULL << 13)
 #define FS_TRUNCATE (1ULL << 14)
 #define FS_IOCTL_DEV (1ULL << 15)
+#define FS_RESOLVE_UNIX (1ULL << 16)
 #define FS_READ_ONLY (FS_EXECUTE | FS_READ_FILE | FS_READ_DIR)
 
 /* Landlock leaves undeclared rights unrestricted. */
@@ -128,6 +129,9 @@ static uint64_t landlock_handled(long abi) {
   }
   if (abi >= 5) {
     handled |= FS_IOCTL_DEV;
+  }
+  if (abi >= 9) {
+    handled |= FS_RESOLVE_UNIX;
   }
   return handled;
 }

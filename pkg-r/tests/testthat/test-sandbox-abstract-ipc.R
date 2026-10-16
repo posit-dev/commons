@@ -11,7 +11,7 @@ sandbox_c_source <- function() {
 # The lines of one top-level function, up to the next one.
 c_function <- function(src, name) {
   starts <- grep("^static ", src)
-  from <- grep(paste0("^static [a-z_ ]+\\b", name, "\\("), src)
+  from <- grep(paste0("^static [a-z0-9_ ]+\\b", name, "\\("), src)
   expect_length(from, 1)
   later <- starts[starts > from]
   to <- if (length(later) > 0) later[[1]] - 1 else length(src)
@@ -80,4 +80,29 @@ test_that("landlock_engage scopes abstract sockets from the fixture ABI", {
   engage <- c_function(src, "landlock_engage")
   expect_true(any(grepl("abi >= LL_SCOPE_MIN_ABI", engage, fixed = TRUE)))
   expect_true(any(grepl(paste0(".scoped = ", flag), engage, fixed = TRUE)))
+})
+
+test_that("landlock_handled handles pathname sockets from the fixture ABI", {
+  fixture <- shared_fixture("sandbox-abstract-ipc")
+  spec <- fixture$landlock_pathname_unix_right
+  # sandbox.c defines the right itself, as FS_ in place of LANDLOCK_ACCESS_FS_.
+  right <- sub("^LANDLOCK_ACCESS_", "", spec$right)
+
+  src <- sandbox_c_source()
+  expect_true(any(grepl(
+    paste0("#define ", right, " (1ULL << ", spec$bit, ")"),
+    src,
+    fixed = TRUE
+  )))
+
+  handled <- paste(c_function(src, "landlock_handled"), collapse = "\n")
+  expect_true(grepl(
+    paste0("abi >= ", spec$min_abi, ") {\n    handled |= ", right, ";"),
+    handled,
+    fixed = TRUE
+  ))
+
+  read_only <- grep("^#define FS_READ_ONLY ", src, value = TRUE)
+  expect_length(read_only, 1)
+  expect_identical(grepl(right, read_only, fixed = TRUE), spec$granted_to_read_roots)
 })
