@@ -26,7 +26,7 @@
           "linux"
         ],
         "code": {
-          "r": "script <- tempfile(fileext = '.pl')\nwriteLines(\"use Fcntl; pipe(my $r, my $w); print fcntl($r, F_SETOWN, {host_pid}) ? 'allowed' : $!{EPERM} ? 'refused' : \\\"error $!\\\";\", script)\ncat(system2('perl', script, stdout = TRUE))",
+          "r": "script <- tempfile(fileext = '.pl')\nwriteLines(\"use Fcntl; pipe(my $r, my $w); print fcntl($r, F_SETOWN, {host_pid}) ? 'allowed' : $!{EPERM} ? 'refused' : \\\"error $!\\\";\", script)\ncat(system2('perl', shQuote(script), stdout = TRUE))",
           "python": "import fcntl, os\nread, _ = os.pipe()\ntry:\n    fcntl.fcntl(read, fcntl.F_SETOWN, {host_pid})\n    print('allowed')\nexcept PermissionError:\n    print('refused')"
         },
         "output": "refused"
