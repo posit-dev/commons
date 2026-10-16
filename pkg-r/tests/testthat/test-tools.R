@@ -457,7 +457,7 @@ test_that("describe_table_tool reports columns and their types", {
   expect_match(res@value, "\\|order_id +\\|VARCHAR +\\|")
 })
 
-test_that("describe_table matches the shared DuckDB schema contract", {
+test_that("describe_table reports native types without exposing row values", {
   spec <- shared_fixture("describe-table")$duckdb
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
@@ -472,6 +472,7 @@ test_that("describe_table matches the shared DuckDB schema contract", {
   description <- describe_table_tool(src, spec$table)@value
 
   expect_match(description, df_to_markdown(expected), fixed = TRUE)
+  # Row values reach the model only through run_sql (#319).
   for (value in spec$excluded_values) {
     expect_no_match(description, value, fixed = TRUE)
   }

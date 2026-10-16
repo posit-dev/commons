@@ -394,7 +394,7 @@ def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
     assert "| region | VARCHAR |" in body
 
 
-def test_describe_table_matches_the_shared_duckdb_schema_contract() -> None:
+def test_describe_table_reports_native_types_without_exposing_row_values() -> None:
     spec = load_shared_fixture("describe-table")["duckdb"]
     connection = duckdb.connect()
     try:
@@ -412,6 +412,7 @@ def test_describe_table_matches_the_shared_duckdb_schema_contract() -> None:
 
     for column in spec["expected_columns"]:
         assert f"| {column['column']} | {column['type']} |" in body
+    # Row values reach the model only through run_sql (#319).
     for value in spec["excluded_values"]:
         assert value not in body
 
