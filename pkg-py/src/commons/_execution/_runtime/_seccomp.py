@@ -48,6 +48,7 @@ __all__ = [
     "build_network_filter",
     "build_sandbox_filter",
     "current_arch",
+    "describe_header",
     "engage",
     "seccomp_available",
     "set_no_new_privs",
@@ -440,26 +441,38 @@ def build_sandbox_filter(arch: Arch) -> list[SockFilter]:
     return program
 
 
-# What each ``platform.machine()`` means at each pointer size. A 32-bit
-# process finds its own name here without help, because the kernel reports
-# i686 or armv8l to one rather than the 64-bit name. The pointer size is in
-# the key for what it excludes: x32 is the one ABI that reports a 64-bit
-# machine with 32-bit pointers, and it belongs to neither table, since its
-# calls carry the x86_64 audit tag over its own syscall numbering. It gets
-# no entry, so such a host is reported unsandboxable rather than handed a
-# filter that would reject every call it makes.
-_MACHINES: Mapping[tuple[str, int], str] = {
-    ("x86_64", 8): "x86_64",
-    ("amd64", 8): "x86_64",
-    ("i386", 4): "i386",
-    ("i486", 4): "i386",
-    ("i586", 4): "i386",
-    ("i686", 4): "i386",
-    ("aarch64", 8): "aarch64",
-    ("arm64", 8): "aarch64",
-    ("armv6l", 4): "arm",
-    ("armv7l", 4): "arm",
-    ("armv8l", 4): "arm",
+# The ELF header fields arch detection reads, from include/uapi/linux/elf.h
+# and elf-em.h. The interpreter's own binary is the truthful answer: the
+# machine name a process sees comes from its uname personality, which a
+# 32-bit container started on a 64-bit host inherits from the host, while
+# the kernel tags the syscalls of a 32-bit binary with the 32-bit ABI
+# whatever the personality says.
+_ELF_MAGIC = b"\x7fELF"
+_ELFCLASS32 = 1
+_ELFCLASS64 = 2
+_ELFDATA2LSB = 1
+_ELFDATA2MSB = 2
+_EI_CLASS = 4
+_EI_DATA = 5
+_E_MACHINE = 18
+_ELF_HEADER_PREFIX = 20
+# How e_machine is encoded under each EI_DATA, for describing a header.
+_BYTE_ORDERS: Mapping[int, tuple[str, str]] = {
+    _ELFDATA2LSB: ("<H", "little-endian"),
+    _ELFDATA2MSB: (">H", "big-endian"),
+}
+
+# Each table by machine and class. x32 is EM_X86_64 in a 32-bit class, and it
+# belongs to neither table, since its calls have the x86_64 audit tag over
+# its own syscall numbering. It gets no entry, so such a host is reported
+# unsandboxable rather than handed a filter that would reject every call it
+# makes. Big-endian ELF is refused before this lookup, because its audit tags
+# differ from the ones in the tables.
+_MACHINES: Mapping[tuple[int, int], str] = {
+    (62, _ELFCLASS64): "x86_64",  # EM_X86_64
+    (3, _ELFCLASS32): "i386",  # EM_386
+    (183, _ELFCLASS64): "aarch64",  # EM_AARCH64
+    (40, _ELFCLASS32): "arm",  # EM_ARM
 }
 
 PR_SET_NO_NEW_PRIVS = 38
@@ -468,20 +481,58 @@ PR_GET_SECCOMP = 21
 SECCOMP_MODE_FILTER = 2
 
 
-def arch_for(machine: str, pointer_size: int) -> Arch | None:
-    """The table for a machine name and pointer size, or ``None`` for neither.
+def arch_for(header: bytes) -> Arch | None:
+    """The table for an ELF header, or ``None`` for one there is no table for.
 
     ``None`` is the fail-closed answer. A filter built from another
     architecture's numbers is worse than no filter, because it reads as
     protection while screening the wrong calls.
     """
-    name = _MACHINES.get((machine.lower(), pointer_size))
+    if (
+        len(header) < _ELF_HEADER_PREFIX
+        or not header.startswith(_ELF_MAGIC)
+        or header[_EI_DATA] != _ELFDATA2LSB
+    ):
+        return None
+    (machine,) = struct.unpack_from("<H", header, _E_MACHINE)
+    name = _MACHINES.get((machine, header[_EI_CLASS]))
     return None if name is None else ARCHES[name]
 
 
+def describe_header(header: bytes) -> str:
+    """What an ELF header names, for an error that has to say why it has no table."""
+    if len(header) < _ELF_HEADER_PREFIX or not header.startswith(_ELF_MAGIC):
+        return "not an ELF file"
+    encoding = _BYTE_ORDERS.get(header[_EI_DATA])
+    if encoding is None:
+        return "an ELF file of unknown byte order"
+    fmt, order = encoding
+    (machine,) = struct.unpack_from(fmt, header, _E_MACHINE)
+    bits = {_ELFCLASS32: "32-bit", _ELFCLASS64: "64-bit"}.get(
+        header[_EI_CLASS], "unknown class"
+    )
+    return f"ELF machine {machine}, {bits}, {order}"
+
+
+@functools.cache
+def _interpreter_header() -> bytes | None:
+    """The start of the interpreter's binary, or ``None`` where it cannot be read.
+
+    The worker's filesystem sandbox may hide the binary, so the worker asks
+    before engaging that sandbox and the answer is cached. It cannot change
+    during the process's life.
+    """
+    try:
+        with open("/proc/self/exe", "rb") as exe:
+            return exe.read(_ELF_HEADER_PREFIX)
+    except OSError:
+        return None
+
+
 def current_arch() -> Arch | None:
-    """The table for the process this is running in."""
-    return arch_for(platform.machine(), struct.calcsize("P"))
+    """The table for the interpreter this process is running."""
+    header = _interpreter_header()
+    return None if header is None else arch_for(header)
 
 
 def _libc() -> ctypes.CDLL:
@@ -587,12 +638,18 @@ def engage(*, network: Literal["none", "full"]) -> None:
             "commons cannot install a seccomp filter on "
             f"{platform.system()}: seccomp is a Linux facility."
         )
-    arch = current_arch()
+    header = _interpreter_header()
+    if header is None:
+        raise RuntimeError(
+            "commons cannot install a seccomp filter: the interpreter's "
+            "binary could not be read from /proc/self/exe."
+        )
+    arch = arch_for(header)
     if arch is None:
         raise RuntimeError(
-            "commons cannot install a seccomp filter on "
-            f"{platform.machine()}: the syscall numbers it would have to "
-            "match are not known for this architecture."
+            "commons cannot install a seccomp filter: the syscall "
+            "numbers it would have to match are not known for this "
+            f"interpreter's binary ({describe_header(header)})."
         )
     set_no_new_privs()
     _install(build_sandbox_filter(arch), what="seccomp filter")

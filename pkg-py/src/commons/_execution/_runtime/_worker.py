@@ -145,6 +145,8 @@ def _engage_sandbox(network: str, protection: str) -> None:
     import _seccomp  # pyrefly: ignore[missing-import]
     import _userns  # pyrefly: ignore[missing-import]
 
+    # Read from /proc/self/exe, which the filesystem sandbox may hide.
+    _seccomp.current_arch()
     if _landlock.engage(read_roots, write_roots) is None:
         _userns.engage(
             read_roots,

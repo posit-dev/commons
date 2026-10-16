@@ -22,6 +22,13 @@ import re
 import stat
 import warnings
 
+try:
+    from . import _seccomp
+except ImportError:
+    # The worker puts this directory on sys.path and imports this module by
+    # bare name, so the relative import above would fail on the worker
+    import _seccomp  # pyrefly: ignore[missing-import]
+
 __all__ = [
     "UsernsError",
     "UsernsUnavailable",
@@ -167,13 +174,17 @@ def _syscall_numbers() -> dict[str, int]:
     engaging, so an architecture commons has no numbers for is an unavailable
     host rather than a process left half-confined.
     """
-    machine = os.uname().machine
-    try:
-        return _SYSCALLS[machine]
-    except KeyError:
+    # The interpreter's binary decides the syscall ABI, as for the seccomp
+    # filter, whatever machine name the process's personality reports.
+    arch = _seccomp.current_arch()
+    numbers = None if arch is None else _SYSCALLS.get(arch.name)
+    if numbers is None:
         raise UsernsUnavailable(
-            0, f"commons does not know the syscall numbers for {machine}"
-        ) from None
+            0,
+            "commons does not know the syscall numbers for "
+            f"{'this interpreter' if arch is None else arch.name}",
+        )
+    return numbers
 
 
 def _syscall(name: str, *args: object) -> int:

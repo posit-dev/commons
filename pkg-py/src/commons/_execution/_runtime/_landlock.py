@@ -17,10 +17,16 @@ import ctypes
 import ctypes.util
 import errno
 import os
-import platform
 import stat
 import sys
 from collections.abc import Iterable
+
+try:
+    from . import _seccomp
+except ImportError:
+    # The worker puts this directory on sys.path and imports this module by
+    # bare name, so the relative import above would fail on the worker
+    import _seccomp  # pyrefly: ignore[missing-import]
 
 __all__ = [
     "FS_EXECUTE",
@@ -48,16 +54,19 @@ NR_RESTRICT_SELF = 446
 
 # The numbers come from include/uapi/asm-generic/unistd.h in the kernel
 # tree, the table most architectures share for syscalls added since 2019;
-# x86_64's arch/x86/entry/syscalls/syscall_64.tbl assigns the same values.
-# The structs and flag bits below are include/uapi/linux/landlock.h, and
-# the landlock_create_ruleset(2), landlock_add_rule(2),
+# x86_64's arch/x86/entry/syscalls/syscall_64.tbl, i386's syscall_32.tbl
+# and arm's arch/arm/tools/syscall.tbl assign the same values. The structs
+# and flag bits below are include/uapi/linux/landlock.h, and the
+# landlock_create_ruleset(2), landlock_add_rule(2),
 # landlock_restrict_self(2) and landlock(7) man pages document the
 # contract. mips offsets its whole table by thousands, so 444 there is a
 # different call entirely. Calling a syscall by the wrong number is worse
 # than not calling it, so this is an allowlist of the architectures the
 # numbers are verified for, and anything else reports no Landlock and
-# falls back.
-KNOWN_ARCHITECTURES = frozenset({"x86_64", "amd64", "aarch64", "arm64"})
+# falls back. The names are the seccomp tables', read from the
+# interpreter's binary, since the syscall ABI is the binary's whatever
+# machine name the process's personality reports.
+KNOWN_ARCHITECTURES = frozenset({"x86_64", "i386", "aarch64", "arm"})
 
 CREATE_RULESET_VERSION = 1 << 0
 RULE_PATH_BENEATH = 1
@@ -137,9 +146,10 @@ class PathBeneathAttr(ctypes.Structure):
 # Syscall numbers differ by architecture, so on an unknown one these numbers
 # could call an unrelated syscall instead of failing with ENOSYS. Everything
 # below runs only on the known ones.
-ON_LINUX = sys.platform == "linux" and platform.machine().lower() in (
-    KNOWN_ARCHITECTURES
+_ARCH: _seccomp.Arch | None = (
+    _seccomp.current_arch() if sys.platform == "linux" else None
 )
+ON_LINUX = _ARCH is not None and _ARCH.name in KNOWN_ARCHITECTURES
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True) if ON_LINUX else None
 if _libc is not None:
