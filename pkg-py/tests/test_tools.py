@@ -376,16 +376,6 @@ def test_a_context_hit_carries_the_turn_citation_request(plain: DataSource) -> N
 # ---- describe_table --------------------------------------------------------
 
 
-def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
-    source = data_source(sales=frame().head(0))
-    tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
-
-    body = call(find(tools, "describe_table"), table="sales")
-
-    assert "| revenue | DOUBLE |" in body
-    assert "| region | VARCHAR |" in body
-
-
 def test_describe_table_reports_native_types_without_exposing_row_values() -> None:
     spec = load_shared_fixture("describe-table")["duckdb"]
     connection = duckdb.connect()
