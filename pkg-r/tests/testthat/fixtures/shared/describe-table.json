@@ -1,0 +1,16 @@
+{
+  "description": "The DuckDB column types describe_table reports to the model. Both packages run the case against a real DuckDB table so SQL-native detail cannot be replaced by host-language classes, and the inserted value confirms that schema inspection does not expose row data.",
+  "duckdb": {
+    "table": "typed",
+    "create_sql": "CREATE TABLE typed (id INTEGER, amount DECIMAL(12,2), happened TIMESTAMP, active BOOLEAN, label VARCHAR)",
+    "insert_sql": "INSERT INTO typed VALUES (1, 12.34, TIMESTAMP '2026-10-16 12:00:00', TRUE, 'secret-value')",
+    "expected_columns": [
+      { "column": "id", "type": "INTEGER" },
+      { "column": "amount", "type": "DECIMAL(12,2)" },
+      { "column": "happened", "type": "TIMESTAMP" },
+      { "column": "active", "type": "BOOLEAN" },
+      { "column": "label", "type": "VARCHAR" }
+    ],
+    "excluded_values": ["12.34", "2026-10-16", "secret-value"]
+  }
+}

@@ -847,7 +847,11 @@ describe_table_tool <- function(
   trusted_only = FALSE
 ) {
   source_state <- data_source_state(source)
-  d <- source_describe(source, table)
+  d <- source_describe(
+    source,
+    table,
+    n_fallback_rows = if (trusted_only) 0L else 5L
+  )
   if (inherits(d, "commons_semantic_model_description")) {
     body <- semantic_model_description_text(d)
     return(tool_result(

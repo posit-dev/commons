@@ -239,7 +239,7 @@ test_that("run_sql and describe_table route to the named source", {
 
   describe <- agent_tool(agent, "describe_table")
   res <- describe("orders", source = "b")
-  expect_match(res@value, "integer")
+  expect_match(res@value, "INTEGER")
 })
 
 test_that("run_sql delivers one citation reminder per user turn", {

@@ -454,9 +454,27 @@ test_that("format_measure_value collects a lazy dbplyr table", {
 test_that("describe_table_tool reports columns and their types", {
   res <- describe_table_tool(test_source(), "sales")
   expect_equal(res@extra$display$title, "Inspected a table")
-  expect_match(res@value, "\\|order_id +\\|character +\\|")
-  # Row values reach the model only through run_sql (#319).
-  expect_no_match(res@value, "EMEA", fixed = TRUE)
+  expect_match(res@value, "\\|order_id +\\|VARCHAR +\\|")
+})
+
+test_that("describe_table matches the shared DuckDB schema contract", {
+  spec <- shared_fixture("describe-table")$duckdb
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, spec$create_sql)
+  DBI::dbExecute(con, spec$insert_sql)
+  src <- data_source(con, tables = spec$table)
+  expected <- data.frame(
+    column = vapply(spec$expected_columns, `[[`, character(1), "column"),
+    type = vapply(spec$expected_columns, `[[`, character(1), "type")
+  )
+
+  description <- describe_table_tool(src, spec$table)@value
+
+  expect_match(description, df_to_markdown(expected), fixed = TRUE)
+  for (value in spec$excluded_values) {
+    expect_no_match(description, value, fixed = TRUE)
+  }
 })
 
 test_that("search_context_tool handles a missing context layer", {

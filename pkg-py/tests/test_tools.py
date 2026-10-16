@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Annotated, Any
 
+import duckdb
 import pandas as pd
 import pytest
 from chatlas import ContentToolResult, Tool
@@ -32,6 +33,7 @@ from commons._tools import (
     run_sql_description,
     tool_description,
 )
+from tests._shared import load_shared_fixture
 from tests._warehouse import FakeDatabricks, FakeWarehouse
 
 DICTIONARY = """
@@ -380,8 +382,6 @@ def test_describe_table_shows_columns_and_their_types(plain: DataSource) -> None
 
     assert "Columns of `sales`:" in body
     assert "| revenue | DOUBLE |" in body
-    # Row values reach the model only through run_sql (#319).
-    assert "EMEA" not in body
 
 
 def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
@@ -392,6 +392,28 @@ def test_a_table_with_no_rows_is_still_described_column_by_column() -> None:
 
     assert "| revenue | DOUBLE |" in body
     assert "| region | VARCHAR |" in body
+
+
+def test_describe_table_matches_the_shared_duckdb_schema_contract() -> None:
+    spec = load_shared_fixture("describe-table")["duckdb"]
+    connection = duckdb.connect()
+    try:
+        connection.execute(spec["create_sql"])
+        connection.execute(spec["insert_sql"])
+        source = DataSource(
+            backend=DuckDBBackend(connection),
+            tables=[spec["table"]],
+            table_ids={spec["table"]: TableId(table=spec["table"])},
+        )
+        tools = build_commons_tools(ToolContext(sources={"sales_db": source}))
+        body = call(find(tools, "describe_table"), table=spec["table"])
+    finally:
+        connection.close()
+
+    for column in spec["expected_columns"]:
+        assert f"| {column['column']} | {column['type']} |" in body
+    for value in spec["excluded_values"]:
+        assert value not in body
 
 
 def test_describe_table_delivers_the_dictionary_entry(documented: DataSource) -> None:

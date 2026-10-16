@@ -14,7 +14,37 @@ test_that("source_describe returns the schema with each column's type", {
     d$schema,
     data.frame(
       column = c("order_id", "revenue", "region", "product_line", "rep"),
-      type = c("character", "numeric", "character", "character", "character")
+      type = c("VARCHAR", "DOUBLE", "VARCHAR", "VARCHAR", "VARCHAR")
+    )
+  )
+})
+
+test_that("fallback descriptions infer R column classes", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(
+    con,
+    paste(
+      "CREATE TABLE typed (",
+      "id INTEGER,",
+      "amount DECIMAL(12,2),",
+      "label VARCHAR",
+      ")"
+    )
+  )
+  DBI::dbExecute(con, "INSERT INTO typed VALUES (1, 12.34, 'secret')")
+
+  schema <- fallback_describe_relation(
+    con,
+    DBI::Id(table = "typed"),
+    n_fallback_rows = 5L
+  )
+
+  expect_equal(
+    schema,
+    data.frame(
+      column = c("id", "amount", "label"),
+      type = c("integer", "numeric", "character")
     )
   )
 })
