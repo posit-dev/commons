@@ -30,6 +30,8 @@ Documentation = "https://posit-dev.github.io/commons/py/"
 Issues = "https://github.com/posit-dev/commons/issues"
 
 [project.optional-dependencies]
+mcp = ["fastmcp>=3,<4", "jsonschema>=4"]
+server = ["commons[mcp]", "fastapi>=0.115", "uvicorn>=0.30"]
 tracing = [
     "opentelemetry-sdk>=1.39",
     "opentelemetry-exporter-otlp-json-file",
@@ -43,7 +45,7 @@ shiny = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]", "matplotlib>=3.8", "great-tables>=1.0.0", "plotnine>=0.15.8"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny,server]", "matplotlib>=3.8", "great-tables>=1.0.0", "plotnine>=0.15.8"]
 docs = [
     "great-docs>=0.17",
 ]

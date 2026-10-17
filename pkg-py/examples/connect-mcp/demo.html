@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>commons remote demo</title>
+<style>
+  :root { color-scheme: light dark; font: 16px/1.5 system-ui; }
+  body { max-width: 1000px; margin: 3rem auto; padding: 0 1rem; }
+  h1 { margin-bottom: .25rem; }
+  section { border: 1px solid #8886; border-radius: 12px; padding: 1.25rem; margin: 1.5rem 0; }
+  label { display: block; margin-top: .75rem; }
+  input, select, textarea, button { font: inherit; padding: .6rem; border: 1px solid #888; border-radius: 6px; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 100px; font-family: monospace; }
+  button { cursor: pointer; margin-top: 1rem; }
+  button:disabled { cursor: wait; opacity: .6; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: #8881; }
+  #status { min-height: 1.5rem; }
+  small { color: #777; }
+</style>
+<body data-service-auth="required">
+<h1>commons remote demo</h1>
+<p>Server-owned DuckDB datasets. Metadata through FastAPI; calculations through FastMCP.</p>
+<section>
+  <h2>Connect</h2>
+  <div id="service-auth">
+    <label for="key">API key <small>(configured by the service operator)</small></label>
+    <input id="key" type="password" autocomplete="off" placeholder="API key">
+  </div>
+  <button id="connect">Load catalog</button>
+  <p id="status" role="status" aria-live="polite">Enter the demo key to load the authorized view.</p>
+</section>
+<section>
+  <h2>Approved revenue</h2>
+  <p>The approved calculation returns execution provenance tag A.</p>
+  <label for="region">Region</label>
+  <select id="region"><option value="">All regions</option><option>North</option><option>South</option></select>
+  <button id="revenue" disabled>Calculate revenue</button>
+  <pre id="measure-output" aria-live="polite">Connect to calculate.</pre>
+</section>
+<section id="hospital-section" hidden>
+  <h2>Approved hospital event counts</h2>
+  <p>Counts of recorded events, not hospital incidence rates or quality measures.</p>
+  <label for="hospital-name">Exact hospital name <small>(leave empty for all hospitals)</small></label>
+  <input id="hospital-name" type="text">
+  <label for="hospital-group">Group by</label>
+  <select id="hospital-group"><option value="hospital">Hospital</option><option value="event_type">Event type</option><option value="severity">Severity label</option></select>
+  <button id="hospital-summary" disabled>Summarize events</button>
+  <button id="hospital-counts" disabled>Count by category</button>
+  <pre id="hospital-output" aria-live="polite">Connect to calculate.</pre>
+</section>
+<section>
+  <h2>Custom SQL</h2>
+  <p>Custom queries return execution provenance tag B. A commons agent verifies supporting citations before assigning the Cited or Untrusted outcome.</p>
+  <label for="source">Dataset</label>
+  <select id="source"><option value="warehouse">warehouse</option></select>
+  <label for="sql">Read-only query</label>
+  <textarea id="sql" spellcheck="false">SELECT region, SUM(revenue) AS revenue
+FROM orders
+GROUP BY region
+ORDER BY region</textarea>
+  <button id="query" disabled>Run query</button>
+  <pre id="sql-output" aria-live="polite">Connect to query.</pre>
+</section>
+<section>
+  <h2>Authorized metadata</h2>
+  <details><summary>Catalog</summary><pre id="catalog-output"></pre></details>
+  <details><summary>Data dictionary</summary><pre id="dictionary-output"></pre></details>
+</section>
+<script>
+  const element = id => document.getElementById(id);
+  const serviceAuth = document.body.dataset.serviceAuth === "required";
+  if (!serviceAuth) {
+    element("service-auth").hidden = true;
+    element("status").textContent = "Authentication is managed by Connect. Load the catalog.";
+  }
+  let catalog;
+  let requestId = 1;
+
+  async function request(path, options = {}) {
+    const response = await fetch(path, {
+      ...options,
+      redirect: "error",
+      headers: {
+        ...(serviceAuth ? {"X-API-Key": element("key").value} : {}),
+        ...options.headers,
+      },
+    });
+    if (!response.ok) throw new Error(`Request failed (${response.status}). ${serviceAuth ? "Check the API key and input." : "Check your Connect sign-in and input."}`);
+    return response;
+  }
+
+  async function mcp(method, params) {
+    const response = await request("./mcp/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "MCP-Protocol-Version": "2025-03-26",
+      },
+      body: JSON.stringify({jsonrpc: "2.0", id: requestId++, method, params}),
+    });
+    const reply = await response.json();
+    if (reply.error || reply.result?.isError) throw new Error("The server rejected the call. Verify the query, permissions, and catalog revision.");
+    return reply.result;
+  }
+
+  async function execute(button, work) {
+    button.disabled = true;
+    try { await work(); }
+    catch (error) { element("status").textContent = error.message; }
+    finally { button.disabled = false; }
+  }
+
+  element("connect").onclick = () => execute(element("connect"), async () => {
+    catalog = await (await request("./v1/catalog")).json();
+    await mcp("initialize", {
+      protocolVersion: "2025-03-26",
+      capabilities: {},
+      clientInfo: {name: "commons-demo-page", version: "1"},
+    });
+    element("catalog-output").textContent = JSON.stringify(catalog, null, 2);
+    element("source").replaceChildren(...catalog.sources.map(source => {
+      const option = document.createElement("option");
+      option.value = source.id; option.textContent = `${source.id} (${source.tables.join(", ")})`;
+      return option;
+    }));
+    element("dictionary-output").textContent = (await Promise.all(catalog.sources.map(async source =>
+      await (await request(`./v1/data-dictionaries/${encodeURIComponent(source.id)}`)).text()
+    ))).join("\n\n");
+    element("revenue").disabled = !catalog.tools.some(tool => tool.name === "revenue");
+    element("hospital-section").hidden = !catalog.sources.some(source => source.id === "hospital");
+    element("hospital-summary").disabled = !catalog.tools.some(tool => tool.name === "hospital_summary");
+    element("hospital-counts").disabled = !catalog.tools.some(tool => tool.name === "hospital_event_counts");
+    element("query").disabled = !catalog.tools.some(tool => tool.name === "run_sql");
+    element("status").textContent = `Connected. Catalog revision ${catalog.catalog_revision}.`;
+  });
+
+  async function calculate(name, args, target) {
+    const result = await mcp("tools/call", {
+      name, arguments: args,
+      _meta: {commons_catalog_revision: catalog.catalog_revision},
+    });
+    const envelope = result.structuredContent;
+    element(target).textContent = JSON.stringify({
+      data: envelope.data,
+      execution_provenance_tag: envelope.commons.provenance_tag,
+      coverage: envelope.commons.coverage,
+    }, null, 2);
+    element("status").textContent = "Calculation complete.";
+  }
+
+  element("revenue").onclick = () => execute(element("revenue"), () => calculate(
+    "revenue", {region: element("region").value || null}, "measure-output",
+  ));
+  element("query").onclick = () => execute(element("query"), () => calculate(
+    "run_sql", {source: element("source").value, sql: element("sql").value}, "sql-output",
+  ));
+  element("hospital-summary").onclick = () => execute(element("hospital-summary"), () => calculate(
+    "hospital_summary", {hospital_name: element("hospital-name").value || null}, "hospital-output",
+  ));
+  element("hospital-counts").onclick = () => execute(element("hospital-counts"), () => calculate(
+    "hospital_event_counts", {group_by: element("hospital-group").value, hospital_name: element("hospital-name").value || null}, "hospital-output",
+  ));
+  element("source").onchange = () => {
+    element("sql").value = element("source").value === "hospital"
+      ? "SELECT hospitals_table, COUNT(*) AS event_count\nFROM hospital_events\nGROUP BY hospitals_table\nORDER BY event_count DESC"
+      : "SELECT region, SUM(revenue) AS revenue\nFROM orders\nGROUP BY region\nORDER BY region";
+  };
+</script>
+</body>
+</html>

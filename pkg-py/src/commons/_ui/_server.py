@@ -10,6 +10,7 @@ from shiny.session import Session, require_active_session
 
 from .._agent import Commons
 from .._tracing import commons_span
+from ._history import history_options
 
 __all__ = ["check_commons_client", "server"]
 
@@ -41,6 +42,7 @@ def server(id: str, client: Commons, **kwargs: Any) -> shinychat.Chat:
 
     with commons_span("commons_server_start", {"commons.server.id": id}):
         _prewarm_on_idle(client, require_active_session(None))
+        kwargs["history"] = history_options(kwargs.get("history", True), client)
         chat = shinychat.Chat(id, client=client, **kwargs)
 
         # shinychat owns the conversation identity; commons only needs to

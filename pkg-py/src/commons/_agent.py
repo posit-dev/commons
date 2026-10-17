@@ -14,6 +14,7 @@ import copy
 import warnings
 import weakref
 from collections.abc import AsyncGenerator, Mapping, Sequence
+from contextlib import suppress
 from typing import Any, Literal, NoReturn
 
 from chatlas import Chat, StreamController, Tool, Turn, UserTurn
@@ -34,6 +35,7 @@ from ._definitions import Registry, build_registry
 from ._execution._driver import Worker
 from ._execution._thread import WorkerThread
 from ._handles import HandleStore
+from ._mcp import close_servers, open_servers, remote_prompt
 from ._measures import SemanticLayer, resolve_injections, semantic_layer
 from ._prompt import (
     EXECUTION_TOOL,
@@ -114,7 +116,7 @@ class Commons(Chat[Any, Any]):
     def __init__(
         self,
         client: Chat,
-        data_sources: DataSource | Mapping[str, DataSource],
+        data_sources: DataSource | Mapping[str, DataSource] | None = None,
         semantic_layer: SemanticLayer | None = None,
         context_layer: ContextLayer | None = None,
         *,
@@ -130,7 +132,6 @@ class Commons(Chat[Any, Any]):
         # is checked, as pkg-r/R/commons.R does, so a bad later argument
         # does not eat the warning.
         _warn_ignored_client_state(client)
-        sources = _as_data_sources(data_sources)
         if context_layer is not None and not isinstance(context_layer, ContextLayer):
             raise TypeError(
                 "context_layer must be a ContextLayer from commons.context_layer(), "
@@ -145,12 +146,11 @@ class Commons(Chat[Any, Any]):
                 f"{type(semantic_layer).__name__}."
             )
         check_instructions(instructions)
+        if network not in {"none", "full"}:
+            raise ValueError("network must be 'none' or 'full'.")
         # Built here so a host that cannot sandbox the session fails now,
         # before any model asks to run code. The process starts on first use.
-        worker = Worker(
-            network=network,
-            measure_sources=list(semantic_layer.source_text.values()),
-        )
+        sources, worker = _sources_and_worker(data_sources, semantic_layer, network)
 
         # Share the provider, which knows the chosen model; shallow-copy
         # the chat kwargs so later changes don't cross between the two.
@@ -189,31 +189,83 @@ class Commons(Chat[Any, Any]):
             injections=self._injections,
             first_touch=self._first_touch,
         )
+        tools = self._local_tools(context, worker, network)
+        self._remote = []
+        try:
+            self._remote = open_servers(semantic_layer.mcp_servers)
+            self._configure_remote(tools)
+            self._set_prompt(tools, instructions)
+        except BaseException:
+            with suppress(BaseException):
+                self.close()
+            raise
+
+    def _local_tools(
+        self,
+        context: ToolContext,
+        worker: Worker | None,
+        network: Literal["none", "full"],
+    ) -> list[Tool]:
         tools = build_commons_tools(context)
-        self._python = WorkerThread(worker)
+        if not self._sources:
+            allowed = {"search_pool", "call_measure"} if self._measures else set()
+            if self._context_layer is not None:
+                allowed.add("search_context")
+            tools = [tool for tool in tools if tool.name in allowed]
+        self._python = WorkerThread(worker) if worker is not None else None
         # Close the session's process and thread when the agent is
         # collected or the interpreter exits. The callback names only the
         # WorkerThread, so the finalizer never keeps the agent alive.
-        weakref.finalize(self, self._python.close)
-        self._run_python, self._run_python_sync = run_python_tools(
-            self._python,
-            context,
-            run_python_description(
-                [tool.name for tool in tools],
-                has_measures=bool(self._measures),
-                network=network,
-            ),
-            network,
+        if self._python is not None:
+            weakref.finalize(self, self._python.close)
+            self._run_python, self._run_python_sync = run_python_tools(
+                self._python,
+                context,
+                run_python_description(
+                    [tool.name for tool in tools],
+                    has_measures=bool(self._measures),
+                    network=network,
+                ),
+                network,
+            )
+            tools.append(self._run_python)
+        return tools
+
+    def _configure_remote(self, tools: list[Tool]) -> None:
+        weakref.finalize(self, close_servers, self._remote)
+        self._remote_tools = [
+            pair
+            for session in self._remote
+            for pair in session.tools(self._citation_request)
+        ]
+        tools.extend(pair[0] for pair in self._remote_tools)
+        self._corpus.extend(
+            entry for session in self._remote for entry in session.corpus
         )
-        tools.append(self._run_python)
         self.set_tools(list(tools))
-        self.system_prompt = _system_prompt(
-            sources,
+
+    def _set_prompt(self, tools: list[Tool], instructions: str | None) -> None:
+        # Actual tools keep remote-only prompts from advertising a Python worker.
+        prompt = _system_prompt(
+            self._sources,
             self._definitions,
-            instructions=instructions,
+            instructions=None if self._remote else instructions,
             tools=tools,
             model=self.model,
         )
+        if self._remote:
+            prompt = f"{prompt}\n\n{remote_prompt(self._remote)}"
+            if additional := read_instructions(instructions):
+                prompt += f"\n\n## Additional instructions\n\n{additional}"
+        self.system_prompt = prompt
+
+    def close(self) -> None:
+        """Close this agent's remote clients and local execution worker."""
+        try:
+            close_servers(self._remote)
+        finally:
+            if self._python is not None:
+                self._python.close()
 
     def __repr__(self) -> str:
         count = len(self._sources)
@@ -252,13 +304,15 @@ class Commons(Chat[Any, Any]):
         swap = any(tool.name == EXECUTION_TOOL for tool in self.get_tools())
         if swap:
             self.register_tool(self._run_python_sync, force=True)
+        for _, sync in self._remote_tools:
+            self.register_tool(sync, force=True)
         try:
-            response = super().chat(
-                *inputs, echo=echo, stream=stream, kwargs=kwargs
-            )
+            response = super().chat(*inputs, echo=echo, stream=stream, kwargs=kwargs)
         finally:
             if swap:
                 self.register_tool(self._run_python, force=True)
+            for asynchronous, _ in self._remote_tools:
+                self.register_tool(asynchronous, force=True)
         self._consume_restore_reminder(was_pending)
         return response
 
@@ -354,7 +408,10 @@ class Commons(Chat[Any, Any]):
         """Stop the Python session's calls once ``controller`` is cancelled."""
         while not controller.cancelled:
             await asyncio.sleep(STOP_POLL_INTERVAL)
-        self._python.stop_calls()
+        if self._python is not None:
+            self._python.stop_calls()
+        for session in self._remote:
+            session.stop_calls()
 
     # ---- chatlas.Chat entry points a Commons agent does not support ----------------
 
@@ -426,7 +483,7 @@ class Commons(Chat[Any, Any]):
         self, inputs: Sequence[Content | str]
     ) -> list[Content | str]:
         prepared = append_turn_reminder(inputs, self.model)
-        if self._restore_reminder_pending:
+        if self._restore_reminder_pending and self._python is not None:
             prepared = append_restored_conversation_reminder(prepared)
         return prepared
 
@@ -495,7 +552,7 @@ def _carry_model_params(agent: Chat, client: Chat) -> None:
 
 
 def _as_data_sources(
-    data_sources: DataSource | Mapping[str, DataSource],
+    data_sources: DataSource | Mapping[str, DataSource] | None,
 ) -> dict[str, DataSource]:
     if isinstance(data_sources, DataSource):
         return {SOLE_SOURCE: data_sources}
@@ -520,11 +577,32 @@ def _as_data_sources(
     return dict(data_sources)
 
 
+def _sources_and_worker(
+    data_sources: DataSource | Mapping[str, DataSource] | None,
+    semantic_layer: SemanticLayer,
+    network: Literal["none", "full"],
+) -> tuple[dict[str, DataSource], Worker | None]:
+    sources = (
+        {}
+        if data_sources is None and semantic_layer.mcp_servers
+        else _as_data_sources(data_sources)
+    )
+    worker = (
+        Worker(
+            network=network,
+            measure_sources=list(semantic_layer.source_text.values()),
+        )
+        if sources
+        else None
+    )
+    return sources, worker
+
+
 # A measure can take a named source's connection as an argument named after
 # the source. A lone source passed on its own has no name to be asked for, so
 # it offers nothing to inject, as in pkg-r/R/commons.R.
 def _measure_injectables(
-    data_sources: DataSource | Mapping[str, DataSource],
+    data_sources: DataSource | Mapping[str, DataSource] | None,
     sources: Mapping[str, DataSource],
 ) -> dict[str, Any]:
     if isinstance(data_sources, DataSource):

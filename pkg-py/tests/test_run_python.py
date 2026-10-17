@@ -484,6 +484,7 @@ def test_the_network_argument_reaches_the_description_and_annotations() -> None:
     assert "The session has network access" in rules
     assert tool.annotations is not None
     assert tool.annotations.get("openWorldHint") is True
+    assert agent._python is not None
     assert agent._python._worker._network == "full"
 
 
@@ -529,6 +530,7 @@ def test_dropping_the_agent_stops_its_session_thread() -> None:
         data_source(sales=frame()),
     )
     agent.chat("Go.", echo="none")
+    assert agent._python is not None
     thread = agent._python._thread
     assert thread is not None and thread.is_alive()
     del agent
