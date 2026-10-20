@@ -32,7 +32,7 @@ Only the following text is citable:
 
 These parts of tool outputs are not citable:
 
-- Live relation metadata, inferred schema, and sample rows from `describe_table`.
+- Live relation metadata and inferred schema from `describe_table`.
 - Result values from `call_measure`. An answer based on that tool alone is already trusted and needs no citation.
 - Result values from `call_metrics`. An answer based on that tool alone is already trusted and needs no citation.
 - Query result rows from `run_sql`.

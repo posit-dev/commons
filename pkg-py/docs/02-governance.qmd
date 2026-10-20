@@ -66,7 +66,7 @@ Communication happens through pipes between the two processes. `commons` copies 
 
 ## Permissioning facts
 
-The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.
+The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.
 
 Because of this, you should only include facts that you can share with both the application's viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information.
 

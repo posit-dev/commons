@@ -1,0 +1,24 @@
+{
+  "description": "The DuckDB column types describe_table reports to the model. Both packages run the case against a real DuckDB table so SQL-native detail, including ENUM labels, cannot be replaced by host-language classes, while values that appear only in inserted rows stay out of model-facing descriptions.",
+  "duckdb": {
+    "table": "typed",
+    "create_sql": "CREATE TABLE typed (id INTEGER, amount DECIMAL(12,2), happened TIMESTAMP, active BOOLEAN, label VARCHAR, owner ENUM('Alice Smith', 'Bob | Jones'), details STRUCT(owner ENUM('nested ) secret', 'O''Brien | secret'), n INTEGER))",
+    "insert_sql": "INSERT INTO typed VALUES (1, 12.34, TIMESTAMP '2026-10-16 12:00:00', TRUE, 'secret-value', 'Alice Smith', struct_pack(owner := 'nested ) secret', n := 1))",
+    "expected_columns": [
+      { "column": "id", "type": "INTEGER" },
+      { "column": "amount", "type": "DECIMAL(12,2)" },
+      { "column": "happened", "type": "TIMESTAMP" },
+      { "column": "active", "type": "BOOLEAN" },
+      { "column": "label", "type": "VARCHAR" },
+      { "column": "owner", "type": "ENUM('Alice Smith', 'Bob | Jones')" },
+      { "column": "details", "type": "STRUCT(\"owner\" ENUM('nested ) secret', 'O''Brien | secret'), n INTEGER)" }
+    ],
+    "excluded_values": ["12.34", "2026-10-16", "secret-value"]
+  },
+  "wide_duckdb": {
+    "table": "wide_table",
+    "column_count": 51,
+    "column_name_template": "column_%03d",
+    "column_type": "INTEGER"
+  }
+}

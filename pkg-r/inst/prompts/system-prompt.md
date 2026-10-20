@@ -52,7 +52,7 @@ Only the following text is citable:
 These parts of tool outputs are not citable:
 
 {% if has_describe_table %}
-- Live relation metadata, inferred schema, and sample rows from `describe_table`.
+- Live relation metadata and inferred schema from `describe_table`.
 {% endif %}
 {% if has_call_measure %}
 - Result values from `call_measure`. An answer based on that tool alone is already trusted and needs no citation.

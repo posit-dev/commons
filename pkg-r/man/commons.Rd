@@ -52,10 +52,10 @@ code.
 \item \code{"trusted only"}: the agent answers only with trusted calculations:
 measures, governed metrics, and exact trusted queries. When none
 answers the question, it says so rather than writing its own code. The
-agent can still search context and inspect table schemas, but not
-sample rows. Because every answer comes from a trusted calculation,
-answers carry no provenance markers, and the agent needs no sandboxed
-R session. The agent must have at least one trusted calculation.
+agent can still search context and inspect table schemas. Because
+every answer comes from a trusted calculation, answers carry no
+provenance markers, and the agent needs no sandboxed R session. The
+agent must have at least one trusted calculation.
 }}
 
 \item{network}{Whether the agent's R session has network access. One
@@ -155,8 +155,7 @@ determines and displays answer trust.
 R session.
 }
 
-With \code{mode = "trusted only"}, the agent never receives \code{run_sql} or \code{run_r},
-and \code{describe_table} omits sample rows.
+With \code{mode = "trusted only"}, the agent never receives \code{run_sql} or \code{run_r}.
 
 These model-facing tools should be considered private. Their constructors
 are intentionally not exported, and their names, arguments, availability,

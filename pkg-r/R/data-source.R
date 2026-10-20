@@ -601,7 +601,7 @@ pending_tables_in_error <- function(source, err) {
 source_describe <- function(
   source,
   table,
-  n_sample = 5,
+  n_fallback_rows = 5L,
   call = rlang::caller_env()
 ) {
   state <- data_source_state(source)
@@ -622,27 +622,22 @@ source_describe <- function(
   catalog_ensure_queryable(source, table, call = call)
   source_ensure_tables(source, table)
 
-  sample <- DBI::dbGetQuery(
-    state$con,
-    sprintf(
-      "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(state$con, id),
-      n_sample
-    )
-  )
   relation <- source_relation(source, table)
-  if (is.null(state$relations)) {
-    schema <- data.frame(
-      column = names(sample),
-      type = vapply(sample, function(x) class(x)[[1]], character(1)),
-      row.names = NULL
-    )
-  } else if (!is.null(relation$columns)) {
+  if (!is.null(relation$columns)) {
     schema <- relation$columns
   } else if (is_snowflake_connection(state$con)) {
     schema <- snowflake_describe_relation(state$con, id, call = call)
-  } else {
+  } else if (is_databricks_connection(state$con)) {
     schema <- databricks_describe_relation(state$con, id, call = call)
+  } else if (inherits(state$con, "duckdb_connection")) {
+    schema <- duckdb_describe_relation(state$con, id, call = call)
+  } else {
+    schema <- fallback_describe_relation(
+      state$con,
+      id,
+      n_fallback_rows,
+      call = call
+    )
   }
   if (!is.null(state$manifest) && is.null(relation$columns)) {
     relation$columns <- schema
@@ -650,9 +645,60 @@ source_describe <- function(
   }
   list(
     schema = schema,
-    sample = sample,
     kind = relation$kind,
     description = relation$description
+  )
+}
+
+duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {
+  rows <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste("DESCRIBE", DBI::dbQuoteIdentifier(con, id))
+    ),
+    error = function(err) {
+      cli::cli_abort(
+        "Failed to describe the selected DuckDB relation.",
+        parent = err,
+        call = call
+      )
+    }
+  )
+  names(rows) <- tolower(names(rows))
+  data.frame(
+    column = rows$column_name,
+    type = rows$column_type,
+    row.names = NULL
+  )
+}
+
+fallback_describe_relation <- function(
+  con,
+  id,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  sample <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      sprintf(
+        "SELECT * FROM %s LIMIT %d",
+        DBI::dbQuoteIdentifier(con, id),
+        n_fallback_rows
+      )
+    ),
+    error = function(err) {
+      cli::cli_abort(
+        "Failed to infer the selected relation's column types.",
+        parent = err,
+        call = call
+      )
+    }
+  )
+  data.frame(
+    column = names(sample),
+    type = vapply(sample, function(x) class(x)[[1]], character(1)),
+    row.names = NULL
   )
 }
 

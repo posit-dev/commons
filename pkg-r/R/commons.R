@@ -40,10 +40,10 @@
 #'   * `"trusted only"`: the agent answers only with trusted calculations:
 #'     measures, governed metrics, and exact trusted queries. When none
 #'     answers the question, it says so rather than writing its own code. The
-#'     agent can still search context and inspect table schemas, but not
-#'     sample rows. Because every answer comes from a trusted calculation,
-#'     answers carry no provenance markers, and the agent needs no sandboxed
-#'     R session. The agent must have at least one trusted calculation.
+#'     agent can still search context and inspect table schemas. Because
+#'     every answer comes from a trusted calculation, answers carry no
+#'     provenance markers, and the agent needs no sandboxed R session. The
+#'     agent must have at least one trusted calculation.
 #' @param network Whether the agent's R session has network access. One
 #'   of
 #'   `"none"` (the default) or `"full"`. Must be `"none"` when
@@ -120,8 +120,7 @@
 #' * `run_r` executes R code to analyze results and render plots in the agent's
 #'   R session.
 #'
-#' With `mode = "trusted only"`, the agent never receives `run_sql` or `run_r`,
-#' and `describe_table` omits sample rows.
+#' With `mode = "trusted only"`, the agent never receives `run_sql` or `run_r`.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,

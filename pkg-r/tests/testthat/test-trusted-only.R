@@ -78,21 +78,15 @@ test_that("the trusted-only prompt drops the fallback path and citations", {
   expect_no_match(prompt, "run_r", fixed = TRUE)
 })
 
-test_that("describe_table omits sample rows and fetches none", {
+test_that("describe_table frames definitions for trusted calculations", {
   src <- definitions_source()
   agent <- trusted_agent(data_sources = list(sales_db = src))
   describe <- agent_tool(agent, "describe_table")
 
-  expect_no_match(tool_description(describe), "sample", ignore.case = TRUE)
   body <- describe("sales")@value
-  expect_no_match(body, "Sample summary", fixed = TRUE)
   expect_match(body, "revenue", fixed = TRUE)
   expect_match(body, "compute metrics with call_metrics", fixed = TRUE)
   expect_no_match(body, "tokens in SQL", fixed = TRUE)
-
-  described <- source_describe(src, "sales", n_sample = 0)
-  expect_identical(nrow(described$sample), 0L)
-  expect_setequal(names(described$sample), names(test_sales()))
 })
 
 test_that("describe_table keeps the live schema of an undocumented table", {
@@ -100,7 +94,6 @@ test_that("describe_table keeps the live schema of an undocumented table", {
 
   body <- agent_tool(agent, "describe_table")("sales")@value
 
-  expect_no_match(body, "Sample summary", fixed = TRUE)
   for (column in names(test_sales())) {
     expect_match(body, column, fixed = TRUE)
   }
