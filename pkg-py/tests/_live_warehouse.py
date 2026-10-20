@@ -145,7 +145,9 @@ def _engine(backend: str, namespace: tuple[str, ...]) -> sqlalchemy.Engine:
         pytest.importorskip(
             "databricks.sqlalchemy", reason="pip install databricks-sqlalchemy"
         )
-        from databricks.sdk.core import Config
+        Config = pytest.importorskip(
+            "databricks.sdk.core", reason="pip install databricks-sdk"
+        ).Config
 
         host = os.environ["DATABRICKS_HOST"].removeprefix("https://").rstrip("/")
         catalog, schema = namespace
