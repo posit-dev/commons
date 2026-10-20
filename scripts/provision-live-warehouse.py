@@ -168,6 +168,8 @@ def grants(dialect: str, parts: list[str], qualified: str, tables: list[str], gr
     principal = quote_identifier(grantee, dialect)
     denied = f"{qualified}.{quote_identifier(DENIED_TABLE, dialect)}"
     lines = [
+        f"-- Run this as a principal other than {principal}. An owner can read its own",
+        f"-- tables, so {principal} must not own {denied}.",
         f"DROP TABLE IF EXISTS {denied};",
         f"CREATE TABLE {denied} AS SELECT * FROM {qualified}.{quote_identifier('orders', dialect)};",
         "",
