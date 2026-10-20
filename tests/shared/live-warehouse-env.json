@@ -1,10 +1,9 @@
 {
-  "note": "The environment both suites read to reach a real warehouse. Held here so the two harnesses cannot drift on a variable name. Connection variables are the vendor's own, which is what the Databricks and Snowflake client libraries read in Python and what odbc::databricks() and odbc::snowflake() read in R, so one export block serves both languages and the vendor CLIs. Fixture variables carry one dotted identifier each. A backend whose required variables are unset skips; an optional fixture skips only the tests that need it.",
+  "note": "The environment both suites read to reach a real warehouse. Held here so the two harnesses cannot drift on a variable name. Connection variables are the vendor's own, so one export block serves both languages and the vendor CLIs. Databricks credentials are left to the vendor's unified authentication, which resolves DATABRICKS_TOKEN, a DATABRICKS_CLIENT_ID with a secret or GitHub Actions OIDC, or a Databricks CLI login, so none is named here. Snowflake signs in with a key pair, the one method a service user and a person share. Fixture variables carry one dotted identifier each. A backend whose required variables are unset skips; an optional fixture skips only the tests that need it.",
   "backends": {
     "databricks": {
       "connection": {
-        "required": ["DATABRICKS_HOST", "DATABRICKS_HTTP_PATH"],
-        "token": "DATABRICKS_TOKEN"
+        "required": ["DATABRICKS_HOST", "DATABRICKS_HTTP_PATH"]
       },
       "fixtures": {
         "schema": {
@@ -29,8 +28,12 @@
     },
     "snowflake": {
       "connection": {
-        "required": ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_WAREHOUSE"],
-        "token": "SNOWFLAKE_PASSWORD"
+        "required": [
+          "SNOWFLAKE_ACCOUNT",
+          "SNOWFLAKE_USER",
+          "SNOWFLAKE_WAREHOUSE",
+          "SNOWFLAKE_PRIVATE_KEY_FILE"
+        ]
       },
       "fixtures": {
         "schema": {
