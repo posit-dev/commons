@@ -325,6 +325,14 @@ yet. `source_ensure_all()` in `pkg-r/R/data-source.R` is the same
 step for the same reason. A source with nothing pending, which is
 every source that is not board-backed, does nothing.
 
+ensure_tables_loaded(self, tables: 'list[str]') -> 'None'
+
+Read the pins behind `tables` that this source has not read yet.
+
+For a caller that reads a table's columns from the backend rather than
+through `query()`, which is where loading otherwise happens.
+`source_ensure_tables()` in `pkg-r/R/data-source.R` is the same step.
+
 dialect(self) -> 'str'
 
 A hint for the system prompt, not a contract.
@@ -789,7 +797,7 @@ Communication happens through pipes between the two processes. `commons` copies 
 
 ## Permissioning facts
 
-The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.
+The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.
 
 Because of this, you should only include facts that you can share with both the application's viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information.
 

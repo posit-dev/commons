@@ -54,6 +54,7 @@
 - [DataSource.from_board](https://posit-dev.github.io/commons/py/reference/DataSource.from_board.html)
 - [DataSource.query](https://posit-dev.github.io/commons/py/reference/DataSource.query.html)
 - [DataSource.ensure_loaded](https://posit-dev.github.io/commons/py/reference/DataSource.ensure_loaded.html)
+- [DataSource.ensure_tables_loaded](https://posit-dev.github.io/commons/py/reference/DataSource.ensure_tables_loaded.html)
 - [DataSource.dialect](https://posit-dev.github.io/commons/py/reference/DataSource.dialect.html)
 
 #### Shiny UI and server

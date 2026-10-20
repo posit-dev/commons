@@ -117,6 +117,9 @@ Run one read-only statement, rejecting anything else first.
 [DataSource.ensure_loaded()](DataSource.ensure_loaded.md#commons.DataSource.ensure_loaded)  
 Read every pin this source has not read yet.
 
+[DataSource.ensure_tables_loaded()](DataSource.ensure_tables_loaded.md#commons.DataSource.ensure_tables_loaded)  
+Read the pins behind `tables` that this source has not read yet.
+
 [DataSource.dialect()](DataSource.dialect.md#commons.DataSource.dialect)  
 A hint for the system prompt, not a contract.
 

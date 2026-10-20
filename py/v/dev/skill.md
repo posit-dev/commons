@@ -70,6 +70,7 @@ Methods for the DataSource class
 - `DataSource.from_board`
 - `DataSource.query`
 - `DataSource.ensure_loaded`
+- `DataSource.ensure_tables_loaded`
 - `DataSource.dialect`
 
 ### Shiny UI and server
