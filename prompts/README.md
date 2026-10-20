@@ -16,9 +16,11 @@ construction balances a few goals:
 - Keep ambient context useful but bounded. Detailed table and definition
   context arrives through tools when needed.
 
-This directory is the single source for both packages. `scripts/sync-shared.sh`
-copies it into `pkg-r/inst/prompts/` and `pkg-py/src/commons/prompts/`, and CI
-fails when either copy is stale. Edit the files here, never a copy.
+The shared prompt files live here. `scripts/sync-shared.sh` copies them into
+`pkg-r/inst/prompts/` and `pkg-py/src/commons/prompts/`, and CI fails when
+either copy is stale. The Python-only remote MCP prompt is maintained in
+`pkg-py/src/commons/prompts/remote-system-prompt.md`; the sync script preserves
+it while refreshing the shared files.
 
 The template is Jinja2, rendered by `jinja2` in Python and by a small renderer
 in R that implements the same subset: `{{ name }}` substitution,

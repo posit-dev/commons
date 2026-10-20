@@ -38,6 +38,8 @@ from pydantic import BaseModel, ConfigDict, create_model
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
+from ._mcp_config import MCPServer, collect_servers
+
 
 class _InjectedMarker:
     """Sentinel distinguishing a commons-supplied parameter from a described one."""
@@ -435,6 +437,7 @@ class SemanticLayer:
 
     measures: Mapping[str, Measure]
     source_text: Mapping[str, str]
+    mcp_servers: tuple[MCPServer, ...] = ()
 
     def __len__(self) -> int:
         return len(self.measures)
@@ -451,7 +454,7 @@ class SemanticLayer:
         return f"A commons semantic layer with {count} measure{plural}."
 
 
-def semantic_layer(*items: Any) -> SemanticLayer:
+def semantic_layer(*items: Any, mcp_servers: Sequence[MCPServer] = ()) -> SemanticLayer:
     """Collect measures into a semantic layer.
 
     Each item is a measure, a list (or tuple) of measures, a module, or a
@@ -473,6 +476,7 @@ def semantic_layer(*items: Any) -> SemanticLayer:
     sharing one name is. The R implementation is stricter here: it rejects
     a repeated name even when it is the same measure twice.
     """
+    servers = collect_servers(mcp_servers)
     measures: dict[str, Measure] = {}
     source_text: dict[str, str] = {}
     duplicates: list[str] = []
@@ -501,6 +505,7 @@ def semantic_layer(*items: Any) -> SemanticLayer:
     return SemanticLayer(
         measures=MappingProxyType(measures),
         source_text=MappingProxyType(source_text),
+        mcp_servers=servers,
     )
 
 

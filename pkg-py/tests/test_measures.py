@@ -1110,12 +1110,14 @@ def test_public_api_exposes_the_semantic_layer() -> None:
         "DataSource",
         "Injected",
         "Measure",
+        "MCPServer",
         "SemanticLayer",
         "Tag",
         "context_layer",
         "data_source",
         "list_tables",
         "measure",
+        "mcp_server",
         "semantic_layer",
     }
     assert commons.Injected is Injected

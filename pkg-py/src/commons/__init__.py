@@ -11,6 +11,7 @@ from typing import Any
 from ._agent import Commons
 from ._context_layer import ContextLayer, context_layer
 from ._data_source import DataSource, data_source, list_tables
+from ._mcp_config import MCPServer, mcp_server
 from ._measures import Injected, Measure, SemanticLayer, measure, semantic_layer
 from ._provenance import Tag
 
@@ -19,12 +20,14 @@ __all__: list[str] = [
     "ContextLayer",
     "DataSource",
     "Injected",
+    "MCPServer",
     "Measure",
     "SemanticLayer",
     "Tag",
     "context_layer",
     "data_source",
     "list_tables",
+    "mcp_server",
     "measure",
     "semantic_layer",
 ]

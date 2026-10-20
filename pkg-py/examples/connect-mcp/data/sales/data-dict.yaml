@@ -1,0 +1,32 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+name: Synthetic sales warehouse
+description: Deterministic demonstration orders; not real customer or sales data.
+tables:
+  - name: orders
+    description: One row per completed order. Revenue is quantity multiplied by unit_price in USD; no tax, refunds, or discounts.
+    columns:
+      - name: order_id
+        type: number(id)
+        description: Unique synthetic order identifier.
+      - name: region
+        type: string
+        description: Sales region, North or South.
+      - name: revenue
+        type: number(quantity)
+        description: Booked order amount in USD, equal to quantity multiplied by unit_price.
+      - name: ordered_at
+        type: date
+        description: Synthetic order date from 2025-01-01 through 2025-04-30.
+      - name: product
+        type: string
+        description: Synthetic product category, Monitor, Keyboard, Dock, or Mouse.
+      - name: quantity
+        type: number(quantity)
+        description: Number of product units in the order.
+      - name: unit_price
+        type: number(quantity)
+        description: Product unit price in USD.
+      - name: customer_id
+        type: number(id)
+        description: Synthetic customer identifier from 1 through 80; not a real person.
