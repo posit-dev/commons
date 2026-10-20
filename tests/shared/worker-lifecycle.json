@@ -40,7 +40,7 @@
     ]
   },
   "endings": {
-    "description": "The programs the worker started stop when the worker ends, however it ends. Each runner runs `start` for its language in a real worker, which starts a background program and prints its process ID. It then ends the worker: `close` closes it from the host, the way the idle timeout and closing the agent do, and otherwise the case's code for its language makes the worker exit. Within `seconds`, the program must no longer be running. A host whose worker cannot start programs skips the cases.",
+    "description": "The programs the worker started stop when the worker ends, whether the host closed it or it crashed. This covers programs that stay in the worker's process group; on Linux the sandbox keeps every program there, and macOS lets a program leave it (see sandbox-signals.json). Each runner runs `start` for its language in a real worker, which starts a background program and prints its process ID. It then ends the worker: `close` closes it from the host, the way the idle timeout and closing the agent do, and otherwise the case's code for its language makes the worker exit. Within `seconds`, the program must no longer be running. A host whose worker cannot start programs skips the cases.",
     "seconds": 5,
     "start": {
       "r": "cat(system('sleep 30 > child.out 2>&1 & echo $!', intern = TRUE))",
