@@ -30,8 +30,8 @@ process](https://posit.co/blog/trust-llm-tools).
 
 An agent created with `commons(mode = "trusted only")` has neither
 `run_sql` nor `run_r`. It can run only trusted calculations and inspect
-table schemas without sample rows, so the SQL and R code execution
-sections below don’t apply to it.
+table schemas, so the SQL and R code execution sections below don’t
+apply to it.
 
 ## SQL code execution
 
@@ -159,9 +159,9 @@ environments and database connections are not transferred.
 The rows returned by SQL are not the only potentially sensitive
 information available to an agent. Dataset descriptions and glossary
 entries from `data-dict.yaml` are included in the system prompt. Table
-documentation and sample values are supplied when a table is first used,
-context documents are available through search, and measure source can
-be read in the agent’s R session.
+documentation is supplied when a table is first used, context documents
+are available through search, and measure source can be read in the
+agent’s R session.
 
 Only include facts and source code that may be shared with both the
 application’s viewers and its model provider. If one audience should not

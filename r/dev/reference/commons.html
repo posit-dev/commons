@@ -117,10 +117,10 @@ code.</p></li>
 <li><p><code>"trusted only"</code>: the agent answers only with trusted calculations:
 measures, governed metrics, and exact trusted queries. When none
 answers the question, it says so rather than writing its own code. The
-agent can still search context and inspect table schemas, but not
-sample rows. Because every answer comes from a trusted calculation,
-answers carry no provenance markers, and the agent needs no sandboxed
-R session. The agent must have at least one trusted calculation.</p></li>
+agent can still search context and inspect table schemas. Because
+every answer comes from a trusted calculation, answers carry no
+provenance markers, and the agent needs no sandboxed R session. The
+agent must have at least one trusted calculation.</p></li>
 </ul></dd>
 
 
@@ -214,8 +214,7 @@ determines and displays answer trust.</p></li>
 <li><p><code>run_sql</code> executes a read-only SQL query.</p></li>
 <li><p><code>run_r</code> executes R code to analyze results and render plots in the agent's
 R session.</p></li>
-</ul><p>With <code>mode = "trusted only"</code>, the agent never receives <code>run_sql</code> or <code>run_r</code>,
-and <code>describe_table</code> omits sample rows.</p>
+</ul><p>With <code>mode = "trusted only"</code>, the agent never receives <code>run_sql</code> or <code>run_r</code>.</p>
 <p>These model-facing tools should be considered private. Their constructors
 are intentionally not exported, and their names, arguments, availability,
 and behavior may change without notice. Application code should configure

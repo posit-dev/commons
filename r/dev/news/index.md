@@ -8,6 +8,13 @@
   R, and it tells the user when no trusted calculation answers a
   question. These answers carry no provenance markers.
 
+- `describe_table` reports complete table schemas and documentation
+  without a sampled-row summary. DuckDB descriptions use database-native
+  types. Snowflake and Databricks continue to use native metadata, while
+  other DBI connections infer R column classes from five sampled rows,
+  or zero rows in trusted-only mode
+  ([\#319](https://github.com/posit-dev/commons/issues/319)).
+
 - On macOS, R code run by `run_r` can now start other programs, such as
   through [`system()`](https://rdrr.io/r/base/system.html) or
   [`system2()`](https://rdrr.io/r/base/system2.html). The sandbox

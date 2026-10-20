@@ -100,8 +100,8 @@ that you <a href="https://posit.co/blog/trust-llm-tools" class="external-link">d
 that provider to process</a>.</p>
 <p>An agent created with <code>commons(mode = "trusted only")</code> has
 neither <code>run_sql</code> nor <code>run_r</code>. It can run only
-trusted calculations and inspect table schemas without sample rows, so
-the SQL and R code execution sections below don’t apply to it.</p>
+trusted calculations and inspect table schemas, so the SQL and R code
+execution sections below don’t apply to it.</p>
 </div>
 <div class="section level2">
 <h2 id="sql-code-execution">SQL code execution<a class="anchor" aria-label="anchor" href="#sql-code-execution"></a>
@@ -225,9 +225,9 @@ connections are not transferred.</p>
 <p>The rows returned by SQL are not the only potentially sensitive
 information available to an agent. Dataset descriptions and glossary
 entries from <code>data-dict.yaml</code> are included in the system
-prompt. Table documentation and sample values are supplied when a table
-is first used, context documents are available through search, and
-measure source can be read in the agent’s R session.</p>
+prompt. Table documentation is supplied when a table is first used,
+context documents are available through search, and measure source can
+be read in the agent’s R session.</p>
 <p>Only include facts and source code that may be shared with both the
 application’s viewers and its model provider. If one audience should not
 see a fact, use separate applications with separate context or place the
