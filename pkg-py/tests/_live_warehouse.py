@@ -134,36 +134,35 @@ def require_live_warehouse(backend: str, *needs: str) -> LiveWarehouse:
             f"{expected} identifier parts, got {fixtures['schema']!r}."
         )
 
-    engine = _engine(backend, connection, namespace)
+    engine = _engine(backend, namespace)
     return LiveWarehouse(
         backend=backend, engine=engine, namespace=namespace, fixtures=fixtures
     )
 
 
-def _engine(
-    backend: str, connection: dict[str, Any], namespace: tuple[str, ...]
-) -> sqlalchemy.Engine:
+def _engine(backend: str, namespace: tuple[str, ...]) -> sqlalchemy.Engine:
     if backend == "databricks":
         pytest.importorskip(
             "databricks.sqlalchemy", reason="pip install databricks-sqlalchemy"
         )
+        from databricks.sdk.core import Config
+
         host = os.environ["DATABRICKS_HOST"].removeprefix("https://").rstrip("/")
-        token = os.environ.get(connection["token"], "")
         catalog, schema = namespace
-        query = {"http_path": os.environ["DATABRICKS_HTTP_PATH"]}
         url = sqlalchemy.engine.URL.create(
             "databricks",
-            username="token" if token else None,
-            password=token or None,
             host=host,
             database=schema,
-            query={**query, "catalog": catalog},
+            query={"http_path": os.environ["DATABRICKS_HTTP_PATH"], "catalog": catalog},
         )
-        # Without a token the connector runs the OAuth user-to-machine flow,
-        # which opens a browser and reuses the SSO session. That is what makes
-        # an SSO-only account usable without minting a long-lived secret.
-        connect_args = {} if token else {"auth_type": "databricks-oauth"}
-        return sqlalchemy.create_engine(url, connect_args=connect_args)
+        # The SDK's unified authentication picks the credential from the
+        # environment: a token, a service principal's secret or GitHub OIDC
+        # token, or a CLI login. The connector asks for headers per request,
+        # and the SDK refreshes short-lived tokens behind them.
+        config = Config(host=f"https://{host}")
+        return sqlalchemy.create_engine(
+            url, connect_args={"credentials_provider": lambda: config.authenticate}
+        )
 
     pytest.importorskip(
         "snowflake.sqlalchemy", reason="pip install snowflake-sqlalchemy"
@@ -172,12 +171,17 @@ def _engine(
     url = sqlalchemy.engine.URL.create(
         "snowflake",
         username=os.environ["SNOWFLAKE_USER"],
-        password=os.environ.get(connection["token"]) or None,
         host=os.environ["SNOWFLAKE_ACCOUNT"],
         database=f"{database}/{schema}",
         query={"warehouse": os.environ["SNOWFLAKE_WAREHOUSE"]},
     )
-    return sqlalchemy.create_engine(url)
+    return sqlalchemy.create_engine(
+        url,
+        connect_args={
+            "authenticator": "SNOWFLAKE_JWT",
+            "private_key_file": os.environ["SNOWFLAKE_PRIVATE_KEY_FILE"],
+        },
+    )
 
 
 def _duckdb_value(value: Any, type_name: str) -> Any:
