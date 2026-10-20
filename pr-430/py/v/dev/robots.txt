@@ -1,1 +1,0 @@
-Sitemap: https://posit-dev.github.io/commons/py/v/dev/sitemap.xml
