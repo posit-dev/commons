@@ -1,0 +1,96 @@
+name: "Py: Live warehouse tests"
+
+on:
+  push:
+    branches: [main]
+    paths: [pkg-py/**, tests/shared/**, .github/workflows/py-live-warehouse.yaml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [databricks, snowflake]
+    # Each backend's credentials live in its own environment. The Databricks
+    # federation policy trusts this repository's `databricks-ci` environment
+    # by name.
+    environment: ${{ matrix.backend }}-ci
+    permissions:
+      contents: read
+      # GitHub OIDC for the Databricks service principal.
+      id-token: write
+    defaults:
+      run:
+        working-directory: pkg-py
+    env:
+      UV_PYTHON: "3.13"
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ vars.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      # Unset unless the federation policy accepts an audience other than the
+      # workspace's token endpoint, which is what the SDK asks GitHub for.
+      DATABRICKS_TOKEN_AUDIENCE: ${{ vars.DATABRICKS_TOKEN_AUDIENCE }}
+      # Unset when the service principal signs in with GitHub OIDC instead.
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      COMMONS_TEST_DATABRICKS_SCHEMA: ${{ vars.COMMONS_TEST_DATABRICKS_SCHEMA }}
+      COMMONS_TEST_DATABRICKS_DENIED_TABLE: ${{ vars.COMMONS_TEST_DATABRICKS_DENIED_TABLE }}
+      SNOWFLAKE_ACCOUNT: ${{ vars.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ vars.SNOWFLAKE_USER }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
+      COMMONS_TEST_SNOWFLAKE_SCHEMA: ${{ vars.COMMONS_TEST_SNOWFLAKE_SCHEMA }}
+      COMMONS_TEST_SNOWFLAKE_DENIED_TABLE: ${{ vars.COMMONS_TEST_SNOWFLAKE_DENIED_TABLE }}
+      COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE: ${{ vars.COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Write the Snowflake private key
+        if: matrix.backend == 'snowflake'
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SNOWFLAKE_PRIVATE_KEY" ]; then
+            key="$RUNNER_TEMP/snowflake_key.p8"
+            (umask 077 && printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY" > "$key")
+            echo "SNOWFLAKE_PRIVATE_KEY_FILE=$key" >> "$GITHUB_ENV"
+          fi
+      - name: Check the configuration
+        # The tests skip when a required variable is unset, so a job with a
+        # missing variable would pass having tested nothing. Stop here instead:
+        # skip the job when nothing is configured, and fail it when only some
+        # of it is.
+        id: configured
+        run: |
+          backend='${{ matrix.backend }}'
+          names=$(jq -r --arg b "$backend" \
+            '.backends[$b] | .connection.required[], .fixtures.schema.variable' \
+            ../tests/shared/live-warehouse-env.json)
+          missing=()
+          for name in $names; do
+            [ -n "${!name:-}" ] || missing+=("$name")
+          done
+          total=$(echo "$names" | wc -w)
+          if [ "${#missing[@]}" -eq "$total" ]; then
+            echo "::notice::$backend is not configured for this repository; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          elif [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::$backend is partly configured. Missing: ${missing[*]}"
+            exit 1
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: astral-sh/setup-uv@v6
+        if: steps.configured.outputs.run == 'true'
+        with:
+          enable-cache: true
+          cache-dependency-glob: pkg-py/uv.lock
+      - name: Install dependencies
+        if: steps.configured.outputs.run == 'true'
+        run: uv sync --locked --all-extras --group live-warehouse
+      - name: Test
+        if: steps.configured.outputs.run == 'true'
+        run: uv run pytest tests/test_live_warehouses.py -k '${{ matrix.backend }}' -rs

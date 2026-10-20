@@ -52,7 +52,11 @@ docs = [
 # Drivers for the live warehouse tests, which skip without a configured
 # warehouse. Kept out of `dev` so an ordinary contributor does not install a
 # warehouse client to run the suite.
-live-warehouse = ["databricks-sqlalchemy>=2", "snowflake-sqlalchemy>=1.6"]
+live-warehouse = [
+    "databricks-sdk>=0.55",
+    "databricks-sqlalchemy>=2",
+    "snowflake-sqlalchemy>=1.6",
+]
 
 [build-system]
 requires = ["hatchling"]
