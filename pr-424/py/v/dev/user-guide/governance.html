@@ -83,7 +83,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="../site_libs/quarto-html/quarto-syntax-highlighting-bf27225e3a48a9273f3daa8f8e829971.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-c4d708d4e441993890320f2eab87994c.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-71273340b58aedfdddc14b2e03ca163a.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -234,7 +234,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="60" data-forks="4"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="61" data-forks="4"></div>
     </span>
   </li>  
 </ul>
@@ -372,7 +372,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="permissioning-facts" class="level1">
 <h1>Permissioning facts</h1>
-<p>The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.</p>
+<p>The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.</p>
 <p>Because of this, you should only include facts that you can share with both the application’s viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information.</p>
 </section>
 <section id="telemetry" class="level1">
