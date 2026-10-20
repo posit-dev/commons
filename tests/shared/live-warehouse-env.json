@@ -16,7 +16,7 @@
           "variable": "COMMONS_TEST_DATABRICKS_DENIED_TABLE",
           "required": false,
           "arity": 3,
-          "description": "A relation the test principal genuinely cannot read. Needs an owner other than the test principal, so provisioning cannot finish it."
+          "description": "A relation the test principal genuinely cannot read. Provisioning with --grant-to creates one, owned by whoever runs the SQL."
         },
         "metric_view": {
           "variable": "COMMONS_TEST_DATABRICKS_METRIC_VIEW",
