@@ -49,10 +49,11 @@ That prints SQL to run; it does not connect. The rows come from
 `tests/shared/live-warehouse-rows.json`, and the same file is loaded into
 DuckDB so the two engines' answers can be compared.
 
-One fixture it cannot create is the denied table, since an owner can always
-read their own relation. Making one needs a second principal, and the
-generated SQL says what is left to do. Until its variable is set, the
-access-refusal test skips.
+The access-refusal test needs a table the test principal cannot read. Pass
+`--grant-to` with the principal the tests connect as (a Snowflake role, or a
+Databricks service principal's application ID), and the SQL grants it the
+fixture tables and creates a copy it is refused. Without `--grant-to` there is
+no such table, so that test skips.
 
 `test_live_warehouse_fixture.py` covers the half of this that needs no
 warehouse: the rows load, every corpus definition runs against them, and the
