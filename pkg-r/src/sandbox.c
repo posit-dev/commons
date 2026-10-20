@@ -1075,9 +1075,27 @@ SEXP c_sandbox_engage(SEXP read_roots, SEXP rw_roots, SEXP memory_limit,
 
 #endif
 
+#ifndef _WIN32
+#include <signal.h>
+#endif
+
+/* Kill what is left of the process group a closed worker led. A group with
+ * members keeps its id reserved, and an empty one's id is too fresh to have
+ * been reused. tools::pskill() refuses the negative pid that kill() would need. */
+SEXP c_kill_group(SEXP pid_sexp) {
+#ifndef _WIN32
+  int pid = Rf_asInteger(pid_sexp);
+  if (pid != NA_INTEGER && pid > 1) {
+    killpg((pid_t) pid, SIGKILL);
+  }
+#endif
+  return R_NilValue;
+}
+
 static const R_CallMethodDef call_methods[] = {
   {"c_sandbox_capabilities", (DL_FUNC) &c_sandbox_capabilities, 0},
   {"c_sandbox_engage", (DL_FUNC) &c_sandbox_engage, 6},
+  {"c_kill_group", (DL_FUNC) &c_kill_group, 1},
   {NULL, NULL, 0}
 };
 

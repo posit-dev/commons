@@ -83,3 +83,25 @@ test_that("worker failures follow the shared fixture", {
     expect_identical(output, expected, label = case$name)
   }
 })
+
+for (case in shared_fixture("worker-lifecycle")$endings$cases) {
+  test_that(paste("a worker's programs stop when it ends:", case$name), {
+    skip_on_os("windows")
+    endings <- shared_fixture("worker-lifecycle")$endings
+    worker <- shared_worker()
+    pid <- suppressWarnings(as.integer(tool_output(worker, endings$start$r)))
+    skip_if(is.na(pid), "the worker cannot start programs on this host")
+
+    if (identical(case$end, "close")) {
+      worker_close(worker)
+    } else {
+      tool_output(worker, case$end$r)
+    }
+
+    deadline <- Sys.time() + endings$seconds
+    while (tools::pskill(pid, 0L) && Sys.time() < deadline) {
+      Sys.sleep(0.1)
+    }
+    expect_false(tools::pskill(pid, 0L))
+  })
+}

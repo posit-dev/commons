@@ -12,7 +12,9 @@ worker and ``run_python_result`` produce together.
 
 from __future__ import annotations
 
+import asyncio
 import os
+import time
 from typing import Any
 
 import pytest
@@ -95,3 +97,36 @@ async def test_worker_failures_follow_the_shared_fixture(case: dict[str, Any]) -
         seconds=seconds, **LIFECYCLE["substitutions"]["python"]
     )
     assert output == expected
+
+
+def running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@needs_worker
+@pytest.mark.parametrize(
+    "case", LIFECYCLE["endings"]["cases"], ids=lambda case: case["name"]
+)
+async def test_a_workers_programs_stop_when_it_ends(case: dict[str, Any]) -> None:
+    endings = LIFECYCLE["endings"]
+    worker = Worker()
+    try:
+        output = await tool_output(worker, endings["start"]["python"])
+        if not str(output).strip().isdigit():
+            pytest.skip("the worker cannot start programs on this host")
+        pid = int(output)
+        if case["end"] == "close":
+            await worker.aclose()
+        else:
+            await worker.run(case["end"]["python"])
+    finally:
+        await worker.aclose()
+
+    deadline = time.monotonic() + endings["seconds"]
+    while running(pid) and time.monotonic() < deadline:
+        await asyncio.sleep(0.1)
+    assert not running(pid)

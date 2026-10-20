@@ -372,11 +372,22 @@ commons_dll_path <- function() {
 worker_close <- function(worker) {
   cancel_worker_reap(worker)
   if (!is.null(worker$rs)) {
-    try(worker$rs$close(), silent = TRUE)
+    close_worker_session(worker$rs)
     worker$rs <- NULL
     worker$synced <- 0L
   }
   invisible(worker)
+}
+
+# callr kills the worker's process group only if the worker is still running
+# when close() gives up waiting, so a worker that exits on its own, or has
+# crashed, leaves the programs it started running. The worker leads its own
+# group, and the sandbox keeps everything it starts in that group.
+close_worker_session <- function(rs) {
+  pid <- tryCatch(rs$get_pid(), error = function(e) NA_integer_)
+  try(rs$close(), silent = TRUE)
+  .Call(c_kill_group, pid)
+  invisible()
 }
 
 # The content environment holds credentials (API keys, session tokens,
@@ -497,7 +508,7 @@ worker_await <- function(
       }
     }
     kill_worker <- function(reason) {
-      try(rs$close(), silent = TRUE)
+      close_worker_session(rs)
       if (identical(worker$rs, rs)) {
         worker$rs <- NULL
         worker$synced <- 0L
