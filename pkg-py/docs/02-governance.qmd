@@ -36,7 +36,7 @@ When viewer credentials are not available, it is recommended to use a service ac
 
 ## Python code execution
 
-Python code written by the agent does not run in the main application process. Each `commons` agent instead gets a persistent Python subprocess, created on first use. Its state remains available to later Python analysis by the same agent until the subprocess is closed or restarted.
+Python code written by the agent does not run in the main application process. Each `commons` agent instead gets a persistent Python subprocess, created on first use. Its state remains available to later Python analysis by the same agent until the subprocess is closed or restarted. If the application process is killed outright, `commons` cannot stop the subprocess's current call or the programs it started.
 
 ### OS-level sandboxing
 
