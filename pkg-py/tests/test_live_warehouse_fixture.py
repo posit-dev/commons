@@ -128,6 +128,24 @@ def test_the_provisioning_script_renders_every_fixture_table(dialect):
         assert literal in sql, literal
 
 
+@pytest.mark.parametrize("dialect", ["databricks", "snowflake"])
+def test_the_grants_cover_every_fixture_table_but_the_denied_one(dialect):
+    generator = _generator()
+    sql = generator.render(dialect, "catalog.schema", grantee="tester")
+    granted = [line for line in sql.splitlines() if line.startswith("GRANT SELECT")]
+
+    assert len(granted) == len(ROWS["tables"])
+    for table in ROWS["tables"]:
+        assert any(
+            generator.quote_identifier(table, dialect) in line for line in granted
+        )
+    assert not any(generator.DENIED_TABLE in line for line in granted)
+    assert (
+        f".{generator.quote_identifier(generator.DENIED_TABLE, dialect)} AS SELECT"
+        in sql
+    )
+
+
 def test_a_mismatch_is_reported_as_one():
     """The comparator, since every live assertion rests on it."""
     assert matches([1.0, None], [None, 1.0])

@@ -7,10 +7,14 @@ data. Nothing is generated into the repository: the SQL is printed for a person
 to run, which leaves no committed artifact to go stale.
 
     python3 scripts/provision-live-warehouse.py databricks main.commons_live
+    python3 scripts/provision-live-warehouse.py snowflake COMMONS_CI.PUBLIC --grant-to COMMONS_CI_ROLE
 
-The denied-table fixture is not created here. A relation its owner cannot read
-does not exist, so making one needs a second principal; the script prints what
-remains to be done by hand.
+`--grant-to` names the principal the tests connect as: a Snowflake role, or a
+Databricks service principal's application ID. Its grants cover the fixture
+tables and leave out a copy of one, which becomes the denied-table fixture.
+That works because whoever runs this SQL owns the copy and the test principal
+does not. Without `--grant-to` the tests run as the owner, who can read
+everything, so the denied table is left to do by hand.
 """
 
 from __future__ import annotations
@@ -20,7 +24,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-FIXTURE = Path(__file__).resolve().parent.parent / "tests" / "shared" / "live-warehouse-rows.json"
+SHARED = Path(__file__).resolve().parent.parent / "tests" / "shared"
+FIXTURE = SHARED / "live-warehouse-rows.json"
+ENV = SHARED / "live-warehouse-env.json"
+DENIED_TABLE = "denied_orders"
 
 SPECIAL_DOUBLES = {
     "databricks": {"NaN": "double('NaN')", "Infinity": "double('Infinity')", "-Infinity": "double('-Infinity')"},
@@ -102,7 +109,7 @@ def quote_identifier(name: str, dialect: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def render(dialect: str, namespace: str) -> str:
+def render(dialect: str, namespace: str, grantee: str | None = None) -> str:
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     types = fixture["types"]
     parts = namespace.split(".")
@@ -143,22 +150,62 @@ def render(dialect: str, namespace: str) -> str:
         )
         lines += [f"INSERT INTO {target} ({column_list}) VALUES", values + ";", ""]
 
-    lines += [
-        "-- Still to do by hand, because an owner can always read their own relation:",
-        f"--   Create a copy of {qualified}.{quote_identifier('orders', dialect)} owned by another",
-        "--   principal, in a schema this one has no SELECT on, and export its identifier as the",
-        "--   denied-table variable named in tests/shared/live-warehouse-env.json. Until then the",
-        "--   access-refusal tests skip.",
-    ]
+    if grantee is None:
+        lines += [
+            "-- Still to do by hand, because an owner can always read their own relation:",
+            f"--   Create a copy of {qualified}.{quote_identifier('orders', dialect)} owned by another",
+            "--   principal, in a schema this one has no SELECT on, and export its identifier as the",
+            "--   denied-table variable named in tests/shared/live-warehouse-env.json. Until then the",
+            "--   access-refusal tests skip.",
+        ]
+    else:
+        lines += grants(dialect, parts, qualified, list(fixture["tables"]), grantee)
     return "\n".join(lines) + "\n"
 
 
+def grants(dialect: str, parts: list[str], qualified: str, tables: list[str], grantee: str) -> list[str]:
+    """Read access for the test principal, and a table it is refused."""
+    principal = quote_identifier(grantee, dialect)
+    denied = f"{qualified}.{quote_identifier(DENIED_TABLE, dialect)}"
+    lines = [
+        f"DROP TABLE IF EXISTS {denied};",
+        f"CREATE TABLE {denied} AS SELECT * FROM {qualified}.{quote_identifier('orders', dialect)};",
+        "",
+    ]
+    if dialect == "databricks":
+        lines += [
+            f"-- {principal} also needs USE CATALOG on {quote_identifier(parts[0], dialect)}, from its owner.",
+            f"GRANT USE SCHEMA ON SCHEMA {qualified} TO {principal};",
+        ]
+        lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO {principal};" for t in tables]
+    else:
+        lines += [
+            f"GRANT USAGE ON DATABASE {quote_identifier(parts[0], dialect)} TO ROLE {principal};",
+            f"GRANT USAGE ON SCHEMA {qualified} TO ROLE {principal};",
+        ]
+        lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO ROLE {principal};" for t in tables]
+    variable = json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["fixtures"]["denied_table"]["variable"]
+    return lines + ["", f"-- Then: export {variable}={'.'.join(parts)}.{DENIED_TABLE}"]
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) != 3 or argv[1] not in ("databricks", "snowflake"):
+    args = argv[1:]
+    grantee = None
+    if "--grant-to" in args:
+        at = args.index("--grant-to")
+        if at + 1 >= len(args):
+            args = []
+        else:
+            grantee = args[at + 1]
+            del args[at : at + 2]
+    if len(args) != 2 or args[0] not in ("databricks", "snowflake"):
         print(__doc__, file=sys.stderr)
-        print("Usage: provision-live-warehouse.py {databricks|snowflake} <catalog.schema>", file=sys.stderr)
+        print(
+            "Usage: provision-live-warehouse.py {databricks|snowflake} <catalog.schema> [--grant-to <principal>]",
+            file=sys.stderr,
+        )
         return 2
-    print(render(argv[1], argv[2]), end="")
+    print(render(args[0], args[1], grantee), end="")
     return 0
 
 
