@@ -132,12 +132,13 @@ def test_a_source_over_the_namespace_describes_every_fixture_table(backend):
 
     source = data_source(live.engine, tables=_selector(live), dictionary=dictionary)
 
-    labels = {_folded(live, label) for label in list_tables(source)}
+    # A label is qualified by the namespace; the fixture names only the table.
+    labels = {_folded(live, label.rsplit(".", 1)[-1]) for label in list_tables(source)}
     assert {_folded(live, table) for table in FIXTURE_TABLES} <= labels
     survey = next(
         label
         for label in list_tables(source)
-        if _folded(live, label).endswith("survey")
+        if _folded(live, label).endswith(_folded(live, "survey"))
     )
     assert source.relations is not None
     columns = source.relations[survey].columns
