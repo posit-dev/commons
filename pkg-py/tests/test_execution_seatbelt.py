@@ -426,3 +426,36 @@ def test_a_child_process_inherits_the_sandbox(tmp_path) -> None:
 
     assert result[0] != 0
     assert result[1] == ""
+
+
+def test_signals_are_denied_except_within_the_sandbox() -> None:
+    profile = seatbelt_profile(["/usr"], [])
+    assert profile.index("(deny signal)") < profile.index(
+        "(allow signal (target same-sandbox))"
+    )
+
+
+# SIGURG is ignored by default, so a profile that let one through would leave
+# this test process, the host here, running.
+@darwin_only
+def test_the_host_cannot_be_signalled(tmp_path) -> None:
+    result = run_sandboxed(
+        "os.kill(os.getppid(), __import__('signal').SIGURG); result = 'sent'",
+        read_roots=[str(tmp_path)],
+        write_roots=[],
+    )
+    assert result == "PermissionError"
+
+
+@darwin_only
+def test_the_worker_can_signal_its_own_children(tmp_path) -> None:
+    result = run_sandboxed(
+        """
+        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        child.terminate()
+        result = child.wait()
+        """,
+        read_roots=[str(tmp_path)],
+        write_roots=[],
+    )
+    assert result == -15

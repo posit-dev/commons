@@ -3,7 +3,8 @@
 This runs in the child, after the filesystem sandbox and before any
 model-written code is loaded. Its job is the part of the boundary a
 filesystem sandbox cannot express: the syscalls that would let the worker
-step out of that sandbox rather than read around it, and, when the caller
+step out of that sandbox rather than read around it, the ones that would
+signal the host or leave the worker's process group, and, when the caller
 asked for no network, the syscalls that open a socket or send one to an
 address.
 
@@ -30,21 +31,27 @@ import platform
 import struct
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
 __all__ = [
     "ARCHES",
+    "GROUP_LEAVING",
     "LOCAL_PEER_SCREENED",
     "LOCAL_PEER_SCREENED_WHEN_ADDRESSED",
     "NETWORK_SCREENED",
+    "OWNER_FCNTL",
+    "OWNER_IOCTL",
     "SCREENED",
     "SCREENED_WHERE_PRESENT",
+    "SIGNAL_BY_PROCESS",
+    "SIGNAL_UNADDRESSED",
     "SOCKETCALL_ALLOWED",
     "Arch",
     "allow_all",
     "arch_for",
+    "build_group_filter",
     "build_network_filter",
     "build_sandbox_filter",
     "current_arch",
@@ -80,6 +87,27 @@ SCREENED = (
 
 # Screened as well, on the architectures whose table still carries them.
 SCREENED_WHERE_PRESENT = ("umount",)
+
+# Syscalls that take a process out of the worker's process group, so the
+# driver's group kill would miss it.
+GROUP_LEAVING = ("setsid", "setpgid")
+
+# Syscalls that signal a thread by id alone or a process by descriptor,
+# neither of which the filter can compare against the host, so they are
+# denied outright. glibc signals its own threads through tgkill(); musl's
+# raise() and pthread_kill() use tkill() and fail under this filter.
+SIGNAL_UNADDRESSED = ("tkill", "pidfd_send_signal")
+
+# Syscalls whose first argument is the process they signal, denied when that
+# process is the host.
+SIGNAL_BY_PROCESS = ("tgkill", "rt_sigqueueinfo", "rt_tgsigqueueinfo")
+
+# fcntl() commands and ioctl() requests that choose which process a
+# descriptor's I/O signals, which F_SETSIG can make any signal. Denied
+# outright, since F_SETOWN_EX and both ioctls take their target behind a
+# pointer.
+OWNER_FCNTL: Mapping[str, int] = {"F_SETOWN": 8, "F_SETOWN_EX": 15}
+OWNER_IOCTL: Mapping[str, int] = {"FIOSETOWN": 0x8901, "SIOCSPGRP": 0x8902}
 
 # Syscalls that open a socket, screened only when the caller asked for no
 # network. Separate from SCREENED because network access is a choice and
@@ -149,6 +177,7 @@ BPF_RET_K = 0x06 | 0x00
 DATA_NR = 0
 DATA_ARCH = 4
 DATA_ARG0 = 16
+DATA_ARG1 = 16 + 8
 DATA_ARG4 = 16 + 4 * 8
 
 SECCOMP_RET_ALLOW = 0x7FFF0000
@@ -160,7 +189,13 @@ ENOSYS = 38
 DENY_EPERM = _SECCOMP_RET_ERRNO | EPERM
 DENY_ENOSYS = _SECCOMP_RET_ERRNO | ENOSYS
 
+# The sign bit of a 32-bit pid_t. Every architecture here is little-endian,
+# so an argument's low word is the one at its offset, and the kernel reads an
+# int argument from that word alone.
+_NEGATIVE = 0x80000000
+
 CLONE_NEWTIME = 0x00000080
+CLONE_PARENT = 0x00008000
 CLONE_NEWNS = 0x00020000
 CLONE_NEWCGROUP = 0x02000000
 CLONE_NEWUTS = 0x04000000
@@ -219,6 +254,48 @@ def _screen_socketcall(program: list[SockFilter], nr: int) -> None:
         program.append(SockFilter(code=BPF_JEQ_K, jt=count - index, jf=0, k=call))
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
+
+
+def _screen_arg_in(
+    program: list[SockFilter], nr: int, offset: int, values: Sequence[int]
+) -> None:
+    """Deny one syscall when the 32-bit argument at ``offset`` is in ``values``."""
+    count = len(values)
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=count + 3, k=nr))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=offset))
+    for index, value in enumerate(values):
+        program.append(
+            SockFilter(code=BPF_JEQ_K, jt=count - index, jf=0, k=value & 0xFFFFFFFF)
+        )
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
+
+
+def _screen_kill(
+    program: list[SockFilter], nr: int, *, parent: int, group: int | None
+) -> None:
+    """Deny kill() aimed at the host, or at any process group but the worker's.
+
+    kill() names a process group as a negative pid, or as zero for the
+    caller's own. ``group`` is ``None`` when the worker does not lead its
+    own group, since the group it is in then includes processes outside it.
+    """
+    checks = [(parent, DENY_EPERM)]
+    if group is None:
+        checks.append((0, DENY_EPERM))
+    else:
+        checks += [(-group, SECCOMP_RET_ALLOW), (0, SECCOMP_RET_ALLOW)]
+    count = len(checks)
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=count + 4, k=nr))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=DATA_ARG0))
+    for index, (value, verdict) in enumerate(checks):
+        # Each check jumps over the ones after it and the sign test to reach
+        # the allow, and one further to reach the deny.
+        to = count - index + (verdict == DENY_EPERM)
+        program.append(SockFilter(code=BPF_JEQ_K, jt=to, jf=0, k=value & 0xFFFFFFFF))
+    program.append(SockFilter(code=BPF_JGE_K, jt=1, jf=0, k=_NEGATIVE))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
 
 
 def _preamble(arch: Arch) -> list[SockFilter]:
@@ -305,6 +382,16 @@ ARCHES: Mapping[str, Arch] = {
             "sendmsg": 46,
             "sendmmsg": 307,
             "io_uring_setup": 425,
+            "kill": 62,
+            "tkill": 200,
+            "tgkill": 234,
+            "rt_sigqueueinfo": 129,
+            "rt_tgsigqueueinfo": 297,
+            "pidfd_send_signal": 424,
+            "setsid": 112,
+            "setpgid": 109,
+            "fcntl": 72,
+            "ioctl": 16,
         },
     ),
     "aarch64": Arch(
@@ -338,6 +425,16 @@ ARCHES: Mapping[str, Arch] = {
             "sendmsg": 211,
             "sendmmsg": 269,
             "io_uring_setup": 425,
+            "kill": 129,
+            "tkill": 130,
+            "tgkill": 131,
+            "rt_sigqueueinfo": 138,
+            "rt_tgsigqueueinfo": 240,
+            "pidfd_send_signal": 424,
+            "setsid": 157,
+            "setpgid": 154,
+            "fcntl": 25,
+            "ioctl": 29,
         },
     ),
     "i386": Arch(
@@ -378,6 +475,17 @@ ARCHES: Mapping[str, Arch] = {
             "sendmsg": 370,
             "sendmmsg": 345,
             "io_uring_setup": 425,
+            "kill": 37,
+            "tkill": 238,
+            "tgkill": 270,
+            "rt_sigqueueinfo": 178,
+            "rt_tgsigqueueinfo": 335,
+            "pidfd_send_signal": 424,
+            "setsid": 66,
+            "setpgid": 57,
+            "fcntl": 55,
+            "fcntl64": 221,
+            "ioctl": 54,
         },
     ),
     "arm": Arch(
@@ -411,6 +519,17 @@ ARCHES: Mapping[str, Arch] = {
             "sendmsg": 296,
             "sendmmsg": 374,
             "io_uring_setup": 425,
+            "kill": 37,
+            "tkill": 238,
+            "tgkill": 268,
+            "rt_sigqueueinfo": 178,
+            "rt_tgsigqueueinfo": 363,
+            "pidfd_send_signal": 424,
+            "setsid": 66,
+            "setpgid": 57,
+            "fcntl": 55,
+            "fcntl64": 221,
+            "ioctl": 54,
         },
     ),
 }
@@ -437,6 +556,44 @@ def build_sandbox_filter(arch: Arch) -> list[SockFilter]:
     program.append(SockFilter(code=BPF_JSET_K, jt=0, jf=1, k=NAMESPACE_FLAGS))
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
 
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
+    return program
+
+
+def build_group_filter(
+    arch: Arch, *, parent: int, group: int | None
+) -> list[SockFilter]:
+    """A filter that keeps the worker's signals and descendants in its group.
+
+    ``parent`` is the host's pid and ``group`` the process group the worker
+    leads, or ``None`` if it leads none. The host's pid and every process
+    group but the worker's are refused, no clone can make the host its
+    parent, and no descendant can leave the group the driver kills. Any other
+    process of the same user stays reachable by pid, and the host by the id
+    of any of its other threads: the filter cannot tell either from a
+    descendant the worker started. On Landlock ABI 6 and later, signal
+    scoping closes both.
+    """
+    program = _preamble(arch)
+    for name in (*GROUP_LEAVING, *SIGNAL_UNADDRESSED):
+        _screen(program, arch.syscalls[name], DENY_EPERM)
+    for name in SIGNAL_BY_PROCESS:
+        _screen_arg_in(program, arch.syscalls[name], DATA_ARG0, [parent])
+    _screen_kill(program, arch.syscalls["kill"], parent=parent, group=group)
+    for name in ("fcntl", "fcntl64"):
+        if name in arch.syscalls:
+            _screen_arg_in(
+                program, arch.syscalls[name], DATA_ARG1, list(OWNER_FCNTL.values())
+            )
+    _screen_arg_in(
+        program, arch.syscalls["ioctl"], DATA_ARG1, list(OWNER_IOCTL.values())
+    )
+    # A clone with CLONE_PARENT makes a child of the host, and the child's
+    # exit then signals the host.
+    program.append(SockFilter(code=BPF_JEQ_K, jt=0, jf=3, k=arch.syscalls["clone"]))
+    program.append(SockFilter(code=BPF_LD_W_ABS, jt=0, jf=0, k=DATA_ARG0))
+    program.append(SockFilter(code=BPF_JSET_K, jt=0, jf=1, k=CLONE_PARENT))
+    program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=DENY_EPERM))
     program.append(SockFilter(code=BPF_RET_K, jt=0, jf=0, k=SECCOMP_RET_ALLOW))
     return program
 
@@ -653,5 +810,12 @@ def engage(*, network: Literal["none", "full"]) -> None:
         )
     set_no_new_privs()
     _install(build_sandbox_filter(arch), what="seccomp filter")
+    # Read once, here: the host's pid cannot change while the worker lives,
+    # and the worker cannot change its group once the filter is on.
+    group = os.getpid() if os.getpgrp() == os.getpid() else None
+    _install(
+        build_group_filter(arch, parent=os.getppid(), group=group),
+        what="process-group filter",
+    )
     if network == "none":
         _install(build_network_filter(arch), what="network block")
