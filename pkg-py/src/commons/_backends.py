@@ -107,18 +107,13 @@ class EngineBackend:
         return list(sqlalchemy.inspect(self._engine).get_table_names())
 
     def quote(self, table_id: TableId) -> str:
+        # quote_identifier() always quotes. quote() leaves an all-lowercase
+        # name bare, because SQLAlchemy reads it as case-insensitive, and a
+        # warehouse that folds to upper case then looks up a different name.
+        # Each component is quoted on its own: one call on "ANALYTICS.PUBLIC"
+        # names a schema with a dot in it.
         preparer = self._engine.dialect.identifier_preparer
-        quoted = preparer.quote(table_id.table)
-        if table_id.schema is None:
-            return quoted
-        # quote_schema() is given one component at a time: handed
-        # "ANALYTICS.PUBLIC" it produces one identifier containing a dot.
-        outer = ".".join(
-            preparer.quote_schema(part)
-            for part in (table_id.catalog, table_id.schema)
-            if part is not None
-        )
-        return f"{outer}.{quoted}"
+        return ".".join(preparer.quote_identifier(part) for part in table_id.parts)
 
     def columns(self, table_id: TableId) -> list[dict[str, Any]]:
         inspector = sqlalchemy.inspect(self._engine)
