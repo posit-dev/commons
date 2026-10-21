@@ -40,6 +40,18 @@ _WORDS = re.compile(r"[^0-9a-z_]+")
 _GLOB_SPECIAL = re.compile(r"([][{}()+.^$|\\])")
 
 
+class CatalogAmbiguousTableError(ValueError):
+    """An authored table name matches more than one selected relation."""
+
+
+class CatalogClaimedRelationError(ValueError):
+    """Two authored tables match the same selected relation."""
+
+
+class CatalogAmbiguousColumnError(ValueError):
+    """An authored column name matches more than one discovered column."""
+
+
 @dataclass(frozen=True)
 class Selector:
     """One entry of a `tables` selection, naming a relation or a namespace.
@@ -442,7 +454,7 @@ def _dictionary_matches(
         if label is None:
             continue
         if label in claimed:
-            raise ValueError(
+            raise CatalogClaimedRelationError(
                 f"Authored tables {claimed[label]!r} and {authored_name!r} "
                 f"both match selected relation {label!r}."
             )
@@ -504,7 +516,7 @@ def has_suffix(
 
 def _abort_ambiguous(authored_name: str, candidates: list[str]) -> None:
     listed = ", ".join(repr(item) for item in sorted(candidates))
-    raise ValueError(
+    raise CatalogAmbiguousTableError(
         f"Authored table {authored_name!r} matches more than one selected "
         f"relation: {listed}. Use its fully qualified name in the data "
         f"dictionary."
@@ -562,7 +574,7 @@ def _merge_columns(
             ]
         if len(candidates) > 1:
             listed = ", ".join(repr(name) for name in candidates)
-            raise ValueError(
+            raise CatalogAmbiguousColumnError(
                 f"Authored column {authored_name!r} matches more than one "
                 f"discovered column: {listed}."
             )
