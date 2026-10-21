@@ -21,6 +21,11 @@
   previously stopped every program it started. Those programs run under
   the same sandbox as the R session.
 
+- R code run by `run_r` can no longer send a signal to the application
+  process’s ID or to its process group. On Linux, the programs it starts
+  can also no longer leave its process group, so they all stop when the
+  R session ends.
+
 - The CSS classes on `run_r`’s display are now `commons-run-display`,
   `commons-run-details`, `commons-run-code`, and `commons-run-plot`,
   without the `-r`, because the Python package’s code tool uses the same
