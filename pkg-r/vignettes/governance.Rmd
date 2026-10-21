@@ -52,7 +52,7 @@ The SQL query runs through the DBI connection in the main application process. I
 
 ## R code execution
 
-R code written by the agent does not run in the main application process. Each commons agent instead gets a persistent R subprocess, created on first use. Its state remains available to later R analysis by the same agent. If the application process is killed outright, commons cannot stop the subprocess's current call or the programs it started.
+R code written by the agent does not run in the main application process. Each commons agent instead gets a persistent R subprocess, created on first use. Its state remains available to later R analysis by the same agent.
 
 ### OS-level sandboxing
 
