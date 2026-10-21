@@ -581,6 +581,17 @@ definition_sql_similar <- function(node, state, dialect, selected) {
 }
 
 definition_sql_temporal_shift <- function(node, state, dialect, selected) {
+  # The checker accepts an untyped NULL as the interval, which shifts to
+  # NULL. Neither warehouse adds a bare NULL to a date, so it is typed.
+  if (
+    identical(node$type, "datetime") &&
+      "null" %in% c(node$lhs$kind, node$rhs$kind)
+  ) {
+    return(sprintf(
+      "CAST(NULL AS %s)",
+      definition_sql_null_datetime[[dialect]]
+    ))
+  }
   lhs_interval <- identical(node$lhs$type, "interval")
   rhs_interval <- identical(node$rhs$type, "interval")
   if (!lhs_interval && !rhs_interval) {
@@ -773,6 +784,11 @@ definition_sql_abort_unsupported <- function(dialect, what, why) {
     call = NULL
   )
 }
+
+definition_sql_null_datetime <- list(
+  snowflake = "TIMESTAMP_TZ",
+  databricks = "TIMESTAMP"
+)
 
 definition_sql_nan_note <- list(
   snowflake = paste(

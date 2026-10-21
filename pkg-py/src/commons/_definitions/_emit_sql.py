@@ -43,6 +43,8 @@ _MICROSECONDS = {
     "weeks": "604800000000",
 }
 
+_NULL_DATETIME = {"snowflake": "TIMESTAMP_TZ", "databricks": "TIMESTAMP"}
+
 _SIMPLE_FUNCTIONS = {
     "length": "length",
     "lower": "lower",
@@ -423,11 +425,15 @@ def _temporal_shift(node: Ir, state: _State, selected: str | None) -> str | None
     interval becomes a count of microseconds.
     """
     attrs = node.attrs
+    dialect = state.dialect
+    # The checker accepts an untyped NULL as the interval, which shifts to
+    # NULL. Neither warehouse adds a bare NULL to a date, so it is typed.
+    if node.type == "datetime" and "null" in (attrs["lhs"].kind, attrs["rhs"].kind):
+        return f"CAST(NULL AS {_NULL_DATETIME[dialect]})"
     lhs_interval = attrs["lhs"].type == "interval"
     rhs_interval = attrs["rhs"].type == "interval"
     if not lhs_interval and not rhs_interval:
         return None
-    dialect = state.dialect
     if lhs_interval and attrs["op"] == "-":
         _unsupported(
             dialect,
