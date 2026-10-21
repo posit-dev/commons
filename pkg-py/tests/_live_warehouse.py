@@ -163,7 +163,12 @@ def _engine(backend: str, namespace: tuple[str, ...]) -> sqlalchemy.Engine:
         # and the SDK refreshes short-lived tokens behind them.
         config = Config(host=f"https://{host}")
         return sqlalchemy.create_engine(
-            url, connect_args={"credentials_provider": lambda: config.authenticate}
+            url,
+            connect_args={
+                "credentials_provider": lambda: config.authenticate,
+                # UTC, as the Snowflake session and the DuckDB reference are.
+                "session_configuration": {"TIMEZONE": "UTC"},
+            },
         )
 
     pytest.importorskip(
