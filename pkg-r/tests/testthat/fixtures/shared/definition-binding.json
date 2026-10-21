@@ -359,6 +359,104 @@
           }
         }
       }
+    },
+    {
+      "name": "a mixed-grain metric is refused before a column the relation lacks",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [
+              { "name": "flag", "expr": "id > avg(id)" },
+              {
+                "name": "flagged",
+                "expr": "sum(case when flag then 1 else 0 end)"
+              },
+              { "name": "total", "expr": "sum(ghost)" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "mixed_grain" }
+    },
+    {
+      "name": "tables are checked in authored order, a column before a later table's match",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [{ "name": "total", "expr": "sum(ghost)" }]
+          },
+          {
+            "name": "unmatched",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [{ "name": "total", "expr": "sum(id)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "absent_column" }
+    },
+    {
+      "name": "tables are checked in authored order, a match before a later table's column",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "unmatched",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [{ "name": "total", "expr": "sum(id)" }]
+          },
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [{ "name": "total", "expr": "sum(ghost)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "unmatched_table" }
     }
   ]
 }

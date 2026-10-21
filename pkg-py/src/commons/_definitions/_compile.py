@@ -20,6 +20,7 @@ from ._registry import ExportRecord
 
 __all__ = [
     "DefinitionAbsentColumnError",
+    "DefinitionMixedGrainError",
     "DefinitionUnmatchedTableError",
     "attach_compiled_definitions",
     "mixed_grain",
@@ -38,6 +39,10 @@ class DefinitionUnmatchedTableError(ValueError):
 
 class DefinitionAbsentColumnError(ValueError):
     """A definition names an authored column the matched relation lacks."""
+
+
+class DefinitionMixedGrainError(ValueError):
+    """A metric's dependency chain mixes row and aggregate grain."""
 
 
 def mixed_grain(definitions: dict[str, DefinitionExport]) -> dict[str, bool]:
@@ -139,59 +144,85 @@ def attach_compiled_definitions(
 
     Nothing is assigned until every table compiles, so a refusal leaves the
     dictionary untouched and the caller can attach it to another source.
+
+    The refusals are checked in the order the definition-binding contract
+    pins, so a dictionary with several faults reports the same one in either
+    package: metric grain on every table, then the dialect, then each table
+    in authored order, its match before its columns.
     """
-    exports: dict[str, dict[str, DefinitionExport]] = (
-        getattr(dictionary, "definition_exports", None) or {}
-    )
-    if bindings is not None:
-        _check_definitions_matched(exports, bindings)
-    compiled: dict[str, list[ExportRecord]] = {}
-    for table_name, entry in dictionary.tables.items():
-        # A catalog import re-keys the dictionary to the warehouse's labels
-        # and records what the author called each table, which is how its
-        # exports are still found afterwards.
-        authored = getattr(entry, "authored_name", None) or table_name
-        definitions = exports.get(authored) or {}
-        if not definitions:
-            compiled[table_name] = []
-            continue
-        if table_name not in exposed:
-            raise ValueError(
-                f"The data dictionary declares definitions on table "
-                f"{table_name!r}, which the data source does not expose. "
-                f"Exposed tables: {', '.join(sorted(exposed))}."
-            )
-        target = _TARGETS.get(dialect)
-        if target is None:
-            raise ValueError(
-                f"Definitions on table {table_name!r} cannot be compiled for a "
-                f"{dialect!r} data source. commons lowers definitions to "
-                f"{', '.join(sorted(_TARGETS))}."
-            )
+    exports: dict[str, dict[str, DefinitionExport]] = {
+        authored: definitions
+        for authored, definitions in (
+            getattr(dictionary, "definition_exports", None) or {}
+        ).items()
+        if definitions
+    }
+    for authored, definitions in exports.items():
+        _check_metric_grain(authored, definitions)
+    target = _TARGETS.get(dialect)
+    if exports and target is None:
+        raise ValueError(
+            f"Definitions on table {next(iter(exports))!r} cannot be compiled "
+            f"for a {dialect!r} data source. commons lowers definitions to "
+            f"{', '.join(sorted(_TARGETS))}."
+        )
+    compiled: dict[str, list[ExportRecord]] = {
+        table_name: [] for table_name in dictionary.tables
+    }
+    for authored, definitions in exports.items():
+        # A catalog import re-keys the dictionary to the warehouse's labels,
+        # so the bindings are how an authored table's exports find its entry.
+        table_name = _definition_table(authored, exposed, bindings)
         if bindings is not None:
             definitions = _bind_table(
                 definitions, bindings["columns"].get(authored) or {}, table_name
             )
+        assert target is not None
         compiled[table_name] = _compile_table(table_name, definitions, target)
     for table_name, entry in dictionary.tables.items():
         entry.compiled_definitions = compiled[table_name]
 
 
-def _check_definitions_matched(
-    exports: dict[str, dict[str, DefinitionExport]], bindings: dict[str, Any]
-) -> None:
-    """Refuse a definition whose table the catalog selection left out.
+def _definition_table(
+    authored: str, exposed: set[str], bindings: dict[str, Any] | None
+) -> str:
+    """The table an authored table's definitions compile against.
 
-    Compiling it is impossible and dropping it is worse than failing: the
-    agent would be told about a governed definition that quietly is not there.
+    A table the catalog selection left out is refused rather than skipped:
+    the agent would otherwise be told about a governed definition that
+    quietly is not there.
     """
-    for authored, definitions in exports.items():
-        if definitions and bindings["tables"].get(authored) is None:
-            raise DefinitionUnmatchedTableError(
-                f"Authored table {authored!r} declares definitions, and does "
-                f"not match an exposed relation. Name it as the data source "
-                f"selects it, or drop it from the data dictionary."
+    if bindings is None:
+        if authored not in exposed:
+            raise ValueError(
+                f"The data dictionary declares definitions on table "
+                f"{authored!r}, which the data source does not expose. "
+                f"Exposed tables: {', '.join(sorted(exposed))}."
             )
+        return authored
+    label = bindings["tables"].get(authored)
+    if label is None:
+        raise DefinitionUnmatchedTableError(
+            f"Authored table {authored!r} declares definitions, and does "
+            f"not match an exposed relation. Name it as the data source "
+            f"selects it, or drop it from the data dictionary."
+        )
+    return label
+
+
+def _check_metric_grain(table: str, definitions: dict[str, DefinitionExport]) -> None:
+    grain = mixed_grain(definitions)
+    offenders = [
+        name
+        for name, definition in definitions.items()
+        if grain[name] and definition.kind == "metric"
+    ]
+    if offenders:
+        raise DefinitionMixedGrainError(
+            f"Metric definition {offenders[0]!r} on table {table!r} cannot be "
+            f"compiled into one SQL expression. Its dependency chain mixes row "
+            f"and aggregate grain and would need a subquery rewrite."
+        )
 
 
 def _bind_table(
@@ -282,17 +313,6 @@ def _compile_table(
     table: str, definitions: dict[str, DefinitionExport], target: str
 ) -> list[ExportRecord]:
     grain = mixed_grain(definitions)
-    offenders = [
-        name
-        for name, definition in definitions.items()
-        if grain[name] and definition.kind == "metric"
-    ]
-    if offenders:
-        raise ValueError(
-            f"Metric definition {offenders[0]!r} on table {table!r} cannot be "
-            f"compiled into one SQL expression. Its dependency chain mixes row "
-            f"and aggregate grain and would need a subquery rewrite."
-        )
     markers = _reference_markers(definitions)
     # Only the source's own target is lowered, and ExportRecord carries that
     # one target. The R implementation emits every target up front and keeps

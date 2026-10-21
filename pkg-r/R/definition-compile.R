@@ -102,6 +102,7 @@ definition_check_metric_grain <- function(tables, call) {
           "Metric definition {.val {names(definitions)[invalid]}} on table {.val {table$name}} cannot be compiled into one SQL expression.",
           i = "The dependency chain mixes row and aggregate grain and requires a subquery rewrite."
         ),
+        class = "commons_definition_mixed_grain_error",
         call = call
       )
     }
