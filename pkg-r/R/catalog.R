@@ -382,8 +382,7 @@ catalog_merge_dictionary <- function(
     relations = relations,
     definition_bindings = list(
       tables = matches,
-      columns = column_matches,
-      strict = TRUE
+      columns = column_matches
     )
   )
 }
