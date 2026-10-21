@@ -12,9 +12,11 @@ to run, which leaves no committed artifact to go stale.
 `--grant-to` names the principal the tests connect as: a Snowflake role, or a
 Databricks service principal's application ID. Its grants cover the fixture
 tables and leave out a copy of one, which becomes the denied-table fixture.
-That works because whoever runs this SQL owns the copy and the test principal
-does not. Without `--grant-to` the tests run as the owner, who can read
-everything, so the denied table is left to do by hand.
+That works because the principal that runs this SQL owns the copy, and on
+Snowflake that is the active role. Run it under a role other than the test
+principal, or the test principal owns the copy and can read it. Without
+`--grant-to` the tests run as the owner, who can read everything, so the
+denied table is left to do by hand.
 """
 
 from __future__ import annotations
