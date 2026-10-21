@@ -576,6 +576,8 @@ tracing = [
 [package.dev-dependencies]
 dev = [
     { name = "commons", extra = ["shiny"] },
+    { name = "databricks-sdk" },
+    { name = "databricks-sqlalchemy" },
     { name = "great-tables" },
     { name = "matplotlib" },
     { name = "pandas" },
@@ -587,14 +589,10 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytz" },
     { name = "ruff" },
+    { name = "snowflake-sqlalchemy" },
 ]
 docs = [
     { name = "great-docs" },
-]
-live-warehouse = [
-    { name = "databricks-sdk" },
-    { name = "databricks-sqlalchemy" },
-    { name = "snowflake-sqlalchemy" },
 ]
 
 [package.metadata]
@@ -623,6 +621,8 @@ provides-extras = ["tracing", "shiny"]
 [package.metadata.requires-dev]
 dev = [
     { name = "commons", extras = ["shiny"] },
+    { name = "databricks-sdk", specifier = ">=0.55" },
+    { name = "databricks-sqlalchemy", specifier = ">=2" },
     { name = "great-tables", specifier = ">=1.0.0" },
     { name = "matplotlib", specifier = ">=3.8" },
     { name = "pandas", specifier = ">=2" },
@@ -634,13 +634,9 @@ dev = [
     { name = "pytest-asyncio" },
     { name = "pytz" },
     { name = "ruff" },
-]
-docs = [{ name = "great-docs", specifier = ">=0.17" }]
-live-warehouse = [
-    { name = "databricks-sdk", specifier = ">=0.55" },
-    { name = "databricks-sqlalchemy", specifier = ">=2" },
     { name = "snowflake-sqlalchemy", specifier = ">=1.6" },
 ]
+docs = [{ name = "great-docs", specifier = ">=0.17" }]
 
 [[package]]
 name = "contourpy"
