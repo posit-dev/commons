@@ -1,5 +1,7 @@
 # commons (development version)
 
+* A definition that divides by a compound expression, such as `amount / (ratio * 2)`, now compiles to the correct Snowflake and Databricks SQL. The parentheses around the divisor were dropped, so the query divided by `ratio` alone (#439).
+
 * `commons()` gains a `mode` argument. With `mode = "trusted only"`, the agent answers only with trusted calculations. It never writes its own SQL or R, and it tells the user when no trusted calculation answers a question. These answers carry no provenance markers.
 
 * `describe_table` reports complete table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
