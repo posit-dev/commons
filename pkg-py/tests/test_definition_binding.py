@@ -9,18 +9,20 @@ is lowered or the SQL would name columns the warehouse does not have.
 import pytest
 
 from commons._data_dictionary import DataDictionary
-from commons._definitions._compile import (
+from commons._definitions import (
     DefinitionAbsentColumnError,
+    DefinitionMixedGrainError,
     DefinitionUnmatchedTableError,
-    _bind_ir,
     attach_compiled_definitions,
 )
+from commons._definitions._compile import _bind_ir
 from commons._definitions._export import Ir
 from tests._shared import load_shared_fixture
 from tests._warehouse import merge_shared_case
 
 _BINDING_ERRORS = {
     "absent_column": DefinitionAbsentColumnError,
+    "mixed_grain": DefinitionMixedGrainError,
     "unmatched_table": DefinitionUnmatchedTableError,
 }
 
@@ -46,9 +48,12 @@ def test_definition_binding_matches_the_shared_contract():
     for case in cases:
         expect = case["expect"]
         if "error" in expect:
-            with pytest.raises(_BINDING_ERRORS[expect["error"]]):
+            try:
                 compile_shared_case(case)
-            continue
+            except ValueError as error:
+                assert isinstance(error, _BINDING_ERRORS[expect["error"]]), case["name"]
+                continue
+            pytest.fail(f"{case['name']}: nothing was refused")
         assert compile_shared_case(case) == expect["tables"], case["name"]
 
 
