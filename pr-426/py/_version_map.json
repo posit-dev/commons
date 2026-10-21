@@ -111,6 +111,10 @@
       "dev",
       "0.1.0b2"
     ],
+    "reference/DataSource.ensure_tables_loaded.html": [
+      "dev",
+      "0.1.0b2"
+    ],
     "reference/DataSource.from_board.html": [
       "dev",
       "0.1.0b2"
