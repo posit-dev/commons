@@ -182,6 +182,10 @@ def _engine(backend: str, namespace: tuple[str, ...]) -> sqlalchemy.Engine:
         connect_args={
             "authenticator": "SNOWFLAKE_JWT",
             "private_key_file": os.environ["SNOWFLAKE_PRIVATE_KEY_FILE"],
+            # DuckDB is pinned to UTC as well: a date compared or combined
+            # with a timestamp is read in the session time zone, so two
+            # engines in different zones disagree by the offset.
+            "session_parameters": {"TIMEZONE": "UTC"},
         },
     )
 
@@ -215,6 +219,8 @@ def duckdb_fixture_connection():
     import duckdb
 
     con = duckdb.connect()
+    # The same zone the warehouse sessions use; see _engine().
+    con.execute("SET TimeZone = 'UTC'")
     types = _ROWS["types"]
     for table, spec in _ROWS["tables"].items():
         columns = ", ".join(
