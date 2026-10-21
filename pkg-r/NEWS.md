@@ -1,5 +1,7 @@
 # commons (development version)
 
+* A definition that divides by a compound expression, such as `amount / (ratio * 2)`, now compiles to the correct Snowflake and Databricks SQL. The parentheses around the divisor were dropped, so the query divided by `ratio` alone (#439).
+
 * The `commons()` function was split into two. Calls to `commons()` previously looked like this:
 
   ```r

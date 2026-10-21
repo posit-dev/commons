@@ -74,8 +74,16 @@
         "SQL(snowflake)": { "notes_contain": ["newline characters"] }
       },
       "survey::negative quotient": {
-        "SQL(snowflake)": { "code_contains": ["CASE WHEN"] },
-        "SQL(databricks)": { "notes_contain": ["negative zero divisor"] }
+        "SQL(snowflake)": {
+          "code_contains": [
+            "CASE WHEN \"ratio\" + 1.0 = 0 THEN",
+            "ELSE -(\"amount\" - 2) / (\"ratio\" + 1.0) END"
+          ]
+        },
+        "SQL(databricks)": {
+          "code_contains": ["ELSE -(`amount` - 2) / (`ratio` + 1.0) END"],
+          "notes_contain": ["negative zero divisor"]
+        }
       }
     }
   },
