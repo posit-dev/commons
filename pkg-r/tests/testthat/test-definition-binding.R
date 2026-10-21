@@ -3,6 +3,7 @@
 
 binding_error_class <- c(
   absent_column = "commons_definition_absent_column_error",
+  mixed_grain = "commons_definition_mixed_grain_error",
   unmatched_table = "commons_definition_unmatched_table_error"
 )
 
@@ -33,7 +34,8 @@ test_that("definition binding matches the shared contract", {
     if (!is.null(case$expect$error)) {
       expect_error(
         compile_binding_case(case),
-        class = binding_error_class[[case$expect$error]]
+        class = binding_error_class[[case$expect$error]],
+        info = case$name
       )
       next
     }

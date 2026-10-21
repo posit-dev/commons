@@ -12,7 +12,13 @@ IR. Cross-implementation conformance against the data-dict binary is the
 authority, not this code.
 """
 
-from ._compile import attach_compiled_definitions, mixed_grain
+from ._compile import (
+    DefinitionAbsentColumnError,
+    DefinitionMixedGrainError,
+    DefinitionUnmatchedTableError,
+    attach_compiled_definitions,
+    mixed_grain,
+)
 from ._registry import (
     ExportRecord,
     Registry,
@@ -26,6 +32,9 @@ from ._registry import (
 )
 
 __all__ = [
+    "DefinitionAbsentColumnError",
+    "DefinitionMixedGrainError",
+    "DefinitionUnmatchedTableError",
     "ExportRecord",
     "Registry",
     "applied_text",
