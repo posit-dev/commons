@@ -18,11 +18,17 @@
           "arity": 3,
           "description": "A relation the test principal genuinely cannot read. Provisioning with --grant-to creates one, owned by the principal that runs the SQL (on Snowflake, its active role)."
         },
-        "metric_view": {
-          "variable": "COMMONS_TEST_DATABRICKS_METRIC_VIEW",
+        "parameterized_model": {
+          "variable": "COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL",
           "required": false,
           "arity": 3,
-          "description": "A parameterized metric view. Read by the R suite only: pkg-py has no semantic-model surface (commons kata gcgj)."
+          "description": "A metric view with at least one parameter and one metric. Read by the R suite only: pkg-py has no semantic-model surface (commons kata gcgj)."
+        },
+        "parameterized_model_arguments": {
+          "variable": "COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL_ARGUMENTS",
+          "required": false,
+          "format": "json",
+          "description": "The arguments to call the parameterized model with, as a JSON object. Needed alongside it."
         }
       }
     },
@@ -65,6 +71,18 @@
           "required": false,
           "arity": 3,
           "description": "A semantic view carrying a verified query. Read by the R suite only."
+        },
+        "parameterized_model": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL",
+          "required": false,
+          "arity": 3,
+          "description": "A semantic view with at least one variable and one metric. Read by the R suite only."
+        },
+        "parameterized_model_arguments": {
+          "variable": "COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL_ARGUMENTS",
+          "required": false,
+          "format": "json",
+          "description": "The arguments to call the parameterized model with, as a JSON object. Needed alongside it."
         }
       }
     }
