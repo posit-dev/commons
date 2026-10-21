@@ -90,7 +90,7 @@ jobs:
           cache-dependency-glob: pkg-py/uv.lock
       - name: Install dependencies
         if: steps.configured.outputs.run == 'true'
-        run: uv sync --locked --all-extras --group live-warehouse
+        run: uv sync --locked --all-extras
       - name: Test
         if: steps.configured.outputs.run == 'true'
         run: uv run pytest tests/test_live_warehouses.py -k '${{ matrix.backend }}' -rs
