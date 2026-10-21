@@ -18,13 +18,26 @@ from ._emit_sql import emit_sql
 from ._export import DefinitionExport, Ir
 from ._registry import ExportRecord
 
-__all__ = ["attach_compiled_definitions", "mixed_grain"]
+__all__ = [
+    "DefinitionAbsentColumnError",
+    "DefinitionUnmatchedTableError",
+    "attach_compiled_definitions",
+    "mixed_grain",
+]
 
 _TARGETS = {
     "duckdb": "SQL(duckdb)",
     "snowflake": "SQL(snowflake)",
     "databricks": "SQL(databricks)",
 }
+
+
+class DefinitionUnmatchedTableError(ValueError):
+    """An authored table declares definitions and matched no relation."""
+
+
+class DefinitionAbsentColumnError(ValueError):
+    """A definition names an authored column the matched relation lacks."""
 
 
 def mixed_grain(definitions: dict[str, DefinitionExport]) -> dict[str, bool]:
@@ -174,7 +187,7 @@ def _check_definitions_matched(
     """
     for authored, definitions in exports.items():
         if definitions and bindings["tables"].get(authored) is None:
-            raise ValueError(
+            raise DefinitionUnmatchedTableError(
                 f"Authored table {authored!r} declares definitions, and does "
                 f"not match an exposed relation. Name it as the data source "
                 f"selects it, or drop it from the data dictionary."
@@ -231,33 +244,19 @@ def _bind_selection(
 ) -> dict[str, Any] | None:
     """Rewrite a `COLUMNS(...)` selection to the discovered spellings.
 
-    A selection the author wrote out by name is bound strictly: naming a
-    column the warehouse does not have is a mistake worth reporting. A
-    selection derived from a pattern or from the whole table is not, because
-    the author named no column at all. It is resolved over the authored
-    columns, so a dictionary that still documents a dropped column would
-    otherwise take every wildcard definition on the table down with it, and
-    the refusal would name a column that appears nowhere in the expression.
-    The other side of that intersection is already tolerated: a warehouse
-    column the dictionary does not describe is simply not selected.
+    A selection from a pattern or from the whole table is resolved over the
+    authored columns, so it binds as strictly as one written out by name: a
+    dictionary that documents a column the relation lacks is refused.
     """
     if selection is None:
         return None
-    named = selection.get("form") == "list"
-    bound = []
-    for column in selection["columns"]:
-        path = _bind_path(
-            column["path"], columns, definition, table, required=named
-        )
-        if path is not None:
-            bound.append({**column, "path": path})
-    if not bound:
-        raise ValueError(
-            f"Definition {definition!r} on table {table!r} selects columns, "
-            f"and the selected relation has none of the ones the data "
-            f"dictionary describes."
-        )
-    return {**selection, "columns": bound}
+    return {
+        **selection,
+        "columns": [
+            {**column, "path": _bind_path(column["path"], columns, definition, table)}
+            for column in selection["columns"]
+        ],
+    }
 
 
 def _bind_path(
@@ -265,19 +264,12 @@ def _bind_path(
     columns: dict[str, str | None],
     definition: str,
     table: str,
-    required: bool = True,
 ) -> Any:
-    """The physical spelling of the column a path leads with.
-
-    Returns None for a column the relation does not have, when the caller
-    can drop it rather than refuse.
-    """
+    """The physical spelling of the column a path leads with."""
     segments = list(path) if isinstance(path, list) else [path]
     physical = columns.get(segments[0])
     if physical is None:
-        if not required:
-            return None
-        raise ValueError(
+        raise DefinitionAbsentColumnError(
             f"Definition {definition!r} on table {table!r} references "
             f"authored column {segments[0]!r}, which is absent from the "
             f"selected relation."

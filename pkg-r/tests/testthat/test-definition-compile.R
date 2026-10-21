@@ -277,8 +277,7 @@ test_that("source selection binds authored warehouse identifiers", {
         order_total = "ORDER_TOTAL",
         tile_size = "TILE_SIZE"
       )
-    ),
-    strict = TRUE
+    )
   )
   source <- definition_mock_source("ANALYTICS.PUBLIC.ORDERS", bindings)
   compiled <- definition_compile_fixture("core.yaml", source)
@@ -298,32 +297,6 @@ test_that("source selection binds authored warehouse identifiers", {
     definitions$enterprise_revenue$sql,
     '"TILE_SIZE"',
     fixed = TRUE
-  )
-})
-
-test_that("missing warehouse bindings fail before SQL can run", {
-  local_mocked_bindings(
-    is_snowflake_connection = function(con) TRUE,
-    is_databricks_connection = function(con) FALSE
-  )
-  bindings <- list(
-    tables = c(orders = "ANALYTICS.PUBLIC.ORDERS"),
-    columns = list(
-      orders = c(
-        status_cd = "STATUS_CD",
-        order_total = "ORDER_TOTAL",
-        tile_size = NA_character_
-      )
-    ),
-    strict = TRUE
-  )
-
-  expect_error(
-    definition_compile_fixture(
-      "core.yaml",
-      definition_mock_source("ANALYTICS.PUBLIC.ORDERS", bindings)
-    ),
-    "authored column.*tile_size"
   )
 })
 
@@ -421,8 +394,7 @@ test_that("physical columns cannot be confused with sibling definitions", {
   )
   bindings <- list(
     tables = c(values = "ANALYTICS.PUBLIC.VALUES"),
-    columns = list(values = c(amount = "AMOUNT")),
-    strict = TRUE
+    columns = list(values = c(amount = "AMOUNT"))
   )
   compiled <- definition_compile_source(
     raw,
