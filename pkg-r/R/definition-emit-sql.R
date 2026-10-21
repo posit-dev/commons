@@ -396,6 +396,17 @@ definition_sql_divide <- function(node, state, dialect, selected) {
     dialect,
     selected
   )
+  # The guards compare each operand, which binds looser than arithmetic, so
+  # only the quotient needs the operands wrapped at division's precedence.
+  quotient <- definition_sql_infix(
+    node$lhs,
+    node$rhs,
+    "/",
+    6L,
+    state,
+    dialect,
+    selected
+  )
   nan <- definition_sql_non_finite_literal("nan", dialect)
   inf <- definition_sql_non_finite_literal("inf", dialect)
   neg_inf <- definition_sql_non_finite_literal("-inf", dialect)
@@ -407,7 +418,7 @@ definition_sql_divide <- function(node, state, dialect, selected) {
       "WHEN %s IS NULL THEN NULL ",
       "WHEN %s OR %s = 0 THEN %s ",
       "WHEN %s < 0 THEN %s ELSE %s END ",
-      "ELSE %s / %s END"
+      "ELSE %s END"
     ),
     divisor,
     numerator,
@@ -417,8 +428,7 @@ definition_sql_divide <- function(node, state, dialect, selected) {
     numerator,
     neg_inf,
     inf,
-    numerator,
-    divisor
+    quotient
   )
 }
 
