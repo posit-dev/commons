@@ -141,16 +141,21 @@ def render(dialect: str, namespace: str, grantee: str | None = None) -> str:
             "",
         ]
         column_list = ", ".join(quote_identifier(c["name"], dialect) for c in spec["columns"])
-        values = ",\n".join(
-            "  ("
-            + ", ".join(
+        rows = [
+            ", ".join(
                 literal(row[column["name"]], column["type"], types, dialect)
                 for column in spec["columns"]
             )
-            + ")"
             for row in spec["rows"]
-        )
-        lines += [f"INSERT INTO {target} ({column_list}) VALUES", values + ";", ""]
+        ]
+        if dialect == "snowflake":
+            # Snowflake accepts only constants in a VALUES list, and the
+            # array and object literals are function calls.
+            values = "\nUNION ALL ".join(f"SELECT {row}" for row in rows)
+            lines += [f"INSERT INTO {target} ({column_list})", values + ";", ""]
+        else:
+            values = ",\n".join(f"  ({row})" for row in rows)
+            lines += [f"INSERT INTO {target} ({column_list}) VALUES", values + ";", ""]
 
     if grantee is None:
         lines += [
