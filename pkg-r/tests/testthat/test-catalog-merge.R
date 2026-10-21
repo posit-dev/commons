@@ -30,6 +30,12 @@ test_that("exclusion globs match the shared contract", {
   }
 })
 
+merge_error_class <- c(
+  ambiguous = "commons_catalog_ambiguous_table_error",
+  claimed = "commons_catalog_claimed_relation_error",
+  ambiguous_column = "commons_catalog_ambiguous_column_error"
+)
+
 test_that("the dictionary merge matches the shared contract", {
   cases <- shared_fixture("catalog-merge")$merge
   expect_gt(length(cases), 0L)
@@ -70,7 +76,7 @@ test_that("the dictionary merge matches the shared contract", {
       )
     }
     if (!is.null(case$expect$error)) {
-      expect_error(run())
+      expect_error(run(), class = merge_error_class[[case$expect$error]])
       next
     }
     merged <- run()

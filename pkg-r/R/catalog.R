@@ -448,6 +448,7 @@ catalog_dictionary_matches <- function(
       cli::cli_abort(
         "Authored tables {.val {c(other, authored_name)}} both match selected
          relation {.val {label}}.",
+        class = "commons_catalog_claimed_relation_error",
         call = call
       )
     }
@@ -534,6 +535,7 @@ catalog_abort_ambiguous_dictionary_table <- function(
        relation: {.val {matches}}.",
       "i" = "Use its fully qualified name in the data dictionary."
     ),
+    class = "commons_catalog_ambiguous_table_error",
     call = call
   )
 }
@@ -597,6 +599,7 @@ catalog_merge_dictionary_columns <- function(
       cli::cli_abort(
         "Authored column {.val {authored_name}} matches more than one discovered
          column: {.val {names(out)[candidates]}}.",
+        class = "commons_catalog_ambiguous_column_error",
         call = call
       )
     }
