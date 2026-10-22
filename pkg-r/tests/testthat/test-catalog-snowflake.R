@@ -443,9 +443,19 @@ test_that("Snowflake casts a bound variable to the type its view declares", {
     'VARIABLES "MIN_TOTAL" => CAST(? AS NUMBER(10,2)), "SINCE" => CAST(? AS TIMESTAMP_TZ)'
   )
 
-  model$parameters$SINCE$sql_type <- NULL
+  # A declared type is spliced into SQL, so one that is not a plain type name
+  # leaves its variable with a bare placeholder.
+  odd <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "SINCE", data_type = "TIMESTAMP_TZ); DROP TABLE x; --")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
   expect_equal(
-    snowflake_semantic_variables(DBI::ANSI(), model, "SINCE"),
+    snowflake_semantic_variables(DBI::ANSI(), odd, "SINCE"),
     'VARIABLES "SINCE" => ?'
   )
 })
