@@ -36,7 +36,7 @@ DENIED_TABLE = "denied_orders"
 
 # Snowflake semantic views over the orders table, for the R suite's semantic
 # model tests. Each is YAML for SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with
-# {database} and {schema} filled in. ORDERS_MODEL serves both the semantic view
+# {database} and {schema} filled in as quoted identifiers. ORDERS_MODEL serves both the semantic view
 # and the verified query fixtures; ORDERS_PARAM_MODEL declares a variable.
 SEMANTIC_VIEWS = {
     "ORDERS_MODEL": """\
@@ -45,8 +45,8 @@ description: Orders from the commons live-test fixture.
 tables:
   - name: orders
     base_table:
-      database: {database}
-      schema: {schema}
+      database: '{database}'
+      schema: '{schema}'
       table: '"orders"'
     dimensions:
       - name: tile_size
@@ -76,8 +76,8 @@ variables:
 tables:
   - name: orders
     base_table:
-      database: {database}
-      schema: {schema}
+      database: '{database}'
+      schema: '{schema}'
       table: '"orders"'
     facts:
       - name: order_total
@@ -282,17 +282,19 @@ def grants(dialect: str, parts: list[str], qualified: str, tables: list[str], gr
 def semantic_views(parts: list[str]) -> list[str]:
     """The Snowflake semantic views, created from YAML.
 
-    Dollar quoting keeps the YAML's own quotes intact. A semantic view takes
-    a qualified base table, so the catalog and schema are written in.
+    Dollar quoting keeps the YAML's own quotes intact. The procedure takes
+    the schema, and the view's name comes from the YAML. A semantic view
+    takes a qualified base table, so the catalog and schema are written in.
     """
-    database, schema = parts
-    namespace = f"{quote_identifier(database, 'snowflake')}.{quote_identifier(schema, 'snowflake')}"
+    database, schema = (quote_identifier(part, "snowflake") for part in parts)
+    namespace = f"{database}.{schema}"
     lines = []
     for view, spec in SEMANTIC_VIEWS.items():
-        body = spec.format(database=database, schema=schema)
+        # YAML single quotes double a quote inside them, as SQL does.
+        body = spec.format(database=database.replace("'", "''"), schema=schema.replace("'", "''"))
         lines += [
             f"DROP SEMANTIC VIEW IF EXISTS {namespace}.{quote_identifier(view, 'snowflake')};",
-            f"CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('{database}.{schema}', $$",
+            f"CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML({quote_string(namespace)}, $$",
             body.rstrip("\n"),
             "$$);",
             "",
