@@ -36,7 +36,8 @@ DENIED_TABLE = "denied_orders"
 
 # Snowflake semantic views over the orders table, for the R suite's semantic
 # model tests. Each is YAML for SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with
-# {database} and {schema} filled in as quoted identifiers. ORDERS_MODEL serves both the semantic view
+# {database} and {schema} filled in as YAML scalars and {namespace} as the
+# quoted identifiers the verified query's SQL names. ORDERS_MODEL serves both the semantic view
 # and the verified query fixtures; ORDERS_PARAM_MODEL declares a variable.
 SEMANTIC_VIEWS = {
     "ORDERS_MODEL": """\
@@ -63,7 +64,7 @@ tables:
 verified_queries:
   - name: total_order_value_by_tile
     question: What is the total order value for each tile size?
-    sql: SELECT "tile_size", SUM("order_total") AS total_order_value FROM {database}.{schema}."orders" GROUP BY "tile_size"
+    sql: SELECT "tile_size", SUM("order_total") AS total_order_value FROM {namespace}."orders" GROUP BY "tile_size"
 """,
     "ORDERS_PARAM_MODEL": """\
 name: ORDERS_PARAM_MODEL
@@ -290,8 +291,13 @@ def semantic_views(parts: list[str]) -> list[str]:
     namespace = f"{database}.{schema}"
     lines = []
     for view, spec in SEMANTIC_VIEWS.items():
-        # YAML single quotes double a quote inside them, as SQL does.
-        body = spec.format(database=database.replace("'", "''"), schema=schema.replace("'", "''"))
+        # A YAML single-quoted scalar doubles a quote inside it; the SQL in
+        # the verified query takes the identifiers as they are.
+        body = spec.format(
+            database=database.replace("'", "''"),
+            schema=schema.replace("'", "''"),
+            namespace=namespace,
+        )
         lines += [
             f"DROP SEMANTIC VIEW IF EXISTS {namespace}.{quote_identifier(view, 'snowflake')};",
             f"CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML({quote_string(namespace)}, $$",
