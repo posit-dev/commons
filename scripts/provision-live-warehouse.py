@@ -69,7 +69,7 @@ verified_queries:
 name: ORDERS_PARAM_MODEL
 description: Orders from the commons live-test fixture, with a threshold variable.
 variables:
-  - name: min_total
+  - name: MIN_TOTAL
     data_type: NUMBER(10,2)
     default_value: "0"
     description: Only orders whose total is at least this amount count.
@@ -85,18 +85,19 @@ tables:
         data_type: FLOAT
     metrics:
       - name: total_above_min
-        description: Sum of order totals at or above min_total.
-        expr: SUM(CASE WHEN orders.order_total >= min_total THEN orders.order_total ELSE 0 END)
+        description: Sum of order totals at or above MIN_TOTAL.
+        expr: SUM(CASE WHEN orders.order_total >= MIN_TOTAL THEN orders.order_total ELSE 0 END)
 """,
 }
 # The env fixture each semantic view fills, and the arguments the
-# parameterized model is called with.
+# parameterized model is called with. Snowflake stores a semantic view's
+# member names in upper case, so the YAML spells them that way too.
 SEMANTIC_FIXTURES = {
     "semantic_view": "ORDERS_MODEL",
     "verified_query_view": "ORDERS_MODEL",
     "parameterized_model": "ORDERS_PARAM_MODEL",
 }
-PARAMETERIZED_ARGUMENTS = {"min_total": 50}
+PARAMETERIZED_ARGUMENTS = {"MIN_TOTAL": 50}
 
 SPECIAL_DOUBLES = {
     "databricks": {"NaN": "double('NaN')", "Infinity": "double('Infinity')", "-Infinity": "double('-Infinity')"},
