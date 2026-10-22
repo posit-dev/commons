@@ -1,0 +1,70 @@
+name: Install R system requirements without the Chromium PPA
+description: >
+  Installs the Linux system packages that setup-r-dependencies would install
+  for the same inputs, except Chromium. pak installs Chromium from a Launchpad
+  PPA, and that PPA's outages fail every Linux job; the runner image already
+  ships Chrome. Run setup-r-dependencies afterwards with PKG_SYSREQS set to
+  "false". Does nothing on macOS and Windows, where pak installs no system
+  packages.
+
+inputs:
+  extra-packages:
+    description: The extra-packages input given to setup-r-dependencies.
+    default: ""
+  needs:
+    description: The needs input given to setup-r-dependencies.
+    default: ""
+  working-directory:
+    description: The working-directory input given to setup-r-dependencies.
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Install system requirements except Chromium
+      if: runner.os == 'Linux'
+      shell: Rscript {0}
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SYSREQS_EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+        SYSREQS_NEEDS: ${{ inputs.needs }}
+      run: |
+        # A private library, so this pak does not interfere with the one
+        # setup-r-dependencies installs.
+        lib <- file.path(Sys.getenv("RUNNER_TEMP", tempdir()), "sysreqs-pak")
+        dir.create(lib, recursive = TRUE, showWarnings = FALSE)
+        install.packages("pak", lib = lib, quiet = TRUE, repos = sprintf(
+          "https://r-lib.github.io/p/pak/stable/%s/%s/%s",
+          .Platform$pkgType, R.Version()$os, R.Version()$arch
+        ))
+        # pak's worker subprocess looks for pak on the library path.
+        .libPaths(c(lib, .libPaths()))
+
+        split <- function(x) {
+          parts <- trimws(strsplit(x, "[[:space:],]+")[[1]])
+          parts[nzchar(parts)]
+        }
+        # The same resolution setup-r-dependencies asks pak for.
+        refs <- unique(c("deps::.", split(Sys.getenv("SYSREQS_EXTRA_PACKAGES"))))
+        needs <- split(Sys.getenv("SYSREQS_NEEDS"))
+        plan <- pak::pkg_sysreqs(
+          refs,
+          dependencies = c("all", if (length(needs)) paste0("Config/Needs/", needs))
+        )
+        rows <- plan$packages[plan$packages$sysreq != "chrome", ]
+
+        sudo <- if (Sys.info()[["effective_user"]] == "root") "" else "sudo "
+        run <- function(command) {
+          message("> ", command)
+          status <- system(paste0(
+            sudo, "env DEBIAN_FRONTEND=noninteractive sh -c ", shQuote(command)
+          ))
+          if (status != 0) stop("Failed: ", command, call. = FALSE)
+        }
+        for (command in unique(unlist(rows$pre_install))) run(command)
+        run("apt-get -y update")
+        system_packages <- unique(unlist(rows$system_packages))
+        if (length(system_packages)) {
+          run(paste("apt-get -y install", paste(system_packages, collapse = " ")))
+        }
+        for (command in unique(unlist(rows$post_install))) run(command)

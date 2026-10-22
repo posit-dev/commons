@@ -3,9 +3,9 @@ name: "R: R CMD check"
 on:
   push:
     branches: [main]
-    paths: [pkg-r/**, tests/shared/**, .github/workflows/R-CMD-check.yaml]
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/R-CMD-check.yaml, .github/actions/r-sysreqs/**]
   pull_request:
-    paths: [pkg-r/**, tests/shared/**, .github/workflows/R-CMD-check.yaml]
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/R-CMD-check.yaml, .github/actions/r-sysreqs/**]
   workflow_dispatch:
 
 permissions: read-all
@@ -49,7 +49,14 @@ jobs:
           install.packages("odbc", lib = lib, repos = "https://cran.r-project.org")
           stopifnot(nzchar(system.file(package = "odbc", lib.loc = lib)))
       # END odbc workaround
+      - uses: ./.github/actions/r-sysreqs
+        with:
+          extra-packages: any::rcmdcheck, local::.
+          needs: check
+          working-directory: pkg-r
       - uses: r-lib/actions/setup-r-dependencies@v2
+        env:
+          PKG_SYSREQS: "false"
         with:
           extra-packages: any::rcmdcheck, local::.
           needs: check

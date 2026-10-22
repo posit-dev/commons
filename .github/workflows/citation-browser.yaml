@@ -3,9 +3,9 @@ name: "R: Citation browser tests"
 on:
   push:
     branches: [main]
-    paths: [pkg-r/**, tests/shared/**, .github/workflows/citation-browser.yaml]
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/citation-browser.yaml, .github/actions/r-sysreqs/**]
   pull_request:
-    paths: [pkg-r/**, tests/shared/**, .github/workflows/citation-browser.yaml]
+    paths: [pkg-r/**, tests/shared/**, .github/workflows/citation-browser.yaml, .github/actions/r-sysreqs/**]
   workflow_dispatch:
 
 permissions: read-all
@@ -23,11 +23,19 @@ jobs:
       - uses: r-lib/actions/setup-r@v2
         with:
           use-public-rspm: true
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - uses: ./.github/actions/r-sysreqs
         with:
           extra-packages: local::., any::devtools, any::shinytest2, any::chromote
           needs: check
           working-directory: pkg-r
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        env:
+          PKG_SYSREQS: "false"
+        with:
+          extra-packages: local::., any::devtools, any::shinytest2, any::chromote
+          needs: check
+          working-directory: pkg-r
+      # The runner image's Chrome, since r-sysreqs skips the Chromium PPA.
       - name: Locate Chrome
         run: Rscript -e 'stopifnot(nzchar(chromote::find_chrome()))'
       - name: Run citation browser tests
