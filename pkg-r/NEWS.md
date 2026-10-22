@@ -1,5 +1,7 @@
 # commons (development version)
 
+* A Snowflake semantic view's variables are now bound with the type the view declares, such as `NUMBER(10,2)`. Snowflake refuses a value of another type, and an ODBC driver can bind a number as text (#447).
+
 * A Snowflake semantic view whose base tables are named with quoted identifiers, such as `"orders"`, now scopes to those tables. The quotes were kept as part of each name, so `data_source()` could not find them (#446).
 
 * A definition that adds `NULL` to a date, such as `created + NULL`, now compiles to SQL that Snowflake accepts. It compiles to a typed `NULL` timestamp (#441).
