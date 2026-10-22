@@ -17,6 +17,9 @@ Snowflake that is the active role. Run it under a role other than the test
 principal, or the test principal owns the copy and can read it. Without
 `--grant-to` the tests run as the owner, who can read everything, so the
 denied table is left to do by hand.
+
+On Snowflake it also creates the semantic views the R suite's semantic model
+tests read, over the orders table.
 """
 
 from __future__ import annotations
@@ -30,6 +33,70 @@ SHARED = Path(__file__).resolve().parent.parent / "tests" / "shared"
 FIXTURE = SHARED / "live-warehouse-rows.json"
 ENV = SHARED / "live-warehouse-env.json"
 DENIED_TABLE = "denied_orders"
+
+# Snowflake semantic views over the orders table, for the R suite's semantic
+# model tests. Each is YAML for SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with
+# {database} and {schema} filled in. ORDERS_MODEL serves both the semantic view
+# and the verified query fixtures; ORDERS_PARAM_MODEL declares a variable.
+SEMANTIC_VIEWS = {
+    "ORDERS_MODEL": """\
+name: ORDERS_MODEL
+description: Orders from the commons live-test fixture.
+tables:
+  - name: orders
+    base_table:
+      database: {database}
+      schema: {schema}
+      table: '"orders"'
+    dimensions:
+      - name: tile_size
+        expr: '"tile_size"'
+        data_type: VARCHAR
+    facts:
+      - name: order_total
+        expr: '"order_total"'
+        data_type: FLOAT
+    metrics:
+      - name: total_order_value
+        description: Sum of order totals.
+        expr: SUM(orders.order_total)
+verified_queries:
+  - name: total_order_value_by_tile
+    question: What is the total order value for each tile size?
+    sql: SELECT "tile_size", SUM("order_total") AS total_order_value FROM {database}.{schema}."orders" GROUP BY "tile_size"
+""",
+    "ORDERS_PARAM_MODEL": """\
+name: ORDERS_PARAM_MODEL
+description: Orders from the commons live-test fixture, with a threshold variable.
+variables:
+  - name: min_total
+    data_type: NUMBER(10,2)
+    default_value: "0"
+    description: Only orders whose total is at least this amount count.
+tables:
+  - name: orders
+    base_table:
+      database: {database}
+      schema: {schema}
+      table: '"orders"'
+    facts:
+      - name: order_total
+        expr: '"order_total"'
+        data_type: FLOAT
+    metrics:
+      - name: total_above_min
+        description: Sum of order totals at or above min_total.
+        expr: SUM(CASE WHEN orders.order_total >= min_total THEN orders.order_total ELSE 0 END)
+""",
+}
+# The env fixture each semantic view fills, and the arguments the
+# parameterized model is called with.
+SEMANTIC_FIXTURES = {
+    "semantic_view": "ORDERS_MODEL",
+    "verified_query_view": "ORDERS_MODEL",
+    "parameterized_model": "ORDERS_PARAM_MODEL",
+}
+PARAMETERIZED_ARGUMENTS = {"min_total": 50}
 
 SPECIAL_DOUBLES = {
     "databricks": {"NaN": "double('NaN')", "Infinity": "double('Infinity')", "-Infinity": "double('-Infinity')"},
@@ -157,6 +224,8 @@ def render(dialect: str, namespace: str, grantee: str | None = None) -> str:
             values = ",\n".join(f"  ({row})" for row in rows)
             lines += [f"INSERT INTO {target} ({column_list}) VALUES", values + ";", ""]
 
+    if dialect == "snowflake":
+        lines += semantic_views(parts)
     if grantee is None:
         lines += [
             "-- Still to do by hand, because an owner can always read their own relation:",
@@ -193,8 +262,41 @@ def grants(dialect: str, parts: list[str], qualified: str, tables: list[str], gr
             f"GRANT USAGE ON SCHEMA {qualified} TO ROLE {principal};",
         ]
         lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO ROLE {principal};" for t in tables]
-    variable = json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["fixtures"]["denied_table"]["variable"]
-    return lines + ["", f"-- Then: export {variable}={'.'.join(parts)}.{DENIED_TABLE}"]
+        lines += [
+            f"GRANT REFERENCES, SELECT ON SEMANTIC VIEW {qualified}.{quote_identifier(view, dialect)} TO ROLE {principal};"
+            for view in SEMANTIC_VIEWS
+        ]
+    fixtures = json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["fixtures"]
+    namespace = ".".join(parts)
+    exports = [f"{fixtures['denied_table']['variable']}={namespace}.{DENIED_TABLE}"]
+    if dialect == "snowflake":
+        exports += [
+            f"{fixtures[fixture]['variable']}={namespace}.{view}" for fixture, view in SEMANTIC_FIXTURES.items()
+        ]
+        arguments = json.dumps(PARAMETERIZED_ARGUMENTS)
+        exports.append(f"{fixtures['parameterized_model_arguments']['variable']}='{arguments}'")
+    return lines + ["", "-- Then:"] + [f"--   export {export}" for export in exports]
+
+
+def semantic_views(parts: list[str]) -> list[str]:
+    """The Snowflake semantic views, created from YAML.
+
+    Dollar quoting keeps the YAML's own quotes intact. A semantic view takes
+    a qualified base table, so the catalog and schema are written in.
+    """
+    database, schema = parts
+    namespace = f"{quote_identifier(database, 'snowflake')}.{quote_identifier(schema, 'snowflake')}"
+    lines = []
+    for view, spec in SEMANTIC_VIEWS.items():
+        body = spec.format(database=database, schema=schema)
+        lines += [
+            f"DROP SEMANTIC VIEW IF EXISTS {namespace}.{quote_identifier(view, 'snowflake')};",
+            f"CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('{database}.{schema}', $$",
+            body.rstrip("\n"),
+            "$$);",
+            "",
+        ]
+    return lines
 
 
 def main(argv: list[str]) -> int:
