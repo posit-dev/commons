@@ -93,6 +93,26 @@ test_that("Snowflake semantic YAML imports only public dimensions and metrics", 
   expect_equal(model$metrics[[1]]$parent, "orders")
 })
 
+test_that("Snowflake semantic dependencies read base tables as SQL identifiers", {
+  # The YAML keeps a quoted name's quotes, and folds an unquoted one to upper
+  # case the way the SQL that created it would.
+  specification <- list(tables = list(
+    list(base_table = list(
+      database = '"Commons"',
+      schema = "live",
+      table = '"order ""lines"""'
+    ))
+  ))
+  id <- DBI::Id(catalog = "COMMONS", schema = "LIVE", table = "MODEL")
+
+  model <- snowflake_semantic_model_from_spec(id, specification)
+
+  expect_identical(
+    model$dependencies[[1]],
+    DBI::Id(catalog = "Commons", schema = "LIVE", table = 'order "lines"')
+  )
+})
+
 test_that("Snowflake semantic scope retains dependencies and public context", {
   specification <- list(
     custom_instructions = "Use booked revenue for finance questions.",
