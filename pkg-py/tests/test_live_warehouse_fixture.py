@@ -162,6 +162,13 @@ def test_every_semantic_fixture_is_provisioned_on_snowflake():
     assert "SEMANTIC VIEW" not in generator.render("databricks", "catalog.schema")
 
 
+def test_a_semantic_view_escapes_the_namespace_for_yaml_alone():
+    sql = _generator().render("snowflake", "O'Brien.schema")
+
+    assert "database: '\"O''Brien\"'" in sql
+    assert 'FROM "O\'Brien"."schema"."orders"' in sql
+
+
 def test_a_mismatch_is_reported_as_one():
     """The comparator, since every live assertion rests on it."""
     assert matches([1.0, None], [None, 1.0])
