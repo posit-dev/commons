@@ -111,6 +111,16 @@ test_that("Snowflake semantic dependencies read base tables as SQL identifiers",
     model$dependencies[[1]],
     DBI::Id(catalog = "Commons", schema = "LIVE", table = 'order "lines"')
   )
+
+  # A namespace the YAML leaves out is the view's own, which is exact.
+  inherited <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "MyDb", schema = "MySchema", table = "MODEL"),
+    list(tables = list(list(base_table = list(table = "orders"))))
+  )
+  expect_identical(
+    inherited$dependencies[[1]],
+    DBI::Id(catalog = "MyDb", schema = "MySchema", table = "ORDERS")
+  )
 })
 
 test_that("Snowflake semantic scope retains dependencies and public context", {
