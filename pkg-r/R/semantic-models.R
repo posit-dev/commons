@@ -114,13 +114,23 @@ semantic_parameters_from_spec <- function(entries, backend) {
     default <- if (has_default) {
       coerce_semantic_default(entry[[default_field]], type)
     }
-    new_typed_argument(
+    argument <- new_typed_argument(
       name,
       type,
       description = entry$description %||% entry$comment,
       default = default,
       has_default = has_default
     )
+    # Snowflake requires a variable's value to match its declared type, so
+    # the type is kept for the query to cast to. It is spliced into SQL, so
+    # only a plain type name is kept.
+    if (
+      identical(backend, "Snowflake") &&
+        grepl("^[A-Za-z_]+( *\\( *[0-9]+( *, *[0-9]+)? *\\))?$", declared_type)
+    ) {
+      argument$sql_type <- toupper(gsub(" ", "", declared_type, fixed = TRUE))
+    }
+    argument
   })
   names(parameters) <- vapply(parameters, `[[`, character(1), "name")
   if (anyDuplicated(names(parameters))) {
