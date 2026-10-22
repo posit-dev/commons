@@ -2,8 +2,9 @@ name: Install R system requirements without the Chromium PPA
 description: >
   Installs the Linux system packages that setup-r-dependencies would install
   for the same inputs, except Chromium. pak installs Chromium from a Launchpad
-  PPA, and that PPA's outages fail every Linux job; the runner image already
-  ships Chrome. Run setup-r-dependencies afterwards with PKG_SYSREQS set to
+  PPA. That PPA has seen multiple outages that cause Linux jobs to fail;
+  the runner image already ships Chrome, so we use that instead.
+  Run setup-r-dependencies afterwards with PKG_SYSREQS set to
   "false". Does nothing on macOS and Windows, where pak installs no system
   packages.
 
