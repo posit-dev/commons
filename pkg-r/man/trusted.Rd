@@ -27,7 +27,7 @@ columns, either as a string like
 \code{"project = 'dplyr' AND date >= '2026-06-01'"} or as a list of
 \code{c(column, op, value)} triples.
 \item \verb{$calculation(name, arguments, source)} runs an exact trusted query.
-\item \verb{$context(query)} searches business context.
+\item \verb{$context(query)} searches trusted context.
 \item \verb{$describe(table, source)} describes a table.
 \item \verb{$connection(source)} returns a source's DBI connection, for queries
 that no trusted calculation answers.
@@ -35,35 +35,34 @@ that no trusted calculation answers.
 }
 \description{
 \code{trusted()} gathers a team's data sources, semantic layer, and context layer
-into one object that code can call directly, without a model. It's the part
-of a \code{\link[=commons]{commons()}} agent that doesn't depend on an LLM: pass it to \code{commons()}
-to build an agent, or place it in an R session that a coding agent already
-controls.
+into one object that code can call directly, without a model. Pass it to
+\code{commons()} to build an agent in R, or place it in an R session that a
+coding agent already controls.
 }
-\section{Using commons with coding agents}{
+\section{Using commons with other coding agents}{
 
-A coding agent can use a \code{trusted} object in an R session it controls. In
-each setup below, code builds \code{trusted} when the session starts and a
-sentence tells the agent about it. Here, \code{acme.metrics::trusted()} stands
-for whatever code builds the team's \code{trusted} object.
+\code{trusted()} is the entry point to use commons with external coding agents.
+The approach depends on whether the coding agent already has a persistent
+R session. For example, Posit Assistant connects to the user's R session.
+Claude Code and Codex, by contrast, do not have a built-in connection to a
+persistent R REPL.
 
-Posit Assistant runs code in an R session, so build \code{trusted} in the
-project's \code{.Rprofile}:
+\strong{For agents that already have an R session, like Posit Assistant}, create
+a \code{trusted()} object in the relevant \code{.Rprofile} and then add a line telling
+the agent print it out before doing data analysis:
 
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{trusted <- acme.metrics::trusted()
+\if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The R session has an object called `trusted` that holds this team's trusted
+code and context. Before analyzing data, run `print(trusted)`, and use its 
+calculations where they apply in favor of writing analysis code ad-hoc.
 }\if{html}{\out{</div>}}
 
-Posit Assistant doesn't always list the session's variables for the model,
-so tell it about \code{trusted} in the project's \code{AGENTS.md}:
-
-\if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The R session has an object called `trusted` that holds this team's vetted
-calculations and business context. Before analyzing data, run
-`print(trusted)`, and use its calculations where they apply.
-}\if{html}{\out{</div>}}
-
-Claude Code and Codex have no persistent R session of their own. They can
+\strong{Claude Code and Codex have no persistent R session of their own.} They can
 get one through \href{https://t-kalinowski.github.io/mcp-console/}{MCP Console}.
-Register it for the project, from the project directory:
+MCP Console can be configured to run code at startup (which we'll use to
+build \code{trusted}), and we'll also edit the console tool's description to tell
+the model to print out \code{trusted} before analyzing data.
+
+To use MCP console, register it for the project, from the project directory:
 
 \if{html}{\out{<div class="sourceCode bash">}}\preformatted{uvx mcp-console configure-client claude --directory .
 uvx mcp-console configure-client codex --directory .
@@ -89,8 +88,9 @@ tool:
     # ...the exported description, unchanged...
 
     The R session has an object called `trusted` that holds this team's
-    vetted calculations and business context. Before analyzing data, run
-    `print(trusted)`, and use its calculations where they apply.
+    trsuted code and context. Before analyzing data, run
+    `print(trusted)`, and use its calculations where they apply in favor of
+    writing analysis code ad-hoc.
 }\if{html}{\out{</div>}}
 
 Claude Code shows the tool description only once the agent loads the tool,

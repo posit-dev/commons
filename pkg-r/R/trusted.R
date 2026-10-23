@@ -1,10 +1,9 @@
 #' Trusted calculations and context
 #'
 #' `trusted()` gathers a team's data sources, semantic layer, and context layer
-#' into one object that code can call directly, without a model. It's the part
-#' of a [commons()] agent that doesn't depend on an LLM: pass it to `commons()`
-#' to build an agent, or place it in an R session that a coding agent already
-#' controls.
+#' into one object that code can call directly, without a model. Pass it to 
+#' `commons()` to build an agent in R, or place it in an R session that a 
+#' coding agent already controls.
 #'
 #' @inheritParams commons
 #'
@@ -18,36 +17,35 @@
 #'   `"project = 'dplyr' AND date >= '2026-06-01'"` or as a list of
 #'   `c(column, op, value)` triples.
 #' * `$calculation(name, arguments, source)` runs an exact trusted query.
-#' * `$context(query)` searches business context.
+#' * `$context(query)` searches trusted context.
 #' * `$describe(table, source)` describes a table.
 #' * `$connection(source)` returns a source's DBI connection, for queries
 #'   that no trusted calculation answers.
 #'
-#' @section Using commons with coding agents:
-#' A coding agent can use a `trusted` object in an R session it controls. In
-#' each setup below, code builds `trusted` when the session starts and a
-#' sentence tells the agent about it. Here, `acme.metrics::trusted()` stands
-#' for whatever code builds the team's `trusted` object.
-#'
-#' Posit Assistant runs code in an R session, so build `trusted` in the
-#' project's `.Rprofile`:
-#'
-#' ```r
-#' trusted <- acme.metrics::trusted()
-#' ```
-#'
-#' Posit Assistant doesn't always list the session's variables for the model,
-#' so tell it about `trusted` in the project's `AGENTS.md`:
-#'
+#' @section Using commons with other coding agents:
+#' `trusted()` is the entry point to use commons with external coding agents.
+#' The approach depends on whether the coding agent already has a persistent
+#' R session. For example, Posit Assistant connects to the user's R session.
+#' Claude Code and Codex, by contrast, do not have a built-in connection to a 
+#' persistent R REPL.
+#' 
+#' **For agents that already have an R session, like Posit Assistant**, create
+#' a `trusted()` object in the relevant `.Rprofile` and then add a line telling
+#' the agent print it out before doing data analysis:
+#' 
 #' ```markdown
-#' The R session has an object called `trusted` that holds this team's vetted
-#' calculations and business context. Before analyzing data, run
-#' `print(trusted)`, and use its calculations where they apply.
+#' The R session has an object called `trusted` that holds this team's trusted
+#' code and context. Before analyzing data, run `print(trusted)`, and use its 
+#' calculations where they apply in favor of writing analysis code ad-hoc.
 #' ```
 #'
-#' Claude Code and Codex have no persistent R session of their own. They can
+#' **Claude Code and Codex have no persistent R session of their own.** They can
 #' get one through [MCP Console](https://t-kalinowski.github.io/mcp-console/).
-#' Register it for the project, from the project directory:
+#' MCP Console can be configured to run code at startup (which we'll use to 
+#' build `trusted`), and we'll also edit the console tool's description to tell
+#' the model to print out `trusted` before analyzing data.
+#' 
+#' To use MCP console, register it for the project, from the project directory:
 #'
 #' ```bash
 #' uvx mcp-console configure-client claude --directory .
@@ -76,8 +74,9 @@
 #'     # ...the exported description, unchanged...
 #'
 #'     The R session has an object called `trusted` that holds this team's
-#'     vetted calculations and business context. Before analyzing data, run
-#'     `print(trusted)`, and use its calculations where they apply.
+#'     trsuted code and context. Before analyzing data, run
+#'     `print(trusted)`, and use its calculations where they apply in favor of
+#'     writing analysis code ad-hoc.
 #' ```
 #'
 #' Claude Code shows the tool description only once the agent loads the tool,
