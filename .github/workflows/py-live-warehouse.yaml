@@ -20,7 +20,11 @@ jobs:
     # Each backend's credentials live in its own environment. The Databricks
     # federation policy trusts this repository's `databricks-ci` environment
     # by name.
-    environment: ${{ matrix.backend }}-ci
+    environment:
+      name: ${{ matrix.backend }}-ci
+      # No deployment record for a test run. Databricks keeps the default
+      # until its OIDC federation is verified without one.
+      deployment: ${{ matrix.backend == 'databricks' }}
     permissions:
       contents: read
       # GitHub OIDC for the Databricks service principal.
