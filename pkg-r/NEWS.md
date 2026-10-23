@@ -18,6 +18,8 @@
 
 * When a data dictionary cannot be matched to the warehouse catalog, the error now has a condition class you can catch: `commons_catalog_ambiguous_table_error` when an authored table name matches more than one selected relation, `commons_catalog_claimed_relation_error` when two authored tables match the same relation, and `commons_catalog_ambiguous_column_error` when an authored column name matches more than one discovered column.
 
+* When a definition in a data dictionary cannot be bound to the warehouse catalog, the error now has a condition class you can catch: `commons_definition_mixed_grain_error` when a metric mixes row and aggregate grain, `commons_definition_unmatched_table_error` when the definition's table matches no selected relation, and `commons_definition_absent_column_error` when the definition names a column the relation does not have.
+
 * The CSS classes on `run_r`'s display are now `commons-run-display`, `commons-run-details`, `commons-run-code`, and `commons-run-plot`, without the `-r`, because the Python package's code tool uses the same classes. App CSS that targets the old `commons-run-r-*` names needs updating.
 
 # commons 0.1.1

@@ -1,0 +1,462 @@
+{
+  "cases": [
+    {
+      "name": "a column is lowered with the spelling Snowflake reported",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [
+              { "name": "total", "expr": "sum(id)" },
+              { "name": "doubled", "expr": "total * 2" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.SALES": {
+            "total": "sum(\"ID\")",
+            "doubled": "(sum(\"ID\")) * 2"
+          }
+        }
+      }
+    },
+    {
+      "name": "a column is lowered with the spelling Databricks reported",
+      "backend": "databricks",
+      "identifier_case": "lower",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [{ "name": "Amount", "type": "number(quantity)" }],
+            "definitions": [{ "name": "total", "expr": "sum(Amount)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "main.default.sales",
+          "catalog": "main",
+          "schema": "default",
+          "table": "sales",
+          "columns": [{ "column": "amount", "type": "bigint" }]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "main.default.sales": { "total": "sum(`amount`)" }
+        }
+      }
+    },
+    {
+      "name": "a column inside a CASE branch is bound",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [
+              { "name": "flagged", "expr": "CASE WHEN id > 0 THEN 1 ELSE 0 END" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.SALES": {
+            "flagged": "CASE WHEN \"ID\" > 0 THEN 1 ELSE 0 END"
+          }
+        }
+      }
+    },
+    {
+      "name": "a pattern selection is bound column by column",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [
+              { "name": "any_set", "expr": "COLUMNS('^i') IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.SALES": { "any_set": "\"ID\" IS NOT NULL" }
+        }
+      }
+    },
+    {
+      "name": "a column the relation lacks is refused",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [{ "name": "total", "expr": "sum(ghost)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "absent_column" }
+    },
+    {
+      "name": "a named selection refuses a column the relation lacks",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [
+              { "name": "any_set", "expr": "COLUMNS([id, ghost]) IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "absent_column" }
+    },
+    {
+      "name": "a pattern selection refuses a column the relation lacks",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [
+              { "name": "any_set", "expr": "COLUMNS('.*') IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "absent_column" }
+    },
+    {
+      "name": "a star selection refuses a column the relation lacks",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [
+              { "name": "any_set", "expr": "COLUMNS(*) IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "absent_column" }
+    },
+    {
+      "name": "a table with definitions that matched no relation is refused",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "unmatched",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [{ "name": "total", "expr": "sum(id)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "unmatched_table" }
+    },
+    {
+      "name": "a physical column named like a reference marker does not shadow the reference",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              {
+                "name": "__COMMONS_DEFINITION_REFERENCE_001__",
+                "type": "number(quantity)"
+              }
+            ],
+            "definitions": [
+              { "name": "base", "expr": "id > 0" },
+              {
+                "name": "flagged",
+                "expr": "base AND __COMMONS_DEFINITION_REFERENCE_001__ > 0"
+              }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [
+            { "column": "ID", "type": "NUMBER(38,0)" },
+            {
+              "column": "__commons_definition_reference_001__",
+              "type": "NUMBER(38,0)"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.SALES": {
+            "base": "\"ID\" > 0",
+            "flagged": "(\"ID\" > 0) AND \"__commons_definition_reference_001__\" > 0"
+          }
+        }
+      }
+    },
+    {
+      "name": "a marker-named column reachable only through a selection does not shadow the reference",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              {
+                "name": "__COMMONS_DEFINITION_REFERENCE_001__",
+                "type": "number(quantity)"
+              }
+            ],
+            "definitions": [
+              { "name": "base", "expr": "id > 0" },
+              {
+                "name": "flagged",
+                "expr": "base AND COLUMNS('^__') IS NOT NULL"
+              }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [
+            { "column": "ID", "type": "NUMBER(38,0)" },
+            {
+              "column": "__commons_definition_reference_001__",
+              "type": "NUMBER(38,0)"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "tables": {
+          "ANALYTICS.PUBLIC.SALES": {
+            "base": "\"ID\" > 0",
+            "flagged": "(\"ID\" > 0) AND \"__commons_definition_reference_001__\" IS NOT NULL"
+          }
+        }
+      }
+    },
+    {
+      "name": "a mixed-grain metric is refused before a column the relation lacks",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [
+              { "name": "flag", "expr": "id > avg(id)" },
+              {
+                "name": "flagged",
+                "expr": "sum(case when flag then 1 else 0 end)"
+              },
+              { "name": "total", "expr": "sum(ghost)" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "mixed_grain" }
+    },
+    {
+      "name": "tables are checked in authored order, a column before a later table's match",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [{ "name": "total", "expr": "sum(ghost)" }]
+          },
+          {
+            "name": "unmatched",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [{ "name": "total", "expr": "sum(id)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "absent_column" }
+    },
+    {
+      "name": "tables are checked in authored order, a match before a later table's column",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "unmatched",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [{ "name": "total", "expr": "sum(id)" }]
+          },
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [{ "name": "total", "expr": "sum(ghost)" }]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "unmatched_table" }
+    }
+  ]
+}

@@ -40,41 +40,7 @@ test_that("the dictionary merge matches the shared contract", {
   cases <- shared_fixture("catalog-merge")$merge
   expect_gt(length(cases), 0L)
   for (case in cases) {
-    dictionary <- new_data_dictionary(case$dictionary)
-    relations <- list()
-    columns <- list()
-    for (entry in case$relations) {
-      id_args <- Filter(Negate(is.null), entry[c("catalog", "schema", "table")])
-      relations[[entry$label]] <- list(
-        id = do.call(DBI::Id, id_args),
-        kind = entry$kind,
-        description = entry$description
-      )
-      columns[[entry$label]] <- entry$columns
-    }
-    describe <- function(con, id, ...) {
-      rows <- columns[[table_id_label(id)]]
-      data.frame(
-        column = vapply(rows, `[[`, character(1), "column"),
-        type = vapply(rows, function(row) row$type %||% NA_character_, character(1)),
-        nullable = vapply(rows, function(row) row$nullable %||% NA, logical(1)),
-        description = vapply(
-          rows,
-          function(row) row$description %||% NA_character_,
-          character(1)
-        ),
-        stringsAsFactors = FALSE
-      )
-    }
-    run <- function() {
-      catalog_merge_dictionary(
-        dictionary,
-        relations,
-        NULL,
-        describe,
-        case$identifier_case
-      )
-    }
+    run <- function() merge_shared_case(case)
     if (!is.null(case$expect$error)) {
       expect_error(run(), class = merge_error_class[[case$expect$error]])
       next

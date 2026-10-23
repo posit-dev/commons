@@ -102,6 +102,7 @@ definition_check_metric_grain <- function(tables, call) {
           "Metric definition {.val {names(definitions)[invalid]}} on table {.val {table$name}} cannot be compiled into one SQL expression.",
           i = "The dependency chain mixes row and aggregate grain and requires a subquery rewrite."
         ),
+        class = "commons_definition_mixed_grain_error",
         call = call
       )
     }
@@ -133,7 +134,6 @@ definition_bind_one <- function(
   bound_ir <- definition_bind_ir(
     ir,
     binding$columns,
-    binding$strict,
     definition$name,
     table,
     call
@@ -141,7 +141,6 @@ definition_bind_one <- function(
   bound_selection <- definition_bind_selection(
     selection,
     binding$columns,
-    binding$strict,
     definition$name,
     table,
     call
@@ -272,26 +271,22 @@ definition_source_binding <- function(source, table, call) {
         call = call
       )
     }
-    return(list(table = table, columns = NULL, strict = FALSE))
+    return(list(table = table, columns = NULL))
   }
   selected <- bindings$tables[[table]]
   if (is.null(selected) || is.na(selected)) {
     cli::cli_abort(
       "Authored table {.val {table}} with definitions does not match an exposed relation.",
+      class = "commons_definition_unmatched_table_error",
       call = call
     )
   }
-  list(
-    table = selected,
-    columns = bindings$columns[[table]],
-    strict = isTRUE(bindings$strict)
-  )
+  list(table = selected, columns = bindings$columns[[table]])
 }
 
 definition_bind_ir <- function(
   node,
   columns,
-  strict,
   definition,
   table,
   call
@@ -306,7 +301,6 @@ definition_bind_ir <- function(
     node$path <- definition_bind_column_path(
       node$path,
       columns,
-      strict,
       definition,
       table,
       call
@@ -316,7 +310,6 @@ definition_bind_ir <- function(
     node,
     definition_bind_ir,
     columns = columns,
-    strict = strict,
     definition = definition,
     table = table,
     call = call
@@ -326,7 +319,6 @@ definition_bind_ir <- function(
 definition_bind_selection <- function(
   selection,
   columns,
-  strict,
   definition,
   table,
   call
@@ -338,7 +330,6 @@ definition_bind_selection <- function(
     column$path <- definition_bind_column_path(
       column$path,
       columns,
-      strict,
       definition,
       table,
       call
@@ -351,7 +342,6 @@ definition_bind_selection <- function(
 definition_bind_column_path <- function(
   path,
   columns,
-  strict,
   definition,
   table,
   call
@@ -361,13 +351,11 @@ definition_bind_column_path <- function(
   }
   physical <- columns[[path[[1]]]]
   if (is.null(physical) || is.na(physical)) {
-    if (strict) {
-      cli::cli_abort(
-        "Definition {.val {definition}} on table {.val {table}} references authored column {.val {path[[1]]}}, which is absent from the selected relation.",
-        call = call
-      )
-    }
-    return(path)
+    cli::cli_abort(
+      "Definition {.val {definition}} on table {.val {table}} references authored column {.val {path[[1]]}}, which is absent from the selected relation.",
+      class = "commons_definition_absent_column_error",
+      call = call
+    )
   }
   path[[1]] <- physical
   path
