@@ -421,7 +421,43 @@ test_that("Snowflake imports and binds semantic variables", {
   expect_equal(model$parameters$threshold$default, 42)
   expect_false(model$parameters$category$has_default)
   expect_identical(model$parameters$large_id$default, 2147483648)
-  expect_match(sql, 'VARIABLES "category" => ?', fixed = TRUE)
+  expect_match(sql, 'VARIABLES "category" => CAST(? AS TEXT)', fixed = TRUE)
+})
+
+test_that("Snowflake casts a bound variable to the type its view declares", {
+  # Snowflake requires a variable's value to match the declared type, and a
+  # driver may bind a number as text, so the placeholder is cast.
+  model <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "MIN_TOTAL", data_type = "NUMBER(10,2)"),
+        list(name = "SINCE", data_type = "TIMESTAMP_TZ")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+
+  expect_equal(
+    snowflake_semantic_variables(DBI::ANSI(), model, c("MIN_TOTAL", "SINCE")),
+    'VARIABLES "MIN_TOTAL" => CAST(? AS NUMBER(10,2)), "SINCE" => CAST(? AS TIMESTAMP_TZ)'
+  )
+
+  # A declared type is spliced into SQL, so one that is not a plain type name
+  # leaves its variable with a bare placeholder.
+  odd <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "SINCE", data_type = "TIMESTAMP_TZ); DROP TABLE x; --")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+  expect_equal(
+    snowflake_semantic_variables(DBI::ANSI(), odd, "SINCE"),
+    'VARIABLES "SINCE" => ?'
+  )
 })
 
 test_that("Snowflake hydrates only explicitly selected semantic views", {

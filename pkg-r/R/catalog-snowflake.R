@@ -802,16 +802,7 @@ snowflake_semantic_metric_sql <- function(
       paste(snowflake_semantic_member_references(metrics, con), collapse = ", ")
     ),
     if (length(arguments)) {
-      paste(
-        "VARIABLES",
-        paste(
-          sprintf(
-            "%s => ?",
-            DBI::dbQuoteIdentifier(con, names(arguments))
-          ),
-          collapse = ", "
-        )
-      )
+      snowflake_semantic_variables(con, model, names(arguments))
     }
   )
   conditions <- c(
@@ -825,6 +816,22 @@ snowflake_semantic_metric_sql <- function(
     "SELECT * FROM SEMANTIC_VIEW(\n  ",
     paste(parts, collapse = "\n  "),
     "\n)"
+  )
+}
+
+snowflake_semantic_variables <- function(con, model, names) {
+  placeholders <- vapply(names, function(name) {
+    type <- model$parameters[[name]]$sql_type
+    if (is.null(type)) "?" else sprintf("CAST(? AS %s)", type)
+  }, character(1))
+  paste(
+    "VARIABLES",
+    paste(
+      DBI::dbQuoteIdentifier(con, names),
+      "=>",
+      placeholders,
+      collapse = ", "
+    )
   )
 }
 
