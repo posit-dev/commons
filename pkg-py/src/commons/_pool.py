@@ -267,7 +267,7 @@ def call_metrics(
         sql += " HAVING COUNT(*) >= 0"
 
     rows = source.query(sql)
-    advert = handles.register(rows) if handles is not None else None
+    advert = handles.register_rows(rows) if handles is not None else None
     applied: list[ExportRecord] = []
     for record in (
         *metric_records,

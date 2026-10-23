@@ -352,10 +352,23 @@ class DataSource:
         step for the same reason. A source with nothing pending, which is
         every source that is not board-backed, does nothing.
         """
-        if self.pending is None or not self.pending.pins:
+        if self.pending is None:
             return
         # A snapshot, because a loaded pin leaves `pins` as it goes.
-        self._load_pins(list(self.pending.pins))
+        self.ensure_tables_loaded(list(self.pending.pins))
+
+    def ensure_tables_loaded(self, tables: list[str]) -> None:
+        """Read the pins behind `tables` that this source has not read yet.
+
+        For a caller that reads a table's columns from the backend rather than
+        through `query()`, which is where loading otherwise happens.
+        `source_ensure_tables()` in `pkg-r/R/data-source.R` is the same step.
+        """
+        if self.pending is None:
+            return
+        todo = [table for table in tables if table in self.pending.pins]
+        if todo:
+            self._load_pins(todo)
 
     def _load_pins(self, labels: list[str]) -> None:
         assert self.pending is not None

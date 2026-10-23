@@ -111,6 +111,7 @@ def landlock_kernel() -> None:
             "no Landlock-capable kernel available, on this host or through Docker"
         )
 
+
 # Reporting the exception's type rather than a bare "denied" keeps a case
 # honest: a setup mistake surfaces as FileNotFoundError instead of passing as
 # the refusal the test was hoping for.
@@ -249,6 +250,39 @@ def test_a_package_symlinked_into_a_store_is_readable_through_its_library(
     assert reported["at_the_store"] == "allowed"
 
 
+FILE_SYMLINK_PROBE = (
+    """
+import json, os, sys, tempfile
+import _landlock
+
+# The shape /bin has: an entry that is a symlink to a regular file, as pkill
+# is to pgrep. Resolving it yields a file, which cannot take directory rights.
+base = tempfile.mkdtemp()
+tools = os.path.join(base, "tools")
+scratch = os.path.join(base, "scratch")
+os.makedirs(tools)
+os.makedirs(scratch)
+target = os.path.join(base, "target.txt")
+with open(target, "w") as handle:
+    handle.write("contents")
+os.symlink(target, os.path.join(tools, "link"))
+_landlock.engage(["/usr", tools], [scratch])
+"""
+    + ATTEMPT
+    + """
+json.dump(
+    {"through_the_link": attempt(lambda: open(os.path.join(tools, "link")).close())},
+    sys.stdout,
+)
+"""
+)
+
+
+def test_a_root_holding_a_symlink_to_a_file_engages(landlock_kernel: None) -> None:
+    reported = run_on_a_landlock_kernel(FILE_SYMLINK_PROBE)
+    assert reported["through_the_link"] == "allowed"
+
+
 MISSING_ROOT_PROBE = (
     """
 import json, os, sys, tempfile
@@ -298,11 +332,18 @@ def test_the_handled_mask_covers_every_right_the_abi_defines() -> None:
     assert _landlock.handled_access(5) == (
         _landlock.handled_access(4) | _landlock.FS_IOCTL_DEV
     )
+    # ABI 6, 7 and 8 add no filesystem right.
+    assert _landlock.handled_access(8) == _landlock.handled_access(5)
+    assert _landlock.handled_access(9) == (
+        _landlock.handled_access(8) | _landlock.FS_RESOLVE_UNIX
+    )
+    # ABI 10 adds UDP rights and 11 a restrict_self flag.
+    assert _landlock.handled_access(11) == _landlock.handled_access(9)
 
 
 def test_an_abi_newer_than_this_code_knows_is_handled_as_the_newest_known(
 ) -> None:
-    assert _landlock.handled_access(99) == _landlock.handled_access(5)
+    assert _landlock.handled_access(99) == _landlock.handled_access(9)
 
 
 def test_the_rule_attribute_is_packed_as_the_kernel_reads_it() -> None:
@@ -370,6 +411,95 @@ def test_abstract_sockets_outside_the_domain_are_unreachable(
     assert reported["own"] == "allowed"
 
 
+PATHNAME_SOCKET_PROBE = """
+import json, os, socket, sys, tempfile
+import _landlock
+
+base = tempfile.mkdtemp()
+readable = os.path.join(base, "readable")
+scratch = os.path.join(base, "scratch")
+for directory in (readable, scratch):
+    os.makedirs(directory)
+
+# Each stands in for a host daemon listening before the worker starts.
+daemons = {}
+for where, directory in (("readable", readable), ("scratch", scratch)):
+    daemon = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    daemon.bind(os.path.join(directory, "daemon.sock"))
+    daemons[where] = daemon
+
+abi = _landlock.engage(["/usr", readable], [scratch])
+result = {"abi": abi}
+for where, directory in (("readable", readable), ("scratch", scratch)):
+    client = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        client.connect(os.path.join(directory, "daemon.sock"))
+        result[where] = "allowed"
+    except OSError as error:
+        result[where] = type(error).__name__
+
+json.dump(result, sys.stdout)
+"""
+
+
+# The probe runs without seccomp, so what refuses the signal is Landlock alone.
+SIGNAL_PROBE = """
+import json, os, signal, subprocess, sys, tempfile
+import _landlock
+
+scratch = tempfile.mkdtemp()
+# Started before the restriction, so it stands outside the domain the way the
+# host does. It exits when its stdin closes, since the probe cannot kill it.
+outsider = subprocess.Popen(
+    [sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE
+)
+
+abi = _landlock.engage(["/usr", "/lib", "/bin", sys.prefix, sys.base_prefix], [scratch])
+result = {"abi": abi}
+
+try:
+    os.kill(outsider.pid, signal.SIGURG)
+    result["outsider"] = "allowed"
+except OSError as error:
+    result["outsider"] = type(error).__name__
+
+own = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+own.terminate()
+result["own"] = own.wait()
+
+outsider.stdin.close()
+outsider.wait()
+json.dump(result, sys.stdout)
+"""
+
+
+def test_pathname_sockets_are_reachable_only_under_a_write_root(
+    landlock_kernel: None,
+) -> None:
+    reported = run_on_a_landlock_kernel(PATHNAME_SOCKET_PROBE)
+    if reported["abi"] is None or reported["abi"] < 9:
+        pytest.skip(
+            "pathname-socket restriction needs Landlock ABI 9 (Linux 7.1); "
+            f"this kernel reports {reported['abi']}"
+        )
+    assert reported["readable"] == "PermissionError"
+    assert reported["scratch"] == "allowed"
+
+
+def test_processes_outside_the_domain_cannot_be_signalled(
+    landlock_kernel: None,
+) -> None:
+    reported = run_on_a_landlock_kernel(SIGNAL_PROBE)
+    if reported["abi"] is None or reported["abi"] < _landlock.SCOPE_MIN_ABI:
+        pytest.skip(
+            "signal scoping needs Landlock ABI "
+            f"{_landlock.SCOPE_MIN_ABI} (Linux 6.12); this kernel reports "
+            f"{reported['abi']}"
+        )
+    assert reported["outsider"] == "PermissionError"
+    assert reported["own"] == -15
+
+
 def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
     assert _landlock.FS_READ_ONLY == (
         _landlock.FS_EXECUTE | _landlock.FS_READ_FILE | _landlock.FS_READ_DIR
@@ -377,6 +507,7 @@ def test_a_read_root_is_granted_no_right_that_changes_anything() -> None:
     assert _landlock.FS_READ_ONLY & _landlock.FS_WRITE_FILE == 0
     assert _landlock.FS_READ_ONLY & _landlock.FS_MAKE_REG == 0
     assert _landlock.FS_READ_ONLY & _landlock.FS_REMOVE_FILE == 0
+    assert _landlock.FS_READ_ONLY & _landlock.FS_RESOLVE_UNIX == 0
 
 
 def test_engage_reports_none_where_the_kernel_has_no_landlock(monkeypatch) -> None:

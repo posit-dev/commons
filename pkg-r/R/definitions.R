@@ -353,15 +353,22 @@ definition_index_lines <- function(registry) {
   )
 }
 
-definitions_entry_text <- function(definitions) {
+definitions_entry_text <- function(definitions, trusted_only = FALSE) {
   if (length(definitions) == 0) {
     return(NULL)
   }
   paste0(
-    paste0(
-      "Governed definitions (write as `{{name}}` tokens in SQL; use ",
-      "`{{table::name}}` to qualify):\n\n"
-    ),
+    if (trusted_only) {
+      paste0(
+        "Governed definitions (compute metrics with call_metrics; pass ",
+        "filters and derived definitions as its filters or dimensions):\n\n"
+      )
+    } else {
+      paste0(
+        "Governed definitions (write as `{{name}}` tokens in SQL; use ",
+        "`{{table::name}}` to qualify):\n\n"
+      )
+    },
     paste(
       sprintf(
         "- `{{%s}}` %s",

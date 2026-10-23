@@ -451,14 +451,73 @@ test_that("format_measure_value collects a lazy dbplyr table", {
   expect_match(out, "EMEA")
 })
 
-test_that("describe_table_tool reports columns and samples", {
+test_that("describe_table_tool has an inspection display", {
   res <- describe_table_tool(test_source(), "sales")
   expect_equal(res@extra$display$title, "Inspected a table")
-  expect_match(res@value, "order_id")
-  expect_match(res@value, "Sample summary")
+})
+
+test_that("describe_table controls fallback sampling by trust mode", {
+  fallback_rows <- integer()
+  local_mocked_bindings(
+    source_describe = function(source, table, n_fallback_rows, ...) {
+      fallback_rows <<- c(fallback_rows, n_fallback_rows)
+      list(
+        schema = data.frame(column = "order_id", type = "VARCHAR"),
+        kind = NULL,
+        description = NULL
+      )
+    }
+  )
+
+  describe_table_tool(test_source(), "sales")
+  describe_table_tool(test_source(), "sales", trusted_only = TRUE)
+
+  expect_identical(fallback_rows, c(5L, 0L))
+})
+
+test_that("describe_table reports native types without exposing row values", {
+  spec <- shared_fixture("describe-table")$duckdb
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, spec$create_sql)
+  DBI::dbExecute(con, spec$insert_sql)
+  src <- data_source(con, tables = spec$table)
+  expected <- data.frame(
+    column = vapply(spec$expected_columns, `[[`, character(1), "column"),
+    type = vapply(spec$expected_columns, `[[`, character(1), "type")
+  )
+
+  description <- describe_table_tool(src, spec$table)@value
+
+  expect_match(description, df_to_markdown(expected), fixed = TRUE)
+  # Values present only in rows reach the model through run_sql (#319).
+  for (value in spec$excluded_values) {
+    expect_no_match(description, value, fixed = TRUE)
+  }
+})
+
+test_that("describe_table reports every column in wide tables", {
+  spec <- shared_fixture("describe-table")$wide_duckdb
+  column_names <- sprintf(spec$column_name_template, seq_len(spec$column_count))
+  create_sql <- sprintf(
+    "CREATE TABLE %s (%s)",
+    spec$table,
+    paste(column_names, spec$column_type, collapse = ", ")
+  )
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, create_sql)
+  src <- data_source(con, tables = spec$table)
+  expected <- data.frame(
+    column = column_names,
+    type = rep(spec$column_type, spec$column_count)
+  )
+
+  description <- describe_table_tool(src, spec$table)@value
+
   expect_match(
-    res@value,
-    '* order_id: character with 0 NAs, and 5 unique values',
+    description,
+    df_to_markdown(expected, max_rows = nrow(expected)),
     fixed = TRUE
   )
 })

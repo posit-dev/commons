@@ -1,3 +1,10 @@
+# fallback description errors are contextualized
+
+    Code
+      writeLines(error$message)
+    Output
+      Failed to infer the selected relation's column types.
+
 # source_describe errors informatively for unknown tables
 
     Code

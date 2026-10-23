@@ -50,11 +50,11 @@ from ._display import (
 )
 from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
+from ._measure_results import rich_measure_result
 from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
-from ._sample_summary import SAMPLE_SUMMARY_HEADING, sample_summary
 from ._skills import Skill, builtin_skills
 
 __all__ = [
@@ -68,7 +68,6 @@ __all__ = [
     "tool_description",
 ]
 
-SAMPLE_ROWS = 5
 CATALOG_SEARCH_LIMIT = 10
 # As many items of a measure's list result as the model gets to read.
 MAX_MEASURE_ITEMS = 20
@@ -353,6 +352,10 @@ def _call_measure(context: ToolContext) -> Tool:
         # what it alone knows.
         if isinstance(value, ContentToolResult):
             return _finish_measure_result(value, record, context, args)
+        footer = measure_source_footer(record.provenance)
+        rich = rich_measure_result(value, args, record, context.handles, footer)
+        if rich is not None:
+            return rich
         advert = context.handles.register(value)
         body = "\n\n".join(
             part for part in (_format_measure_value(value), advert) if part
@@ -364,7 +367,7 @@ def _call_measure(context: ToolContext) -> Tool:
             html=measure_display_html(
                 args, value, title=record.title, description=record.description
             ),
-            footer=measure_source_footer(record.provenance),
+            footer=footer,
         )
 
     return _tool(
@@ -716,10 +719,8 @@ def _describe_table(context: ToolContext) -> Tool:
     return _tool(
         describe_table,
         "describe_table",
-        "Describe a table: columns, types, and sample rows. Use this before "
-        "writing SQL against an unfamiliar table. The sample summary covers the "
-        "sampled rows only, so it cannot show which values the whole table holds. "
-        "Before you report that a value is absent, query for it.",
+        "Describe a table: its columns, types, and documentation. Use this "
+        "before writing SQL against an unfamiliar table.",
         _parameters(
             {"table": _string("The table name, as listed in the system prompt.")},
             ["table"],
@@ -739,10 +740,8 @@ def _describe_table_text(
             f"No table named {table!r}. Available tables: {', '.join(source.tables)}."
         )
     ensure_queryable(source.backend, source.manifest, table, table_id)
+    source.ensure_tables_loaded([table])
 
-    sample = source.query(
-        f"SELECT * FROM {source.backend.quote(table_id)} LIMIT {SAMPLE_ROWS}"
-    )
     relation = (source.relations or {}).get(table)
     schema = _relation_columns(source, table, table_id, relation)
     dictionary = source.dictionary
@@ -755,21 +754,15 @@ def _describe_table_text(
         # Without an entry the catalog's own prose is all there is to say.
         if relation is not None and relation.description:
             parts.append(relation.description)
-        parts.append(f"Columns of `{table}`:\n\n{rows_to_markdown(schema)}")
+        parts.append(
+            f"Columns of `{table}`:\n\n{rows_to_markdown(schema, max_rows=len(schema))}"
+        )
     else:
         assert dictionary is not None
         columns = dictionary.columns_text(table, live=schema)
         parts.extend(
             dictionary.entry_parts(table, f"Columns of `{table}`:\n\n{columns}")
         )
-    # A summary of the sample rather than the rows: five rows of values say
-    # less about a column than its range, its missing count, and the values it
-    # takes. The schema fixes the columns, so a table whose sample came back
-    # empty is still described column by column.
-    parts.append(
-        f"{SAMPLE_SUMMARY_HEADING}\n\n"
-        f"{sample_summary(sample, [str(found['column']) for found in schema])}"
-    )
 
     tracker.mark(label, table)
     return "\n\n".join(parts)
@@ -827,7 +820,7 @@ def _run_sql(context: ToolContext) -> Tool:
             for part in (
                 rows_to_markdown(rows),
                 applied_text(applied),
-                context.handles.register(rows),
+                context.handles.register_rows(rows),
                 *_first_touch_entries(resolved, expanded, label, context.first_touch),
             )
             if part

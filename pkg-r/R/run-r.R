@@ -226,7 +226,7 @@ run_r_html <- function(code, segments) {
       dims <- plot_dimensions()
       plot_html <- c(plot_html, sprintf(
         paste0(
-          "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" ",
+          "<img class=\"commons-run-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
         ),
         plot_image_data(seg$path),
@@ -241,18 +241,18 @@ run_r_html <- function(code, segments) {
     }
   }
   code_html <- sprintf(
-    "<pre class=\"commons-run-r-code\"><code class=\"language-r\">%s</code></pre>",
+    "<pre class=\"commons-run-code\"><code class=\"language-r\">%s</code></pre>",
     highlight_r_html(paste(c(code, output), collapse = "\n"))
   )
   if (length(plot_html)) {
     code_html <- paste0(
-      "<details class=\"commons-run-r-details\"><summary>Details</summary>",
+      "<details class=\"commons-run-details\"><summary>Details</summary>",
       code_html,
       "</details>"
     )
   }
   sprintf(
-    "<div class=\"commons-run-r-display\">%s</div>",
+    "<div class=\"commons-run-display\">%s</div>",
     paste(c(code_html, plot_html), collapse = "\n")
   )
 }
@@ -372,11 +372,22 @@ commons_dll_path <- function() {
 worker_close <- function(worker) {
   cancel_worker_reap(worker)
   if (!is.null(worker$rs)) {
-    try(worker$rs$close(), silent = TRUE)
+    close_worker_session(worker$rs)
     worker$rs <- NULL
     worker$synced <- 0L
   }
   invisible(worker)
+}
+
+# callr kills the worker's process group only if the worker is still running
+# when close() gives up waiting, so a worker that exits on its own, or has
+# crashed, leaves the programs it started running. The worker leads its own
+# group, and the sandbox keeps everything it starts in that group.
+close_worker_session <- function(rs) {
+  pid <- tryCatch(rs$get_pid(), error = function(e) NA_integer_)
+  try(rs$close(), silent = TRUE)
+  .Call(c_kill_group, pid)
+  invisible()
 }
 
 # The content environment holds credentials (API keys, session tokens,
@@ -425,13 +436,21 @@ worker_call <- function(runtime, name, args) {
   base::do.call(entry_point, args)
 }
 
+# Seconds: how long a call may run, how long an interrupted call gets to
+# answer before the worker is restarted, and how long an idle worker lives.
+worker_defaults <- list(
+  call_timeout = 60,
+  interrupt_grace = 5,
+  idle_timeout = 600
+)
+
 # Close the worker after a quiet stretch; it respawns lazily on the next
 # call. One timer per worker, not one per call: shiny::testServer() reads its
 # outputs through shiny:::wait_for_it(), which spins until the whole later
 # queue drains, so a stray timer stalls the reader for its full delay.
 schedule_worker_reap <- function(
   worker,
-  idle = getOption("commons.run_r_idle_timeout", 600)
+  idle = getOption("commons.run_r_idle_timeout", worker_defaults$idle_timeout)
 ) {
   worker$last_used <- Sys.time()
   cancel_worker_reap(worker)
@@ -461,7 +480,7 @@ cancel_worker_reap <- function(worker) {
 # an unresponsive or crashed worker is killed (it respawns on the next call).
 worker_await <- function(
   worker,
-  timeout = getOption("commons.run_r_timeout", 60)
+  timeout = getOption("commons.run_r_timeout", worker_defaults$call_timeout)
 ) {
   rs <- worker$rs
   promises::promise(function(resolve, reject) {
@@ -489,7 +508,7 @@ worker_await <- function(
       }
     }
     kill_worker <- function(reason) {
-      try(rs$close(), silent = TRUE)
+      close_worker_session(rs)
       if (identical(worker$rs, rs)) {
         worker$rs <- NULL
         worker$synced <- 0L
@@ -513,7 +532,7 @@ worker_await <- function(
               ))
             }
           },
-          delay = 5
+          delay = worker_defaults$interrupt_grace
         )
       },
       delay = timeout

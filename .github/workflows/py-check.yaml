@@ -13,6 +13,8 @@ permissions: read-all
 jobs:
   check:
     runs-on: ${{ matrix.os }}
+    # A deadlock in the worker tests fails the leg instead of hanging it.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +77,7 @@ jobs:
     # kernel runs natively while tagging the syscalls with the 32-bit ABI,
     # so the live tests check the 32-bit tables against the kernel itself.
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -99,7 +102,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" \
             -w /work/pkg-py \
             python:3.13-slim \
-            setarch linux32 python -c "
+            python -c "
           import sys
           sys.path.insert(0, 'src/commons/_execution/_runtime')
           import _seccomp
@@ -108,6 +111,37 @@ jobs:
           assert _seccomp.seccomp_available(), 'a filter does not install here'
           print(f'{arch.name}: a filter installs')
           "
+      - name: Engage Landlock and seccomp together
+        # The pair the worker engages on a host with Landlock. The suite
+        # below covers seccomp alone, and the Landlock tests import commons.
+        # Run once under each personality: setarch linux32 reports the
+        # 32-bit machine name a native 32-bit host does, so a gate that
+        # trusts uname fails there instead of passing on the host's name.
+        run: |
+          script="
+          import sys
+          sys.path.insert(0, 'src/commons/_execution/_runtime')
+          import _landlock, _seccomp
+          abi = _landlock.engage(['/'], ['/tmp'])
+          assert abi is not None, 'Landlock is not available here'
+          _seccomp.engage(network='none')
+          open('/tmp/inside', 'w').close()
+          try:
+              open('/work/outside', 'w').close()
+          except PermissionError:
+              print(f'Landlock ABI {abi} and seccomp engaged')
+          else:
+              sys.exit('a write outside the write root went through')
+          "
+          for personality in "" "setarch linux32"; do
+            docker run --rm \
+              --platform '${{ matrix.platform }}' \
+              --security-opt seccomp=unconfined \
+              -v "$GITHUB_WORKSPACE:/work" \
+              -w /work/pkg-py \
+              python:3.13-slim \
+              $personality python -c "$script"
+          done
       - name: Run the seccomp suite under a 32-bit personality
         # seccomp=unconfined lifts docker's own filter, which refuses some
         # of the calls these tests make unfiltered as a control (ptrace,
@@ -116,11 +150,9 @@ jobs:
         # --noconftest: the suite-wide conftest imports commons, whose
         # dependencies publish no 32-bit wheels; the seccomp file uses
         # none of its fixtures.
-        # setarch linux32: the container runtime leaves the host's uname
-        # personality on a 32-bit container, so the process still sees a
-        # 64-bit machine name, a combination arch detection refuses
-        # (rightly: it is also how x32 looks). A 32-bit process started
-        # natively runs under PER_LINUX32 and reports the 32-bit name.
+        # No setarch: the container keeps the host's 64-bit uname
+        # personality, and arch detection has to find the 32-bit table from
+        # the interpreter's binary regardless.
         run: |
           docker run --rm \
             --platform '${{ matrix.platform }}' \
@@ -128,4 +160,4 @@ jobs:
             -v "$GITHUB_WORKSPACE:/work" \
             -w /work/pkg-py \
             python:3.13-slim \
-            sh -c "pip install -q pytest && setarch linux32 python -m pytest --noconftest -rs tests/test_execution_seccomp.py"
+            sh -c "pip install -q pytest && python -m pytest --noconftest -rs tests/test_execution_seccomp.py"

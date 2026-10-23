@@ -1,6 +1,8 @@
 """Rendering query results for the model."""
 
+import json
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -91,3 +93,34 @@ def test_frame_rows_reads_a_polars_frame() -> None:
 
 def test_frame_rows_declines_a_value_it_cannot_read_rows_from() -> None:
     assert frame_rows(object()) is None
+
+
+def test_a_decimal_reads_the_same_as_a_float_of_the_same_magnitude() -> None:
+    # Decimal does not pad its exponent, so the padding is added for it.
+    assert render_value(Decimal("0.000012345")) == "1.2345e-05"
+    assert render_value(0.000012345) == "1.2345e-05"
+
+
+def test_a_signalling_decimal_nan_renders_rather_than_raising() -> None:
+    # math.isnan() refuses to convert one to a float and raises.
+    assert render_value(Decimal("sNaN")) == "NaN"
+    assert render_value(Decimal("NaN")) == "NaN"
+
+
+BATTERY = Path(__file__).parent / "data" / "r-format-signif.json"
+
+
+def test_a_number_is_formatted_the_way_r_formats_it() -> None:
+    """The battery is `format(x, digits = 7)` read off R, one value at a
+    time, at the precision `render_value` uses. R is not available to this
+    suite to ask at run time."""
+    cases = json.loads(BATTERY.read_text())
+    assert len(cases) > 100
+
+    wrong = [
+        (case["value"], case["text"], render_value(float(case["value"])))
+        for case in cases
+        if render_value(float(case["value"])) != case["text"]
+    ]
+
+    assert wrong == []
