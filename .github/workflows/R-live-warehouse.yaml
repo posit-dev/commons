@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths: [pkg-r/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/R-live-warehouse.yaml]
   workflow_dispatch:
+  # TODO: REMOVE BEFORE MERGE. Temporary trigger to see the live tests pass on this stack's PRs.
+  pull_request:
+    paths: [pkg-r/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/R-live-warehouse.yaml]
 
 permissions:
   contents: read
