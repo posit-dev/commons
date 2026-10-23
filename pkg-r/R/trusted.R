@@ -111,7 +111,8 @@ Trusted <- R6::R6Class(
         query,
         if (length(s$sources) > 1) names(s$sources) else character(),
         semantic_models = s$semantic_models,
-        calculations = s$calculations
+        calculations = s$calculations,
+        methods = TRUE
       ))
     },
 

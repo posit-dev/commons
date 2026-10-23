@@ -19,3 +19,12 @@ test_that("commons() builds an agent around a trusted() object", {
     error = TRUE
   )
 })
+
+test_that("$search() names the trusted object's methods", {
+  tr <- trusted(
+    data_sources = list(sales_db = definitions_source()),
+    semantic_layer = semantic_layer(count_measure_tool())
+  )
+
+  expect_snapshot(tr$search("big revenue region orders"))
+})

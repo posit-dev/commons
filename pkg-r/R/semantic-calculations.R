@@ -432,7 +432,11 @@ calculation_tokens <- function(sql) {
   substr(tokens, 3L, nchar(tokens) - 2L)
 }
 
-calculation_pool_text <- function(calculation, source_names = character()) {
+calculation_pool_text <- function(
+  calculation,
+  source_names = character(),
+  methods = FALSE
+) {
   arguments <- calculation$arguments
   argument_text <- if (length(arguments)) {
     paste(vapply(arguments, function(argument) {
@@ -466,11 +470,17 @@ calculation_pool_text <- function(calculation, source_names = character()) {
   } else {
     ""
   }
+  run <- if (methods) {
+    sprintf("`$calculation(\"%s\")`", calculation$key)
+  } else {
+    "`call_calculation`"
+  }
   sprintf(
-    "### %s --- trusted query\n%s\nArguments: %s.%s\nRun with `call_calculation`.",
+    "### %s --- trusted query\n%s\nArguments: %s.%s\nRun with %s.",
     calculation$key,
     calculation$description,
     argument_text,
-    source
+    source,
+    run
   )
 }
