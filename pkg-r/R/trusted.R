@@ -20,6 +20,45 @@
 #' * `$connection(source)` returns a source's DBI connection, for queries
 #'   that no trusted calculation answers.
 #'
+#' @section Using commons with coding agents:
+#' A coding agent with an R session, like Posit Assistant, can use a
+#' `trusted` object placed in that session directly. Agents without an
+#' interactive REPL, like Claude Code or Codex, can reach one through
+#' [MCP Console](https://t-kalinowski.github.io/mcp-console/), which gives
+#' them a persistent R session. Build `trusted` in the session's startup code
+#' and tell the agent about it in the tool description.
+#'
+#' A configured description replaces the one MCP Console generates, so start
+#' from an export of the resolved configuration, run from the project
+#' directory:
+#'
+#' ```bash
+#' mcp-console config resolve --full > .agents/console/config.yaml
+#' ```
+#'
+#' Then add startup code that builds `trusted`, and add a sentence about it to
+#' the end of the exported description:
+#'
+#' ```yaml
+#' startup:
+#'   language: r
+#'   code: |
+#'     trusted <- acme.metrics::trusted()
+#'     .console$sql_connection(trusted$connection())
+#' tool:
+#'   description: |-
+#'     # ...the exported description, unchanged...
+#'
+#'     The R session has an object called `trusted` that holds this team's
+#'     vetted calculations and business context. Before analyzing data, run
+#'     `trusted` to print it, and use its calculations where they apply.
+#' ```
+#'
+#' Here, `acme.metrics::trusted()` stands for whatever code builds the team's
+#' `trusted` object. Some clients, like Claude Code, show the tool description
+#' only once the agent loads the tool, so add the same sentence to
+#' `tool.instructions` as well.
+#'
 #' @examples
 #' \dontrun{
 #' tr <- trusted(
