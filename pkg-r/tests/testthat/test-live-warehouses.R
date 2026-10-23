@@ -146,9 +146,12 @@ test_that("live Snowflake classifies denied query access", {
   con <- local_warehouse_connection("snowflake", require_table = FALSE)
 
   expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
+  # Snowflake leaves a relation the role holds no privilege on out of the
+  # listing, and a name the listing never reported is missing rather than
+  # refused (tests/shared/catalog-access-precedence.json).
   expect_error(
     data_source(con, tables = denied),
-    class = "commons_catalog_authorization_error"
+    "not on the connection"
   )
 })
 

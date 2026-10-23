@@ -3,8 +3,11 @@ name: "Py: Live warehouse tests"
 on:
   push:
     branches: [main]
-    paths: [pkg-py/**, tests/shared/**, .github/workflows/py-live-warehouse.yaml]
+    paths: [pkg-py/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/py-live-warehouse.yaml]
   workflow_dispatch:
+  # TODO: REMOVE BEFORE MERGE. Temporary trigger to see the live tests pass on this stack's PRs.
+  pull_request:
+    paths: [pkg-py/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/py-live-warehouse.yaml]
 
 permissions:
   contents: read
@@ -63,30 +66,8 @@ jobs:
             echo "SNOWFLAKE_PRIVATE_KEY_FILE=$key" >> "$GITHUB_ENV"
           fi
       - name: Check the configuration
-        # The tests skip when a required variable is unset, so a job with a
-        # missing variable would pass having tested nothing. Stop here instead:
-        # skip the job when nothing is configured, and fail it when only some
-        # of it is.
         id: configured
-        run: |
-          backend='${{ matrix.backend }}'
-          names=$(jq -r --arg b "$backend" \
-            '.backends[$b] | .connection.required[], .fixtures.schema.variable' \
-            ../tests/shared/live-warehouse-env.json)
-          missing=()
-          for name in $names; do
-            [ -n "${!name:-}" ] || missing+=("$name")
-          done
-          total=$(echo "$names" | wc -w)
-          if [ "${#missing[@]}" -eq "$total" ]; then
-            echo "::notice::$backend is not configured for this repository; skipping."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          elif [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error::$backend is partly configured. Missing: ${missing[*]}"
-            exit 1
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
+        run: ../.github/scripts/live-warehouse-configured.sh '${{ matrix.backend }}'
       - uses: astral-sh/setup-uv@v6
         if: steps.configured.outputs.run == 'true'
         with:

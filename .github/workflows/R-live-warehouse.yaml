@@ -1,0 +1,126 @@
+name: "R: Live warehouse tests"
+
+on:
+  push:
+    branches: [main]
+    paths: [pkg-r/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/R-live-warehouse.yaml]
+  workflow_dispatch:
+  # TODO: REMOVE BEFORE MERGE. Temporary trigger to see the live tests pass on this stack's PRs.
+  pull_request:
+    paths: [pkg-r/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/R-live-warehouse.yaml]
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [databricks, snowflake]
+    # The same environments the Python live tests use.
+    environment:
+      name: ${{ matrix.backend }}-ci
+      # No deployment record for a test run. Databricks keeps the default
+      # until its OIDC federation is verified without one.
+      deployment: ${{ matrix.backend == 'databricks' }}
+    permissions:
+      contents: read
+      # GitHub OIDC for the Databricks service principal.
+      id-token: write
+    defaults:
+      run:
+        working-directory: pkg-r
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ vars.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      DATABRICKS_TOKEN_AUDIENCE: ${{ vars.DATABRICKS_TOKEN_AUDIENCE }}
+      # Unset when the service principal signs in with GitHub OIDC instead.
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      COMMONS_TEST_DATABRICKS_SCHEMA: ${{ vars.COMMONS_TEST_DATABRICKS_SCHEMA }}
+      COMMONS_TEST_DATABRICKS_DENIED_TABLE: ${{ vars.COMMONS_TEST_DATABRICKS_DENIED_TABLE }}
+      COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL: ${{ vars.COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL }}
+      COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL_ARGUMENTS: ${{ vars.COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL_ARGUMENTS }}
+      SNOWFLAKE_ACCOUNT: ${{ vars.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ vars.SNOWFLAKE_USER }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
+      COMMONS_TEST_SNOWFLAKE_SCHEMA: ${{ vars.COMMONS_TEST_SNOWFLAKE_SCHEMA }}
+      COMMONS_TEST_SNOWFLAKE_DENIED_TABLE: ${{ vars.COMMONS_TEST_SNOWFLAKE_DENIED_TABLE }}
+      COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE: ${{ vars.COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE }}
+      COMMONS_TEST_SNOWFLAKE_SEMANTIC_VIEW: ${{ vars.COMMONS_TEST_SNOWFLAKE_SEMANTIC_VIEW }}
+      COMMONS_TEST_SNOWFLAKE_VERIFIED_QUERY_VIEW: ${{ vars.COMMONS_TEST_SNOWFLAKE_VERIFIED_QUERY_VIEW }}
+      COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL: ${{ vars.COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL }}
+      COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL_ARGUMENTS: ${{ vars.COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL_ARGUMENTS }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Write the Snowflake private key
+        if: matrix.backend == 'snowflake'
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SNOWFLAKE_PRIVATE_KEY" ]; then
+            key="$RUNNER_TEMP/snowflake_key.p8"
+            (umask 077 && printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY" > "$key")
+            echo "SNOWFLAKE_PRIVATE_KEY_FILE=$key" >> "$GITHUB_ENV"
+          fi
+      - name: Check the configuration
+        id: configured
+        run: ../.github/scripts/live-warehouse-configured.sh '${{ matrix.backend }}'
+
+      # Each driver installs where odbc::snowflake() and odbc::databricks()
+      # look for it by default.
+      - name: Install the Snowflake ODBC driver
+        if: steps.configured.outputs.run == 'true' && matrix.backend == 'snowflake'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q unixodbc
+          curl -fsSL -o "$RUNNER_TEMP/snowflake-odbc.deb" \
+            https://sfc-repo.snowflakecomputing.com/odbc/linux/3.21.0/snowflake-odbc-3.21.0.x86_64.deb
+          sudo apt-get install -y -q "$RUNNER_TEMP/snowflake-odbc.deb"
+          # The driver's own config names libodbcinst.so.1, and Ubuntu ships .so.2.
+          sudo sed -i 's|^ODBCInstLib=.*|ODBCInstLib=libodbcinst.so.2|' \
+            /usr/lib/snowflake/odbc/lib/simba.snowflake.ini
+      - name: Install the Databricks ODBC driver
+        if: steps.configured.outputs.run == 'true' && matrix.backend == 'databricks'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q unixodbc
+          curl -fsSL -o "$RUNNER_TEMP/simbaspark.zip" \
+            https://databricks-bi-artifacts.s3.us-east-2.amazonaws.com/simbaspark-drivers/odbc/2.9.2/SimbaSparkODBC-2.9.2.1008-Debian-64bit.zip
+          unzip -j -o "$RUNNER_TEMP/simbaspark.zip" '*.deb' -x '__MACOSX/*' -d "$RUNNER_TEMP/simbaspark"
+          sudo apt-get install -y -q "$RUNNER_TEMP"/simbaspark/*.deb
+
+      - uses: r-lib/actions/setup-r@v2
+        if: steps.configured.outputs.run == 'true'
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        if: steps.configured.outputs.run == 'true'
+        with:
+          extra-packages: any::testthat, local::.
+          working-directory: pkg-r
+
+      - name: Request a GitHub OIDC token for Databricks
+        # odbc::databricks() exchanges this token for a Databricks one on each
+        # connection. The audience matches what the Databricks SDK requests in
+        # the Python job, so one federation policy serves both. Fetched last,
+        # just before the tests, because the token is short-lived.
+        if: >-
+          steps.configured.outputs.run == 'true' && matrix.backend == 'databricks'
+          && env.DATABRICKS_CLIENT_ID != '' && env.DATABRICKS_CLIENT_SECRET == ''
+        run: |
+          host="${DATABRICKS_HOST#https://}"
+          audience="${DATABRICKS_TOKEN_AUDIENCE:-https://${host%/}/oidc/v1/token}"
+          token=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" | jq -r .value)
+          echo "::add-mask::$token"
+          echo "DATABRICKS_OIDC_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "DATABRICKS_AUTH_TYPE=env-oidc" >> "$GITHUB_ENV"
+      - name: Test
+        if: steps.configured.outputs.run == 'true'
+        shell: Rscript {0}
+        run: testthat::test_local(filter = "live-warehouses", stop_on_failure = TRUE)
