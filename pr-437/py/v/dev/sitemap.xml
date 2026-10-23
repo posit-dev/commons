@@ -2,190 +2,190 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/user-guide/governance.html</loc>
-    <lastmod>2026-10-23T22:24:48.043Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.120Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/user-guide/feature-parity.html</loc>
-    <lastmod>2026-10-23T22:24:48.043Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.121Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/ui.theme.html</loc>
-    <lastmod>2026-10-23T22:24:48.540Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.617Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/ui.commons_chat_dependency.html</loc>
-    <lastmod>2026-10-23T22:24:48.540Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.617Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/ui.app.html</loc>
-    <lastmod>2026-10-23T22:24:48.539Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.616Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/measure.html</loc>
-    <lastmod>2026-10-23T22:24:48.512Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.589Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/index.html</loc>
-    <lastmod>2026-10-23T22:24:48.510Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.586Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/context_layer.html</loc>
-    <lastmod>2026-10-23T22:24:48.513Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.589Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/SemanticLayer.html</loc>
-    <lastmod>2026-10-23T22:24:48.525Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.602Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Injected.html</loc>
-    <lastmod>2026-10-23T22:24:48.534Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.611Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.html</loc>
-    <lastmod>2026-10-23T22:24:48.524Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.601Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.from_engine.html</loc>
-    <lastmod>2026-10-23T22:24:48.536Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.613Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.ensure_tables_loaded.html</loc>
-    <lastmod>2026-10-23T22:24:48.538Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.615Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.dialect.html</loc>
-    <lastmod>2026-10-23T22:24:48.538Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.615Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.to_solver.html</loc>
-    <lastmod>2026-10-23T22:24:48.517Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.593Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.stream.html</loc>
-    <lastmod>2026-10-23T22:24:48.515Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.591Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.queue_restore_reminder.html</loc>
-    <lastmod>2026-10-23T22:24:48.518Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.595Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.prewarm.html</loc>
-    <lastmod>2026-10-23T22:24:48.517Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.594Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.extract_data.html</loc>
-    <lastmod>2026-10-23T22:24:48.516Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.592Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.chat_structured_async.html</loc>
-    <lastmod>2026-10-23T22:24:48.516Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.592Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.chat_async.html</loc>
-    <lastmod>2026-10-23T22:24:48.514Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.591Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.add_turn.html</loc>
-    <lastmod>2026-10-23T22:24:48.518Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.594Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.__deepcopy__.html</loc>
-    <lastmod>2026-10-23T22:24:48.513Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.590Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/index.html</loc>
-    <lastmod>2026-10-23T22:24:40.968Z</lastmod>
+    <lastmod>2026-10-23T22:40:47.671Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/package-info.html</loc>
-    <lastmod>2026-10-23T22:24:40.961Z</lastmod>
+    <lastmod>2026-10-23T22:40:47.664Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.__repr__.html</loc>
-    <lastmod>2026-10-23T22:24:48.513Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.589Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.chat.html</loc>
-    <lastmod>2026-10-23T22:24:48.514Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.590Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.chat_structured.html</loc>
-    <lastmod>2026-10-23T22:24:48.515Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.592Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.citation_corpus.html</loc>
-    <lastmod>2026-10-23T22:24:48.517Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.593Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.extract_data_async.html</loc>
-    <lastmod>2026-10-23T22:24:48.516Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.593Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.html</loc>
-    <lastmod>2026-10-23T22:24:48.511Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.587Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.set_turns.html</loc>
-    <lastmod>2026-10-23T22:24:48.518Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.595Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Commons.stream_async.html</loc>
-    <lastmod>2026-10-23T22:24:48.514Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.591Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/ContextLayer.html</loc>
-    <lastmod>2026-10-23T22:24:48.527Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.603Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.ensure_loaded.html</loc>
-    <lastmod>2026-10-23T22:24:48.538Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.615Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.from_board.html</loc>
-    <lastmod>2026-10-23T22:24:48.537Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.614Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.from_frames.html</loc>
-    <lastmod>2026-10-23T22:24:48.536Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.613Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/DataSource.query.html</loc>
-    <lastmod>2026-10-23T22:24:48.537Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.614Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Measure.html</loc>
-    <lastmod>2026-10-23T22:24:48.531Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.608Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/Tag.html</loc>
-    <lastmod>2026-10-23T22:24:48.535Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.612Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/data_source.html</loc>
-    <lastmod>2026-10-23T22:24:48.511Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.588Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/list_tables.html</loc>
-    <lastmod>2026-10-23T22:24:48.535Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.612Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/semantic_layer.html</loc>
-    <lastmod>2026-10-23T22:24:48.512Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.588Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/ui.asset_base_url.html</loc>
-    <lastmod>2026-10-23T22:24:48.541Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.618Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/reference/ui.server.html</loc>
-    <lastmod>2026-10-23T22:24:48.539Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.616Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/skills.html</loc>
-    <lastmod>2026-10-23T22:24:48.013Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.090Z</lastmod>
   </url>
   <url>
     <loc>https://posit-dev.github.io/commons/py/v/dev/user-guide/get-started.html</loc>
-    <lastmod>2026-10-23T22:24:48.042Z</lastmod>
+    <lastmod>2026-10-23T22:40:55.120Z</lastmod>
   </url>
 </urlset>
