@@ -680,9 +680,12 @@ snowflake_semantic_dependencies <- function(id, specification) {
   complete <- TRUE
   for (table in semantic_spec_entries(specification$tables)) {
     base <- table$base_table %||% list()
-    table_name <- base$table
-    catalog <- base$database %||% base$catalog %||% model[["catalog"]]
-    schema <- base$schema %||% model[["schema"]]
+    # A name the YAML gives follows SQL identifier rules; one it leaves out
+    # comes from the view's own id, which is already exact.
+    table_name <- snowflake_yaml_identifier(base$table)
+    catalog <- snowflake_yaml_identifier(base$database %||% base$catalog) %||%
+      model[["catalog"]]
+    schema <- snowflake_yaml_identifier(base$schema) %||% model[["schema"]]
     if (
       !rlang::is_string(catalog) ||
         !rlang::is_string(schema) ||
@@ -704,6 +707,19 @@ snowflake_semantic_dependencies <- function(id, specification) {
     backend = "snowflake_semantic_view"
   )
   list(ids = ids[!duplicated(keys)], complete = complete && length(ids) > 0L)
+}
+
+# A name in a semantic view's YAML follows SQL identifier rules: a quoted one
+# is exact, with a doubled quote standing for one, and an unquoted one folds to
+# upper case.
+snowflake_yaml_identifier <- function(name) {
+  if (!rlang::is_string(name)) {
+    return(NULL)
+  }
+  if (grepl('^".*"$', name)) {
+    return(gsub('""', '"', substr(name, 2L, nchar(name) - 1L), fixed = TRUE))
+  }
+  toupper(name)
 }
 
 snowflake_semantic_context <- function(
