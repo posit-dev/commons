@@ -73,6 +73,10 @@
       "survey::dynamic match": {
         "SQL(snowflake)": { "notes_contain": ["newline characters"] }
       },
+      "survey::nullable date shift": {
+        "SQL(snowflake)": { "code": "CAST(NULL AS TIMESTAMP_TZ)" },
+        "SQL(databricks)": { "code": "CAST(NULL AS TIMESTAMP)" }
+      },
       "survey::negative quotient": {
         "SQL(snowflake)": {
           "code_contains": [
