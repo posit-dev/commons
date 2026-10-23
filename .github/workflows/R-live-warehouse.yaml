@@ -18,7 +18,11 @@ jobs:
       matrix:
         backend: [databricks, snowflake]
     # The same environments the Python live tests use.
-    environment: ${{ matrix.backend }}-ci
+    environment:
+      name: ${{ matrix.backend }}-ci
+      # No deployment record for a test run. Databricks keeps the default
+      # until its OIDC federation is verified without one.
+      deployment: ${{ matrix.backend == 'databricks' }}
     permissions:
       contents: read
       # GitHub OIDC for the Databricks service principal.
