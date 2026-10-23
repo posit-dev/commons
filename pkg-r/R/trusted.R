@@ -222,6 +222,14 @@ trusted_overview <- function(state) {
     function(td) sprintf("  - %s: %s", tool_name(td), tool_description(td)),
     character(1)
   )
+  runners <- c("measure", "metrics", "calculation")[
+    c(length(measures) > 0, n_metrics > 0, length(state$calculations) > 0)
+  ]
+  run_with <- cli::ansi_collapse(
+    sprintf("`$%s()`", runners),
+    sep2 = " or ",
+    last = ", or "
+  )
   c(
     "<commons_trusted>",
     sprintf(
@@ -241,18 +249,36 @@ trusted_overview <- function(state) {
     },
     if (state$has_context_layer) "Business context is available.",
     "Methods:",
-    trusted_method_signatures(),
-    "This object provides access to trusted code and context. Before writing",
-    "your own analysis code or SQL, look for existing code with `$search()` and run it",
-    "with `$measure()`, `$metrics()`, or `$calculation()`. When none fits,",
-    "check `$context(\"your query\")` for guidance on the approach. Say in your answer",
-    "which numbers came from trusted calculations and which didn't."
+    trusted_method_signatures(
+      hide = setdiff(c("measure", "metrics", "calculation"), runners)
+    ),
+    strwrap(paste(
+      "This object provides access to trusted code and context.",
+      if (length(runners)) {
+        paste(
+          "Before writing your own analysis code or SQL, look for existing",
+          "code with `$search()` and run it with", paste0(run_with, "."),
+          "When none fits, check `$context(\"your query\")` for guidance on",
+          "the approach."
+        )
+      } else {
+        paste(
+          "Before writing your own analysis code or SQL, check",
+          "`$context(\"your query\")` for guidance on the approach."
+        )
+      },
+      "Say in your answer which numbers came from trusted calculations and",
+      "which didn't."
+    ))
   )
 }
 
-trusted_method_signatures <- function() {
+# Methods that run a kind of calculation the object has none of are hidden.
+trusted_method_signatures <- function(hide = character()) {
   methods <- Trusted$public_methods
-  methods <- methods[setdiff(names(methods), c("initialize", "print", "clone"))]
+  methods <- methods[
+    setdiff(names(methods), c("initialize", "print", "clone", hide))
+  ]
   vapply(
     names(methods),
     function(name) {

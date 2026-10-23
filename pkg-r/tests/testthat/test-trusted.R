@@ -69,3 +69,7 @@ test_that("trusted() prints its contents and method signatures", {
 
   expect_snapshot(tr)
 })
+
+test_that("trusted() lists only the calculation methods it can run", {
+  expect_snapshot(trusted(list(sales_db = test_source())))
+})

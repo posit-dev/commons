@@ -67,13 +67,29 @@
         $search(query)
         $measure(name, arguments = list())
         $metrics(metrics, dimensions = NULL, filters = NULL, where = NULL, arguments = list(), source = NULL)
-        $calculation(name, arguments = list(), source = NULL)
         $context(query)
         $describe(table, source = NULL)
         $connection(source = NULL)
       This object provides access to trusted code and context. Before writing
-      your own analysis code or SQL, look for existing code with `$search()` and run it
-      with `$measure()`, `$metrics()`, or `$calculation()`. When none fits,
-      check `$context("your query")` for guidance on the approach. Say in your answer
-      which numbers came from trusted calculations and which didn't.
+      your own analysis code or SQL, look for existing code with `$search()`
+      and run it with `$measure()` or `$metrics()`. When none fits, check
+      `$context("your query")` for guidance on the approach. Say in your
+      answer which numbers came from trusted calculations and which didn't.
+
+# trusted() lists only the calculation methods it can run
+
+    Code
+      trusted(list(sales_db = test_source()))
+    Output
+      <commons_trusted>
+      Sources: sales_db. Tables: sales.
+      Methods:
+        $search(query)
+        $context(query)
+        $describe(table, source = NULL)
+        $connection(source = NULL)
+      This object provides access to trusted code and context. Before writing
+      your own analysis code or SQL, check `$context("your query")` for
+      guidance on the approach. Say in your answer which numbers came from
+      trusted calculations and which didn't.
 
