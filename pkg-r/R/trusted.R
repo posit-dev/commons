@@ -206,15 +206,20 @@ trusted_overview <- function(state) {
       if (length(tables)) paste(tables, collapse = ", ") else "none listed"
     ),
     if (length(measures)) c("Measures:", measures),
-    if (n_metrics) sprintf("Governed metrics: %d.", n_metrics),
+    if (n_metrics) {
+      sprintf("Governed metrics: %d. Find them with `$search()`.", n_metrics)
+    },
     if (length(state$calculations)) {
-      sprintf("Exact trusted queries: %d.", length(state$calculations))
+      sprintf(
+        "Exact trusted queries: %d. Find them with `$search()`.",
+        length(state$calculations)
+      )
     },
     if (state$has_context_layer) "Business context is available.",
     "This object provides access to trusted code and context. Before writing",
     "your own analysis code or SQL, look for existing code with `$search()` and run it",
     "with `$measure()`, `$metrics()`, or `$calculation()`. When none fits,",
-    "check `$context()` for guidance on the approach. Say in your answer",
+    "check `$context(\"your query\")` for guidance on the approach. Say in your answer",
     "which numbers came from trusted calculations and which didn't."
   )
 }
