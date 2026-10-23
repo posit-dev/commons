@@ -42,22 +42,42 @@ controls.
 }
 \section{Using commons with coding agents}{
 
-A coding agent with an R session, like Posit Assistant, can use a
-\code{trusted} object placed in that session directly. Agents without an
-interactive REPL, like Claude Code or Codex, can reach one through
-\href{https://t-kalinowski.github.io/mcp-console/}{MCP Console}, which gives
-them a persistent R session. Build \code{trusted} in the session's startup code
-and tell the agent about it in the tool description.
+A coding agent can use a \code{trusted} object in an R session it controls. In
+each setup below, code builds \code{trusted} when the session starts and a
+sentence tells the agent about it. Here, \code{acme.metrics::trusted()} stands
+for whatever code builds the team's \code{trusted} object.
 
-A configured description replaces the one MCP Console generates, so start
-from an export of the resolved configuration, run from the project
-directory:
+Posit Assistant runs code in an R session, so build \code{trusted} in the
+project's \code{.Rprofile}:
 
-\if{html}{\out{<div class="sourceCode bash">}}\preformatted{mcp-console config resolve --full > .agents/console/config.yaml
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{trusted <- acme.metrics::trusted()
 }\if{html}{\out{</div>}}
 
-Then add startup code that builds \code{trusted}, and add a sentence about it to
-the end of the exported description:
+Posit Assistant doesn't always list the session's variables for the model,
+so tell it about \code{trusted} in the project's \code{AGENTS.md}:
+
+\if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The R session has an object called `trusted` that holds this team's vetted
+calculations and business context. Before analyzing data, run
+`print(trusted)`, and use its calculations where they apply.
+}\if{html}{\out{</div>}}
+
+Claude Code and Codex have no persistent R session of their own. They can
+get one through \href{https://t-kalinowski.github.io/mcp-console/}{MCP Console}.
+Register it for the project, from the project directory:
+
+\if{html}{\out{<div class="sourceCode bash">}}\preformatted{uvx mcp-console configure-client claude --directory .
+uvx mcp-console configure-client codex --directory .
+}\if{html}{\out{</div>}}
+
+Then configure MCP Console to build \code{trusted} at startup and to mention it
+in its tool description. A configured description replaces the one MCP
+Console generates, so start from an export of the resolved configuration:
+
+\if{html}{\out{<div class="sourceCode bash">}}\preformatted{uvx mcp-console config resolve --full > .agents/console/config.yaml
+}\if{html}{\out{</div>}}
+
+In that file, set the startup code, and add the same sentence to the end of
+the exported description:
 
 \if{html}{\out{<div class="sourceCode yaml">}}\preformatted{startup:
   language: r
@@ -70,13 +90,11 @@ tool:
 
     The R session has an object called `trusted` that holds this team's
     vetted calculations and business context. Before analyzing data, run
-    `trusted` to print it, and use its calculations where they apply.
+    `print(trusted)`, and use its calculations where they apply.
 }\if{html}{\out{</div>}}
 
-Here, \code{acme.metrics::trusted()} stands for whatever code builds the team's
-\code{trusted} object. Some clients, like Claude Code, show the tool description
-only once the agent loads the tool, so add the same sentence to
-\code{tool.instructions} as well.
+Claude Code shows the tool description only once the agent loads the tool,
+so add the sentence to the end of \code{tool.instructions} as well.
 }
 
 \examples{

@@ -60,3 +60,12 @@ test_that("$metrics() accepts `where` as a string or unnamed triples", {
     tr$metrics("big_revenue", where = list(c("region", "EMEA")))
   })
 })
+
+test_that("trusted() prints its contents and method signatures", {
+  tr <- trusted(
+    data_sources = list(sales_db = definitions_source()),
+    semantic_layer = semantic_layer(count_measure_tool())
+  )
+
+  expect_snapshot(tr)
+})

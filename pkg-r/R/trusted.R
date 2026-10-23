@@ -24,23 +24,46 @@
 #'   that no trusted calculation answers.
 #'
 #' @section Using commons with coding agents:
-#' A coding agent with an R session, like Posit Assistant, can use a
-#' `trusted` object placed in that session directly. Agents without an
-#' interactive REPL, like Claude Code or Codex, can reach one through
-#' [MCP Console](https://t-kalinowski.github.io/mcp-console/), which gives
-#' them a persistent R session. Build `trusted` in the session's startup code
-#' and tell the agent about it in the tool description.
+#' A coding agent can use a `trusted` object in an R session it controls. In
+#' each setup below, code builds `trusted` when the session starts and a
+#' sentence tells the agent about it. Here, `acme.metrics::trusted()` stands
+#' for whatever code builds the team's `trusted` object.
 #'
-#' A configured description replaces the one MCP Console generates, so start
-#' from an export of the resolved configuration, run from the project
-#' directory:
+#' Posit Assistant runs code in an R session, so build `trusted` in the
+#' project's `.Rprofile`:
 #'
-#' ```bash
-#' mcp-console config resolve --full > .agents/console/config.yaml
+#' ```r
+#' trusted <- acme.metrics::trusted()
 #' ```
 #'
-#' Then add startup code that builds `trusted`, and add a sentence about it to
-#' the end of the exported description:
+#' Posit Assistant doesn't always list the session's variables for the model,
+#' so tell it about `trusted` in the project's `AGENTS.md`:
+#'
+#' ```markdown
+#' The R session has an object called `trusted` that holds this team's vetted
+#' calculations and business context. Before analyzing data, run
+#' `print(trusted)`, and use its calculations where they apply.
+#' ```
+#'
+#' Claude Code and Codex have no persistent R session of their own. They can
+#' get one through [MCP Console](https://t-kalinowski.github.io/mcp-console/).
+#' Register it for the project, from the project directory:
+#'
+#' ```bash
+#' uvx mcp-console configure-client claude --directory .
+#' uvx mcp-console configure-client codex --directory .
+#' ```
+#'
+#' Then configure MCP Console to build `trusted` at startup and to mention it
+#' in its tool description. A configured description replaces the one MCP
+#' Console generates, so start from an export of the resolved configuration:
+#'
+#' ```bash
+#' uvx mcp-console config resolve --full > .agents/console/config.yaml
+#' ```
+#'
+#' In that file, set the startup code, and add the same sentence to the end of
+#' the exported description:
 #'
 #' ```yaml
 #' startup:
@@ -54,13 +77,11 @@
 #'
 #'     The R session has an object called `trusted` that holds this team's
 #'     vetted calculations and business context. Before analyzing data, run
-#'     `trusted` to print it, and use its calculations where they apply.
+#'     `print(trusted)`, and use its calculations where they apply.
 #' ```
 #'
-#' Here, `acme.metrics::trusted()` stands for whatever code builds the team's
-#' `trusted` object. Some clients, like Claude Code, show the tool description
-#' only once the agent loads the tool, so add the same sentence to
-#' `tool.instructions` as well.
+#' Claude Code shows the tool description only once the agent loads the tool,
+#' so add the sentence to the end of `tool.instructions` as well.
 #'
 #' @examples
 #' \dontrun{
@@ -220,11 +241,38 @@ trusted_overview <- function(state) {
       )
     },
     if (state$has_context_layer) "Business context is available.",
+    "Methods:",
+    trusted_method_signatures(),
     "This object provides access to trusted code and context. Before writing",
     "your own analysis code or SQL, look for existing code with `$search()` and run it",
     "with `$measure()`, `$metrics()`, or `$calculation()`. When none fits,",
     "check `$context(\"your query\")` for guidance on the approach. Say in your answer",
     "which numbers came from trusted calculations and which didn't."
+  )
+}
+
+trusted_method_signatures <- function() {
+  methods <- Trusted$public_methods
+  methods <- methods[setdiff(names(methods), c("initialize", "print", "clone"))]
+  vapply(
+    names(methods),
+    function(name) {
+      formals <- formals(methods[[name]])
+      args <- vapply(
+        names(formals),
+        function(arg) {
+          if (rlang::is_missing(formals[[arg]])) {
+            arg
+          } else {
+            paste(arg, "=", deparse(formals[[arg]]))
+          }
+        },
+        character(1)
+      )
+      sprintf("  $%s(%s)", name, paste(args, collapse = ", "))
+    },
+    character(1),
+    USE.NAMES = FALSE
   )
 }
 

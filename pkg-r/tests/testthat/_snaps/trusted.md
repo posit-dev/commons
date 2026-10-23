@@ -53,3 +53,27 @@
       i Pass a string like `"project = 'dplyr' AND date >= '2026-06-01'"`, or a list of `c(column, op, value)` triples.
       i Operators: `=`, `!=`, `<`, `<=`, `>`, and `>=`, joined by `AND`.
 
+# trusted() prints its contents and method signatures
+
+    Code
+      tr
+    Output
+      <commons_trusted>
+      Sources: sales_db. Tables: sales.
+      Measures:
+        - order_count: Count orders, optionally filtered by region and a revenue ceiling.
+      Governed metrics: 3. Find them with `$search()`.
+      Methods:
+        $search(query)
+        $measure(name, arguments = list())
+        $metrics(metrics, dimensions = NULL, filters = NULL, where = NULL, arguments = list(), source = NULL)
+        $calculation(name, arguments = list(), source = NULL)
+        $context(query)
+        $describe(table, source = NULL)
+        $connection(source = NULL)
+      This object provides access to trusted code and context. Before writing
+      your own analysis code or SQL, look for existing code with `$search()` and run it
+      with `$measure()`, `$metrics()`, or `$calculation()`. When none fits,
+      check `$context("your query")` for guidance on the approach. Say in your answer
+      which numbers came from trusted calculations and which didn't.
+
