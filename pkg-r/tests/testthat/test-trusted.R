@@ -28,3 +28,35 @@ test_that("$search() names the trusted object's methods", {
 
   expect_snapshot(tr$search("big revenue region orders"))
 })
+
+test_that("$metrics() accepts `where` as a string or unnamed triples", {
+  tr <- trusted(list(sales_db = definitions_source()))
+  emea <- tr$metrics("big_revenue", where = list(
+    list(column = "region", op = "=", value = "EMEA"),
+    list(column = "revenue", op = ">", value = 0)
+  ))
+
+  expect_equal(
+    tr$metrics("big_revenue", where = "region = 'EMEA' and revenue > 0"),
+    emea
+  )
+  expect_equal(
+    tr$metrics(
+      "big_revenue",
+      where = list(c("region", "=", "EMEA"), list("revenue", ">", 0))
+    ),
+    emea
+  )
+  expect_equal(
+    tr$metrics("big_revenue", where = c("region", "=", "EMEA")),
+    tr$metrics("big_revenue", where = "region = 'EMEA'")
+  )
+  expect_equal(
+    as_where_triples("name <> 'O''Brien'")[[1]],
+    list(column = "name", op = "!=", value = "O'Brien")
+  )
+  expect_snapshot(error = TRUE, {
+    tr$metrics("big_revenue", where = "region IN ('EMEA', 'APAC')")
+    tr$metrics("big_revenue", where = list(c("region", "EMEA")))
+  })
+})

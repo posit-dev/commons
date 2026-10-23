@@ -22,7 +22,10 @@ A \code{commons_trusted} object with methods:
 \item \verb{$search(query)} searches trusted calculations.
 \item \verb{$measure(name, arguments)} runs a measure.
 \item \verb{$metrics(metrics, dimensions, filters, where, arguments, source)}
-computes governed metrics.
+computes governed metrics. \code{where} takes simple conditions on documented
+columns, either as a string like
+\code{"project = 'dplyr' AND date >= '2026-06-01'"} or as a list of
+\code{c(column, op, value)} triples.
 \item \verb{$calculation(name, arguments, source)} runs an exact trusted query.
 \item \verb{$context(query)} searches business context.
 \item \verb{$describe(table, source)} describes a table.

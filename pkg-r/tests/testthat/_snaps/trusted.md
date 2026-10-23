@@ -36,3 +36,20 @@
       Selected SQL(duckdb): `(CASE WHEN ("region" = 'EMEA') THEN 'east' ELSE 'west' END)`.
       Use as a `$metrics()` dimension.
 
+# $metrics() accepts `where` as a string or unnamed triples
+
+    Code
+      tr$metrics("big_revenue", where = "region IN ('EMEA', 'APAC')")
+    Condition
+      Error in `tr$metrics()`:
+      ! `where` must be simple conditions on documented columns.
+      i Pass a string like `"project = 'dplyr' AND date >= '2026-06-01'"`, or a list of `c(column, op, value)` triples.
+      i Operators: `=`, `!=`, `<`, `<=`, `>`, and `>=`, joined by `AND`.
+    Code
+      tr$metrics("big_revenue", where = list(c("region", "EMEA")))
+    Condition
+      Error in `tr$metrics()`:
+      ! `where` must be simple conditions on documented columns.
+      i Pass a string like `"project = 'dplyr' AND date >= '2026-06-01'"`, or a list of `c(column, op, value)` triples.
+      i Operators: `=`, `!=`, `<`, `<=`, `>`, and `>=`, joined by `AND`.
+

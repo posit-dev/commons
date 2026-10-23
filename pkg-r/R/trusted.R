@@ -13,7 +13,10 @@
 #' * `$search(query)` searches trusted calculations.
 #' * `$measure(name, arguments)` runs a measure.
 #' * `$metrics(metrics, dimensions, filters, where, arguments, source)`
-#'   computes governed metrics.
+#'   computes governed metrics. `where` takes simple conditions on documented
+#'   columns, either as a string like
+#'   `"project = 'dplyr' AND date >= '2026-06-01'"` or as a list of
+#'   `c(column, op, value)` triples.
 #' * `$calculation(name, arguments, source)` runs an exact trusted query.
 #' * `$context(query)` searches business context.
 #' * `$describe(table, source)` describes a table.
@@ -136,7 +139,7 @@ Trusted <- R6::R6Class(
         metrics = metrics,
         dimensions = dimensions,
         filters = filters,
-        where = where,
+        where = as_where_triples(where),
         source_name = source,
         arguments = arguments
       )$result
@@ -237,4 +240,65 @@ trusted_text <- function(text) {
 print.commons_trusted_text <- function(x, ...) {
   cat(x, "\n", sep = "")
   invisible(x)
+}
+
+# Accepts the shapes models write first: a SQL-like string or unnamed triples.
+as_where_triples <- function(where, call = rlang::caller_env()) {
+  if (is.null(where) || is.data.frame(where) || !is.null(names(where))) {
+    return(where)
+  }
+  if (rlang::is_string(where)) {
+    return(parse_where_string(where, call = call))
+  }
+  if (is.character(where) && length(where) == 3) {
+    where <- list(where)
+  }
+  lapply(where, function(triple) {
+    if (!is.null(names(triple))) {
+      return(triple)
+    }
+    if (length(triple) != 3) {
+      abort_where(call)
+    }
+    rlang::set_names(as.list(triple), c("column", "op", "value"))
+  })
+}
+
+parse_where_string <- function(where, call = rlang::caller_env()) {
+  condition <- paste0(
+    "^\\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\\s*(<=|>=|!=|<>|=|<|>)\\s*",
+    "('(?:[^']|'')*'|-?[0-9]+(?:\\.[0-9]+)?)\\s*(?:(?i:AND)\\s+|$)"
+  )
+  rest <- where
+  triples <- list()
+  while (nzchar(trimws(rest))) {
+    match <- regmatches(rest, regexec(condition, rest, perl = TRUE))[[1]]
+    if (length(match) == 0) {
+      abort_where(call)
+    }
+    value <- match[[4]]
+    if (startsWith(value, "'")) {
+      value <- gsub("''", "'", substr(value, 2, nchar(value) - 1))
+    }
+    op <- if (identical(match[[3]], "<>")) "!=" else match[[3]]
+    triples[[length(triples) + 1]] <- list(
+      column = match[[2]],
+      op = op,
+      value = value
+    )
+    rest <- substring(rest, nchar(match[[1]]) + 1)
+  }
+  triples
+}
+
+abort_where <- function(call) {
+  cli::cli_abort(
+    c(
+      "{.arg where} must be simple conditions on documented columns.",
+      i = "Pass a string like {.code \"project = 'dplyr' AND date >= '2026-06-01'\"},
+           or a list of {.code c(column, op, value)} triples.",
+      i = "Operators: {.code {where_ops}}, joined by {.code AND}."
+    ),
+    call = call
+  )
 }
