@@ -28,6 +28,6 @@
     Code
       call(filters = "above_minimum")
     Condition
-      Error in `call_metrics_impl()`:
+      Error in `query_metrics()`:
       ! Mixed-grain filter "above_minimum" cannot be applied by `call_metrics()`, and no other trusted calculation can apply it.
 

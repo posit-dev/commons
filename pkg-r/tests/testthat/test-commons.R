@@ -45,12 +45,12 @@ test_that("commons() configures run_r network access", {
 test_that("run_r describes both protection modes as sandboxed", {
   sandboxed <- Commons$new(
     client = test_client(),
-    data_sources = list(sales_db = test_source()),
+    trusted = trusted(list(sales_db = test_source())),
     protection = "sandbox"
   )
   guarded <- Commons$new(
     client = test_client(),
-    data_sources = list(sales_db = test_source()),
+    trusted = trusted(list(sales_db = test_source())),
     protection = "guardrails"
   )
   sandboxed_description <- tool_description(agent_tool(sandboxed, "run_r"))

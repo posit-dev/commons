@@ -19,8 +19,9 @@ navbar:
 
 reference:
 - title: Main functions
-  description: The main agent constructor, plus the building blocks for a commons agent.
+  description: The main constructor, plus the building blocks for a commons agent.
   contents:
+  - trusted
   - commons
   - data_source
   - semantic_layer

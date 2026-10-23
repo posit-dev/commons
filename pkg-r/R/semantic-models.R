@@ -756,8 +756,10 @@ semantic_member_pool_text <- function(
   member,
   members,
   source_names = character(),
-  parameters = list()
+  parameters = list(),
+  methods = FALSE
 ) {
+  call_metrics <- if (methods) "`$metrics()`" else "call_metrics"
   reference <- if (nrow(semantic_member_candidates(member$name[[1]], members)) == 1L) {
     member$name[[1]]
   } else {
@@ -774,28 +776,30 @@ semantic_member_pool_text <- function(
         detail
       ),
       semantic_member_sources_line(member, source_names),
-      semantic_parameters_pool_text(parameters),
+      semantic_parameters_pool_text(parameters, methods = methods),
       switch(
         member$kind[[1]],
-        metric = sprintf(
-          "Query with call_metrics (metrics = [\"%s\"]).",
-          reference
-        ),
+        metric = if (methods) {
+          sprintf("Query with `$metrics(\"%s\")`.", reference)
+        } else {
+          sprintf("Query with call_metrics (metrics = [\"%s\"]).", reference)
+        },
         dimension = sprintf(
-          "Use as a call_metrics dimension: %s.",
+          "Use as a %s dimension: %s.",
+          call_metrics,
           reference
         ),
         NULL
       ),
       if (isTRUE(member$filter[[1]])) {
-        sprintf("May be applied as a call_metrics filter: %s.", reference)
+        sprintf("May be applied as a %s filter: %s.", call_metrics, reference)
       }
     ),
     collapse = "\n"
   )
 }
 
-semantic_parameters_pool_text <- function(parameters) {
+semantic_parameters_pool_text <- function(parameters, methods = FALSE) {
   if (length(parameters) == 0L) {
     return(NULL)
   }
@@ -817,7 +821,7 @@ semantic_parameters_pool_text <- function(parameters) {
     )
   }, character(1))
   paste0(
-    "call_metrics arguments JSON: ",
+    if (methods) "`$metrics()` arguments: " else "call_metrics arguments JSON: ",
     paste(entries, collapse = ", "),
     "."
   )

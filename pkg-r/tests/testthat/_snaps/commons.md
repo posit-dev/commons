@@ -45,7 +45,7 @@
       commons(client = test_client(), data_sources = list(sales_db = test_source()),
       semantic_layer = layer)
     Condition
-      Error in `initialize()`:
+      Error in `commons()`:
       ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source.
       i Available sources: "sales_db".
 
@@ -54,7 +54,7 @@
     Code
       commons(client = test_client(), data_sources = test_source(), semantic_layer = layer)
     Condition
-      Error in `initialize()`:
+      Error in `commons()`:
       ! Measure "region_revenue" has undocumented argument `warehouse` matching no data source.
       i `data_sources` has no named sources.
 
