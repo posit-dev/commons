@@ -31,6 +31,7 @@ tool_run_r <- function(private) {
       "Run R code in your sandboxed R session to analyze results or render plots.",
       "R code and textual output are visible only to you; rendered plots are",
       "also shown to the user.",
+      "Prefer ggplot2 for visualizing data.",
       "The user cannot access or interact with this session. Never direct them",
       "to run code or inspect its variables or files; perform follow-up analysis",
       "yourself and report the result in your response.",
