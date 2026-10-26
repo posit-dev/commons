@@ -36,6 +36,10 @@ A list of conversations, named by conversation id and ordered
 oldest-first. Each conversation is a list with a \code{turns} field containing
 a list of \link[ellmer:Turn]{ellmer::Turn}s and a \code{last_active} field containing a
 \code{POSIXct} giving the time of the conversation's most recent chat activity.
+The \code{user} field contains the authenticated Shiny session username from
+the earliest recorded non-title chat, when supplied by Connect, or
+\code{NA_character_} when unavailable (including anonymous sessions and older
+logs). This is attribution metadata, not an authentication credential.
 }
 \description{
 \code{trajectory_read()} reads conversation trajectories captured by

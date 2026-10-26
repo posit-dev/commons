@@ -41,6 +41,10 @@
 #'   oldest-first. Each conversation is a list with a `turns` field containing
 #'   a list of [ellmer::Turn]s and a `last_active` field containing a
 #'   `POSIXct` giving the time of the conversation's most recent chat activity.
+#'   The `user` field contains the authenticated Shiny session username from
+#'   the earliest recorded non-title chat, when supplied by Connect, or
+#'   `NA_character_` when unavailable (including anonymous sessions and older
+#'   logs). This is attribution metadata, not an authentication credential.
 #'
 #' @examples
 #' \dontrun{
@@ -751,6 +755,7 @@ build_trajectories <- function(spans) {
     return(list())
   }
   latest <- latest_chat_spans(chat_spans)
+  by_conversation <- chat_spans_by_conversation(chat_spans)
   provenance_spans <- latest_provenance_spans(spans, index)
   calls <- latest_recorded_call_spans(chat_spans, index, provenance_spans)
   selected <- c(
@@ -759,7 +764,7 @@ build_trajectories <- function(spans) {
   )
   parsed <- parse_chat_spans_once(
     selected,
-    by_conversation = chat_spans_by_conversation(chat_spans),
+    by_conversation = by_conversation,
     index = index
   )
   candidates <- recorded_call_candidates(calls, parsed)
@@ -775,12 +780,30 @@ build_trajectories <- function(spans) {
       )
       list(
         turns = turns,
-        last_active = nano_posixct(span_time(span))
+        last_active = nano_posixct(span_time(span)),
+        user = conversation_user(by_conversation[[id]], index)
       )
     },
     latest,
     names(latest)
   )
+}
+
+conversation_user <- function(chat_spans, index) {
+  chat_spans <- Filter(
+    function(span) !is_conversation_title_span(span),
+    chat_spans
+  )
+  if (length(chat_spans) == 0) {
+    return(NA_character_)
+  }
+  first <- order(vapply(chat_spans, span_time, character(1)))[[1]]
+  turn <- conversation_turn_ancestor(chat_spans[[first]], index)
+  user <- turn$attributes[["commons.connect.user"]]
+  if (!rlang::is_string(user) || !nzchar(user)) {
+    return(NA_character_)
+  }
+  user
 }
 
 # Second precision is sufficient; the origin supports R < 4.3.
@@ -886,10 +909,15 @@ parse_chat_spans_once <- function(
   spans <- spans[!duplicated(keys)]
   turns <- lapply(spans, trajectory_turns)
   if (!is.null(by_conversation) && !is.null(index)) {
-    turns <- Map(recover_missing_input, spans, turns, MoreArgs = list(
-      by_conversation = by_conversation,
-      index = index
-    ))
+    turns <- Map(
+      recover_missing_input,
+      spans,
+      turns,
+      MoreArgs = list(
+        by_conversation = by_conversation,
+        index = index
+      )
+    )
   }
   rlang::set_names(turns, keys[!duplicated(keys)])
 }
@@ -901,9 +929,11 @@ chat_spans_by_conversation <- function(spans) {
 # ellmer omits the full input attribute when rich content cannot be serialized.
 # Recover what the conversation still records from its latest valid snapshot.
 recover_missing_input <- function(span, turns, by_conversation, index) {
-  if (!is.null(parse_semconv_json(
-    span$attributes[["gen_ai.input.messages"]]
-  ))) {
+  if (
+    !is.null(parse_semconv_json(
+      span$attributes[["gen_ai.input.messages"]]
+    ))
+  ) {
     return(turns)
   }
 
@@ -1008,14 +1038,17 @@ missing_input_turn <- function() {
 }
 
 missing_tool_results <- function(turns) {
-  requests <- unlist(lapply(turns, function(turn) {
-    Filter(
-      function(content) {
-        S7::S7_inherits(content, ellmer::ContentToolRequest)
-      },
-      turn@contents
-    )
-  }), recursive = FALSE)
+  requests <- unlist(
+    lapply(turns, function(turn) {
+      Filter(
+        function(content) {
+          S7::S7_inherits(content, ellmer::ContentToolRequest)
+        },
+        turn@contents
+      )
+    }),
+    recursive = FALSE
+  )
   if (length(requests) == 0) {
     return(NULL)
   }
