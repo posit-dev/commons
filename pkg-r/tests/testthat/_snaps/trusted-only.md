@@ -12,7 +12,7 @@
     Code
       trusted_agent(semantic_layer = semantic_layer(count_measure_tool()), network = "full")
     Condition
-      Error in `commons()`:
+      Error in `agent()`:
       ! `network = "full"` can't be combined with `mode = "trusted only"`, which has no R session.
 
 # call_metrics errors don't point at fallback tools

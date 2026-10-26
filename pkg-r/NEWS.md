@@ -1,6 +1,8 @@
 # commons (development version)
 
-* `commons()` gains a `mode` argument. With `mode = "trusted only"`, the agent answers only with trusted calculations. It never writes its own SQL or R, and it tells the user when no trusted calculation answers a question. These answers carry no provenance markers.
+* `commons()` now gathers data sources, semantic layer, and context layer into "the commons", an object that code can call directly without a model, such as from a coding agent's R session. Its arguments must be named. The new `agent()` builds an agent from a client and the commons, replacing the old role of `commons()`. Calls that pass a client to `commons()` still work and return an agent, with a deprecation warning.
+
+* `agent()` gains a `mode` argument. With `mode = "trusted only"`, the agent answers only with trusted calculations. It never writes its own SQL or R, and it tells the user when no trusted calculation answers a question. These answers carry no provenance markers.
 
 * `describe_table` reports complete table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
 

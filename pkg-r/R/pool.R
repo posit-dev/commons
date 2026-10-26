@@ -510,7 +510,7 @@ compile_where_triple <- function(triple, columns, con) {
 
 # One discovery surface over the whole pool: measures and definitions ranked
 # together, so the model doesn't have to guess which kind holds its answer.
-# `methods` phrases usage as `trusted()` methods rather than agent tools.
+# `methods` phrases usage as `commons()` methods rather than agent tools.
 search_pool_text <- function(
   measures,
   registry,

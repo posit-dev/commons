@@ -2,215 +2,124 @@
 % Please edit documentation in R/commons.R
 \name{commons}
 \alias{commons}
-\title{Create a commons agent}
+\title{Gather trusted calculations and context}
 \usage{
-commons(
-  client,
-  data_sources,
-  semantic_layer = NULL,
-  context_layer = NULL,
-  ...,
-  instructions = NULL,
-  mode = c("normal", "trusted only"),
-  network = c("none", "full"),
-  log = FALSE,
-  share_with = NULL
-)
+commons(..., data_sources, semantic_layer = NULL, context_layer = NULL)
 }
 \arguments{
-\item{client}{An \link[ellmer:Chat]{ellmer::Chat} giving the provider and model to use, e.g.
-\code{\link[ellmer:chat_anthropic]{ellmer::chat_anthropic()}}. For best results, enable thinking when
-supported by the selected provider and model. A system prompt already set
-on the client is ignored, with a warning; use \code{instructions} to add to
-commons' prompt.}
+\item{...}{These dots are for future extensions and must be empty.}
 
 \item{data_sources}{A \code{\link[=data_source]{data_source()}}, or a named list of them. Measures
 can take a source's connection as an argument named after the source; see
-\code{\link[=semantic_layer]{semantic_layer()}}. In \code{commons()}, this can also be a \code{\link[=trusted]{trusted()}} object,
-in which case \code{semantic_layer} and \code{context_layer} must be \code{NULL}.}
+\code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
-
-\item{...}{These dots are for future extensions and must be empty.}
-
-\item{instructions}{Optional instructions placed under an
-\verb{## Additional instructions} heading at the end of commons' built-in
-system prompt, as a single string or the path to a text or Markdown file.
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{commons(
-  # ...
-  instructions = "Use the organization's fiscal-year conventions."
-)
-}\if{html}{\out{</div>}}}
-
-\item{mode}{Which analysis paths the agent may take. One of:
-\itemize{
-\item \code{"normal"} (the default): the agent prefers trusted calculations and,
-when none answers the question, falls back to writing its own SQL and R
-code.
-\item \code{"trusted only"}: the agent answers only with trusted calculations:
-measures, governed metrics, and exact trusted queries. When none
-answers the question, it says so rather than writing its own code. The
-agent can still search context and inspect table schemas. Because
-every answer comes from a trusted calculation, answers carry no
-provenance markers, and the agent needs no sandboxed R session. The
-agent must have at least one trusted calculation.
-}}
-
-\item{network}{Whether the agent's R session has network access. One
-of
-\code{"none"} (the default) or \code{"full"}. Must be \code{"none"} when
-\code{mode = "trusted only"}, since that mode has no R session. The session uses OS sandboxing on
-Linux and macOS. On unsupported hosts, local development can opt in to
-best-effort R guardrails with
-\code{options(commons.allow_unsafe_fallback = TRUE)}. These guardrails
-are not a security boundary.}
-
-\item{log}{Whether to request conversation trajectory capture with
-OpenTelemetry (default \code{FALSE}). When \code{TRUE}, commons checks the tracing
-setup and warns with setup steps when it is incomplete. This feature
-requires Connect >= 2026.09.0.
-
-When deploying to Posit Connect, include
-\code{"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"} in the \code{envVars}
-argument to \code{\link[rsconnect:deployApp]{rsconnect::deployApp()}} so \pkg{ellmer} includes message
-content. A server administrator must also set \code{OpenTelemetry.Enabled = true}
-and \code{OpenTelemetry.AllowContentInstrumentation = true}.
-
-Once the agent is deployed and serving traffic, you can read conversation
-histories back into R with \code{\link[=trajectory_read]{trajectory_read()}}.}
-
-\item{share_with}{An optional character vector of Connect usernames granted
-access to this content's trajectories when running on Posit Connect.
-Reading traces requires editor-level access, so named users are added as
-collaborators on the content. Note that users whose Connect \emph{account}
-role is viewer cannot read traces even when named here; trace readers
-need at least a publisher account.}
 }
 \value{
-An \link[ellmer:Chat]{ellmer::Chat} subclass.
+A \code{commons} object with methods:
+\itemize{
+\item \verb{$search(query)} searches trusted calculations.
+\item \verb{$measure(name, arguments)} runs a measure.
+\item \verb{$metrics(metrics, dimensions, filters, where, arguments, source)}
+computes governed metrics. \code{where} takes simple conditions on documented
+columns, either as a string like
+\code{"project = 'dplyr' AND date >= '2026-06-01'"} or as a list of
+\code{c(column, op, value)} triples.
+\item \verb{$calculation(name, arguments, source)} runs an exact trusted query.
+\item \verb{$context(query)} searches trusted context.
+\item \verb{$describe(table, source)} describes a table.
+\item \verb{$connection(source)} returns a source's DBI connection, for queries
+that no trusted calculation answers.
+}
 }
 \description{
-\code{commons()} creates an \link[ellmer:Chat]{ellmer::Chat} subclass with tools and prompting that
-allow the agent to navigate its data sources, semantic layer, and context
-layer. Depending on the agent's choice of tools, responses can be
-deterministically classified as based on a trusted calculation, cited, or
-untrusted.
+\code{commons()} gathers a team's data sources, semantic layer, and context layer
+into one object, "the commons", that code can call directly without a model.
+Pass it to \code{\link[=agent]{agent()}} to build an agent in R, or place it in an R session
+that a coding agent already controls.
 }
 \details{
-The provider and model come from \code{client}; commons sets its own system prompt
-and tools. Use \code{agent$chat()} to ask questions, \code{\link[=commons_theme]{commons_theme()}} and
-\code{\link[=commons_server]{commons_server()}} to embed the agent in Shiny, and \code{\link[vitals:generate]{vitals::generate()}}
-to use the agent as a vitals solver.
+All arguments must be named.
 }
-\section{Cache pre-warming}{
+\section{Using commons with other coding agents}{
 
-A commons agent builds its context search index and downloads uncached pins
-the first time it needs them. \code{\link[=commons_server]{commons_server()}} and \code{\link[=commons_app]{commons_app()}} call the
-agent's \code{prewarm()} method automatically during post-startup idle time.
+\code{commons()} is the entry point to use commons with external coding agents.
+The approach depends on whether the coding agent already has a persistent
+R session. For example, Posit Assistant connects to the user's R session.
+Claude Code and Codex, by contrast, do not have a built-in connection to a
+persistent R REPL.
 
-To warm the caches before deployment, call \code{agent$prewarm()} in a
-pre-deploy script. The context index is cached on disk once per version of
-the context documents; pin downloads populate the local pins cache.
+\strong{For agents that already have an R session, like Posit Assistant}, create
+a \code{commons()} object in the relevant \code{.Rprofile} and then add a line telling
+the agent to print it out before doing data analysis:
 
-To ship a pre-built context index with an app, configure a directory inside
-the app in both the pre-deploy script and the deployed app, then prewarm the
-agent before deploying:
-
-\if{html}{\out{<div class="sourceCode r">}}\preformatted{options(commons.context_cache = "commons-cache")
-agent <- commons(
-  ellmer::chat_anthropic(),
-  data_sources = data_source(sales = sales)
-)
-agent$prewarm()
+\if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The R session has an object called `commons` that holds this team's trusted
+code and context. Before analyzing data, run `print(commons)`, and use its
+calculations where they apply in favor of writing analysis code ad-hoc.
 }\if{html}{\out{</div>}}
 
-Do not use \verb{app_cache/} for this workflow because rsconnect excludes it from
-deployed bundles. Without explicit configuration, commons uses Connect's
-persistent content data directory when available, an \verb{app_cache/} directory
-beside hosted apps, or the per-user cache directory. Set the cache directory
-with \code{options(commons.context_cache = "path/to/dir")} or the
-\code{COMMONS_CONTEXT_CACHE} environment variable. Set the option to \code{FALSE} to
-disable persistence. The cache is capped at 256 MB with least-recently-used
-eviction; change the cap with \code{options(commons.context_cache_max_size)}.
+\strong{Claude Code and Codex have no persistent R session of their own.} They can
+get one through \href{https://t-kalinowski.github.io/mcp-console/}{MCP Console}.
+MCP Console can be configured to run code at startup (which we'll use to
+build \code{commons}), and we'll also edit the console tool's description to tell
+the model to print out \code{commons} before analyzing data.
+
+To use MCP console, register it for the project, from the project directory:
+
+\if{html}{\out{<div class="sourceCode bash">}}\preformatted{uvx mcp-console configure-client claude --directory .
+uvx mcp-console configure-client codex --directory .
+}\if{html}{\out{</div>}}
+
+Then configure MCP Console to build \code{commons} at startup and to mention it
+in its tool description. A configured description replaces the one MCP
+Console generates, so start from an export of the resolved configuration:
+
+\if{html}{\out{<div class="sourceCode bash">}}\preformatted{uvx mcp-console config resolve --full > .agents/console/config.yaml
+}\if{html}{\out{</div>}}
+
+In that file, set the startup code, and add the same sentence to the end of
+the exported description:
+
+\if{html}{\out{<div class="sourceCode yaml">}}\preformatted{startup:
+  language: r
+  code: |
+    commons <- acme.metrics::commons()
+    .console$sql_connection(commons$connection())
+tool:
+  description: |-
+    # ...the exported description, unchanged...
+
+    The R session has an object called `commons` that holds this team's
+    trusted code and context. Before analyzing data, run
+    `print(commons)`, and use its calculations where they apply in favor of
+    writing analysis code ad-hoc.
+}\if{html}{\out{</div>}}
+
+Claude Code shows the tool description only once the agent loads the tool,
+so add the sentence to the end of \code{tool.instructions} as well.
 }
 
-\section{Agent tools}{
+\section{Lifecycle}{
 
-Depending on its semantic layer, context layer, data sources, and \code{mode}, a
-commons agent receives some combination of these tools:
-\itemize{
-\item \code{search_pool} searches trusted calculations and semantic models.
-\item \code{search_catalog} searches a warehouse catalog.
-\item \code{call_measure} invokes an R measure.
-\item \code{call_metrics} invokes governed or warehouse-native metrics.
-\item \code{call_calculation} invokes an exact trusted query.
-\item \code{search_context} retrieves relevant business context.
-\item \code{load_skill} loads instructions for a task, such as explaining how commons
-determines and displays answer trust.
-\item \code{describe_table} inspects a table or semantic model.
-\item \code{run_sql} executes a read-only SQL query.
-\item \code{run_r} executes R code to analyze results and render plots in the agent's
-R session.
-}
-
-With \code{mode = "trusted only"}, the agent never receives \code{run_sql} or \code{run_r}.
-
-These model-facing tools should be considered private. Their constructors
-are intentionally not exported, and their names, arguments, availability,
-and behavior may change without notice. Application code should configure
-an agent through \code{commons()} and its layer constructors rather than depend
-on individual tools.
+Before commons 0.2.0, \code{commons()} built the agent itself, taking \code{client}
+as its first argument. Calls in that form still work, with a deprecation
+warning, and return an agent as before. Use \code{\link[=agent]{agent()}} instead.
 }
 
 \examples{
 \dontrun{
-# A measure over local data computes directly in R.
-sem <- semantic_layer(
-  measure(
-    "order_count",
-    "Count of orders.",
-    function() nrow(my_sales),
-    arguments = list()
-  )
+commons <- commons(
+  data_sources = data_source(warehouse = con),
+  semantic_layer = sem,
+  context_layer = context_layer(files = "notes.md")
 )
-agent <- commons(
-  ellmer::chat_anthropic(),
-  data_sources = data_source(sales = my_sales),
-  semantic_layer = sem
-)
-agent$chat("How many orders are there?")
+commons
+commons$search("revenue by region")
+commons$measure("revenue_by_region", arguments = list(region = "West"))
 
-# A measure takes a connection as an argument named after a data source.
-# `warehouse` isn't in `arguments`, so the model never sees it; commons
-# supplies it when the measure runs. Bind model-supplied arguments through
-# DBI so they're quoted safely.
-con <- DBI::dbConnect(duckdb::duckdb())
-sem <- semantic_layer(
-  measure(
-    "revenue_by_region",
-    "Total revenue for a region.",
-    function(region, warehouse) {
-      DBI::dbGetQuery(
-        warehouse,
-        "SELECT sum(revenue) AS revenue FROM sales WHERE region = ?",
-        params = list(region)
-      )
-    },
-    arguments = list(region = ellmer::type_string("Sales region."))
-  )
-)
-agent <- commons(
-  ellmer::chat_anthropic(),
-  data_sources = list(warehouse = data_source(con)),
-  semantic_layer = sem
-)
-
-# Objects that aren't data sources (a pins board, an API client) come from
-# argument defaults in the measure, e.g. `board = pins::board_connect()`.
-# See ?semantic_layer.
+# The same object backs an agent:
+agent <- agent(ellmer::chat_anthropic(), commons = commons)
 }
-
 }

@@ -21,8 +21,8 @@ reference:
 - title: Main functions
   description: The main constructor, plus the building blocks for a commons agent.
   contents:
-  - trusted
   - commons
+  - agent
   - data_source
   - semantic_layer
   - measure

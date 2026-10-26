@@ -1,186 +1,150 @@
-#' Create a commons agent
+#' Gather trusted calculations and context
 #'
-#' `commons()` creates an [ellmer::Chat] subclass with tools and prompting that
-#' allow the agent to navigate its data sources, semantic layer, and context
-#' layer. Depending on the agent's choice of tools, responses can be
-#' deterministically classified as based on a trusted calculation, cited, or
-#' untrusted.
+#' `commons()` gathers a team's data sources, semantic layer, and context layer
+#' into one object, "the commons", that code can call directly without a model.
+#' Pass it to [agent()] to build an agent in R, or place it in an R session
+#' that a coding agent already controls.
 #'
-#' The provider and model come from `client`; commons sets its own system prompt
-#' and tools. Use `agent$chat()` to ask questions, [commons_theme()] and
-#' [commons_server()] to embed the agent in Shiny, and [vitals::generate()]
-#' to use the agent as a vitals solver.
+#' All arguments must be named.
 #'
-#' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
-#'   [ellmer::chat_anthropic()]. For best results, enable thinking when
-#'   supported by the selected provider and model. A system prompt already set
-#'   on the client is ignored, with a warning; use `instructions` to add to
-#'   commons' prompt.
+#' @param ... These dots are for future extensions and must be empty.
 #' @param data_sources A [data_source()], or a named list of them. Measures
 #'   can take a source's connection as an argument named after the source; see
-#'   [semantic_layer()]. In `commons()`, this can also be a [trusted()] object,
-#'   in which case `semantic_layer` and `context_layer` must be `NULL`.
+#'   [semantic_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
-#' @param ... These dots are for future extensions and must be empty.
-#' @param instructions Optional instructions placed under an
-#'   `## Additional instructions` heading at the end of commons' built-in
-#'   system prompt, as a single string or the path to a text or Markdown file.
 #'
-#'   ```r
-#'   commons(
-#'     # ...
-#'     instructions = "Use the organization's fiscal-year conventions."
-#'   )
-#'   ```
-#' @param mode Which analysis paths the agent may take. One of:
+#' @return A `commons` object with methods:
 #'
-#'   * `"normal"` (the default): the agent prefers trusted calculations and,
-#'     when none answers the question, falls back to writing its own SQL and R
-#'     code.
-#'   * `"trusted only"`: the agent answers only with trusted calculations:
-#'     measures, governed metrics, and exact trusted queries. When none
-#'     answers the question, it says so rather than writing its own code. The
-#'     agent can still search context and inspect table schemas. Because
-#'     every answer comes from a trusted calculation, answers carry no
-#'     provenance markers, and the agent needs no sandboxed R session. The
-#'     agent must have at least one trusted calculation.
-#' @param network Whether the agent's R session has network access. One
-#'   of
-#'   `"none"` (the default) or `"full"`. Must be `"none"` when
-#'   `mode = "trusted only"`, since that mode has no R session. The session uses OS sandboxing on
-#'   Linux and macOS. On unsupported hosts, local development can opt in to
-#'   best-effort R guardrails with
-#'   `options(commons.allow_unsafe_fallback = TRUE)`. These guardrails
-#'   are not a security boundary.
-#' @param log Whether to request conversation trajectory capture with
-#'   OpenTelemetry (default `FALSE`). When `TRUE`, commons checks the tracing
-#'   setup and warns with setup steps when it is incomplete. This feature
-#'   requires Connect >= 2026.09.0.
+#' * `$search(query)` searches trusted calculations.
+#' * `$measure(name, arguments)` runs a measure.
+#' * `$metrics(metrics, dimensions, filters, where, arguments, source)`
+#'   computes governed metrics. `where` takes simple conditions on documented
+#'   columns, either as a string like
+#'   `"project = 'dplyr' AND date >= '2026-06-01'"` or as a list of
+#'   `c(column, op, value)` triples.
+#' * `$calculation(name, arguments, source)` runs an exact trusted query.
+#' * `$context(query)` searches trusted context.
+#' * `$describe(table, source)` describes a table.
+#' * `$connection(source)` returns a source's DBI connection, for queries
+#'   that no trusted calculation answers.
 #'
-#'   When deploying to Posit Connect, include
-#'   `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the `envVars`
-#'   argument to [rsconnect::deployApp()] so \pkg{ellmer} includes message
-#'   content. A server administrator must also set `OpenTelemetry.Enabled = true`
-#'   and `OpenTelemetry.AllowContentInstrumentation = true`.
+#' @section Using commons with other coding agents:
+#' `commons()` is the entry point to use commons with external coding agents.
+#' The approach depends on whether the coding agent already has a persistent
+#' R session. For example, Posit Assistant connects to the user's R session.
+#' Claude Code and Codex, by contrast, do not have a built-in connection to a
+#' persistent R REPL.
 #'
-#'   Once the agent is deployed and serving traffic, you can read conversation
-#'   histories back into R with [trajectory_read()].
-#' @param share_with An optional character vector of Connect usernames granted
-#'   access to this content's trajectories when running on Posit Connect.
-#'   Reading traces requires editor-level access, so named users are added as
-#'   collaborators on the content. Note that users whose Connect *account*
-#'   role is viewer cannot read traces even when named here; trace readers
-#'   need at least a publisher account.
+#' **For agents that already have an R session, like Posit Assistant**, create
+#' a `commons()` object in the relevant `.Rprofile` and then add a line telling
+#' the agent to print it out before doing data analysis:
 #'
-#' @section Cache pre-warming:
-#' A commons agent builds its context search index and downloads uncached pins
-#' the first time it needs them. [commons_server()] and [commons_app()] call the
-#' agent's `prewarm()` method automatically during post-startup idle time.
-#'
-#' To warm the caches before deployment, call `agent$prewarm()` in a
-#' pre-deploy script. The context index is cached on disk once per version of 
-#' the context documents; pin downloads populate the local pins cache.
-#'
-#' To ship a pre-built context index with an app, configure a directory inside
-#' the app in both the pre-deploy script and the deployed app, then prewarm the
-#' agent before deploying:
-#'
-#' ```r
-#' options(commons.context_cache = "commons-cache")
-#' agent <- commons(
-#'   ellmer::chat_anthropic(),
-#'   data_sources = data_source(sales = sales)
-#' )
-#' agent$prewarm()
+#' ```markdown
+#' The R session has an object called `commons` that holds this team's trusted
+#' code and context. Before analyzing data, run `print(commons)`, and use its
+#' calculations where they apply in favor of writing analysis code ad-hoc.
 #' ```
 #'
-#' Do not use `app_cache/` for this workflow because rsconnect excludes it from
-#' deployed bundles. Without explicit configuration, commons uses Connect's
-#' persistent content data directory when available, an `app_cache/` directory
-#' beside hosted apps, or the per-user cache directory. Set the cache directory
-#' with `options(commons.context_cache = "path/to/dir")` or the
-#' `COMMONS_CONTEXT_CACHE` environment variable. Set the option to `FALSE` to
-#' disable persistence. The cache is capped at 256 MB with least-recently-used
-#' eviction; change the cap with `options(commons.context_cache_max_size)`.
+#' **Claude Code and Codex have no persistent R session of their own.** They can
+#' get one through [MCP Console](https://t-kalinowski.github.io/mcp-console/).
+#' MCP Console can be configured to run code at startup (which we'll use to
+#' build `commons`), and we'll also edit the console tool's description to tell
+#' the model to print out `commons` before analyzing data.
 #'
-#' @section Agent tools:
-#' Depending on its semantic layer, context layer, data sources, and `mode`, a
-#' commons agent receives some combination of these tools:
+#' To use MCP console, register it for the project, from the project directory:
 #'
-#' * `search_pool` searches trusted calculations and semantic models.
-#' * `search_catalog` searches a warehouse catalog.
-#' * `call_measure` invokes an R measure.
-#' * `call_metrics` invokes governed or warehouse-native metrics.
-#' * `call_calculation` invokes an exact trusted query.
-#' * `search_context` retrieves relevant business context.
-#' * `load_skill` loads instructions for a task, such as explaining how commons
-#'   determines and displays answer trust.
-#' * `describe_table` inspects a table or semantic model.
-#' * `run_sql` executes a read-only SQL query.
-#' * `run_r` executes R code to analyze results and render plots in the agent's
-#'   R session.
+#' ```bash
+#' uvx mcp-console configure-client claude --directory .
+#' uvx mcp-console configure-client codex --directory .
+#' ```
 #'
-#' With `mode = "trusted only"`, the agent never receives `run_sql` or `run_r`.
+#' Then configure MCP Console to build `commons` at startup and to mention it
+#' in its tool description. A configured description replaces the one MCP
+#' Console generates, so start from an export of the resolved configuration:
 #'
-#' These model-facing tools should be considered private. Their constructors
-#' are intentionally not exported, and their names, arguments, availability,
-#' and behavior may change without notice. Application code should configure
-#' an agent through `commons()` and its layer constructors rather than depend
-#' on individual tools.
+#' ```bash
+#' uvx mcp-console config resolve --full > .agents/console/config.yaml
+#' ```
 #'
-#' @return An [ellmer::Chat] subclass.
+#' In that file, set the startup code, and add the same sentence to the end of
+#' the exported description:
+#'
+#' ```yaml
+#' startup:
+#'   language: r
+#'   code: |
+#'     commons <- acme.metrics::commons()
+#'     .console$sql_connection(commons$connection())
+#' tool:
+#'   description: |-
+#'     # ...the exported description, unchanged...
+#'
+#'     The R session has an object called `commons` that holds this team's
+#'     trusted code and context. Before analyzing data, run
+#'     `print(commons)`, and use its calculations where they apply in favor of
+#'     writing analysis code ad-hoc.
+#' ```
+#'
+#' Claude Code shows the tool description only once the agent loads the tool,
+#' so add the sentence to the end of `tool.instructions` as well.
+#'
+#' @section Lifecycle:
+#' Before commons 0.2.0, `commons()` built the agent itself, taking `client`
+#' as its first argument. Calls in that form still work, with a deprecation
+#' warning, and return an agent as before. Use [agent()] instead.
 #'
 #' @examples
 #' \dontrun{
-#' # A measure over local data computes directly in R.
-#' sem <- semantic_layer(
-#'   measure(
-#'     "order_count",
-#'     "Count of orders.",
-#'     function() nrow(my_sales),
-#'     arguments = list()
-#'   )
+#' commons <- commons(
+#'   data_sources = data_source(warehouse = con),
+#'   semantic_layer = sem,
+#'   context_layer = context_layer(files = "notes.md")
 #' )
-#' agent <- commons(
-#'   ellmer::chat_anthropic(),
-#'   data_sources = data_source(sales = my_sales),
-#'   semantic_layer = sem
-#' )
-#' agent$chat("How many orders are there?")
+#' commons
+#' commons$search("revenue by region")
+#' commons$measure("revenue_by_region", arguments = list(region = "West"))
 #'
-#' # A measure takes a connection as an argument named after a data source.
-#' # `warehouse` isn't in `arguments`, so the model never sees it; commons
-#' # supplies it when the measure runs. Bind model-supplied arguments through
-#' # DBI so they're quoted safely.
-#' con <- DBI::dbConnect(duckdb::duckdb())
-#' sem <- semantic_layer(
-#'   measure(
-#'     "revenue_by_region",
-#'     "Total revenue for a region.",
-#'     function(region, warehouse) {
-#'       DBI::dbGetQuery(
-#'         warehouse,
-#'         "SELECT sum(revenue) AS revenue FROM sales WHERE region = ?",
-#'         params = list(region)
-#'       )
-#'     },
-#'     arguments = list(region = ellmer::type_string("Sales region."))
-#'   )
-#' )
-#' agent <- commons(
-#'   ellmer::chat_anthropic(),
-#'   data_sources = list(warehouse = data_source(con)),
-#'   semantic_layer = sem
-#' )
-#'
-#' # Objects that aren't data sources (a pins board, an API client) come from
-#' # argument defaults in the measure, e.g. `board = pins::board_connect()`.
-#' # See ?semantic_layer.
+#' # The same object backs an agent:
+#' agent <- agent(ellmer::chat_anthropic(), commons = commons)
 #' }
-#'
 #' @export
 commons <- function(
+  ...,
+  data_sources,
+  semantic_layer = NULL,
+  context_layer = NULL
+) {
+  if (is_legacy_commons_call(...)) {
+    args <- c(
+      rlang::list2(...),
+      if (!missing(data_sources)) list(data_sources = data_sources),
+      if (!missing(semantic_layer)) list(semantic_layer = semantic_layer),
+      if (!missing(context_layer)) list(context_layer = context_layer)
+    )
+    return(rlang::exec(
+      commons_legacy,
+      !!!args,
+      call = rlang::current_env(),
+      user_env = rlang::caller_env()
+    ))
+  }
+  rlang::check_dots_empty()
+  rlang::check_required(data_sources)
+  new_commons(data_sources, semantic_layer, context_layer)
+}
+
+# Before 0.2.0, commons() took a client first and returned the agent.
+is_legacy_commons_call <- function(...) {
+  dots <- rlang::list2(...)
+  if ("client" %in% names(dots)) {
+    return(TRUE)
+  }
+  unnamed <- dots[!nzchar(rlang::names2(dots))]
+  length(unnamed) > 0 && inherits(unnamed[[1]], "Chat")
+}
+
+commons_legacy <- function(
   client,
   data_sources,
   semantic_layer = NULL,
@@ -190,393 +154,305 @@ commons <- function(
   mode = c("normal", "trusted only"),
   network = c("none", "full"),
   log = FALSE,
-  share_with = NULL
+  share_with = NULL,
+  call,
+  user_env
 ) {
-  rlang::check_dots_empty()
-  if (!inherits(client, "Chat")) {
-    cli::cli_abort(
-      "{.arg client} must be an {.cls ellmer::Chat}, e.g. from {.fn ellmer::chat_anthropic}."
-    )
-  }
-  if (!is.null(client$get_system_prompt())) {
-    cli::cli_warn(
-      c(
-        "The system prompt set on {.arg client} is ignored; commons builds
-         its own.",
-        i = "Use {.arg instructions} to add to commons' prompt."
-      )
-    )
-  }
-  if (inherits(data_sources, "commons_trusted")) {
-    if (!is.null(semantic_layer) || !is.null(context_layer)) {
-      cli::cli_abort(
-        "Pass {.arg semantic_layer} and {.arg context_layer} to {.fn trusted},
-         not {.fn commons}, when {.arg data_sources} is a {.fn trusted} object."
-      )
-    }
-    trusted <- data_sources
-  } else {
-    trusted <- new_trusted(data_sources, semantic_layer, context_layer)
-  }
-  mode <- rlang::arg_match(mode)
-  network <- rlang::arg_match(network)
-  trusted_only <- identical(mode, "trusted only")
-  if (trusted_only && identical(network, "full")) {
-    cli::cli_abort(
-      "{.code network = \"full\"} can't be combined with
-       {.code mode = \"trusted only\"}, which has no R session."
-    )
-  }
-  # Without run_r there is nothing to sandbox, so the host needs no support.
-  protection <- if (trusted_only) NULL else run_r_protection_mode()
-  check_instructions(instructions)
-  rlang::check_bool(log)
-  check_share_with(share_with)
-
-  Commons$new(
-    client = client,
-    trusted = trusted,
-    network = network,
-    protection = protection,
+  lifecycle::deprecate_warn(
+    "0.2.0",
+    "commons(client)",
+    "agent()",
+    details = paste(
+      "Build the commons with `commons(data_sources = ...)`, then pass it to",
+      "`agent(client, commons = commons)`."
+    ),
+    env = call,
+    user_env = user_env
+  )
+  rlang::check_dots_empty(call = call)
+  commons <- new_commons(data_sources, semantic_layer, context_layer, call = call)
+  agent(
+    client,
+    commons = commons,
     instructions = instructions,
     mode = mode,
+    network = network,
     log = log,
     share_with = share_with
   )
 }
 
-Commons <- R6::R6Class(
-  "Commons",
-  inherit = ellmer::Chat,
+new_commons <- function(
+  data_sources,
+  semantic_layer = NULL,
+  context_layer = NULL,
+  call = rlang::caller_env()
+) {
+  data_sources <- as_data_sources(data_sources, call = call)
+  check_context_layer(context_layer, call = call)
+  semantic_layer <- semantic_layer %||% new_semantic_layer()
+  check_semantic_layer(semantic_layer, call = call)
+  TheCommons$new(commons_state(data_sources, semantic_layer, context_layer, call))
+}
+
+TheCommons <- R6::R6Class(
+  "commons",
   public = list(
-    initialize = function(
-      client,
-      trusted,
-      ...,
-      instructions = NULL,
-      mode = c("normal", "trusted only"),
-      network = c("none", "full"),
-      protection = NULL,
-      log = FALSE,
-      share_with = NULL
-    ) {
-      rlang::check_dots_empty()
-      super$initialize(
-        provider = client$get_provider(),
-        model = client$get_model_object(),
-        echo = "none"
-      )
-      mode <- rlang::arg_match(mode)
-      network <- rlang::arg_match(network)
-      private$trusted_only <- identical(mode, "trusted only")
-
-      state <- trusted_state_of(trusted)
-      sources <- state$sources
-      private$trusted_obj <- trusted
-      private$sources <- sources
-      private$context_layer <- state$context_layer
-      private$first_touch <- new.env(parent = emptyenv())
-      private$definitions <- state$definitions
-      private$semantic_models <- state$semantic_models
-      private$calculations <- state$calculations
-      private$registry <- state$registry
-      private$fn_sources <- state$fn_sources
-      private$measure_provenance <- state$measure_provenance
-      private$measure_display <- state$measure_display
-      private$injections <- state$injections
-      private$tracing <- new_trajectory_tracing(log, share_with)
-
-      local_commons_span(
-        "commons_agent_create",
-        attributes = list(
-          "commons.agent.n_data_sources" = length(sources),
-          "commons.agent.has_context_layer" = state$has_context_layer,
-          "commons.agent.n_measures" = length(state$registry),
-          "commons.agent.n_definitions" = nrow(private$definitions$defs),
-          "commons.agent.n_semantic_members" = nrow(
-            private$semantic_models$members
-          ),
-          "commons.agent.n_calculations" = length(private$calculations)
-        )
-      )
-
-      private$corpus <- build_citation_corpus(
-        private$context_layer,
-        private$registry,
-        sources
-      )
-      private$restore_reminder_pending <- FALSE
-      # Handles, the worker, and citation requests all serve the fallback
-      # path, which a trusted-only agent doesn't have.
-      if (!private$trusted_only) {
-        private$handles <- new_handle_store()
-        private$worker <- new_r_worker(
-          network,
-          protection %||% run_r_protection_mode()
-        )
-        private$citation_request <- new.env(parent = emptyenv())
-        private$citation_request$reminder <- citation_reminder_text()
-      }
-
-      commons_tools <- build_commons_tools(self, private)
-      if (private$trusted_only) {
-        check_trusted_tools(commons_tools)
-      }
-      self$register_tools(commons_tools)
-      self$set_system_prompt(
-        commons_system_prompt(
-          private$sources,
-          definitions = private$definitions,
-          instructions = instructions,
-          tools = commons_tools,
-          model = self$get_model(),
-          trusted_only = private$trusted_only
-        )
-      )
+    initialize = function(state) {
+      private$state <- state
     },
 
-    add_turn = function(user, assistant, log_tokens = TRUE) {
-      if (turn_has_user_message(user) && !is.null(private$citation_request)) {
-        private$citation_request$requested <- FALSE
-      }
-      super$add_turn(user, assistant, log_tokens = log_tokens)
-    },
-
-    set_turns = function(value) {
-      private$restore_reminder_pending <- FALSE
-      super$set_turns(value)
-    },
-
-    chat = function(..., echo = NULL) {
-      if (private$tracing) {
-        local_conversation_turn_span()
-      }
-      restore_reminder_pending <- private$restore_reminder_pending
-      inputs <- private$prepare_turn_inputs(rlang::list2(...))
-      result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
-      private$consume_restore_reminder(restore_reminder_pending)
-      if (result$visible) result$value else invisible(result$value)
-    },
-
-    stream_async = function(
-      ...,
-      tool_mode = c("concurrent", "sequential"),
-      stream = c("text", "content"),
-      controller = NULL
-    ) {
-      from_index <- length(self$get_turns()) + 1L
-      stream <- rlang::arg_match(stream)
-      restore_reminder_pending <- private$restore_reminder_pending
-      inputs <- private$prepare_turn_inputs(rlang::list2(...))
-      raw_stream <- do.call(
-        super$stream_async,
-        c(
-          inputs,
-          list(
-            tool_mode = tool_mode,
-            stream = stream,
-            controller = controller
-          )
-        )
-      )
-
-      tracing <- private$tracing
-      trusted_only <- private$trusted_only
-      # A trusted-only agent shows no provenance markers. An empty corpus still
-      # strips citation markup but rejects every citation, so none renders.
-      corpus <- if (trusted_only) list() else private$corpus
-      as_content <- identical(stream, "content")
-
-      # Always project citations so reserved model markup cannot reach the browser.
-      coro::async_generator(function() {
-        span <- NULL
-        if (tracing) {
-          span <- local_conversation_turn_span()
-        }
-        scanner <- citation_scanner(corpus)
-
-        for (chunk in coro::await_each(raw_stream)) {
-          if (is.character(chunk)) {
-            out <- scanner$feed(chunk)
-            if (nzchar(out)) yield(out)
-          } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
-            out <- scanner$feed(chunk@text)
-            if (nzchar(out)) yield(ellmer::ContentText(out))
-          } else {
-            yield(chunk)
-          }
-        }
-
-        private$consume_restore_reminder(restore_reminder_pending)
-
-        tail <- scanner$finish()
-        if (nzchar(tail)) {
-          yield(if (as_content) ellmer::ContentText(tail) else tail)
-        }
-
-        decisions <- scanner$decisions()
-        verified <- any(vapply(
-          decisions,
-          function(d) identical(d$status, "accepted"),
-          logical(1)
-        ))
-        turns <- self$get_turns()
-        tag <- derive_provenance_tag(
-          collect_appended_tags(turns, from_index),
-          verified
-        )
-
-        if (tracing) {
-          # An absent provenance tag must not suppress the citation audit record.
-          if (!is.na(tag)) {
-            tryCatch(
-              commons_span_set_attribute(span, "commons.provenance.tag", tag),
-              error = function(err) NULL
-            )
-          }
-          tryCatch(
-            commons_span_set_attribute(
-              span,
-              "commons.citation.candidates",
-              jsonlite::toJSON(decisions, auto_unbox = TRUE)
-            ),
-            error = function(err) NULL
-          )
-          tryCatch(
-            record_provenance_span(tag, decisions),
-            error = function(err) NULL
-          )
-        }
-
-        # A trusted-only agent shows no provenance marker. (coro generators
-        # can't assign the result of an `if` expression.)
-        display_tag <- tag
-        if (trusted_only) {
-          display_tag <- NA_character_
-        }
-        aside <- provenance_aside(display_tag)
-        if (nzchar(aside)) {
-          yield(if (as_content) ellmer::ContentText(aside) else aside)
-        }
-        coro::exhausted()
-      })()
-    },
-
-    citation_corpus = function() {
-      private$corpus
-    },
-
-    queue_restore_reminder = function() {
-      private$restore_reminder_pending <- TRUE
+    print = function(...) {
+      cat(commons_overview(private$state), sep = "\n")
       invisible(self)
     },
 
-    prewarm = function() {
-      # A direct call is typically warming caches ahead of deployment, so
-      # failures propagate: a cold cache should fail the deploy.
-      # prewarm_on_idle() downgrades them to warnings.
-      private$prewarm_context()
-      private$prewarm_sources()
-      invisible(self)
+    search = function(query) {
+      s <- private$state
+      commons_text(search_pool_text(
+        s$registry,
+        s$definitions,
+        query,
+        if (length(s$sources) > 1) names(s$sources) else character(),
+        semantic_models = s$semantic_models,
+        calculations = s$calculations,
+        methods = TRUE
+      ))
+    },
+
+    measure = function(name, arguments = list()) {
+      s <- private$state
+      run_measure(s$registry, name, arguments, s$injections, s$sources)$value
+    },
+
+    metrics = function(
+      metrics,
+      dimensions = NULL,
+      filters = NULL,
+      where = NULL,
+      arguments = list(),
+      source = NULL
+    ) {
+      s <- private$state
+      query_metrics(
+        s$definitions,
+        s$sources,
+        metrics = metrics,
+        dimensions = dimensions,
+        filters = filters,
+        where = as_where_triples(where),
+        source_name = source,
+        arguments = arguments
+      )$result
+    },
+
+    calculation = function(name, arguments = list(), source = NULL) {
+      run_calculation(private$state$sources, name, arguments, source)$result
+    },
+
+    context = function(query) {
+      result <- search_context_tool(private$state$context_layer, query)
+      commons_text(tool_result_text(result))
+    },
+
+    describe = function(table, source = NULL) {
+      src <- resolve_sql_source(private$state$sources, source)
+      commons_text(tool_result_text(describe_table_tool(src, table)))
+    },
+
+    connection = function(source = NULL) {
+      src <- resolve_sql_source(private$state$sources, source)
+      data_source_state(src)$con
     }
   ),
-  active = list(
-    trusted = function() private$trusted_obj
-  ),
-  private = list(
-    prewarm_context = function() {
-      layer <- private$context_layer
-      layer_state <- if (is.null(layer)) NULL else context_layer_state(layer)
-      if (!is.null(layer_state) && length(layer_state$docs) > 0) {
-        local_commons_span(
-          "commons_context_prewarm",
-          attributes = list(
-            "commons.context.n_docs" = length(layer_state$docs),
-            # tryCatch: telemetry must not abort prewarming (resolving the
-            # cache dir can fail or warn on an unwritable root).
-            "commons.context.cache_hit" =
-              !is.null(layer_state$store) ||
-              isTRUE(tryCatch(
-                context_cache_enabled() &&
-                  file.exists(context_store_path(layer_state$docs)),
-                error = function(err) FALSE
-              ))
-          )
-        )
-        context_store(layer)
-      }
-      invisible(self)
-    },
-
-    prewarm_sources = function() {
-      for (source in private$sources) {
-        source_prewarm(source)
-      }
-      invisible(self)
-    },
-
-    trusted_obj = NULL,
-    sources = NULL,
-    trusted_only = FALSE,
-    context_layer = NULL,
-    registry = NULL,
-    definitions = NULL,
-    semantic_models = NULL,
-    calculations = NULL,
-    fn_sources = NULL,
-    measure_provenance = NULL,
-    measure_display = NULL,
-    injections = NULL,
-    tracing = FALSE,
-    first_touch = NULL,
-    handles = NULL,
-    worker = NULL,
-    corpus = NULL,
-    citation_request = NULL,
-    restore_reminder_pending = FALSE,
-
-    prepare_turn_inputs = function(inputs) {
-      inputs <- append_turn_reminder(inputs, self$get_model())
-      # The restore reminder is about run_r state, which this mode never has.
-      if (private$restore_reminder_pending && !private$trusted_only) {
-        inputs <- append_restored_conversation_reminder(inputs)
-      }
-      inputs
-    },
-
-    consume_restore_reminder = function(was_pending) {
-      if (was_pending) {
-        private$restore_reminder_pending <- FALSE
-      }
-      invisible(NULL)
-    }
-  )
+  private = list(state = NULL)
 )
 
-# A trusted-only agent answers only with trusted calculations, so one that
-# has none could answer nothing.
-check_trusted_tools <- function(tools) {
-  names <- vapply(tools, tool_name, character(1))
-  if (any(c("call_measure", "call_metrics", "call_calculation") %in% names)) {
-    return(invisible(NULL))
-  }
-  cli::cli_abort(
-    c(
-      "{.code mode = \"trusted only\"} needs at least one trusted
-       calculation.",
-      i = "Add measures to {.arg semantic_layer}, governed metric
-           definitions to a data dictionary, or a warehouse semantic model."
-    ),
-    call = NULL
+commons_state_of <- function(x) object_private(x)$state
+
+commons_state <- function(data_sources, semantic_layer, context_layer, call) {
+  semantic_state <- semantic_layer_state(semantic_layer)
+  list(
+    sources = data_sources,
+    context_layer = augment_context_layer(context_layer, data_sources),
+    has_context_layer = !is.null(context_layer),
+    definitions = definitions_registry(data_sources),
+    semantic_models = semantic_models_registry(data_sources),
+    calculations = calculations_registry(data_sources),
+    registry = semantic_state$measures,
+    fn_sources = semantic_state$fn_sources,
+    measure_provenance = semantic_state$measure_provenance,
+    measure_display = semantic_state$measure_display,
+    injections = resolve_injections(
+      semantic_state$measures,
+      measure_injectables(data_sources),
+      call = call
+    )
   )
 }
 
-turn_has_user_message <- function(turn) {
-  any(!vapply(turn@contents, is_tool_result_content, logical(1)))
+commons_overview <- function(state) {
+  tables <- unlist(lapply(state$sources, function(source) {
+    tables <- data_source_state(source)$tables
+    if (is.character(tables)) tables else names(tables)
+  }))
+  n_metrics <- nrow(registry_defs(state$definitions)) +
+    nrow(registry_semantic_members(state$semantic_models))
+  measures <- vapply(
+    state$registry,
+    function(td) sprintf("  - %s: %s", tool_name(td), tool_description(td)),
+    character(1)
+  )
+  runners <- c("measure", "metrics", "calculation")[
+    c(length(measures) > 0, n_metrics > 0, length(state$calculations) > 0)
+  ]
+  run_with <- cli::ansi_collapse(
+    sprintf("`$%s()`", runners),
+    sep2 = " or ",
+    last = ", or "
+  )
+  c(
+    "<commons>",
+    sprintf(
+      "Sources: %s. Tables: %s.",
+      paste(names(state$sources) %||% "1 unnamed", collapse = ", "),
+      if (length(tables)) paste(tables, collapse = ", ") else "none listed"
+    ),
+    if (length(measures)) c("Measures:", measures),
+    if (n_metrics) {
+      sprintf("Governed metrics: %d. Find them with `$search()`.", n_metrics)
+    },
+    if (length(state$calculations)) {
+      sprintf(
+        "Exact trusted queries: %d. Find them with `$search()`.",
+        length(state$calculations)
+      )
+    },
+    if (state$has_context_layer) "Business context is available.",
+    "Methods:",
+    commons_method_signatures(
+      hide = setdiff(c("measure", "metrics", "calculation"), runners)
+    ),
+    strwrap(paste(
+      "This object provides access to trusted code and context.",
+      if (length(runners)) {
+        paste(
+          "Before writing your own analysis code or SQL, look for existing",
+          "code with `$search()` and run it with", paste0(run_with, "."),
+          "When none fits, check `$context(\"your query\")` for guidance on",
+          "the approach."
+        )
+      } else {
+        paste(
+          "Before writing your own analysis code or SQL, check",
+          "`$context(\"your query\")` for guidance on the approach."
+        )
+      },
+      "Say in your answer which numbers came from trusted calculations and",
+      "which didn't."
+    ))
+  )
 }
 
-# Measures can take a named source's connection as an argument.
-measure_injectables <- function(sources) {
-  named <- sources[rlang::have_name(sources)]
-  lapply(named, function(source) data_source_state(source)$con)
+# Methods that run a kind of calculation the object has none of are hidden.
+commons_method_signatures <- function(hide = character()) {
+  methods <- TheCommons$public_methods
+  methods <- methods[
+    setdiff(names(methods), c("initialize", "print", "clone", hide))
+  ]
+  vapply(
+    names(methods),
+    function(name) {
+      formals <- formals(methods[[name]])
+      args <- vapply(
+        names(formals),
+        function(arg) {
+          if (rlang::is_missing(formals[[arg]])) {
+            arg
+          } else {
+            paste(arg, "=", deparse(formals[[arg]]))
+          }
+        },
+        character(1)
+      )
+      sprintf("  $%s(%s)", name, paste(args, collapse = ", "))
+    },
+    character(1),
+    USE.NAMES = FALSE
+  )
+}
+
+tool_result_text <- function(result) {
+  if (S7::S7_inherits(result, ellmer::ContentToolResult)) result@value else result
+}
+
+commons_text <- function(text) {
+  structure(paste(text, collapse = "\n"), class = "commons_text")
+}
+
+#' @export
+print.commons_text <- function(x, ...) {
+  cat(x, "\n", sep = "")
+  invisible(x)
+}
+
+# Accepts the shapes models write first: a SQL-like string or unnamed triples.
+as_where_triples <- function(where, call = rlang::caller_env()) {
+  if (is.null(where) || is.data.frame(where) || !is.null(names(where))) {
+    return(where)
+  }
+  if (rlang::is_string(where)) {
+    return(parse_where_string(where, call = call))
+  }
+  if (is.character(where) && length(where) == 3) {
+    where <- list(where)
+  }
+  lapply(where, function(triple) {
+    if (!is.null(names(triple))) {
+      return(triple)
+    }
+    if (length(triple) != 3) {
+      abort_where(call)
+    }
+    rlang::set_names(as.list(triple), c("column", "op", "value"))
+  })
+}
+
+parse_where_string <- function(where, call = rlang::caller_env()) {
+  condition <- paste0(
+    "^\\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\\s*(<=|>=|!=|<>|=|<|>)\\s*",
+    "('(?:[^']|'')*'|-?[0-9]+(?:\\.[0-9]+)?)\\s*(?:(?i:AND)\\s+|$)"
+  )
+  rest <- where
+  triples <- list()
+  while (nzchar(trimws(rest))) {
+    match <- regmatches(rest, regexec(condition, rest, perl = TRUE))[[1]]
+    if (length(match) == 0) {
+      abort_where(call)
+    }
+    value <- match[[4]]
+    if (startsWith(value, "'")) {
+      value <- gsub("''", "'", substr(value, 2, nchar(value) - 1))
+    }
+    op <- if (identical(match[[3]], "<>")) "!=" else match[[3]]
+    triples[[length(triples) + 1]] <- list(
+      column = match[[2]],
+      op = op,
+      value = value
+    )
+    rest <- substring(rest, nchar(match[[1]]) + 1)
+  }
+  triples
+}
+
+abort_where <- function(call) {
+  cli::cli_abort(
+    c(
+      "{.arg where} must be simple conditions on documented columns.",
+      i = "Pass a string like {.code \"project = 'dplyr' AND date >= '2026-06-01'\"},
+           or a list of {.code c(column, op, value)} triples.",
+      i = "Operators: {.code {where_ops}}, joined by {.code AND}."
+    ),
+    call = call
+  )
 }

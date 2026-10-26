@@ -80,11 +80,13 @@ test_agent <- function(
 ) {
   # On Windows, this would error without setting this option.
   withr::local_options(commons.allow_unsafe_fallback = TRUE)
-  commons(
+  agent(
     test_client(),
-    data_sources = data_sources,
-    context_layer = context_layer,
-    semantic_layer = semantic_layer,
+    commons = commons(
+      data_sources = data_sources,
+      context_layer = context_layer,
+      semantic_layer = semantic_layer
+    ),
     log = log,
     ...
   )

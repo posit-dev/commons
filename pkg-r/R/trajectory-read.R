@@ -2,8 +2,8 @@
 #'
 #' @description
 #' `trajectory_read()` reads conversation trajectories captured by
-#' [commons()] when `log = TRUE`. Trajectories are recorded as OpenTelemetry
-#' spans—see the `log` argument of [commons()] for how capture is
+#' [agent()] when `log = TRUE`. Trajectories are recorded as OpenTelemetry
+#' spans—see the `log` argument of [agent()] for how capture is
 #' enabled—and read back from Posit Connect's content observability store or
 #' from local trace files.
 #'
@@ -14,7 +14,7 @@
 #'   * `NULL` (the default) resolves automatically: on Posit Connect, this
 #'     content's own traces; in a project that has been deployed with
 #'     rsconnect, the deployed content's traces; otherwise, the local trace
-#'     directory that [commons()] writes to.
+#'     directory that [agent()] writes to.
 #'   * A Connect content GUID, a content URL (`.../content/<guid>/`), a
 #'     vanity URL (`.../content/<name>/`), or a dashboard URL
 #'     (`.../connect/#/apps/<guid>/`).
@@ -35,7 +35,7 @@
 #' URL, the project's deployment record, or the sole Connect server registered
 #' with rsconnect), and editor-level access to the content: you must own it or
 #' be a collaborator. See the `share_with` argument of
-#' [commons()].
+#' [agent()].
 #'
 #' @return A list of conversations, named by conversation id and ordered
 #'   oldest-first. Each conversation is a list with a `turns` field containing

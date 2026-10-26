@@ -34,10 +34,12 @@ ui <- page_fillable(
 )
 
 server <- function(input, output, session) {
-  agent <- commons(
+  agent <- agent(
     ellmer::chat_anthropic(),
-    data_sources = data_source(values = values),
-    semantic_layer = measures
+    commons = commons(
+      data_sources = data_source(values = values),
+      semantic_layer = measures
+    )
   )
 
   commons_server("chat", agent)
