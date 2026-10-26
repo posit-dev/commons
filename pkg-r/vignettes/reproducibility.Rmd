@@ -1,0 +1,148 @@
+---
+title: "Reproducing an analysis from trajectories"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Reproducing an analysis from trajectories}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup}
+#| include: false
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+You may find yourself wanting to understand how a commons agent arrived at a particular answer, double-check an answer, or reuse a calculation from a commons app. Logged trajectories record the trusted calculations an agent requested and the custom SQL and R code it submitted. A coding agent can use those trajectories to put the relevant calculations into an R script that you can review and run.
+
+The commons skill includes a [reference for reproducing analyses from trajectories](https://github.com/posit-dev/commons/blob/main/pkg-r/inst/skills/commons/references/reproducing-from-trajectories.md) to help a coding agent assemble the script. See the [introduction](commons.html#working-with-the-agent-skill) for how to install the skill.
+
+## Prerequisites
+
+There are few prerequisites to reproducing an analysis done by a commons agent:
+
+1. Trajectory logging must have been enabled when the analysis ran. 
+2. Access to the commons layers used by the agent.
+3. Working connections to the data sources used in the analysis. 
+4. If reading the trajectory from Connect: owner or collaborator access to the content and a configured `CONNECT_API_KEY`. See `?trajectory_read` for setup.
+
+Also note that the commons layers, data, or packages may have changed since the agent ran the analysis, so re-running the code in this way may not reproduce results exactly.
+
+## Create the analysis script
+
+With the commons skill installed, give your coding agent the trace location, the conversation or answer you want to reproduce, and the compatible commons object or its setup code. For example:
+
+> Use the commons skill to reproduce the analysis behind [the question or answer] in conversation [conversation ID] from [Connect content GUID or local trace path]. The compatible commons object is named `commons`. Create and save an R script as `analysis.R` that I can run without the original app. Identify any missing inputs, and do not run the script yet.
+
+The coding agent reads the conversation, extracts the recorded calculations and matching results, and writes the script. It selects the calculations needed for the intended answer, leaves out abandoned attempts, and connects their inputs and outputs. For example, if recorded R code uses `r1`, it identifies the calculation that supplied `r1` and adds the assignment. It preserves sources and parameter values, calls trusted calculations and governed SQL through the commons object, and orders the code by its dependencies. It does not ask the commons agent to answer again.
+
+You do not need to run the extraction code below yourself. If you have already run it, tell the coding agent to use the loaded `trajectory` and `reproduction_code` instead of reading the logs again.
+
+## Run the analysis script
+
+Run the file created by the agent in an R session with your `commons` object available. You can ask the coding agent to run it and compare its outputs with captured results. It should report what was reproduced and any missing inputs or differences that prevent verification.
+
+## Extraction details
+
+The commons skill uses the code below to extract calculations into `reproduction_code`. These are snippets with matching recorded results, not the final script: the coding agent still needs to select and connect them as described above.
+
+<details>
+<summary>Show the extraction code</summary>
+
+```{r reproduction-code}
+library(commons)
+library(purrr)
+
+trajectories <- trajectory_read("<content-guid-or-local-trace-path>")
+trajectory <- trajectories[["<conversation-id>"]]
+
+contents <- trajectory$turns |>
+  map(\(turn) turn@contents) |>
+  list_flatten()
+
+requests <- contents |>
+  keep(\(content) S7::S7_inherits(content, ellmer::ContentToolRequest)) |>
+  keep(\(request) request@name %in% c(
+    "call_measure", "call_metrics", "call_calculation", "run_sql", "run_r"
+  ))
+
+results <- contents |>
+  keep(\(content) S7::S7_inherits(content, ellmer::ContentToolResult))
+
+calculations <- map(requests, function(request) {
+  matching_results <- keep(results, \(result) {
+    !is.null(result@request) && identical(result@request@id, request@id)
+  })
+
+  list(
+    request_id = request@id,
+    tool = request@name,
+    arguments = request@arguments,
+    results = map(matching_results, \(result) result@value)
+  )
+})
+
+trusted_arguments <- function(calculation) {
+  args <- calculation$arguments
+  args$arguments <- if (
+    is.null(args$arguments) ||
+      identical(args$arguments, "") ||
+      identical(args$arguments, "{}")
+  ) {
+    list()
+  } else if (is.list(args$arguments)) {
+    args$arguments
+  } else {
+    jsonlite::fromJSON(args$arguments, simplifyVector = FALSE)
+  }
+  if (calculation$tool == "call_metrics") {
+    for (field in intersect(c("metrics", "dimensions", "filters"), names(args))) {
+      args[[field]] <- unlist(args[[field]], use.names = FALSE)
+    }
+    if (!is.null(args$where)) {
+      args$where <- map(args$where, \(predicate) {
+        unlist(predicate[c("column", "op", "value")], use.names = FALSE)
+      })
+    }
+  }
+  args
+}
+
+as_code <- function(x) paste(deparse(x, width.cutoff = 100L), collapse = "\n")
+
+trusted_call <- function(calculation) {
+  method <- sub("^call_", "", calculation$tool)
+  call <- rlang::call2(method, !!!trusted_arguments(calculation))
+  call[[1]] <- parse(text = paste0("commons$", method))[[1]]
+  as_code(call)
+}
+
+sql_call <- function(calculation) {
+  call <- rlang::call2("sql", !!!calculation$arguments)
+  call[[1]] <- quote(commons$sql)
+  as_code(call)
+}
+
+generate_code <- safely(function(calculation) {
+  switch(calculation$tool,
+    run_sql = sql_call(calculation),
+    run_r = calculation$arguments$code,
+    trusted_call(calculation)
+  )
+})
+
+reproduction_code <- map(calculations, function(calculation) {
+  generated <- generate_code(calculation)
+  list(
+    request_id = calculation$request_id,
+    tool = calculation$tool,
+    code = generated$result,
+    error = if (!is.null(generated$error)) conditionMessage(generated$error),
+    source = calculation$arguments$source,
+    results = calculation$results
+  )
+})
+
+reproduction_code
+```
+
+</details>
