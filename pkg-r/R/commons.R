@@ -284,6 +284,7 @@ TheCommons <- R6::R6Class(
 
     connection = function(source = NULL) {
       src <- resolve_sql_source(private$state$sources, source)
+      source_ensure_all(src)
       data_source_state(src)$con
     }
   ),
@@ -453,14 +454,16 @@ parse_where_string <- function(where, call = rlang::caller_env()) {
       abort_where(call)
     }
     value <- match[[4]]
-    if (startsWith(value, "'")) {
+    quoted <- startsWith(value, "'")
+    if (quoted) {
       value <- gsub("''", "'", substr(value, 2, nchar(value) - 1))
     }
     op <- if (identical(match[[3]], "<>")) "!=" else match[[3]]
     triples[[length(triples) + 1]] <- list(
       column = match[[2]],
       op = op,
-      value = value
+      value = value,
+      quoted = quoted
     )
     rest <- substring(rest, nchar(match[[1]]) + 1)
   }

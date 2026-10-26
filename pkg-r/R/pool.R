@@ -495,7 +495,9 @@ compile_where_triple <- function(triple, columns, con) {
        not {.val {triple$op}}."
     )
   }
-  value <- if (grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)) {
+  value <- if (
+    !isTRUE(triple$quoted) && grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)
+  ) {
     triple$value
   } else {
     as.character(DBI::dbQuoteString(con, triple$value))

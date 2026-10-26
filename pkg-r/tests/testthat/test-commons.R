@@ -7,6 +7,23 @@ test_that("commons() runs measures", {
   expect_equal(tr$measure("order_count", arguments = list(region = "EMEA")), 3)
 })
 
+test_that("$connection() loads pending pins before returning the connection", {
+  skip_if_not_installed("pins")
+  sales <- test_sales()
+  board <- board_with_pins(sales = sales, orders = sales[1:2, ])
+  tr <- commons(
+    data_sources = data_source(
+      board,
+      tables = c(sales = "sales", orders = "orders")
+    )
+  )
+
+  con <- tr$connection()
+  expect_equal(DBI::dbGetQuery(con, "SELECT * FROM sales"), sales)
+  expect_equal(DBI::dbGetQuery(con, "SELECT * FROM orders"), sales[1:2, ])
+  expect_identical(tr$connection(), con)
+})
+
 test_that("agent() builds an agent around a commons() object", {
   withr::local_options(commons.allow_unsafe_fallback = TRUE)
   tr <- commons(data_sources = list(sales_db = test_source()))
@@ -126,12 +143,47 @@ test_that("$metrics() accepts `where` as a string or unnamed triples", {
   )
   expect_equal(
     as_where_triples("name <> 'O''Brien'")[[1]],
-    list(column = "name", op = "!=", value = "O'Brien")
+    list(column = "name", op = "!=", value = "O'Brien", quoted = TRUE)
   )
   expect_snapshot(error = TRUE, {
     tr$metrics("big_revenue", where = "region IN ('EMEA', 'APAC')")
     tr$metrics("big_revenue", where = list(c("region", "EMEA")))
   })
+})
+
+test_that("$metrics() preserves quoted numeric strings in where", {
+  sales <- data.frame(region = c("001", "1"), revenue = c(10, 20))
+  tr <- commons(
+    data_sources = data_source(
+      sales = sales,
+      dictionary = local_definitions_dict(c(
+        "      - name: n_orders",
+        "        expr: ROW_COUNT()"
+      ))
+    )
+  )
+
+  expect_equal(tr$metrics("n_orders", where = "region = '001'")$n_orders, 1)
+  expect_equal(tr$metrics("n_orders", where = "region = '1'")$n_orders, 1)
+  expect_equal(tr$metrics("n_orders", where = "region = 1")$n_orders, 2)
+})
+
+test_that("parsed where literals retain quoting for native semantic metrics", {
+  source <- test_semantic_source()
+  members <- registry_semantic_members(semantic_models_registry(list(
+    db = source
+  )))
+  con <- data_source_state(source)$con
+
+  expect_equal(
+    semantic_where_conditions(
+      as_where_triples("region = '001' AND region <> 1"),
+      members,
+      con,
+      member_references = function(dimension, con) "region"
+    ),
+    c("(region = '001')", "(region != 1)")
+  )
 })
 
 test_that("commons() prints its contents and method signatures", {

@@ -743,7 +743,9 @@ semantic_where_conditions <- function(
       call = call
     )
     reference <- member_references(dimension, con)
-    value <- if (grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)) {
+    value <- if (
+      !isTRUE(triple$quoted) && grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)
+    ) {
       triple$value
     } else {
       as.character(DBI::dbQuoteString(con, triple$value))
