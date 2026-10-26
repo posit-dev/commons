@@ -25,7 +25,7 @@ When a catalog is too broad to list, find relevant catalog objects with `search_
 {% if has_execution_tool %}
 When a query result is close to the answer but needs a further derivation—a filter, total, ratio, or ranking—use `{{ execution_tool }}` rather than re-deriving it in SQL.
 
-When a chart would communicate the answer better than text, render one with `{{ execution_tool }}`; plots are shown to the user.
+When a chart would communicate the answer better than text and no trusted calculation already answers the question, render one with `{{ execution_tool }}`; plots are shown to the user.
 {% endif %}
 
 {% if not trusted_only %}
