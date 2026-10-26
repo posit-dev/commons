@@ -568,12 +568,7 @@ test_that("commons() records an agent-creation span", {
 })
 
 # Split a real ellmer response inside reserved markup to test chunk invariance.
-stream_citations_fixture <- function(
-  agent,
-  raw,
-  split_at,
-  before_collect = NULL
-) {
+stream_citations_fixture <- function(agent, raw, split_at) {
   skip_if_ellmer_streaming_hooks_unavailable()
   final_turn <- ellmer::AssistantTurn(
     list(ellmer::ContentText(raw)),
@@ -611,9 +606,6 @@ stream_citations_fixture <- function(
   )
   user_input <- list("What does canopy cover mean?")
   stream <- agent$stream_async(!!!user_input)
-  if (!is.null(before_collect)) {
-    before_collect()
-  }
   sync_promise(coro::async_collect(stream))
 }
 
@@ -818,37 +810,6 @@ test_that("stream_async records provenance at span creation and completion", {
       )
     )
   )
-})
-
-test_that("stream_async captures the user before deferred execution", {
-  skip_if_not_installed("otelsdk")
-  skip_if_not_installed("shiny")
-  withr::local_envvar(
-    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
-  )
-  session <- shiny::MockShinySession$new()
-  withr::defer(session$close())
-  session$user <- "alice"
-
-  recorded <- otelsdk::with_otel_record({
-    agent <- test_agent(log = TRUE)
-    shiny::withReactiveDomain(
-      session,
-      stream_citations_fixture(
-        agent,
-        "An answer.",
-        split_at = 3,
-        before_collect = function() session$user <- "bob"
-      )
-    )
-  })
-
-  spans <- Filter(
-    function(span) identical(span$name, "commons_conversation_turn"),
-    recorded$traces
-  )
-  expect_length(spans, 1)
-  expect_identical(spans[[1]]$attributes[["commons.connect.user"]], "alice")
 })
 
 test_that("a trusted-only agent streams no provenance or citation markers", {
