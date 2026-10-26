@@ -99,6 +99,26 @@ tool:
 
 Claude Code shows the tool description only once the agent loads the tool,
 so add the sentence to the end of \code{tool.instructions} as well.
+
+If the commons has a context layer, \verb{$context()} needs one more step for
+now. It relies on DuckDB's \code{fts} extension, which MCP Console's sandbox
+can't download. MCP Console can install the extension itself, but only
+into its own cache, which R's duckdb doesn't read by default. Point R at
+that cache with an absolute path (\code{~} and environment variables aren't
+expanded):
+
+\if{html}{\out{<div class="sourceCode yaml">}}\preformatted{environment:
+  # macOS; on Linux, /home/you/.cache/mcp-console/dependencies/duckdb
+  DUCKDB_R_HOME: /Users/you/Library/Caches/mcp-console/dependencies/duckdb
+}\if{html}{\out{</div>}}
+
+Then add one more sentence to both \code{tool.description} and
+\code{tool.instructions}, so the agent asks MCP Console to install the
+extension:
+
+\if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The first time you run `commons$context()`, include
+`"requirements": \{"duckdb": ["fts"]\}` in the same call.
+}\if{html}{\out{</div>}}
 }
 
 \section{Lifecycle}{

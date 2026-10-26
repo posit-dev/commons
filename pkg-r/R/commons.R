@@ -89,6 +89,28 @@
 #' Claude Code shows the tool description only once the agent loads the tool,
 #' so add the sentence to the end of `tool.instructions` as well.
 #'
+#' If the commons has a context layer, `$context()` needs one more step for
+#' now. It relies on DuckDB's `fts` extension, which MCP Console's sandbox
+#' can't download. MCP Console can install the extension itself, but only
+#' into its own cache, which R's duckdb doesn't read by default. Point R at
+#' that cache with an absolute path (`~` and environment variables aren't
+#' expanded):
+#'
+#' ```yaml
+#' environment:
+#'   # macOS; on Linux, /home/you/.cache/mcp-console/dependencies/duckdb
+#'   DUCKDB_R_HOME: /Users/you/Library/Caches/mcp-console/dependencies/duckdb
+#' ```
+#'
+#' Then add one more sentence to both `tool.description` and
+#' `tool.instructions`, so the agent asks MCP Console to install the
+#' extension:
+#'
+#' ```markdown
+#' The first time you run `commons$context()`, include
+#' `"requirements": {"duckdb": ["fts"]}` in the same call.
+#' ```
+#'
 #' @section Lifecycle:
 #' Before commons 0.2.0, `commons()` built the agent itself, taking `client`
 #' as its first argument. Calls in that form still work, with a deprecation
