@@ -1,7 +1,5 @@
 # commons (development version)
 
-* The system prompt now tells the agent to render a chart only when no trusted calculation already answers the question, rather than running code to visualize a result it has already been given.
-
 * `commons()` gains a `mode` argument. With `mode = "trusted only"`, the agent answers only with trusted calculations. It never writes its own SQL or R, and it tells the user when no trusted calculation answers a question. These answers carry no provenance markers.
 
 * `describe_table` reports complete table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
