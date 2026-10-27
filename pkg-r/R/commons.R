@@ -26,8 +26,10 @@
 #' * `$calculation(name, arguments, source)` runs an exact trusted query.
 #' * `$context(query)` searches trusted context.
 #' * `$describe(table, source)` describes a table.
-#' * `$connection(source)` returns a source's DBI connection, for queries
-#'   that no trusted calculation answers.
+#' * `$run_sql(query, source)` runs a read-only query and returns a data frame.
+#'   Governed definitions can be written as `{{name}}` tokens (or
+#'   `{{table::name}}` when qualification is needed), and each expands to its
+#'   compiled SQL before the query runs.
 #'
 #' @section Using commons with other coding agents:
 #' `commons()` is the entry point to use commons with external coding agents.
@@ -47,10 +49,10 @@
 #' ```
 #'
 #' **Claude Code and Codex have no persistent R session of their own.** They can
-#' get one through [MCP Console](https://t-kalinowski.github.io/mcp-console/).
-#' MCP Console can be configured to run code at startup (which we'll use to
-#' build `commons`), and we'll also edit the console tool's description to tell
-#' the model to print out `commons` before analyzing data.
+#' get one through [MCP Console](https://posit-dev.github.io/mcp-console/).
+#' Its R session reads the project's `.Rprofile` like any other, so build
+#' `commons` there in the same way, and then edit the console tool's
+#' description to tell the model to print out `commons` before analyzing data.
 #'
 #' To use MCP console, register it for the project, from the project directory:
 #'
@@ -59,23 +61,17 @@
 #' uvx mcp-console configure-client codex --directory .
 #' ```
 #'
-#' Then configure MCP Console to build `commons` at startup and to mention it
-#' in its tool description. A configured description replaces the one MCP
-#' Console generates, so start from an export of the resolved configuration:
+#' A configured description replaces the one MCP Console generates, so start
+#' from an export of the resolved configuration:
 #'
 #' ```bash
 #' uvx mcp-console config resolve --full > .agents/console/config.yaml
 #' ```
 #'
-#' In that file, set the startup code, and add the same sentence to the end of
-#' the exported description:
+#' In that file, add the same sentence to the end of the exported
+#' description:
 #'
 #' ```yaml
-#' startup:
-#'   language: r
-#'   code: |
-#'     commons <- acme.metrics::commons()
-#'     .console$sql_connection(commons$connection())
 #' tool:
 #'   description: |-
 #'     # ...the exported description, unchanged...
@@ -110,6 +106,11 @@
 #' The first time you run `commons$context()`, include
 #' `"requirements": {"duckdb": ["fts"]}` in the same call.
 #' ```
+#'
+#' In either setup, `$run_sql()` refuses queries that write, but that check
+#' isn't a security boundary. Code that the agent runs in the same R session
+#' can reach anything the session can, including the connections behind
+#' `commons`. Connect to databases with a read-only role.
 #'
 #' @section Lifecycle:
 #' Before commons 0.2.0, `commons()` built the agent itself, taking `client`
@@ -282,10 +283,19 @@ TheCommons <- R6::R6Class(
       commons_text(tool_result_text(describe_table_tool(src, table)))
     },
 
-    connection = function(source = NULL) {
-      src <- resolve_sql_source(private$state$sources, source)
-      source_ensure_all(src)
-      data_source_state(src)$con
+    run_sql = function(query, source = NULL) {
+      s <- private$state
+      src <- resolve_sql_source(s$sources, source)
+      expansion <- expand_for_run_sql(
+        s$definitions,
+        s$sources,
+        source,
+        query,
+        call = rlang::current_env()
+      )
+      # source_query() checks too, but this attributes a refusal to `$run_sql()`.
+      check_query(expansion$sql)
+      source_query(src, expansion$sql)
     }
   ),
   private = list(state = NULL)

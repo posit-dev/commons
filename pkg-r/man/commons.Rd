@@ -30,8 +30,10 @@ columns, either as a string like
 \item \verb{$calculation(name, arguments, source)} runs an exact trusted query.
 \item \verb{$context(query)} searches trusted context.
 \item \verb{$describe(table, source)} describes a table.
-\item \verb{$connection(source)} returns a source's DBI connection, for queries
-that no trusted calculation answers.
+\item \verb{$run_sql(query, source)} runs a read-only query and returns a data frame.
+Governed definitions can be written as \code{{{name}}} tokens (or
+\code{{{table::name}}} when qualification is needed), and each expands to its
+compiled SQL before the query runs.
 }
 }
 \description{
@@ -61,10 +63,10 @@ calculations where they apply in favor of writing analysis code ad-hoc.
 }\if{html}{\out{</div>}}
 
 \strong{Claude Code and Codex have no persistent R session of their own.} They can
-get one through \href{https://t-kalinowski.github.io/mcp-console/}{MCP Console}.
-MCP Console can be configured to run code at startup (which we'll use to
-build \code{commons}), and we'll also edit the console tool's description to tell
-the model to print out \code{commons} before analyzing data.
+get one through \href{https://posit-dev.github.io/mcp-console/}{MCP Console}.
+Its R session reads the project's \code{.Rprofile} like any other, so build
+\code{commons} there in the same way, and then edit the console tool's
+description to tell the model to print out \code{commons} before analyzing data.
 
 To use MCP console, register it for the project, from the project directory:
 
@@ -72,22 +74,16 @@ To use MCP console, register it for the project, from the project directory:
 uvx mcp-console configure-client codex --directory .
 }\if{html}{\out{</div>}}
 
-Then configure MCP Console to build \code{commons} at startup and to mention it
-in its tool description. A configured description replaces the one MCP
-Console generates, so start from an export of the resolved configuration:
+A configured description replaces the one MCP Console generates, so start
+from an export of the resolved configuration:
 
 \if{html}{\out{<div class="sourceCode bash">}}\preformatted{uvx mcp-console config resolve --full > .agents/console/config.yaml
 }\if{html}{\out{</div>}}
 
-In that file, set the startup code, and add the same sentence to the end of
-the exported description:
+In that file, add the same sentence to the end of the exported
+description:
 
-\if{html}{\out{<div class="sourceCode yaml">}}\preformatted{startup:
-  language: r
-  code: |
-    commons <- acme.metrics::commons()
-    .console$sql_connection(commons$connection())
-tool:
+\if{html}{\out{<div class="sourceCode yaml">}}\preformatted{tool:
   description: |-
     # ...the exported description, unchanged...
 
@@ -119,6 +115,11 @@ extension:
 \if{html}{\out{<div class="sourceCode markdown">}}\preformatted{The first time you run `commons$context()`, include
 `"requirements": \{"duckdb": ["fts"]\}` in the same call.
 }\if{html}{\out{</div>}}
+
+In either setup, \verb{$run_sql()} refuses queries that write, but that check
+isn't a security boundary. Code that the agent runs in the same R session
+can reach anything the session can, including the connections behind
+\code{commons}. Connect to databases with a read-only role.
 }
 
 \section{Lifecycle}{

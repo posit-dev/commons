@@ -1,3 +1,18 @@
+# $run_sql() expands governed definitions
+
+    Code
+      tr$run_sql("SELECT COUNT(*) FROM sales WHERE {{not_a_definition}}")
+    Condition
+      Error in `tr$run_sql()`:
+      ! No governed definition matches `{{not_a_definition}}`.
+      i Available definitions: `{{emea}} (sales)`, `{{big_revenue}} (sales)`, and `{{region_band}} (sales)`.
+    Code
+      tr$run_sql("DELETE FROM sales")
+    Condition
+      Error in `tr$run_sql()`:
+      ! The query contains a disallowed operation: `DELETE`.
+      i Only read-only SELECT queries are allowed.
+
 # commons() requires named arguments
 
     Code
@@ -105,7 +120,7 @@
       Revenue over big EMEA orders.
       Selected SQL(duckdb): `(sum(CASE WHEN ("region" = 'EMEA') AND "revenue" > 600 THEN "revenue" ELSE 0 END))`.
       Translation notes: DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there. DuckDB sums integers at 128 bits, so a total data-dict reports as an overflow (D09) may succeed.
-      Query with `$metrics("big_revenue")`.
+      Query with `$metrics("big_revenue")` or in `$run_sql()` as `SELECT {{big_revenue}} AS value`.
       Filters and derived definitions on this table: {{emea}} (filter), {{region_band}} (derived).
       
       ### order_count
@@ -119,12 +134,12 @@
       ### {{emea}} --- filter on table `sales`
       EMEA rows only.
       Selected SQL(duckdb): `("region" = 'EMEA')`.
-      Use as a `$metrics()` filter or dimension.
+      Apply in `$run_sql()` (e.g. `WHERE {{emea}}`) or as a `$metrics()` filter or dimension.
       
       ### {{region_band}} --- derived on table `sales`
       Coarse region grouping.
       Selected SQL(duckdb): `(CASE WHEN ("region" = 'EMEA') THEN 'east' ELSE 'west' END)`.
-      Use as a `$metrics()` dimension.
+      Use in `$run_sql()` SELECT or GROUP BY as `{{region_band}}`, or as a `$metrics()` dimension.
 
 # $metrics() accepts `where` as a string or unnamed triples
 
@@ -159,7 +174,7 @@
         $metrics(metrics, dimensions = NULL, filters = NULL, where = NULL, arguments = list(), source = NULL)
         $context(query)
         $describe(table, source = NULL)
-        $connection(source = NULL)
+        $run_sql(query, source = NULL)
       This object provides access to trusted code and context. Before writing
       your own analysis code or SQL, look for existing code with `$search()`
       and run it with `$measure()` or `$metrics()`. When none fits, check
@@ -177,7 +192,7 @@
         $search(query)
         $context(query)
         $describe(table, source = NULL)
-        $connection(source = NULL)
+        $run_sql(query, source = NULL)
       This object provides access to trusted code and context. Before writing
       your own analysis code or SQL, check `$context("your query")` for
       guidance on the approach. Say in your answer which numbers came from

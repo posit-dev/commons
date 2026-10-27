@@ -160,12 +160,18 @@ definition_token_pattern <-
 
 # The expansion step of run_sql, before check_query() so the denylist sees
 # the SQL that will actually execute.
-expand_for_run_sql <- function(registry, sources, source_name, sql) {
+expand_for_run_sql <- function(
+  registry,
+  sources,
+  source_name,
+  sql,
+  call = rlang::current_env()
+) {
   if (is.null(registry) || nrow(registry$defs) == 0) {
     return(list(sql = sql, applied = NULL))
   }
   label <- source_name %||% rlang::names2(sources)[[1]]
-  expand_definitions(sql, registry_defs(registry, label))
+  expand_definitions(sql, registry_defs(registry, label), call = call)
 }
 
 expand_definitions <- function(sql, defs, call = rlang::caller_env()) {

@@ -524,8 +524,6 @@ search_pool_text <- function(
   trusted_only = FALSE,
   methods = FALSE
 ) {
-  # Outside commons, there's no run_sql to expand definition tokens.
-  trusted_only <- trusted_only || methods
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
   semantic_members <- registry_semantic_members(semantic_models)
@@ -592,7 +590,7 @@ search_pool_text <- function(
   hits <- lexical_rank(query, catalog, n = 5)
   if (length(hits) == 0) {
     return(sprintf(
-      if (trusted_only) {
+      if (trusted_only || methods) {
         "Nothing in the semantic layer matches \"%s\"."
       } else {
         "Nothing in the semantic layer matches \"%s\". Consider writing a SQL query."
@@ -742,37 +740,50 @@ definition_pool_text <- function(
       defs$table == def$table &
       defs$kind == "metric"
   )
+  run_sql <- if (methods) "`$run_sql()`" else "run_sql"
+  call_metrics <- if (methods) "`$metrics()`" else "call_metrics"
   invoke <- if (trusted_only) {
     definition_trusted_usage(def, table_has_metrics, methods = methods)
   } else if (def$mixed_grain) {
     sprintf(
-      "Use `{{%s}}` only in run_sql with manually grain-correct query structure.",
-      def$name
+      "Use `{{%s}}` only in %s with manually grain-correct query structure.",
+      def$name,
+      run_sql
     )
   } else {
     switch(
       kind,
       filter = if (table_has_metrics) {
         sprintf(
-          "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
-          def$name
+          "Apply in %s (e.g. `WHERE {{%s}}`) or as a %s filter or dimension.",
+          run_sql,
+          def$name,
+          call_metrics
         )
       } else {
-        sprintf("Apply in run_sql (e.g. `WHERE {{%s}}`).", def$name)
+        sprintf("Apply in %s (e.g. `WHERE {{%s}}`).", run_sql, def$name)
       },
       metric = sprintf(
-        "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS value`.",
-        def$name,
+        "Query with %s or in %s as `SELECT {{%s}} AS value`.",
+        if (methods) {
+          sprintf("`$metrics(\"%s\")`", def$name)
+        } else {
+          sprintf("call_metrics (metrics = [\"%s\"])", def$name)
+        },
+        run_sql,
         def$name
       ),
       if (table_has_metrics) {
         sprintf(
-          "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
-          def$name
+          "Use in %s SELECT or GROUP BY as `{{%s}}`, or as a %s dimension.",
+          run_sql,
+          def$name,
+          call_metrics
         )
       } else {
         sprintf(
-          "Use in run_sql SELECT or GROUP BY as `{{%s}}`.",
+          "Use in %s SELECT or GROUP BY as `{{%s}}`.",
+          run_sql,
           def$name
         )
       }

@@ -7,21 +7,41 @@ test_that("commons() runs measures", {
   expect_equal(tr$measure("order_count", arguments = list(region = "EMEA")), 3)
 })
 
-test_that("$connection() loads pending pins before returning the connection", {
+test_that("$run_sql() expands governed definitions", {
+  tr <- commons(data_sources = list(sales_db = definitions_source()))
+  plain <- tr$run_sql("SELECT COUNT(*) AS n FROM sales WHERE region = 'EMEA'")
+  expect_equal(plain$n, sum(test_sales()$region == "EMEA"))
+
+  expect_equal(
+    tr$run_sql("SELECT COUNT(*) AS n FROM sales WHERE {{emea}}"),
+    plain
+  )
+  expect_equal(
+    tr$run_sql("SELECT COUNT(*) AS n FROM sales WHERE {{sales::emea}}"),
+    plain
+  )
+  expect_equal(
+    tr$run_sql("SELECT {{big_revenue}} AS value FROM sales")$value,
+    tr$metrics("big_revenue")$big_revenue
+  )
+  expect_snapshot(error = TRUE, {
+    tr$run_sql("SELECT COUNT(*) FROM sales WHERE {{not_a_definition}}")
+    tr$run_sql("DELETE FROM sales")
+  })
+})
+
+test_that("$run_sql() loads pending pins", {
   skip_if_not_installed("pins")
   sales <- test_sales()
-  board <- board_with_pins(sales = sales, orders = sales[1:2, ])
   tr <- commons(
     data_sources = data_source(
-      board,
+      board_with_pins(sales = sales, orders = sales[1:2, ]),
       tables = c(sales = "sales", orders = "orders")
     )
   )
 
-  con <- tr$connection()
-  expect_equal(DBI::dbGetQuery(con, "SELECT * FROM sales"), sales)
-  expect_equal(DBI::dbGetQuery(con, "SELECT * FROM orders"), sales[1:2, ])
-  expect_identical(tr$connection(), con)
+  expect_equal(tr$run_sql("SELECT * FROM sales"), sales)
+  expect_equal(tr$run_sql("SELECT * FROM orders"), sales[1:2, ])
 })
 
 test_that("agent() builds an agent around a commons() object", {
