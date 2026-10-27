@@ -61,17 +61,24 @@
 #' uvx mcp-console configure-client codex --directory .
 #' ```
 #'
-#' A configured description replaces the one MCP Console generates, so start
-#' from an export of the resolved configuration:
+#' Then configure MCP Console to offer the model only R, so that it queries
+#' data through `commons$run_sql()` rather than sending SQL to a database
+#' itself, and to mention `commons` in its tool description. A configured
+#' description replaces the one MCP Console generates, so start from an export
+#' of the resolved configuration:
 #'
 #' ```bash
-#' uvx mcp-console config resolve --full > .agents/console/config.yaml
+#' mkdir -p .agents/console
+#' uvx mcp-console config resolve --full --no-project-config \
+#'   -c 'languages=[r]' > .agents/console/config.yaml
 #' ```
 #'
-#' In that file, add the same sentence to the end of the exported
-#' description:
+#' In that file, keep `languages: [r]`, and add the same sentence to the end
+#' of the exported description:
 #'
 #' ```yaml
+#' languages:
+#'   - r
 #' tool:
 #'   description: |-
 #'     # ...the exported description, unchanged...
@@ -85,8 +92,9 @@
 #' Claude Code shows the tool description only once the agent loads the tool,
 #' so add the sentence to the end of `tool.instructions` as well.
 #'
-#' If the commons has a context layer, `$context()` needs one more step for
-#' now. It relies on DuckDB's `fts` extension, which MCP Console's sandbox
+#' `$context()` needs one more step for now. This applies even without a
+#' context layer when a data source has a data dictionary or semantic model,
+#' since `$context()` searches those too. It relies on DuckDB's `fts` extension, which MCP Console's sandbox
 #' can't download. MCP Console can install the extension itself, but only
 #' into its own cache, which R's duckdb doesn't read by default. Point R at
 #' that cache with an absolute path (`~` and environment variables aren't
