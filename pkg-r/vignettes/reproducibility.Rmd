@@ -117,8 +117,10 @@ trusted_call <- function(calculation) {
 }
 
 sql_call <- function(calculation) {
-  call <- rlang::call2("sql", !!!calculation$arguments)
-  call[[1]] <- quote(commons$sql)
+  args <- calculation$arguments
+  names(args)[names(args) == "sql"] <- "query"
+  call <- rlang::call2("run_sql", !!!args)
+  call[[1]] <- quote(commons$run_sql)
   as_code(call)
 }
 

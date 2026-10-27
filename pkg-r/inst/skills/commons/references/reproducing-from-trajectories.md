@@ -36,7 +36,7 @@ The chunk decodes JSON parameter strings with `jsonlite::fromJSON(..., simplifyV
 
 ### 4. Recreate the inputs to custom code
 
-Retrieve authored SQL from `run_sql` requests and preserve the recorded source. Use `commons$sql()` to expand governed definitions and execute the query through the same path as the agent. The vignette's `sql_call()` helper generates this call without executing it. Do not manually substitute expressions from tool-result display text, call internal APIs, or send unresolved tokens to DBI.
+Retrieve authored SQL from `run_sql` requests and preserve the recorded source. Use `commons$run_sql(query, source)` to expand governed definitions and execute the read-only query through the same path as the agent, returning a data frame. The vignette's `sql_call()` helper maps the recorded `sql` argument to `query` and generates this call without executing it. Preserve `{{name}}` and `{{table::name}}` tokens for the commons to resolve. Do not manually substitute expressions from tool-result display text, call internal APIs, or send unresolved tokens to DBI.
 
 Assign results to the variables referenced by the selected R analysis, such as `r1` and `r2`. The corresponding tool responses advertise those handles. Query position alone is not sufficient to determine them. Match tabular materialization to commons' data-frame conversion and 10,000-row handle cap, and check types against the recorded schema when needed. Trusted results used by later code may also need to be assigned to their advertised handles. A measure can return an `ellmer::ContentToolResult` rather than a plain data frame. Inspect its value and any attached data to identify what the original handle exposed before creating the corresponding variable.
 
@@ -46,7 +46,7 @@ The `run_r` snippets contain the recorded R code. Review their imports, assignme
 
 ### 5. Assemble a readable analysis script
 
-Assemble one R script for the intended analysis using the reviewed snippets, with SQL passed to `commons$sql()`. Omit searches, schema inspection, and abandoned attempts, but retain the setup required by the selected calculations. Order queries, trusted calls, and R code by their dependencies so the script runs from top to bottom in one session. Interleave SQL and R when needed rather than assuming all SQL runs first. This is an analysis script, not a sequential replay engine.
+Assemble one R script for the intended analysis using the reviewed snippets, with SQL passed to `commons$run_sql()`. Omit searches, schema inspection, and abandoned attempts, but retain the setup required by the selected calculations. Order queries, trusted calls, and R code by their dependencies so the script runs from top to bottom in one session. Interleave SQL and R when needed rather than assuming all SQL runs first. This is an analysis script, not a sequential replay engine.
 
 Limit script comments to the relevant user question and follow-ups that changed its scope, plus details essential to running or correctly interpreting the analysis that are not evident from the code. Preserve the user's wording where practical and omit irrelevant or sensitive details. Do not copy the full transcript or include user identity.
 
