@@ -48,7 +48,7 @@ A \code{commons_data_source} R6 object. Its internals are private and may
 change without notice.
 }
 \description{
-A data source is the set of tables available to a \code{\link[=commons]{commons()}} agent.
+A data source is the set of tables gathered by \code{\link[=commons]{commons()}}.
 }
 \details{
 \code{data_source()} accepts data in several forms, picked by the class of what
@@ -62,7 +62,7 @@ when the data isn't already in a database.
 in-process database: each pin in \code{tables} becomes a table. Pin names are
 validated against the board at construction (a single listing call), but
 each pin is downloaded only when its table is first used. Calling the
-agent's \code{prewarm()} method (see \code{\link[=commons]{commons()}}) starts a background process
+agent's \code{prewarm()} method (see \code{\link[=agent]{agent()}}) starts a background process
 that downloads the remaining pins into the local
 pins cache, so a first use typically only reads an already-downloaded
 file. Since the pins cache is on disk, \code{prewarm()} can also run

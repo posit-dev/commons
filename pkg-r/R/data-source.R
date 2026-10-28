@@ -1,6 +1,6 @@
 #' Create a data source
 #'
-#' A data source is the set of tables available to a [commons()] agent.
+#' A data source is the set of tables gathered by [commons()].
 #'
 #' `data_source()` accepts data in several forms, picked by the class of what
 #' you pass:
@@ -13,7 +13,7 @@
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
 #'   each pin is downloaded only when its table is first used. Calling the
-#'   agent's `prewarm()` method (see [commons()]) starts a background process
+#'   agent's `prewarm()` method (see [agent()]) starts a background process
 #'   that downloads the remaining pins into the local
 #'   pins cache, so a first use typically only reads an already-downloaded
 #'   file. Since the pins cache is on disk, `prewarm()` can also run
