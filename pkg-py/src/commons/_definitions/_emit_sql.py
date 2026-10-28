@@ -329,6 +329,10 @@ def _divide(node: Ir, state: _State, selected: str | None) -> str:
     dialect = state.dialect
     numerator = _child(node.attrs["lhs"], 0, "free", state, selected)
     divisor = _child(node.attrs["rhs"], 0, "free", state, selected)
+    # Parenthesize compound operands so `a / (b * c)` keeps its grouping.
+    quotient = _infix(
+        node.attrs["lhs"], node.attrs["rhs"], "/", _MULTIPLICATIVE, state, selected
+    )
     nan = _non_finite_literal("nan", dialect)
     infinity = _non_finite_literal("inf", dialect)
     negative_infinity = _non_finite_literal("-inf", dialect)
@@ -339,7 +343,7 @@ def _divide(node: Ir, state: _State, selected: str | None) -> str:
         f"WHEN {numerator} IS NULL THEN NULL "
         f"WHEN {is_nan} OR {numerator} = 0 THEN {nan} "
         f"WHEN {numerator} < 0 THEN {negative_infinity} ELSE {infinity} END "
-        f"ELSE {numerator} / {divisor} END"
+        f"ELSE {quotient} END"
     )
 
 
