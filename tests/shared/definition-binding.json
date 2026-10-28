@@ -239,6 +239,88 @@
       "expect": { "error": "absent_column" }
     },
     {
+      "name": "a pattern selection that matches no authored column is refused",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [
+              { "name": "any_set", "expr": "COLUMNS('^missing') IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "empty_selection" }
+    },
+    {
+      "name": "a table's match is refused before its empty selection",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "unmatched",
+            "columns": [{ "name": "id", "type": "number(quantity)" }],
+            "definitions": [
+              { "name": "any_set", "expr": "COLUMNS('^missing') IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "unmatched_table" }
+    },
+    {
+      "name": "an empty selection is refused before an earlier definition's absent column",
+      "backend": "snowflake",
+      "identifier_case": "upper",
+      "dictionary": {
+        "tables": [
+          {
+            "name": "sales",
+            "columns": [
+              { "name": "id", "type": "number(quantity)" },
+              { "name": "ghost", "type": "number(quantity)" }
+            ],
+            "definitions": [
+              { "name": "total", "expr": "sum(ghost)" },
+              { "name": "any_set", "expr": "COLUMNS('^missing') IS NOT NULL" }
+            ]
+          }
+        ]
+      },
+      "relations": [
+        {
+          "label": "ANALYTICS.PUBLIC.SALES",
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES",
+          "columns": [{ "column": "ID", "type": "NUMBER(38,0)" }]
+        }
+      ],
+      "expect": { "error": "empty_selection" }
+    },
+    {
       "name": "a table with definitions that matched no relation is refused",
       "backend": "snowflake",
       "identifier_case": "upper",
