@@ -1,8 +1,7 @@
 # Create a data source
 
-A data source is the set of tables available to a
-[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
-agent.
+A data source is the set of tables gathered by
+[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md).
 
 ## Usage
 
@@ -81,7 +80,7 @@ what you pass:
   construction (a single listing call), but each pin is downloaded only
   when its table is first used. Calling the agent's `prewarm()` method
   (see
-  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md))
+  [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md))
   starts a background process that downloads the remaining pins into the
   local pins cache, so a first use typically only reads an
   already-downloaded file. Since the pins cache is on disk, `prewarm()`

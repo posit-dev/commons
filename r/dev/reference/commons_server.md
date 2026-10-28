@@ -30,11 +30,11 @@ commons_theme(..., preset = "shiny")
 
 - client:
 
-  A
-  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
-  agent. In a deployed app, create the agent inside the server function
-  and pass it to `commons_server()` so each Shiny session gets its own
-  agent state.
+  An
+  [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
+  In a deployed app, create the agent inside the server function and
+  pass it to `commons_server()` so each Shiny session gets its own agent
+  state.
 
 - ...:
 
@@ -75,9 +75,9 @@ ui <- page_chat("Assistant", id = "chat", theme = commons_theme())
 
 server <- function(input, output, session) {
   # One agent per session, so each user gets their own agent state
-  agent <- commons(
+  agent <- agent(
     ellmer::chat_anthropic(),
-    data_sources = data_source(sales = sales)
+    commons = commons(data_sources = data_source(sales = sales))
   )
   commons_server("chat", agent)
 }

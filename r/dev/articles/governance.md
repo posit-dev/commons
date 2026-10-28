@@ -28,7 +28,7 @@ sent to the model provider, so the agent should not have access to data
 that you [do not trust that provider to
 process](https://posit.co/blog/trust-llm-tools).
 
-An agent created with `commons(mode = "trusted only")` has neither
+An agent created with `agent(mode = "trusted only")` has neither
 `run_sql` nor `run_r`. It can run only trusted calculations and inspect
 table schemas, so the SQL and R code execution sections below don’t
 apply to it.
@@ -110,8 +110,8 @@ The Linux sandbox also caps the subprocess’s virtual address space at 8
 GiB; a lower limit inherited from Connect still applies.
 
 By default, the subprocess cannot create network sockets. An application
-author can opt in to network access with `commons(network = "full")`;
-the filesystem sandbox remains in place, but R code can then contact
+author can opt in to network access with `agent(network = "full")`; the
+filesystem sandbox remains in place, but R code can then contact
 services reachable from the deployment and transmit data from result
 handles. Only enable network access when that egress is required and
 acceptable.
@@ -171,7 +171,7 @@ from that audience.
 
 ## Logging trajectories
 
-Trajectory logging is disabled by default. With `commons(log = TRUE)`,
+Trajectory logging is disabled by default. With `agent(log = TRUE)`,
 commons asks ellmer to include message content in OpenTelemetry spans.
 These spans contain full conversation histories, including user
 messages, model responses, tool requests, and tool results. Treat them
@@ -180,7 +180,7 @@ as another copy of the data available to the agent.
 On Connect, both the server administrator and application author must
 opt in for the data to flow. The administrator must enable OpenTelemetry
 and allow content instrumentation. The application author sets
-`commons(log = TRUE)` and includes
+`agent(log = TRUE)` and includes
 `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the `envVars`
 argument to
 [`rsconnect::deployApp()`](https://rstudio.github.io/rsconnect/reference/deployApp.html).

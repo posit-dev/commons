@@ -2,10 +2,11 @@
 
 ## Main functions
 
-The main agent constructor, plus the building blocks for a commons
-agent.
+The main constructor, plus the building blocks for a commons agent.
 
 - [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  : Gather trusted calculations and context
+- [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md)
   : Create a commons agent
 - [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
   : Create a data source

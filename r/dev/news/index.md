@@ -2,7 +2,44 @@
 
 ## commons (development version)
 
-- [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+- The
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  function was split into two. Calls to
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  previously looked like this:
+
+  ``` r
+
+  commons <- commons(client, data_sources, semantic_layer, context_layer)
+  ```
+
+  The construction of the data structure that holds the data sources,
+  semantic layer, and context layer and the construction of the agent
+  harness that makes that information available to an LLM are now split
+  into two pieces.
+
+  ``` r
+
+  commons <- commons(data_sources = ..., semantic_layer = ..., context_layer = ...)
+  agent <- agent(client, commons = commons)
+  ```
+
+  We call that first data structure “the commons.” The commons can be
+  used to invoke trusted code and search trusted context directly from R
+  and is intended for use with other coding agents. See `?commons()` to
+  learn more.
+  [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md)
+  returns what
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  used to return—a commons agent.
+
+  This transition was implemented backward-compatibly; existing calls to
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  will raise a deprecation warning with migration instructions.
+
+- [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md)
+  (formerly
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md))
   gains a `mode` argument. With `mode = "trusted only"`, the agent
   answers only with trusted calculations. It never writes its own SQL or
   R, and it tells the user when no trusted calculation answers a

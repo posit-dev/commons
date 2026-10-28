@@ -61,7 +61,7 @@ assemble the UI and server yourself with <code><a href="commons_server.html">com
 
 
 <dl><dt id="arg-client">client<a class="anchor" aria-label="anchor" href="#arg-client"></a></dt>
-<dd><p>A <code><a href="commons.html">commons()</a></code> agent.</p></dd>
+<dd><p>An <code><a href="agent.html">agent()</a></code>.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -86,9 +86,9 @@ cites nothing verified.</p>
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># \dontrun{</span></span></span>
-<span class="r-in"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="commons.html">commons</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span><span class="va">agent</span> <span class="op">&lt;-</span> <span class="fu"><a href="agent.html">agent</a></span><span class="op">(</span></span></span>
 <span class="r-in"><span>  <span class="fu">ellmer</span><span class="fu">::</span><span class="fu"><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">chat_anthropic</a></span><span class="op">(</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>  data_sources <span class="op">=</span> <span class="fu"><a href="data_source.html">data_source</a></span><span class="op">(</span>sales <span class="op">=</span> <span class="va">sales</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  commons <span class="op">=</span> <span class="fu"><a href="commons.html">commons</a></span><span class="op">(</span>data_sources <span class="op">=</span> <span class="fu"><a href="data_source.html">data_source</a></span><span class="op">(</span>sales <span class="op">=</span> <span class="va">sales</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu">commons_app</span><span class="op">(</span><span class="va">agent</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span> <span class="co"># }</span></span></span>

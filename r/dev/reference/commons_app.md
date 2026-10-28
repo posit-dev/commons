@@ -20,9 +20,8 @@ commons_app(client, ...)
 
 - client:
 
-  A
-  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
-  agent.
+  An
+  [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
 
 - ...:
 
@@ -46,9 +45,9 @@ when a fallback answer cites nothing verified.
 
 ``` r
 if (FALSE) { # \dontrun{
-agent <- commons(
+agent <- agent(
   ellmer::chat_anthropic(),
-  data_sources = data_source(sales = sales)
+  commons = commons(data_sources = data_source(sales = sales))
 )
 commons_app(agent)
 } # }

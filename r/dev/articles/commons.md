@@ -126,8 +126,8 @@ The agent itself does not determine the provenance outcome. commons
 derives it deterministically from the agent’s behavior.
 
 To turn off the lower-trust path altogether, use
-`commons(mode = "trusted only")`. In this mode, the agent can’t write
-its own SQL or R code; it answers only with trusted calculations. If no
+`agent(mode = "trusted only")`. In this mode, the agent can’t write its
+own SQL or R code; it answers only with trusted calculations. If no
 trusted calculation answers a question, it tells the user so. Since
 every answer comes from a trusted calculation, answers carry no
 provenance markers.
@@ -336,12 +336,15 @@ files:
 
 ## Constructing the agent
 
-Use
+Construct an agent in two steps. First, use
 [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
-to construct an agent. Pass it an ellmer `Chat` and one or more data
-sources, along with any semantic and context layers. You can also
-optionally append information to the commons agent system prompt using
-the `instructions` argument.
+to gather one or more data sources, along with any semantic and context
+layers, into “the commons”. Then pass an ellmer `Chat` and the commons
+to
+[`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
+You can also optionally append information to the commons agent system
+prompt using the `instructions` argument to
+[`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
 
 ``` r
 
@@ -353,11 +356,15 @@ biodiversity <- data_source(
   dictionary = "dictionaries/biodiversity.yaml"
 )
 
-agent <- commons(
-  client = ellmer::chat("anthropic/claude-sonnet-5"),
+commons <- commons(
   data_sources = list(biodiversity = biodiversity),
   semantic_layer = semantic_layer("measures"),
-  context_layer = context_layer("context/context.md"),
+  context_layer = context_layer("context/context.md")
+)
+
+agent <- agent(
+  client = ellmer::chat("anthropic/claude-sonnet-5"),
+  commons = commons,
   instructions = "instructions.md"
 )
 

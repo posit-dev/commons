@@ -1,9 +1,9 @@
 # Create a semantic layer
 
-`semantic_layer()` collects trusted calculations for a
-[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
-agent. Data dictionary definitions and warehouse semantic models
-contribute through
+`semantic_layer()` collects trusted calculations for
+[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md).
+Data dictionary definitions and warehouse semantic models contribute
+through
 [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md).
 
 ## Usage
@@ -97,10 +97,12 @@ if (FALSE) { # \dontrun{
 #   DBI::dbGetQuery(warehouse, ...)
 # }
 
-agent <- commons(
+agent <- agent(
   ellmer::chat_anthropic(),
-  data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
-  semantic_layer = semantic_layer("R/semantic_layer.R")
+  commons = commons(
+    data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
+    semantic_layer = semantic_layer("R/semantic_layer.R")
+  )
 )
 } # }
 ```
