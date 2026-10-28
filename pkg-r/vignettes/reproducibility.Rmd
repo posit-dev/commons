@@ -20,7 +20,7 @@ There are few prerequisites to reproducing an analysis done by a commons agent. 
 3. Working connections to the data sources used in the analysis.
 4. If reading the trajectory from Connect: owner or collaborator access to the content and a configured `CONNECT_API_KEY`. See `?trajectory_read` for setup.
 
-Also note that the commons layers, data, or packages may have changed since the agent ran the analysis, so re-running the code in this way may not reproduce results exactly.
+Also note that the commons layers, data, or packages may have changed since the agent ran the analysis, and the data source rows and tables available to the app user might be different than the data available to you as the author, so re-running the code in this way may not reproduce results exactly.
 
 ## Create the analysis script
 
