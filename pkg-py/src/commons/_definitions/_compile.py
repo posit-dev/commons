@@ -20,6 +20,7 @@ from ._registry import ExportRecord
 
 __all__ = [
     "DefinitionAbsentColumnError",
+    "DefinitionEmptySelectionError",
     "DefinitionMixedGrainError",
     "DefinitionUnmatchedTableError",
     "attach_compiled_definitions",
@@ -39,6 +40,10 @@ class DefinitionUnmatchedTableError(ValueError):
 
 class DefinitionAbsentColumnError(ValueError):
     """A definition names an authored column the matched relation lacks."""
+
+
+class DefinitionEmptySelectionError(ValueError):
+    """A `COLUMNS(...)` selection matches none of the authored columns."""
 
 
 class DefinitionMixedGrainError(ValueError):
@@ -148,7 +153,8 @@ def attach_compiled_definitions(
     The refusals are checked in the order the definition-binding contract
     pins, so a dictionary with several faults reports the same one in either
     package: metric grain on every table, then the dialect, then each table
-    in authored order, its match before its columns.
+    in authored order: its match, then every definition's selection, then its
+    columns.
     """
     exports: dict[str, dict[str, DefinitionExport]] = {
         authored: definitions
@@ -173,6 +179,7 @@ def attach_compiled_definitions(
         # A catalog import re-keys the dictionary to the warehouse's labels,
         # so the bindings are how an authored table's exports find its entry.
         table_name = _definition_table(authored, exposed, bindings)
+        _check_selections(definitions, table_name)
         if bindings is not None:
             definitions = _bind_table(
                 definitions, bindings["columns"].get(authored) or {}, table_name
@@ -208,6 +215,21 @@ def _definition_table(
             f"selects it, or drop it from the data dictionary."
         )
     return label
+
+
+def _check_selections(definitions: dict[str, DefinitionExport], table: str) -> None:
+    """Refuse a `COLUMNS(...)` selection that matched no authored column.
+
+    It would lower to an empty SQL expression on every target.
+    """
+    for name, definition in definitions.items():
+        selection = definition.selection
+        if selection is not None and not selection["columns"]:
+            raise DefinitionEmptySelectionError(
+                f"Definition {name!r} on table {table!r} selects columns, and "
+                f"its selection matches none of the columns the data "
+                f"dictionary describes."
+            )
 
 
 def _check_metric_grain(table: str, definitions: dict[str, DefinitionExport]) -> None:

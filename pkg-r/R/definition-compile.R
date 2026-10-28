@@ -56,6 +56,7 @@ definition_bind_export <- function(
   )
   tables <- lapply(tables, function(table) {
     binding <- definition_source_binding(source, table$name, call = call)
+    definition_check_selections(table$definitions, table$name, call = call)
     markers <- definition_reference_markers(table$definitions, binding)
     definitions <- lapply(table$definitions, function(definition) {
       definition_bind_one(
@@ -103,6 +104,21 @@ definition_check_metric_grain <- function(tables, call) {
           i = "The dependency chain mixes row and aggregate grain and requires a subquery rewrite."
         ),
         class = "commons_definition_mixed_grain_error",
+        call = call
+      )
+    }
+  }
+}
+
+# A COLUMNS(...) selection that matched no authored column would lower to an
+# empty SQL expression on every target.
+definition_check_selections <- function(definitions, table, call) {
+  for (definition in definitions) {
+    selection <- attr(definition, "selection", exact = TRUE)
+    if (!is.null(selection) && length(selection$columns) == 0L) {
+      cli::cli_abort(
+        "Definition {.val {definition$name}} on table {.val {table}} selects columns, and its selection matches none of the columns the data dictionary describes.",
+        class = "commons_definition_empty_selection_error",
         call = call
       )
     }
