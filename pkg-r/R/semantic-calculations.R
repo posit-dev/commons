@@ -151,7 +151,11 @@ resolve_calculation <- function(
   available <- unique(vapply(calculations, `[[`, character(1), "key"))
   cli::cli_abort(c(
     "No trusted calculation is named {.val {name}}.",
-    "i" = "Available calculations: {.val {available}}."
+    "i" = if (length(available)) {
+      "Available calculations: {.val {available}}."
+    } else {
+      "No trusted calculations are defined."
+    }
   ), call = call)
 }
 

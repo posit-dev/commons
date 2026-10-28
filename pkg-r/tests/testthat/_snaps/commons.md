@@ -158,6 +158,21 @@
       i Pass a string like `"project = 'dplyr' AND date >= '2026-06-01'"`, or a list of `c(column, op, value)` triples.
       i Operators: `=`, `!=`, `<`, `<=`, `>`, and `>=`, joined by `AND`.
 
+# missing calculations and metrics don't list empty alternatives
+
+    Code
+      tr$calculation("nope")
+    Condition
+      Error in `run_calculation()`:
+      ! No trusted calculation is named "nope".
+      i No trusted calculations are defined.
+    Code
+      tr$metrics("nope")
+    Condition
+      Error in `FUN()`:
+      ! No governed metric is named "nope".
+      i No governed metrics are defined.
+
 # commons() prints its contents and method signatures
 
     Code
@@ -190,11 +205,8 @@
       Sources: sales_db. Tables: sales.
       Methods:
         $search(query)
-        $context(query)
         $describe(table, source = NULL)
         $run_sql(query, source = NULL)
-      This object provides access to trusted code and context. Before writing
-      your own analysis code or SQL, check `$context("your query")` for
-      guidance on the approach. Say in your answer which numbers came from
-      trusted calculations and which didn't.
+      This object provides access to trusted code and context. Say in your
+      answer which numbers came from trusted calculations and which didn't.
 

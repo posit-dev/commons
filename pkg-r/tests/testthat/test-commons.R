@@ -171,6 +171,26 @@ test_that("$metrics() accepts `where` as a string or unnamed triples", {
   })
 })
 
+test_that("`where` strings reject malformed conditions", {
+  expect_equal(
+    as_where_triples("\"region\" = 'EMEA' AND revenue > 0"),
+    as_where_triples("region = 'EMEA' AND revenue > 0")
+  )
+  expect_error(as_where_triples("a = 1 AND "), class = "rlang_error")
+  expect_error(as_where_triples("a = 1AND b = 2"), class = "rlang_error")
+  expect_error(as_where_triples("\"a = 1"), class = "rlang_error")
+  expect_error(as_where_triples("a\" = 1"), class = "rlang_error")
+})
+
+test_that("missing calculations and metrics don't list empty alternatives", {
+  tr <- commons(data_sources = list(sales_db = test_source()))
+
+  expect_snapshot(error = TRUE, {
+    tr$calculation("nope")
+    tr$metrics("nope")
+  })
+})
+
 test_that("$metrics() preserves quoted numeric strings in where", {
   sales <- data.frame(region = c("001", "1"), revenue = c(10, 20))
   tr <- commons(

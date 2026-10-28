@@ -227,7 +227,11 @@ metric_origin <- function(name, definitions, semantic_members) {
     )
     cli::cli_abort(c(
       "No governed metric is named {.val {name}}.",
-      "i" = "Available metrics: {.val {available}}."
+      "i" = if (length(available)) {
+        "Available metrics: {.val {available}}."
+      } else {
+        "No governed metrics are defined."
+      }
     ))
   }
 }

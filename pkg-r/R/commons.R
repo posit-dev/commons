@@ -347,6 +347,8 @@ commons_overview <- function(state) {
   runners <- c("measure", "metrics", "calculation")[
     c(length(measures) > 0, n_metrics > 0, length(state$calculations) > 0)
   ]
+  # Includes dictionary and semantic model context, not just a context layer.
+  has_context <- !is.null(state$context_layer)
   run_with <- cli::ansi_collapse(
     sprintf("`$%s()`", runners),
     sep2 = " or ",
@@ -372,25 +374,35 @@ commons_overview <- function(state) {
     if (state$has_context_layer) "Business context is available.",
     "Methods:",
     commons_method_signatures(
-      hide = setdiff(c("measure", "metrics", "calculation"), runners)
+      hide = c(
+        setdiff(c("measure", "metrics", "calculation"), runners),
+        if (!has_context) "context"
+      )
     ),
     strwrap(paste(
-      "This object provides access to trusted code and context.",
-      if (length(runners)) {
-        paste(
-          "Before writing your own analysis code or SQL, look for existing",
-          "code with `$search()` and run it with", paste0(run_with, "."),
-          "When none fits, check `$context(\"your query\")` for guidance on",
-          "the approach."
-        )
-      } else {
-        paste(
-          "Before writing your own analysis code or SQL, check",
-          "`$context(\"your query\")` for guidance on the approach."
-        )
-      },
-      "Say in your answer which numbers came from trusted calculations and",
-      "which didn't."
+      c(
+        "This object provides access to trusted code and context.",
+        if (length(runners)) {
+          c(
+            "Before writing your own analysis code or SQL, look for existing",
+            "code with `$search()` and run it with", paste0(run_with, "."),
+            if (has_context) {
+              c(
+                "When none fits, check `$context(\"your query\")` for",
+                "guidance on the approach."
+              )
+            }
+          )
+        } else if (has_context) {
+          c(
+            "Before writing your own analysis code or SQL, check",
+            "`$context(\"your query\")` for guidance on the approach."
+          )
+        },
+        "Say in your answer which numbers came from trusted calculations and",
+        "which didn't."
+      ),
+      collapse = " "
     ))
   )
 }
@@ -461,8 +473,10 @@ as_where_triples <- function(where, call = rlang::caller_env()) {
 
 parse_where_string <- function(where, call = rlang::caller_env()) {
   condition <- paste0(
-    "^\\s*\"?([A-Za-z_][A-Za-z0-9_]*)\"?\\s*(<=|>=|!=|<>|=|<|>)\\s*",
-    "('(?:[^']|'')*'|-?[0-9]+(?:\\.[0-9]+)?)\\s*(?:(?i:AND)\\s+|$)"
+    "^\\s*(?|\"([A-Za-z_][A-Za-z0-9_]*)\"|([A-Za-z_][A-Za-z0-9_]*))",
+    "\\s*(<=|>=|!=|<>|=|<|>)\\s*",
+    "('(?:[^']|'')*'|-?[0-9]+(?:\\.[0-9]+)?)",
+    "(?:\\s+(?i:AND)\\s+(?=\\S)|\\s*$)"
   )
   rest <- where
   triples <- list()
