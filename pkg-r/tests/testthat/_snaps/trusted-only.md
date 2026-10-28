@@ -12,7 +12,7 @@
     Code
       trusted_agent(semantic_layer = semantic_layer(count_measure_tool()), network = "full")
     Condition
-      Error in `commons()`:
+      Error in `agent()`:
       ! `network = "full"` can't be combined with `mode = "trusted only"`, which has no R session.
 
 # call_metrics errors don't point at fallback tools
@@ -28,6 +28,6 @@
     Code
       call(filters = "above_minimum")
     Condition
-      Error in `call_metrics_impl()`:
+      Error in `query_metrics()`:
       ! Mixed-grain filter "above_minimum" cannot be applied by `call_metrics()`, and no other trusted calculation can apply it.
 

@@ -1,6 +1,6 @@
 #' Create a semantic layer
 #'
-#' `semantic_layer()` collects trusted calculations for a [commons()] agent.
+#' `semantic_layer()` collects trusted calculations for [commons()].
 #' Data dictionary definitions and warehouse semantic models contribute through
 #' [data_source()].
 #'
@@ -68,10 +68,12 @@
 #' #   DBI::dbGetQuery(warehouse, ...)
 #' # }
 #'
-#' agent <- commons(
+#' agent <- agent(
 #'   ellmer::chat_anthropic(),
-#'   data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
-#'   semantic_layer = semantic_layer("R/semantic_layer.R")
+#'   commons = commons(
+#'     data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
+#'     semantic_layer = semantic_layer("R/semantic_layer.R")
+#'   )
 #' )
 #' }
 #'

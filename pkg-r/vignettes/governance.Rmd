@@ -26,7 +26,7 @@ A commons agent is an ellmer chat with a system prompt and a set of tools. The s
 
 We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like "never reveal sensitive data." Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider, so the agent should not have access to data that you [do not trust that provider to process](https://posit.co/blog/trust-llm-tools).
 
-An agent created with `commons(mode = "trusted only")` has neither `run_sql` nor `run_r`. It can run only trusted calculations and inspect table schemas, so the SQL and R code execution sections below don't apply to it.
+An agent created with `agent(mode = "trusted only")` has neither `run_sql` nor `run_r`. It can run only trusted calculations and inspect table schemas, so the SQL and R code execution sections below don't apply to it.
 
 ## SQL code execution
 
@@ -60,7 +60,7 @@ On Linux (which underlies [Posit Connect](https://posit.co/products/enterprise/c
 
 The filesystem sandbox gives the subprocess read access to R, installed packages, and required operating-system directories. It can write only to temporary directories used by the subprocess and its communication with the main R process. The seccomp filters prevent it from inspecting another process's memory or changing mount and namespace configuration. The Linux sandbox also caps the subprocess's virtual address space at 8 GiB; a lower limit inherited from Connect still applies.
 
-By default, the subprocess cannot create network sockets. An application author can opt in to network access with `commons(network = "full")`; the filesystem sandbox remains in place, but R code can then contact services reachable from the deployment and transmit data from result handles. Only enable network access when that egress is required and acceptable.
+By default, the subprocess cannot create network sockets. An application author can opt in to network access with `agent(network = "full")`; the filesystem sandbox remains in place, but R code can then contact services reachable from the deployment and transmit data from result handles. Only enable network access when that egress is required and acceptable.
 
 For local development on macOS, commons applies a similar filesystem and network policy using Seatbelt. Windows has no OS-level sandbox for the agent's R session. Deployed Connect applications run on Linux and use the Linux mechanisms described above.
 
@@ -88,8 +88,8 @@ Only include facts and source code that may be shared with both the application'
 
 ## Logging trajectories
 
-Trajectory logging is disabled by default. With `commons(log = TRUE)`, commons asks ellmer to include message content in OpenTelemetry spans. These spans contain full conversation histories, including user messages, model responses, tool requests, and tool results. Treat them as another copy of the data available to the agent.
+Trajectory logging is disabled by default. With `agent(log = TRUE)`, commons asks ellmer to include message content in OpenTelemetry spans. These spans contain full conversation histories, including user messages, model responses, tool requests, and tool results. Treat them as another copy of the data available to the agent.
 
-On Connect, both the server administrator and application author must opt in for the data to flow. The administrator must enable OpenTelemetry and allow content instrumentation. The application author sets `commons(log = TRUE)` and includes `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the `envVars` argument to `rsconnect::deployApp()`. commons enables [Content Observability](https://docs.posit.co/connect/user/content-settings/#content-observability) for the content item when needed, although capture begins only after the content process restarts.
+On Connect, both the server administrator and application author must opt in for the data to flow. The administrator must enable OpenTelemetry and allow content instrumentation. The application author sets `agent(log = TRUE)` and includes `"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT"` in the `envVars` argument to `rsconnect::deployApp()`. commons enables [Content Observability](https://docs.posit.co/connect/user/content-settings/#content-observability) for the content item when needed, although capture begins only after the content process restarts.
 
 Content owners and collaborators can read Connect trajectories with `trajectory_read()`. If a conversation is flagged or annotated in `trajectory_review()`, the reviewer writes a Markdown document containing the complete reviewer-visible conversation and its tool activity. Store these files only in an appropriately protected location, and carry out reviews in an environment trusted to handle internal user data, such as [Posit Workbench](https://posit.co/products/enterprise/workbench). Retention and access controls for the underlying OpenTelemetry data are determined by Connect or the configured exporter, not by commons.

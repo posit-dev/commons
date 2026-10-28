@@ -151,13 +151,42 @@ resolve_calculation <- function(
   available <- unique(vapply(calculations, `[[`, character(1), "key"))
   cli::cli_abort(c(
     "No trusted calculation is named {.val {name}}.",
-    "i" = "Available calculations: {.val {available}}."
+    "i" = if (length(available)) {
+      "Available calculations: {.val {available}}."
+    } else {
+      "No trusted calculations are defined."
+    }
   ), call = call)
 }
 
 call_calculation_impl <- function(
   sources,
   handles,
+  name,
+  arguments = "{}",
+  source_name = NULL
+) {
+  run <- run_calculation(sources, name, arguments, source_name)
+  result <- run$result
+  prepared <- run$prepared
+  advert <- register_handle(handles, result)
+  tool_result(
+    paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
+    title = "Ran a trusted calculation",
+    icon = maybe_icon("shield-check"),
+    markdown = sprintf(
+      "```sql\n%s\n```\n\n%s",
+      prepared$sql,
+      df_to_markdown(result)
+    ),
+    html = measure_display_html(prepared$arguments, result),
+    tag = "A",
+    show_tag = FALSE
+  )
+}
+
+run_calculation <- function(
+  sources,
   name,
   arguments = "{}",
   source_name = NULL
@@ -177,20 +206,9 @@ call_calculation_impl <- function(
     parse_json_args(arguments),
     data_source_state(source)$con
   )
-  result <- source_query_bind(source, prepared$sql, prepared$bindings)
-  advert <- register_handle(handles, result)
-  tool_result(
-    paste(c(df_to_markdown(result), advert), collapse = "\n\n"),
-    title = "Ran a trusted calculation",
-    icon = maybe_icon("shield-check"),
-    markdown = sprintf(
-      "```sql\n%s\n```\n\n%s",
-      prepared$sql,
-      df_to_markdown(result)
-    ),
-    html = measure_display_html(prepared$arguments, result),
-    tag = "A",
-    show_tag = FALSE
+  list(
+    result = source_query_bind(source, prepared$sql, prepared$bindings),
+    prepared = prepared
   )
 }
 
@@ -418,7 +436,11 @@ calculation_tokens <- function(sql) {
   substr(tokens, 3L, nchar(tokens) - 2L)
 }
 
-calculation_pool_text <- function(calculation, source_names = character()) {
+calculation_pool_text <- function(
+  calculation,
+  source_names = character(),
+  methods = FALSE
+) {
   arguments <- calculation$arguments
   argument_text <- if (length(arguments)) {
     paste(vapply(arguments, function(argument) {
@@ -452,11 +474,17 @@ calculation_pool_text <- function(calculation, source_names = character()) {
   } else {
     ""
   }
+  run <- if (methods) {
+    sprintf("`$calculation(\"%s\")`", calculation$key)
+  } else {
+    "`call_calculation`"
+  }
   sprintf(
-    "### %s --- trusted query\n%s\nArguments: %s.%s\nRun with `call_calculation`.",
+    "### %s --- trusted query\n%s\nArguments: %s.%s\nRun with %s.",
     calculation$key,
     calculation$description,
     argument_text,
-    source
+    source,
+    run
   )
 }
