@@ -44,6 +44,61 @@ test_that("$run_sql() loads pending pins", {
   expect_equal(tr$run_sql("SELECT * FROM orders"), sales[1:2, ])
 })
 
+test_that("$calculation() runs trusted calculations", {
+  source <- test_source()
+  state <- data_source_state(source)
+  state$calculations <- list(test_calculation())
+  tr <- commons(data_sources = list(sales_db = source))
+
+  result <- tr$calculation(
+    "preview_value",
+    arguments = list(column = "region", value = 2)
+  )
+
+  expect_s3_class(result, "data.frame")
+  expect_named(result, c("region", "bound_value"))
+  expect_equal(result$bound_value, 2)
+  expect_error(
+    tr$calculation(
+      "preview_value",
+      arguments = list(column = "secret", value = 2)
+    ),
+    "does not allow"
+  )
+})
+
+test_that("$context() searches a context layer", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
+  withr::local_options(commons.context_cache = withr::local_tempdir())
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines(c("# Revenue", "", "Revenue means booked revenue."), path)
+  tr <- commons(
+    data_sources = list(sales_db = test_source()),
+    context_layer = context_layer(files = path)
+  )
+
+  expect_match(tr$context("what counts as revenue?"), "booked revenue")
+})
+
+test_that("$context() searches data dictionaries without a context layer", {
+  # requires duckdb extensions via ragnar (#400)
+  skip_on_cran()
+  withr::local_options(commons.context_cache = withr::local_tempdir())
+  tr <- commons(data_sources = list(sales_db = definitions_source()))
+
+  expect_match(tr$context("what is one row of sales?"), "One row per order line")
+})
+
+test_that("$describe() describes a table's columns", {
+  tr <- commons(data_sources = list(sales_db = test_source()))
+  description <- tr$describe("sales")
+
+  for (column in names(test_sales())) {
+    expect_match(description, column, fixed = TRUE)
+  }
+})
+
 test_that("agent() builds an agent around a commons() object", {
   withr::local_options(commons.allow_unsafe_fallback = TRUE)
   tr <- commons(data_sources = list(sales_db = test_source()))
