@@ -1,7 +1,7 @@
 ---
 name: commons
 description: >-
-  Build and maintain self-service data agents created with Posit's commons R package. Use when the user mentions a commons data agent or a project uses commons package APIs such as agent(), commons(), data_source(), semantic_layer(), context_layer(), or trajectory_read(), including onboarding, commons data dictionaries, trusted-artifact extraction, evaluation, and trajectory-based improvement. Do not use for unrelated data dictionaries, generic AI agents, or common or shared resources.
+  Build and maintain self-service data agents created with Posit's commons R package. Use when the user mentions a commons data agent or a project uses commons package APIs such as agent(), commons(), data_source(), semantic_layer(), context_layer(), or trajectory_read(), including onboarding, commons data dictionaries, trusted-artifact extraction, evaluation, analysis reproduction from trajectories, and trajectory-based improvement. Do not use for unrelated data dictionaries, generic AI agents, or common or shared resources.
 ---
 
 # commons
@@ -12,6 +12,7 @@ Read the relevant reference below before starting the corresponding task.
 - [Use data dictionaries with commons](references/data-dictionaries.md) - read alongside onboarding or extraction when creating, reviewing, or editing a data dictionary.
 - [Extract commons context from existing data artifacts](references/extracting-from-artifacts.md) - turn a trusted Shiny app, Quarto report, R script, or SQL file into measures, governed definitions, dictionary edits, and free-text context, each carrying provenance back to its source.
 - [Evaluating a commons agent](references/evaluation.md) - create an evaluation for a commons agent to determine whether it is working correctly.
+- [Reproduce an analysis from trajectories](references/reproducing-from-trajectories.md) - assemble a runnable analysis script from extracted calculations and matching results using the available commons layers, without replaying the conversation or changing the layers.
 - [Iterate on a commons agent from trajectories](references/iterating-from-trajectories.md) - improve an existing agent from reviewed conversations when available, or from raw logged trajectories otherwise, then propose semantic layer or context layer changes.
 
 ## Working principles

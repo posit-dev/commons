@@ -61,7 +61,8 @@
 #'   and `OpenTelemetry.AllowContentInstrumentation = true`.
 #'
 #'   Once the agent is deployed and serving traffic, you can read conversation
-#'   histories back into R with [trajectory_read()].
+#'   histories back into R with [trajectory_read()]. Logging also records the
+#'   authenticated Shiny session user, when supplied by Connect, for attribution.
 #' @param share_with An optional character vector of Connect usernames granted
 #'   access to this content's trajectories when running on Posit Connect.
 #'   Reading traces requires editor-level access, so named users are added as
@@ -375,6 +376,8 @@ Commons <- R6::R6Class(
       )
 
       tracing <- private$tracing
+      # Capture before the generator runs outside the originating Shiny session.
+      user <- if (tracing) trajectory_user() else NA_character_
       trusted_only <- private$trusted_only
       # A trusted-only agent shows no provenance markers. An empty corpus still
       # strips citation markup but rejects every citation, so none renders.
@@ -385,7 +388,7 @@ Commons <- R6::R6Class(
       coro::async_generator(function() {
         span <- NULL
         if (tracing) {
-          span <- local_conversation_turn_span()
+          span <- local_conversation_turn_span(user = user)
         }
         scanner <- citation_scanner(corpus)
 

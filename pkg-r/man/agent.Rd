@@ -72,7 +72,8 @@ content. A server administrator must also set \code{OpenTelemetry.Enabled = true
 and \code{OpenTelemetry.AllowContentInstrumentation = true}.
 
 Once the agent is deployed and serving traffic, you can read conversation
-histories back into R with \code{\link[=trajectory_read]{trajectory_read()}}.}
+histories back into R with \code{\link[=trajectory_read]{trajectory_read()}}. Logging also records the
+authenticated Shiny session user, when supplied by Connect, for attribution.}
 
 \item{share_with}{An optional character vector of Connect usernames granted
 access to this content's trajectories when running on Posit Connect.

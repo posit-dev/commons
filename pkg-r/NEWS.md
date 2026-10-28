@@ -22,6 +22,8 @@
 
 * `describe_table` reports complete table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
 
+* `trajectory_read()` now returns a `user` field with the originating Shiny session username supplied by Connect. With `log = TRUE`, authenticated session users are recorded with conversation trajectories; older logs and anonymous sessions return `NA_character_` (#316).
+
 * On macOS, R code run by `run_r` can now start other programs, such as through `system()` or `system2()`. The sandbox previously stopped every program it started. Those programs run under the same sandbox as the R session.
 
 * R code run by `run_r` can no longer send a signal to the application process's ID or to its process group. On Linux, the programs it starts can also no longer leave its process group, so they all stop when the R session ends.
