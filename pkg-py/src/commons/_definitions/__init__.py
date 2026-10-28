@@ -14,6 +14,7 @@ authority, not this code.
 
 from ._compile import (
     DefinitionAbsentColumnError,
+    DefinitionEmptySelectionError,
     DefinitionMixedGrainError,
     DefinitionUnmatchedTableError,
     attach_compiled_definitions,
@@ -33,6 +34,7 @@ from ._registry import (
 
 __all__ = [
     "DefinitionAbsentColumnError",
+    "DefinitionEmptySelectionError",
     "DefinitionMixedGrainError",
     "DefinitionUnmatchedTableError",
     "ExportRecord",

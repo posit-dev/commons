@@ -11,6 +11,7 @@ import pytest
 from commons._data_dictionary import DataDictionary
 from commons._definitions import (
     DefinitionAbsentColumnError,
+    DefinitionEmptySelectionError,
     DefinitionMixedGrainError,
     DefinitionUnmatchedTableError,
     attach_compiled_definitions,
@@ -22,6 +23,7 @@ from tests._warehouse import merge_shared_case
 
 _BINDING_ERRORS = {
     "absent_column": DefinitionAbsentColumnError,
+    "empty_selection": DefinitionEmptySelectionError,
     "mixed_grain": DefinitionMixedGrainError,
     "unmatched_table": DefinitionUnmatchedTableError,
 }
