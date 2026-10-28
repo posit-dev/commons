@@ -396,8 +396,7 @@ definition_sql_divide <- function(node, state, dialect, selected) {
     dialect,
     selected
   )
-  # The guards compare each operand, which binds looser than arithmetic, so
-  # only the quotient needs the operands wrapped at division's precedence.
+  # Parenthesize compound operands so `a / (b * c)` keeps its grouping.
   quotient <- definition_sql_infix(
     node$lhs,
     node$rhs,

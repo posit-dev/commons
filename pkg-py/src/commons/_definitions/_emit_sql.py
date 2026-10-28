@@ -327,10 +327,9 @@ def _divide(node: Ir, state: _State, selected: str | None) -> str:
     null, so the cases are written out.
     """
     dialect = state.dialect
-    # The guards compare each operand, which binds looser than arithmetic, so
-    # only the quotient needs the operands wrapped at division's precedence.
     numerator = _child(node.attrs["lhs"], 0, "free", state, selected)
     divisor = _child(node.attrs["rhs"], 0, "free", state, selected)
+    # Parenthesize compound operands so `a / (b * c)` keeps its grouping.
     quotient = _infix(
         node.attrs["lhs"], node.attrs["rhs"], "/", _MULTIPLICATIVE, state, selected
     )
