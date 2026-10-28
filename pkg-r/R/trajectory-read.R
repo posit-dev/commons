@@ -44,7 +44,7 @@
 #'   The `user` field contains the authenticated Shiny session username from
 #'   the earliest recorded non-title chat, when supplied by Connect, or
 #'   `NA_character_` when unavailable (including anonymous sessions and older
-#'   logs). This is attribution metadata, not an authentication credential.
+#'   logs).
 #'
 #' @examples
 #' \dontrun{
