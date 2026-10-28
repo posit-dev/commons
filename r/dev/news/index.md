@@ -52,6 +52,13 @@
   or zero rows in trusted-only mode
   ([\#319](https://github.com/posit-dev/commons/issues/319)).
 
+- [`trajectory_read()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_read.md)
+  now returns a `user` field with the originating Shiny session username
+  supplied by Connect. With `log = TRUE`, authenticated session users
+  are recorded with conversation trajectories; older logs and anonymous
+  sessions return `NA_character_`
+  ([\#316](https://github.com/posit-dev/commons/issues/316)).
+
 - On macOS, R code run by `run_r` can now start other programs, such as
   through [`system()`](https://rdrr.io/r/base/system.html) or
   [`system2()`](https://rdrr.io/r/base/system2.html). The sandbox

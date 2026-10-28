@@ -59,7 +59,11 @@ oldest-first. Each conversation is a list with a `turns` field
 containing a list of
 [ellmer::Turn](https://ellmer.tidyverse.org/reference/Turn.html)s and a
 `last_active` field containing a `POSIXct` giving the time of the
-conversation's most recent chat activity.
+conversation's most recent chat activity. The `user` field contains the
+authenticated Shiny session username from the earliest recorded
+non-title chat, when supplied by Connect, or `NA_character_` when
+unavailable (including anonymous sessions and older logs). This is
+attribution metadata, not an authentication credential.
 
 ## Details
 

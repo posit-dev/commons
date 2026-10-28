@@ -101,6 +101,8 @@ agent(
   Once the agent is deployed and serving traffic, you can read
   conversation histories back into R with
   [`trajectory_read()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_read.md).
+  Logging also records the authenticated Shiny session user, when
+  supplied by Connect, for attribution.
 
 - share_with:
 
