@@ -114,13 +114,23 @@ semantic_parameters_from_spec <- function(entries, backend) {
     default <- if (has_default) {
       coerce_semantic_default(entry[[default_field]], type)
     }
-    new_typed_argument(
+    argument <- new_typed_argument(
       name,
       type,
       description = entry$description %||% entry$comment,
       default = default,
       has_default = has_default
     )
+    # Snowflake rejects a value with a mismatched type, so store the type to be used in
+    # casting later. The regex matches a sequence of letters and underscores, optionally 
+    # followed by a numeric precision (e.g. `TIMESTAMP_TZ`, `VARCHAR(16)`, `NUMBER(10, 2)`)
+    if (
+      identical(backend, "Snowflake") &&
+        grepl("^[A-Za-z_]+( *\\( *[0-9]+( *, *[0-9]+)? *\\))?$", declared_type)
+    ) {
+      argument$sql_type <- toupper(gsub(" ", "", declared_type, fixed = TRUE))
+    }
+    argument
   })
   names(parameters) <- vapply(parameters, `[[`, character(1), "name")
   if (anyDuplicated(names(parameters))) {
@@ -161,9 +171,13 @@ semantic_parameter_type <- function(type) {
   if (base %in% c("BYTEINT", "SMALLINT", "INT", "INTEGER", "BIGINT")) {
     return("integer")
   }
-  if (base %in% c(
-    "NUMBER", "NUMERIC", "DECIMAL", "FLOAT", "DOUBLE", "REAL"
-  )) {
+  if (base %in% c("NUMBER", "NUMERIC", "DECIMAL")) {
+    # Casting a fraction to scale 0 (the default) rounds it silently. Typing
+    # the parameter as an integer rejects the fraction instead.
+    scale <- regmatches(type, regexec(",\\s*([0-9]+)\\s*\\)", type))[[1]][2]
+    return(if (is.na(scale) || as.integer(scale) == 0L) "integer" else "number")
+  }
+  if (base %in% c("FLOAT", "DOUBLE", "REAL")) {
     return("number")
   }
   if (base %in% c("BOOL", "BOOLEAN")) {

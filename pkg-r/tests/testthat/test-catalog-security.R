@@ -388,9 +388,11 @@ test_that("semantic model probes use native zero-row queries", {
 
 test_that("semantic model probes bind required native parameters", {
   model <- test_semantic_model()
+  threshold <- new_typed_argument("threshold", "number")
+  threshold$sql_type <- "NUMBER(10,2)"
   model$parameters <- list(
-    new_typed_argument("threshold", "number"),
-    new_typed_argument(
+    threshold = threshold,
+    category = new_typed_argument(
       "category",
       "string",
       default = "retail",
@@ -411,7 +413,11 @@ test_that("semantic model probes bind required native parameters", {
     catalog_probe_semantic_model(DBI::ANSI(), model)$state,
     "queryable"
   )
-  expect_match(sql, 'VARIABLES "threshold" => ?', fixed = TRUE)
+  expect_match(
+    sql,
+    'VARIABLES "threshold" => CAST(? AS NUMBER(10,2))',
+    fixed = TRUE
+  )
   expect_named(bindings, "threshold")
   expect_true(is.na(bindings$threshold))
 

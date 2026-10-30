@@ -475,14 +475,8 @@ catalog_semantic_probe_sql <- function(con, model, arguments = list()) {
     reference <- catalog_semantic_member_reference(con, member)
     variables <- if (length(arguments)) {
       paste0(
-        "\n  VARIABLES ",
-        paste(
-          sprintf(
-            "%s => ?",
-            DBI::dbQuoteIdentifier(con, names(arguments))
-          ),
-          collapse = ", "
-        )
+        "\n  ",
+        snowflake_semantic_variables(con, model, names(arguments))
       )
     } else {
       ""
