@@ -442,6 +442,28 @@ test_that("Snowflake casts a bound variable to the type its view declares", {
     'VARIABLES "MIN_TOTAL" => CAST(? AS NUMBER(10,2)), "SINCE" => CAST(? AS TIMESTAMP_TZ)'
   )
 
+  # A cast to scale 0 rounds a fraction, so such a variable takes only whole
+  # numbers.
+  whole <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "MIN_COUNT", data_type = "NUMBER(38,0)"),
+        list(name = "LIMIT_N", data_type = "NUMBER")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+  expect_equal(whole$parameters$MIN_COUNT$type, "integer")
+  expect_equal(whole$parameters$LIMIT_N$type, "integer")
+  expect_error(
+    validate_typed_arguments(
+      whole$parameters,
+      list(MIN_COUNT = 50.5, LIMIT_N = 10)
+    ),
+    "must be an integer value"
+  )
+
   # A declared type is spliced into SQL, so one that is not a plain type name
   # leaves its variable with a bare placeholder.
   odd <- snowflake_semantic_model_from_spec(
