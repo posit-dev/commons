@@ -29,7 +29,7 @@ Each call returns a data frame, or a vector for a measure that returns a value. 
 
 - Run the calculations with tools first, so you know what they return before you write about them.
 - Every number in the document must come from a `commons` call or a cell that runs when it renders. Write key figures in prose as inline R expressions, such as `` `r nrow(revenue)` ``, rather than typing them.
-- Cells run in order in a fresh R session without network access, using installed packages. Keep them short; readers see code folded.
+- Cells run in order in a fresh R session without network access, using installed packages. Keep them short. Readers see code folded beneath each result, so don't set `echo` or other options that hide code.
 - The document is shown as knitted Markdown. Use headings, paragraphs, lists, tables, R cells with static plots, and `::: {.callout-note}` callouts; tabsets, cross-references, and interactive widgets aren't supported.
 
 Create a document only by writing the tag; `edit_artifact` works only on a document you have already written. Change a document with `edit_artifact` rather than writing it again. Its result says whether the new version rendered; if it didn't, fix the error before telling the user the document is ready. If a document you wrote with the tag fails to render, you'll be told on the next turn.
