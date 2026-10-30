@@ -692,19 +692,21 @@ worker_knit_init <- function(dir) {
     message = FALSE,
     comment = "#>"
   )
+  # The HTML these hooks write ends with a blank line: otherwise Markdown that
+  # follows directly, such as a plot, is read as part of the HTML block.
   knitr::knit_hooks$set(
     source = function(x, options) {
       paste0(
         "\n<details class=\"commons-code\"><summary>Code</summary>\n\n```r\n",
         paste(x, collapse = "\n"),
-        "\n```\n\n</details>\n"
+        "\n```\n\n</details>\n\n"
       )
     },
     error = function(x, options) {
       message <- gsub("(^|\n)#> ?(! )?", "\\1", trimws(x))
       message <- sub("^Error[^:\n]*:\\s*", "", message)
       state$errors <- c(state$errors, trimws(message))
-      paste0("\n<div class=\"commons-cell-error\">", escape(x), "</div>\n")
+      paste0("\n<div class=\"commons-cell-error\">", escape(x), "</div>\n\n")
     }
   )
   registerS3method(
