@@ -581,8 +581,7 @@ definition_sql_similar <- function(node, state, dialect, selected) {
 }
 
 definition_sql_temporal_shift <- function(node, state, dialect, selected) {
-  # The checker accepts an untyped NULL as the interval, which shifts to
-  # NULL. Neither warehouse adds a bare NULL to a date, so it is typed.
+  # Snowflake refuses DATE + NULL, so write CAST(NULL AS <timestamp>) (#441).
   if (
     identical(node$type, "datetime") &&
       "null" %in% c(node$lhs$kind, node$rhs$kind)
