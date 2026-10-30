@@ -146,6 +146,29 @@ def test_the_grants_cover_every_fixture_table_but_the_denied_one(dialect):
     )
 
 
+def test_every_semantic_fixture_is_provisioned_on_snowflake():
+    generator = _generator()
+    fixtures = load_shared_fixture("live-warehouse-env")["backends"]["snowflake"][
+        "fixtures"
+    ]
+    sql = generator.render("snowflake", "catalog.schema", grantee="tester")
+
+    for view in generator.SEMANTIC_VIEWS:
+        assert f"name: {view}\n" in sql
+        assert f'SEMANTIC VIEW "catalog"."schema"."{view}" TO ROLE' in sql
+    for fixture, view in generator.SEMANTIC_FIXTURES.items():
+        assert f"export {fixtures[fixture]['variable']}=catalog.schema.{view}" in sql
+    assert fixtures["parameterized_model_arguments"]["variable"] in sql
+    assert "SEMANTIC VIEW" not in generator.render("databricks", "catalog.schema")
+
+
+def test_a_semantic_view_escapes_the_namespace_for_yaml_alone():
+    sql = _generator().render("snowflake", "O'Brien.schema")
+
+    assert "database: '\"O''Brien\"'" in sql
+    assert 'FROM "O\'Brien"."schema"."orders"' in sql
+
+
 def test_a_mismatch_is_reported_as_one():
     """The comparator, since every live assertion rests on it."""
     assert matches([1.0, None], [None, 1.0])
