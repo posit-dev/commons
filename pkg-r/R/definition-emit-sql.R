@@ -581,6 +581,16 @@ definition_sql_similar <- function(node, state, dialect, selected) {
 }
 
 definition_sql_temporal_shift <- function(node, state, dialect, selected) {
+  # Snowflake refuses DATE + NULL, so write CAST(NULL AS <timestamp>) (#441).
+  if (
+    identical(node$type, "datetime") &&
+      "null" %in% c(node$lhs$kind, node$rhs$kind)
+  ) {
+    return(sprintf(
+      "CAST(NULL AS %s)",
+      definition_sql_null_datetime[[dialect]]
+    ))
+  }
   lhs_interval <- identical(node$lhs$type, "interval")
   rhs_interval <- identical(node$rhs$type, "interval")
   if (!lhs_interval && !rhs_interval) {
@@ -773,6 +783,11 @@ definition_sql_abort_unsupported <- function(dialect, what, why) {
     call = NULL
   )
 }
+
+definition_sql_null_datetime <- list(
+  snowflake = "TIMESTAMP_TZ",
+  databricks = "TIMESTAMP"
+)
 
 definition_sql_nan_note <- list(
   snowflake = paste(
