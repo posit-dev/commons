@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head><meta name="robots" content="noindex, nofollow">
 
 <meta charset="utf-8">
-<meta name="generator" content="quarto-1.10.19">
+<meta name="generator" content="quarto-1.10.20">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
@@ -26,6 +26,41 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
 </style>
 
 
@@ -45,10 +80,10 @@ ul.task-list li input[type="checkbox"] {
 <script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
 <script src="../site_libs/quarto-html/anchor.min.js"></script>
 <link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="../site_libs/quarto-html/quarto-syntax-highlighting-bf27225e3a48a9273f3daa8f8e829971.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-17888a1159294d3eb470f19f6f52f5a5.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="../site_libs/bootstrap/bootstrap.min.js"></script>
 <link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="../site_libs/bootstrap/bootstrap-c4d708d4e441993890320f2eab87994c.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="../site_libs/bootstrap/bootstrap-7e9b4f36233c51a331fcd27f7c4ba3a1.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 <script id="quarto-search-options" type="application/json">{
   "location": "navbar",
   "copy-button": false,
@@ -199,7 +234,7 @@ ul.task-list li input[type="checkbox"] {
             <ul class="navbar-nav navbar-nav-scroll ms-auto">
   <li class="nav-item">
     <span class="nav-link">
-<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="58" data-forks="2"></div>
+<div id="github-widget" data-owner="posit-dev" data-repo="commons" data-stars="66" data-forks="4"></div>
     </span>
   </li>  
 </ul>
@@ -259,7 +294,11 @@ ul.task-list li input[type="checkbox"] {
   <li><a href="#destructive-actions" id="toc-destructive-actions" class="nav-link" data-scroll-target="#destructive-actions">Destructive actions</a></li>
   <li><a href="#data-access" id="toc-data-access" class="nav-link" data-scroll-target="#data-access">Data access</a></li>
   </ul></li>
-  <li><a href="#python-code-execution" id="toc-python-code-execution" class="nav-link" data-scroll-target="#python-code-execution">Python code execution</a></li>
+  <li><a href="#python-code-execution" id="toc-python-code-execution" class="nav-link" data-scroll-target="#python-code-execution">Python code execution</a>
+  <ul class="collapse">
+  <li><a href="#os-level-sandboxing" id="toc-os-level-sandboxing" class="nav-link" data-scroll-target="#os-level-sandboxing">OS-level sandboxing</a></li>
+  <li><a href="#communication-with-the-main-app-process" id="toc-communication-with-the-main-app-process" class="nav-link" data-scroll-target="#communication-with-the-main-app-process">Communication with the main app process</a></li>
+  </ul></li>
   <li><a href="#permissioning-facts" id="toc-permissioning-facts" class="nav-link" data-scroll-target="#permissioning-facts">Permissioning facts</a></li>
   <li><a href="#telemetry" id="toc-telemetry" class="nav-link" data-scroll-target="#telemetry">Telemetry</a></li>
   </ul>
@@ -287,11 +326,11 @@ ul.task-list li input[type="checkbox"] {
 </header>
 
 
-<p><code>commons</code> allows users to build and deploy agents that can run SQL queries against live databases and (soon) execute arbitrary Python code. This raises several security and governance questions: How do you make sure that an agent cannot delete production data? Can model-generated Python code interfere with a <a href="https://posit.co/products/enterprise/connect">Posit Connect</a> deployment? Can an agent show users tables, rows, or business context that they shouldn’t be able to see?</p>
+<p><code>commons</code> allows users to build and deploy agents that can run SQL queries against live databases and execute Python code that the model writes. This raises several security and governance questions: How do you make sure that an agent cannot delete production data? Can model-generated Python code interfere with a <a href="https://posit.co/products/enterprise/connect">Posit Connect</a> deployment? Can an agent show users tables, rows, or business context that they shouldn’t be able to see?</p>
 <p>This page explains the boundaries that <code>commons</code> provides and the responsibilities that remain with the application author and server administrator.</p>
 <section id="the-commons-harness" class="level1">
 <h1>The <code>commons</code> harness</h1>
-<p>A <code>commons</code> agent is a <code>chatlas.Chat</code> object that carries a system prompt and a set of tools. The system prompt lists the available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, or run a SQL query.</p>
+<p>A <code>commons</code> agent is a <code>chatlas.Chat</code> object with a system prompt and a set of tools. The system prompt lists the available data sources and business context. Tools let the model retrieve more context, call a trusted calculation, run a SQL query, or run Python code.</p>
 <p>We assume that a model might make any request allowed by its tools. Application security should therefore not depend on the model following an instruction like “never reveal sensitive data.” Instead, only give an agent access to data that the current user of the application is allowed to see. The system prompt, tool arguments, and tool results are also sent to the model provider. The agent must therefore not have access to data that you <a href="https://posit.co/blog/trust-llm-tools">do not trust that provider to process</a>.</p>
 </section>
 <section id="sql-code-execution" class="level1">
@@ -313,11 +352,27 @@ ul.task-list li input[type="checkbox"] {
 </section>
 <section id="python-code-execution" class="level1">
 <h1>Python code execution</h1>
-<p>The Python agent currently has no tool that runs code written by the model, but this feature is expected in the near future. Currently, there is no concern for Python <code>commons</code> agents executing arbitrary Python code. When the feature is added, it will generally follow the R package’s <a href="https://posit-dev.github.io/commons/r/articles/governance.html#r-code-execution">R code execution</a> design.</p>
+<p>Python code written by the agent does not run in the main application process. Each <code>commons</code> agent instead gets a persistent Python subprocess, created on first use. Its state remains available to later Python analysis by the same agent until the subprocess is closed or restarted.</p>
+<section id="os-level-sandboxing" class="level2">
+<h2 class="anchored" data-anchor-id="os-level-sandboxing">OS-level sandboxing</h2>
+<p>On Linux (which underlies <a href="https://posit.co/products/enterprise/connect">Posit Connect</a>), <code>commons</code> combines a filesystem sandbox with seccomp system-call filters. It uses Landlock when the kernel supports it and otherwise falls back to unprivileged user and mount namespaces. If neither filesystem mechanism is available, or if seccomp is unavailable, <code>commons</code> refuses to create an agent.</p>
+<p>The filesystem sandbox gives the subprocess read access to Python, installed packages, and required operating-system directories. It can write only to a temporary directory used by the subprocess. The seccomp filters prevent it from inspecting another process’s memory or changing mount and namespace configuration. The Linux sandbox also caps the subprocess’s virtual address space at 8 GiB; a lower limit inherited from Connect still applies.</p>
+<p>By default, the subprocess cannot create network sockets. An application author can opt in to network access with <code>Commons(network="full")</code>; the filesystem sandbox remains in place, but Python code can then contact services reachable from the deployment, send out the data that earlier queries and measures returned, and install packages with pip into its temporary directory. Only enable network access when that egress is required and acceptable.</p>
+<p>For local development on macOS, <code>commons</code> applies a similar filesystem and network policy using Seatbelt. Windows has no OS-level sandbox for the agent’s Python session. Deployed Connect applications run on Linux and use the Linux mechanisms described above.</p>
+<p>By default, <code>commons</code> refuses to create an agent when an OS-level sandbox is not available. An application author can enable a local-development fallback explicitly by setting an environment variable:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">export</span> <span class="va">COMMONS_ALLOW_UNSAFE_FALLBACK</span><span class="op">=</span>1</span></code></pre></div>
+<p><code>commons</code> always uses OS-level sandboxing when it is available. This variable cannot disable or bypass it; it only permits <code>commons</code> to fall back to best-effort Python guardrails when no OS-level sandbox is available.</p>
+<p>The fallback checks file, process, and network operations while code evaluates in the agent’s Python session. It limits filesystem reads to the directories the sandbox allows, limits writes to the temporary directory, denies starting other processes, and follows the requested network policy. These checks reduce accidental access and damage, but native code and other Python mechanisms can bypass them. They are not a sandbox or security boundary and should not be enabled in a deployment.</p>
+</section>
+<section id="communication-with-the-main-app-process" class="level2">
+<h2 class="anchored" data-anchor-id="communication-with-the-main-app-process">Communication with the main app process</h2>
+<p>The subprocess starts with a small allowlist of environment variables rather than inheriting the application’s complete environment. In particular, API keys, session tokens, and database URLs are not inherited. The subprocess also runs in Python’s isolated mode, which ignores <code>PYTHON*</code> environment variables and the user’s site directory to further isolate the subprocess from the host environment.</p>
+<p>Communication happens through pipes between the two processes. <code>commons</code> copies the results of earlier queries and measures, and the source code of each measure, into the subprocess, then receives captured output and plots in return. Function objects and database connections are not transferred. A measure whose source cannot be defined in the subprocess is skipped.</p>
+</section>
 </section>
 <section id="permissioning-facts" class="level1">
 <h1>Permissioning facts</h1>
-<p>The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table, with a summary of sampled rows, goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.</p>
+<p>The rows returned by SQL are not the only sensitive information available to an agent. The description and details of each data dictionary, and its glossary entries up to a size cap, go into the system prompt. The full dictionary entry for a table goes to the model when a table is first described or queried. Context documents and the rest of the dictionary prose are available to the model through search.</p>
 <p>Because of this, you should only include facts that you can share with both the application’s viewers and its model provider. If one audience must not see a fact, use separate applications with separate context, or put the facts behind viewer credentials. Asking the model to hide the fact from that audience is not a reliable means of preventing unauthorized access to the information.</p>
 </section>
 <section id="telemetry" class="level1">

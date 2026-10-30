@@ -13,7 +13,8 @@ Commons(
     semantic_layer=None,
     context_layer=None,
     *,
-    instructions=None
+    instructions=None,
+    network="none"
 )
 ```
 
@@ -26,4 +27,6 @@ A [Commons](Commons.md#commons.Commons) agent inherits directly from `chatlas.Ch
 
 `data_sources` is a [DataSource](DataSource.md#commons.DataSource), or a mapping of name to [DataSource](DataSource.md#commons.DataSource); a measure can take a named source's connection as an argument named after it. `instructions` is extra text placed under an `## Additional instructions` heading at the end of commons' built-in system prompt, as a string or the path to a text or Markdown file.
 
-Construction raises a TypeError if `client` is not a `chatlas.Chat`, if an entry of `data_sources` is not a [DataSource](DataSource.md#commons.DataSource), or if a layer is not the layer its argument claims; a ValueError if `data_sources` names no source or a measure asks for an injection no named source can fill; and a FileNotFoundError if `instructions` names a file that does not exist.
+The agent can run Python code that its model writes. The code runs in a separate, sandboxed Python process, which starts the first time the model runs code. `network` sets whether that process can reach the network: `"none"` (the default) or `"full"`. The sandbox works on Linux and macOS. For local development on another system, set the `COMMONS_ALLOW_UNSAFE_FALLBACK` environment variable to run the code with limited checks instead. Warning! These checks are not intended to be a security boundary.
+
+Construction raises a TypeError if `client` is not a `chatlas.Chat`, if an entry of `data_sources` is not a [DataSource](DataSource.md#commons.DataSource), or if a layer is not the layer its argument claims; a ValueError if `data_sources` names no source, a measure asks for an injection no named source can fill, or `network` is neither `"none"` nor `"full"`; a FileNotFoundError if `instructions` names a file that does not exist; and a RuntimeError if this host cannot sandbox the session and the opt-in is not set.

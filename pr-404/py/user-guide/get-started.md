@@ -23,24 +23,25 @@ The agent searches for a trusted calculation that answers the question. If it fi
 
 Although the agent had to decide *which* trusted calculation to run. It did not have to decide *what code to write*, reducing degrees of freedom and allowing the agent to use code that you already vetted.
 
-However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (currently SQL, but soon custom Python code as well). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an `Untrusted` outcome.
+However, we also expect users to ask questions that stray from the "happy path." For those, the agent searches for additional context and writes custom code (either SQL or Python). Answers from this path either include a blue quote-mark citation marker if a citation was found in the added context, or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 
 # Trust flow
 
 A `commons` agent uses trusted calculations when it can. When the user asks a question, the agent first searches the semantic layer for a trusted calculation. If it finds one, it calls that calculation, and the answer shows the green check-shield provenance marker for the `Trusted` outcome.
 
-If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL (or soon Python) code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
+If a relevant trusted calculation is not found, the agent proceeds down the lower-trust path. It searches through the context for additional information, then uses that information to write custom SQL or Python code to answer the user's question. These answers either include blue quote-mark citation markers that open details about verified sources or display the yellow exclamation provenance marker for an `Untrusted` outcome.
 
 The lower-trust path has two possible provenance outcomes. When the agent writes custom SQL or Python, it can also include supporting text quoted from a trusted source. If `commons` verifies that the quoted text appears in that source, the provenance outcome is `Cited` and the answer displays blue quote-mark citation markers that open the source details. If no citation verifies, the provenance outcome is `Untrusted` and the answer displays the yellow exclamation provenance marker
 
 The table below lists how each provenance outcome can occur:
 
-| How the answer is produced | Provenance outcome |
+| How the answer is produced | Provenance outcome[^1] |
 |----|----|
 | A trusted Python [measure](#semantic-layer) | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
 | A [data dictionary metric](#definitions), possibly grouped or filtered with definitions | `Trusted` <img src="assets/figs/trusted-icon.svg" class="commons-documentation-marker" /> |
-| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> or `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
+| Custom SQL, including SQL that uses [data dictionary definitions](#definitions) | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
+| Custom Python | `Cited` <img src="assets/figs/citation-mark.svg" class="commons-documentation-marker" /> when the answer quotes a trusted source and `commons` verifies the quote; otherwise `Untrusted` <img src="assets/figs/warning-icon.svg" class="commons-documentation-marker" /> |
 | No data tool used (for example, the agent already had the information, or no accessible information answered the question) | No provenance outcome |
 
 The agent does not decide the provenance outcome. `commons` derives it from the tools the agent called and the citations it made.
@@ -213,7 +214,7 @@ tables:
         expr: SUM(count)
 ```
 
-There are three kinds of definition. A definition can take part in a trusted metric calculation, or the agent can use it in custom SQL:[^1]
+There are three kinds of definition. A definition can take part in a trusted metric calculation, or the agent can use it in custom SQL:[^2]
 
 | Kind | Example | Use in a trusted metric calculation |
 |----|----|----|
@@ -275,6 +276,8 @@ agent.chat("How many species were observed at Oak Bluff?")
 
 `data_sources` is one [DataSource](../reference/DataSource.md#commons.DataSource) or a mapping of name to [DataSource](../reference/DataSource.md#commons.DataSource). Name the sources when a measure takes an injected connection, because commons injects by name. [semantic_layer()](../reference/semantic_layer.md#commons.semantic_layer) accepts measures, modules, or paths to `.py` files and directories. [context_layer()](../reference/context_layer.md#commons.context_layer) accepts a list of file paths.
 
+The agent can also write and run Python code, for example to reshape a query result or draw a matplotlib chart. The code runs in a separate, sandboxed Python process. That process cannot reach the network unless you pass `network="full"`. On a host where `commons` cannot sandbox the process, [Commons()](../reference/Commons.md#commons.Commons) raises an error. See [Security and governance](governance.md#python-code-execution) for what the sandbox does and how to run on such a host for local development.
+
 Underneath, a [Commons](../reference/Commons.md#commons.Commons) agent inherits from a `chatlas.Chat` object, but builds its own system prompt and tools. As such, it follows the `Chat` API and provides the [chat()](../reference/Commons.chat.md#commons.Commons.chat) and [stream_async()](../reference/Commons.stream_async.md#commons.Commons.stream_async) methods as ways to ask a question. The other `chatlas` entry points, such as [chat_async()](../reference/Commons.chat_async.md#commons.Commons.chat_async), [stream()](../reference/Commons.stream.md#commons.Commons.stream), and [chat_structured()](../reference/Commons.chat_structured.md#commons.Commons.chat_structured), are not supported and will raise `NotImplementedError` at this moment.
 
 
@@ -324,4 +327,6 @@ app = App(app_ui, app_server)
 ## Footnotes
 
 
-[^1]: In custom SQL, the agent writes a definition as a `{name}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Trusted`.
+[^1]: An answer that uses both a trusted calculation and custom SQL or Python gets the outcome for custom code: `Cited` or `Untrusted`, never `Trusted`.
+
+[^2]: In custom SQL, the agent writes a definition as a `{name}` token, and `commons` expands it to the SQL compiled for the data source. This is still custom SQL, so the provenance outcome is `Cited` or `Untrusted`, not `Trusted`.
