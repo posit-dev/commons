@@ -240,7 +240,10 @@ class LocalSession:
         self._exit.add_done_callback(self._kill_group)
         threading.Thread(
             target=_kill_when_stopped,
-            args=(process.pid, _process_start(process.pid)),
+            args=(
+                process.pid,
+                _process_start(process.pid) if sys.platform == "darwin" else None,
+            ),
             name=f"commons-worker-stop-{process.pid}",
             daemon=True,
         ).start()
@@ -421,11 +424,9 @@ def _process_start(pid: int) -> tuple[int, int] | None:
     """The start time that identifies the process behind ``pid`` on macOS.
 
     Read on the event loop's thread right after the spawn, before asyncio
-    can reap the worker and free its PID for reuse. None off macOS, or if
-    the worker is already a zombie.
+    can reap the worker and free its PID for reuse. None if the worker is
+    already a zombie.
     """
-    if sys.platform != "darwin":
-        return None
     info = _darwin_proc_info(pid)
     if info is None:
         return None
