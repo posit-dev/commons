@@ -387,3 +387,54 @@ test_that("Shiny Chat preserves Markdown blocks around citations", {
     FALSE
   )
 })
+
+test_that("a streamed document opens in the drawer and reopens from its chip", {
+  skip_on_cran()
+  skip_if_not_installed("shinytest2")
+  skip_if_not_installed("chromote")
+  skip_if_browser_tests_disabled()
+  skip_if_ellmer_streaming_hooks_unavailable()
+
+  app <- shinytest2::AppDriver$new(
+    browser_test_app("artifact-stream"),
+    name = "artifact-stream",
+    timeout = 30 * 1000,
+    load_timeout = 30 * 1000
+  )
+  withr::defer(app$stop())
+
+  # The document lives in a sandboxed frame the test can't read, so it reads
+  # the pieces on their way there.
+  app$run_js(paste0(
+    "window.commonsPieces = [];",
+    "$(document).on('shiny:message', (event) => {",
+    "const msg = event.message.custom && event.message.custom['commons-artifact'];",
+    "if (msg && msg.pieces) window.commonsPieces.push(...msg.pieces.map((p) => p.html));",
+    "});"
+  ))
+  frame <- "document.querySelector('commons-artifact-view iframe')"
+  app$wait_for_js(
+    "window.commonsPieces.some((html) => html.includes('There are 4 orders across'))",
+    timeout = 60 * 1000
+  )
+  expect_true(app$get_js(paste0("!!", frame)))
+  app$wait_for_js("document.querySelector('commons-artifact-view').ready")
+  expect_true(app$get_js(
+    "window.commonsPieces.some((html) => html.includes('commons-code'))"
+  ))
+  expect_identical(
+    app$get_js("document.querySelector('commons-artifact-link').textContent"),
+    "Orders by region · v1"
+  )
+  expect_false(app$get_js(
+    "document.body.innerText.includes('trusted$measure')"
+  ))
+
+  app$run_js(paste0(
+    frame,
+    ".remove();",
+    "document.querySelector('commons-artifact-link')",
+    ".shadowRoot.querySelector('button').click();"
+  ))
+  app$wait_for_js(paste0("!!", frame), timeout = 30 * 1000)
+})

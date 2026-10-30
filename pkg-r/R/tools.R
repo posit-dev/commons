@@ -2,7 +2,7 @@
 # surface should imply operations it doesn't have.
 build_commons_tools <- function(self, private) {
   trusted_only <- isTRUE(private$trusted_only)
-  c(
+  tools <- c(
     if (pool_searchable(
       private$registry,
       private$definitions,
@@ -37,8 +37,9 @@ build_commons_tools <- function(self, private) {
     ),
     # A trusted-only agent has no fallback path of its own.
     if (!trusted_only) list(tool_run_sql(private), tool_run_r(private)),
-    list(tool_load_skill())
+    if (!is.null(private$artifacts)) list(tool_edit_artifact(private))
   )
+  c(tools, list(tool_load_skill(vapply(tools, tool_name, character(1)))))
 }
 
 tool_search_catalog <- function(private) {
@@ -223,7 +224,7 @@ tool_call_metrics <- function(private) {
       paste(
         "Compute trusted calculations from governed metrics, optionally",
         "grouped and filtered. Metric, grouping, and filter names come from",
-        "%s; commons compiles and runs the query."
+        "%s; the query is compiled and run for you."
       ),
       if (pool_searchable(
         private$registry,

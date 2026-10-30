@@ -1,5 +1,5 @@
-tool_load_skill <- function() {
-  skills <- builtin_skills()
+tool_load_skill <- function(tool_names = character()) {
+  skills <- builtin_skills(tool_names)
   ellmer::tool(
     function(name) {
       skill <- skills[[name]]
@@ -45,11 +45,16 @@ load_skill_description <- function(skills) {
 }
 
 # Each skill is a directory holding a SKILL.md, in the Agent Skills format:
-# YAML frontmatter with a name and description, then the instructions.
-builtin_skills <- function() {
+# YAML frontmatter with a name and description, then the instructions. A
+# skill that `requires` a tool is offered only when that tool is registered.
+builtin_skills <- function(tool_names = character()) {
   dir <- system.file("prompts", "skills", package = "commons")
   paths <- file.path(sort(list.dirs(dir, recursive = FALSE)), "SKILL.md")
   skills <- lapply(paths, read_skill)
+  skills <- Filter(
+    function(skill) is.null(skill$requires) || skill$requires %in% tool_names,
+    skills
+  )
   names(skills) <- vapply(skills, function(skill) skill$name, character(1))
   skills
 }
@@ -62,6 +67,7 @@ read_skill <- function(path) {
     name = meta$name,
     description = meta$description,
     topic = meta$metadata$topic,
+    requires = meta$metadata$requires,
     body = trimws(paste(lines[-seq_len(end)], collapse = "\n"))
   )
 }

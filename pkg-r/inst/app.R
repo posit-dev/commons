@@ -91,7 +91,8 @@ ui <- page_chat(
   "Biodiversity explorer",
   id = "chat",
   greeting = greeting,
-  theme = commons_theme()
+  theme = commons_theme(),
+  drawer = chat_drawer(width = 640, open = FALSE)
 )
 
 server <- function(input, output, session) {

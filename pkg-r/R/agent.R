@@ -117,8 +117,27 @@
 #' * `run_sql` executes a read-only SQL query.
 #' * `run_r` executes R code to analyze results and render plots in the agent's
 #'   R session.
+#' * `edit_artifact` edits a document the agent wrote.
 #'
-#' With `mode = "trusted only"`, the agent never receives `run_sql` or `run_r`.
+#' With `mode = "trusted only"`, the agent never receives `run_sql`, `run_r`,
+#' or `edit_artifact`.
+#'
+#' @section Documents:
+#' When a user asks for a report, the agent writes a Quarto document instead
+#' of a chat reply. In [commons_server()], the document streams into the chat's
+#' drawer as it's written, with each R cell knitted as soon as it arrives;
+#' outside Shiny, `agent$chat()` knits it and reports where it wrote the
+#' result.
+#'
+#' A document gets its data by calling the [commons()] object's
+#' `$measure()`, `$metrics()`, `$calculation()`, and `$run_sql()` methods in its
+#' code. The code runs in a fresh sandboxed R session, with the same
+#' restrictions as `run_r`, where `commons` is a stand-in that asks the app to
+#' run each call and returns the result; the data sources never enter the
+#' sandbox. The saved source keeps its `commons$` calls, so it renders
+#' wherever a `commons` object is defined. Quarto isn't needed to show
+#' documents, only to render the saved source elsewhere. A trusted-only agent doesn't write
+#' documents, since their code is the agent's own.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,
@@ -301,8 +320,8 @@ Commons <- R6::R6Class(
         sources
       )
       private$restore_reminder_pending <- FALSE
-      # Handles, the worker, and citation requests all serve the fallback
-      # path, which a trusted-only agent doesn't have.
+      # Handles, the worker, citation requests, and documents all serve the
+      # fallback path, which a trusted-only agent doesn't have.
       if (!private$trusted_only) {
         private$handles <- new_handle_store()
         private$worker <- new_r_worker(
@@ -311,6 +330,14 @@ Commons <- R6::R6Class(
         )
         private$citation_request <- new.env(parent = emptyenv())
         private$citation_request$reminder <- citation_reminder_text()
+        private$artifacts <- new_artifact_store(
+          resolve_input = function(method, args) {
+            resolve_artifact_input(private$commons_obj, method, args)
+          },
+          network = network,
+          protection = protection %||% run_r_protection_mode()
+        )
+        private$artifacts$owner <- self
       }
 
       commons_tools <- build_commons_tools(self, private)
@@ -339,6 +366,12 @@ Commons <- R6::R6Class(
 
     set_turns = function(value) {
       private$restore_reminder_pending <- FALSE
+      # Artifacts live for one conversation; a restored or cleared one starts
+      # without them.
+      store <- private$own_artifacts()
+      if (!is.null(store)) {
+        artifact_store_reset(store)
+      }
       super$set_turns(value)
     },
 
@@ -348,8 +381,11 @@ Commons <- R6::R6Class(
       }
       restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
+      n_turns <- length(self$get_turns())
       result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
       private$consume_restore_reminder(restore_reminder_pending)
+      turns <- self$get_turns()
+      save_turn_artifacts(private$own_artifacts(), turns[seq_along(turns) > n_turns])
       if (result$visible) result$value else invisible(result$value)
     },
 
@@ -382,7 +418,13 @@ Commons <- R6::R6Class(
       # A trusted-only agent shows no provenance markers. An empty corpus still
       # strips citation markup but rejects every citation, so none renders.
       corpus <- if (trusted_only) list() else private$corpus
+      artifact_store <- private$own_artifacts()
+      on_artifact <- if (!is.null(artifact_store)) {
+        artifact_scan_handler(artifact_store)
+      }
       as_content <- identical(stream, "content")
+      # Bypasses this class's set_turns(), which would drop the artifacts.
+      replace_turns <- function(turns) super$set_turns(turns)
 
       # Always project citations so reserved model markup cannot reach the browser.
       coro::async_generator(function() {
@@ -390,7 +432,10 @@ Commons <- R6::R6Class(
         if (tracing) {
           span <- local_conversation_turn_span(user = user)
         }
-        scanner <- citation_scanner(corpus)
+        scanner <- citation_scanner(
+          corpus,
+          on_artifact = on_artifact
+        )
 
         for (chunk in coro::await_each(raw_stream)) {
           if (is.character(chunk)) {
@@ -410,6 +455,12 @@ Commons <- R6::R6Class(
         if (nzchar(tail)) {
           yield(if (as_content) ellmer::ContentText(tail) else tail)
         }
+        replace_turns(project_turns_display(
+          self$get_turns(),
+          from_index,
+          corpus,
+          artifact_store
+        ))
 
         decisions <- scanner$decisions()
         verified <- any(vapply(
@@ -461,6 +512,10 @@ Commons <- R6::R6Class(
 
     citation_corpus = function() {
       private$corpus
+    },
+
+    artifact_store = function() {
+      private$own_artifacts()
     },
 
     queue_restore_reminder = function() {
@@ -531,14 +586,29 @@ Commons <- R6::R6Class(
     corpus = NULL,
     citation_request = NULL,
     restore_reminder_pending = FALSE,
+    artifacts = NULL,
 
     prepare_turn_inputs = function(inputs) {
       inputs <- append_turn_reminder(inputs, self$get_model())
+      inputs <- c(inputs, take_artifact_reminders(private$own_artifacts()))
       # The restore reminder is about run_r state, which this mode never has.
       if (private$restore_reminder_pending && !private$trusted_only) {
         inputs <- append_restored_conversation_reminder(inputs)
       }
       inputs
+    },
+
+    # `clone()` copies the reference to the store, so a clone, such as the one
+    # shinychat makes to title a conversation, would clear the original's
+    # documents when it sets its own turns. A clone takes its own copy first.
+    own_artifacts = function() {
+      store <- private$artifacts
+      if (is.null(store) || identical(store$owner, self)) {
+        return(store)
+      }
+      private$artifacts <- artifact_store_fork(store)
+      private$artifacts$owner <- self
+      private$artifacts
     },
 
     consume_restore_reminder = function(was_pending) {

@@ -24,6 +24,7 @@ test_that("a trusted-only agent registers no fallback tools", {
   expect_null(private$worker)
   expect_null(private$handles)
   expect_null(private$citation_request)
+  expect_null(private$artifacts)
 
   metrics <- trusted_agent(
     data_sources = list(sales_db = definitions_source())

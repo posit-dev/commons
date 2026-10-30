@@ -279,6 +279,7 @@ new_r_worker <- function(network = "none", protection = "sandbox") {
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
+  worker$cancel_await <- NULL
   worker$pending <- 0L
   worker$reap <- NULL
   worker$last_used <- Sys.time()
@@ -372,6 +373,9 @@ commons_dll_path <- function() {
 
 worker_close <- function(worker) {
   cancel_worker_reap(worker)
+  if (!is.null(worker$cancel_await)) {
+    worker$cancel_await()
+  }
   if (!is.null(worker$rs)) {
     close_worker_session(worker$rs)
     worker$rs <- NULL
@@ -479,9 +483,12 @@ cancel_worker_reap <- function(worker) {
 # watches the session's poll connection, the same mechanism ellmer itself
 # uses for async HTTP. A wall-clock timeout interrupts the computation, and
 # an unresponsive or crashed worker is killed (it respawns on the next call).
+# `on_message` receives the conditions the call signals to the host, such as a
+# document's requests to its commons, while the call runs.
 worker_await <- function(
   worker,
-  timeout = getOption("commons.run_r_timeout", worker_defaults$call_timeout)
+  timeout = getOption("commons.run_r_timeout", worker_defaults$call_timeout),
+  on_message = NULL
 ) {
   rs <- worker$rs
   promises::promise(function(resolve, reject) {
@@ -494,6 +501,7 @@ worker_await <- function(
     # waits on later::loop_empty() is not held up by a timer for a call that
     # already finished. Calling one after its callback ran is a safe no-op.
     release <- function() {
+      worker$cancel_await <- NULL
       for (cancel in list(cancel_timeout, cancel_kill, cancel_watch)) {
         if (!is.null(cancel)) {
           cancel()
@@ -560,6 +568,12 @@ worker_await <- function(
             } else {
               settle(msg$result)
             }
+          } else if (msg$code == 301 && !is.null(on_message)) {
+            tryCatch(
+              on_message(msg$message),
+              error = function(err) cli::cli_warn(conditionMessage(err))
+            )
+            cancel_watch <<- poll()
           } else if (msg$code >= 500) {
             kill_worker(
               "the R session crashed and was restarted. Session variables were reset."
@@ -572,5 +586,8 @@ worker_await <- function(
       )
     }
     cancel_watch <- poll()
+    worker$cancel_await <- function() {
+      settle(list(failure = "the R session was closed before the code finished."))
+    }
   })
 }
