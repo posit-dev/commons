@@ -121,9 +121,9 @@ semantic_parameters_from_spec <- function(entries, backend) {
       default = default,
       has_default = has_default
     )
-    # Snowflake requires a variable's value to match its declared type, so
-    # the type is kept for the query to cast to. It is spliced into SQL, so
-    # only a plain type name is kept.
+    # Snowflake rejects a value with a mismatched type, so store the type to be used in
+    # casting later. The regex matches a sequence of letters and underscores, optionally 
+    # followed by a numeric precision (e.g. `TIMESTAMP_TZ`, `VARCHAR(16)`, `NUMBER(10, 2)`)
     if (
       identical(backend, "Snowflake") &&
         grepl("^[A-Za-z_]+( *\\( *[0-9]+( *, *[0-9]+)? *\\))?$", declared_type)
@@ -172,8 +172,8 @@ semantic_parameter_type <- function(type) {
     return("integer")
   }
   if (base %in% c("NUMBER", "NUMERIC", "DECIMAL")) {
-    # Scale defaults to 0, and a cast to scale 0 rounds a fraction, so such a
-    # value must be a whole number.
+    # Casting a fraction to scale 0 (the default) rounds it silently. Typing
+    # the parameter as an integer rejects the fraction instead.
     scale <- regmatches(type, regexec(",\\s*([0-9]+)\\s*\\)", type))[[1]][2]
     return(if (is.na(scale) || as.integer(scale) == 0L) "integer" else "number")
   }
