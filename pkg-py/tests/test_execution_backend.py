@@ -13,6 +13,8 @@ import asyncio
 import os
 import signal
 import subprocess
+import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, cast
@@ -27,6 +29,7 @@ from commons._execution._backend import (
     LocalBackend,
     LocalSession,
     WorkerSession,
+    _kill_when_stopped,
     _read_tail,
     _signal_tree,
     _terminate,
@@ -347,7 +350,6 @@ def test_the_default_grace_is_the_documented_constant() -> None:
     assert LocalBackend()._terminate_grace == TERMINATE_GRACE
 
 
-
 @pytest.mark.skipif(
     not hasattr(os, "waitid"), reason="os.waitid is POSIX, and on macOS 3.13+"
 )
@@ -359,3 +361,23 @@ def test_a_group_left_with_only_a_zombie_can_still_be_signalled() -> None:
     os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)  # pyrefly: ignore[missing-attribute]
     _signal_tree(cast(Any, process), signal.SIGTERM)
     assert process.wait() == 0
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="reads the macOS process table")
+def test_a_stopped_worker_is_killed_after_another_waiter_took_the_stop_report() -> None:
+    # Python 3.14.10's asyncio on macOS takes the report of a stopped child
+    # before the stop watcher can see it.
+    process = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    try:
+        os.kill(process.pid, signal.SIGSTOP)
+        os.waitpid(process.pid, os.WUNTRACED)
+        watcher = threading.Thread(
+            target=_kill_when_stopped, args=(process.pid,), daemon=True
+        )
+        watcher.start()
+        watcher.join(timeout=5)
+        assert not watcher.is_alive(), "the stopped worker was never killed"
+        assert process.wait(timeout=5) == -signal.SIGKILL
+    finally:
+        process.kill()
+        process.wait()

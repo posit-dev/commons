@@ -12,11 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ctypes
 import os
 import shutil
 import signal
+import sys
 import tempfile
 import threading
+import time
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any, Literal, Protocol, runtime_checkable
@@ -313,30 +316,115 @@ def _kill_when_stopped(pid: int) -> None:
 
     Waits until the worker stops or exits, and returns without acting if
     it exits. Model code can stop its own process with SIGSTOP (nothing
-    else has a reason to). On macOS, Python 3.14's asyncio mistakes a
+    else has a reason to). On macOS, Python 3.14 before 3.14.10 mistakes a
     stopped child for an exited one, then blocks the event loop in
     ``waitpid()`` until the child really exits, which freezes the host.
-    Killing the worker lets that ``waitpid()`` return at once. This runs
-    wherever ``os.waitid`` exists, so the driver reports a stopped worker
-    as a crash on every such platform.
+    Killing the worker lets that ``waitpid()`` return at once, and the
+    driver reports a stopped worker as a crash rather than waiting out
+    the call's timeout.
 
-    ``WNOWAIT`` leaves the exit status for asyncio to collect. Without
-    ``os.waitid`` (macOS before Python 3.13), a stopped worker is not
-    killed here, and the call fails when its timeout runs out.
+    On macOS this polls the process table, because from 3.14.10 asyncio
+    takes the stop report that ``waitid`` would otherwise leave for this
+    thread. Elsewhere ``WNOWAIT`` leaves the exit status for asyncio to
+    collect. Without
+    either (Windows), a stopped worker is not killed here, and the call
+    fails when its timeout runs out.
     """
-    if not hasattr(os, "waitid"):
+    if sys.platform == "darwin":
+        stopped = _darwin_wait_for_stop(pid)
+    elif hasattr(os, "waitid"):
+        try:
+            info = os.waitid(os.P_PID, pid, os.WEXITED | os.WSTOPPED | os.WNOWAIT)
+        except ChildProcessError:
+            return
+        stopped = info is not None and info.si_code == os.CLD_STOPPED
+    else:
         return
-    try:
-        info = os.waitid(os.P_PID, pid, os.WEXITED | os.WSTOPPED | os.WNOWAIT)
-    except ChildProcessError:
-        return
-    if info is None or info.si_code != os.CLD_STOPPED:
+    if not stopped:
         return
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(pid, signal.SIGKILL)
         return
     with contextlib.suppress(ProcessLookupError):
         os.kill(pid, signal.SIGKILL)
+
+
+# How often the macOS stop watcher reads a worker's state.
+STOP_POLL = 0.1
+
+# From <sys/proc_info.h> and <sys/proc.h>.
+_PROC_PIDTBSDINFO = 3
+_SSTOP = 4
+
+
+class _ProcBsdInfo(ctypes.Structure):
+    """``struct proc_bsdinfo``, which ``proc_pidinfo()`` fills."""
+
+    _fields_ = [
+        *(
+            (name, ctypes.c_uint32)
+            for name in (
+                "pbi_flags",
+                "pbi_status",
+                "pbi_xstatus",
+                "pbi_pid",
+                "pbi_ppid",
+                "pbi_uid",
+                "pbi_gid",
+                "pbi_ruid",
+                "pbi_rgid",
+                "pbi_svuid",
+                "pbi_svgid",
+                "rfu_1",
+            )
+        ),
+        ("pbi_comm", ctypes.c_char * 16),
+        ("pbi_name", ctypes.c_char * 32),
+        *(
+            (name, ctypes.c_uint32)
+            for name in (
+                "pbi_nfiles",
+                "pbi_pgid",
+                "pbi_pjobc",
+                "e_tdev",
+                "e_tpgid",
+            )
+        ),
+        ("pbi_nice", ctypes.c_int32),
+        ("pbi_start_tvsec", ctypes.c_uint64),
+        ("pbi_start_tvusec", ctypes.c_uint64),
+    ]
+
+
+def _darwin_wait_for_stop(pid: int) -> bool:
+    """Poll the worker's state until it stops (True) or is gone (False).
+
+    ``proc_pidinfo()`` fails once the worker is a zombie. The start time
+    guards against acting on a later process that reuses the PID.
+    """
+    proc_pidinfo = ctypes.CDLL(None).proc_pidinfo
+    proc_pidinfo.argtypes = [
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_uint64,
+        ctypes.c_void_p,
+        ctypes.c_int,
+    ]
+    proc_pidinfo.restype = ctypes.c_int
+    info = _ProcBsdInfo()
+    size = ctypes.sizeof(info)
+    started = None
+    while True:
+        if proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(info), size) != size:
+            return False
+        start = (info.pbi_start_tvsec, info.pbi_start_tvusec)
+        if started is None:
+            started = start
+        elif start != started:
+            return False
+        if info.pbi_status == _SSTOP:
+            return True
+        time.sleep(STOP_POLL)
 
 
 def _signal_tree(process: asyncio.subprocess.Process, sig: signal.Signals) -> None:

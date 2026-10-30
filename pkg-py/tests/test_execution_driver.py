@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import sys
 import time
 from datetime import date
 from typing import Annotated
@@ -357,7 +358,9 @@ async def test_a_child_ignoring_sigterm_does_not_outlive_the_close():
     )
 
 
-@pytest.mark.skipif(not hasattr(os, "waitid"), reason="needs os.waitid")
+@pytest.mark.skipif(
+    sys.platform != "darwin" and not hasattr(os, "waitid"), reason="needs os.waitid"
+)
 async def test_a_worker_that_stops_itself_is_killed_and_reported_as_a_crash():
     async with make_worker(call_timeout=30) as worker:
         await worker.run("1")
