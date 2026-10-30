@@ -94,8 +94,7 @@ test_that("Snowflake semantic YAML imports only public dimensions and metrics", 
 })
 
 test_that("Snowflake semantic dependencies read base tables as SQL identifiers", {
-  # The YAML keeps a quoted name's quotes, and folds an unquoted one to upper
-  # case the way the SQL that created it would.
+  # The YAML gives each name as written in SQL, quotes and all.
   specification <- list(tables = list(
     list(base_table = list(
       database = '"Commons"',

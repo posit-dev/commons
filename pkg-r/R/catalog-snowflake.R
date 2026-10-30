@@ -680,8 +680,7 @@ snowflake_semantic_dependencies <- function(id, specification) {
   complete <- TRUE
   for (table in semantic_spec_entries(specification$tables)) {
     base <- table$base_table %||% list()
-    # A name the YAML gives follows SQL identifier rules; one it leaves out
-    # comes from the view's own id, which is already exact.
+    # If base_table has no database or schema, use the view's as-is.
     table_name <- snowflake_yaml_identifier(base$table)
     catalog <- snowflake_yaml_identifier(base$database %||% base$catalog) %||%
       model[["catalog"]]
@@ -709,9 +708,7 @@ snowflake_semantic_dependencies <- function(id, specification) {
   list(ids = ids[!duplicated(keys)], complete = complete && length(ids) > 0L)
 }
 
-# A name in a semantic view's YAML follows SQL identifier rules: a quoted one
-# is exact, with a doubled quote standing for one, and an unquoted one folds to
-# upper case.
+# Strip quotes from a quoted name ("" is one quote); upper-case others (see #446).
 snowflake_yaml_identifier <- function(name) {
   if (!rlang::is_string(name)) {
     return(NULL)
