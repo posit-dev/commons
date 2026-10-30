@@ -426,8 +426,7 @@ def _temporal_shift(node: Ir, state: _State, selected: str | None) -> str | None
     """
     attrs = node.attrs
     dialect = state.dialect
-    # The checker accepts an untyped NULL as the interval, which shifts to
-    # NULL. Neither warehouse adds a bare NULL to a date, so it is typed.
+    # Snowflake refuses DATE + NULL, so write CAST(NULL AS <timestamp>) (#441).
     if node.type == "datetime" and "null" in (attrs["lhs"].kind, attrs["rhs"].kind):
         return f"CAST(NULL AS {_NULL_DATETIME[dialect]})"
     lhs_interval = attrs["lhs"].type == "interval"
