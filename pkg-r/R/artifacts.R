@@ -144,6 +144,17 @@ artifact_store_values <- function(store) {
   c(drop_nulls(saved), pending[setdiff(names(pending), names(saved))])
 }
 
+# A separate store holding the same documents, rendered again once needed.
+artifact_store_fork <- function(store) {
+  fork <- new_artifact_store(
+    store$resolve_input,
+    network = store$network,
+    protection = store$protection
+  )
+  artifact_store_restore(fork, artifact_store_values(store))
+  fork
+}
+
 artifact_store_restore <- function(store, values) {
   for (id in names(values)) {
     entry <- values[[id]]

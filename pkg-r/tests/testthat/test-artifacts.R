@@ -409,6 +409,43 @@ test_that("embedding a figure respects the document's sandbox", {
   expect_false(grepl(encoded, report, fixed = TRUE))
 })
 
+test_that("a plot directly after a cell's code shows as an image", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  source <- "---\ntitle: Plot\n---\n\n```{r}\nplot(1:3)\n```\n"
+
+  result <- wait_for_promise(
+    artifact_commit(store, "plot", "Plot", source)$rendered
+  )
+
+  html <- paste(result$html, collapse = "")
+  expect_match(html, "<img src=\"data:image/png;base64,", fixed = TRUE)
+  expect_false(grepl("![", html, fixed = TRUE))
+})
+
+test_that("a clone of the agent doesn't clear the original's documents", {
+  agent <- orders_agent()
+  store <- agent$artifact_store()
+  events <- character()
+  store$listener <- function(event) events <<- c(events, event$type)
+  artifact_store_restore(
+    store,
+    list(orders = list(title = "Orders", sources = list(orders_document())))
+  )
+
+  clone <- agent$clone()
+  clone$set_turns(list())
+
+  expect_identical(agent$artifact_store(), store)
+  expect_equal(names(artifact_store_values(store)), "orders")
+  expect_length(events, 0)
+  expect_false(identical(clone$artifact_store(), store))
+  expect_length(artifact_store_values(clone$artifact_store()), 0)
+
+  # Before the clone resets, it starts with the original's documents.
+  expect_equal(names(artifact_store_values(agent$clone()$artifact_store())), "orders")
+})
+
 test_that("the first chat saves its documents and later chats save only new turns", {
   skip_if_no_sandbox()
   agent <- orders_agent()
