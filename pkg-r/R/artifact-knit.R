@@ -48,8 +48,12 @@ artifact_run_update <- function(run, source, complete = FALSE) {
     return(invisible(run))
   }
   if (is.null(run$front) && is.null(run$front_error)) {
-    split <- split_artifact_source(source)
+    split <- split_artifact_source(source, complete = complete)
     if (is.null(split)) {
+      if (complete) {
+        run$front_error <- "The frontmatter that opens the document needs a closing `---` line."
+        artifact_run_status(run, "failed", run$front_error)
+      }
       return(invisible(run))
     }
     run$front <- tryCatch(
@@ -295,8 +299,10 @@ artifact_run_emit <- function(run) {
   if (run$cancelled) {
     return(invisible(run))
   }
+  frontmatter <- run$front$frontmatter
+  frontmatter$title <- frontmatter$title %||% run$title %||% run$artifact$title
   html <- c(
-    artifact_header_html(run$front$frontmatter),
+    artifact_header_html(frontmatter),
     vapply(
       run$pieces %||% list(),
       function(piece) artifact_piece_html(run, piece),

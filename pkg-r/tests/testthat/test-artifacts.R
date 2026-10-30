@@ -44,6 +44,30 @@ test_that("documents are validated as the shared cases say", {
   }
 })
 
+test_that("a streamed source waits until it can tell whether frontmatter opens it", {
+  for (prefix in c("", "\n", "-", "--", "---", "---\ntitle: A")) {
+    expect_null(split_artifact_source(prefix, complete = FALSE), label = prefix)
+  }
+  expect_identical(
+    split_artifact_source("# Sales", complete = FALSE),
+    list(yaml = "", body = "# Sales")
+  )
+  expect_identical(split_artifact_source("---\ntitle: A\n---\nB")$body, "B")
+})
+
+test_that("a document without frontmatter takes the tag's title", {
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
+  committed <- artifact_commit(store, "doc", "Sales by region", "Just prose.\n")
+  wait_for_promise(committed$rendered)
+
+  artifact <- artifact_get(store, "doc")
+  expect_identical(artifact$title, "Sales by region")
+  expect_match(
+    read_utf8(file.path(artifact_latest_dir(artifact), "report.qmd")),
+    "^---\ntitle: Sales by region\n---\n\nJust prose."
+  )
+})
+
 test_that("frontmatter reads booleans as YAML 1.2 does", {
   doc <- parse_artifact_document("---\ntitle: Top\nsubtitle: On\n---\nBody.\n")
   expect_identical(doc$frontmatter$subtitle, "On")

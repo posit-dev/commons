@@ -143,6 +143,7 @@ artifact_scan_handler <- function(store) {
         }
         assign(event$id, new_artifact_run(store, artifact), envir = store$streams)
         store$streams[[event$id]]$source <- ""
+        store$streams[[event$id]]$title <- event$title
         artifact_notify(store, event)
       },
       delta = {
@@ -425,8 +426,8 @@ parse_artifact_document <- function(source, call = rlang::caller_env()) {
   split <- split_artifact_source(source)
   if (is.null(split)) {
     artifact_invalid(
-      "missing_frontmatter",
-      "The document must start with YAML frontmatter between `---` lines.",
+      "unterminated_frontmatter",
+      "The frontmatter that opens the document needs a closing `---` line.",
       call = call
     )
   }
@@ -437,8 +438,17 @@ parse_artifact_document <- function(source, call = rlang::caller_env()) {
 }
 
 # NULL until the frontmatter's closing `---` has arrived.
-split_artifact_source <- function(source) {
+# Frontmatter is optional; a document without it gets the tag's title. While
+# the source is still arriving (`complete = FALSE`), NULL means it can't yet
+# tell whether frontmatter opens the document or where it ends.
+split_artifact_source <- function(source, complete = TRUE) {
   text <- sub("^(?:[ \t]*\n)+", "", gsub("\r\n", "\n", source), perl = TRUE)
+  if (!startsWith(text, "---")) {
+    if (!complete && startsWith("---", text)) {
+      return(NULL)
+    }
+    return(list(yaml = "", body = text))
+  }
   match <- regexec(
     "(?s)^---[ \t]*\n(?:(.*?)\n)??(?:---|\\.\\.\\.)[ \t]*(?:\n|$)",
     text,
@@ -470,7 +480,7 @@ validate_artifact_frontmatter <- function(yaml_text, call = rlang::caller_env())
       call = call
     )
   }
-  front <- front %||% list()
+  front <- front %||% rlang::set_names(list())
   if (!is_mapping(front)) {
     artifact_invalid(
       "invalid_yaml",
