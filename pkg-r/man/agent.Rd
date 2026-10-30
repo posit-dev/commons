@@ -162,16 +162,14 @@ drawer as it's written, with each R cell knitted as soon as it arrives;
 outside Shiny, \code{agent$chat()} knits it and reports where it wrote the
 result.
 
-A document gets its data by calling trusted calculations in its code.
-commons runs each call before the cell does, saves the result as a CSV file
-beside the document, and replaces the call with a read of that file, so the
-saved directory is ordinary Quarto source with no credentials and no
-commons dependency. A manifest beside the data records the call behind each
-file and, for metrics and calculations, the SQL it ran.
-
-The document's code runs in a fresh sandboxed R session, with the same
-restrictions as \code{run_r}. Quarto isn't needed to show documents, only to
-render the saved source elsewhere. A trusted-only agent doesn't write
+A document gets its data by calling the \code{\link[=commons]{commons()}} object's
+\verb{$measure()}, \verb{$metrics()}, \verb{$calculation()}, and \verb{$run_sql()} methods in its
+code. The code runs in a fresh sandboxed R session, with the same
+restrictions as \code{run_r}, where \code{commons} is a stand-in that asks the app to
+run each call and returns the result; the data sources never enter the
+sandbox. The saved source keeps its \verb{commons$} calls, so it renders
+wherever a \code{commons} object is defined. Quarto isn't needed to show
+documents, only to render the saved source elsewhere. A trusted-only agent doesn't write
 documents, since their code is the agent's own.
 
 These model-facing tools should be considered private. Their constructors

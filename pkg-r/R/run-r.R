@@ -483,9 +483,12 @@ cancel_worker_reap <- function(worker) {
 # watches the session's poll connection, the same mechanism ellmer itself
 # uses for async HTTP. A wall-clock timeout interrupts the computation, and
 # an unresponsive or crashed worker is killed (it respawns on the next call).
+# `on_message` receives the conditions the call signals to the host, such as a
+# document's requests to its commons, while the call runs.
 worker_await <- function(
   worker,
-  timeout = getOption("commons.run_r_timeout", worker_defaults$call_timeout)
+  timeout = getOption("commons.run_r_timeout", worker_defaults$call_timeout),
+  on_message = NULL
 ) {
   rs <- worker$rs
   promises::promise(function(resolve, reject) {
@@ -565,6 +568,12 @@ worker_await <- function(
             } else {
               settle(msg$result)
             }
+          } else if (msg$code == 301 && !is.null(on_message)) {
+            tryCatch(
+              on_message(msg$message),
+              error = function(err) cli::cli_warn(conditionMessage(err))
+            )
+            cancel_watch <<- poll()
           } else if (msg$code >= 500) {
             kill_worker(
               "the R session crashed and was restarted. Session variables were reset."

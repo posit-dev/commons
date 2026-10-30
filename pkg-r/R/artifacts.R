@@ -40,9 +40,8 @@ tool_edit_artifact <- function(private) {
 
 # --- the store -----------------------------------------------------------------
 
-# `resolve_input` runs one normalized trusted call and returns its result as
-# a data frame, with the SQL or provenance behind it; the store never touches
-# data sources itself.
+# `resolve_input(method, args)` answers a document's call to a `commons`
+# method; the store never touches data sources itself.
 new_artifact_store <- function(
   resolve_input,
   network = "none",
@@ -103,9 +102,8 @@ take_artifact_reminders <- function(store) {
   )
 }
 
-# An artifact exists from the moment its tag opens, so a streaming run can
-# cache its trusted results, but only counts as a document once it has a
-# version.
+# An artifact exists from the moment its tag opens, but only counts as a
+# document once it has a version.
 artifact_get <- function(store, id) {
   if (!rlang::is_string(id)) {
     return(NULL)
@@ -121,10 +119,7 @@ artifact_ensure <- function(store, id) {
     artifact$id <- id
     artifact$title <- id
     artifact$versions <- list()
-    artifact$results <- list()
     artifact$units <- list()
-    artifact$calls <- list()
-    artifact$replacements <- character()
     artifact$html <- character()
     artifact$errors <- character()
     artifact$status <- "writing"
@@ -297,8 +292,6 @@ artifact_rerun <- function(store, artifact, doc) {
   signature <- function(units) lapply(units, `[`, c("kind", "text"))
   if (identical(signature(units), signature(artifact$units))) {
     run$units <- artifact$units
-    run$calls <- artifact$calls
-    run$replacements <- artifact$replacements
     run$queued <- length(units)
   }
   run
@@ -318,18 +311,10 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     artifact$status <- "ready"
     if (!is.null(run)) {
       artifact$units <- run$units
-      artifact$calls <- run$calls
-      artifact$replacements <- run$replacements
     }
   }
   dir <- artifact$versions[[version]]$dir
-  write_artifact_dir(
-    dir,
-    doc,
-    run$calls %||% list(),
-    run$replacements %||% character(),
-    artifact
-  )
+  write_artifact_dir(dir, doc)
   writeLines(
     artifact_document_html(artifact$title, result$html),
     file.path(dir, "report.html"),
@@ -592,61 +577,52 @@ is_mapping <- function(x) {
     (length(x) == 0 || (!is.null(names(x)) && all(nzchar(names(x)))))
 }
 
-# --- trusted results and files -------------------------------------------------
+# --- the document's commons ----------------------------------------------------
 
-resolve_artifact_input <- function(private, input) {
-  args <- input$call
-  query <- switch(
-    input$kind,
-    measure = list(result = artifact_measure_data(run_measure(
-      private$registry,
-      args$name,
-      args$arguments,
-      private$injections,
-      private$sources
-    )$value)),
-    metrics = query_metrics(
-      private$definitions,
-      private$sources,
-      metrics = unlist(args$metrics),
-      dimensions = unlist(args$dimensions),
-      filters = unlist(args$filters),
-      where = args$where,
-      source_name = args$source,
-      arguments = args$arguments
-    ),
-    calculation = {
-      run <- run_calculation(
-        private$sources,
-        args$name,
-        args$arguments,
-        source_name = args$source
-      )
-      list(
-        result = run$result,
-        sql = run$prepared$sql,
-        bindings = run$prepared$bindings
-      )
-    }
+# The methods a document's `commons` offers: the trusted calculations, and
+# read-only SQL for what they don't cover.
+artifact_commons_methods <- c("measure", "metrics", "calculation", "run_sql")
+
+# Answers a document's `commons$<method>(...)` on the real commons. Requests
+# come from the sandbox, so only plain values pass in and only tables and
+# vectors pass out: a plot, for one, would carry its environment with it.
+resolve_artifact_input <- function(commons, method, args) {
+  if (!rlang::is_string(method) || !method %in% artifact_commons_methods) {
+    cli::cli_abort(
+      "Documents can call {.code commons${artifact_commons_methods}()} only.",
+      call = NULL
+    )
+  }
+  if (!is.list(args) || !is_plain_value(args)) {
+    cli::cli_abort(
+      "Arguments must be strings, numbers, or lists of them.",
+      call = NULL
+    )
+  }
+  value <- do.call(commons[[method]], args)
+  if (identical(method, "measure")) {
+    value <- artifact_measure_data(value)
+  }
+  if (is.data.frame(value)) {
+    return(as.data.frame(value))
+  }
+  if (is.atomic(value) && !is.null(value) && is_plain_value(unclass(value))) {
+    return(value)
+  }
+  cli::cli_abort(
+    "It returned neither a table nor a value, which documents can't use.",
+    call = NULL
   )
-  value <- query$result
-  scalar <- is.atomic(value) && !is.null(value)
-  if (scalar) {
-    value <- data.frame(value = value)
+}
+
+is_plain_value <- function(x) {
+  if (!all(names(attributes(x)) %in% "names")) {
+    return(FALSE)
   }
-  if (!is.data.frame(value)) {
-    cli::cli_abort("It must return a table or a value, not a plot or nothing.")
+  if (is.null(x) || is.atomic(x)) {
+    return(TRUE)
   }
-  provenance <- if (identical(input$kind, "measure")) {
-    private$measure_provenance[[args$name]]
-  }
-  list(
-    value = value,
-    scalar = scalar,
-    sql = query$sql,
-    bindings = if (length(query$bindings)) query$bindings,
-    provenance = if (length(provenance)) as.list(provenance)
-  )
+  is.list(x) && all(vapply(x, is_plain_value, logical(1)))
 }
 
 # The data behind a measure's value, as call_measure registers it for run_r.
@@ -661,26 +637,14 @@ artifact_measure_data <- function(value) {
   value
 }
 
-write_artifact_dir <- function(dir, doc, calls, replacements, artifact) {
-  dir.create(file.path(dir, "data"), recursive = TRUE, showWarnings = FALSE)
+write_artifact_dir <- function(dir, doc) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   writeLines(artifact_quarto_yml(), file.path(dir, "_quarto.yml"))
   writeLines(
-    artifact_qmd(doc$frontmatter, rewrite_trusted_text(doc$body, replacements)),
+    artifact_qmd(doc$frontmatter, doc$body),
     file.path(dir, "report.qmd"),
     useBytes = TRUE
   )
-  for (key in names(calls)) {
-    write_trusted_result(
-      artifact$results[[key]]$value,
-      file.path(dir, "data", calls[[key]]$file)
-    )
-  }
-  if (length(calls)) {
-    yaml::write_yaml(
-      trusted_call_manifest(calls, artifact),
-      file.path(dir, "data", "manifest.yaml")
-    )
-  }
   invisible(dir)
 }
 

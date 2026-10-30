@@ -14,22 +14,21 @@ In the frontmatter, set `title` and, if useful, `subtitle` or `date`; the format
 
 Write as much prose as the user seems to want, which may be none: a request for a plot or table may want only that. Users share documents on their own, so make each one presentable without the chat.
 
-Documents can't reach your data sources, your R session, or earlier tool results. Get data in a cell by calling a trusted calculation through the `trusted` object, with the same arguments as its tool:
+Documents can't reach your R session or earlier tool results. Get data in a cell through the `commons` object, whose methods take the same arguments as the matching tools:
 
 ```r
-revenue <- trusted$metrics(metrics = "net_revenue", dimensions = "region")
+revenue <- commons$metrics(metrics = "net_revenue", dimensions = "region")
 ```
 
-Each trusted-calculation tool you have has a counterpart:
+- `commons$measure(name, arguments)`, as for `call_measure`.
+- `commons$metrics(metrics, dimensions, filters, where, arguments, source)`, as for `call_metrics`.
+- `commons$calculation(name, arguments, source)`, as for `call_calculation`.
+- `commons$run_sql(query, source)`, as for `run_sql`. Prefer the trusted calculations above; use SQL only for what they don't cover.
 
-- `trusted$measure(name, arguments)`, as for `call_measure`.
-- `trusted$metrics(metrics, dimensions, filters, where, arguments, source)`, as for `call_metrics`.
-- `trusted$calculation(name, arguments, source)`, as for `call_calculation`.
-
-Write arguments out as literals: strings, numbers, and `c()` or `list()` of them, not variables or computed values. Each call returns a data frame, or a vector for a measure that returns a value. Before the cell runs, each call is run, its result is saved with the document, and the call is replaced with a read of the saved file.
+Each call returns a data frame, or a vector for a measure that returns a value. Only use the methods for a tool you have.
 
 - Run the calculations with tools first, so you know what they return before you write about them.
-- Every number in the document must come from a trusted call or a cell that runs when it renders. Write key figures in prose as inline R expressions, such as `` `r nrow(revenue)` ``, rather than typing them.
+- Every number in the document must come from a `commons` call or a cell that runs when it renders. Write key figures in prose as inline R expressions, such as `` `r nrow(revenue)` ``, rather than typing them.
 - Cells run in order in a fresh R session without network access, using installed packages. Keep them short; readers see code folded.
 - The document is shown as knitted Markdown. Use headings, paragraphs, lists, tables, R cells with static plots, and `::: {.callout-note}` callouts; tabsets, cross-references, and interactive widgets aren't supported.
 

@@ -663,12 +663,13 @@ worker_engage_guardrails <- function() {
   }
 }
 
-# Documents knit a piece at a time in the document's own directory, so cells
-# can read `data/` as the deployed document does. Code is folded and data
-# frames print as tables; errors are kept in the output and recorded.
+# Documents knit a piece at a time in the document's own directory. Code is
+# folded and data frames print as tables; errors are kept in the output and
+# recorded.
 worker_knit_init <- function(dir) {
   setwd(dir)
   state <- attach(NULL, name = "commons:knit")
+  state$commons <- worker_commons_proxy(file.path(dir, ".commons"))
   state$errors <- character()
   state$figs <- file.path(dir, "figs")
   escape <- function(x) {
@@ -718,6 +719,66 @@ worker_knit_init <- function(dir) {
     envir = asNamespace("knitr")
   )
   invisible(TRUE)
+}
+
+# A stand-in for the host's commons. Each method asks the host to run the
+# call on the real object, which holds the connections this session must not,
+# and waits for the answer to appear in `dir`.
+worker_commons_proxy <- function(dir) {
+  count <- 0L
+  request <- function(method, args) {
+    count <<- count + 1L
+    id <- paste0(Sys.getpid(), "-", count)
+    path <- file.path(dir, paste0(id, ".rds"))
+    signalCondition(structure(
+      list(message = "commons request", id = id, method = method, args = args),
+      class = c("commons_request", "callr_message", "condition")
+    ))
+    while (!file.exists(path)) {
+      Sys.sleep(0.01)
+    }
+    response <- readRDS(path)
+    unlink(path)
+    if (!is.null(response$error)) {
+      stop(response$error, call. = FALSE)
+    }
+    response$value
+  }
+  structure(
+    list(
+      measure = function(name, arguments = list()) {
+        request("measure", list(name = name, arguments = arguments))
+      },
+      metrics = function(
+        metrics,
+        dimensions = NULL,
+        filters = NULL,
+        where = NULL,
+        arguments = list(),
+        source = NULL
+      ) {
+        request("metrics", list(
+          metrics = metrics,
+          dimensions = dimensions,
+          filters = filters,
+          where = where,
+          arguments = arguments,
+          source = source
+        ))
+      },
+      calculation = function(name, arguments = list(), source = NULL) {
+        request("calculation", list(
+          name = name,
+          arguments = arguments,
+          source = source
+        ))
+      },
+      run_sql = function(query, source = NULL) {
+        request("run_sql", list(query = query, source = source))
+      }
+    ),
+    class = "commons_proxy"
+  )
 }
 
 worker_knit_unit <- function(kind, text) {

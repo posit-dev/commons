@@ -26,14 +26,12 @@ new_artifact_run <- function(store, artifact) {
   run$artifact <- artifact
   run$dir <- tempfile("commons-run-")
   dir.create(file.path(run$dir, "figs"), recursive = TRUE)
-  dir.create(file.path(run$dir, "data"))
+  dir.create(file.path(run$dir, ".commons"))
   run$worker <- NULL
   run$tail <- promises::promise_resolve(NULL)
   run$front <- NULL
   run$front_error <- NULL
   run$units <- list()
-  run$calls <- list()
-  run$replacements <- character()
   run$queued <- 0L
   run$sent <- character()
   run$cache <- new.env(parent = emptyenv())
@@ -171,13 +169,6 @@ artifact_run_unit <- function(run, unit) {
       ))
     )))
   }
-  text <- tryCatch(
-    artifact_run_prepare(run, unit),
-    error = function(err) err
-  )
-  if (inherits(text, "error")) {
-    return(promises::promise_resolve(artifact_unit_failure(conditionMessage(text))))
-  }
   if (is.null(run$worker)) {
     run$worker <- new_r_worker(run$store$network, run$store$protection)
     worker_ensure(run$worker)
@@ -189,11 +180,15 @@ artifact_run_unit <- function(run, unit) {
     args = list(
       runtime = worker$runtime,
       name = "worker_knit_unit",
-      args = list(kind = unit$kind, text = text)
+      args = list(kind = unit$kind, text = unit$text)
     )
   )
   promises::then(
-    worker_await(worker, getOption("commons.run_r_timeout", 60)),
+    worker_await(
+      worker,
+      getOption("commons.run_r_timeout", 60),
+      on_message = function(message) artifact_serve_request(run, message)
+    ),
     function(res) {
       if (!is.null(res$failure)) {
         # The worker is gone, so later units start a fresh one.
@@ -217,24 +212,34 @@ artifact_run_unit <- function(run, unit) {
   )
 }
 
-# Resolves the unit's trusted calls and returns its text with each replaced by
-# a read of the file its result was written to. The run keeps every
-# replacement, so the saved document reads the same files.
-artifact_run_prepare <- function(run, unit) {
-  replacements <- character()
-  for (found in find_trusted_calls(unit_code(unit))) {
-    calls <- register_trusted_call(run$calls, found)
-    result <- resolve_trusted_call(run$store, run$artifact, found)
-    run$calls <- calls
-    entry <- calls[[trusted_call_key(found)]]
-    path <- file.path(run$dir, "data", entry$file)
-    if (!file.exists(path)) {
-      write_trusted_result(result$value, path)
-    }
-    replacements[[found$text]] <- trusted_call_read(entry, result)
-    run$replacements[[found$text]] <- replacements[[found$text]]
+# The document's `commons` is a stand-in: each method call is sent here as a
+# condition while the cell runs, answered on the real commons, and the answer
+# written where the waiting worker reads it. The data sources never enter the
+# sandbox.
+artifact_serve_request <- function(run, message) {
+  id <- message$id
+  if (
+    !inherits(message, "commons_request") ||
+      !rlang::is_string(id) ||
+      !grepl("^[0-9]+-[0-9]+$", id)
+  ) {
+    return(invisible())
   }
-  rewrite_trusted_text(unit$text, replacements)
+  response <- tryCatch(
+    list(value = run$store$resolve_input(message$method, message$args)),
+    error = function(err) {
+      list(error = sprintf(
+        "`commons$%s()` failed: %s",
+        if (rlang::is_string(message$method)) message$method else "?",
+        conditionMessage(err)
+      ))
+    }
+  )
+  path <- file.path(run$dir, ".commons", paste0(id, ".rds"))
+  partial <- paste0(path, ".partial")
+  saveRDS(response, partial)
+  file.rename(partial, path)
+  invisible()
 }
 
 artifact_unit_failure <- function(message) {

@@ -22,9 +22,8 @@
 * Agents write reports as Quarto documents. In `commons_server()`, a document
   streams into the chat's drawer as the agent writes it, with each R cell
   knitted in a sandboxed R session as soon as it arrives. Documents get their
-  data by calling trusted calculations in their code, whose results are saved
-  beside the document, and the agent revises them with a new `edit_artifact`
-  tool.
+  data by calling `commons()` methods in their code, and the agent revises them
+  with a new `edit_artifact` tool.
 
 * `describe_table` reports complete table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
 

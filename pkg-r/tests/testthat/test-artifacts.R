@@ -44,157 +44,84 @@ test_that("documents are validated as the shared cases say", {
   }
 })
 
-test_that("trusted calls are normalized as the shared cases say", {
-  spec <- shared_fixture("artifact-calls")
-  expect_gt(length(spec$calls), 0)
-  expect_identical(
-    lapply(trusted_call_signatures, function(f) names(formals(f))),
-    lapply(spec$methods, unlist)
-  )
-
-  for (case in spec$calls) {
-    run <- function() normalize_trusted_call(case$method, case$arguments)
-    if (is.null(case$error)) {
-      expect_identical(run(), case$expected, info = case$name)
-    } else {
-      expect_identical(artifact_slug(run()), case$error, info = case$name)
-    }
-  }
-})
-
-test_that("trusted calls get files as the shared cases say", {
-  spec <- shared_fixture("artifact-calls")
-  expect_identical(ARTIFACT_MAX_CALLS, as.integer(spec$max_calls))
-
-  for (case in spec$files) {
-    run <- function() {
-      calls <- list()
-      for (x in case$calls) {
-        found <- c(
-          list(target = x$target),
-          normalize_trusted_call(x$method, x$arguments)
-        )
-        calls <- register_trusted_call(calls, found)
-      }
-      unname(vapply(calls, `[[`, character(1), "file"))
-    }
-    if (is.null(case$error)) {
-      expect_identical(run(), unlist(case$expected), info = case$name)
-    } else {
-      expect_identical(artifact_slug(run()), case$error, info = case$name)
-    }
-  }
-})
-
-test_that("trusted calls are found in R code with literal arguments", {
-  found <- find_trusted_calls(paste(
-    "#| label: totals",
-    "revenue <- trusted$metrics(\"net_revenue\", dimensions = c(\"region\"))",
-    "nrow(trusted$measure(\"orders\", arguments = list(n = -2)))",
-    sep = "\n"
-  ))
-  expect_identical(
-    vapply(found, `[[`, character(1), "text"),
-    c(
-      "trusted$metrics(\"net_revenue\", dimensions = c(\"region\"))",
-      "trusted$measure(\"orders\", arguments = list(n = -2))"
-    )
-  )
-  expect_identical(found[[1]]$target, "revenue")
-  expect_null(found[[2]]$target)
-  expect_identical(found[[2]]$call$arguments, list(n = -2))
-  expect_length(find_trusted_calls("not R ("), 0)
-
-  expect_identical(
-    artifact_slug(find_trusted_calls("trusted$measure(paste0(\"or\", \"ders\"))")),
-    "non_literal_argument"
-  )
-  expect_identical(
-    artifact_slug(find_trusted_calls("x <- \"orders\"\ntrusted$measure(x)")),
-    "non_literal_argument"
-  )
-  expect_identical(artifact_slug(find_trusted_calls("f <- trusted$measure")), "reserved_name")
-  expect_identical(artifact_slug(find_trusted_calls("trusted$query(1)")), "unknown_method")
-  expect_identical(
-    artifact_slug(find_trusted_calls("trusted$measure(\"a\", by = 1)")),
-    "invalid_arguments"
-  )
-})
-
 test_that("frontmatter reads booleans as YAML 1.2 does", {
   doc <- parse_artifact_document("---\ntitle: Top\nsubtitle: On\n---\nBody.\n")
   expect_identical(doc$frontmatter$subtitle, "On")
 })
 
-test_that("the saved document reads each trusted result from its file", {
-  agent <- test_agent(data_sources = list(sales_db = definitions_source()))
-  store <- agent$artifact_store()
-  artifact <- artifact_ensure(store, "doc")
-  run <- new_artifact_run(store, artifact)
-  body <- paste0(
-    "```{r}\nbig <- trusted$metrics(\"big_revenue\", dimensions = \"region\")\n```\n\n",
-    "EMEA had `r big$big_revenue[big$region == \"EMEA\"]`.\n"
-  )
-  for (unit in artifact_units(segment_artifact_body(body))) {
-    artifact_run_prepare(run, unit)
-  }
 
-  dir <- withr::local_tempdir()
-  doc <- parse_artifact_document(paste0("---\ntitle: Big\n---\n\n", body))
-  write_artifact_dir(dir, doc, run$calls, run$replacements, artifact)
-
-  expect_setequal(
-    list.files(dir, recursive = TRUE),
-    c("_quarto.yml", "report.qmd", "data/big.csv", "data/manifest.yaml")
+test_that("a document's commons answers with tables and values", {
+  commons <- commons(
+    data_sources = list(sales_db = definitions_source()),
+    semantic_layer = semantic_layer(count_measure_tool())
   )
-  qmd <- read_utf8(file.path(dir, "report.qmd"))
-  expect_match(qmd, "big <- read.csv(\"data/big.csv\")", fixed = TRUE)
-  expect_no_match(qmd, "trusted$", fixed = TRUE)
-  big <- read.csv(file.path(dir, "data", "big.csv"))
+
+  big <- resolve_artifact_input(
+    commons,
+    "metrics",
+    list(metrics = "big_revenue", dimensions = "region")
+  )
+  expect_s3_class(big, "data.frame")
   expect_equal(big$big_revenue[big$region == "EMEA"], 1950)
-
-  manifest <- yaml::read_yaml(file.path(dir, "data", "manifest.yaml"))
-  expect_named(manifest, "big.csv")
-  expect_identical(manifest$big.csv$kind, "metrics")
-  expect_identical(manifest$big.csv$call$metrics, "big_revenue")
-  expect_match(manifest$big.csv$sql, "^SELECT")
-  expect_match(manifest$big.csv$resolved, "^\\d{4}-\\d{2}-\\d{2}T")
+  expect_equal(
+    resolve_artifact_input(
+      commons,
+      "measure",
+      list(name = "order_count", arguments = list(region = "EMEA"))
+    ),
+    3
+  )
+  expect_equal(
+    resolve_artifact_input(
+      commons,
+      "run_sql",
+      list(query = "SELECT COUNT(*) AS n FROM sales WHERE {{emea}}")
+    )$n,
+    sum(test_sales()$region == "EMEA")
+  )
 })
 
-test_that("a saved result reads back as the tool returned it", {
-  value <- data.frame(
-    month = as.Date(c("2024-01-01", "2024-02-01")),
-    code = c("007", "010"),
-    `net revenue` = c(1.5, 2),
-    check.names = FALSE
+test_that("a document's commons refuses other methods, objects, and plots", {
+  skip_if_not_installed("ggplot2")
+  commons <- commons(
+    data_sources = list(sales_db = test_source()),
+    semantic_layer = semantic_layer(measure(
+      "revenue_plot",
+      "A plot of revenue.",
+      function() ggplot2::ggplot(test_sales(), ggplot2::aes(revenue)),
+      arguments = list()
+    ))
   )
+
+  expect_error(
+    resolve_artifact_input(commons, "describe", list(table = "sales")),
+    "only"
+  )
+  expect_error(
+    resolve_artifact_input(commons, "run_sql", list(query = quote(x))),
+    "strings, numbers"
+  )
+  expect_error(
+    resolve_artifact_input(commons, "measure", list(name = "revenue_plot")),
+    "neither a table nor a value"
+  )
+  expect_error(
+    resolve_artifact_input(commons, "run_sql", list(query = "DELETE FROM sales"))
+  )
+})
+
+test_that("the saved document keeps its commons calls", {
   dir <- withr::local_tempdir()
-  dir.create(file.path(dir, "data"))
-  write_trusted_result(value, file.path(dir, "data", "x.csv"))
-  read <- trusted_call_read(list(file = "x.csv"), list(value = value))
+  body <- "```{r}\nbig <- commons$metrics(\"big_revenue\")\n```\n"
+  write_artifact_dir(dir, parse_artifact_document(paste0("---\ntitle: Big\n---\n\n", body)))
 
-  expect_identical(withr::with_dir(dir, eval(str2lang(read))), value)
-})
-
-test_that("a cell whose trusted call can't resolve shows the error", {
-  store <- test_agent()$artifact_store()
-  committed <- artifact_commit(
-    store,
-    "doc",
-    "Doc",
-    "---\ntitle: Doc\n---\n\n```{r}\nx <- trusted$measure(\"missing\")\n```\n"
-  )
-  result <- wait_for_promise(committed$rendered)
-
-  expect_match(result$errors, "Cell 1: `trusted$measure()` failed", fixed = TRUE)
+  expect_setequal(list.files(dir, recursive = TRUE), c("_quarto.yml", "report.qmd"))
   expect_match(
-    paste(result$html, collapse = ""),
-    "<div class=\"commons-cell-error\">",
+    read_utf8(file.path(dir, "report.qmd")),
+    "big <- commons$metrics(\"big_revenue\")",
     fixed = TRUE
   )
-  expect_length(artifact_get(store, "doc")$calls, 0)
 })
-
 test_that("documents split into prose blocks and cells as they arrive", {
   body <- paste0(
     "Intro with `r n`.\n\n::: {.callout-note}\nA note.\n\nStill the note.\n:::\n\n",
@@ -227,7 +154,7 @@ test_that("callouts keep their Markdown", {
 })
 
 test_that("an edit that breaks the frontmatter makes no version", {
-  store <- new_artifact_store(resolve_input = function(input) NULL)
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
   wait_for_promise(
     artifact_commit(store, "doc", "Doc", "---\ntitle: Doc\n---\nBody.\n")$rendered
   )
@@ -279,7 +206,7 @@ orders_agent <- function() {
 orders_document <- function(cell = "nrow(orders)") {
   paste0(
     "\n---\ntitle: Orders\n---\n\n",
-    "```{r}\norders <- trusted$measure(\"orders\")\n```\n\n",
+    "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
     "There are `r ", cell, "` orders.\n\n",
     "```{r}\n#| label: by-region\ntable(orders$region)\nplot(orders$revenue)\n```\n"
   )
@@ -298,7 +225,7 @@ wait_until_ready <- function(store, id) {
   }))
 }
 
-test_that("a streamed document knits from its trusted calls as it arrives", {
+test_that("a streamed document knits from its commons calls as it arrives", {
   skip_if_no_sandbox()
   agent <- orders_agent()
   store <- agent$artifact_store()
@@ -350,10 +277,6 @@ test_that("a prose edit reuses every code result", {
   artifact <- artifact_get(store, "orders")
   expect_identical(artifact$units, units)
   expect_match(paste(artifact$html, collapse = ""), "We count 6 orders.", fixed = TRUE)
-  expect_equal(
-    read.csv(file.path(artifact_latest_dir(artifact), "data", "orders.csv")),
-    test_sales()
-  )
 })
 
 test_that("errors stay in the document and are reported by cell", {
@@ -372,6 +295,27 @@ test_that("errors stay in the document and are reported by cell", {
     "<div class=\"commons-cell-error\">",
     fixed = TRUE
   )
+})
+
+test_that("a cell whose commons call fails shows the error", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  committed <- artifact_commit(
+    store,
+    "doc",
+    "Doc",
+    paste0(
+      "---\ntitle: Doc\n---\n\n",
+      "```{r}\nx <- commons$measure(\"missing\")\n```\n\n",
+      "```{r}\ncommons$describe(\"sales\")\n```\n\n",
+      "```{r}\nnrow(commons$measure(\"orders\"))\n```\n"
+    )
+  )
+  result <- wait_for_promise(committed$rendered)
+
+  expect_length(result$errors, 2)
+  expect_match(result$errors[[1]], "Cell 1: `commons$measure()` failed", fixed = TRUE)
+  expect_match(paste(result$html, collapse = ""), "[1] 6", fixed = TRUE)
 })
 
 test_that("cells after one that times out still run", {
@@ -528,7 +472,7 @@ test_that("clearing a closed stream cancels its render and its callbacks", {
 })
 
 test_that("clearing a conversation also cancels an edit's render", {
-  store <- new_artifact_store(resolve_input = function(input) NULL)
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
   wait_for_promise(artifact_commit(
     store, "doc", "Doc", "---\ntitle: Doc\n---\n\nOriginal.\n"
   )$rendered)

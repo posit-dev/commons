@@ -300,7 +300,6 @@ query_semantic_metrics <- function(
   list(
     result = source_query_bind(source, sql, unname(arguments)),
     sql = sql,
-    bindings = unname(arguments),
     note = NULL,
     metadata = semantic_metric_metadata(metric_members)
   )

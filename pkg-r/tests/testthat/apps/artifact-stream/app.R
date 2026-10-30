@@ -3,7 +3,7 @@ library(commons)
 document <- paste0(
   "---\ntitle: Orders by region\n---\n\n",
   "## Summary\n\n",
-  "```{r}\norders <- trusted$measure(\"orders\")\n```\n\n",
+  "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
   "There are `r nrow(orders)` orders across **three** regions.\n\n",
   "```{r}\ntable(orders$region)\n```\n\n",
   "- EMEA leads.\n- APAC trails.\n"
