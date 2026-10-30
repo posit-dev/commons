@@ -240,7 +240,7 @@ class LocalSession:
         self._exit.add_done_callback(self._kill_group)
         threading.Thread(
             target=_kill_when_stopped,
-            args=(process.pid,),
+            args=(process.pid, _process_start(process.pid)),
             name=f"commons-worker-stop-{process.pid}",
             daemon=True,
         ).start()
@@ -311,7 +311,7 @@ class LocalSession:
         shutil.rmtree(self.scratch, ignore_errors=True)
 
 
-def _kill_when_stopped(pid: int) -> None:
+def _kill_when_stopped(pid: int, started: tuple[int, int] | None = None) -> None:
     """Kill the worker's process group if the worker is stopped.
 
     Waits until the worker stops or exits, and returns without acting if
@@ -325,13 +325,16 @@ def _kill_when_stopped(pid: int) -> None:
 
     On macOS this polls the process table, because from 3.14.10 asyncio
     takes the stop report that ``waitid`` would otherwise leave for this
-    thread. Elsewhere ``WNOWAIT`` leaves the exit status for asyncio to
-    collect. Without
+    thread. ``started`` is the worker's start time from ``_process_start``,
+    so a later process that reuses the PID is left alone. Elsewhere
+    ``WNOWAIT`` leaves the exit status for asyncio to collect. Without
     either (Windows), a stopped worker is not killed here, and the call
     fails when its timeout runs out.
     """
     if sys.platform == "darwin":
-        stopped = _darwin_wait_for_stop(pid)
+        if started is None:
+            return
+        stopped = _darwin_wait_for_stop(pid, started)
     elif hasattr(os, "waitid"):
         try:
             info = os.waitid(os.P_PID, pid, os.WEXITED | os.WSTOPPED | os.WNOWAIT)
@@ -396,12 +399,8 @@ class _ProcBsdInfo(ctypes.Structure):
     ]
 
 
-def _darwin_wait_for_stop(pid: int) -> bool:
-    """Poll the worker's state until it stops (True) or is gone (False).
-
-    ``proc_pidinfo()`` fails once the worker is a zombie. The start time
-    guards against acting on a later process that reuses the PID.
-    """
+def _darwin_proc_info(pid: int) -> _ProcBsdInfo | None:
+    """Read a process's entry, or None once it is a zombie or gone."""
     proc_pidinfo = ctypes.CDLL(None).proc_pidinfo
     proc_pidinfo.argtypes = [
         ctypes.c_int,
@@ -413,14 +412,31 @@ def _darwin_wait_for_stop(pid: int) -> bool:
     proc_pidinfo.restype = ctypes.c_int
     info = _ProcBsdInfo()
     size = ctypes.sizeof(info)
-    started = None
+    if proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(info), size) != size:
+        return None
+    return info
+
+
+def _process_start(pid: int) -> tuple[int, int] | None:
+    """The start time that identifies the process behind ``pid`` on macOS.
+
+    Read on the event loop's thread right after the spawn, before asyncio
+    can reap the worker and free its PID for reuse. None off macOS, or if
+    the worker is already a zombie.
+    """
+    if sys.platform != "darwin":
+        return None
+    info = _darwin_proc_info(pid)
+    if info is None:
+        return None
+    return (info.pbi_start_tvsec, info.pbi_start_tvusec)
+
+
+def _darwin_wait_for_stop(pid: int, started: tuple[int, int]) -> bool:
+    """Poll the worker's state until it stops (True) or is gone (False)."""
     while True:
-        if proc_pidinfo(pid, _PROC_PIDTBSDINFO, 0, ctypes.byref(info), size) != size:
-            return False
-        start = (info.pbi_start_tvsec, info.pbi_start_tvusec)
-        if started is None:
-            started = start
-        elif start != started:
+        info = _darwin_proc_info(pid)
+        if info is None or (info.pbi_start_tvsec, info.pbi_start_tvusec) != started:
             return False
         if info.pbi_status == _SSTOP:
             return True

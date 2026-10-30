@@ -30,6 +30,7 @@ from commons._execution._backend import (
     LocalSession,
     WorkerSession,
     _kill_when_stopped,
+    _process_start,
     _read_tail,
     _signal_tree,
     _terminate,
@@ -363,21 +364,42 @@ def test_a_group_left_with_only_a_zombie_can_still_be_signalled() -> None:
     assert process.wait() == 0
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="reads the macOS process table")
-def test_a_stopped_worker_is_killed_after_another_waiter_took_the_stop_report() -> None:
+def stopped_after_another_waiter_took_the_report() -> subprocess.Popen[bytes]:
     # Python 3.14.10's asyncio on macOS takes the report of a stopped child
     # before the stop watcher can see it.
     process = subprocess.Popen(["sleep", "30"], start_new_session=True)
+    os.kill(process.pid, signal.SIGSTOP)
+    os.waitpid(process.pid, os.WUNTRACED)
+    return process
+
+
+def watch_for_stop(pid: int, started: tuple[int, int] | None) -> bool:
+    """Run the stop watcher, and say whether it returned in time."""
+    watcher = threading.Thread(
+        target=_kill_when_stopped, args=(pid, started), daemon=True
+    )
+    watcher.start()
+    watcher.join(timeout=5)
+    return not watcher.is_alive()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="reads the macOS process table")
+def test_a_stopped_worker_is_killed_after_another_waiter_took_the_stop_report() -> None:
+    process = stopped_after_another_waiter_took_the_report()
     try:
-        os.kill(process.pid, signal.SIGSTOP)
-        os.waitpid(process.pid, os.WUNTRACED)
-        watcher = threading.Thread(
-            target=_kill_when_stopped, args=(process.pid,), daemon=True
-        )
-        watcher.start()
-        watcher.join(timeout=5)
-        assert not watcher.is_alive(), "the stopped worker was never killed"
+        assert watch_for_stop(process.pid, _process_start(process.pid))
         assert process.wait(timeout=5) == -signal.SIGKILL
+    finally:
+        process.kill()
+        process.wait()
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="reads the macOS process table")
+def test_a_stopped_process_that_reused_the_pid_is_left_alone() -> None:
+    process = stopped_after_another_waiter_took_the_report()
+    try:
+        assert watch_for_stop(process.pid, (0, 0))
+        assert process.poll() is None
     finally:
         process.kill()
         process.wait()
