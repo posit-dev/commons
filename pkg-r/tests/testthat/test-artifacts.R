@@ -541,3 +541,103 @@ test_that("outside Shiny, a call's documents are knitted and reported", {
     fixed = TRUE
   )
 })
+
+# --- restored conversations ------------------------------------------------------
+
+prose_store <- function() {
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
+  wait_for_promise(artifact_commit(store, "doc", "Doc", "First.\n")$rendered)
+  wait_for_promise(artifact_edit(store, "doc", "First.", "Second."))
+  store
+}
+
+test_that("saved turns show each document tag as a link to the version it wrote", {
+  store <- prose_store()
+  text <- "Here.\n<artifact id=\"doc\" title=\"Doc\">First.\n</artifact>\nDone."
+  turns <- list(
+    ellmer::UserTurn(list(ellmer::ContentText("Write it."))),
+    ellmer::AssistantTurn(list(
+      ellmer::ContentText(text),
+      ellmer::ContentText("No markup here.")
+    ))
+  )
+
+  projected <- project_turns_display(turns, 1L, list(), store)
+  contents <- projected[[2]]@contents
+  expect_true(S7::S7_inherits(contents[[1]], ContentProjectedText))
+  expect_identical(contents[[1]]@text, text)
+  expect_match(shinychat::contents_shinychat(contents[[1]]), "version=\"1\"", fixed = TRUE)
+  expect_no_match(shinychat::contents_shinychat(contents[[1]]), "<artifact ", fixed = TRUE)
+  expect_identical(class(contents[[2]])[[1]], "ellmer::ContentText")
+  expect_identical(projected[[1]], turns[[1]])
+
+  replayed <- ellmer::contents_replay(ellmer::contents_record(projected[[2]]))
+  expect_identical(replayed@contents[[1]]@display, contents[[1]]@display)
+})
+
+test_that("a restored document renders when it's first needed", {
+  values <- artifact_store_values(prose_store())
+  expect_identical(values$doc$title, "Doc")
+
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
+  artifact_store_restore(store, jsonlite::fromJSON(jsonlite::toJSON(values)))
+  expect_length(ls(store$artifacts), 0)
+  expect_identical(artifact_store_values(store), values)
+
+  artifact <- artifact_get(store, "doc")
+  wait_until_ready(store, "doc")
+  expect_length(artifact$versions, 2)
+  expect_match(paste(artifact$html, collapse = ""), "Second.", fixed = TRUE)
+  expect_true(file.exists(file.path(artifact_latest_dir(artifact), "report.qmd")))
+})
+
+test_that("a restored document can be edited or rewritten before it's opened", {
+  values <- artifact_store_values(prose_store())
+
+  edited <- new_artifact_store(resolve_input = function(method, args) NULL)
+  artifact_store_restore(edited, values)
+  result <- wait_for_promise(artifact_edit(edited, "doc", "Second.", "Third."))
+  expect_identical(result@value, "Saved version 3 of `doc`.")
+
+  rewritten <- new_artifact_store(resolve_input = function(method, args) NULL)
+  artifact_store_restore(rewritten, values)
+  committed <- artifact_commit(rewritten, "doc", "Doc", "Fresh.\n")
+  wait_for_promise(committed$rendered)
+  expect_identical(committed$version, 3L)
+  expect_length(ls(rewritten$pending), 0)
+})
+
+test_that("a streamed reply's turn keeps its text and shows the link", {
+  chunks <- c(
+    "I wrote it.\n\n<artifact id=\"doc\" title=\"Doc\">Just ",
+    "prose.\n</artifact>\n\nDone."
+  )
+  raw <- paste0(chunks, collapse = "")
+  local_mocked_bindings(
+    chat_perform = function(...) {
+      coro::async_generator(function() {
+        for (chunk in chunks) yield(list(text = chunk))
+        coro::exhausted()
+      })()
+    },
+    stream_merge_chunks = function(provider, result, chunk) chunk,
+    stream_content_with_turns = function(provider, event, completion = NULL, turns = list()) {
+      list(ellmer::ContentText(event$text))
+    },
+    value_finish_reason = function(provider, result) "stop",
+    value_turn_with_turns = function(provider, model, result, has_type = FALSE, turns = list()) {
+      ellmer::AssistantTurn(list(ellmer::ContentText(raw)), tokens = c(0, 0, 0), cost = 0)
+    },
+    .package = "ellmer"
+  )
+  agent <- test_agent()
+
+  wait_for_promise(coro::async_collect(agent$stream_async("Write it.")))
+
+  turns <- agent$get_turns()
+  content <- turns[[length(turns)]]@contents[[1]]
+  expect_true(S7::S7_inherits(content, ContentProjectedText))
+  expect_identical(content@text, raw)
+  expect_match(content@display, "<commons-artifact-link artifact=\"doc\" version=\"1\"", fixed = TRUE)
+  expect_length(artifact_get(agent$artifact_store(), "doc")$versions, 1)
+})

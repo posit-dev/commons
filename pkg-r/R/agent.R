@@ -420,6 +420,9 @@ Commons <- R6::R6Class(
         artifact_scan_handler(private$artifacts)
       }
       as_content <- identical(stream, "content")
+      artifact_store <- private$artifacts
+      # Bypasses this class's set_turns(), which would drop the artifacts.
+      replace_turns <- function(turns) super$set_turns(turns)
 
       # Always project citations so reserved model markup cannot reach the browser.
       coro::async_generator(function() {
@@ -450,6 +453,12 @@ Commons <- R6::R6Class(
         if (nzchar(tail)) {
           yield(if (as_content) ellmer::ContentText(tail) else tail)
         }
+        replace_turns(project_turns_display(
+          self$get_turns(),
+          from_index,
+          corpus,
+          artifact_store
+        ))
 
         decisions <- scanner$decisions()
         verified <- any(vapply(

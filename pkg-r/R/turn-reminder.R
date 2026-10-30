@@ -13,6 +13,42 @@ S7::method(contents_shinychat, ContentTurnReminder) <- function(content) {
   NULL
 }
 
+# Assistant text as the model wrote it, with the projection the chat showed:
+# citations as asides and documents as links. shinychat rebuilds a restored
+# conversation from its turns, so without this it would show the raw markup.
+ContentProjectedText <- S7::new_class(
+  "ContentProjectedText",
+  parent = ellmer::ContentText,
+  properties = list(display = S7::class_character)
+)
+
+S7::method(contents_shinychat, ContentProjectedText) <- function(content) {
+  content@display
+}
+
+project_turns_display <- function(turns, from, corpus, artifacts = NULL) {
+  on_artifact <- function(event) {
+    if (identical(event$type, "close")) artifact_turn_link(artifacts, event) else ""
+  }
+  for (i in seq_along(turns)[seq_along(turns) >= from]) {
+    if (!S7::S7_inherits(turns[[i]], ellmer::AssistantTurn)) {
+      next
+    }
+    turns[[i]]@contents <- lapply(turns[[i]]@contents, function(content) {
+      if (!identical(class(content)[[1]], "ellmer::ContentText")) {
+        return(content)
+      }
+      scanner <- citation_scanner(corpus, on_artifact = on_artifact)
+      display <- paste0(scanner$feed(content@text), scanner$finish())
+      if (identical(display, content@text)) {
+        return(content)
+      }
+      ContentProjectedText(text = content@text, display = display)
+    })
+  }
+  turns
+}
+
 brevity_turn_reminder <- "<reminder>Be concise as a default.</reminder>"
 
 restored_conversation_turn_reminder <- paste0(

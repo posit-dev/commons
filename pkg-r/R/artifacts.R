@@ -52,6 +52,8 @@ new_artifact_store <- function(
   store$streams <- new.env(parent = emptyenv())
   # A closed stream or an edit can still be rendering when the chat is cleared.
   store$runs <- new.env(parent = emptyenv())
+  # Documents from a restored conversation, rendered once they're needed.
+  store$pending <- new.env(parent = emptyenv())
   store$root <- tempfile("commons-artifacts-")
   store$resolve_input <- resolve_input
   store$network <- network
@@ -68,6 +70,7 @@ artifact_store_reset <- function(store) {
   }
   store$artifacts <- new.env(parent = emptyenv())
   store$streams <- new.env(parent = emptyenv())
+  store$pending <- new.env(parent = emptyenv())
   store$reminders <- character()
   artifact_notify(store, list(type = "reset"))
   invisible(store)
@@ -103,13 +106,78 @@ take_artifact_reminders <- function(store) {
 }
 
 # An artifact exists from the moment its tag opens, but only counts as a
-# document once it has a version.
+# document once it has a version. Getting a restored document renders it.
 artifact_get <- function(store, id) {
   if (!rlang::is_string(id)) {
     return(NULL)
   }
+  if (is.null(store$artifacts[[id]]) && !is.null(store$pending[[id]])) {
+    artifact_materialize(store, id)
+  }
   artifact <- store$artifacts[[id]]
   if (is.null(artifact) || length(artifact$versions) == 0) NULL else artifact
+}
+
+artifact_materialize <- function(store, id) {
+  artifact <- artifact_ensure(store, id)
+  n <- length(artifact$versions)
+  latest <- artifact$versions[[n]]$source
+  artifact$versions <- artifact$versions[-n]
+  artifact_commit(store, id, artifact$title, latest)
+  invisible(artifact)
+}
+
+# What a saved conversation keeps of its documents: each one's title and the
+# source of every version, enough to render it again after a restore.
+artifact_store_values <- function(store) {
+  saved <- lapply(rlang::set_names(ls(store$artifacts)), function(id) {
+    artifact <- store$artifacts[[id]]
+    if (length(artifact$versions) == 0) {
+      return(NULL)
+    }
+    list(
+      title = artifact$title,
+      sources = lapply(artifact$versions, `[[`, "source")
+    )
+  })
+  pending <- as.list(store$pending)
+  c(drop_nulls(saved), pending[setdiff(names(pending), names(saved))])
+}
+
+artifact_store_restore <- function(store, values) {
+  for (id in names(values)) {
+    entry <- values[[id]]
+    sources <- as.character(unlist(entry$sources))
+    if (
+      !rlang::is_string(id) ||
+        !rlang::is_string(entry$title) ||
+        length(sources) == 0 ||
+        !is.null(store$artifacts[[id]])
+    ) {
+      next
+    }
+    assign(
+      id,
+      list(title = entry$title, sources = as.list(sources)),
+      envir = store$pending
+    )
+  }
+  invisible(store)
+}
+
+# The link that replaces a document's tag in a saved turn, naming the version
+# that tag wrote.
+artifact_turn_link <- function(store, event) {
+  artifact <- if (!is.null(store)) store$artifacts[[event$id]]
+  matches <- which(vapply(
+    artifact$versions,
+    function(version) identical(version$source, event$body),
+    logical(1)
+  ))
+  if (length(matches) == 0) {
+    return("")
+  }
+  artifact_link_html(store, event$id, max(matches))
 }
 
 artifact_ensure <- function(store, id) {
@@ -119,6 +187,16 @@ artifact_ensure <- function(store, id) {
     artifact$id <- id
     artifact$title <- id
     artifact$versions <- list()
+    # A restored document keeps its versions, which were never rendered here.
+    pending <- store$pending[[id]]
+    if (!is.null(pending)) {
+      rm(list = id, envir = store$pending)
+      artifact$title <- pending$title
+      artifact$versions <- lapply(
+        pending$sources,
+        function(source) list(source = source, dir = NA_character_)
+      )
+    }
     artifact$units <- list()
     artifact$html <- character()
     artifact$errors <- character()
@@ -342,7 +420,10 @@ artifact_edit <- function(
 ) {
   artifact <- artifact_get(store, id)
   if (is.null(artifact)) {
-    ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
+    ids <- c(
+      Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts)),
+      ls(store$pending)
+    )
     cli::cli_abort(
       c(
         "There is no document with id {.val {id}}.",
@@ -399,7 +480,7 @@ artifact_edit_result <- function(store, artifact, version, result) {
 }
 
 artifact_link_html <- function(store, id, version = NULL) {
-  artifact <- artifact_get(store, id)
+  artifact <- store$artifacts[[id]]
   version <- version %||% length(artifact$versions)
   sprintf(
     paste0(

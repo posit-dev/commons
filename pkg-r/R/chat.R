@@ -127,7 +127,17 @@ commons_server <- function(id, client, ...) {
   # only needs to know that a restore happened.
   chat$history$on_restore(function(values) {
     client$queue_restore_reminder()
+    store <- client$artifact_store()
+    if (!is.null(store)) {
+      artifact_store_restore(store, values$commons_artifacts)
+    }
   })
+  if (!is.null(client$artifact_store())) {
+    chat$history$on_save(function(values) {
+      values$commons_artifacts <- artifact_store_values(client$artifact_store())
+      values
+    })
+  }
   chat
 }
 
