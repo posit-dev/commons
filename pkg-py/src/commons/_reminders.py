@@ -12,10 +12,10 @@ from typing import Any, Final
 
 from chatlas.types import ContentText
 
-from ._prompt import is_claude_5_model
+from ._prompt import needs_brevity_prompting
 
 __all__ = [
-    "CLAUDE_5_TURN_REMINDER",
+    "BREVITY_TURN_REMINDER",
     "RESTORED_CONVERSATION_REMINDER",
     "ContentTurnReminder",
     "append_restored_conversation_reminder",
@@ -31,7 +31,7 @@ class ContentTurnReminder(ContentText):
     """
 
 
-CLAUDE_5_TURN_REMINDER: Final = "<reminder>Be concise as a default.</reminder>"
+BREVITY_TURN_REMINDER: Final = "<reminder>Be concise as a default.</reminder>"
 
 RESTORED_CONVERSATION_REMINDER: Final = (
     "<reminder>The Python state associated with this restored conversation is "
@@ -43,9 +43,9 @@ RESTORED_CONVERSATION_REMINDER: Final = (
 
 def append_turn_reminder(inputs: Sequence[Any], model: str | None) -> list[Any]:
     """Add the concise reminder for the models that need it."""
-    if not is_claude_5_model(model):
+    if not needs_brevity_prompting(model):
         return list(inputs)
-    return [*inputs, ContentTurnReminder(text=CLAUDE_5_TURN_REMINDER)]
+    return [*inputs, ContentTurnReminder(text=BREVITY_TURN_REMINDER)]
 
 
 def append_restored_conversation_reminder(inputs: Sequence[Any]) -> list[Any]:

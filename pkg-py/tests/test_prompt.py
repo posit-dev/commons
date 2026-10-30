@@ -14,7 +14,7 @@ from commons._definitions._registry import build_registry
 from commons._prompt import (
     EXECUTION_TOOL,
     check_instructions,
-    is_claude_5_model,
+    needs_brevity_prompting,
     prompt_date,
     read_instructions,
     read_prompt,
@@ -178,13 +178,13 @@ def test_template_data_is_validated():
 
 
 def test_claude_5_model_ids_are_recognized_across_providers():
-    assert is_claude_5_model("claude-sonnet-5")
-    assert is_claude_5_model("anthropic/claude-opus-5")
-    assert is_claude_5_model("us.anthropic.claude-fable-5")
-    assert is_claude_5_model("databricks-claude-sonnet-5")
-    assert not is_claude_5_model("claude-sonnet-4-5")
-    assert not is_claude_5_model("gpt-5.4")
-    assert not is_claude_5_model(None)
+    assert needs_brevity_prompting("claude-sonnet-5")
+    assert needs_brevity_prompting("anthropic/claude-opus-5")
+    assert needs_brevity_prompting("us.anthropic.claude-fable-5")
+    assert needs_brevity_prompting("databricks-claude-sonnet-5")
+    assert not needs_brevity_prompting("claude-sonnet-4-5")
+    assert not needs_brevity_prompting("gpt-5.4")
+    assert not needs_brevity_prompting(None)
 
 
 def test_missing_instruction_paths_are_recognized(tmp_path):

@@ -35,6 +35,7 @@ Imports:
     jsonlite,
     knitr,
     later,
+    lifecycle,
     processx,
     promises (>= 1.5.0),
     R6,

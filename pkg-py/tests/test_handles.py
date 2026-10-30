@@ -1,5 +1,7 @@
 """Handles: tool results a later `run_python` call can reach by name."""
 
+import datetime
+import sys
 from typing import Any
 
 import pytest
@@ -311,3 +313,42 @@ def test_fifty_one_columns_counts_one_more():
     assert "* c49: " in note
     assert "* c50: " not in note
     assert "and 1 more columns" in note
+
+
+def test_query_rows_are_stored_as_a_capped_frame():
+    store = HandleStore(max_rows=3)
+    rows = [{"day": datetime.date(2024, 1, day), "n": day} for day in range(1, 6)]
+
+    note = store.register_rows(rows)
+
+    assert note is not None
+    assert "Only the first 3 rows are stored." in note
+    stored = store.get("r1")
+    assert list(stored["n"]) == [1, 2, 3]
+    assert stored["day"].iloc[0] == datetime.date(2024, 1, 1)
+
+
+def test_query_rows_at_the_cap_are_stored_whole():
+    store = HandleStore(max_rows=3)
+
+    note = store.register_rows([{"n": n} for n in range(3)])
+
+    assert note is not None
+    assert "Only the first" not in note
+    assert len(store.get("r1")) == 3
+
+
+def test_query_rows_become_a_capped_table_without_pandas_or_polars(monkeypatch):
+    # pyarrow is a core dependency, so a frame is always available.
+    monkeypatch.setitem(sys.modules, "pandas", None)
+    monkeypatch.setitem(sys.modules, "polars", None)
+    store = HandleStore(max_rows=3)
+    rows = [{"day": datetime.date(2024, 1, day), "n": day} for day in range(1, 6)]
+
+    note = store.register_rows(rows)
+
+    assert note == "Available to `run_python` as `r1`. Only the first 3 rows are stored."
+    stored = store.get("r1")
+    assert type(stored).__name__ == "Table"
+    assert stored.column("n").to_pylist() == [1, 2, 3]
+    assert stored.column("day").to_pylist()[0] == datetime.date(2024, 1, 1)

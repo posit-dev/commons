@@ -11,7 +11,42 @@ call_metrics_impl <- function(
   filters = NULL,
   where = NULL,
   source_name = NULL,
-  arguments = "{}"
+  arguments = "{}",
+  trusted_only = FALSE
+) {
+  query <- query_metrics(
+    registry,
+    sources,
+    metrics,
+    dimensions,
+    filters,
+    where,
+    source_name,
+    arguments,
+    trusted_only = trusted_only
+  )
+  metric_tool_result(
+    query$result,
+    query$sql,
+    handles,
+    metrics,
+    dimensions,
+    filters,
+    note = query$note,
+    metadata = query$metadata
+  )
+}
+
+query_metrics <- function(
+  registry,
+  sources,
+  metrics,
+  dimensions = NULL,
+  filters = NULL,
+  where = NULL,
+  source_name = NULL,
+  arguments = "{}",
+  trusted_only = FALSE
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
@@ -27,9 +62,8 @@ call_metrics_impl <- function(
     )
   }
   if (identical(origins[[1]], "semantic_model")) {
-    return(call_semantic_metrics(
+    return(query_semantic_metrics(
       source,
-      handles,
       semantic_members,
       metrics,
       dimensions,
@@ -57,7 +91,11 @@ call_metrics_impl <- function(
     cli::cli_abort(
       c(
         "Metrics in one query must share a table; these span {.val {tables}}.",
-        i = "Query them separately and combine the results with run_r."
+        i = if (trusted_only) {
+          "Query them separately."
+        } else {
+          "Query them separately and combine the results with run_r."
+        }
       )
     )
   }
@@ -70,13 +108,21 @@ call_metrics_impl <- function(
   dim_names <- strip_token_braces(dimensions %||% character())
   dims <- vapply(
     rlang::set_names(dim_names),
-    function(name) dimension_sql(name, on_table, columns, con),
+    function(name) {
+      dimension_sql(name, on_table, columns, con, trusted_only = trusted_only)
+    },
     character(1)
   )
   filter_defs <- resolve_pool_names(filters, on_table, kind = "filter")
   if (any(filter_defs$mixed_grain)) {
+    mixed <- filter_defs$name[filter_defs$mixed_grain]
+    if (trusted_only) {
+      cli::cli_abort(
+        "Mixed-grain filter{?s} {.val {mixed}} cannot be applied by {.fn call_metrics}, and no other trusted calculation can apply {?it/them}."
+      )
+    }
     cli::cli_abort(
-      "Mixed-grain filter{?s} {.val {filter_defs$name[filter_defs$mixed_grain]}} cannot be applied by {.fn call_metrics}; use the definition in {.fn run_sql}."
+      "Mixed-grain filter{?s} {.val {mixed}} cannot be applied by {.fn call_metrics}; use the definition in {.fn run_sql}."
     )
   }
   conditions <- c(
@@ -112,28 +158,15 @@ call_metrics_impl <- function(
   }
 
   result <- source_query(source, sql)
-  advert <- register_handle(handles, result)
   dimension_defs <- on_table[
     match(dim_names, on_table$name, nomatch = 0L),
   ]
   applied <- rbind(metric_defs, dimension_defs, filter_defs)
   applied <- applied[!duplicated(applied[c("name", "table", "source")]), ]
-  note <- applied_definitions_text(applied)
-  args <- drop_nulls(list(
-    metrics = metrics,
-    dimensions = dimensions,
-    filters = filters
-  ))
-  metric_tool_result(
-    result,
-    sql,
-    handles,
-    metrics,
-    dimensions,
-    filters,
-    note = note,
-    advert = advert,
-    args = args,
+  list(
+    result = result,
+    sql = sql,
+    note = applied_definitions_text(applied),
     metadata = metric_definition_metadata(metric_defs)
   )
 }
@@ -194,14 +227,17 @@ metric_origin <- function(name, definitions, semantic_members) {
     )
     cli::cli_abort(c(
       "No governed metric is named {.val {name}}.",
-      "i" = "Available metrics: {.val {available}}."
+      "i" = if (length(available)) {
+        "Available metrics: {.val {available}}."
+      } else {
+        "No governed metrics are defined."
+      }
     ))
   }
 }
 
-call_semantic_metrics <- function(
+query_semantic_metrics <- function(
   source,
-  handles,
   members,
   metrics,
   dimensions,
@@ -261,16 +297,12 @@ call_semantic_metrics <- function(
       "Unsupported native semantic-model backend {.val {model$backend}}."
     )
   )
-  result <- source_query_bind(source, sql, unname(arguments))
-  metric_tool_result(
-    result,
-    sql,
-    handles,
-    metrics,
-    dimensions,
-    filters,
-    metadata = semantic_metric_metadata(metric_members),
-    bindings = unname(arguments)
+  list(
+    result = source_query_bind(source, sql, unname(arguments)),
+    sql = sql,
+    bindings = unname(arguments),
+    note = NULL,
+    metadata = semantic_metric_metadata(metric_members)
   )
 }
 
@@ -288,10 +320,9 @@ metric_tool_result <- function(
     dimensions = dimensions,
     filters = filters
   )),
-  metadata = NULL,
-  bindings = NULL
+  metadata = NULL
 ) {
-  out <- tool_result(
+  tool_result(
     paste(c(df_to_markdown(result), note, advert), collapse = "\n\n"),
     title = "Ran a trusted calculation",
     icon = maybe_icon("shield-check"),
@@ -300,16 +331,6 @@ metric_tool_result <- function(
     tag = "A",
     show_tag = FALSE
   )
-  with_query_extra(out, sql, bindings)
-}
-
-# Keeps the query with the result, for the manifest beside a document's data.
-with_query_extra <- function(result, sql, bindings = NULL) {
-  result@extra$sql <- sql
-  if (length(bindings)) {
-    result@extra$bindings <- bindings
-  }
-  result
 }
 
 metric_definition_metadata <- function(definitions) {
@@ -399,7 +420,7 @@ pool_name_candidates <- function(name, defs) {
   defs[defs$name == name, ]
 }
 
-dimension_sql <- function(name, defs, columns, con) {
+dimension_sql <- function(name, defs, columns, con, trusted_only = FALSE) {
   named <- defs[defs$name == name, ]
   if (nrow(named)) {
     if (!named$kind[[1]] %in% c("derived", "filter")) {
@@ -408,6 +429,11 @@ dimension_sql <- function(name, defs, columns, con) {
       )
     }
     if (named$mixed_grain[[1]]) {
+      if (trusted_only) {
+        cli::cli_abort(
+          "Mixed-grain definition {.val {name}} cannot be grouped by with {.fn call_metrics}, and no other trusted calculation can group by it."
+        )
+      }
       cli::cli_abort(
         "Mixed-grain definition {.val {name}} cannot be grouped by with {.fn call_metrics}; use it in {.fn run_sql}."
       )
@@ -474,7 +500,9 @@ compile_where_triple <- function(triple, columns, con) {
        not {.val {triple$op}}."
     )
   }
-  value <- if (grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)) {
+  value <- if (
+    !isTRUE(triple$quoted) && grepl("^-?[0-9]+(\\.[0-9]+)?$", triple$value)
+  ) {
     triple$value
   } else {
     as.character(DBI::dbQuoteString(con, triple$value))
@@ -489,6 +517,7 @@ compile_where_triple <- function(triple, columns, con) {
 
 # One discovery surface over the whole pool: measures and definitions ranked
 # together, so the model doesn't have to guess which kind holds its answer.
+# `methods` phrases usage as `commons()` methods rather than agent tools.
 search_pool_text <- function(
   measures,
   registry,
@@ -496,7 +525,9 @@ search_pool_text <- function(
   source_names = character(),
   semantic_models = NULL,
   calculations = list(),
-  measure_titles = FALSE
+  measure_titles = FALSE,
+  trusted_only = FALSE,
+  methods = FALSE
 ) {
   defs <- registry_defs(registry)
   semantic_models <- semantic_models %||% list(members = no_semantic_members)
@@ -564,7 +595,11 @@ search_pool_text <- function(
   hits <- lexical_rank(query, catalog, n = 5)
   if (length(hits) == 0) {
     return(sprintf(
-      "Nothing in the semantic layer matches \"%s\". Consider writing a SQL query.",
+      if (trusted_only || methods) {
+        "Nothing in the semantic layer matches \"%s\"."
+      } else {
+        "Nothing in the semantic layer matches \"%s\". Consider writing a SQL query."
+      },
       query
     ))
   }
@@ -573,13 +608,25 @@ search_pool_text <- function(
     function(hit) {
       if (hit <= length(measures)) {
         td <- measures[[hit]]
-        measure_schema_text(
+        text <- measure_schema_text(
           td,
           source_names = source_names,
           heading = if (measure_titles) tool_title(td) else tool_name(td)
         )
+        if (methods) {
+          text <- paste0(
+            text,
+            sprintf("\nRun with `$measure(\"%s\")`.", tool_name(td))
+          )
+        }
+        text
       } else if (hit <= length(measures) + nrow(defs)) {
-        definition_pool_text(defs[hit - length(measures), ], defs)
+        definition_pool_text(
+          defs[hit - length(measures), ],
+          defs,
+          trusted_only = trusted_only,
+          methods = methods
+        )
       } else if (
         hit <= length(measures) + nrow(defs) + nrow(semantic_members)
       ) {
@@ -594,7 +641,8 @@ search_pool_text <- function(
               ,
               drop = FALSE
             ]
-          )
+          ),
+          methods = methods
         )
       } else if (
         hit <= length(measures) +
@@ -608,7 +656,8 @@ search_pool_text <- function(
             ,
             drop = FALSE
           ],
-          source_names
+          source_names,
+          methods = methods
         )
       } else {
         calculation_pool_text(
@@ -619,7 +668,8 @@ search_pool_text <- function(
               nrow(semantic_members) -
               nrow(semantic_stubs)
           ]],
-          source_names
+          source_names,
+          methods = methods
         )
       }
     },
@@ -628,7 +678,31 @@ search_pool_text <- function(
   paste(blocks, collapse = "\n\n")
 }
 
-semantic_stub_pool_text <- function(stub, source_names = character()) {
+# Without run_sql, a definition is usable only through call_metrics: a metric
+# directly, and a filter or derived definition beside a metric on its table.
+definition_trusted_usage <- function(def, table_has_metrics, methods = FALSE) {
+  if (def$mixed_grain || (!identical(def$kind, "metric") && !table_has_metrics)) {
+    return("No trusted calculation can use this definition.")
+  }
+  call_metrics <- if (methods) "`$metrics()`" else "call_metrics"
+  switch(
+    def$kind,
+    metric = if (methods) {
+      sprintf("Query with `$metrics(\"%s\")`.", def$name)
+    } else {
+      sprintf("Query with call_metrics (metrics = [\"%s\"]).", def$name)
+    },
+    filter = sprintf("Use as a %s filter or dimension.", call_metrics),
+    sprintf("Use as a %s dimension.", call_metrics)
+  )
+}
+
+semantic_stub_pool_text <- function(
+  stub,
+  source_names = character(),
+  methods = FALSE
+) {
+  describe <- if (methods) "`$describe()`" else "`describe_table`"
   backend <- switch(
     stub$backend[[1]],
     snowflake_semantic_view = "Snowflake semantic view",
@@ -645,11 +719,11 @@ semantic_stub_pool_text <- function(stub, source_names = character()) {
       "### %s --- %s\n%s%s\n",
       if (identical(stub$backend[[1]], "snowflake_semantic_view")) {
         paste(
-          "Inspect with `describe_table` to find its public members and",
+          "Inspect with", describe, "to find its public members and",
           "verified queries."
         )
       } else {
-        "Inspect with `describe_table` to find its public members."
+        paste("Inspect with", describe, "to find its public members.")
       }
     ),
     stub$model[[1]],
@@ -659,42 +733,62 @@ semantic_stub_pool_text <- function(stub, source_names = character()) {
   )
 }
 
-definition_pool_text <- function(def, defs) {
+definition_pool_text <- function(
+  def,
+  defs,
+  trusted_only = FALSE,
+  methods = FALSE
+) {
   kind <- def$kind
   table_has_metrics <- any(
     defs$source == def$source &
       defs$table == def$table &
       defs$kind == "metric"
   )
-  invoke <- if (def$mixed_grain) {
+  run_sql <- if (methods) "`$run_sql()`" else "run_sql"
+  call_metrics <- if (methods) "`$metrics()`" else "call_metrics"
+  invoke <- if (trusted_only) {
+    definition_trusted_usage(def, table_has_metrics, methods = methods)
+  } else if (def$mixed_grain) {
     sprintf(
-      "Use `{{%s}}` only in run_sql with manually grain-correct query structure.",
-      def$name
+      "Use `{{%s}}` only in %s with manually grain-correct query structure.",
+      def$name,
+      run_sql
     )
   } else {
     switch(
       kind,
       filter = if (table_has_metrics) {
         sprintf(
-          "Apply in run_sql (e.g. `WHERE {{%s}}`) or as a call_metrics filter or dimension.",
-          def$name
+          "Apply in %s (e.g. `WHERE {{%s}}`) or as a %s filter or dimension.",
+          run_sql,
+          def$name,
+          call_metrics
         )
       } else {
-        sprintf("Apply in run_sql (e.g. `WHERE {{%s}}`).", def$name)
+        sprintf("Apply in %s (e.g. `WHERE {{%s}}`).", run_sql, def$name)
       },
       metric = sprintf(
-        "Query with call_metrics (metrics = [\"%s\"]) or in run_sql as `SELECT {{%s}} AS value`.",
-        def$name,
+        "Query with %s or in %s as `SELECT {{%s}} AS value`.",
+        if (methods) {
+          sprintf("`$metrics(\"%s\")`", def$name)
+        } else {
+          sprintf("call_metrics (metrics = [\"%s\"])", def$name)
+        },
+        run_sql,
         def$name
       ),
       if (table_has_metrics) {
         sprintf(
-          "Use in run_sql SELECT or GROUP BY as `{{%s}}`, or as a call_metrics dimension.",
-          def$name
+          "Use in %s SELECT or GROUP BY as `{{%s}}`, or as a %s dimension.",
+          run_sql,
+          def$name,
+          call_metrics
         )
       } else {
         sprintf(
-          "Use in run_sql SELECT or GROUP BY as `{{%s}}`.",
+          "Use in %s SELECT or GROUP BY as `{{%s}}`.",
+          run_sql,
           def$name
         )
       }

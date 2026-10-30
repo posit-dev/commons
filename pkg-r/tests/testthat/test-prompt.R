@@ -289,13 +289,13 @@ test_that("prompt data renders the packaged template", {
 })
 
 test_that("Claude 5 model IDs are recognized across providers", {
-  expect_true(is_claude_5_model("claude-sonnet-5"))
-  expect_true(is_claude_5_model("anthropic/claude-opus-5"))
-  expect_true(is_claude_5_model("us.anthropic.claude-fable-5"))
-  expect_true(is_claude_5_model("databricks-claude-sonnet-5"))
-  expect_false(is_claude_5_model("claude-sonnet-4-5"))
-  expect_false(is_claude_5_model("gpt-5.4"))
-  expect_false(is_claude_5_model(NULL))
+  expect_true(needs_brevity_prompting("claude-sonnet-5"))
+  expect_true(needs_brevity_prompting("anthropic/claude-opus-5"))
+  expect_true(needs_brevity_prompting("us.anthropic.claude-fable-5"))
+  expect_true(needs_brevity_prompting("databricks-claude-sonnet-5"))
+  expect_false(needs_brevity_prompting("claude-sonnet-4-5"))
+  expect_false(needs_brevity_prompting("gpt-5.4"))
+  expect_false(needs_brevity_prompting(NULL))
 })
 
 test_that("instructions are not interpreted as prompt template expressions", {

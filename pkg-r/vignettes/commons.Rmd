@@ -113,6 +113,8 @@ The following table details the various ways each provenance outcome can occur:
 
 The agent itself does not determine the provenance outcome. commons derives it deterministically from the agent's behavior.
 
+To turn off the lower-trust path altogether, use `agent(mode = "trusted only")`. In this mode, the agent can't write its own SQL or R code; it answers only with trusted calculations. If no trusted calculation answers a question, it tells the user so. Since every answer comes from a trusted calculation, answers carry no provenance markers.
+
 ## Information layers
 
 commons distinguishes between two primary layers of information: the **semantic layer** and the **context layer**. The semantic layer encodes trusted calculations, ideally lifted from reliable code that you already use. The **context layer** contains background or supporting information, useful both for figuring out what custom code to run and how to interpret results. Data dictionaries span the two layers.
@@ -263,7 +265,7 @@ A commons agent is easiest to maintain when the pieces live in separate files:
 
 ## Constructing the agent
 
-Use `commons()` to construct an agent. Pass it an ellmer `Chat` and one or more data sources, along with any semantic and context layers. You can also optionally append information to the commons agent system prompt using the `instructions` argument.
+Construct an agent in two steps. First, use `commons()` to gather one or more data sources, along with any semantic and context layers, into "the commons". Then pass an ellmer `Chat` and the commons to `agent()`. You can also optionally append information to the commons agent system prompt using the `instructions` argument to `agent()`.
 
 ```r
 library(commons)
@@ -274,11 +276,15 @@ biodiversity <- data_source(
   dictionary = "dictionaries/biodiversity.yaml"
 )
 
-agent <- commons(
-  client = ellmer::chat("anthropic/claude-sonnet-5"),
+commons <- commons(
   data_sources = list(biodiversity = biodiversity),
   semantic_layer = semantic_layer("measures"),
-  context_layer = context_layer("context/context.md"),
+  context_layer = context_layer("context/context.md")
+)
+
+agent <- agent(
+  client = ellmer::chat("anthropic/claude-sonnet-5"),
+  commons = commons,
   instructions = "instructions.md"
 )
 

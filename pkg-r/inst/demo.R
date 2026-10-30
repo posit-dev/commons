@@ -102,13 +102,15 @@ ui <- shinychat::page_chat(
 )
 
 server <- function(input, output, session) {
-  agent <- commons(
+  agent <- agent(
     ellmer::chat_anthropic(),
-    data_sources = list(
-      warehouse = data_source(stands = stands, surveys = surveys)
-    ),
-    semantic_layer = sem,
-    context_layer = context_layer(files = notes)
+    commons = commons(
+      data_sources = list(
+        warehouse = data_source(stands = stands, surveys = surveys)
+      ),
+      semantic_layer = sem,
+      context_layer = context_layer(files = notes)
+    )
   )
 
   commons_server("chat", agent)

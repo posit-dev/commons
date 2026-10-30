@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ._frames import describe_frame, is_frame
+from ._rows import rows_frame
 
 __all__ = ["HandleStore"]
 
@@ -41,8 +42,7 @@ class HandleStore:
         try:
             truncated = len(value) > self.max_rows
             if truncated:
-                value = value.head(self.max_rows)
-            description = describe_frame(value)
+                value = _first_rows(value, self.max_rows)
         except (TypeError, AttributeError):
             # is_frame is duck-typed, so a value that quacks like a frame but
             # cannot be read like one is still stored, only undescribed.
@@ -52,13 +52,32 @@ class HandleStore:
         capped = (
             f" Only the first {self.max_rows:,} rows are stored." if truncated else ""
         )
+        try:
+            description = describe_frame(value)
+        except (TypeError, AttributeError):
+            # A pyarrow Table, for one, is stored and capped but not described.
+            return f"{_note(handle)}{capped}"
         return f"{_note(handle)}{capped}\n{description}"
+
+    def register_rows(self, rows: list[dict[str, Any]]) -> str | None:
+        """Store query rows as a data frame, as ``register`` would store one.
+
+        Only the rows the store keeps, plus one to tell it the result was
+        cut, become the frame, so a large result is never copied whole.
+        """
+        return self.register(rows_frame(rows[: self.max_rows + 1]))
 
     def ids(self) -> list[str]:
         return list(self._values)
 
     def get(self, handle: str) -> Any:
         return self._values[handle]
+
+
+def _first_rows(frame: Any, count: int) -> Any:
+    """The frame's first ``count`` rows; a pyarrow Table has no ``head``."""
+    head = getattr(frame, "head", None)
+    return head(count) if head is not None else frame.slice(0, count)
 
 
 def _note(handle: str) -> str:

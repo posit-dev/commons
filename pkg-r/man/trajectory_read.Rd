@@ -12,7 +12,7 @@ trajectory_read(source = NULL, ..., n = NULL, from = NULL, to = NULL)
 \item \code{NULL} (the default) resolves automatically: on Posit Connect, this
 content's own traces; in a project that has been deployed with
 rsconnect, the deployed content's traces; otherwise, the local trace
-directory that \code{\link[=commons]{commons()}} writes to.
+directory that \code{\link[=agent]{agent()}} writes to.
 \item A Connect content GUID, a content URL (\verb{.../content/<guid>/}), a
 vanity URL (\verb{.../content/<name>/}), or a dashboard URL
 (\verb{.../connect/#/apps/<guid>/}).
@@ -36,11 +36,15 @@ A list of conversations, named by conversation id and ordered
 oldest-first. Each conversation is a list with a \code{turns} field containing
 a list of \link[ellmer:Turn]{ellmer::Turn}s and a \code{last_active} field containing a
 \code{POSIXct} giving the time of the conversation's most recent chat activity.
+The \code{user} field contains the authenticated Shiny session username from
+the earliest recorded non-title chat, when supplied by Connect, or
+\code{NA_character_} when unavailable (including anonymous sessions and older
+logs). This is attribution metadata, not an authentication credential.
 }
 \description{
 \code{trajectory_read()} reads conversation trajectories captured by
-\code{\link[=commons]{commons()}} when \code{log = TRUE}. Trajectories are recorded as OpenTelemetry
-spans—see the \code{log} argument of \code{\link[=commons]{commons()}} for how capture is
+\code{\link[=agent]{agent()}} when \code{log = TRUE}. Trajectories are recorded as OpenTelemetry
+spans—see the \code{log} argument of \code{\link[=agent]{agent()}} for how capture is
 enabled—and read back from Posit Connect's content observability store or
 from local trace files.
 
@@ -52,7 +56,7 @@ variable (and \code{CONNECT_SERVER}, when the server can't be inferred from the
 URL, the project's deployment record, or the sole Connect server registered
 with rsconnect), and editor-level access to the content: you must own it or
 be a collaborator. See the \code{share_with} argument of
-\code{\link[=commons]{commons()}}.
+\code{\link[=agent]{agent()}}.
 }
 \examples{
 \dontrun{

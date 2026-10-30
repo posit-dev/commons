@@ -67,8 +67,6 @@ test_that("live Snowflake discovers and describes catalog relations", {
     described$schema,
     c("column", "type", "nullable", "description")
   )
-  expect_true(nrow(described$sample) <= 5)
-  expect_equal(names(described$sample), described$schema$column)
   expect_equal(
     data_source_state(exact)$dictionary$tables[[label]]$description,
     "Authored live table description."
@@ -93,7 +91,6 @@ test_that("live Snowflake discovers and describes catalog relations", {
 
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
-  expect_match(tool@value, "Sample summary")
 })
 
 test_that("live Snowflake rejects changed session namespaces", {
@@ -454,8 +451,6 @@ test_that("live Databricks discovers and describes catalog relations", {
     c("column", "type", "nullable", "description")
   )
   expect_false(anyNA(described$schema$nullable))
-  expect_true(nrow(described$sample) <= 5)
-  expect_equal(names(described$sample), described$schema$column)
   expect_equal(
     data_source_state(exact)$dictionary$tables[[label]]$description,
     "Authored live table description."
@@ -481,7 +476,6 @@ test_that("live Databricks discovers and describes catalog relations", {
   tool <- describe_table_tool(exact, label)
   expect_match(tool@value, "Relation type")
   expect_match(tool@value, "nullable")
-  expect_match(tool@value, "Sample summary")
 })
 
 test_that("live Databricks rejects changed session namespaces", {
@@ -546,7 +540,7 @@ test_that("live Databricks searches a broad manifest before hydration", {
   expect_contains(names(catalog_search(source, query)), target)
   expect_null(data_source_state(source)$manifest$relations[[target]]$columns)
 
-  described <- source_describe(source, target, n_sample = 1L)
+  described <- source_describe(source, target)
 
   expect_gt(nrow(described$schema), 0L)
   expect_identical(
@@ -653,7 +647,6 @@ test_that("live Databricks handles quoted relation and column names", {
 
   expect_identical(data_source_state(source)$table_ids[["commons quoted.table"]], table)
   expect_equal(described$schema$column, "quoted column")
-  expect_equal(described$sample[["quoted column"]], 1L)
 })
 
 test_that("live Databricks executes compiled definition mappings", {

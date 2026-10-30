@@ -65,11 +65,13 @@ sales <- data.frame(
   region = c("EMEA", "EMEA", "Americas", "APAC"),
   revenue = c(500, 1200, 900, 300)
 )
-agent <- commons(
+agent <- agent(
   client,
-  data_sources = list(sales = data_source(sales = sales)),
-  semantic_layer = semantic_layer(
-    measure("orders", "All orders.", function() sales, arguments = list())
+  commons = commons(
+    data_sources = list(sales = data_source(sales = sales)),
+    semantic_layer = semantic_layer(
+      measure("orders", "All orders.", function() sales, arguments = list())
+    )
   )
 )
 

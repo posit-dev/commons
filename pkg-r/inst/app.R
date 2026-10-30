@@ -96,16 +96,18 @@ ui <- page_chat(
 )
 
 server <- function(input, output, session) {
-  agent <- commons(
+  agent <- agent(
     ellmer::chat_anthropic(),
-    log = TRUE,
-    data_sources = list(
-      warehouse = data_source(
-        observations = observations,
-        site_area = site_area
-      )
+    commons = commons(
+      data_sources = list(
+        warehouse = data_source(
+          observations = observations,
+          site_area = site_area
+        )
+      ),
+      semantic_layer = semantics
     ),
-    semantic_layer = semantics
+    log = TRUE
   )
 
   commons_server("chat", agent)

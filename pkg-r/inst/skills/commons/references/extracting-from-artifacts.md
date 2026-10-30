@@ -17,7 +17,7 @@ The user decides which artifacts and calculations are trusted. Do not treat code
 
 ## Workflow
 
-1. Locate the agent project. Find the `commons()` definition and the existing semantic layer, dictionaries (`dictionaries/*.yaml`), and context files. If no agent project is found, say so and stop — this reference does not scaffold one.
+1. Locate the agent project. Find the `agent()` and `commons()` calls and the existing semantic layer, dictionaries (`dictionaries/*.yaml`), and context files. If no agent project is found, say so and stop — this reference does not scaffold one.
 
 2. Establish runnable access. Treat extraction as a code-running workflow, not a static source review. Confirm access to the artifact, each data source it uses, and its runtime dependencies. Use the project's existing authentication and configuration mechanisms. If credentials are missing, ask the user to provide authorized, preferably read-only access through an appropriate secret-management mechanism. Never write credential values to the agent project, agent instruction files, proposals, or logs.
 

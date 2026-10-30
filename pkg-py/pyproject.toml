@@ -43,7 +43,7 @@ shiny = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]"]
+dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]", "matplotlib>=3.8", "great-tables>=1.0.0", "plotnine>=0.15.8"]
 docs = [
     "great-docs>=0.17",
 ]
@@ -55,6 +55,8 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# A test still running after this many seconds prints every thread's stack.
+faulthandler_timeout = 300
 
 [tool.ruff]
 src = ["src", "tests"]

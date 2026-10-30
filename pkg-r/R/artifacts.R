@@ -90,6 +90,9 @@ artifact_remind <- function(store, text) {
 }
 
 take_artifact_reminders <- function(store) {
+  if (is.null(store)) {
+    return(list())
+  }
   reminders <- store$reminders
   store$reminders <- character()
   lapply(
@@ -591,26 +594,20 @@ is_mapping <- function(x) {
 
 # --- trusted results and files -------------------------------------------------
 
-# A private handle store, so the result isn't advertised to run_r.
 resolve_artifact_input <- function(private, input) {
-  handles <- new_handle_store(max_rows = Inf)
   args <- input$call
-  result <- switch(
+  query <- switch(
     input$kind,
-    measure = call_measure_tool(
+    measure = list(result = artifact_measure_data(run_measure(
       private$registry,
       args$name,
       args$arguments,
-      injections = private$injections,
-      handles = handles,
-      sources = private$sources,
-      measure_provenance = private$measure_provenance,
-      measure_display = private$measure_display
-    ),
-    metrics = call_metrics_impl(
+      private$injections,
+      private$sources
+    )$value)),
+    metrics = query_metrics(
       private$definitions,
       private$sources,
-      handles,
       metrics = unlist(args$metrics),
       dimensions = unlist(args$dimensions),
       filters = unlist(args$filters),
@@ -618,16 +615,21 @@ resolve_artifact_input <- function(private, input) {
       source_name = args$source,
       arguments = args$arguments
     ),
-    calculation = call_calculation_impl(
-      private$sources,
-      handles,
-      args$name,
-      args$arguments,
-      source_name = args$source
-    )
+    calculation = {
+      run <- run_calculation(
+        private$sources,
+        args$name,
+        args$arguments,
+        source_name = args$source
+      )
+      list(
+        result = run$result,
+        sql = run$prepared$sql,
+        bindings = run$prepared$bindings
+      )
+    }
   )
-  ids <- handle_ids(handles)
-  value <- if (length(ids)) get_handle(handles, ids[[1]])
+  value <- query$result
   scalar <- is.atomic(value) && !is.null(value)
   if (scalar) {
     value <- data.frame(value = value)
@@ -641,10 +643,22 @@ resolve_artifact_input <- function(private, input) {
   list(
     value = value,
     scalar = scalar,
-    sql = result@extra$sql,
-    bindings = result@extra$bindings,
+    sql = query$sql,
+    bindings = if (length(query$bindings)) query$bindings,
     provenance = if (length(provenance)) as.list(provenance)
   )
+}
+
+# The data behind a measure's value, as call_measure registers it for run_r.
+artifact_measure_data <- function(value) {
+  if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
+    value <- if (is.null(value@error)) value@extra$data
+  }
+  value <- collect_lazy_table(value)
+  if (is_gt_table(value)) {
+    value <- recover_gt_table_data(value)
+  }
+  value
 }
 
 write_artifact_dir <- function(dir, doc, calls, replacements, artifact) {
@@ -695,6 +709,9 @@ artifact_quarto_yml <- function() {
 # documents in the turns it added after the fact and says where they were
 # written.
 save_turn_artifacts <- function(store, turns) {
+  if (is.null(store)) {
+    return(invisible())
+  }
   committed <- list()
   on_artifact <- function(event) {
     if (identical(event$type, "close")) {

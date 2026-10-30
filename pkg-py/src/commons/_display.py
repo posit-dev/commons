@@ -24,6 +24,7 @@ from ._rows import MAX_MARKDOWN_ROWS, frame_rows, render_value
 _URL = re.compile(r"https?://", re.IGNORECASE)
 
 __all__ = [
+    "CODE_ANALYSIS",
     "CONTEXT_SEARCH",
     "DATA_RETRIEVAL",
     "DISPLAY_EXTRA_KEY",
@@ -60,6 +61,7 @@ TRUSTED_CALL = Title("Running a trusted calculation", "Ran a trusted calculation
 CONTEXT_SEARCH = Title("Searching context", "Searched context")
 TABLE_INSPECTION = Title("Inspecting a table", "Inspected a table")
 DATA_RETRIEVAL = Title("Retrieving data", "Retrieved data")
+CODE_ANALYSIS = Title("Analyzing data", "Analyzed data")
 
 
 def tool_display(
@@ -153,6 +155,34 @@ def measure_display_with_custom_html(
                 class_="commons-measure-result-value "
                 "commons-measure-result-value-authored",
             ),
+            class_="commons-measure-result",
+        ),
+        class_="commons-measure-display",
+    )
+
+
+def measure_display_with_result_html(
+    args: Mapping[str, Any],
+    result: TagChild,
+    *,
+    title: str | None = None,
+    description: str | None = None,
+    value_class: str | None = None,
+) -> Tag:
+    """The standard measure card around a result commons rendered itself.
+
+    ``value_class`` is added to the result's container, so a plot, a styled
+    table, or a note that one could not be shown can be styled apart.
+    """
+    classes = "commons-measure-result-value commons-measure-result-value-authored"
+    if value_class is not None:
+        classes = f"{classes} {value_class}"
+    return div(
+        _metadata_html(title, description),
+        _args_html(args),
+        div(
+            tags.strong("Result"),
+            div(result, class_=classes),
             class_="commons-measure-result",
         ),
         class_="commons-measure-display",

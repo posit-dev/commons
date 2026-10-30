@@ -9,8 +9,10 @@ interaction without provenance and citation tracking.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import warnings
+import weakref
 from collections.abc import AsyncGenerator, Mapping, Sequence
 from typing import Any, Literal, NoReturn
 
@@ -29,9 +31,12 @@ from ._citations import (
 from ._context_layer import ContextLayer, augment_context_layer
 from ._data_source import DataSource
 from ._definitions import Registry, build_registry
+from ._execution._driver import Worker
+from ._execution._thread import WorkerThread
 from ._handles import HandleStore
 from ._measures import SemanticLayer, resolve_injections, semantic_layer
 from ._prompt import (
+    EXECUTION_TOOL,
     check_instructions,
     read_instructions,
     render_system_prompt,
@@ -40,6 +45,7 @@ from ._prompt import (
 )
 from ._provenance import collect_appended_tags, derive_provenance_tag, provenance_aside
 from ._reminders import append_restored_conversation_reminder, append_turn_reminder
+from ._run_python import run_python_description, run_python_tools
 from ._tools import FirstTouch, ToolContext, build_commons_tools
 
 __all__ = ["Commons"]
@@ -50,6 +56,9 @@ EchoOptions = Literal["output", "all", "none", "text"]
 # the model a `source` argument and never labels its prompt sections, so this
 # is only what the agent's own bookkeeping keys on.
 SOLE_SOURCE = "data"
+
+# How often a stream checks whether the stop button was pressed, in seconds.
+STOP_POLL_INTERVAL = 0.1
 
 # Frozen and empty, so every agent built without a semantic layer can share it.
 _NO_MEASURES = semantic_layer()
@@ -84,11 +93,22 @@ class Commons(Chat[Any, Any]):
     `## Additional instructions` heading at the end of commons' built-in
     system prompt, as a string or the path to a text or Markdown file.
 
+    The agent can run Python code that its model writes. The code runs in a
+    separate, sandboxed Python process, which starts the first time the model
+    runs code. `network` sets whether that process can reach the network:
+    `"none"` (the default) or `"full"`. The sandbox works on Linux and macOS.
+    For local development on another system, set the
+    `COMMONS_ALLOW_UNSAFE_FALLBACK` environment variable to run the code with
+    limited checks instead. Warning! These checks are not intended to be a
+    security boundary.
+
     Construction raises a TypeError if `client` is not a `chatlas.Chat`, if
     an entry of `data_sources` is not a `DataSource`, or if a layer is not
     the layer its argument claims; a ValueError if `data_sources` names no
-    source or a measure asks for an injection no named source can fill; and
-    a FileNotFoundError if `instructions` names a file that does not exist.
+    source, a measure asks for an injection no named source can fill, or
+    `network` is neither `"none"` nor `"full"`; a FileNotFoundError if
+    `instructions` names a file that does not exist; and a RuntimeError if
+    this host cannot sandbox the session and the opt-in is not set.
     """
 
     def __init__(
@@ -99,6 +119,7 @@ class Commons(Chat[Any, Any]):
         context_layer: ContextLayer | None = None,
         *,
         instructions: str | None = None,
+        network: Literal["none", "full"] = "none",
     ) -> None:
         if not isinstance(client, Chat):
             raise TypeError(
@@ -124,8 +145,14 @@ class Commons(Chat[Any, Any]):
                 f"{type(semantic_layer).__name__}."
             )
         check_instructions(instructions)
+        # Built here so a host that cannot sandbox the session fails now,
+        # before any model asks to run code. The process starts on first use.
+        worker = Worker(
+            network=network,
+            measure_sources=list(semantic_layer.source_text.values()),
+        )
 
-        # Share the provider, which carries the chosen model; shallow-copy
+        # Share the provider, which knows the chosen model; shallow-copy
         # the chat kwargs so later changes don't cross between the two.
         super().__init__(
             provider=client.provider, kwargs_chat=copy.copy(client.kwargs_chat)
@@ -152,18 +179,33 @@ class Commons(Chat[Any, Any]):
         )
         self._restore_reminder_pending = False
 
-        tools = build_commons_tools(
-            ToolContext(
-                sources=sources,
-                measures=self._measures,
-                definitions=self._definitions,
-                context_layer=self._context_layer,
-                handles=self._handles,
-                citation_request=self._citation_request,
-                injections=self._injections,
-                first_touch=self._first_touch,
-            )
+        context = ToolContext(
+            sources=sources,
+            measures=self._measures,
+            definitions=self._definitions,
+            context_layer=self._context_layer,
+            handles=self._handles,
+            citation_request=self._citation_request,
+            injections=self._injections,
+            first_touch=self._first_touch,
         )
+        tools = build_commons_tools(context)
+        self._python = WorkerThread(worker)
+        # Close the session's process and thread when the agent is
+        # collected or the interpreter exits. The callback names only the
+        # WorkerThread, so the finalizer never keeps the agent alive.
+        weakref.finalize(self, self._python.close)
+        self._run_python, self._run_python_sync = run_python_tools(
+            self._python,
+            context,
+            run_python_description(
+                [tool.name for tool in tools],
+                has_measures=bool(self._measures),
+                network=network,
+            ),
+            network,
+        )
+        tools.append(self._run_python)
         self.set_tools(list(tools))
         self.system_prompt = _system_prompt(
             sources,
@@ -204,7 +246,19 @@ class Commons(Chat[Any, Any]):
         was_pending = self._restore_reminder_pending
         inputs = self._prepare_turn_inputs(args)
         self._citation_request.reset()
-        response = super().chat(*inputs, echo=echo, stream=stream, kwargs=kwargs)
+        # A synchronous chat cannot await an async tool, so chatlas
+        # refuses to run while the async run_python tool is registered.
+        # This workaround swaps in the sync variant of run_python for this call.
+        swap = any(tool.name == EXECUTION_TOOL for tool in self.get_tools())
+        if swap:
+            self.register_tool(self._run_python_sync, force=True)
+        try:
+            response = super().chat(
+                *inputs, echo=echo, stream=stream, kwargs=kwargs
+            )
+        finally:
+            if swap:
+                self.register_tool(self._run_python, force=True)
         self._consume_restore_reminder(was_pending)
         return response
 
@@ -246,7 +300,7 @@ class Commons(Chat[Any, Any]):
             kwargs=kwargs,
             controller=controller,
         )
-        return self._projected(raw, from_index, was_pending)
+        return self._projected(raw, from_index, was_pending, controller)
 
     # Citations are always projected, so reserved model markup cannot reach
     # the browser whatever the display layer does with the stream.
@@ -255,8 +309,16 @@ class Commons(Chat[Any, Any]):
         raw: AsyncGenerator[Any, None],
         from_index: int,
         was_pending: bool,
+        controller: StreamController | None = None,
     ) -> AsyncGenerator[str | Content, None]:
         scanner = CitationScanner(self._corpus)
+        # chatlas checks the controller only between chunks, so a running
+        # run_python call would otherwise finish before a stop takes effect.
+        watch = (
+            asyncio.ensure_future(self._stop_python_when(controller))
+            if controller is not None
+            else None
+        )
         try:
             async for chunk in raw:
                 # A provider's structured content passes through untouched;
@@ -268,6 +330,8 @@ class Commons(Chat[Any, Any]):
                 if projected:
                     yield projected
         finally:
+            if watch is not None:
+                watch.cancel()
             # A consumer that walks away early without cancelling still
             # closes the provider's stream.
             await raw.aclose()
@@ -285,6 +349,12 @@ class Commons(Chat[Any, Any]):
         aside = provenance_aside(tag)
         if aside:
             yield aside
+
+    async def _stop_python_when(self, controller: StreamController) -> None:
+        """Stop the Python session's calls once ``controller`` is cancelled."""
+        while not controller.cancelled:
+            await asyncio.sleep(STOP_POLL_INTERVAL)
+        self._python.stop_calls()
 
     # ---- chatlas.Chat entry points a Commons agent does not support ----------------
 

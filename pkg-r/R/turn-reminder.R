@@ -13,7 +13,7 @@ S7::method(contents_shinychat, ContentTurnReminder) <- function(content) {
   NULL
 }
 
-claude_5_turn_reminder <- "<reminder>Be concise as a default.</reminder>"
+brevity_turn_reminder <- "<reminder>Be concise as a default.</reminder>"
 
 restored_conversation_turn_reminder <- paste0(
   "<reminder>The R state associated with this restored conversation is ",
@@ -23,10 +23,10 @@ restored_conversation_turn_reminder <- paste0(
 )
 
 append_turn_reminder <- function(inputs, model) {
-  if (!is_claude_5_model(model)) {
+  if (!needs_brevity_prompting(model)) {
     return(inputs)
   }
-  c(inputs, list(ContentTurnReminder(text = claude_5_turn_reminder)))
+  c(inputs, list(ContentTurnReminder(text = brevity_turn_reminder)))
 }
 
 append_restored_conversation_reminder <- function(inputs) {

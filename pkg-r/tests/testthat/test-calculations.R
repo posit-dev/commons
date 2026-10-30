@@ -1,20 +1,3 @@
-test_calculation <- function() {
-  new_trusted_calculation(
-    "preview_value",
-    "Preview an allowed column with a bound value.",
-    "SELECT {{column}}, {{value}} AS bound_value FROM sales LIMIT 1",
-    arguments = list(
-      new_typed_argument(
-        "column",
-        "string",
-        identifier = TRUE,
-        choices = c("region", "revenue")
-      ),
-      new_typed_argument("value", "number")
-    )
-  )
-}
-
 test_that("trusted calculations bind values and allowlist identifiers", {
   calculation <- test_calculation()
   prepared <- prepare_calculation(

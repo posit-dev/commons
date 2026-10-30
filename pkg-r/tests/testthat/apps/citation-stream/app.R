@@ -82,7 +82,7 @@ client <- ellmer::Chat[["new"]](
 )
 stopifnot(S7::S7_inherits(client$get_model_object(), ellmer::Model))
 source <- data_source(fixture = data.frame(value = 1))
-agent <- commons(client, data_sources = list(fixture = source))
+agent <- agent(client, commons = commons(data_sources = list(fixture = source)))
 agent$.__enclos_env__$private$corpus <- list(
   list(label = "documentation", kind = "prose", text = quote_one),
   list(label = "sales table", kind = "schema", text = quote_two)
