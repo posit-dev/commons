@@ -14,8 +14,8 @@ parse_commons_citation <- function(body) {
 
 # Hold partial reserved tags between chunks so projection does not depend on
 # stream chunk boundaries.
-CITATION_OPEN <- "<commons-citation>"
-CITATION_CLOSE <- "</commons-citation>"
+CITATION_OPEN <- "<citation>"
+CITATION_CLOSE <- "</citation>"
 ASIDE_OPEN <- "<shiny-aside"
 ASIDE_CLOSE <- "</shiny-aside>"
 ELEMENT_BODY_CAP <- 16384L
@@ -174,9 +174,9 @@ project_citation_text <- function(text, corpus) {
 
 find_text_event <- function(buf, at_line_start) {
   citation_pattern <- if (at_line_start) {
-    "(?:^|(?<=\n))<commons-citation>"
+    "(?:^|(?<=\n))<citation>"
   } else {
-    "(?<=\n)<commons-citation>"
+    "(?<=\n)<citation>"
   }
   citation_pos <- regexpr(
     citation_pattern,

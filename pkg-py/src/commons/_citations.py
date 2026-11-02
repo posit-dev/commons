@@ -85,7 +85,7 @@ class CorpusEntry:
 
 @dataclass(frozen=True)
 class ParsedCitation:
-    """The two halves of a ``<commons-citation>`` body.
+    """The two halves of a ``<citation>`` body.
 
     Only ``quote`` is ever verified. ``explanation`` is the model's own words
     and carries no trust.

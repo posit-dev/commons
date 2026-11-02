@@ -174,7 +174,7 @@ test_that("Shiny Chat renders streamed citations as icon markers", {
     fixed = TRUE
   )
   expect_match(answer, "After citations.", fixed = TRUE)
-  expect_no_match(answer_html, "commons-citation", fixed = TRUE)
+  expect_no_match(answer_html, "citation>", fixed = TRUE)
 })
 
 test_that("Shiny Chat distinguishes trusted, cited, and untrusted asides", {

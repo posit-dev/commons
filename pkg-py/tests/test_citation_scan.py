@@ -25,7 +25,7 @@ EXHAUSTIVE_MAX: int = SPEC["exhaustive_split_max_chars"]
 
 PAD_TOKEN = "{{pad}}"
 SPLIT_TOKEN = "{{split}}"
-CITATION_OPEN = "<commons-citation>"
+CITATION_OPEN = "<citation>"
 
 # One sample passage for the tests below that need a quote but do not pin the
 # projection. Anything that pins the projection belongs in the fixture.
@@ -118,12 +118,12 @@ def test_any_verified_reports_whether_a_quote_was_accepted() -> None:
     scanner = CitationScanner(SAMPLE_CORPUS)
     assert not scanner.any_verified
 
-    scanner.feed("<commons-citation>\n\nwhy\n\n> nothing supports this\n\n")
-    scanner.feed("</commons-citation>")
+    scanner.feed("<citation>\n\nwhy\n\n> nothing supports this\n\n")
+    scanner.feed("</citation>")
     assert not scanner.any_verified
 
-    scanner.feed(f"\n<commons-citation>\n\nwhy\n\n> {SAMPLE_QUOTE}\n\n")
-    scanner.feed("</commons-citation>")
+    scanner.feed(f"\n<citation>\n\nwhy\n\n> {SAMPLE_QUOTE}\n\n")
+    scanner.feed("</citation>")
     assert scanner.any_verified
 
 
@@ -132,7 +132,7 @@ def test_an_oversized_unclosed_citation_does_not_grow_the_buffer() -> None:
     # this pins that nothing is retained while waiting for a close tag.
     scanner = CitationScanner(SAMPLE_CORPUS)
 
-    assert scanner.feed("<commons-citation>" + "x" * (ELEMENT_BODY_CAP + 1)) == ""
+    assert scanner.feed("<citation>" + "x" * (ELEMENT_BODY_CAP + 1)) == ""
     assert len(scanner._buffer) < len(CITATION_CLOSE)
     assert scanner.feed("y" * (ELEMENT_BODY_CAP * 2)) == ""
     assert len(scanner._buffer) < len(CITATION_CLOSE)

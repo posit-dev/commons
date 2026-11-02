@@ -229,19 +229,19 @@ test_that("search_context requests a citation for fallback answers", {
   )
 
   expect_s7_class(result, ellmer::ContentToolResult)
-  expect_match(result@value, "<commons-citation>", fixed = TRUE)
+  expect_match(result@value, "<citation>", fixed = TRUE)
 })
 
-test_that("citation_reminder_text names the commons-citation dialect", {
+test_that("citation_reminder_text names the citation dialect", {
   reminder <- citation_reminder_text()
 
-  expect_match(reminder, "<commons-citation>", fixed = TRUE)
+  expect_match(reminder, "<citation>", fixed = TRUE)
   expect_no_match(reminder, "<citation reason", fixed = TRUE)
 })
 
 test_that("citation instructions describe only available tool outputs", {
   base <- test_agent()$get_system_prompt()
-  expect_match(base, "<commons-citation>", fixed = TRUE)
+  expect_match(base, "<citation>", fixed = TRUE)
   expect_match(base, "From `search_context`", fixed = TRUE)
   expect_match(base, "From `describe_table`", fixed = TRUE)
   expect_match(base, "From `run_sql`", fixed = TRUE)

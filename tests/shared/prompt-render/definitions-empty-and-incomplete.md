@@ -32,17 +32,17 @@ These parts of tool outputs are not citable:
 If exact citable text you have seen supports the way you computed an answer,
 cite it using this format:
 
-<commons-citation>
+<citation>
 
 A very short reason the quote supports the answer.
 
 > Exact supporting text copied from trusted context.
 
-</commons-citation>
+</citation>
 
 Rules:
 
-- Start each `<commons-citation>` at the beginning of a line, exactly as
+- Start each `<citation>` at the beginning of a line, exactly as
   written, with no attributes.
 - Quote the text verbatim in exactly one blockquote, with every line prefixed
   by `> `. Citations are verified by exact text match against

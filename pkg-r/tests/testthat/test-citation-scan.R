@@ -25,7 +25,7 @@ test_that("citation decisions match the shared record shape", {
     c("accepted", "rejected", "malformed")
   )
 
-  malformed <- "<commons-citation>\n\nno blockquote\n\n</commons-citation>"
+  malformed <- "<citation>\n\nno blockquote\n\n</citation>"
 
   for (case in cases) {
     want <- case$decision
@@ -67,9 +67,9 @@ citation_scan_padding <- function(case, text) {
   if (is.null(case$pad)) {
     return("")
   }
-  open_at <- regexpr("<commons-citation>", text, fixed = TRUE)
-  after_open <- substring(text, open_at + nchar("<commons-citation>"))
-  close_at <- regexpr("</commons-citation>", after_open, fixed = TRUE)
+  open_at <- regexpr("<citation>", text, fixed = TRUE)
+  after_open <- substring(text, open_at + nchar("<citation>"))
+  close_at <- regexpr("</citation>", after_open, fixed = TRUE)
   body <- substr(after_open, 1, close_at - 1L)
   strrep(
     case$pad$char,
@@ -192,7 +192,7 @@ test_that("an oversized unclosed citation keeps only a bounded close-tag suffix"
 
   expect_identical(
     scanner$feed(paste0(
-      "<commons-citation>",
+      "<citation>",
       strrep("x", ELEMENT_BODY_CAP + 1L)
     )),
     ""
