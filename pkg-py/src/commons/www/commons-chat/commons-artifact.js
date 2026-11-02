@@ -106,6 +106,10 @@
   // nothing but the stylesheet load from the network. The frame patches the
   // pieces it is sent rather than reloading, so streaming text and finished
   // cells don't flicker.
+  //
+  // The sandbox still lets the frame navigate itself, so the frame opens links
+  // through the parent, drops the elements that navigate on their own, and
+  // takes the document over a port that dies with it if it navigates anyway.
   const nonce = crypto.randomUUID();
   const frameSource = `<!doctype html>
 <html><head><meta charset="utf-8">
@@ -113,21 +117,47 @@
 <link rel="stylesheet" href="${new URL("commons-document.css", assetRoot)}">
 </head><body><main id="doc"></main><script nonce="${nonce}">
 const doc = document.getElementById("doc");
-window.addEventListener("message", (event) => {
-  if (event.source !== window.parent) return;
-  const msg = event.data;
+let port = null;
+const show = (msg) => {
   const root = document.scrollingElement;
   const following = root.scrollHeight - root.scrollTop - root.clientHeight < 40;
   if (msg.reset) doc.replaceChildren();
   for (const piece of msg.pieces) {
     while (doc.children.length <= piece.index) doc.append(document.createElement("section"));
-    doc.children[piece.index].innerHTML = piece.html;
+    // Parsed inert first: a <meta> refresh acts as soon as it's inserted.
+    const template = document.createElement("template");
+    template.innerHTML = piece.html;
+    template.content.querySelectorAll("meta, base").forEach((node) => node.remove());
+    doc.children[piece.index].replaceChildren(template.content);
   }
   while (doc.children.length > msg.count) doc.lastElementChild.remove();
   if (msg.follow && following) root.scrollTop = root.scrollHeight;
+};
+window.addEventListener("message", (event) => {
+  if (port || event.source !== window.parent || !event.ports[0]) return;
+  port = event.ports[0];
+  port.onmessage = (event) => show(event.data);
+});
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a[href]");
+  if (!link) return;
+  event.preventDefault();
+  const href = link.getAttribute("href");
+  // A fragment resolves against the chat page's URL, which would load it here.
+  if (href.startsWith("#")) {
+    document.getElementById(decodeURIComponent(href.slice(1)))?.scrollIntoView();
+  } else if (port) {
+    port.postMessage({ open: link.href });
+  }
 });
 parent.postMessage("ready", "*");
 </script></body></html>`;
+
+  const openLink = (url) => {
+    if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
+  };
 
   const statusText = { writing: "Writing…", running: "Running…" };
 
@@ -149,10 +179,15 @@ parent.postMessage("ready", "*");
         frame.setAttribute("sandbox", "allow-scripts");
         frame.className = "commons-artifact-frame";
         this.ready = false;
+        this.port?.close();
         this.shown = { id: null, pieces: [] };
         const onReady = (event) => {
           if (event.source !== frame.contentWindow || event.data !== "ready") return;
           window.removeEventListener("message", onReady);
+          const channel = new MessageChannel();
+          channel.port1.onmessage = (event) => openLink(event.data?.open);
+          frame.contentWindow.postMessage("port", "*", [channel.port2]);
+          this.port = channel.port1;
           this.ready = true;
           this.render();
         };
@@ -184,10 +219,12 @@ parent.postMessage("ready", "*");
         if (old[index] !== html) pieces.push({ index, html });
       });
       if (!reset && !pieces.length && old.length === a.pieces.length) return;
-      frame.contentWindow.postMessage(
-        { reset, pieces, count: a.pieces.length, follow: a.status === "writing" },
-        "*"
-      );
+      this.port.postMessage({
+        reset,
+        pieces,
+        count: a.pieces.length,
+        follow: a.status === "writing",
+      });
       this.shown = { id: a.id, pieces: [...a.pieces] };
     }
   }

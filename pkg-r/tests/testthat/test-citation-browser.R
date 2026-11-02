@@ -439,6 +439,26 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
     "document.body.innerText.includes('trusted$measure')"
   ))
 
+  # A link opens in a new tab rather than replacing the document in its frame,
+  # which runs in a target of its own.
+  app$run_js("window.opened = []; window.open = (url) => window.opened.push(url);")
+  browser <- app$get_chromote_session()$parent
+  targets <- browser$Target$getTargets()$targetInfos
+  target <- Filter(function(t) identical(t$type, "iframe"), targets)[[1]]$targetId
+  frame_session <- chromote::ChromoteSession$new(parent = browser, targetId = target)
+  in_frame <- function(js) {
+    frame_session$Runtime$evaluate(js, returnByValue = TRUE)$result$value
+  }
+  link <- "document.querySelector('a[href=\"https://example.com/orders\"]')"
+  deadline <- Sys.time() + 30
+  while (!isTRUE(in_frame(paste0("!!", link))) && Sys.time() < deadline) {
+    Sys.sleep(0.1)
+  }
+  in_frame(paste0(link, ".click()"))
+  app$wait_for_js("window.opened.length > 0")
+  expect_identical(app$get_js("window.opened"), list("https://example.com/orders"))
+  expect_identical(in_frame("location.href"), "about:srcdoc")
+
   app$run_js(paste0(
     frame,
     ".remove();",

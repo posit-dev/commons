@@ -7,7 +7,8 @@ document <- paste0(
   "There are `r nrow(orders)` orders across **three** regions.\n\n",
   "```{r}\ntable(orders$region)\n```\n\n",
   "```{r}\nbarplot(table(orders$region))\n```\n\n",
-  "- EMEA leads.\n- APAC trails.\n"
+  "- EMEA leads.\n- APAC trails.\n\n",
+  "See [the source](https://example.com/orders).\n"
 )
 response_chunks <- c(
   "I wrote the report.\n\n<arti",
