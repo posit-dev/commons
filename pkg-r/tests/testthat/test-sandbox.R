@@ -74,7 +74,7 @@ test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
         runtime = worker_runtime(),
         name = "worker_init",
         args = list(
-          parent_tmp = tempdir(),
+          callr_dir = tempdir(),
           work_dir = tempdir(),
           dll_path = NA_character_
         )
@@ -93,7 +93,7 @@ test_that("worker_init errors without the compiled library", {
         runtime = worker_runtime(),
         name = "worker_init",
         args = list(
-          parent_tmp = tempdir(),
+          callr_dir = tempdir(),
           work_dir = tempdir(),
           dll_path = NA_character_
         )
@@ -110,7 +110,7 @@ test_that("worker_init permits the explicit guardrail mode", {
       runtime = worker_runtime(),
       name = "worker_init",
       args = list(
-        parent_tmp = tempdir(),
+        callr_dir = tempdir(),
         work_dir = tempdir(),
         dll_path = NA_character_,
         protection = "guardrails"
@@ -135,9 +135,16 @@ sandboxed_worker_probes <- function(
     file.path(outside, "secret.txt")
   )
 
+  # The host keeps files in its own tempdir(), as other conversations would.
+  host_file <- withr::local_tempfile(.local_envir = env)
+  writeLines("secret", host_file)
+
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir)
   withr::defer(unlink(work_dir, recursive = TRUE), envir = env)
+  callr_dir <- tempfile("commons-callr-")
+  dir.create(callr_dir)
+  withr::defer(unlink(callr_dir, recursive = TRUE), envir = env)
 
   rs <- callr::r_session$new(
     callr::r_session_options(
@@ -145,6 +152,7 @@ sandboxed_worker_probes <- function(
     )
   )
   withr::defer(rs$close(), envir = env)
+  withr::local_envvar(CALLR_TMPDIR = callr_dir, .local_envir = env)
   rs$run(
     function(outside) {
       assign(
@@ -161,7 +169,7 @@ sandboxed_worker_probes <- function(
       runtime = worker_runtime(),
       name = "worker_init",
       args = list(
-        parent_tmp = tempdir(),
+        callr_dir = callr_dir,
         work_dir = work_dir,
         dll_path = commons_dll_path(),
         network = network,
@@ -183,7 +191,7 @@ sandboxed_worker_probes <- function(
   }
 
   rs$run(
-    function(outside, peer_sockets) {
+    function(outside, host_file, peer_sockets) {
       perl_report <- function(out) {
         if (!identical(attr(out, "status"), 127L)) {
           pairs <- strsplit(out, "=", fixed = TRUE)
@@ -202,6 +210,14 @@ sandboxed_worker_probes <- function(
       }
       list(
         read = denied(readLines(file.path(outside, "secret.txt"), n = 1)),
+        host_tmp_read = denied(readLines(host_file)),
+        host_tmp_write = if (
+          isTRUE(suppressWarnings(file.create(paste0(host_file, "-w"))))
+        ) {
+          "allowed"
+        } else {
+          "denied"
+        },
         inherited = denied({
           con <- get(".commons_inherited_file", envir = globalenv())
           seek(con, where = 100000)
@@ -294,7 +310,11 @@ sandboxed_worker_probes <- function(
         compute = sum(1:10)
       )
     },
-    args = list(outside = outside, peer_sockets = peer_sockets)
+    args = list(
+      outside = outside,
+      host_file = host_file,
+      peer_sockets = peer_sockets
+    )
   )
 }
 
@@ -367,6 +387,8 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   probes <- sandboxed_worker_probes("auto")
   expect_equal(probes$read, "denied")
   expect_equal(probes$write, "denied")
+  expect_equal(probes$host_tmp_read, "denied")
+  expect_equal(probes$host_tmp_write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
   expect_equal(probes$exec, "allowed")
@@ -383,6 +405,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
 
   probes <- sandboxed_worker_probes("userns")
   expect_equal(probes$read, "denied")
+  expect_equal(probes$host_tmp_read, "denied")
   expect_equal(probes$inherited, "denied")
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")

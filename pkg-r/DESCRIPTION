@@ -20,7 +20,7 @@ Depends:
     R (>= 4.1.0)
 Imports:
     bslib (>= 0.11.0),
-    callr,
+    callr (>= 3.8.0),
     cli,
     coro,
     DBI,
