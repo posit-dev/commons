@@ -192,19 +192,19 @@ artifact_store_restore <- function(store, values) {
   invisible(store)
 }
 
-# The link that replaces a document's tag in a saved turn, naming the version
-# that tag wrote.
+# The link that replaces a document's tag in a saved turn, shown only when the
+# version that tag wrote was saved.
 artifact_turn_link <- function(store, event) {
   artifact <- if (!is.null(store)) store$artifacts[[event$id]]
-  matches <- which(vapply(
+  saved <- vapply(
     artifact$versions,
     function(version) identical(version$source, event$body),
     logical(1)
-  ))
-  if (length(matches) == 0) {
+  )
+  if (!any(saved)) {
     return("")
   }
-  artifact_link_html(store, event$id, max(matches))
+  artifact_link_html(store, event$id)
 }
 
 artifact_ensure <- function(store, id) {
@@ -507,27 +507,21 @@ artifact_edit_result <- function(store, artifact, version, result) {
     value,
     title = sprintf("Edited %s", artifact$title),
     icon = maybe_icon("file-earmark-text"),
-    html = artifact_link_html(store, artifact$id, version)
+    html = artifact_link_html(store, artifact$id)
   )
 }
 
-artifact_link_html <- function(store, id, version = NULL) {
-  artifact <- store$artifacts[[id]]
-  version <- version %||% length(artifact$versions)
+# Opens the document's latest version, wherever in the chat it appears.
+artifact_link_html <- function(store, id) {
   sprintf(
-    paste0(
-      "<commons-artifact-link artifact=\"%s\" version=\"%d\"%s>",
-      "%s \u00b7 v%d</commons-artifact-link>"
-    ),
+    "<commons-artifact-link artifact=\"%s\"%s>%s</commons-artifact-link>",
     escape_attr(id),
-    version,
     if (is.null(store$link_input)) {
       ""
     } else {
       sprintf(" input=\"%s\"", escape_attr(store$link_input))
     },
-    html_escape(artifact$title),
-    version
+    html_escape(store$artifacts[[id]]$title)
   )
 }
 

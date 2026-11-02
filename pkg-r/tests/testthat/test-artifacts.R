@@ -267,7 +267,7 @@ test_that("a streamed document knits from its commons calls as it arrives", {
     vapply(substring(source, starts, starts + 19), scanner$feed, character(1)),
     collapse = ""
   )
-  expect_match(out, "<commons-artifact-link artifact=\"orders\" version=\"1\"", fixed = TRUE)
+  expect_match(out, "<commons-artifact-link artifact=\"orders\"", fixed = TRUE)
 
   wait_until_ready(store, "orders")
   html <- paste(artifact_get(store, "orders")$html, collapse = "\n")
@@ -588,7 +588,7 @@ prose_store <- function() {
   store
 }
 
-test_that("saved turns show each document tag as a link to the version it wrote", {
+test_that("saved turns show each document tag as a link to the document", {
   store <- prose_store()
   text <- "Here.\n<artifact id=\"doc\" title=\"Doc\">First.\n</artifact>\nDone."
   turns <- list(
@@ -603,7 +603,7 @@ test_that("saved turns show each document tag as a link to the version it wrote"
   contents <- projected[[2]]@contents
   expect_true(S7::S7_inherits(contents[[1]], ContentProjectedText))
   expect_identical(contents[[1]]@text, text)
-  expect_match(shinychat::contents_shinychat(contents[[1]]), "version=\"1\"", fixed = TRUE)
+  expect_match(shinychat::contents_shinychat(contents[[1]]), "<commons-artifact-link artifact=\"doc\"", fixed = TRUE)
   expect_no_match(shinychat::contents_shinychat(contents[[1]]), "<artifact ", fixed = TRUE)
   expect_identical(class(contents[[2]])[[1]], "ellmer::ContentText")
   expect_identical(projected[[1]], turns[[1]])
@@ -675,7 +675,7 @@ test_that("a streamed reply's turn keeps its text and shows the link", {
   content <- turns[[length(turns)]]@contents[[1]]
   expect_true(S7::S7_inherits(content, ContentProjectedText))
   expect_identical(content@text, raw)
-  expect_match(content@display, "<commons-artifact-link artifact=\"doc\" version=\"1\"", fixed = TRUE)
+  expect_match(content@display, "<commons-artifact-link artifact=\"doc\"", fixed = TRUE)
   expect_length(artifact_get(agent$artifact_store(), "doc")$versions, 1)
 })
 

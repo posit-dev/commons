@@ -424,7 +424,7 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
   ))
   expect_identical(
     app$get_js("document.querySelector('commons-artifact-link').textContent"),
-    "Orders by region · v1"
+    "Orders by region"
   )
   expect_false(app$get_js(
     "document.body.innerText.includes('trusted$measure')"
