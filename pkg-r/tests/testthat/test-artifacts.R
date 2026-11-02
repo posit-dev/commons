@@ -874,3 +874,43 @@ test_that("an earlier version still rendering doesn't overwrite the view", {
   statuses <- Filter(function(event) identical(event$type, "status"), events)
   expect_identical(statuses[[length(statuses)]]$status, "ready")
 })
+
+test_that("an earlier version finishing during a rewrite leaves the view to it", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  scanner <- citation_scanner(on_artifact = artifact_scan_handler(store))
+  scanner$feed(paste0(
+    "<artifact id=\"doc\" title=\"Doc\">\n",
+    "```{r}\nSys.sleep(1); 'one'\n```\n</artifact>\n"
+  ))
+  first <- store$settling[[1]]
+  scanner$feed("<artifact id=\"doc\" title=\"Doc\">\nRewriting")
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+
+  wait_for_promise(first)
+
+  types <- vapply(events, `[[`, character(1), "type")
+  expect_false(any(c("status", "thumbnail", "pieces") %in% types))
+  expect_match(paste(store$artifacts$doc$html, collapse = ""), "one", fixed = TRUE)
+
+  scanner$feed(" the document.\n</artifact>")
+  wait_for_promise(artifact_store_settled(store))
+  expect_match(paste(store$artifacts$doc$html, collapse = ""), "Rewriting", fixed = TRUE)
+  statuses <- Filter(function(event) identical(event$type, "status"), events)
+  expect_identical(statuses[[length(statuses)]]$status, "ready")
+})
+
+test_that("reopening a document that failed before rendering shows why", {
+  artifact <- new.env(parent = emptyenv())
+  artifact$id <- "doc"
+  artifact$title <- "Doc"
+  artifact$status <- "ready"
+  artifact$html <- character()
+  artifact$errors <- "The worker didn't start."
+
+  expect_identical(artifact_select_event(artifact)$error, "The worker didn't start.")
+
+  artifact$html <- "<p>Shown.</p>"
+  expect_identical(artifact_select_event(artifact)$error, "")
+})

@@ -8,6 +8,10 @@ artifact_drawer_server <- function(
   session = shiny::getDefaultReactiveDomain()
 ) {
   store <- client$artifact_store()
+  # A trusted-only agent writes no documents.
+  if (is.null(store)) {
+    return(invisible(NULL))
+  }
   view <- session$ns(id)
   open_input <- paste0(id, "_artifact_open")
   store$link_input <- session$ns(open_input)
@@ -84,7 +88,7 @@ artifact_select_event <- function(artifact) {
     }),
     count = length(artifact$html),
     status = artifact$status,
-    error = "",
+    error = artifact_failure(artifact) %||% "",
     thumbnail = artifact$thumbnail %||% ""
   )
 }

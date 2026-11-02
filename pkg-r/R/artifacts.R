@@ -417,6 +417,9 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     return(result)
   }
   latest <- version == length(artifact$versions)
+  # A rewrite of the document can be streaming before it becomes a version, so
+  # only the run on view updates the view.
+  shown <- latest && (is.null(run) || artifact_run_shown(run))
   if (latest) {
     artifact$html <- result$html
     artifact$errors <- result$errors
@@ -425,6 +428,8 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
       artifact$units <- run$units
     }
     artifact$thumbnail <- artifact_thumbnail(artifact$units)
+  }
+  if (shown) {
     artifact_notify(store, list(
       type = "thumbnail",
       id = artifact$id,
@@ -438,17 +443,22 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     file.path(dir, "report.html"),
     useBytes = TRUE
   )
-  if (latest) {
+  if (shown) {
     artifact_notify(store, list(
       type = "status",
       id = artifact$id,
       status = "ready",
-      error = if (length(result$errors) && !length(result$html)) {
-        result$errors[[1]]
-      }
+      error = artifact_failure(artifact)
     ))
   }
   result
+}
+
+# Why a document shows nothing, when it failed before any of it rendered.
+artifact_failure <- function(artifact) {
+  if (length(artifact$errors) && !length(artifact$html)) {
+    artifact$errors[[1]]
+  }
 }
 
 artifact_edit <- function(
