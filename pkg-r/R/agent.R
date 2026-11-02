@@ -22,6 +22,7 @@
 #' @param instructions Optional instructions placed under an
 #'   `## Additional instructions` heading at the end of commons' built-in
 #'   system prompt, as a single string or the path to a text or Markdown file.
+#'   They follow any `instructions` given to [commons()].
 #'
 #'   ```r
 #'   agent(
@@ -322,7 +323,10 @@ Commons <- R6::R6Class(
         commons_system_prompt(
           private$sources,
           definitions = private$definitions,
-          instructions = instructions,
+          instructions = combine_instructions(
+            state$instructions,
+            read_instructions(instructions)
+          ),
           tools = commons_tools,
           model = self$get_model(),
           trusted_only = private$trusted_only

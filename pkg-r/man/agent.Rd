@@ -30,6 +30,7 @@ semantic layer, and context layer.}
 \item{instructions}{Optional instructions placed under an
 \verb{## Additional instructions} heading at the end of commons' built-in
 system prompt, as a single string or the path to a text or Markdown file.
+They follow any \code{instructions} given to \code{\link[=commons]{commons()}}.
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{agent(
   # ...

@@ -104,6 +104,31 @@ test_that("instructions can be read from a file", {
   expect_true(endsWith(prompt, "Prefer fiscal-year comparisons."))
 })
 
+test_that("agent() places commons() instructions ahead of its own", {
+  withr::local_options(commons.allow_unsafe_fallback = TRUE)
+  tr <- commons(
+    data_sources = list(sales_db = test_source()),
+    instructions = "Use the organization's fiscal-year conventions."
+  )
+
+  prompt <- agent(test_client(), commons = tr)$get_system_prompt()
+  expect_true(endsWith(prompt, "Use the organization's fiscal-year conventions."))
+
+  prompt <- agent(
+    test_client(),
+    commons = tr,
+    instructions = "Prefer fiscal-year comparisons."
+  )$get_system_prompt()
+  expect_true(endsWith(
+    prompt,
+    paste(
+      "Use the organization's fiscal-year conventions.",
+      "Prefer fiscal-year comparisons.",
+      sep = "\n\n"
+    )
+  ))
+})
+
 test_that("a system prompt already set on the client warns", {
   withr::local_options(commons.allow_unsafe_fallback = TRUE)
   client <- test_client()

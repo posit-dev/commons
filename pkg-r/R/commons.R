@@ -13,6 +13,10 @@
 #'   [semantic_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
+#' @param instructions Optional instructions shown at the end of the object's
+#'   printed overview, as a single string or the path to a text or Markdown
+#'   file. [agent()] also places them in its system prompt, ahead of its own
+#'   `instructions`.
 #'
 #' @return A `commons` object with methods:
 #'
@@ -144,14 +148,16 @@ commons <- function(
   ...,
   data_sources,
   semantic_layer = NULL,
-  context_layer = NULL
+  context_layer = NULL,
+  instructions = NULL
 ) {
   if (is_legacy_commons_call(...)) {
     args <- c(
       rlang::list2(...),
       if (!missing(data_sources)) list(data_sources = data_sources),
       if (!missing(semantic_layer)) list(semantic_layer = semantic_layer),
-      if (!missing(context_layer)) list(context_layer = context_layer)
+      if (!missing(context_layer)) list(context_layer = context_layer),
+      if (!missing(instructions)) list(instructions = instructions)
     )
     return(rlang::exec(
       commons_legacy,
@@ -162,7 +168,7 @@ commons <- function(
   }
   rlang::check_dots_empty()
   rlang::check_required(data_sources)
-  new_commons(data_sources, semantic_layer, context_layer)
+  new_commons(data_sources, semantic_layer, context_layer, instructions)
 }
 
 # Before 0.2.0, commons() took a client first and returned the agent.
@@ -217,13 +223,17 @@ new_commons <- function(
   data_sources,
   semantic_layer = NULL,
   context_layer = NULL,
+  instructions = NULL,
   call = rlang::caller_env()
 ) {
   data_sources <- as_data_sources(data_sources, call = call)
   check_context_layer(context_layer, call = call)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer, call = call)
-  TheCommons$new(commons_state(data_sources, semantic_layer, context_layer, call))
+  check_instructions(instructions, call = call)
+  state <- commons_state(data_sources, semantic_layer, context_layer, call)
+  state$instructions <- read_instructions(instructions)
+  TheCommons$new(state)
 }
 
 TheCommons <- R6::R6Class(
@@ -403,7 +413,10 @@ commons_overview <- function(state) {
         "which didn't."
       ),
       collapse = " "
-    ))
+    )),
+    if (nzchar(state$instructions %||% "")) {
+      c("Additional instructions:", state$instructions)
+    }
   )
 }
 
