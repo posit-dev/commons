@@ -54,6 +54,26 @@ test_that("split_exchanges opens at plain user turns only", {
   expect_length(exchanges[[2]], 1)
 })
 
+test_that("a hidden follow-up stays in its exchange and out of the transcript", {
+  skip_if_not_installed("shinychat")
+  instruction <- "<system-instruction>Fix the document.\n\n- Cell 1: boom</system-instruction>"
+  turns <- list(
+    ellmer::UserTurn("Write a report."),
+    ellmer::AssistantTurn("Here it is."),
+    ellmer::UserTurn(list(ellmer::ContentText(instruction))),
+    ellmer::AssistantTurn("Fixed it.")
+  )
+
+  expect_length(split_exchanges(turns), 1)
+  sanitized <- sanitize_trajectory_turns(turns)
+  expect_length(split_exchanges(sanitized), 1)
+  messages <- trajectory_messages(sanitized)
+  expect_identical(
+    vapply(messages, `[[`, character(1), "role"),
+    c("user", "assistant")
+  )
+})
+
 test_that("summarize_trajectories describes each conversation", {
   active <- c(
     list(ellmer::UserTurn("How   many\norders came in  last week?")),

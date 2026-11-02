@@ -384,8 +384,25 @@ Commons <- R6::R6Class(
       n_turns <- length(self$get_turns())
       result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
       private$consume_restore_reminder(restore_reminder_pending)
-      turns <- self$get_turns()
-      save_turn_artifacts(private$own_artifacts(), turns[seq_along(turns) > n_turns])
+      store <- private$own_artifacts()
+      for (i in seq_len(artifact_followup_limit + 1L)) {
+        turns <- self$get_turns()
+        save_turn_artifacts(store, turns[seq_along(turns) > n_turns])
+        if (
+          i > artifact_followup_limit ||
+            is.null(store) ||
+            length(store$reminders) == 0
+        ) {
+          break
+        }
+        # As in a stream, the model fixes what failed to render in a hidden
+        # turn, and its reply to that turn is what this call returns.
+        n_turns <- length(turns)
+        result <- withVisible(do.call(
+          super$chat,
+          c(private$prepare_turn_inputs(list()), list(echo = echo))
+        ))
+      }
       if (result$visible) result$value else invisible(result$value)
     },
 
@@ -425,6 +442,16 @@ Commons <- R6::R6Class(
       as_content <- identical(stream, "content")
       # Bypasses this class's set_turns(), which would drop the artifacts.
       replace_turns <- function(turns) super$set_turns(turns)
+      # A hidden turn whose only inputs are the pending system instructions.
+      followup_stream <- function() {
+        do.call(
+          super$stream_async,
+          c(
+            private$prepare_turn_inputs(list()),
+            list(tool_mode = tool_mode, stream = stream, controller = controller)
+          )
+        )
+      }
 
       # Always project citations so reserved model markup cannot reach the browser.
       coro::async_generator(function() {
@@ -437,23 +464,47 @@ Commons <- R6::R6Class(
           on_artifact = on_artifact
         )
 
-        for (chunk in coro::await_each(raw_stream)) {
-          if (is.character(chunk)) {
-            out <- scanner$feed(chunk)
-            if (nzchar(out)) yield(out)
-          } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
-            out <- scanner$feed(chunk@text)
-            if (nzchar(out)) yield(ellmer::ContentText(out))
-          } else {
-            yield(chunk)
+        turn_stream <- raw_stream
+        followups <- 0L
+        repeat {
+          for (chunk in coro::await_each(turn_stream)) {
+            if (is.character(chunk)) {
+              out <- scanner$feed(chunk)
+              if (nzchar(out)) yield(out)
+            } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
+              out <- scanner$feed(chunk@text)
+              if (nzchar(out)) yield(ellmer::ContentText(out))
+            } else {
+              yield(chunk)
+            }
           }
-        }
 
-        private$consume_restore_reminder(restore_reminder_pending)
+          private$consume_restore_reminder(restore_reminder_pending)
 
-        tail <- scanner$finish()
-        if (nzchar(tail)) {
-          yield(if (as_content) ellmer::ContentText(tail) else tail)
+          tail <- scanner$finish()
+          if (nzchar(tail)) {
+            yield(if (as_content) ellmer::ContentText(tail) else tail)
+          }
+
+          # Documents written in this reply are still rendering. Once they
+          # finish, any errors go back to the model in a hidden turn, and the
+          # same response carries its fix rather than waiting on the user.
+          if (is.null(artifact_store) || followups >= artifact_followup_limit) {
+            break
+          }
+          await(artifact_store_settled(artifact_store))
+          if (
+            length(artifact_store$reminders) == 0 ||
+              isTRUE(controller$cancelled)
+          ) {
+            break
+          }
+          followups <- followups + 1L
+          turn_stream <- followup_stream()
+          gap <- scanner$feed("\n\n")
+          if (nzchar(gap)) {
+            yield(if (as_content) ellmer::ContentText(gap) else gap)
+          }
         }
         replace_turns(project_turns_display(
           self$get_turns(),
@@ -638,8 +689,15 @@ check_trusted_tools <- function(tools) {
   )
 }
 
+# A hidden follow-up turn continues the user's request rather than making one.
 turn_has_user_message <- function(turn) {
-  any(!vapply(turn@contents, is_tool_result_content, logical(1)))
+  any(!vapply(
+    turn@contents,
+    function(content) {
+      is_tool_result_content(content) || S7::S7_inherits(content, ContentTurnReminder)
+    },
+    logical(1)
+  ))
 }
 
 # Measures can take a named source's connection as an argument.

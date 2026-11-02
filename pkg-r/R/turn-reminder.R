@@ -13,6 +13,19 @@ S7::method(contents_shinychat, ContentTurnReminder) <- function(content) {
   NULL
 }
 
+# shinychat shows a user turn with nothing left to display as an empty
+# message, so the hidden follow-up turns come out first. The replies on either
+# side of one then merge into a single message, as they streamed.
+S7::method(
+  contents_shinychat,
+  S7::new_S3_class(c("Commons", "Chat", "R6"))
+) <- function(content) {
+  chat <- new_trajectory_chat()
+  chat$set_tools(content$get_tools())
+  chat$set_turns(Filter(Negate(is_internal_turn), content$get_turns()))
+  shinychat::contents_shinychat(chat)
+}
+
 # Assistant text as the model wrote it, with the projection the chat showed:
 # citations as asides and documents as links. shinychat rebuilds a restored
 # conversation from its turns, so without this it would show the raw markup.
@@ -52,10 +65,11 @@ project_turns_display <- function(turns, from, corpus, artifacts = NULL) {
 brevity_turn_reminder <- "<system-instruction>Be concise as a default.</system-instruction>"
 
 restored_conversation_turn_reminder <- paste0(
-  "<system-instruction>The R state associated with this restored conversation is ",
-  "unavailable. Do not assume that objects, loaded packages, or result ",
-  "handles from earlier run_r calls still exist. Re-run needed tools, ",
-  "recreate objects, and reload packages before continuing.</system-instruction>"
+  "<system-instruction>The R state associated with this restored ",
+  "conversation is unavailable. Do not assume that objects, loaded packages, ",
+  "or result handles from earlier run_r calls still exist. Re-run needed ",
+  "tools, recreate objects, and reload packages before continuing.",
+  "</system-instruction>"
 )
 
 append_turn_reminder <- function(inputs, model) {

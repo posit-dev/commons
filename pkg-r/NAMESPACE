@@ -15,6 +15,7 @@ export(trajectory_review)
 importFrom(R6,R6Class)
 importFrom(coro,
   async_generator,
+  await,
   await_each
 )
 importFrom(rlang,"%||%")

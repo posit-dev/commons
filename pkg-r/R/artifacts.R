@@ -61,6 +61,8 @@ new_artifact_store <- function(
   store$listener <- NULL
   store$link_input <- NULL
   store$reminders <- character()
+  # Renders of streamed documents, which finish after the reply that wrote them.
+  store$settling <- list()
   store
 }
 
@@ -72,6 +74,7 @@ artifact_store_reset <- function(store) {
   store$streams <- new.env(parent = emptyenv())
   store$pending <- new.env(parent = emptyenv())
   store$reminders <- character()
+  store$settling <- list()
   artifact_notify(store, list(type = "reset"))
   invisible(store)
 }
@@ -100,9 +103,22 @@ take_artifact_reminders <- function(store) {
   lapply(
     reminders,
     function(text) {
-      ContentTurnReminder(text = paste0("<system-instruction>", text, "</system-instruction>"))
+      ContentTurnReminder(
+        text = paste0("<system-instruction>", text, "</system-instruction>")
+      )
     }
   )
+}
+
+# How many hidden turns one response may spend fixing its documents.
+artifact_followup_limit <- 2L
+
+# Resolves once every streamed document closed since the last call has
+# rendered, so the reminders its errors leave are in place.
+artifact_store_settled <- function(store) {
+  settling <- store$settling
+  store$settling <- list()
+  promises::promise_all(.list = settling)
 }
 
 # An artifact exists from the moment its tag opens, but only counts as a
@@ -257,7 +273,7 @@ artifact_scan_handler <- function(store) {
           )
           return("")
         }
-        promises::then(committed$rendered, function(result) {
+        settled <- promises::then(committed$rendered, function(result) {
           if (run$cancelled || !identical(store$artifacts[[event$id]], run$artifact)) {
             return(NULL)
           }
@@ -268,7 +284,12 @@ artifact_scan_handler <- function(store) {
               result$errors
             ))
           }
+          NULL
         })
+        store$settling[[length(store$settling) + 1L]] <- promises::catch(
+          settled,
+          function(err) NULL
+        )
         artifact_link_html(store, event$id)
       },
       error = {

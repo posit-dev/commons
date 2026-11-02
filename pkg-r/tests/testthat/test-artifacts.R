@@ -678,3 +678,137 @@ test_that("a streamed reply's turn keeps its text and shows the link", {
   expect_match(content@display, "<commons-artifact-link artifact=\"doc\" version=\"1\"", fixed = TRUE)
   expect_length(artifact_get(agent$artifact_store(), "doc")$versions, 1)
 })
+
+# --- hidden follow-ups -----------------------------------------------------------
+
+# Answers each request with the next of `responses`, repeating the last, while
+# exercising ellmer's streaming and turn handling. `on_reply(n)` runs as the
+# nth reply finishes. Returns a count of requests.
+local_scripted_stream <- function(responses, on_reply = NULL, env = parent.frame()) {
+  calls <- 0L
+  current <- function() responses[[min(calls, length(responses))]]
+  local_mocked_bindings(
+    chat_perform = function(...) {
+      calls <<- calls + 1L
+      text <- current()
+      coro::async_generator(function() {
+        yield(list(text = text))
+        coro::exhausted()
+      })()
+    },
+    stream_merge_chunks = function(provider, result, chunk) chunk,
+    stream_content_with_turns = function(provider, event, completion = NULL, turns = list()) {
+      list(ellmer::ContentText(event$text))
+    },
+    value_finish_reason = function(provider, result) "stop",
+    value_turn_with_turns = function(provider, model, result, has_type = FALSE, turns = list()) {
+      if (!is.null(on_reply)) on_reply(calls)
+      ellmer::AssistantTurn(list(ellmer::ContentText(current())), tokens = c(0, 0, 0), cost = 0)
+    },
+    .package = "ellmer",
+    .env = env
+  )
+  function() calls
+}
+
+stream_text <- function(agent, input) {
+  chunks <- wait_for_promise(coro::async_collect(
+    agent$stream_async(input, stream = "content")
+  ))
+  texts <- Filter(function(x) S7::S7_inherits(x, ellmer::ContentText), chunks)
+  paste(vapply(texts, function(x) x@text, character(1)), collapse = "")
+}
+
+test_that("a document that fails to render is fixed in the same response", {
+  skip_if_no_sandbox()
+  calls <- local_scripted_stream(list(
+    "Here.\n<artifact id=\"doc\" title=\"Doc\">\n```{r}\nstop('boom')\n```\n</artifact>",
+    "Fixed it."
+  ))
+  agent <- orders_agent()
+
+  text <- stream_text(agent, "Write it.")
+
+  expect_identical(calls(), 2L)
+  expect_match(text, "Here.", fixed = TRUE)
+  expect_match(text, "\n\nFixed it.", fixed = TRUE)
+  turns <- agent$get_turns()
+  expect_length(turns, 4)
+  hidden <- turns[[3]]@contents
+  expect_true(all(vapply(hidden, S7::S7_inherits, logical(1), class = ContentTurnReminder)))
+  expect_match(
+    hidden[[length(hidden)]]@text,
+    "^<system-instruction>Version 1 of the document `doc` ran with errors"
+  )
+  messages <- shinychat::contents_shinychat(agent)
+  expect_identical(
+    vapply(messages, `[[`, character(1), "role"),
+    c("user", "assistant")
+  )
+  expect_length(agent$artifact_store()$reminders, 0)
+})
+
+rejected_document <- "<artifact id=\"doc\" title=\"Doc\">\n---\nengine: knitr\n---\n\nHi.\n</artifact>"
+
+test_that("a response stops following up after the limit", {
+  calls <- local_scripted_stream(list(rejected_document))
+  agent <- test_agent()
+
+  stream_text(agent, "Write it.")
+
+  expect_identical(calls(), 1L + artifact_followup_limit)
+  # What the last attempt left waits for the user's next message.
+  expect_length(agent$artifact_store()$reminders, 1)
+})
+
+test_that("a cancelled response doesn't follow up", {
+  controller <- ellmer::stream_controller()
+  calls <- local_scripted_stream(
+    list(rejected_document, "Fixed it."),
+    on_reply = function(n) controller$cancel()
+  )
+  agent <- test_agent()
+
+  wait_for_promise(coro::async_collect(
+    agent$stream_async("Write it.", controller = controller)
+  ))
+
+  expect_identical(calls(), 1L)
+})
+
+test_that("a hidden follow-up doesn't count as a new user message", {
+  turn <- ellmer::UserTurn(list(ContentTurnReminder(text = "<system-instruction>Fix it.</system-instruction>")))
+  expect_false(turn_has_user_message(turn))
+  expect_true(is_internal_turn(turn))
+})
+
+test_that("outside Shiny, a call follows up too and returns the fix", {
+  calls <- 0L
+  local_mocked_bindings(
+    chat_perform = function(...) {
+      calls <<- calls + 1L
+      text <- if (calls == 1L) rejected_document else "Fixed it."
+      httr2::response(
+        status_code = 200,
+        headers = list("content-type" = "application/json"),
+        body = charToRaw(jsonlite::toJSON(list(
+          content = list(list(type = "text", text = text)),
+          stop_reason = "end_turn",
+          usage = list(input_tokens = 0, output_tokens = 0)
+        ), auto_unbox = TRUE))
+      )
+    },
+    .package = "ellmer"
+  )
+  agent <- test_agent()
+
+  expect_warning(
+    result <- agent$chat("Write it.", echo = "none"),
+    "was not saved"
+  )
+
+  expect_identical(calls, 2L)
+  expect_identical(as.character(result), "Fixed it.")
+  expect_length(agent$get_turns(), 4)
+  expect_length(agent$artifact_store()$reminders, 0)
+})
