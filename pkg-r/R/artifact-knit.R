@@ -37,7 +37,14 @@ new_artifact_run <- function(store, artifact) {
   run$cache <- new.env(parent = emptyenv())
   run$cancelled <- FALSE
   assign(run$dir, run, envir = store$runs)
+  artifact$run <- run
   run
+}
+
+# A run superseded by a newer version keeps going, so its edit can report how
+# it went, but stops updating the view, which shows the newest.
+artifact_run_shown <- function(run) {
+  !run$cancelled && identical(run$artifact$run, run)
 }
 
 # Brings the run up to date with the source received so far: validates the
@@ -283,7 +290,7 @@ artifact_run_errors <- function(run) {
 }
 
 artifact_run_status <- function(run, status, error = NULL) {
-  if (run$cancelled) {
+  if (!artifact_run_shown(run)) {
     return(invisible(NULL))
   }
   artifact_notify(run$store, list(
@@ -314,7 +321,7 @@ artifact_run_emit <- function(run) {
   changed <- which(is.na(old) | html != old)
   shrunk <- length(html) < length(run$sent)
   run$sent <- html
-  if (length(changed) || shrunk) {
+  if ((length(changed) || shrunk) && artifact_run_shown(run)) {
     artifact_notify(run$store, list(
       type = "pieces",
       id = run$artifact$id,

@@ -848,3 +848,29 @@ test_that("outside Shiny, a call follows up too and returns the fix", {
   expect_length(agent$get_turns(), 4)
   expect_length(agent$artifact_store()$reminders, 0)
 })
+
+test_that("an earlier version still rendering doesn't overwrite the view", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  wait_for_promise(artifact_commit(store, "doc", "Doc", "```{r}\n'one'\n```\n")$rendered)
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+
+  # As when a reply makes two edits at once: the slower version finishes last.
+  slow <- artifact_edit(store, "doc", "'one'", "Sys.sleep(1.5); 'two'")
+  fast <- artifact_edit(store, "doc", "Sys.sleep(1.5); 'two'", "'three'")
+  wait_for_promise(promises::promise_all(slow, fast))
+
+  pieces <- list()
+  for (event in events) {
+    if (identical(event$type, "pieces")) {
+      for (piece in event$pieces) pieces[[piece$index + 1L]] <- piece$html
+      length(pieces) <- event$count
+    }
+  }
+  shown <- paste(unlist(pieces), collapse = "")
+  expect_match(shown, "three", fixed = TRUE)
+  expect_no_match(shown, "two", fixed = TRUE)
+  statuses <- Filter(function(event) identical(event$type, "status"), events)
+  expect_identical(statuses[[length(statuses)]]$status, "ready")
+})

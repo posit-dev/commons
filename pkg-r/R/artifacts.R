@@ -416,7 +416,8 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
       (!is.null(run) && run$cancelled)) {
     return(result)
   }
-  if (version == length(artifact$versions)) {
+  latest <- version == length(artifact$versions)
+  if (latest) {
     artifact$html <- result$html
     artifact$errors <- result$errors
     artifact$status <- "ready"
@@ -437,14 +438,16 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     file.path(dir, "report.html"),
     useBytes = TRUE
   )
-  artifact_notify(store, list(
-    type = "status",
-    id = artifact$id,
-    status = "ready",
-    error = if (length(result$errors) && !length(result$html)) {
-      result$errors[[1]]
-    }
-  ))
+  if (latest) {
+    artifact_notify(store, list(
+      type = "status",
+      id = artifact$id,
+      status = "ready",
+      error = if (length(result$errors) && !length(result$html)) {
+        result$errors[[1]]
+      }
+    ))
+  }
   result
 }
 
