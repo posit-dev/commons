@@ -368,15 +368,6 @@ read_instructions <- function(instructions) {
   )
 }
 
-combine_instructions <- function(...) {
-  instructions <- c(...)
-  instructions <- instructions[nzchar(instructions)]
-  if (length(instructions) == 0) {
-    return(NULL)
-  }
-  paste(instructions, collapse = "\n\n")
-}
-
 looks_like_instructions_path <- function(instructions) {
   if (grepl("\n", instructions, fixed = TRUE)) {
     return(FALSE)

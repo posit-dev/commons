@@ -279,13 +279,13 @@ biodiversity <- data_source(
 commons <- commons(
   data_sources = list(biodiversity = biodiversity),
   semantic_layer = semantic_layer("measures"),
-  context_layer = context_layer("context/context.md")
+  context_layer = context_layer("context/context.md"),
+  instructions = "instructions.md"
 )
 
 agent <- agent(
   client = ellmer::chat("anthropic/claude-sonnet-5"),
-  commons = commons,
-  instructions = "instructions.md"
+  commons = commons
 )
 
 commons_app(agent)

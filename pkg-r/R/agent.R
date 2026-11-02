@@ -14,22 +14,11 @@
 #' @param client An [ellmer::Chat] giving the provider and model to use, e.g.
 #'   [ellmer::chat_anthropic()]. For best results, enable thinking when
 #'   supported by the selected provider and model. A system prompt already set
-#'   on the client is ignored, with a warning; use `instructions` to add to
-#'   commons' prompt.
+#'   on the client is ignored, with a warning; use the `instructions` argument
+#'   of [commons()] to add to commons' prompt.
 #' @param commons A [commons()] object holding the agent's data sources,
-#'   semantic layer, and context layer.
+#'   semantic layer, context layer, and instructions.
 #' @param ... These dots are for future extensions and must be empty.
-#' @param instructions Optional instructions placed under an
-#'   `## Additional instructions` heading at the end of commons' built-in
-#'   system prompt, as a single string or the path to a text or Markdown file.
-#'   They follow any `instructions` given to [commons()].
-#'
-#'   ```r
-#'   agent(
-#'     # ...
-#'     instructions = "Use the organization's fiscal-year conventions."
-#'   )
-#'   ```
 #' @param mode Which analysis paths the agent may take. One of:
 #'
 #'   * `"normal"` (the default): the agent prefers trusted calculations and,
@@ -186,7 +175,6 @@ agent <- function(
   client,
   commons,
   ...,
-  instructions = NULL,
   mode = c("normal", "trusted only"),
   network = c("none", "full"),
   log = FALSE,
@@ -203,7 +191,8 @@ agent <- function(
       c(
         "The system prompt set on {.arg client} is ignored; commons builds
          its own.",
-        i = "Use {.arg instructions} to add to commons' prompt."
+        i = "Use the {.arg instructions} argument of {.fn commons} to add to
+             commons' prompt."
       )
     )
   }
@@ -225,7 +214,6 @@ agent <- function(
   }
   # Without run_r there is nothing to sandbox, so the host needs no support.
   protection <- if (trusted_only) NULL else run_r_protection_mode()
-  check_instructions(instructions)
   rlang::check_bool(log)
   check_share_with(share_with)
 
@@ -234,7 +222,6 @@ agent <- function(
     commons = commons,
     network = network,
     protection = protection,
-    instructions = instructions,
     mode = mode,
     log = log,
     share_with = share_with
@@ -249,7 +236,6 @@ Commons <- R6::R6Class(
       client,
       commons,
       ...,
-      instructions = NULL,
       mode = c("normal", "trusted only"),
       network = c("none", "full"),
       protection = NULL,
@@ -323,10 +309,7 @@ Commons <- R6::R6Class(
         commons_system_prompt(
           private$sources,
           definitions = private$definitions,
-          instructions = combine_instructions(
-            state$instructions,
-            read_instructions(instructions)
-          ),
+          instructions = state$instructions,
           tools = commons_tools,
           model = self$get_model(),
           trusted_only = private$trusted_only

@@ -13,10 +13,17 @@
 #'   [semantic_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
-#' @param instructions Optional instructions shown at the end of the object's
-#'   printed overview, as a single string or the path to a text or Markdown
-#'   file. [agent()] also places them in its system prompt, ahead of its own
-#'   `instructions`.
+#' @param instructions Optional instructions, as a single string or the path
+#'   to a text or Markdown file. They're shown at the end of the object's
+#'   printed overview, and [agent()] places them under an
+#'   `## Additional instructions` heading at the end of its system prompt.
+#'
+#'   ```r
+#'   commons(
+#'     # ...
+#'     instructions = "Use the organization's fiscal-year conventions."
+#'   )
+#'   ```
 #'
 #' @return A `commons` object with methods:
 #'
@@ -207,11 +214,16 @@ commons_legacy <- function(
     user_env = user_env
   )
   rlang::check_dots_empty(call = call)
-  commons <- new_commons(data_sources, semantic_layer, context_layer, call = call)
+  commons <- new_commons(
+    data_sources,
+    semantic_layer,
+    context_layer,
+    instructions,
+    call = call
+  )
   agent(
     client,
     commons = commons,
-    instructions = instructions,
     mode = mode,
     network = network,
     log = log,
