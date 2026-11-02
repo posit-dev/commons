@@ -426,6 +426,15 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
     app$get_js("document.querySelector('commons-artifact-link').textContent"),
     "Orders by region"
   )
+  chip_image <- paste0(
+    "document.querySelector('commons-artifact-link')",
+    ".shadowRoot.querySelector('.shot img')"
+  )
+  app$wait_for_js(paste0("!!", chip_image), timeout = 30 * 1000)
+  expect_match(
+    app$get_js(paste0(chip_image, ".src")),
+    "^data:image/png;base64,"
+  )
   expect_false(app$get_js(
     "document.body.innerText.includes('trusted$measure')"
   ))

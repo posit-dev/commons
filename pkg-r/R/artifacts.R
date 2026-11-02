@@ -423,6 +423,12 @@ artifact_settle <- function(store, artifact, version, doc, run, result) {
     if (!is.null(run)) {
       artifact$units <- run$units
     }
+    artifact$thumbnail <- artifact_thumbnail(artifact$units)
+    artifact_notify(store, list(
+      type = "thumbnail",
+      id = artifact$id,
+      src = artifact$thumbnail %||% ""
+    ))
   }
   dir <- artifact$versions[[version]]$dir
   write_artifact_dir(dir, doc)
@@ -513,16 +519,32 @@ artifact_edit_result <- function(store, artifact, version, result) {
 
 # Opens the document's latest version, wherever in the chat it appears.
 artifact_link_html <- function(store, id) {
+  attrs <- c(
+    artifact = id,
+    view = store$link_view,
+    input = store$link_input
+  )
   sprintf(
-    "<commons-artifact-link artifact=\"%s\"%s>%s</commons-artifact-link>",
-    escape_attr(id),
-    if (is.null(store$link_input)) {
-      ""
-    } else {
-      sprintf(" input=\"%s\"", escape_attr(store$link_input))
-    },
+    "<commons-artifact-link %s>%s</commons-artifact-link>",
+    paste0(names(attrs), "=\"", escape_attr(attrs), "\"", collapse = " "),
     html_escape(store$artifacts[[id]]$title)
   )
+}
+
+# The first plot a cell drew, for the document's link to preview. Only an
+# embedded PNG qualifies, so the chat page never fetches anything for it.
+artifact_thumbnail <- function(units) {
+  pattern <- "<img[^>]*\\ssrc=\"(data:image/png;base64,[A-Za-z0-9+/=]+)\""
+  for (unit in units) {
+    if (!identical(unit$kind, "cell") || !rlang::is_string(unit$html)) {
+      next
+    }
+    match <- regmatches(unit$html, regexec(pattern, unit$html))[[1]]
+    if (length(match)) {
+      return(match[[2]])
+    }
+  }
+  NULL
 }
 
 # --- documents -----------------------------------------------------------------

@@ -423,6 +423,42 @@ test_that("a plot directly after a cell's code shows as an image", {
   expect_false(grepl("![", html, fixed = TRUE))
 })
 
+test_that("a document's first plot becomes its link's thumbnail", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+  source <- "---\ntitle: Plot\n---\n\nText.\n\n```{r}\n1 + 1\n```\n\n```{r}\nplot(1:3)\n```\n"
+
+  wait_for_promise(artifact_commit(store, "plot", "Plot", source)$rendered)
+
+  thumbnail <- artifact_get(store, "plot")$thumbnail
+  expect_match(thumbnail, "^data:image/png;base64,[A-Za-z0-9+/=]+$")
+  sent <- Filter(function(event) identical(event$type, "thumbnail"), events)
+  expect_identical(sent[[length(sent)]]$src, thumbnail)
+  expect_identical(artifact_select_event(artifact_get(store, "plot"))$thumbnail, thumbnail)
+
+  wait_for_promise(artifact_edit(store, "plot", "plot(1:3)", "2 + 2"))
+  expect_null(artifact_get(store, "plot")$thumbnail)
+})
+
+test_that("only an embedded PNG drawn by a cell is a thumbnail", {
+  png <- "data:image/png;base64,iVBORw0KGgo="
+  img <- function(src) sprintf("<p><img src=\"%s\" alt=\"\" /></p>", src)
+  units <- list(
+    list(kind = "markdown", html = img(png)),
+    list(kind = "cell", html = img("https://example.com/plot.png")),
+    list(kind = "cell", html = img("data:image/svg+xml;base64,PHN2Zz4=")),
+    list(kind = "cell", status = "pending")
+  )
+
+  expect_null(artifact_thumbnail(units))
+  expect_identical(
+    artifact_thumbnail(c(units, list(list(kind = "cell", html = img(png))))),
+    png
+  )
+})
+
 test_that("a clone of the agent doesn't clear the original's documents", {
   agent <- orders_agent()
   store <- agent$artifact_store()

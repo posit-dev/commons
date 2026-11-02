@@ -6,6 +6,7 @@ document <- paste0(
   "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
   "There are `r nrow(orders)` orders across **three** regions.\n\n",
   "```{r}\ntable(orders$region)\n```\n\n",
+  "```{r}\nbarplot(table(orders$region))\n```\n\n",
   "- EMEA leads.\n- APAC trails.\n"
 )
 response_chunks <- c(
