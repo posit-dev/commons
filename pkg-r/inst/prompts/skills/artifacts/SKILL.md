@@ -2,7 +2,7 @@
 name: artifacts
 description: How to make something the user can keep or share on its own, apart from the chat, from a single plot or table to a full report. Load it before you create or edit one.
 metadata:
-  topic: documents
+  topic: creating sharable documents
   requires: edit_artifact
 ---
 
