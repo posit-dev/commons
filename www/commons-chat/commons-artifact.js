@@ -10,6 +10,7 @@
 
   const views = new Map();
   const connected = new Set();
+  const chips = new Set();
 
   const stateFor = (view) => {
     if (!views.has(view)) views.set(view, { current: null, artifacts: new Map() });
@@ -18,7 +19,7 @@
 
   const artifactFor = (state, id) => {
     if (!state.artifacts.has(id)) {
-      state.artifacts.set(id, { id, pieces: [], status: "writing", error: null });
+      state.artifacts.set(id, { id, pieces: [], status: "writing", error: null, thumbnail: null });
     }
     return state.artifacts.get(id);
   };
@@ -66,8 +67,16 @@
         break;
       case "select":
         state.current = a.id;
-        Object.assign(a, { pieces: [], status: msg.status, error: msg.error || null });
+        Object.assign(a, {
+          pieces: [],
+          status: msg.status,
+          error: msg.error || null,
+          thumbnail: msg.thumbnail || null,
+        });
         patch(a, msg);
+        break;
+      case "thumbnail":
+        a.thumbnail = msg.src || null;
         break;
     }
   };
@@ -77,6 +86,9 @@
       apply(msg);
       for (const el of connected) {
         if (el.getAttribute("view") === msg.view) el.render();
+      }
+      for (const chip of chips) {
+        if (chip.getAttribute("view") === msg.view) chip.render();
       }
     });
   };
@@ -183,38 +195,83 @@ parent.postMessage("ready", "*");
   // --- the chat chip ----------------------------------------------------------
 
   // shinychat renders the chip from Markdown with React, which owns its light
-  // DOM, so the button lives in a shadow root around the slotted label.
+  // DOM, so the button lives in a shadow root around the slotted title.
   const chipStyle = `
     button {
-      display: inline-flex; align-items: center; gap: 0.4em;
-      font: inherit; color: inherit; cursor: pointer;
-      padding: 0.35em 0.75em; margin: 0.25em 0;
-      border: 1px solid var(--bs-border-color, #dee2e6);
-      border-radius: var(--bs-border-radius, 0.375rem);
-      background: var(--bs-tertiary-bg, #f8f9fa);
+      display: flex; align-items: center; gap: 0.85rem;
+      width: min(100%, 27rem); margin: 0.5rem 0;
+      padding: 0.45rem 1rem 0.45rem 0.45rem;
+      font: inherit; color: inherit; text-align: left; cursor: pointer;
+      border: 1px solid color-mix(in srgb, currentColor 6%, transparent);
+      border-radius: 12px;
+      background: var(--bs-body-bg, #fff);
+      box-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.06);
+      transition: box-shadow 140ms, transform 140ms;
     }
-    button:hover { background: var(--bs-secondary-bg, #e9ecef); }
-    svg { width: 1em; height: 1em; flex: none; }`;
+    button:hover {
+      box-shadow: 0 2px 4px rgb(0 0 0 / 0.08), 0 6px 16px rgb(0 0 0 / 0.08);
+      transform: translateY(-1px);
+    }
+    .shot {
+      flex: none; width: 4.5rem; height: 3rem; border-radius: 8px; overflow: hidden;
+      display: grid; place-items: center;
+      background: color-mix(in srgb, currentColor 6%, transparent);
+    }
+    .shot img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; }
+    .shot svg { width: 1.3rem; height: 1.3rem; opacity: 0.55; }
+    .title {
+      min-width: 0; font-weight: 550;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }`;
 
-  const documentIcon = `
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">
-      <path d="M4 1.5h5.5L13 5v9.5H4z"/><path d="M9.5 1.5V5H13M6 8h5M6 10.5h5"/>
+  const chartIcon = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2 2v12h12"/><path d="M4.5 10.5 7.5 7l2 2 4-5"/>
     </svg>`;
+
+  // The server only sends embedded PNGs; checking again keeps the chat page
+  // from ever loading a URL out of a document.
+  const isThumbnail = (src) => typeof src === "string" && src.startsWith("data:image/png;base64,");
 
   class CommonsArtifactLink extends HTMLElement {
     connectedCallback() {
-      if (this.shadowRoot) return;
-      const root = this.attachShadow({ mode: "open" });
-      root.innerHTML = `<style>${chipStyle}</style><button type="button" part="button">${documentIcon}<slot></slot></button>`;
-      root.querySelector("button").addEventListener("click", () => {
-        const input = this.getAttribute("input");
-        if (!input || !window.Shiny?.setInputValue) return;
-        window.Shiny.setInputValue(
-          input,
-          { artifact: this.getAttribute("artifact"), nonce: Date.now() },
-          { priority: "event" }
-        );
-      });
+      chips.add(this);
+      if (!this.shadowRoot) {
+        const root = this.attachShadow({ mode: "open" });
+        root.innerHTML = `<style>${chipStyle}</style><button type="button" part="button"><span class="shot"></span><span class="title"><slot></slot></span></button>`;
+        root.querySelector("button").addEventListener("click", () => {
+          const input = this.getAttribute("input");
+          if (!input || !window.Shiny?.setInputValue) return;
+          window.Shiny.setInputValue(
+            input,
+            { artifact: this.getAttribute("artifact"), nonce: Date.now() },
+            { priority: "event" }
+          );
+        });
+      }
+      this.render();
+    }
+
+    disconnectedCallback() {
+      chips.delete(this);
+    }
+
+    render() {
+      const shot = this.shadowRoot?.querySelector(".shot");
+      if (!shot) return;
+      const a = stateFor(this.getAttribute("view")).artifacts.get(this.getAttribute("artifact"));
+      const src = isThumbnail(a?.thumbnail) ? a.thumbnail : null;
+      if (shot.dataset.src === (src ?? "")) return;
+      shot.dataset.src = src ?? "";
+      if (src) {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = src;
+        shot.replaceChildren(img);
+      } else {
+        shot.innerHTML = chartIcon;
+      }
     }
   }
 
