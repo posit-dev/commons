@@ -427,7 +427,7 @@ commons_overview <- function(state) {
       collapse = " "
     )),
     if (nzchar(state$instructions %||% "")) {
-      c("Additional instructions:", state$instructions)
+      c("", state$instructions)
     }
   )
 }

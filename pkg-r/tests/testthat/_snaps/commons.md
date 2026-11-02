@@ -209,7 +209,7 @@
         $run_sql(query, source = NULL)
       This object provides access to trusted code and context. Say in your
       answer which numbers came from trusted calculations and which didn't.
-      Additional instructions:
+      
       Use the organization's fiscal-year conventions.
 
 # commons() validates its instructions
