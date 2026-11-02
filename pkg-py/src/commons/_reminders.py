@@ -31,13 +31,16 @@ class ContentTurnReminder(ContentText):
     """
 
 
-BREVITY_TURN_REMINDER: Final = "<reminder>Be concise as a default.</reminder>"
+BREVITY_TURN_REMINDER: Final = (
+    "<system-instruction>Be concise as a default.</system-instruction>"
+)
 
 RESTORED_CONVERSATION_REMINDER: Final = (
-    "<reminder>The Python state associated with this restored conversation is "
-    "unavailable. Do not assume that objects, loaded packages, or result "
-    "handles from earlier run_python calls still exist. Re-run needed tools, "
-    "recreate objects, and reload packages before continuing.</reminder>"
+    "<system-instruction>The Python state associated with this restored "
+    "conversation is unavailable. Do not assume that objects, loaded packages, "
+    "or result handles from earlier run_python calls still exist. Re-run needed "
+    "tools, recreate objects, and reload packages before continuing."
+    "</system-instruction>"
 )
 
 

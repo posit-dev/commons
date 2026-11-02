@@ -100,7 +100,7 @@ take_artifact_reminders <- function(store) {
   lapply(
     reminders,
     function(text) {
-      ContentTurnReminder(text = paste0("<reminder>", text, "</reminder>"))
+      ContentTurnReminder(text = paste0("<system-instruction>", text, "</system-instruction>"))
     }
   )
 }

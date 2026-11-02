@@ -49,13 +49,13 @@ project_turns_display <- function(turns, from, corpus, artifacts = NULL) {
   turns
 }
 
-brevity_turn_reminder <- "<reminder>Be concise as a default.</reminder>"
+brevity_turn_reminder <- "<system-instruction>Be concise as a default.</system-instruction>"
 
 restored_conversation_turn_reminder <- paste0(
-  "<reminder>The R state associated with this restored conversation is ",
+  "<system-instruction>The R state associated with this restored conversation is ",
   "unavailable. Do not assume that objects, loaded packages, or result ",
   "handles from earlier run_r calls still exist. Re-run needed tools, ",
-  "recreate objects, and reload packages before continuing.</reminder>"
+  "recreate objects, and reload packages before continuing.</system-instruction>"
 )
 
 append_turn_reminder <- function(inputs, model) {
