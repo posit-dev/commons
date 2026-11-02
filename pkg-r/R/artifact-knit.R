@@ -197,7 +197,7 @@ artifact_run_unit <- function(run, unit) {
   promises::then(
     worker_await(
       worker,
-      getOption("commons.run_r_timeout", 60),
+      getOption("commons.run_r_timeout", worker_defaults$call_timeout),
       on_message = function(message) artifact_serve_request(run, message)
     ),
     function(res) {
