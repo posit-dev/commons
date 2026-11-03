@@ -40,7 +40,8 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="development version" id="commons-development-version">commons (development version)<a class="anchor" aria-label="anchor" href="#commons-development-version"></a></h2>
-<ul><li>
+<ul><li><p><code><a href="../reference/data_source.html">data_source()</a></code> given a DBI connection and no <code>tables</code> selects the tables and views in the connection’s current schema. When that schema has too many tables to list in the system prompt, the agent finds them with <code>search_catalog</code> instead, as for Snowflake and Databricks connections. A <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> naming only a schema, like <code>DBI::Id(schema = "marts")</code>, selects every table and view in that schema. A data dictionary can name those tables relatively, like <code>orders</code> for <code>marts.orders</code>, when the name matches only one selected table.</p></li>
+<li>
 <p>The <code><a href="../reference/commons.html">commons()</a></code> function was split into two. Calls to <code><a href="../reference/commons.html">commons()</a></code> previously looked like this:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">commons</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/commons.html">commons</a></span><span class="op">(</span><span class="va">client</span>, <span class="va">data_sources</span>, <span class="va">semantic_layer</span>, <span class="va">context_layer</span><span class="op">)</span></span></code></pre></div>

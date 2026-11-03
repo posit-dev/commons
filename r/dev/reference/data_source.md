@@ -24,23 +24,29 @@ data_source(..., tables = NULL, exclude = NULL, dictionary = NULL)
   For a connection, a character vector of table names, qualified strings
   like `"schema.table"` or `"catalog.schema.table"`, or
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) objects. Defaults
-  to every table returned by
+  to every table and view in the connection's current schema, read from
+  `information_schema`; the agent searches them rather than reading a
+  list when there are too many to list. Backends without an
+  `information_schema`, like SQLite, default to every table returned by
   [`DBI::dbListTables()`](https://dbi.r-dbi.org/reference/dbListTables.html).
   Strings containing dots are interpreted as qualified names, at most
   three parts; use `DBI::Id(table = "a.b")` for literal table names
-  containing dots. For Snowflake and Databricks connections, a
+  containing dots. A
   [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) ending in
-  `catalog` or `schema` selects every table and view in that namespace.
-  Leaving `tables` unset selects the current schema. A Databricks
-  `hive_metastore` selection must include a schema. Snowflake selections
-  import semantic views, and Databricks selections import metric views,
-  as native trusted metrics and dimensions. Namespace selections read
-  model definitions lazily. Explicitly selected models are read and
-  validated when the data source is created. Databricks wildcard members
-  require concrete column metadata from the warehouse. An exact
-  physical-table selection also imports associated models when every
-  physical dependency is selected. Only public relationships, facts,
-  filters, and instructions are exposed to the agent.
+  `schema`, like `DBI::Id(schema = "marts")`, selects every table and
+  view in that schema, labeled `"schema.table"`; for Snowflake and
+  Databricks connections, one ending in `catalog` selects the whole
+  catalog. As with the default, the agent searches a selection too broad
+  to list. A Databricks `hive_metastore` selection must include a
+  schema. Snowflake selections import semantic views, and Databricks
+  selections import metric views, as native trusted metrics and
+  dimensions. Namespace selections read model definitions lazily.
+  Explicitly selected models are read and validated when the data source
+  is created. Databricks wildcard members require concrete column
+  metadata from the warehouse. An exact physical-table selection also
+  imports associated models when every physical dependency is selected.
+  Only public relationships, facts, filters, and instructions are
+  exposed to the agent.
 
   For a board, a named character vector of pins to read: the names
   become table names, and the values are pin names passed to

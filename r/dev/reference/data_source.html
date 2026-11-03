@@ -63,12 +63,18 @@ a table name the agent can query.</p></dd>
 supplied.</p>
 <p>For a connection, a character vector of table names, qualified strings
 like <code>"schema.table"</code> or <code>"catalog.schema.table"</code>, or <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> objects.
-Defaults to every table returned by <code><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">DBI::dbListTables()</a></code>. Strings
+Defaults to every table and view in the connection's current schema,
+read from <code>information_schema</code>; the agent searches them rather than
+reading a list when there are too many to list. Backends without an
+<code>information_schema</code>, like SQLite, default to every table returned by
+<code><a href="https://dbi.r-dbi.org/reference/dbListTables.html" class="external-link">DBI::dbListTables()</a></code>. Strings
 containing dots are interpreted as qualified names, at most three parts;
-use <code>DBI::Id(table = "a.b")</code> for literal table names containing dots. For Snowflake and Databricks
-connections, a <code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> ending in <code>catalog</code> or <code>schema</code> selects every
-table and view in that namespace. Leaving <code>tables</code> unset selects the
-current schema. A Databricks <code>hive_metastore</code> selection must include a
+use <code>DBI::Id(table = "a.b")</code> for literal table names containing dots. A
+<code><a href="https://dbi.r-dbi.org/reference/Id.html" class="external-link">DBI::Id</a></code> ending in <code>schema</code>, like <code>DBI::Id(schema = "marts")</code>, selects
+every table and view in that schema, labeled <code>"schema.table"</code>; for
+Snowflake and Databricks connections, one ending in <code>catalog</code> selects the
+whole catalog. As with the default, the agent searches a selection too
+broad to list. A Databricks <code>hive_metastore</code> selection must include a
 schema. Snowflake selections import semantic views, and Databricks
 selections import metric views, as native trusted metrics and dimensions.
 Namespace selections read model definitions lazily. Explicitly selected

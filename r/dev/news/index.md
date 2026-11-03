@@ -2,6 +2,17 @@
 
 ## commons (development version)
 
+- [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
+  given a DBI connection and no `tables` selects the tables and views in
+  the connection’s current schema. When that schema has too many tables
+  to list in the system prompt, the agent finds them with
+  `search_catalog` instead, as for Snowflake and Databricks connections.
+  A [`DBI::Id`](https://dbi.r-dbi.org/reference/Id.html) naming only a
+  schema, like `DBI::Id(schema = "marts")`, selects every table and view
+  in that schema. A data dictionary can name those tables relatively,
+  like `orders` for `marts.orders`, when the name matches only one
+  selected table.
+
 - The
   [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
   function was split into two. Calls to
