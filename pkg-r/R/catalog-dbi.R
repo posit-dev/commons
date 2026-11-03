@@ -156,22 +156,26 @@ dbi_current_namespace <- function(con) {
       next
     }
     names(row) <- tolower(names(row))
-    schema <- catalog_session_value(row$schema[[1]])
+    schema <- catalog_session_value(row$namespace_schema[[1]])
     if (!is.null(schema)) {
-      return(list(catalog = catalog_session_value(row$catalog[[1]]), schema = schema))
+      return(list(
+        catalog = catalog_session_value(row$namespace_catalog[[1]]),
+        schema = schema
+      ))
     }
   }
   NULL
 }
 
-# Tried in order; a dialect that lacks a function errors and moves on.
+# Tried in order; a dialect that lacks a function errors and moves on. The
+# aliases avoid `schema`, which SQL Server and MySQL reserve.
 dbi_namespace_queries <- c(
   # PostgreSQL, DuckDB, Redshift
-  "SELECT current_database() AS catalog, current_schema() AS schema",
+  "SELECT current_database() AS namespace_catalog, current_schema() AS namespace_schema",
   # SQL Server
-  "SELECT DB_NAME() AS catalog, SCHEMA_NAME() AS schema",
+  "SELECT DB_NAME() AS namespace_catalog, SCHEMA_NAME() AS namespace_schema",
   # MySQL and MariaDB, where a schema is a database and table_catalog is 'def'
-  "SELECT NULL AS catalog, DATABASE() AS schema"
+  "SELECT NULL AS namespace_catalog, DATABASE() AS namespace_schema"
 )
 
 dbi_relation_kind <- function(type) {
