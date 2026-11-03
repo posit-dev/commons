@@ -15,6 +15,11 @@ permissions:
 
 jobs:
   live:
+    # A pull request from a fork gets no secrets or OIDC token, so it could
+    # only fail or wait on an approval that cannot help. Skip it.
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
