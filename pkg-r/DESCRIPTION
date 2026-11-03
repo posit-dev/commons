@@ -64,6 +64,7 @@ Suggests:
     readr,
     rmarkdown,
     rsconnect,
+    RSQLite,
     shiny (>= 1.11.1),
     shinytest2,
     testthat (>= 3.0.0),

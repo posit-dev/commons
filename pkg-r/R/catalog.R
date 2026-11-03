@@ -123,7 +123,11 @@ catalog_search <- function(source, query, kinds = NULL, limit = 10L) {
         "{.arg kinds} must be a character vector without missing values."
       )
     }
-    relations <- Filter(function(relation) relation$kind %in% kinds, relations)
+    # A relation without a kind must still yield one value, or Filter() misaligns.
+    relations <- Filter(
+      function(relation) isTRUE(relation$kind %in% kinds),
+      relations
+    )
   }
   query_terms <- catalog_search_terms(query)
   if (length(query_terms) == 0L || length(relations) == 0L) {

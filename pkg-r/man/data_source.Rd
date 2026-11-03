@@ -16,12 +16,18 @@ supplied.
 
 For a connection, a character vector of table names, qualified strings
 like \code{"schema.table"} or \code{"catalog.schema.table"}, or \code{DBI::Id} objects.
-Defaults to every table returned by \code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings
+Defaults to every table and view in the connection's current schema,
+read from \code{information_schema}; the agent searches them rather than
+reading a list when there are too many to list. Backends without an
+\code{information_schema}, like SQLite, default to every table returned by
+\code{\link[DBI:dbListTables]{DBI::dbListTables()}}. Strings
 containing dots are interpreted as qualified names, at most three parts;
-use \code{DBI::Id(table = "a.b")} for literal table names containing dots. For Snowflake and Databricks
-connections, a \code{DBI::Id} ending in \code{catalog} or \code{schema} selects every
-table and view in that namespace. Leaving \code{tables} unset selects the
-current schema. A Databricks \code{hive_metastore} selection must include a
+use \code{DBI::Id(table = "a.b")} for literal table names containing dots. A
+\code{DBI::Id} ending in \code{schema}, like \code{DBI::Id(schema = "marts")}, selects
+every table and view in that schema, labeled \code{"schema.table"}; for
+Snowflake and Databricks connections, one ending in \code{catalog} selects the
+whole catalog. As with the default, the agent searches a selection too
+broad to list. A Databricks \code{hive_metastore} selection must include a
 schema. Snowflake selections import semantic views, and Databricks
 selections import metric views, as native trusted metrics and dimensions.
 Namespace selections read model definitions lazily. Explicitly selected
