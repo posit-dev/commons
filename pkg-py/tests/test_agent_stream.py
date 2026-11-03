@@ -73,15 +73,15 @@ def order_count_layer() -> Any:
 async def test_a_verified_citation_becomes_an_aside(source: Any, notes: Any) -> None:
     raw = (
         "Answer sentence.\n\n"
-        "<commons-citation>\n\nFollows the weighting rule.\n\n"
+        "<citation>\n\nFollows the weighting rule.\n\n"
         f"> {QUOTE}\n\n"
-        "</commons-citation>\n\nMore text."
+        "</citation>\n\nMore text."
     )
     agent = Commons(scripted_chat([split(raw, 30)]), source, context_layer=notes)
 
     streamed = "".join(await collect(agent, "What does canopy cover mean?"))
 
-    assert "<commons-citation>" not in streamed
+    assert "<citation>" not in streamed
     assert "<shiny-aside" in streamed
     assert QUOTE in streamed
     assert streamed.startswith("Answer sentence.")
@@ -105,7 +105,7 @@ async def test_a_model_authored_aside_never_reaches_the_consumer(
 async def test_the_stored_turn_keeps_the_models_own_words(
     source: Any, notes: Any
 ) -> None:
-    raw = f"Answer.\n\n<commons-citation>\n\nWhy.\n\n> {QUOTE}\n\n</commons-citation>"
+    raw = f"Answer.\n\n<citation>\n\nWhy.\n\n> {QUOTE}\n\n</citation>"
     agent = Commons(scripted_chat([split(raw, 20)]), source, context_layer=notes)
 
     await collect(agent, "What does canopy cover mean?")
@@ -117,8 +117,8 @@ async def test_the_projection_does_not_depend_on_the_chunk_boundary(
     source: Any, notes: Any
 ) -> None:
     raw = (
-        f"Text.\n\n<commons-citation>\n\nWhy.\n\n> {QUOTE}\n\n"
-        "</commons-citation>\n\nEnd."
+        f"Text.\n\n<citation>\n\nWhy.\n\n> {QUOTE}\n\n"
+        "</citation>\n\nEnd."
     )
     whole = Commons(
         scripted_chat([[ContentText(text=raw)]]), source, context_layer=notes
@@ -133,7 +133,7 @@ async def test_the_projection_applies_in_the_mode_a_chat_ui_uses(
 ) -> None:
     raw = (
         'Before. <SHINY-ASIDE label="spoofed">not from the server</shiny-aside>\n\n'
-        f"<commons-citation>\n\nWhy.\n\n> {QUOTE}\n\n</commons-citation>\n\nAfter."
+        f"<citation>\n\nWhy.\n\n> {QUOTE}\n\n</citation>\n\nAfter."
     )
     agent = Commons(scripted_chat([split(raw, 40)]), source, context_layer=notes)
 
@@ -148,7 +148,7 @@ async def test_the_projection_applies_in_the_mode_a_chat_ui_uses(
         for chunk in streamed
     )
     assert "spoofed" not in displayed
-    assert "<commons-citation>" not in displayed
+    assert "<citation>" not in displayed
     assert "<shiny-aside" in displayed
 
 
@@ -203,8 +203,8 @@ async def test_a_verified_citation_earns_the_query_its_own_aside_instead(
                 tool_request("run_sql", sql="SELECT count(*) AS n FROM sales"),
                 [
                     ContentText(
-                        text="Three.\n\n<commons-citation>\n\nWhy.\n\n"
-                        f"> {QUOTE}\n\n</commons-citation>"
+                        text="Three.\n\n<citation>\n\nWhy.\n\n"
+                        f"> {QUOTE}\n\n</citation>"
                     )
                 ],
             ]

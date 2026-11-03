@@ -207,7 +207,7 @@ def test_missing_instruction_paths_are_recognized(tmp_path):
 def test_citation_request_text_names_the_dialect():
     reminder = read_prompt("citation-request.md")
 
-    assert "<commons-citation>" in reminder
+    assert "<citation>" in reminder
     assert "\n" not in reminder
 
 

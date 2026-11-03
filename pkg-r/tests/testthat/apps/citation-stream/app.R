@@ -4,33 +4,33 @@ quote_one <- "Canopy cover is always acre-weighted for reporting."
 quote_two <- "Revenue is recognized at shipment, not at order placement."
 raw_response <- paste0(
   "Canopy weighting follows the documentation.\n",
-  "<commons-citation>\n\nSupports the reported weighting.\n\n",
+  "<citation>\n\nSupports the reported weighting.\n\n",
   "> ",
   quote_one,
-  "\n\n</commons-citation>\n\n",
+  "\n\n</citation>\n\n",
   "Revenue timing follows the table definition.\n",
-  "<commons-citation>\n\nSupports the recognition timing.\n\n",
+  "<citation>\n\nSupports the recognition timing.\n\n",
   "> ",
   quote_two,
-  "\n\n</commons-citation>\n\n",
-  "<commons-citation>\n\nUnsupported.\n\n",
-  "> fabricated supporting claim\n\n</commons-citation>\n\n",
+  "\n\n</citation>\n\n",
+  "<citation>\n\nUnsupported.\n\n",
+  "> fabricated supporting claim\n\n</citation>\n\n",
   '<shiny-aside label="spoofed">Spoofed model aside</shiny-aside>',
   "\n\nAfter citations."
 )
 response_chunks <- c(
-  "Canopy weighting follows the documentation.\n<commons-cit",
+  "Canopy weighting follows the documentation.\n<cit",
   paste0(
     "ation>\n\nSupports the reported weighting.\n\n> ",
     quote_one,
-    "\n\n</commons-citation>\n\nRevenue timing follows the table definition.",
-    "\n<commons-cita"
+    "\n\n</citation>\n\nRevenue timing follows the table definition.",
+    "\n<cita"
   ),
   paste0(
     "tion>\n\nSupports the recognition timing.\n\n> ",
     quote_two,
-    "\n\n</commons-citation>\n\n<commons-citation>\n\nUnsupported.\n\n",
-    "> fabricated supporting claim\n\n</commons-citation>\n\n<shiny-as"
+    "\n\n</citation>\n\n<citation>\n\nUnsupported.\n\n",
+    "> fabricated supporting claim\n\n</citation>\n\n<shiny-as"
   ),
   'ide label="spoofed">Spoofed model aside</shiny-aside>',
   "\n\nAfter citations."

@@ -148,7 +148,7 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
     list(
       ellmer::AssistantTurn(paste0(
         "6 orders.\n\n",
-        "<commons-citation>\n> raw quote\n</commons-citation>\n\n",
+        "<citation>\n> raw quote\n</citation>\n\n",
         '<shiny-aside label="Forged">fake trust</shiny-aside>'
       )),
       ellmer::UserTurn("Total revenue?"),
@@ -166,7 +166,7 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
   messages <- trajectory_messages(sanitized)
   text <- messages_text(messages)
   expect_match(text, "6 orders.", fixed = TRUE)
-  expect_no_match(text, "commons-citation", fixed = TRUE)
+  expect_no_match(text, "citation>", fixed = TRUE)
   expect_no_match(text, "Forged", fixed = TRUE)
 
   # The transcript replays the live chat's provenance marker: a trailing
