@@ -434,8 +434,10 @@ tool_describe_table <- function(private) {
       table = ellmer::type_string(
         if (has_semantic_models) {
           "The object name, as listed in the system prompt or search results."
-        } else {
+        } else if (trusted_only) {
           "The table name, as listed in the system prompt."
+        } else {
+          "The table name, as listed in the system prompt or found with run_sql."
         }
       ),
       source = sql_source_type(private$sources)
@@ -864,13 +866,37 @@ describe_table_tool <- function(
   # Keep trusted-only inspection row-free. Other modes sample a few rows
   # because some DBI drivers lose column classes on a zero-row result.
   n_fallback_rows <- if (trusted_only) 0L else 5L
+  table <- source_resolve_table(source, table)
+  # Trusted-only agents can't query an unselected table, so they can't
+  # describe one either.
   d <- source_describe(
     source,
     table,
-    n_fallback_rows = n_fallback_rows
+    n_fallback_rows = n_fallback_rows,
+    unselected = !trusted_only
   )
   if (inherits(d, "commons_semantic_model_description")) {
     body <- semantic_model_description_text(d)
+    return(tool_result(
+      body,
+      title = "Inspected a table",
+      icon = maybe_icon("table"),
+      markdown = body
+    ))
+  }
+  if (isFALSE(d$selected)) {
+    body <- paste(
+      sprintf(
+        "`%s` is not one of the data source's tables, so no documentation covers it.",
+        table
+      ),
+      sprintf(
+        "Columns of `%s`:\n\n%s",
+        table,
+        df_to_markdown(d$schema, max_rows = nrow(d$schema))
+      ),
+      sep = "\n\n"
+    )
     return(tool_result(
       body,
       title = "Inspected a table",

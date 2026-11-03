@@ -650,10 +650,13 @@ pending_tables_in_error <- function(source, err) {
   )]
 }
 
+# With `unselected = TRUE`, a table the data source doesn't select is still
+# described when the connection can query it, since run_sql can reach it too.
 source_describe <- function(
   source,
   table,
   n_fallback_rows = 5L,
+  unselected = FALSE,
   call = rlang::caller_env()
 ) {
   state <- data_source_state(source)
@@ -666,6 +669,9 @@ source_describe <- function(
   }
   id <- state$table_ids[[table]]
   if (is.null(id)) {
+    if (unselected) {
+      return(source_describe_unselected(source, table, n_fallback_rows, call = call))
+    }
     cli::cli_abort(c(
       "No table named {.val {table}}.",
       i = "Available tables: {.val {state$tables}}."
@@ -675,22 +681,8 @@ source_describe <- function(
   source_ensure_tables(source, table)
 
   relation <- source_relation(source, table)
-  if (!is.null(relation$columns)) {
-    schema <- relation$columns
-  } else if (is_snowflake_connection(state$con)) {
-    schema <- snowflake_describe_relation(state$con, id, call = call)
-  } else if (is_databricks_connection(state$con)) {
-    schema <- databricks_describe_relation(state$con, id, call = call)
-  } else if (inherits(state$con, "duckdb_connection")) {
-    schema <- duckdb_describe_relation(state$con, id, call = call)
-  } else {
-    schema <- fallback_describe_relation(
-      state$con,
-      id,
-      n_fallback_rows,
-      call = call
-    )
-  }
+  schema <- relation$columns %||%
+    connection_describe_relation(state$con, id, n_fallback_rows, call = call)
   if (!is.null(state$manifest) && is.null(relation$columns)) {
     relation$columns <- schema
     state$manifest$relations[[table]] <- relation
@@ -700,6 +692,90 @@ source_describe <- function(
     kind = relation$kind,
     description = relation$description
   )
+}
+
+source_describe_unselected <- function(
+  source,
+  table,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  state <- data_source_state(source)
+  schema <- tryCatch(
+    {
+      id <- table_entry_id(table, call = call)
+      # Warehouse sources check access the way they do for selected tables.
+      if (!is.null(state$session)) {
+        catalog_require_queryable(state$con, id, label = table, call = call)
+      }
+      connection_describe_relation(state$con, id, n_fallback_rows, call = call)
+    },
+    error = function(err) {
+      cli::cli_abort(
+        c(
+          "No table named {.val {table}} on the connection.",
+          i = "Selected tables: {.val {state$tables}}."
+        ),
+        parent = err,
+        call = call
+      )
+    }
+  )
+  list(schema = schema, kind = NULL, description = NULL, selected = FALSE)
+}
+
+connection_describe_relation <- function(
+  con,
+  id,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  if (is_snowflake_connection(con)) {
+    return(snowflake_describe_relation(con, id, call = call))
+  }
+  if (is_databricks_connection(con)) {
+    return(databricks_describe_relation(con, id, call = call))
+  }
+  if (inherits(con, "duckdb_connection")) {
+    return(duckdb_describe_relation(con, id, call = call))
+  }
+  fallback_describe_relation(con, id, n_fallback_rows, call = call)
+}
+
+# The data source's label for the table `table` names, like `sales` for
+# `main.sales`, so an alternate name still gets the table's documentation.
+# `table` itself when it is a label already or names no one table.
+source_resolve_table <- function(source, table) {
+  state <- data_source_state(source)
+  known <- c(
+    names(state$table_ids),
+    names(state$semantic_models),
+    names(state$semantic_stubs)
+  )
+  if (table %in% known) {
+    return(table)
+  }
+  id <- tryCatch(table_entry_id(table), error = function(err) NULL)
+  if (is.null(id)) {
+    return(table)
+  }
+  namespace <- state$session$namespace %||% dbi_current_namespace(state$con)
+  path <- relation_path(id, namespace)
+  matches <- names(state$table_ids)[vapply(
+    state$table_ids,
+    function(selected) identical(relation_path(selected, namespace), path),
+    logical(1)
+  )]
+  if (length(matches) == 1L) matches else table
+}
+
+# Unqualified identifiers resolve against the current namespace, and most
+# backends fold their case.
+relation_path <- function(id, namespace) {
+  components <- as.list(id@name)
+  components$schema <- components$schema %||% namespace$schema
+  components$catalog <- components$catalog %||% namespace$catalog
+  tolower(unlist(components[c("catalog", "schema", "table")], use.names = FALSE))
 }
 
 duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {

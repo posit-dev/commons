@@ -456,6 +456,37 @@ test_that("describe_table_tool has an inspection display", {
   expect_equal(res@extra$display$title, "Inspected a table")
 })
 
+test_that("describe_table describes tables outside the data source", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+  DBI::dbExecute(con, "CREATE SCHEMA marts")
+  DBI::dbExecute(con, "CREATE TABLE marts.orders (order_id VARCHAR, revenue DOUBLE)")
+  src <- data_source(con, tables = "sales")
+
+  res <- describe_table_tool(src, "marts.orders")
+
+  expect_match(res@value, "not one of the data source's tables", fixed = TRUE)
+  expect_match(res@value, "|order_id |VARCHAR |", fixed = TRUE)
+  expect_error(
+    describe_table_tool(src, "marts.nope"),
+    "No table named \"marts.nope\" on the connection"
+  )
+})
+
+test_that("describe_table keeps trusted-only agents to the data source", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+  DBI::dbExecute(con, "CREATE TABLE leads (lead_id VARCHAR)")
+  src <- data_source(con, tables = "sales")
+
+  expect_error(
+    describe_table_tool(src, "leads", trusted_only = TRUE),
+    "No table named"
+  )
+})
+
 test_that("describe_table controls fallback sampling by trust mode", {
   fallback_rows <- integer()
   local_mocked_bindings(
