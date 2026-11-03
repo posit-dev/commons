@@ -866,6 +866,7 @@ describe_table_tool <- function(
   # Keep trusted-only inspection row-free. Other modes sample a few rows
   # because some DBI drivers lose column classes on a zero-row result.
   n_fallback_rows <- if (trusted_only) 0L else 5L
+  table <- source_resolve_table(source, table)
   # Trusted-only agents can't query an unselected table, so they can't
   # describe one either.
   d <- source_describe(

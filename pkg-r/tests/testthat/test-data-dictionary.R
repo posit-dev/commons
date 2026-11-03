@@ -159,6 +159,16 @@ test_that("glossary entries past the cap are co-resolved at first touch", {
   expect_no_match(entry, "AOV: x", fixed = TRUE)
 })
 
+test_that("describe_table documents a selected table under a qualified name", {
+  src <- local_dict_source()
+
+  for (name in c("main.sales", "memory.main.SALES")) {
+    res <- describe_table_tool(src, name)
+    expect_match(res@value, "One row per order line", fixed = TRUE)
+    expect_match(res@value, "Columns of `sales`", fixed = TRUE)
+  }
+})
+
 test_that("describe_table merges the dictionary with the live schema", {
   res <- describe_table_tool(local_dict_source(), "sales")
 

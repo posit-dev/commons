@@ -742,6 +742,42 @@ connection_describe_relation <- function(
   fallback_describe_relation(con, id, n_fallback_rows, call = call)
 }
 
+# The data source's label for the table `table` names, like `sales` for
+# `main.sales`, so an alternate name still gets the table's documentation.
+# `table` itself when it is a label already or names no one table.
+source_resolve_table <- function(source, table) {
+  state <- data_source_state(source)
+  known <- c(
+    names(state$table_ids),
+    names(state$semantic_models),
+    names(state$semantic_stubs)
+  )
+  if (table %in% known) {
+    return(table)
+  }
+  id <- tryCatch(table_entry_id(table), error = function(err) NULL)
+  if (is.null(id)) {
+    return(table)
+  }
+  namespace <- state$session$namespace %||% dbi_current_namespace(state$con)
+  path <- relation_path(id, namespace)
+  matches <- names(state$table_ids)[vapply(
+    state$table_ids,
+    function(selected) identical(relation_path(selected, namespace), path),
+    logical(1)
+  )]
+  if (length(matches) == 1L) matches else table
+}
+
+# Unqualified identifiers resolve against the current namespace, and most
+# backends fold their case.
+relation_path <- function(id, namespace) {
+  components <- as.list(id@name)
+  components$schema <- components$schema %||% namespace$schema
+  components$catalog <- components$catalog %||% namespace$catalog
+  tolower(unlist(components[c("catalog", "schema", "table")], use.names = FALSE))
+}
+
 duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {
   rows <- tryCatch(
     DBI::dbGetQuery(
