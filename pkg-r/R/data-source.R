@@ -296,14 +296,16 @@ data_source_connection <- function(
     "commons.data_source.n_tables",
     length(table_registry$labels)
   )
+  bound <- dbi_bind_dictionary(dictionary, table_registry$ids, call = call)
 
   new_data_source(
     con,
     table_registry$labels,
     owned = FALSE,
     table_ids = table_registry$ids,
-    dictionary = dictionary,
+    dictionary = bound$dictionary,
     relations = table_registry$relations,
+    definition_bindings = bound$definition_bindings,
     namespace_selected = isTRUE(table_registry$namespace_selected)
   )
 }

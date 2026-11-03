@@ -74,6 +74,32 @@ dbi_table_registry <- function(con, tables, call = rlang::caller_env()) {
   )
 }
 
+# Re-keys dictionary tables given a relative name, like `orders`, under the
+# qualified label they uniquely match, like `marts.orders`, as the warehouse
+# paths do. Unmatched tables keep the name the dictionary gives them.
+dbi_bind_dictionary <- function(dictionary, ids, call = rlang::caller_env()) {
+  if (is.null(dictionary) || length(dictionary$tables) == 0L) {
+    return(list(dictionary = dictionary, definition_bindings = NULL))
+  }
+  relations <- lapply(ids, function(id) list(id = id))
+  matches <- catalog_dictionary_matches(dictionary, relations, "lower", call = call)
+  for (dictionary_name in names(matches)) {
+    label <- matches[[dictionary_name]]
+    if (is.na(label) || identical(label, dictionary_name)) {
+      next
+    }
+    table <- dictionary$tables[[dictionary_name]]
+    # Keep the dictionary's name for first-touch and relationship matching.
+    table$.authored_name <- dictionary_name
+    dictionary$tables[[dictionary_name]] <- NULL
+    dictionary$tables[[label]] <- table
+  }
+  list(
+    dictionary = dictionary,
+    definition_bindings = list(tables = matches, columns = list(), strict = FALSE)
+  )
+}
+
 dbi_is_namespace_id <- function(entry, call = rlang::caller_env()) {
   if (!inherits(entry, "Id") || "table" %in% names(entry@name)) {
     return(FALSE)

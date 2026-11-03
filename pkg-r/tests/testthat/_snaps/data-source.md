@@ -23,6 +23,16 @@
       ! The connection's current schema contains no tables.
       i Select tables in other schemas with `tables`.
 
+# data_source errors for relative dictionary names matching several tables
+
+    Code
+      data_source(con, tables = list(DBI::Id(schema = "marts"), DBI::Id(schema = "raw")),
+      dictionary = local_definitions_dict())
+    Condition
+      Error in `data_source()`:
+      ! Authored table "sales" matches more than one selected relation: "marts.sales" and "raw.sales".
+      i Use its fully qualified name in the data dictionary.
+
 # data_source errors for empty or unlistable schema selections
 
     Code

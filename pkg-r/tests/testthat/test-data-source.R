@@ -199,6 +199,42 @@ test_that("data_source scopes a schema selection to the current database", {
   expect_equal(list_tables(src), "other.main.leads")
 })
 
+test_that("data_source matches relative dictionary names to schema selections", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA marts")
+  DBI::dbWriteTable(con, DBI::Id(schema = "marts", table = "sales"), test_sales())
+
+  src <- data_source(
+    con,
+    tables = DBI::Id(schema = "marts"),
+    dictionary = local_definitions_dict()
+  )
+
+  table <- data_source_state(src)$dictionary$tables[["marts.sales"]]
+  expect_equal(table$description, "One row per order line.")
+  expect_equal(table$.authored_name, "sales")
+  expect_setequal(names(table$definitions), c("emea", "big_revenue", "region_band"))
+})
+
+test_that("data_source errors for relative dictionary names matching several tables", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  for (schema in c("marts", "raw")) {
+    DBI::dbExecute(con, sprintf("CREATE SCHEMA %s", schema))
+    DBI::dbWriteTable(con, DBI::Id(schema = schema, table = "sales"), test_sales())
+  }
+
+  expect_snapshot(
+    data_source(
+      con,
+      tables = list(DBI::Id(schema = "marts"), DBI::Id(schema = "raw")),
+      dictionary = local_definitions_dict()
+    ),
+    error = TRUE
+  )
+})
+
 test_that("data_source errors for empty or unlistable schema selections", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
