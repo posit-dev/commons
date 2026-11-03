@@ -14,6 +14,15 @@
       ! No table named "nope".
       i Available tables: "sales".
 
+# data_source errors when the current schema is empty
+
+    Code
+      data_source(con)
+    Condition
+      Error in `data_source()`:
+      ! The connection's current schema contains no tables.
+      i Select tables in other schemas with `tables`.
+
 # data_source errors for tables absent from the connection
 
     Code

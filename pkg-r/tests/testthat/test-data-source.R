@@ -114,15 +114,55 @@ test_that("data_source supports explicit DBI identifiers", {
   expect_equal(d$schema$column, c("order_id", "revenue"))
 })
 
-test_that("data_source keeps default connection discovery unvalidated", {
+test_that("data_source defaults to the connection's current schema", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+  DBI::dbExecute(con, "CREATE SCHEMA crm")
+  DBI::dbExecute(con, "CREATE TABLE crm.leads (lead_id VARCHAR)")
+
+  src <- data_source(con)
+
+  expect_equal(list_tables(src), "sales")
+  expect_false(catalog_searchable(src))
+  expect_equal(source_describe(src, "sales")$schema$column, names(test_sales()))
+})
+
+test_that("data_source searches a current schema too broad to list", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  for (i in 1:400) {
+    DBI::dbExecute(con, sprintf("CREATE TABLE orders_%03d (id INT)", i))
+  }
+  DBI::dbExecute(con, "CREATE VIEW revenue_summary AS SELECT 1 AS total")
+
+  src <- data_source(con)
+
+  expect_true(catalog_searchable(src))
+  results <- catalog_search(src, "revenue")
+  expect_equal(names(results), "revenue_summary")
+  expect_equal(results[[1]]$kind, "view")
+})
+
+test_that("data_source errors when the current schema is empty", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
   DBI::dbExecute(con, "CREATE SCHEMA crm")
   DBI::dbExecute(con, "CREATE TABLE crm.sales (order_id VARCHAR)")
 
+  expect_snapshot(data_source(con), error = TRUE)
+})
+
+test_that("data_source lists every table without an information_schema", {
+  skip_if_not_installed("RSQLite")
+  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  withr::defer(DBI::dbDisconnect(con))
+  DBI::dbWriteTable(con, "sales", test_sales())
+
   src <- data_source(con)
 
   expect_equal(list_tables(src), "sales")
+  expect_false(catalog_searchable(src))
 })
 
 test_that("data_source errors for tables absent from the connection", {

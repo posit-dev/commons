@@ -31,7 +31,11 @@
 #'
 #'   For a connection, a character vector of table names, qualified strings
 #'   like `"schema.table"` or `"catalog.schema.table"`, or `DBI::Id` objects.
-#'   Defaults to every table returned by [DBI::dbListTables()]. Strings
+#'   Defaults to every table and view in the connection's current schema,
+#'   read from `information_schema`; the agent searches them rather than
+#'   reading a list when there are too many to list. Backends without an
+#'   `information_schema`, like SQLite, default to every table returned by
+#'   [DBI::dbListTables()]. Strings
 #'   containing dots are interpreted as qualified names, at most three parts;
 #'   use `DBI::Id(table = "a.b")` for literal table names containing dots. For Snowflake and Databricks
 #'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
@@ -281,9 +285,7 @@ data_source_connection <- function(
   }
 
   if (is.null(tables)) {
-    listed <- DBI::dbListTables(con)
-    commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
-    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
+    return(data_source_current_schema(con, dictionary, span, call = call))
   }
 
   table_registry <- normalize_table_registry(tables, call = call)
@@ -300,6 +302,42 @@ data_source_connection <- function(
     owned = FALSE,
     table_ids = table_registry$ids,
     dictionary = dictionary
+  )
+}
+
+# Selecting the current schema is a namespace selection, as for Snowflake and
+# Databricks, so a schema too broad to list in the prompt becomes searchable.
+data_source_current_schema <- function(
+  con,
+  dictionary,
+  span,
+  call = rlang::caller_env()
+) {
+  relations <- dbi_current_relations(con)
+  if (is.null(relations)) {
+    listed <- DBI::dbListTables(con)
+    commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
+    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
+  }
+  if (length(relations) == 0L) {
+    cli::cli_abort(
+      c(
+        "The connection's current schema contains no tables.",
+        i = "Select tables in other schemas with {.arg tables}."
+      ),
+      call = call
+    )
+  }
+  catalog_check_object_limit(length(relations), call = call)
+  commons_span_set_attribute(span, "commons.data_source.n_tables", length(relations))
+  new_data_source(
+    con,
+    names(relations),
+    owned = FALSE,
+    table_ids = lapply(relations, `[[`, "id"),
+    dictionary = dictionary,
+    relations = relations,
+    namespace_selected = TRUE
   )
 }
 

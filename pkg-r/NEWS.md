@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `data_source()` given a DBI connection and no `tables` selects the tables and views in the connection's current schema. When that schema has too many tables to list in the system prompt, the agent finds them with `search_catalog` instead, as for Snowflake and Databricks connections.
+
 * The `commons()` function was split into two. Calls to `commons()` previously looked like this:
 
   ```r
