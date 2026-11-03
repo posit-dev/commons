@@ -153,6 +153,65 @@ test_that("data_source errors when the current schema is empty", {
   expect_snapshot(data_source(con), error = TRUE)
 })
 
+test_that("data_source selects whole schemas alongside individual tables", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+  DBI::dbExecute(con, "CREATE SCHEMA marts")
+  DBI::dbExecute(con, "CREATE TABLE marts.orders (order_id VARCHAR)")
+  DBI::dbExecute(con, "CREATE VIEW marts.revenue AS SELECT 1 AS total")
+  DBI::dbExecute(con, "CREATE SCHEMA raw")
+  DBI::dbExecute(con, "CREATE TABLE raw.orders (order_id VARCHAR)")
+
+  src <- data_source(con, tables = list("sales", DBI::Id(schema = "marts")))
+
+  expect_setequal(list_tables(src), c("sales", "marts.orders", "marts.revenue"))
+  expect_false(catalog_searchable(src))
+  expect_equal(source_describe(src, "marts.orders")$schema$column, "order_id")
+  expect_equal(source_describe(src, "marts.revenue")$kind, "view")
+})
+
+test_that("data_source searches a schema selection too broad to list", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA marts")
+  for (i in 1:300) {
+    DBI::dbExecute(con, sprintf("CREATE TABLE marts.orders_%03d (id INT)", i))
+  }
+
+  src <- data_source(con, tables = DBI::Id(schema = "marts"))
+
+  expect_true(catalog_searchable(src))
+  expect_equal(names(catalog_search(src, "orders_042"))[[1]], "marts.orders_042")
+})
+
+test_that("data_source scopes a schema selection to the current database", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+  DBI::dbExecute(con, "ATTACH ':memory:' AS other")
+  DBI::dbExecute(con, "CREATE TABLE other.main.leads (lead_id VARCHAR)")
+
+  src <- data_source(con, tables = DBI::Id(schema = "main"))
+  expect_equal(list_tables(src), "main.sales")
+
+  src <- data_source(con, tables = DBI::Id(catalog = "other", schema = "main"))
+  expect_equal(list_tables(src), "other.main.leads")
+})
+
+test_that("data_source errors for empty or unlistable schema selections", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbExecute(con, "CREATE SCHEMA empty")
+  expect_snapshot(data_source(con, tables = DBI::Id(schema = "empty")), error = TRUE)
+  expect_snapshot(data_source(con, tables = DBI::Id(catalog = "memory")), error = TRUE)
+
+  skip_if_not_installed("RSQLite")
+  lite <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  withr::defer(DBI::dbDisconnect(lite))
+  expect_snapshot(data_source(lite, tables = DBI::Id(schema = "main")), error = TRUE)
+})
+
 test_that("data_source lists every table without an information_schema", {
   skip_if_not_installed("RSQLite")
   con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")

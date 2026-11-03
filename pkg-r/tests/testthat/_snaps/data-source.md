@@ -23,6 +23,31 @@
       ! The connection's current schema contains no tables.
       i Select tables in other schemas with `tables`.
 
+# data_source errors for empty or unlistable schema selections
+
+    Code
+      data_source(con, tables = DBI::Id(schema = "empty"))
+    Condition
+      Error in `data_source()`:
+      ! Schema "empty" contains no tables.
+
+---
+
+    Code
+      data_source(con, tables = DBI::Id(catalog = "memory"))
+    Condition
+      Error in `data_source()`:
+      ! A <DBI::Id> selecting a whole schema must name a `schema`, optionally preceded by a `catalog`.
+
+---
+
+    Code
+      data_source(lite, tables = DBI::Id(schema = "main"))
+    Condition
+      Error in `data_source()`:
+      ! Can't list the tables in schema "main".
+      i Selecting a whole schema requires `information_schema`; name its tables instead.
+
 # data_source errors for tables absent from the connection
 
     Code

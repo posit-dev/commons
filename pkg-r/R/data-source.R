@@ -37,10 +37,12 @@
 #'   `information_schema`, like SQLite, default to every table returned by
 #'   [DBI::dbListTables()]. Strings
 #'   containing dots are interpreted as qualified names, at most three parts;
-#'   use `DBI::Id(table = "a.b")` for literal table names containing dots. For Snowflake and Databricks
-#'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
-#'   table and view in that namespace. Leaving `tables` unset selects the
-#'   current schema. A Databricks `hive_metastore` selection must include a
+#'   use `DBI::Id(table = "a.b")` for literal table names containing dots. A
+#'   `DBI::Id` ending in `schema`, like `DBI::Id(schema = "marts")`, selects
+#'   every table and view in that schema, labeled `"schema.table"`; for
+#'   Snowflake and Databricks connections, one ending in `catalog` selects the
+#'   whole catalog. As with the default, the agent searches a selection too
+#'   broad to list. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
 #'   selections import metric views, as native trusted metrics and dimensions.
 #'   Namespace selections read model definitions lazily. Explicitly selected
@@ -288,8 +290,7 @@ data_source_connection <- function(
     return(data_source_current_schema(con, dictionary, span, call = call))
   }
 
-  table_registry <- normalize_table_registry(tables, call = call)
-  check_table_ids_exist(con, table_registry, call = call)
+  table_registry <- dbi_table_registry(con, tables, call = call)
   commons_span_set_attribute(
     span,
     "commons.data_source.n_tables",
@@ -301,7 +302,9 @@ data_source_connection <- function(
     table_registry$labels,
     owned = FALSE,
     table_ids = table_registry$ids,
-    dictionary = dictionary
+    dictionary = dictionary,
+    relations = table_registry$relations,
+    namespace_selected = isTRUE(table_registry$namespace_selected)
   )
 }
 

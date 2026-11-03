@@ -7,32 +7,120 @@ dbi_current_relations <- function(con) {
   if (is.null(namespace)) {
     return(NULL)
   }
+  relations <- dbi_list_relations(
+    con,
+    DBI::Id(schema = namespace$schema),
+    catalog = namespace$catalog
+  )
+  if (!is.null(relations)) {
+    names(relations) <- vapply(relations, catalog_relation_name, character(1))
+  }
+  relations
+}
+
+# `tables` for a generic DBI connection: table names and table ids as before,
+# plus ids naming a whole schema, whose relations are labeled schema-qualified
+# so they stay distinct across schemas.
+dbi_table_registry <- function(con, tables, call = rlang::caller_env()) {
+  entries <- table_entries(tables, call = call)
+  is_namespace <- vapply(entries, dbi_is_namespace_id, logical(1), call = call)
+  registry <- normalize_table_registry(entries[!is_namespace], call = call)
+  if (length(registry$ids)) {
+    check_table_ids_exist(con, registry, call = call)
+  }
+  if (!any(is_namespace)) {
+    return(registry)
+  }
+
+  relations <- lapply(registry$ids, function(id) list(id = id))
+  current_catalog <- dbi_current_namespace(con)$catalog
+  for (namespace in entries[is_namespace]) {
+    listed <- dbi_list_relations(con, namespace, catalog = current_catalog)
+    label <- paste(namespace@name, collapse = ".")
+    if (is.null(listed)) {
+      cli::cli_abort(
+        c(
+          "Can't list the tables in schema {.val {label}}.",
+          i = "Selecting a whole schema requires {.code information_schema}; name its tables instead."
+        ),
+        call = call
+      )
+    }
+    if (length(listed) == 0L) {
+      cli::cli_abort(
+        "Schema {.val {label}} contains no tables.",
+        call = call
+      )
+    }
+    names(listed) <- vapply(listed, function(x) table_id_label(x$id), character(1))
+    relations <- c(relations, listed)
+  }
+
+  labels <- names(relations)
+  duplicated_labels <- unique(labels[duplicated(labels)])
+  if (length(duplicated_labels)) {
+    cli::cli_abort(
+      "{.arg tables} must not select duplicate labels: {.val {duplicated_labels}}.",
+      call = call
+    )
+  }
+  catalog_check_object_limit(length(relations), call = call)
+
+  list(
+    labels = labels,
+    ids = lapply(relations, `[[`, "id"),
+    relations = relations,
+    namespace_selected = TRUE
+  )
+}
+
+dbi_is_namespace_id <- function(entry, call = rlang::caller_env()) {
+  if (!inherits(entry, "Id") || "table" %in% names(entry@name)) {
+    return(FALSE)
+  }
+  components <- entry@name
+  roles <- names(components)
+  valid <- identical(roles, "schema") || identical(roles, c("catalog", "schema"))
+  if (!valid || any(is.na(components) | !nzchar(components))) {
+    cli::cli_abort(
+      "A {.cls DBI::Id} selecting a whole schema must name a {.arg schema}, optionally preceded by a {.arg catalog}.",
+      call = call
+    )
+  }
+  TRUE
+}
+
+# The tables and views in one schema, with ids qualified as `namespace` is, or
+# NULL when the backend has no information_schema to ask. `catalog` narrows the
+# lookup when `namespace` doesn't name one.
+dbi_list_relations <- function(con, namespace, catalog = NULL) {
+  components <- namespace@name
+  if ("catalog" %in% names(components)) {
+    catalog <- components[["catalog"]]
+  }
   sql <- paste(
     "SELECT table_name, table_type FROM information_schema.tables",
     "WHERE table_schema =",
-    DBI::dbQuoteString(con, namespace$schema)
+    DBI::dbQuoteString(con, components[["schema"]])
   )
   # DuckDB's information_schema spans every attached database.
-  if (!is.null(namespace$catalog)) {
-    sql <- paste(
-      sql,
-      "AND table_catalog =",
-      DBI::dbQuoteString(con, namespace$catalog)
-    )
+  if (!is.null(catalog)) {
+    sql <- paste(sql, "AND table_catalog =", DBI::dbQuoteString(con, catalog))
   }
   rows <- tryCatch(DBI::dbGetQuery(con, sql), error = function(err) NULL)
   if (is.null(rows)) {
     return(NULL)
   }
   names(rows) <- tolower(names(rows))
-  relations <- lapply(seq_len(nrow(rows)), function(i) {
+  lapply(seq_len(nrow(rows)), function(i) {
     list(
-      id = DBI::Id(schema = namespace$schema, table = rows$table_name[[i]]),
+      id = do.call(
+        DBI::Id,
+        c(as.list(components), table = rows$table_name[[i]])
+      ),
       kind = dbi_relation_kind(rows$table_type[[i]])
     )
   })
-  names(relations) <- rows$table_name
-  relations
 }
 
 dbi_current_namespace <- function(con) {

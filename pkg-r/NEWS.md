@@ -1,6 +1,6 @@
 # commons (development version)
 
-* `data_source()` given a DBI connection and no `tables` selects the tables and views in the connection's current schema. When that schema has too many tables to list in the system prompt, the agent finds them with `search_catalog` instead, as for Snowflake and Databricks connections.
+* `data_source()` given a DBI connection and no `tables` selects the tables and views in the connection's current schema. When that schema has too many tables to list in the system prompt, the agent finds them with `search_catalog` instead, as for Snowflake and Databricks connections. A `DBI::Id` naming only a schema, like `DBI::Id(schema = "marts")`, selects every table and view in that schema.
 
 * The `commons()` function was split into two. Calls to `commons()` previously looked like this:
 
