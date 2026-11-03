@@ -322,7 +322,16 @@ data_source_current_schema <- function(
   if (is.null(relations)) {
     listed <- DBI::dbListTables(con)
     commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
-    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
+    relations <- lapply(listed, function(name) list(id = DBI::Id(table = name)))
+    names(relations) <- listed
+    return(new_data_source(
+      con,
+      listed,
+      owned = FALSE,
+      dictionary = dictionary,
+      relations = relations,
+      namespace_selected = TRUE
+    ))
   }
   if (length(relations) == 0L) {
     cli::cli_abort(

@@ -185,6 +185,28 @@ test_that("data_source searches a schema selection too broad to list", {
   expect_equal(names(catalog_search(src, "orders_042"))[[1]], "marts.orders_042")
 })
 
+test_that("data_source gives named tables a kind in searchable selections", {
+  con <- DBI::dbConnect(duckdb::duckdb())
+  withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
+  DBI::dbWriteTable(con, "sales", test_sales())
+  DBI::dbExecute(con, "CREATE VIEW sales_recent AS SELECT * FROM sales")
+  DBI::dbExecute(con, "CREATE SCHEMA marts")
+  for (i in 1:300) {
+    DBI::dbExecute(con, sprintf("CREATE TABLE marts.orders_%03d (id INT)", i))
+  }
+  DBI::dbExecute(con, "CREATE VIEW marts.sales_summary AS SELECT 1 AS total")
+
+  src <- data_source(
+    con,
+    tables = list("sales", "sales_recent", DBI::Id(schema = "marts"))
+  )
+
+  expect_true(catalog_searchable(src))
+  views <- catalog_search(src, "sales", kinds = "view")
+  expect_setequal(names(views), c("sales_recent", "marts.sales_summary"))
+  expect_equal(names(catalog_search(src, "sales", kinds = "table")), "sales")
+})
+
 test_that("data_source scopes a schema selection to the current database", {
   con <- DBI::dbConnect(duckdb::duckdb())
   withr::defer(DBI::dbDisconnect(con, shutdown = TRUE))
@@ -258,6 +280,21 @@ test_that("data_source lists every table without an information_schema", {
 
   expect_equal(list_tables(src), "sales")
   expect_false(catalog_searchable(src))
+})
+
+test_that("data_source searches a broad listing without an information_schema", {
+  skip_if_not_installed("RSQLite")
+  con <- DBI::dbConnect(RSQLite::SQLite(), ":memory:")
+  withr::defer(DBI::dbDisconnect(con))
+  for (i in 1:400) {
+    DBI::dbExecute(con, sprintf("CREATE TABLE orders_%03d (id INT)", i))
+  }
+
+  src <- data_source(con)
+
+  expect_true(catalog_searchable(src))
+  expect_equal(names(catalog_search(src, "orders_042")), "orders_042")
+  expect_equal(source_describe(src, "orders_042")$schema$column, "id")
 })
 
 test_that("data_source errors for tables absent from the connection", {

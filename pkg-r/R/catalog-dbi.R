@@ -32,8 +32,9 @@ dbi_table_registry <- function(con, tables, call = rlang::caller_env()) {
     return(registry)
   }
 
-  relations <- lapply(registry$ids, function(id) list(id = id))
-  current_catalog <- dbi_current_namespace(con)$catalog
+  current <- dbi_current_namespace(con)
+  relations <- lapply(registry$ids, dbi_named_relation, con = con, current = current)
+  current_catalog <- current$catalog
   for (namespace in entries[is_namespace]) {
     listed <- dbi_list_relations(con, namespace, catalog = current_catalog)
     label <- paste(namespace@name, collapse = ".")
@@ -100,6 +101,32 @@ dbi_bind_dictionary <- function(dictionary, ids, call = rlang::caller_env()) {
   )
 }
 
+# A table named in `tables`, with its kind looked up so searches filtered by
+# kind treat it like the tables a schema selection lists. The kind is left
+# unset when the backend can't say.
+dbi_named_relation <- function(id, con, current) {
+  components <- id@name
+  schema <- if ("schema" %in% names(components)) {
+    components[["schema"]]
+  } else {
+    current$schema
+  }
+  if (is.null(schema)) {
+    return(list(id = id))
+  }
+  namespace <- do.call(
+    DBI::Id,
+    as.list(c(components[names(components) == "catalog"], schema = schema))
+  )
+  listed <- dbi_list_relations(
+    con,
+    namespace,
+    catalog = current$catalog,
+    table = components[["table"]]
+  )
+  list(id = id, kind = if (length(listed) == 1L) listed[[1]]$kind)
+}
+
 dbi_is_namespace_id <- function(entry, call = rlang::caller_env()) {
   if (!inherits(entry, "Id") || "table" %in% names(entry@name)) {
     return(FALSE)
@@ -118,22 +145,39 @@ dbi_is_namespace_id <- function(entry, call = rlang::caller_env()) {
 
 # The tables and views in one schema, with ids qualified as `namespace` is, or
 # NULL when the backend has no information_schema to ask. `catalog` narrows the
-# lookup when `namespace` doesn't name one.
-dbi_list_relations <- function(con, namespace, catalog = NULL) {
+# lookup when `namespace` doesn't name one; `table` narrows it to one relation.
+dbi_list_relations <- function(con, namespace, catalog = NULL, table = NULL) {
   components <- namespace@name
+  views <- "information_schema.tables"
   if ("catalog" %in% names(components)) {
     catalog <- components[["catalog"]]
+    # SQL Server keeps one information_schema per database, so another
+    # database's tables are only listed in its own; DuckDB rejects this form
+    # and falls through to the unqualified view.
+    views <- c(
+      paste0(DBI::dbQuoteIdentifier(con, catalog), ".", views),
+      views
+    )
   }
-  sql <- paste(
-    "SELECT table_name, table_type FROM information_schema.tables",
+  filter <- paste(
     "WHERE table_schema =",
     DBI::dbQuoteString(con, components[["schema"]])
   )
   # DuckDB's information_schema spans every attached database.
   if (!is.null(catalog)) {
-    sql <- paste(sql, "AND table_catalog =", DBI::dbQuoteString(con, catalog))
+    filter <- paste(filter, "AND table_catalog =", DBI::dbQuoteString(con, catalog))
   }
-  rows <- tryCatch(DBI::dbGetQuery(con, sql), error = function(err) NULL)
+  if (!is.null(table)) {
+    filter <- paste(filter, "AND table_name =", DBI::dbQuoteString(con, table))
+  }
+  rows <- NULL
+  for (view in views) {
+    sql <- paste("SELECT table_name, table_type FROM", view, filter)
+    rows <- tryCatch(DBI::dbGetQuery(con, sql), error = function(err) NULL)
+    if (!is.null(rows)) {
+      break
+    }
+  }
   if (is.null(rows)) {
     return(NULL)
   }
