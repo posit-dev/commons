@@ -2,6 +2,12 @@
 
 ## commons (development version)
 
+- `describe_table` describes any table the connection can query, not
+  only the data source’s tables, so it agrees with `run_sql`. The result
+  notes when a table is outside the data source. Agents in
+  `mode = "trusted only"` still describe only the data source’s tables
+  ([\#469](https://github.com/posit-dev/commons/issues/469)).
+
 - [`data_source()`](https://posit-dev.github.io/commons/r/dev/reference/data_source.md)
   given a DBI connection and no `tables` selects the tables and views in
   the connection’s current schema. When that schema has too many tables
