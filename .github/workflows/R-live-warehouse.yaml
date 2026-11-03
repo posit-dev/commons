@@ -24,9 +24,8 @@ jobs:
     # The same environments the Python live tests use.
     environment:
       name: ${{ matrix.backend }}-ci
-      # No deployment record for a test run. Databricks keeps the default
-      # until its OIDC federation is verified without one.
-      deployment: ${{ matrix.backend == 'databricks' }}
+      # No deployment record for a test run.
+      deployment: false
     permissions:
       contents: read
       # GitHub OIDC for the Databricks service principal.
