@@ -6,7 +6,7 @@ on:
     paths: [pkg-py/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/py-live-warehouse.yaml]
   workflow_dispatch:
   pull_request:
-    paths: [pkg-py/**, tests/shared/**, .github/workflows/py-live-warehouse.yaml]
+    paths: [pkg-py/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/py-live-warehouse.yaml]
 
 permissions:
   contents: read

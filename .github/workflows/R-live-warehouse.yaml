@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths: [pkg-r/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/R-live-warehouse.yaml]
   workflow_dispatch:
+  # The Databricks leg waits for a maintainer to approve it in the
+  # databricks-ci environment.
+  pull_request:
+    paths: [pkg-r/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/R-live-warehouse.yaml]
 
 permissions:
   contents: read
