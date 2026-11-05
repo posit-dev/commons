@@ -354,6 +354,7 @@ worker_ensure <- function(worker, fn_sources = character()) {
   })
   worker$rs <- rs
   worker$callr_dir <- callr_dir
+  worker$work_dir <- work_dir
   worker$synced <- 0L
   invisible(worker)
 }

@@ -24,9 +24,8 @@ new_artifact_run <- function(store, artifact) {
   run <- new.env(parent = emptyenv())
   run$store <- store
   run$artifact <- artifact
-  run$dir <- tempfile("commons-run-")
-  dir.create(file.path(run$dir, "figs"), recursive = TRUE)
-  dir.create(file.path(run$dir, ".commons"))
+  run$id <- basename(tempfile("run-"))
+  run$dir <- NULL
   run$worker <- NULL
   run$tail <- promises::promise_resolve(NULL)
   run$front <- NULL
@@ -36,7 +35,7 @@ new_artifact_run <- function(store, artifact) {
   run$sent <- character()
   run$cache <- new.env(parent = emptyenv())
   run$cancelled <- FALSE
-  assign(run$dir, run, envir = store$runs)
+  assign(run$id, run, envir = store$runs)
   artifact$run <- run
   run
 }
@@ -130,8 +129,8 @@ artifact_run_cancel <- function(run) {
 }
 
 artifact_run_unregister <- function(run) {
-  if (exists(run$dir, envir = run$store$runs, inherits = FALSE)) {
-    rm(list = run$dir, envir = run$store$runs)
+  if (exists(run$id, envir = run$store$runs, inherits = FALSE)) {
+    rm(list = run$id, envir = run$store$runs)
   }
   invisible(run)
 }
@@ -183,15 +182,22 @@ artifact_run_unit <- function(run, unit) {
   if (is.null(run$worker)) {
     run$worker <- new_r_worker(run$store$network, run$store$protection)
     worker_ensure(run$worker)
+    # The sandbox lets the worker write only inside its own folder.
+    run$dir <- file.path(run$worker$work_dir, "document")
+    dir.create(file.path(run$dir, "figs"), recursive = TRUE)
+    dir.create(file.path(run$dir, ".commons"))
     worker_runtime_call(run$worker, "worker_knit_init", list(dir = run$dir))
   }
   worker <- run$worker
-  worker$rs$call(
-    worker_call,
-    args = list(
-      runtime = worker$runtime,
-      name = "worker_knit_unit",
-      args = list(kind = unit$kind, text = unit$text)
+  with_callr_dir(
+    worker$callr_dir,
+    worker$rs$call(
+      worker_call,
+      args = list(
+        runtime = worker$runtime,
+        name = "worker_knit_unit",
+        args = list(kind = unit$kind, text = unit$text)
+      )
     )
   )
   promises::then(
@@ -246,10 +252,12 @@ artifact_serve_request <- function(run, message) {
       ))
     }
   )
-  path <- file.path(run$dir, ".commons", paste0(id, ".rds"))
-  partial <- paste0(path, ".partial")
+  # The worker can write in `.commons`, so a file written there directly
+  # could follow a symlink it planted. Write where the worker can't reach,
+  # then rename, which replaces a symlink rather than following it.
+  partial <- tempfile("commons-answer-", fileext = ".rds")
   saveRDS(response, partial)
-  file.rename(partial, path)
+  file.rename(partial, file.path(run$dir, ".commons", paste0(id, ".rds")))
   invisible()
 }
 
@@ -263,9 +271,12 @@ artifact_unit_failure <- function(message) {
 }
 
 worker_runtime_call <- function(worker, name, args) {
-  worker$rs$run(
-    worker_call,
-    args = list(runtime = worker$runtime, name = name, args = args)
+  with_callr_dir(
+    worker$callr_dir,
+    worker$rs$run(
+      worker_call,
+      args = list(runtime = worker$runtime, name = name, args = args)
+    )
   )
 }
 

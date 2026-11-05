@@ -379,6 +379,29 @@ test_that("a document's cells can't read the host's files", {
   expect_no_match(paste(result$html, collapse = ""), "secret\"")
 })
 
+test_that("answering a commons call doesn't write through a planted symlink", {
+  skip_if_no_sandbox()
+  store <- orders_agent()$artifact_store()
+  target <- withr::local_tempfile(tmpdir = path.expand("~"))
+  writeLines("untouched", target)
+  source <- paste0(
+    "---\ntitle: Probe\n---\n\n",
+    "```{r}\n",
+    "file.symlink(", deparse(target), ", file.path('.commons', ",
+    "paste0(Sys.getpid(), '-1.rds.partial')))\n",
+    "nrow(commons$measure('orders'))\n",
+    "```\n"
+  )
+
+  result <- wait_for_promise(
+    artifact_commit(store, "probe", "Probe", source)$rendered
+  )
+
+  expect_length(result$errors, 0)
+  expect_match(paste(result$html, collapse = ""), "[1] 6", fixed = TRUE)
+  expect_identical(readLines(target), "untouched")
+})
+
 test_that("embedding a figure respects the document's sandbox", {
   skip_if_no_sandbox()
   store <- orders_agent()$artifact_store()
