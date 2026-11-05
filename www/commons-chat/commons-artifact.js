@@ -113,7 +113,7 @@
   const nonce = crypto.randomUUID();
   const frameSource = `<!doctype html>
 <html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${assetRoot.origin} 'unsafe-inline'; img-src data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonce}'; style-src ${assetRoot.origin} 'unsafe-inline'; img-src data:; form-action 'none'; base-uri 'none'">
 <link rel="stylesheet" href="${new URL("commons-document.css", assetRoot)}">
 </head><body><main id="doc"></main><script nonce="${nonce}">
 const doc = document.getElementById("doc");

@@ -549,7 +549,15 @@ div_open_html <- function(line) {
 }
 
 markdown_fragment_html <- function(markdown) {
-  commonmark::markdown_html(markdown, extensions = TRUE, footnotes = TRUE)
+  html <- commonmark::markdown_html(markdown, extensions = TRUE, footnotes = TRUE)
+  strip_navigation_tags(html)
+}
+
+# A <meta> refresh, <base>, or <form> can send a reader's browser, and the
+# document's data, elsewhere, and a saved report.html has no drawer to strip
+# them. Removing only the tags leaves a form's contents in place.
+strip_navigation_tags <- function(html) {
+  gsub("</?(meta|base|form)\\b[^>]*>", "", html, perl = TRUE, ignore.case = TRUE)
 }
 
 artifact_header_html <- function(frontmatter) {
@@ -590,7 +598,8 @@ artifact_document_html <- function(title, pieces) {
   paste0(
     "<!doctype html>\n<html><head><meta charset=\"utf-8\">",
     "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src ",
-    "'none'; style-src 'unsafe-inline'; img-src data:\"><title>",
+    "'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; ",
+    "base-uri 'none'\"><title>",
     html_escape(title),
     "</title><style>\n", css, "\n</style></head><body><main>\n",
     paste(pieces, collapse = "\n"),

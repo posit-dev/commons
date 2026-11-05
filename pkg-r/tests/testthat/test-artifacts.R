@@ -402,6 +402,19 @@ test_that("answering a commons call doesn't write through a planted symlink", {
   expect_identical(readLines(target), "untouched")
 })
 
+test_that("a saved document can't navigate or submit on its own", {
+  html <- markdown_fragment_html(paste0(
+    "<META http-equiv=\"refresh\" content=\"0;url=https://example.com\">\n\n",
+    "<base href=\"https://example.com/\">\n\n",
+    "<form action=\"https://example.com\"><button>Send</button></form>\n"
+  ))
+  page <- artifact_document_html("Probe", html)
+
+  expect_no_match(page, "<(meta http-equiv=\"refresh\"|base|form)", ignore.case = TRUE)
+  expect_match(page, "<button>Send</button>", fixed = TRUE)
+  expect_match(page, "form-action 'none'; base-uri 'none'", fixed = TRUE)
+})
+
 test_that("embedding a figure respects the document's sandbox", {
   skip_if_no_sandbox()
   store <- orders_agent()$artifact_store()
