@@ -57,6 +57,15 @@ object.
 
 ## Details
 
+Documents the agent writes open in the chat's drawer, which
+[`shinychat::page_chat()`](https://posit-dev.github.io/shinychat/r/reference/page_chat.html)
+and
+[`shinychat::chat_ui()`](https://posit-dev.github.io/shinychat/r/reference/chat_ui.html)
+enable by default. An app that passes `drawer = FALSE` gets no documents
+in view, though the agent still writes them. Documents read best in a
+wider drawer than the default, e.g.
+`drawer = shinychat::chat_drawer(width = 640, open = FALSE)`.
+
 `commons_theme()` bundles the commons chat CSS and JavaScript into an
 ordinary
 [`bslib::bs_theme()`](https://rstudio.github.io/bslib/reference/bs_theme.html)

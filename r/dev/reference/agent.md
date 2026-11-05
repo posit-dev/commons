@@ -192,8 +192,31 @@ Depending on its semantic layer, context layer, data sources, and
 - `run_r` executes R code to analyze results and render plots in the
   agent's R session.
 
-With `mode = "trusted only"`, the agent never receives `run_sql` or
-`run_r`.
+- `edit_artifact` edits a document the agent wrote.
+
+With `mode = "trusted only"`, the agent never receives `run_sql`,
+`run_r`, or `edit_artifact`.
+
+## Documents
+
+When a user asks for a report, the agent writes a Quarto document
+instead of a chat reply. In
+[`commons_server()`](https://posit-dev.github.io/commons/r/dev/reference/commons_server.md),
+the document streams into the chat's drawer as it's written, with each R
+cell knitted as soon as it arrives; outside Shiny, `agent$chat()` knits
+it and reports where it wrote the result.
+
+A document gets its data by calling the
+[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+object's `$measure()`, `$metrics()`, `$calculation()`, and `$run_sql()`
+methods in its code. The code runs in a fresh sandboxed R session, with
+the same restrictions as `run_r`, where `commons` is a stand-in that
+asks the app to run each call and returns the result; the data sources
+never enter the sandbox. The saved source keeps its `commons$` calls, so
+it renders wherever a `commons` object is defined. Quarto isn't needed
+to show documents, only to render the saved source elsewhere. A
+trusted-only agent doesn't write documents, since their code is the
+agent's own.
 
 These model-facing tools should be considered private. Their
 constructors are intentionally not exported, and their names, arguments,

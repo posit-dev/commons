@@ -62,6 +62,15 @@
   R, and it tells the user when no trusted calculation answers a
   question. These answers carry no provenance markers.
 
+- Agents write reports as Quarto documents. In
+  [`commons_server()`](https://posit-dev.github.io/commons/r/dev/reference/commons_server.md),
+  a document streams into the chat’s drawer as the agent writes it, with
+  each R cell knitted in a sandboxed R session as soon as it arrives.
+  Documents get their data by calling
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  methods in their code, and the agent revises them with a new
+  `edit_artifact` tool.
+
 - `describe_table` reports complete table schemas and documentation
   without a sampled-row summary. DuckDB descriptions use database-native
   types. Snowflake and Databricks continue to use native metadata, while

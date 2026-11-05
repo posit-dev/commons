@@ -91,7 +91,12 @@ forwarded to <code><a href="https://posit-dev.github.io/shinychat/r/reference/pa
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p><code>commons_theme()</code> bundles the commons chat CSS and JavaScript into an
+    <p>Documents the agent writes open in the chat's drawer, which
+<code><a href="https://posit-dev.github.io/shinychat/r/reference/page_chat.html" class="external-link">shinychat::page_chat()</a></code> and <code><a href="https://posit-dev.github.io/shinychat/r/reference/chat_ui.html" class="external-link">shinychat::chat_ui()</a></code> enable by default. An app
+that passes <code>drawer = FALSE</code> gets no documents in view, though the agent
+still writes them. Documents read best in a wider drawer than the default,
+e.g. <code>drawer = shinychat::chat_drawer(width = 640, open = FALSE)</code>.</p>
+<p><code>commons_theme()</code> bundles the commons chat CSS and JavaScript into an
 ordinary <code><a href="https://rstudio.github.io/bslib/reference/bs_theme.html" class="external-link">bslib::bs_theme()</a></code> (via <code><a href="https://posit-dev.github.io/shinychat/r/reference/page_chat_theme.html" class="external-link">shinychat::page_chat_theme()</a></code>), so it
 works anywhere a bslib theme does.</p>
     </div>
