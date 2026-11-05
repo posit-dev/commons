@@ -128,6 +128,14 @@ def test_the_provisioning_script_renders_every_fixture_table(dialect):
         assert literal in sql, literal
 
 
+def test_every_databricks_table_maps_columns_by_name():
+    # A fixture name with a space, like survey's `nick names` struct field,
+    # fails CREATE TABLE on Delta without column mapping.
+    sql = _generator().render("databricks", "catalog.schema")
+
+    assert sql.count("'delta.columnMapping.mode' = 'name'") == len(ROWS["tables"])
+
+
 @pytest.mark.parametrize("dialect", ["databricks", "snowflake"])
 def test_the_grants_cover_every_fixture_table_but_the_denied_one(dialect):
     generator = _generator()

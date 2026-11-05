@@ -202,11 +202,16 @@ def render(dialect: str, namespace: str, grantee: str | None = None) -> str:
             f"  {quote_identifier(column['name'], dialect)} {types[column['type']][dialect]}"
             for column in spec["columns"]
         )
+        # Delta rejects a space in a column or struct field name, such as
+        # survey's `nick names`, unless the table maps columns by name.
+        close = ");"
+        if dialect == "databricks":
+            close = ")\nTBLPROPERTIES ('delta.columnMapping.mode' = 'name');"
         lines += [
             f"DROP TABLE IF EXISTS {target};",
             f"CREATE TABLE {target} (",
             columns,
-            ");",
+            close,
             "",
         ]
         column_list = ", ".join(quote_identifier(c["name"], dialect) for c in spec["columns"])
