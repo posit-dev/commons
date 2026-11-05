@@ -50,7 +50,7 @@ local_warehouse_connection <- function(
   env = parent.frame()
 ) {
   backend <- match.arg(backend, c("snowflake", "databricks"))
-  require_live_warehouse(backend)
+  spec <- require_live_warehouse(backend)
   if (require_table) {
     warehouse_test_table(backend)
   }
@@ -68,14 +68,22 @@ local_warehouse_connection <- function(
     ),
     # odbc::databricks() resolves credentials from the environment: a token,
     # a client secret, or a federated OIDC token.
-    databricks = DBI::dbConnect(
+    databricks = rlang::inject(DBI::dbConnect(
       odbc::databricks(),
       workspace = Sys.getenv("DATABRICKS_HOST"),
-      httpPath = Sys.getenv("DATABRICKS_HTTP_PATH")
-    )
+      httpPath = Sys.getenv("DATABRICKS_HTTP_PATH"),
+      !!!databricks_scope_args(spec)
+    ))
   )
   withr::defer(DBI::dbDisconnect(con), envir = env)
   con
+}
+
+# The Databricks ODBC driver requests all-apis for a client secret unless told
+# otherwise, and a scoped secret refuses it.
+databricks_scope_args <- function(spec) {
+  scopes <- Sys.getenv(spec$connection$scopes$variable)
+  if (nzchar(scopes)) list(Auth_Scope = scopes) else list()
 }
 
 warehouse_test_table <- function(backend) {
