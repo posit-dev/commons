@@ -70,8 +70,8 @@ artifact_view_ui <- function(view) {
     "commons-artifact-view",
     list(
       view = view,
-      htmltools::div(class = "commons-artifact-status"),
-      htmltools::div(class = "commons-artifact-notice"),
+      htmltools::div(class = "commons-artifact-status", role = "status"),
+      htmltools::div(class = "commons-artifact-notice", role = "alert"),
       htmltools::div(class = "commons-artifact-body")
     )
   )

@@ -211,6 +211,7 @@ parent.postMessage("ready", "*");
       notice.innerHTML = a.error ? `<p>${escape(a.error)}</p>` : "";
 
       const frame = this.frame();
+      frame.title = a.title || "Document";
       if (!this.ready) return;
       const reset = this.shown.id !== a.id;
       const old = reset ? [] : this.shown.pieces;
