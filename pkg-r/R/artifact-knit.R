@@ -4,18 +4,13 @@
 # backtick does. The view is the knitted Markdown, converted to HTML a piece
 # at a time.
 #
-# The first version rendered each saved version with `quarto render` inside
-# the sandboxed worker and showed the resulting HTML. That meant a streamed
-# document showed placeholders for its code until the stream ended and then
-# waited about eight seconds for Quarto (mostly Deno and Pandoc starting up),
-# every edit paid the same cost, and Quarto's runtime needed more than the
+# `quarto render` can't show code results until the whole document has
+# arrived, takes seconds to start (Deno and Pandoc), and needs more than the
 # Linux sandbox grants (`/proc/self/exe`, a large address space, device
-# nodes). Knitting cells as they arrive removes the wait and keeps execution
-# in the same kind of worker as run_r. The cost is that the view is commons'
-# rendering of knitted Markdown rather than Quarto's HTML; the saved source is
-# still a Quarto document. This is close in spirit to Quarto 2's preview,
-# which renders in the browser and replays code outputs it executed
-# separately, and that renderer could replace this one once it's embeddable.
+# nodes). So the view is commons' rendering of knitted Markdown rather than
+# Quarto's HTML, while the saved source is still a Quarto document. Quarto 2's
+# preview, which renders in the browser and replays separately executed
+# outputs, could replace this renderer once it's embeddable.
 
 # A run executes one version of a document. Outputs are kept per code unit (a
 # cell or an inline expression, in document order), so a later version whose
