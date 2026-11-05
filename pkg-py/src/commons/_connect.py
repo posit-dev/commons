@@ -86,7 +86,7 @@ class ConnectClient:
             json=json,
             headers={"Authorization": f"Key {self.api_key}"},
         )
-        if response.is_error:
+        if not response.is_success:
             raise ConnectError(method, response.request.url, response.status_code)
         return response
 

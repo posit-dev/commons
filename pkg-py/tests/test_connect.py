@@ -191,6 +191,17 @@ def test_a_failed_request_raises_with_the_status_and_the_url() -> None:
     assert f"/content/{GUID}" in str(raised.value)
 
 
+def test_a_redirect_raises() -> None:
+    # httpx does not follow redirects by default, so a 3xx means the
+    # operation was not performed.
+    client, _ = client_recording(status=307)
+
+    with pytest.raises(ConnectError) as raised:
+        client.request("PATCH", "content", GUID, json={"otel_enabled": True})
+
+    assert raised.value.status_code == 307
+
+
 def test_a_failure_does_not_disclose_the_api_key() -> None:
     # The key is an ephemeral owner-scoped credential; a traceback that
     # reaches a log or an issue report must not carry it.
