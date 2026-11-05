@@ -91,6 +91,39 @@ artifact_run_update <- function(run, source, complete = FALSE) {
   invisible(run)
 }
 
+# Each update re-segments the whole source received so far, which takes longer
+# as a document grows and blocks the process while it runs. While a document
+# streams, an update waits at least twice as long as the last one took, so
+# updating takes at most a third of the time; closing brings it up to date.
+artifact_run_update_throttled <- function(run) {
+  if (isTRUE(run$update_scheduled)) {
+    return(invisible(run))
+  }
+  interval <- max(0.1, 2 * (run$update_cost %||% 0))
+  elapsed <- as.numeric(Sys.time() - (run$updated_at %||% 0), units = "secs")
+  if (elapsed >= interval) {
+    artifact_run_update_timed(run)
+    return(invisible(run))
+  }
+  run$update_scheduled <- TRUE
+  later::later(
+    function() {
+      run$update_scheduled <- FALSE
+      if (!isTRUE(run$closed)) artifact_run_update_timed(run)
+    },
+    interval - elapsed
+  )
+  invisible(run)
+}
+
+artifact_run_update_timed <- function(run) {
+  start <- Sys.time()
+  artifact_run_update(run, run$source)
+  run$updated_at <- Sys.time()
+  run$update_cost <- as.numeric(run$updated_at - start, units = "secs")
+  invisible(run)
+}
+
 # Resolves once every queued unit has run. The result holds each piece's HTML
 # and the errors to report to the model.
 artifact_run_finish <- function(run, source) {

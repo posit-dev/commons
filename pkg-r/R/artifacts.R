@@ -121,6 +121,28 @@ artifact_store_settled <- function(store) {
   promises::promise_all(.list = settling)
 }
 
+# Resolves when `promise` settles or the stream is stopped, whichever is
+# first. ellmer's controller has no cancel callback, so it's polled.
+unless_cancelled <- function(promise, controller, interval = 0.1) {
+  promises::promise(function(resolve, reject) {
+    done <- FALSE
+    finish <- function(...) {
+      if (!done) {
+        done <<- TRUE
+        resolve(NULL)
+      }
+    }
+    promises::then(promise, finish, finish)
+    poll <- function() {
+      if (done) {
+        return()
+      }
+      if (isTRUE(controller$cancelled)) finish() else later::later(poll, interval)
+    }
+    poll()
+  })
+}
+
 # An artifact exists from the moment its tag opens, but only counts as a
 # document once it has a version. Getting a restored document renders it.
 artifact_get <- function(store, id) {
@@ -254,10 +276,11 @@ artifact_scan_handler <- function(store) {
       delta = {
         run <- store$streams[[event$id]]
         run$source <- paste0(run$source, event$text)
-        artifact_run_update(run, run$source)
+        artifact_run_update_throttled(run)
       },
       close = {
         run <- store$streams[[event$id]]
+        run$closed <- TRUE
         rm(list = event$id, envir = store$streams)
         committed <- artifact_commit(
           store,

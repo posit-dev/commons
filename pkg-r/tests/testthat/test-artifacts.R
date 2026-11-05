@@ -848,6 +848,61 @@ test_that("a cancelled response doesn't follow up", {
   expect_identical(calls(), 1L)
 })
 
+test_that("stopping a response doesn't wait for documents to render", {
+  controller <- ellmer::stream_controller()
+  rendering <- promises::promise(function(resolve, reject) NULL)
+  later::later(function() controller$cancel(), 0.2)
+
+  start <- Sys.time()
+  wait_for_promise(unless_cancelled(rendering, controller, interval = 0.05))
+  expect_lt(as.numeric(Sys.time() - start, units = "secs"), 2)
+})
+
+test_that("a provider error mid-document stops the document's run", {
+  local_mocked_bindings(
+    chat_perform = function(...) {
+      coro::async_generator(function() {
+        yield(list(text = "<artifact id=\"doc\" title=\"Doc\">\nHalf a"))
+        stop("connection reset")
+      })()
+    },
+    stream_merge_chunks = function(provider, result, chunk) chunk,
+    stream_content_with_turns = function(provider, event, completion = NULL, turns = list()) {
+      list(ellmer::ContentText(event$text))
+    },
+    .package = "ellmer"
+  )
+  agent <- test_agent()
+  store <- agent$artifact_store()
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+
+  result <- wait_for_promise(coro::async_collect(agent$stream_async("Write it.")))
+  expect_identical(result$error, "connection reset")
+
+  expect_length(ls(store$streams), 0)
+  expect_length(ls(store$runs), 0)
+  last <- events[[length(events)]]
+  expect_identical(last$type, "error")
+  expect_identical(last$reason, "unclosed")
+})
+
+test_that("a streaming document re-segments at most once per interval", {
+  store <- new_artifact_store(resolve_input = function(method, args) NULL)
+  events <- list()
+  store$listener <- function(event) events[[length(events) + 1L]] <<- event
+  scanner <- citation_scanner(on_artifact = artifact_scan_handler(store))
+
+  scanner$feed("<artifact id=\"doc\" title=\"Doc\">\n")
+  for (i in 1:50) scanner$feed(sprintf("Paragraph %d.\n\n", i))
+  pieces <- Filter(function(event) identical(event$type, "pieces"), events)
+  expect_lt(length(pieces), 5)
+
+  scanner$feed("</artifact>")
+  wait_for_promise(artifact_store_settled(store))
+  expect_match(paste(store$artifacts$doc$html, collapse = ""), "Paragraph 50.", fixed = TRUE)
+})
+
 test_that("a hidden follow-up doesn't count as a new user message", {
   turn <- ellmer::UserTurn(list(ContentTurnReminder(text = "<system-instruction>Fix it.</system-instruction>")))
   expect_false(turn_has_user_message(turn))

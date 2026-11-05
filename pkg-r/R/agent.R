@@ -463,6 +463,9 @@ Commons <- R6::R6Class(
           corpus,
           on_artifact = on_artifact
         )
+        # If the provider stream errors mid-document, finishing the scanner
+        # fails the open document, which stops its run and clears the drawer.
+        on.exit(scanner$finish(), add = TRUE)
 
         turn_stream <- raw_stream
         followups <- 0L
@@ -489,10 +492,14 @@ Commons <- R6::R6Class(
           # Documents written in this reply are still rendering. Once they
           # finish, any errors go back to the model in a hidden turn, and the
           # same response carries its fix rather than waiting on the user.
-          if (is.null(artifact_store) || followups >= artifact_followup_limit) {
+          if (
+            is.null(artifact_store) ||
+              followups >= artifact_followup_limit ||
+              isTRUE(controller$cancelled)
+          ) {
             break
           }
-          await(artifact_store_settled(artifact_store))
+          await(unless_cancelled(artifact_store_settled(artifact_store), controller))
           if (
             length(artifact_store$reminders) == 0 ||
               isTRUE(controller$cancelled)
