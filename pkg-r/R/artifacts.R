@@ -63,7 +63,6 @@ new_artifact_store <- function(
   store$reminders <- character()
   # Renders of streamed documents, which finish after the reply that wrote them.
   store$settling <- list()
-  store$shares <- list()
   store
 }
 
@@ -76,7 +75,6 @@ artifact_store_reset <- function(store) {
   store$pending <- new.env(parent = emptyenv())
   store$reminders <- character()
   store$settling <- list()
-  store$shares <- list()
   artifact_notify(store, list(type = "reset"))
   invisible(store)
 }
@@ -156,6 +154,21 @@ artifact_get <- function(store, id) {
   }
   artifact <- store$artifacts[[id]]
   if (is.null(artifact) || length(artifact$versions) == 0) NULL else artifact
+}
+
+# Resolves once every document has rendered its latest version, rendering
+# restored ones that were never opened.
+artifact_store_rendered <- function(store) {
+  if (is.null(store)) {
+    return(promises::promise_resolve(NULL))
+  }
+  for (id in ls(store$pending)) {
+    artifact_get(store, id)
+  }
+  rendered <- lapply(ls(store$artifacts), function(id) {
+    store$artifacts[[id]]$rendered
+  })
+  promises::promise_all(.list = drop_nulls(rendered))
 }
 
 artifact_materialize <- function(store, id) {
@@ -492,6 +505,7 @@ artifact_commit <- function(store, id, title, source, run = NULL) {
   rendered <- promises::then(rendered, function(result) {
     artifact_settle(store, artifact, version, doc, run, result)
   })
+  artifact$rendered <- promises::catch(rendered, function(err) NULL)
   list(version = version, rendered = rendered)
 }
 

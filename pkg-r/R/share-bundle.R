@@ -4,7 +4,10 @@
 
 write_conversation_bundle <- function(client, dir, shared_on = Sys.Date()) {
   store <- client$artifact_store()
-  ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
+  # A trusted-only agent has no documents.
+  ids <- if (!is.null(store)) {
+    Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
+  }
   documents <- list()
   for (id in ids) {
     path <- file.path("documents", paste0(id, ".html"))

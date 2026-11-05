@@ -142,14 +142,11 @@ commons_server <- function(id, client, ...) {
     store <- client$artifact_store()
     if (!is.null(store)) {
       artifact_store_restore(store, values$commons_artifacts)
-      store$shares <- values$commons_shares %||% list()
     }
   })
   if (!is.null(client$artifact_store())) {
     chat$history$on_save(function(values) {
-      store <- client$artifact_store()
-      values$commons_artifacts <- artifact_store_values(store)
-      values$commons_shares <- store$shares
+      values$commons_artifacts <- artifact_store_values(client$artifact_store())
       values
     })
   }

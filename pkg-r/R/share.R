@@ -48,6 +48,7 @@ share_server <- function(id, client, chat, session) {
   document_input <- paste0(id, "_artifact_share")
   confirm_input <- paste0(id, "_share_confirm")
   target <- NULL
+  receipts <- share_receipts(chat)
 
   session$output[[paste0(id, "_share")]] <- shiny::renderUI(
     bslib::toolbar_input_button(
@@ -57,23 +58,30 @@ share_server <- function(id, client, chat, session) {
     )
   )
 
-  task <- shiny::ExtendedTask$new(function(target, archive) {
-    connect_share(
-      token,
-      audience,
-      archive,
-      target$title,
-      guid = target$receipt$guid,
-      on_created = function(content) {
-        store$shares[[target$key]] <- share_receipt(content)
-      }
-    )
+  task <- shiny::ExtendedTask$new(function(target) {
+    ready <- if (identical(target$kind, "conversation")) {
+      artifact_store_rendered(store)
+    } else {
+      promises::promise_resolve(NULL)
+    }
+    promises::then(ready, function(...) {
+      connect_share(
+        token,
+        audience,
+        share_archive(client, target),
+        target$title,
+        guid = target$receipt$guid,
+        on_created = function(content) receipts$remember(target, content)
+      )
+    })
   })
 
   offer <- function(new_target) {
     if (task$status() == "running") {
       return(share_modal("Sharing", "A copy is still being published."))
     }
+    new_target$conversation <- receipts$conversation_id()
+    new_target$receipt <- receipts$get(new_target$key)
     target <<- new_target
     shiny::showModal(share_confirm_modal(target, session$ns(confirm_input)))
   }
@@ -91,27 +99,19 @@ share_server <- function(id, client, chat, session) {
   shiny::observeEvent(session$input[[document_input]], {
     artifact <- artifact_get(store, session$input[[document_input]]$artifact)
     if (!is.null(artifact) && identical(artifact$status, "ready")) {
-      offer(share_document_target(store, artifact))
+      offer(share_document_target(artifact))
     }
   })
 
   shiny::observeEvent(session$input[[confirm_input]], {
-    dir <- tempfile("commons-share-")
-    dir.create(dir)
-    if (identical(target$kind, "conversation")) {
-      write_conversation_bundle(client, dir)
-    } else {
-      write_document_bundle(artifact_get(store, target$id), dir)
-    }
-    task$invoke(target, bundle_archive(dir))
+    task$invoke(target)
     share_modal(target$heading, "Publishing to Posit Connect\u2026")
   })
 
   shiny::observeEvent(task$status(), {
     status <- task$status()
     if (status == "success") {
-      receipt <- share_receipt(task$result())
-      store$shares[[target$key]] <- receipt
+      receipt <- receipts$remember(target, task$result())
       # The receipt is saved with the conversation, which otherwise saves only
       # when an answer finishes.
       tryCatch(chat$history$save(), error = function(err) NULL)
@@ -128,27 +128,71 @@ share_server <- function(id, client, chat, session) {
   session$ns(document_input)
 }
 
+# Receipts belong to the conversation rather than its turns, so editing a
+# message or switching branches keeps them and a new chat drops them.
+share_receipts <- function(chat) {
+  saved <- list()
+  chat$history$on_restore(function(values) {
+    saved <<- values$commons_shares %||% list()
+  })
+  chat$history$on_save(function(values) {
+    values$commons_shares <- saved
+    values
+  })
+  shiny::observeEvent(
+    chat$history$conversation_id(),
+    {
+      if (is.null(chat$history$conversation_id())) {
+        saved <<- list()
+      }
+    },
+    ignoreNULL = FALSE,
+    ignoreInit = TRUE
+  )
+  conversation_id <- function() shiny::isolate(chat$history$conversation_id())
+  list(
+    conversation_id = conversation_id,
+    get = function(key) saved[[key]],
+    # A share that finishes after the user moved to another conversation
+    # mustn't become that conversation's copy.
+    remember = function(target, content) {
+      receipt <- share_receipt(content)
+      if (identical(target$conversation, conversation_id())) {
+        saved[[target$key]] <<- receipt
+      }
+      receipt
+    }
+  )
+}
+
 share_conversation_target <- function(client) {
-  store <- client$artifact_store()
   list(
     kind = "conversation",
     key = "conversation",
     heading = "Share this conversation",
-    title = share_title(conversation_title(client$get_turns())),
-    receipt = store$shares[["conversation"]]
+    title = share_title(conversation_title(client$get_turns()))
   )
 }
 
-share_document_target <- function(store, artifact) {
-  key <- paste0("document:", artifact$id)
+share_document_target <- function(artifact) {
   list(
     kind = "document",
     id = artifact$id,
-    key = key,
+    key = paste0("document:", artifact$id),
     heading = "Share this document",
-    title = share_title(artifact$title),
-    receipt = store$shares[[key]]
+    title = share_title(artifact$title)
   )
+}
+
+share_archive <- function(client, target) {
+  dir <- tempfile("commons-share-")
+  dir.create(dir)
+  if (identical(target$kind, "conversation")) {
+    write_conversation_bundle(client, dir)
+  } else {
+    write_document_bundle(artifact_get(client$artifact_store(), target$id), dir)
+  }
+  bundle_archive(dir)
 }
 
 # Connect requires a title of 3 to 1024 characters without line breaks.

@@ -86,6 +86,41 @@ test_that("a failed deploy reports why in words a viewer can act on", {
   )
 })
 
+test_that("receipts follow the conversation, not its turns", {
+  id <- shiny::reactiveVal(NULL)
+  hooks <- new.env()
+  chat <- list(history = list(
+    conversation_id = function() id(),
+    on_restore = function(fn) hooks$restore <- fn,
+    on_save = function(fn) hooks$save <- fn
+  ))
+  content <- list(guid = "g", content_url = "u", dashboard_url = "d")
+
+  shiny::testServer(
+    function(input, output, session) receipts <- share_receipts(chat),
+    {
+      id("a")
+      session$flushReact()
+      receipts$remember(list(key = "conversation", conversation = "a"), content)
+      values <- hooks$save(list())
+      expect_identical(values$commons_shares$conversation$guid, "g")
+
+      # A share that finishes in another conversation isn't kept.
+      receipts$remember(list(key = "document:x", conversation = "b"), content)
+      expect_null(receipts$get("document:x"))
+
+      id(NULL)
+      session$flushReact()
+      expect_null(receipts$get("conversation"))
+
+      id("a")
+      hooks$restore(values)
+      session$flushReact()
+      expect_identical(receipts$get("conversation")$guid, "g")
+    }
+  )
+})
+
 test_that("shared copies get titles Connect accepts", {
   expect_identical(share_title("Orders\nby region"), "Orders by region")
   expect_identical(share_title("Hi"), "Shared from commons")

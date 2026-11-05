@@ -41,6 +41,45 @@ test_that("a shared conversation shows what the user saw, without Shiny", {
   )
 })
 
+test_that("a trusted-only agent's conversation is shared without documents", {
+  agent <- test_agent(
+    semantic_layer = semantic_layer(count_measure_tool()),
+    mode = "trusted only"
+  )
+  agent$set_turns(list(
+    ellmer::UserTurn(list(ellmer::ContentText("How many orders?"))),
+    ellmer::AssistantTurn(list(ellmer::ContentText("Six.")))
+  ))
+  dir <- withr::local_tempdir()
+
+  write_conversation_bundle(agent, dir)
+
+  expect_true(file.exists(file.path(dir, "index.html")))
+  expect_false(dir.exists(file.path(dir, "documents")))
+})
+
+test_that("a restored conversation's documents are shared before they're opened", {
+  agent <- test_agent()
+  agent$set_turns(list(
+    ellmer::UserTurn(list(ellmer::ContentText("Write it."))),
+    ellmer::AssistantTurn(list(ellmer::ContentText(
+      "<artifact id=\"doc\" title=\"Doc\">\nFirst.\n</artifact>"
+    )))
+  ))
+  store <- agent$artifact_store()
+  expect_length(ls(store$artifacts), 0)
+  dir <- withr::local_tempdir()
+
+  wait_for_promise(artifact_store_rendered(store))
+  write_conversation_bundle(agent, dir)
+
+  expect_match(
+    read_utf8(file.path(dir, "documents", "doc.html")),
+    "First.",
+    fixed = TRUE
+  )
+})
+
 test_that("a shared document is its rendered page", {
   dir <- withr::local_tempdir()
   artifact <- artifact_get(shared_agent()$artifact_store(), "orders")
