@@ -423,9 +423,11 @@ def _darwin_proc_info(pid: int) -> _ProcBsdInfo | None:
 def _process_start(pid: int) -> tuple[int, int] | None:
     """The start time that identifies the process behind ``pid`` on macOS.
 
-    Read on the event loop's thread right after the spawn, before asyncio
-    can reap the worker and free its PID for reuse. None if the worker is
-    already a zombie.
+    Read on the event loop's thread right after the spawn. From Python
+    3.13, asyncio reaps the worker on that thread too, so the PID cannot
+    have been reused yet. Before 3.13, asyncio reaps on a thread of its
+    own, so a worker that exits during the spawn may already be gone.
+    None if the worker is already a zombie.
     """
     info = _darwin_proc_info(pid)
     if info is None:

@@ -359,7 +359,7 @@ async def test_a_child_ignoring_sigterm_does_not_outlive_the_close():
 
 
 @pytest.mark.skipif(
-    sys.platform != "darwin" and not hasattr(os, "waitid"), reason="needs os.waitid"
+    sys.platform != "darwin" and not hasattr(os, "waitid"), reason="needs os.waitid or the macOS process table"
 )
 async def test_a_worker_that_stops_itself_is_killed_and_reported_as_a_crash():
     async with make_worker(call_timeout=30) as worker:
