@@ -135,7 +135,7 @@
     {
       "name": "a citation inside an artifact body is part of the body",
       "why": "The body is a document, not chat prose, so nothing in it is projected.",
-      "text": "<artifact id=\"a\">\n<commons-citation>\n> q\n</commons-citation>\n</artifact>",
+      "text": "<artifact id=\"a\">\n<citation>\n> q\n</citation>\n</artifact>",
       "expected_text": "[artifact:a]",
       "events": [
         {
@@ -146,13 +146,13 @@
         {
           "type": "delta",
           "id": "a",
-          "text": "\n<commons-citation>\n> q\n</commons-citation>\n"
+          "text": "\n<citation>\n> q\n</citation>\n"
         },
         {
           "type": "close",
           "id": "a",
           "title": "a",
-          "body": "\n<commons-citation>\n> q\n</commons-citation>\n"
+          "body": "\n<citation>\n> q\n</citation>\n"
         }
       ]
     },

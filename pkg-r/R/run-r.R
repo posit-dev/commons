@@ -98,19 +98,22 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
         dims <- plot_dimensions()
         # Recreate entry points outside the model's global environment for
         # each call.
-        worker$rs$call(
-          worker_call,
-          args = list(
-            runtime = worker$runtime,
-            name = "worker_run_code",
+        with_callr_dir(
+          worker$callr_dir,
+          worker$rs$call(
+            worker_call,
             args = list(
-              code = code,
-              new_handles = new_handles,
-              plot_width = dims$width,
-              plot_height = dims$height,
-              plot_pixel_ratio = dims$pixel_ratio,
-              evaluate = evaluate::evaluate,
-              new_output_handler = evaluate::new_output_handler
+              runtime = worker$runtime,
+              name = "worker_run_code",
+              args = list(
+                code = code,
+                new_handles = new_handles,
+                plot_width = dims$width,
+                plot_height = dims$height,
+                plot_pixel_ratio = dims$pixel_ratio,
+                evaluate = evaluate::evaluate,
+                new_output_handler = evaluate::new_output_handler
+              )
             )
           )
         )
@@ -300,6 +303,8 @@ worker_ensure <- function(worker, fn_sources = character()) {
   }
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir, recursive = TRUE)
+  callr_dir <- tempfile("commons-callr-")
+  dir.create(callr_dir, recursive = TRUE)
   rs <- callr::r_session$new(
     callr::r_session_options(
       env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
@@ -308,44 +313,47 @@ worker_ensure <- function(worker, fn_sources = character()) {
   )
   # Load the worker runtime before engaging the sandbox. No user-provided code
   # runs until the sandbox is active.
-  rs$run(
-    worker_call,
-    args = list(
-      runtime = worker$runtime,
-      name = "worker_init",
-      args = list(
-        parent_tmp = tempdir(),
-        work_dir = work_dir,
-        dll_path = commons_dll_path(),
-        network = worker$network,
-        protection = worker$protection
-      )
-    )
-  )
-  if (identical(worker$protection, "guardrails")) {
-    # Build hooks in the worker so their captured functions stay worker-local.
+  with_callr_dir(callr_dir, {
     rs$run(
       worker_call,
       args = list(
         runtime = worker$runtime,
-        name = "worker_guardrails",
-        args = list(work_dir = work_dir, network = worker$network)
+        name = "worker_init",
+        args = list(
+          callr_dir = callr_dir,
+          work_dir = work_dir,
+          dll_path = commons_dll_path(),
+          network = worker$network,
+          protection = worker$protection
+        )
       )
     )
-  }
-  # Defining sources at spawn (rather than syncing per call like handles)
-  # means a respawned worker gets them again for free.
-  if (length(fn_sources)) {
-    rs$run(
-      worker_call,
-      args = list(
-        runtime = worker$runtime,
-        name = "worker_define_functions",
-        args = list(fn_sources = fn_sources)
+    if (identical(worker$protection, "guardrails")) {
+      # Build hooks in the worker so their captured functions stay worker-local.
+      rs$run(
+        worker_call,
+        args = list(
+          runtime = worker$runtime,
+          name = "worker_guardrails",
+          args = list(work_dir = work_dir, network = worker$network)
+        )
       )
-    )
-  }
+    }
+    # Defining sources at spawn (rather than syncing per call like handles)
+    # means a respawned worker gets them again for free.
+    if (length(fn_sources)) {
+      rs$run(
+        worker_call,
+        args = list(
+          runtime = worker$runtime,
+          name = "worker_define_functions",
+          args = list(fn_sources = fn_sources)
+        )
+      )
+    }
+  })
   worker$rs <- rs
+  worker$callr_dir <- callr_dir
   worker$synced <- 0L
   invisible(worker)
 }
@@ -361,6 +369,23 @@ worker_single_thread <- function(sandbox_mode) {
     auto = sandbox_capabilities()$landlock_abi < 1,
     FALSE
   )
+}
+
+# callr places each call's function and result files in CALLR_TMPDIR, read
+# when the call starts. A per-worker folder keeps the host's tempdir() out of
+# the sandbox's write roots. Session startup files, which can hold the user's
+# Renviron, still go to tempdir(), which the sandbox can't read.
+with_callr_dir <- function(dir, code) {
+  old <- Sys.getenv("CALLR_TMPDIR", unset = NA)
+  Sys.setenv(CALLR_TMPDIR = dir)
+  on.exit(
+    if (is.na(old)) {
+      Sys.unsetenv("CALLR_TMPDIR")
+    } else {
+      Sys.setenv(CALLR_TMPDIR = old)
+    }
+  )
+  code
 }
 
 commons_dll_path <- function() {

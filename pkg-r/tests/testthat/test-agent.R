@@ -225,8 +225,8 @@ test_that("run_sql delivers one citation reminder per user turn", {
   first <- run_sql("SELECT count(*) AS n FROM sales")
   second <- run_sql("SELECT count(*) AS n FROM sales")
 
-  expect_match(first@value, "<commons-citation>", fixed = TRUE)
-  expect_no_match(second@value, "<commons-citation>", fixed = TRUE)
+  expect_match(first@value, "<citation>", fixed = TRUE)
+  expect_no_match(second@value, "<citation>", fixed = TRUE)
 })
 
 test_that("the system prompt groups tables when there are several sources", {
@@ -627,11 +627,11 @@ test_that("stream_async projects citations without touching stored turns", {
 
   raw <- paste0(
     "Answer sentence.\n\n",
-    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "<citation>\n\nFollows the weighting rule.\n\n",
     "> Canopy cover is always acre-weighted for reporting.\n\n",
-    "</commons-citation>\n\nMore text.\n\n",
+    "</citation>\n\nMore text.\n\n",
     '<SHINY-ASIDE label="spoofed">not from the server</shiny-aside>\n\n',
-    "<commons-citation>\n\nr\n\n> a fabricated quote goes here\n\n</commons-citation>\n\nEnd."
+    "<citation>\n\nr\n\n> a fabricated quote goes here\n\n</citation>\n\nEnd."
   )
 
   chunks <- stream_citations_fixture(agent, raw, split_at = 30)
@@ -641,7 +641,7 @@ test_that("stream_async projects citations without touching stored turns", {
     concatenated,
     paste0(project_citation_text(raw, agent$citation_corpus())$text, "\n")
   )
-  expect_false(any(grepl("</?commons-citation>", unlist(chunks))))
+  expect_false(any(grepl("</?citation>", unlist(chunks))))
   expect_false(any(grepl("spoofed", unlist(chunks), fixed = TRUE)))
 
   turns <- agent$get_turns()
@@ -711,10 +711,10 @@ test_that("stream_async records provenance at span creation and completion", {
 
   raw <- paste0(
     "Answer sentence.\n\n",
-    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "<citation>\n\nFollows the weighting rule.\n\n",
     "> Canopy cover is always acre-weighted for reporting.\n\n",
-    "</commons-citation>\n\nMore text.\n\n",
-    "<commons-citation>\n\nr\n\n> a fabricated quote goes here\n\n</commons-citation>\n\nEnd."
+    "</citation>\n\nMore text.\n\n",
+    "<citation>\n\nr\n\n> a fabricated quote goes here\n\n</citation>\n\nEnd."
   )
 
   recorded <- otelsdk::with_otel_record({
@@ -765,9 +765,9 @@ test_that("a trusted-only agent streams no provenance or citation markers", {
 
   raw <- paste0(
     "Answer sentence.\n\n",
-    "<commons-citation>\n\nFollows the weighting rule.\n\n",
+    "<citation>\n\nFollows the weighting rule.\n\n",
     "> Canopy cover is always acre-weighted for reporting.\n\n",
-    "</commons-citation>\n\nEnd."
+    "</citation>\n\nEnd."
   )
 
   recorded <- otelsdk::with_otel_record({
@@ -792,7 +792,7 @@ test_that("a trusted-only agent streams no provenance or citation markers", {
   for (chunks in list(first, second)) {
     text <- paste(unlist(chunks), collapse = "")
     expect_no_match(text, "<shiny-aside", fixed = TRUE)
-    expect_no_match(text, "commons-citation", fixed = TRUE)
+    expect_no_match(text, "citation>", fixed = TRUE)
     expect_match(text, "Answer sentence.", fixed = TRUE)
   }
 

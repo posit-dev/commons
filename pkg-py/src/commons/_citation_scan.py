@@ -5,7 +5,7 @@ cases in ``tests/shared/citations.json``; change that fixture, not just this
 file. ``pkg-r/R/citation-scan.R`` implements the same contract for R.
 
 Reserved markup is anything the display layer treats as trusted: a
-``<commons-citation>`` block, which becomes an aside only once its quote
+``<citation>`` block, which becomes an aside only once its quote
 verifies, and a ``<shiny-aside>``, which the model must never be able to author.
 Output cannot depend on where a chunk boundary falls, so text that could still
 grow into a reserved tag is held back until the next chunk decides it.
@@ -28,8 +28,8 @@ from ._citations import (
 
 __all__ = ["CitationScanner"]
 
-CITATION_OPEN = "<commons-citation>"
-CITATION_CLOSE = "</commons-citation>"
+CITATION_OPEN = "<citation>"
+CITATION_CLOSE = "</citation>"
 # Attributes may follow, so the opening aside tag is matched without its bracket.
 ASIDE_OPEN = "<shiny-aside"
 ASIDE_CLOSE = "</shiny-aside>"

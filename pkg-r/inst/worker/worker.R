@@ -372,7 +372,7 @@ worker_guardrails <- function(work_dir, network = "none") {
 }
 
 worker_init <- function(
-  parent_tmp,
+  callr_dir,
   work_dir,
   dll_path,
   network = "none",
@@ -447,9 +447,9 @@ worker_init <- function(
   ))
   read_roots <- read_roots[dir.exists(read_roots)]
   read_roots <- unique(c(read_roots, resolve(read_roots)))
-  # callr writes its per-call result files into the parent's tempdir, so the
-  # worker must be able to write there for results to make it back.
-  write_roots <- c(parent_tmp, work_dir)
+  # callr writes each call's result file into callr_dir, so the worker must be
+  # able to write there for results to make it back.
+  write_roots <- c(callr_dir, work_dir)
   write_roots <- unique(c(write_roots, resolve(write_roots)))
   # callr reports status on fd 3 and saves stdout/stderr while a call runs.
   callr_data <- as.environment("tools:callr")[["__callr_data__"]]

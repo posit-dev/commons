@@ -74,7 +74,7 @@ test_that("the trusted-only prompt drops the fallback path and citations", {
 
   expect_match(prompt, "Answer data questions only with trusted calculations")
   expect_no_match(prompt, "## Citations", fixed = TRUE)
-  expect_no_match(prompt, "commons-citation", fixed = TRUE)
+  expect_no_match(prompt, "citation>", fixed = TRUE)
   expect_no_match(prompt, "run_sql", fixed = TRUE)
   expect_no_match(prompt, "run_r", fixed = TRUE)
 })

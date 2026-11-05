@@ -153,8 +153,8 @@ async def test_a_cited_fallback_answer_renders_its_citation_server_side(
         call("search_context", query="revenue recognition"),
         [
             ContentText(
-                text="Shipped-from region.\n\n<commons-citation>\n\n"
-                f"The policy says so.\n\n> {QUOTE}\n\n</commons-citation>"
+                text="Shipped-from region.\n\n<citation>\n\n"
+                f"The policy says so.\n\n> {QUOTE}\n\n</citation>"
             )
         ],
         **agent_layers,
@@ -169,7 +169,7 @@ async def test_a_cited_fallback_answer_renders_its_citation_server_side(
     # Without this the rest passes on an answer that reached no tool at all,
     # since an untagged answer has no marker to look for either.
     assert tool_results(built) == ["search_context"]
-    assert "<commons-citation>" not in streamed
+    assert "<citation>" not in streamed
     assert "<shiny-aside" in streamed
     assert QUOTE in streamed
     # The citation's own aside says the answer is cited, so no second marker.

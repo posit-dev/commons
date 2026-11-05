@@ -16,6 +16,8 @@ This governs behavior a user can observe, not implementation detail. Each packag
 
 When writing about provenance, use "provenance tag" for the internal A/B/C code, "provenance outcome" for the answer-level classification (`Trusted`, `Cited`, or `Untrusted`), and "provenance marker" for the visible UI element.
 
+The agents commons builds don't know what "commons" is, and neither do their end users. Keep the name out of model-facing text: prompts, skills, tool descriptions, and markup the model writes, like the `<citation>` tag. Names only developers or the browser see, like exported functions and CSS classes, are fine.
+
 `commons` supports the published table-level `definitions` field in `data-dict.yaml`. Definitions use data-dict's expression language and are compiled to the attached source's SQL dialect. commons temporarily ports the definition-specific export logic until a data-dict R package is available; see [commons #115](https://github.com/posit-dev/commons/issues/115) for the integration design.
 
 When writing tests for either package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn't available. Broadly, refrain from `expect_match()` for text that is unconditionally included in a prompt or tool description, and `expect_no_match()` for text that has no feasible path to end up in the prompt or tool descriptions.

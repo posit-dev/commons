@@ -6,9 +6,9 @@ corpus <- list(list(
   text = "Canopy cover is always acre-weighted for reporting."
 ))
 citation <- paste0(
-  "<commons-citation>\n\nSupports the weighting rule.\n\n",
+  "<citation>\n\nSupports the weighting rule.\n\n",
   "> Canopy cover is always acre-weighted for reporting.\n\n",
-  "</commons-citation>"
+  "</citation>"
 )
 code <- commons:::project_citation_text(
   paste0("```r\n1 + 1\n```\n\n", citation),
