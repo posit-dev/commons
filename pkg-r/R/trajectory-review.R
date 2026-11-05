@@ -255,7 +255,9 @@ trajectory_messages <- function(turns) {
 
 trajectory_exchange_messages <- function(turns, exchange) {
   chat <- new_trajectory_chat()
-  chat$set_turns(turns)
+  # Dropping a hidden follow-up turn lets the replies around it merge into one
+  # message, as they streamed.
+  chat$set_turns(Filter(Negate(is_internal_turn), turns))
   messages <- shinychat::contents_shinychat(chat)
   for (i in seq_along(messages)) {
     messages[[i]]$exchange <- as.integer(exchange)
@@ -328,13 +330,21 @@ sanitize_trajectory_contents <- function(contents) {
   contents
 }
 
+# Matched by text, since a recorded trajectory doesn't keep the content's class.
+# `<reminder>` is what trajectories recorded before the rename used.
 is_internal_turn_reminder <- function(content) {
   S7::S7_inherits(content, ellmer::ContentText) &&
-    content@text %in%
-      c(
-        claude_5_turn_reminder,
-        restored_conversation_turn_reminder
-      )
+    grepl(
+      "(?s)^<(system-instruction|reminder)>.*</\\1>$",
+      content@text,
+      perl = TRUE
+    )
+}
+
+# A sanitized trajectory has already emptied a hidden turn of its contents.
+is_internal_turn <- function(turn) {
+  identical(turn@role, "user") &&
+    all(vapply(turn@contents, is_internal_turn_reminder, logical(1)))
 }
 
 new_trajectory_chat <- function() {

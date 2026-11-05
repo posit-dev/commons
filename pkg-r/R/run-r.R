@@ -31,6 +31,7 @@ tool_run_r <- function(private) {
       "Run R code in your sandboxed R session to analyze results or render plots.",
       "R code and textual output are visible only to you; rendered plots are",
       "also shown to the user.",
+      "Prefer ggplot2 for visualizing data.",
       "The user cannot access or interact with this session. Never direct them",
       "to run code or inspect its variables or files; perform follow-up analysis",
       "yourself and report the result in your response.",
@@ -97,19 +98,22 @@ run_r_tool <- function(worker, handles, code, fn_sources = character()) {
         dims <- plot_dimensions()
         # Recreate entry points outside the model's global environment for
         # each call.
-        worker$rs$call(
-          worker_call,
-          args = list(
-            runtime = worker$runtime,
-            name = "worker_run_code",
+        with_callr_dir(
+          worker$callr_dir,
+          worker$rs$call(
+            worker_call,
             args = list(
-              code = code,
-              new_handles = new_handles,
-              plot_width = dims$width,
-              plot_height = dims$height,
-              plot_pixel_ratio = dims$pixel_ratio,
-              evaluate = evaluate::evaluate,
-              new_output_handler = evaluate::new_output_handler
+              runtime = worker$runtime,
+              name = "worker_run_code",
+              args = list(
+                code = code,
+                new_handles = new_handles,
+                plot_width = dims$width,
+                plot_height = dims$height,
+                plot_pixel_ratio = dims$pixel_ratio,
+                evaluate = evaluate::evaluate,
+                new_output_handler = evaluate::new_output_handler
+              )
             )
           )
         )
@@ -226,7 +230,7 @@ run_r_html <- function(code, segments) {
       dims <- plot_dimensions()
       plot_html <- c(plot_html, sprintf(
         paste0(
-          "<img class=\"commons-run-r-plot\" src=\"data:image/png;base64,%s\" ",
+          "<img class=\"commons-run-plot\" src=\"data:image/png;base64,%s\" ",
           "alt=\"Plot produced by R code\" width=\"%d\" height=\"%d\"/>"
         ),
         plot_image_data(seg$path),
@@ -241,18 +245,18 @@ run_r_html <- function(code, segments) {
     }
   }
   code_html <- sprintf(
-    "<pre class=\"commons-run-r-code\"><code class=\"language-r\">%s</code></pre>",
+    "<pre class=\"commons-run-code\"><code class=\"language-r\">%s</code></pre>",
     highlight_r_html(paste(c(code, output), collapse = "\n"))
   )
   if (length(plot_html)) {
     code_html <- paste0(
-      "<details class=\"commons-run-r-details\"><summary>Details</summary>",
+      "<details class=\"commons-run-details\"><summary>Details</summary>",
       code_html,
       "</details>"
     )
   }
   sprintf(
-    "<div class=\"commons-run-r-display\">%s</div>",
+    "<div class=\"commons-run-display\">%s</div>",
     paste(c(code_html, plot_html), collapse = "\n")
   )
 }
@@ -278,6 +282,7 @@ new_r_worker <- function(network = "none", protection = "sandbox") {
   worker$rs <- NULL
   worker$synced <- 0L
   worker$tail <- NULL
+  worker$cancel_await <- NULL
   worker$pending <- 0L
   worker$reap <- NULL
   worker$last_used <- Sys.time()
@@ -298,6 +303,8 @@ worker_ensure <- function(worker, fn_sources = character()) {
   }
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir, recursive = TRUE)
+  callr_dir <- tempfile("commons-callr-")
+  dir.create(callr_dir, recursive = TRUE)
   rs <- callr::r_session$new(
     callr::r_session_options(
       env = worker_scrubbed_env(work_dir, worker_single_thread("auto"))
@@ -306,44 +313,48 @@ worker_ensure <- function(worker, fn_sources = character()) {
   )
   # Load the worker runtime before engaging the sandbox. No user-provided code
   # runs until the sandbox is active.
-  rs$run(
-    worker_call,
-    args = list(
-      runtime = worker$runtime,
-      name = "worker_init",
-      args = list(
-        parent_tmp = tempdir(),
-        work_dir = work_dir,
-        dll_path = commons_dll_path(),
-        network = worker$network,
-        protection = worker$protection
-      )
-    )
-  )
-  if (identical(worker$protection, "guardrails")) {
-    # Build hooks in the worker so their captured functions stay worker-local.
+  with_callr_dir(callr_dir, {
     rs$run(
       worker_call,
       args = list(
         runtime = worker$runtime,
-        name = "worker_guardrails",
-        args = list(work_dir = work_dir, network = worker$network)
+        name = "worker_init",
+        args = list(
+          callr_dir = callr_dir,
+          work_dir = work_dir,
+          dll_path = commons_dll_path(),
+          network = worker$network,
+          protection = worker$protection
+        )
       )
     )
-  }
-  # Defining sources at spawn (rather than syncing per call like handles)
-  # means a respawned worker gets them again for free.
-  if (length(fn_sources)) {
-    rs$run(
-      worker_call,
-      args = list(
-        runtime = worker$runtime,
-        name = "worker_define_functions",
-        args = list(fn_sources = fn_sources)
+    if (identical(worker$protection, "guardrails")) {
+      # Build hooks in the worker so their captured functions stay worker-local.
+      rs$run(
+        worker_call,
+        args = list(
+          runtime = worker$runtime,
+          name = "worker_guardrails",
+          args = list(work_dir = work_dir, network = worker$network)
+        )
       )
-    )
-  }
+    }
+    # Defining sources at spawn (rather than syncing per call like handles)
+    # means a respawned worker gets them again for free.
+    if (length(fn_sources)) {
+      rs$run(
+        worker_call,
+        args = list(
+          runtime = worker$runtime,
+          name = "worker_define_functions",
+          args = list(fn_sources = fn_sources)
+        )
+      )
+    }
+  })
   worker$rs <- rs
+  worker$callr_dir <- callr_dir
+  worker$work_dir <- work_dir
   worker$synced <- 0L
   invisible(worker)
 }
@@ -361,6 +372,23 @@ worker_single_thread <- function(sandbox_mode) {
   )
 }
 
+# callr places each call's function and result files in CALLR_TMPDIR, read
+# when the call starts. A per-worker folder keeps the host's tempdir() out of
+# the sandbox's write roots. Session startup files, which can hold the user's
+# Renviron, still go to tempdir(), which the sandbox can't read.
+with_callr_dir <- function(dir, code) {
+  old <- Sys.getenv("CALLR_TMPDIR", unset = NA)
+  Sys.setenv(CALLR_TMPDIR = dir)
+  on.exit(
+    if (is.na(old)) {
+      Sys.unsetenv("CALLR_TMPDIR")
+    } else {
+      Sys.setenv(CALLR_TMPDIR = old)
+    }
+  )
+  code
+}
+
 commons_dll_path <- function() {
   dll <- getLoadedDLLs()[["commons"]]
   if (is.null(dll)) {
@@ -371,12 +399,26 @@ commons_dll_path <- function() {
 
 worker_close <- function(worker) {
   cancel_worker_reap(worker)
+  if (!is.null(worker$cancel_await)) {
+    worker$cancel_await()
+  }
   if (!is.null(worker$rs)) {
-    try(worker$rs$close(), silent = TRUE)
+    close_worker_session(worker$rs)
     worker$rs <- NULL
     worker$synced <- 0L
   }
   invisible(worker)
+}
+
+# callr kills the worker's process group only if the worker is still running
+# when close() gives up waiting, so a worker that exits on its own, or has
+# crashed, leaves the programs it started running. The worker leads its own
+# group, and the sandbox keeps everything it starts in that group.
+close_worker_session <- function(rs) {
+  pid <- tryCatch(rs$get_pid(), error = function(e) NA_integer_)
+  try(rs$close(), silent = TRUE)
+  .Call(c_kill_group, pid)
+  invisible()
 }
 
 # The content environment holds credentials (API keys, session tokens,
@@ -425,13 +467,21 @@ worker_call <- function(runtime, name, args) {
   base::do.call(entry_point, args)
 }
 
+# Seconds: how long a call may run, how long an interrupted call gets to
+# answer before the worker is restarted, and how long an idle worker lives.
+worker_defaults <- list(
+  call_timeout = 60,
+  interrupt_grace = 5,
+  idle_timeout = 600
+)
+
 # Close the worker after a quiet stretch; it respawns lazily on the next
 # call. One timer per worker, not one per call: shiny::testServer() reads its
 # outputs through shiny:::wait_for_it(), which spins until the whole later
 # queue drains, so a stray timer stalls the reader for its full delay.
 schedule_worker_reap <- function(
   worker,
-  idle = getOption("commons.run_r_idle_timeout", 600)
+  idle = getOption("commons.run_r_idle_timeout", worker_defaults$idle_timeout)
 ) {
   worker$last_used <- Sys.time()
   cancel_worker_reap(worker)
@@ -459,9 +509,12 @@ cancel_worker_reap <- function(worker) {
 # watches the session's poll connection, the same mechanism ellmer itself
 # uses for async HTTP. A wall-clock timeout interrupts the computation, and
 # an unresponsive or crashed worker is killed (it respawns on the next call).
+# `on_message` receives the conditions the call signals to the host, such as a
+# document's requests to its commons, while the call runs.
 worker_await <- function(
   worker,
-  timeout = getOption("commons.run_r_timeout", 60)
+  timeout = getOption("commons.run_r_timeout", worker_defaults$call_timeout),
+  on_message = NULL
 ) {
   rs <- worker$rs
   promises::promise(function(resolve, reject) {
@@ -474,6 +527,7 @@ worker_await <- function(
     # waits on later::loop_empty() is not held up by a timer for a call that
     # already finished. Calling one after its callback ran is a safe no-op.
     release <- function() {
+      worker$cancel_await <- NULL
       for (cancel in list(cancel_timeout, cancel_kill, cancel_watch)) {
         if (!is.null(cancel)) {
           cancel()
@@ -489,7 +543,7 @@ worker_await <- function(
       }
     }
     kill_worker <- function(reason) {
-      try(rs$close(), silent = TRUE)
+      close_worker_session(rs)
       if (identical(worker$rs, rs)) {
         worker$rs <- NULL
         worker$synced <- 0L
@@ -513,7 +567,7 @@ worker_await <- function(
               ))
             }
           },
-          delay = 5
+          delay = worker_defaults$interrupt_grace
         )
       },
       delay = timeout
@@ -540,6 +594,12 @@ worker_await <- function(
             } else {
               settle(msg$result)
             }
+          } else if (msg$code == 301 && !is.null(on_message)) {
+            tryCatch(
+              on_message(msg$message),
+              error = function(err) cli::cli_warn(conditionMessage(err))
+            )
+            cancel_watch <<- poll()
           } else if (msg$code >= 500) {
             kill_worker(
               "the R session crashed and was restarted. Session variables were reset."
@@ -552,5 +612,8 @@ worker_await <- function(
       )
     }
     cancel_watch <- poll()
+    worker$cancel_await <- function() {
+      settle(list(failure = "the R session was closed before the code finished."))
+    }
   })
 }

@@ -37,3 +37,14 @@ def test_landlock_scopes_abstract_sockets_from_the_fixture_abi() -> None:
     assert scope["flag"] == "LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET"
     assert _landlock.SCOPE_MIN_ABI == scope["min_abi"]
     assert _landlock.SCOPE_ABSTRACT_UNIX_SOCKET == 1 << 0
+
+
+def test_landlock_handles_pathname_sockets_from_the_fixture_abi() -> None:
+    fixture = load_shared_fixture("sandbox-abstract-ipc")
+    spec = fixture["landlock_pathname_unix_right"]
+    assert spec["right"] == "LANDLOCK_ACCESS_FS_RESOLVE_UNIX"
+    right = _landlock.FS_RESOLVE_UNIX
+    assert right == 1 << spec["bit"]
+    assert _landlock.handled_access(spec["min_abi"] - 1) & right == 0
+    assert _landlock.handled_access(spec["min_abi"]) & right == right
+    assert bool(_landlock.FS_READ_ONLY & right) == spec["granted_to_read_roots"]

@@ -46,7 +46,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 ## Workflow
 
 1. **Orient to commons.** Before scaffolding, identify the installed commons version and locate the corresponding package source when available. Read the relevant commons documentation and skill references, then inspect the implementation, examples, and tests for the APIs the agent will use. At minimum, examine:
-   - `commons()`, `data_source()`, `semantic_layer()`, and `context_layer()`;
+   - `agent()`, `commons()`, `data_source()`, `semantic_layer()`, and `context_layer()`;
    - `commons_theme()` and `commons_server()`, including per-session construction;
    - measure loading and data-dictionary behavior; and
    - dependency and deployment expectations for a commons app.
@@ -106,7 +106,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
 9. **Revisit the assembled design.** Review the dictionaries, measures, governed definitions, and free-text context together against the confirmed scope, intended questions, source mapping, and data flow. Check for contradictions, duplication, unsupported claims, missing provenance, and information stored in the wrong layer. Reconsider the dictionary, semantic layer, and context layer design now that the extracted artifacts are visible. Treat consequential changes as decision points, and update the agent instruction file only when they change its durable guidance.
 
-10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend enabling thinking in the ellmer chat passed to `commons()`.
+10. **Complete the agent.** Fill in `DESCRIPTION`, `agent.R`, and `app.R`. Ensure each Shiny session receives a fresh agent, as required by `commons_server()`. Construct it directly inside the server function or call reusable construction code from `agent.R`; do not pass one global agent object to every session. Ask the user which model provider the agent should use, and recommend enabling thinking in the ellmer chat passed to `agent()`. If the agent should answer only from trusted calculations and never write its own SQL or R, pass `mode = "trusted only"`.
 
    A commons chat app must list `bsicons`, `htmltools`, `shiny`, and `shinychat` in `DESCRIPTION` under `Imports`. List any other packages the app calls directly rather than relying on transitive dependencies or `requireNamespace()` calls in `deploy.R` to make rsconnect discover them.
 
@@ -166,7 +166,7 @@ Reconcile new evidence with earlier assumptions and decisions as it appears. Sur
 
    Adapt `build_agent()` and the rest of `app_files` to the project. The cache must be built before `app_files` is collected, and explicit file lists must include `commons-cache/`. Git-ignore the generated directory, but do not use `app_cache/`: rsconnect excludes that directory from bundles. Keep this deployment-only agent separate from the fresh agent constructed for each Shiny session.
 
-   When the agent uses `commons(log = TRUE)`, keep
+   When the agent uses `agent(log = TRUE)`, keep
    `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true` in the local
    deployment environment and include its name in `deployApp(envVars = ...)`,
    as above. This passes the value to the deployed content; setting it locally

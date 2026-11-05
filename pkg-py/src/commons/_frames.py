@@ -22,9 +22,7 @@ def is_frame(value: Any) -> bool:
 
 
 # The handle store's own description of a frame, for whichever frame library
-# the result came from. Not the one `describe_table` shows: that summary is a
-# cross-language contract and lives in `_sample_summary`, over rows rather
-# than over a frame.
+# the result came from.
 MAX_SUMMARY_COLUMNS = 50
 
 

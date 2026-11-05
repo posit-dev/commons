@@ -168,7 +168,7 @@ test_that("catalog descriptions hydrate columns only once", {
   described <- 0L
   schema <- data.frame(column = "order_id", type = "VARCHAR")
   local_mocked_bindings(
-    databricks_describe_relation = function(...) {
+    duckdb_describe_relation = function(...) {
       described <<- described + 1L
       schema
     }

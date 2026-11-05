@@ -336,9 +336,24 @@ def test_the_result_is_reachable_as_a_handle(source: DataSource) -> None:
     registry = Registry([record("net_revenue")])
     handles = HandleStore()
 
-    call_metrics(registry, source, "sales_db", handles, metrics=["net_revenue"])
+    call_metrics(
+        registry,
+        source,
+        "sales_db",
+        handles,
+        metrics=["net_revenue"],
+        dimensions=["region"],
+    )
 
     assert handles.ids() == ["r1"]
+    # A frame rather than the source's row mappings, so it reaches run_python
+    # with its column types.
+    stored = handles.get("r1")
+    assert isinstance(stored, pd.DataFrame)
+    assert dict(zip(stored["region"], stored["net_revenue"])) == {
+        "EMEA": 800.0,
+        "Americas": 900.0,
+    }
 
 
 def test_no_metric_at_all_is_refused(source: DataSource) -> None:

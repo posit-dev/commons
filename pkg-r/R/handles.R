@@ -1,9 +1,8 @@
 # Conversation-scoped store of tool results, so later `run_r` calls can
 # reference earlier outputs as plain variables (`r1`, `r2`, ...).
 
-new_handle_store <- function(max_rows = 10000L) {
+new_handle_store <- function() {
   store <- new.env(parent = emptyenv())
-  store$max_rows <- max_rows
   store$count <- 0L
   store$values <- new.env(parent = emptyenv())
   store
@@ -13,7 +12,7 @@ new_handle_store <- function(max_rows = 10000L) {
 # it from run_r, or return NULL when there's nothing to register (no store, or
 # a NULL value). Non-tabular values (e.g. scalar measure results) are available
 # for further derivation too.
-register_handle <- function(store, value, max_rows = store$max_rows) {
+register_handle <- function(store, value, max_rows = 10000L) {
   if (is.null(store) || is.null(value)) {
     return(NULL)
   }

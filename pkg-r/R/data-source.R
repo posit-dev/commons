@@ -1,6 +1,6 @@
 #' Create a data source
 #'
-#' A data source is the set of tables available to a [commons()] agent.
+#' A data source is the set of tables gathered by [commons()].
 #'
 #' `data_source()` accepts data in several forms, picked by the class of what
 #' you pass:
@@ -13,7 +13,7 @@
 #'   in-process database: each pin in `tables` becomes a table. Pin names are
 #'   validated against the board at construction (a single listing call), but
 #'   each pin is downloaded only when its table is first used. Calling the
-#'   agent's `prewarm()` method (see [commons()]) starts a background process
+#'   agent's `prewarm()` method (see [agent()]) starts a background process
 #'   that downloads the remaining pins into the local
 #'   pins cache, so a first use typically only reads an already-downloaded
 #'   file. Since the pins cache is on disk, `prewarm()` can also run
@@ -31,12 +31,18 @@
 #'
 #'   For a connection, a character vector of table names, qualified strings
 #'   like `"schema.table"` or `"catalog.schema.table"`, or `DBI::Id` objects.
-#'   Defaults to every table returned by [DBI::dbListTables()]. Strings
+#'   Defaults to every table and view in the connection's current schema,
+#'   read from `information_schema`; the agent searches them rather than
+#'   reading a list when there are too many to list. Backends without an
+#'   `information_schema`, like SQLite, default to every table returned by
+#'   [DBI::dbListTables()]. Strings
 #'   containing dots are interpreted as qualified names, at most three parts;
-#'   use `DBI::Id(table = "a.b")` for literal table names containing dots. For Snowflake and Databricks
-#'   connections, a `DBI::Id` ending in `catalog` or `schema` selects every
-#'   table and view in that namespace. Leaving `tables` unset selects the
-#'   current schema. A Databricks `hive_metastore` selection must include a
+#'   use `DBI::Id(table = "a.b")` for literal table names containing dots. A
+#'   `DBI::Id` ending in `schema`, like `DBI::Id(schema = "marts")`, selects
+#'   every table and view in that schema, labeled `"schema.table"`; for
+#'   Snowflake and Databricks connections, one ending in `catalog` selects the
+#'   whole catalog. As with the default, the agent searches a selection too
+#'   broad to list. A Databricks `hive_metastore` selection must include a
 #'   schema. Snowflake selections import semantic views, and Databricks
 #'   selections import metric views, as native trusted metrics and dimensions.
 #'   Namespace selections read model definitions lazily. Explicitly selected
@@ -281,25 +287,71 @@ data_source_connection <- function(
   }
 
   if (is.null(tables)) {
-    listed <- DBI::dbListTables(con)
-    commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
-    return(new_data_source(con, listed, owned = FALSE, dictionary = dictionary))
+    return(data_source_current_schema(con, dictionary, span, call = call))
   }
 
-  table_registry <- normalize_table_registry(tables, call = call)
-  check_table_ids_exist(con, table_registry, call = call)
+  table_registry <- dbi_table_registry(con, tables, call = call)
   commons_span_set_attribute(
     span,
     "commons.data_source.n_tables",
     length(table_registry$labels)
   )
+  bound <- dbi_bind_dictionary(dictionary, table_registry$ids, call = call)
 
   new_data_source(
     con,
     table_registry$labels,
     owned = FALSE,
     table_ids = table_registry$ids,
-    dictionary = dictionary
+    dictionary = bound$dictionary,
+    relations = table_registry$relations,
+    definition_bindings = bound$definition_bindings,
+    namespace_selected = isTRUE(table_registry$namespace_selected)
+  )
+}
+
+# Selecting the current schema is a namespace selection, as for Snowflake and
+# Databricks, so a schema too broad to list in the prompt becomes searchable.
+data_source_current_schema <- function(
+  con,
+  dictionary,
+  span,
+  call = rlang::caller_env()
+) {
+  relations <- dbi_current_relations(con)
+  if (is.null(relations)) {
+    listed <- DBI::dbListTables(con)
+    commons_span_set_attribute(span, "commons.data_source.n_tables", length(listed))
+    relations <- lapply(listed, function(name) list(id = DBI::Id(table = name)))
+    names(relations) <- listed
+    return(new_data_source(
+      con,
+      listed,
+      owned = FALSE,
+      dictionary = dictionary,
+      relations = relations,
+      namespace_selected = TRUE
+    ))
+  }
+  if (length(relations) == 0L) {
+    cli::cli_abort(
+      c(
+        "The connection's current schema contains no tables.",
+        i = "Select tables in other schemas with {.arg tables}."
+      ),
+      call = call
+    )
+  }
+  catalog_check_object_limit(length(relations), call = call)
+  commons_span_set_attribute(span, "commons.data_source.n_tables", length(relations))
+  new_data_source(
+    con,
+    names(relations),
+    owned = FALSE,
+    table_ids = lapply(relations, `[[`, "id"),
+    dictionary = dictionary,
+    relations = relations,
+    namespace_selected = TRUE
   )
 }
 
@@ -598,10 +650,13 @@ pending_tables_in_error <- function(source, err) {
   )]
 }
 
+# With `unselected = TRUE`, a table the data source doesn't select is still
+# described when the connection can query it, since run_sql can reach it too.
 source_describe <- function(
   source,
   table,
-  n_sample = 5,
+  n_fallback_rows = 5L,
+  unselected = FALSE,
   call = rlang::caller_env()
 ) {
   state <- data_source_state(source)
@@ -614,6 +669,9 @@ source_describe <- function(
   }
   id <- state$table_ids[[table]]
   if (is.null(id)) {
+    if (unselected) {
+      return(source_describe_unselected(source, table, n_fallback_rows, call = call))
+    }
     cli::cli_abort(c(
       "No table named {.val {table}}.",
       i = "Available tables: {.val {state$tables}}."
@@ -622,37 +680,153 @@ source_describe <- function(
   catalog_ensure_queryable(source, table, call = call)
   source_ensure_tables(source, table)
 
-  sample <- DBI::dbGetQuery(
-    state$con,
-    sprintf(
-      "SELECT * FROM %s LIMIT %d",
-      DBI::dbQuoteIdentifier(state$con, id),
-      n_sample
-    )
-  )
   relation <- source_relation(source, table)
-  if (is.null(state$relations)) {
-    schema <- data.frame(
-      column = names(sample),
-      type = vapply(sample, function(x) class(x)[[1]], character(1)),
-      row.names = NULL
-    )
-  } else if (!is.null(relation$columns)) {
-    schema <- relation$columns
-  } else if (is_snowflake_connection(state$con)) {
-    schema <- snowflake_describe_relation(state$con, id, call = call)
-  } else {
-    schema <- databricks_describe_relation(state$con, id, call = call)
-  }
+  schema <- relation$columns %||%
+    connection_describe_relation(state$con, id, n_fallback_rows, call = call)
   if (!is.null(state$manifest) && is.null(relation$columns)) {
     relation$columns <- schema
     state$manifest$relations[[table]] <- relation
   }
   list(
     schema = schema,
-    sample = sample,
     kind = relation$kind,
     description = relation$description
+  )
+}
+
+source_describe_unselected <- function(
+  source,
+  table,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  state <- data_source_state(source)
+  schema <- tryCatch(
+    {
+      id <- table_entry_id(table, call = call)
+      # Warehouse sources check access the way they do for selected tables.
+      if (!is.null(state$session)) {
+        catalog_require_queryable(state$con, id, label = table, call = call)
+      }
+      connection_describe_relation(state$con, id, n_fallback_rows, call = call)
+    },
+    error = function(err) {
+      cli::cli_abort(
+        c(
+          "No table named {.val {table}} on the connection.",
+          i = "Selected tables: {.val {state$tables}}."
+        ),
+        parent = err,
+        call = call
+      )
+    }
+  )
+  list(schema = schema, kind = NULL, description = NULL, selected = FALSE)
+}
+
+connection_describe_relation <- function(
+  con,
+  id,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  if (is_snowflake_connection(con)) {
+    return(snowflake_describe_relation(con, id, call = call))
+  }
+  if (is_databricks_connection(con)) {
+    return(databricks_describe_relation(con, id, call = call))
+  }
+  if (inherits(con, "duckdb_connection")) {
+    return(duckdb_describe_relation(con, id, call = call))
+  }
+  fallback_describe_relation(con, id, n_fallback_rows, call = call)
+}
+
+# The data source's label for the table `table` names, like `sales` for
+# `main.sales`, so an alternate name still gets the table's documentation.
+# `table` itself when it is a label already or names no one table.
+source_resolve_table <- function(source, table) {
+  state <- data_source_state(source)
+  known <- c(
+    names(state$table_ids),
+    names(state$semantic_models),
+    names(state$semantic_stubs)
+  )
+  if (table %in% known) {
+    return(table)
+  }
+  id <- tryCatch(table_entry_id(table), error = function(err) NULL)
+  if (is.null(id)) {
+    return(table)
+  }
+  namespace <- state$session$namespace %||% dbi_current_namespace(state$con)
+  path <- relation_path(id, namespace)
+  matches <- names(state$table_ids)[vapply(
+    state$table_ids,
+    function(selected) identical(relation_path(selected, namespace), path),
+    logical(1)
+  )]
+  if (length(matches) == 1L) matches else table
+}
+
+# Unqualified identifiers resolve against the current namespace, and most
+# backends fold their case.
+relation_path <- function(id, namespace) {
+  components <- as.list(id@name)
+  components$schema <- components$schema %||% namespace$schema
+  components$catalog <- components$catalog %||% namespace$catalog
+  tolower(unlist(components[c("catalog", "schema", "table")], use.names = FALSE))
+}
+
+duckdb_describe_relation <- function(con, id, call = rlang::caller_env()) {
+  rows <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste("DESCRIBE", DBI::dbQuoteIdentifier(con, id))
+    ),
+    error = function(err) {
+      cli::cli_abort(
+        "Failed to describe the selected DuckDB relation.",
+        parent = err,
+        call = call
+      )
+    }
+  )
+  names(rows) <- tolower(names(rows))
+  data.frame(
+    column = rows$column_name,
+    type = rows$column_type,
+    row.names = NULL
+  )
+}
+
+fallback_describe_relation <- function(
+  con,
+  id,
+  n_fallback_rows,
+  call = rlang::caller_env()
+) {
+  sample <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      sprintf(
+        "SELECT * FROM %s LIMIT %d",
+        DBI::dbQuoteIdentifier(con, id),
+        n_fallback_rows
+      )
+    ),
+    error = function(err) {
+      cli::cli_abort(
+        "Failed to infer the selected relation's column types.",
+        parent = err,
+        call = call
+      )
+    }
+  )
+  data.frame(
+    column = names(sample),
+    type = vapply(sample, function(x) class(x)[[1]], character(1)),
+    row.names = NULL
   )
 }
 

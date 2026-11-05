@@ -14,12 +14,12 @@ A \code{commons_context_layer} R6 object. Its internals are private and
 may change without notice.
 }
 \description{
-A context layer contains text that helps a \code{\link[=commons]{commons()}} agent interpret its
+A context layer contains text that helps a commons agent interpret its
 data source.
 }
 \details{
 Context is retrieved when relevant. Facts needed in every conversation
-belong in the \code{instructions} passed to \code{\link[=commons]{commons()}}, not here.
+belong in the \code{instructions} passed to \code{\link[=agent]{agent()}}, not here.
 }
 \examples{
 path <- tempfile(fileext = ".md")

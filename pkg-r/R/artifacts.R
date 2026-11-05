@@ -40,9 +40,8 @@ tool_edit_artifact <- function(private) {
 
 # --- the store -----------------------------------------------------------------
 
-# `resolve_input` runs one normalized trusted call and returns its result as
-# a data frame, with the SQL or provenance behind it; the store never touches
-# data sources itself.
+# `resolve_input(method, args)` answers a document's call to a `commons`
+# method; the store never touches data sources itself.
 new_artifact_store <- function(
   resolve_input,
   network = "none",
@@ -51,6 +50,10 @@ new_artifact_store <- function(
   store <- new.env(parent = emptyenv())
   store$artifacts <- new.env(parent = emptyenv())
   store$streams <- new.env(parent = emptyenv())
+  # A closed stream or an edit can still be rendering when the chat is cleared.
+  store$runs <- new.env(parent = emptyenv())
+  # Documents from a restored conversation, rendered once they're needed.
+  store$pending <- new.env(parent = emptyenv())
   store$root <- tempfile("commons-artifacts-")
   store$resolve_input <- resolve_input
   store$network <- network
@@ -58,50 +61,23 @@ new_artifact_store <- function(
   store$listener <- NULL
   store$link_input <- NULL
   store$reminders <- character()
+  # Renders of streamed documents, which finish after the reply that wrote them.
+  store$settling <- list()
   store$shares <- list()
   store
 }
 
 artifact_store_reset <- function(store) {
-  for (id in ls(store$streams)) {
-    artifact_run_cancel(store$streams[[id]])
+  for (key in ls(store$runs)) {
+    artifact_run_cancel(store$runs[[key]])
   }
   store$artifacts <- new.env(parent = emptyenv())
   store$streams <- new.env(parent = emptyenv())
+  store$pending <- new.env(parent = emptyenv())
   store$reminders <- character()
+  store$settling <- list()
   store$shares <- list()
   artifact_notify(store, list(type = "reset"))
-  invisible(store)
-}
-
-# Saved with the conversation so its documents open again after a restore.
-# Only the latest rendering is kept; older version chips open it, as they do
-# live.
-artifact_store_snapshot <- function(store) {
-  ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
-  lapply(ids, function(id) {
-    artifact <- store$artifacts[[id]]
-    list(
-      id = id,
-      title = artifact$title,
-      sources = lapply(artifact$versions, `[[`, "source"),
-      html = as.list(artifact$html),
-      errors = as.list(artifact$errors)
-    )
-  })
-}
-
-artifact_store_restore <- function(store, documents) {
-  for (document in documents) {
-    artifact <- artifact_ensure(store, document$id)
-    artifact$title <- document$title
-    artifact$versions <- lapply(document$sources, function(source) {
-      list(source = source, dir = NULL)
-    })
-    artifact$html <- as.character(unlist(document$html))
-    artifact$errors <- as.character(unlist(document$errors))
-    artifact$status <- "ready"
-  }
   invisible(store)
 }
 
@@ -121,25 +97,211 @@ artifact_remind <- function(store, text) {
 }
 
 take_artifact_reminders <- function(store) {
+  if (is.null(store)) {
+    return(list())
+  }
   reminders <- store$reminders
   store$reminders <- character()
   lapply(
     reminders,
     function(text) {
-      ContentTurnReminder(text = paste0("<reminder>", text, "</reminder>"))
+      ContentTurnReminder(
+        text = paste0("<system-instruction>", text, "</system-instruction>")
+      )
     }
   )
 }
 
-# An artifact exists from the moment its tag opens, so a streaming run can
-# cache its trusted results, but only counts as a document once it has a
-# version.
+# How many hidden turns one response may spend fixing its documents.
+artifact_followup_limit <- 2L
+
+# Resolves once every streamed document closed since the last call has
+# rendered, so the reminders its errors leave are in place.
+artifact_store_settled <- function(store) {
+  settling <- store$settling
+  store$settling <- list()
+  promises::promise_all(.list = settling)
+}
+
+# Resolves when `promise` settles or the stream is stopped, whichever is
+# first. ellmer's controller has no cancel callback, so it's polled.
+unless_cancelled <- function(promise, controller, interval = 0.1) {
+  promises::promise(function(resolve, reject) {
+    done <- FALSE
+    finish <- function(...) {
+      if (!done) {
+        done <<- TRUE
+        resolve(NULL)
+      }
+    }
+    promises::then(promise, finish, finish)
+    poll <- function() {
+      if (done) {
+        return()
+      }
+      if (isTRUE(controller$cancelled)) finish() else later::later(poll, interval)
+    }
+    poll()
+  })
+}
+
+# An artifact exists from the moment its tag opens, but only counts as a
+# document once it has a version. Getting a restored document renders it.
 artifact_get <- function(store, id) {
   if (!rlang::is_string(id)) {
     return(NULL)
   }
+  if (is.null(store$artifacts[[id]]) && !is.null(store$pending[[id]])) {
+    artifact_materialize(store, id)
+  }
   artifact <- store$artifacts[[id]]
   if (is.null(artifact) || length(artifact$versions) == 0) NULL else artifact
+}
+
+artifact_materialize <- function(store, id) {
+  artifact <- artifact_ensure(store, id)
+  n <- length(artifact$versions)
+  latest <- artifact$versions[[n]]$source
+  artifact$versions <- artifact$versions[-n]
+  artifact_commit(store, id, artifact$title, latest)
+  invisible(artifact)
+}
+
+# What a saved conversation keeps of its documents: each one's title and the
+# source of every version, enough to render it again after a restore.
+artifact_store_values <- function(store) {
+  saved <- lapply(rlang::set_names(ls(store$artifacts)), function(id) {
+    artifact <- store$artifacts[[id]]
+    if (length(artifact$versions) == 0) {
+      return(NULL)
+    }
+    list(
+      title = artifact$title,
+      sources = lapply(artifact$versions, `[[`, "source")
+    )
+  })
+  pending <- as.list(store$pending)
+  c(drop_nulls(saved), pending[setdiff(names(pending), names(saved))])
+}
+
+# A separate store holding the same documents, rendered again once needed.
+artifact_store_fork <- function(store) {
+  fork <- new_artifact_store(
+    store$resolve_input,
+    network = store$network,
+    protection = store$protection
+  )
+  artifact_store_restore(fork, artifact_store_values(store))
+  fork
+}
+
+artifact_store_restore <- function(store, values) {
+  for (id in names(values)) {
+    entry <- values[[id]]
+    sources <- as.character(unlist(entry$sources))
+    if (
+      !rlang::is_string(id) ||
+        !rlang::is_string(entry$title) ||
+        length(sources) == 0 ||
+        !is.null(store$artifacts[[id]]) ||
+        !is.null(store$pending[[id]])
+    ) {
+      next
+    }
+    assign(
+      id,
+      list(title = entry$title, sources = as.list(sources)),
+      envir = store$pending
+    )
+  }
+  invisible(store)
+}
+
+# The documents `turns` wrote, in the form artifact_store_values() returns:
+# each tag, and each edit whose result says it was saved, replayed in order
+# without rendering. A tag is validated as artifact_commit() does, so a
+# rejected one adds no version here either.
+artifact_turns_values <- function(turns) {
+  values <- list()
+  add_version <- function(id, title, source) {
+    doc <- tryCatch(
+      parse_artifact_document(source),
+      commons_artifact_invalid = function(cnd) NULL
+    )
+    if (!is.null(doc)) {
+      values[[id]] <<- list(
+        title = doc$frontmatter$title %||% title,
+        sources = c(values[[id]]$sources, list(source))
+      )
+    }
+  }
+  on_artifact <- function(event) {
+    if (identical(event$type, "close")) {
+      add_version(event$id, event$title, event$body)
+    }
+    NULL
+  }
+  for (turn in turns) {
+    if (S7::S7_inherits(turn, ellmer::AssistantTurn)) {
+      scanner <- citation_scanner(on_artifact = on_artifact)
+      scanner$feed(turn_text(turn))
+      scanner$finish()
+      next
+    }
+    for (content in turn@contents) {
+      edit <- artifact_saved_edit(content)
+      entry <- if (!is.null(edit)) values[[edit$id]]
+      if (is.null(entry)) {
+        next
+      }
+      source <- tryCatch(
+        apply_artifact_edit(
+          entry$sources[[length(entry$sources)]],
+          edit$old_string,
+          edit$new_string,
+          isTRUE(edit$replace_all)
+        ),
+        error = function(err) NULL
+      )
+      if (!is.null(source)) {
+        add_version(edit$id, entry$title, source)
+      }
+    }
+  }
+  values
+}
+
+# The arguments of an edit_artifact call whose result says it saved a version.
+artifact_saved_edit <- function(content) {
+  if (
+    !S7::S7_inherits(content, ellmer::ContentToolResult) ||
+      is.null(content@request) ||
+      !identical(content@request@name, "edit_artifact") ||
+      !is.null(content@error)
+  ) {
+    return(NULL)
+  }
+  value <- content@value
+  if (!rlang::is_string(value) || !startsWith(value, "Saved version ")) {
+    return(NULL)
+  }
+  args <- content@request@arguments
+  if (!rlang::is_string(args$id)) NULL else args
+}
+
+# The link that replaces a document's tag in a saved turn, shown only when the
+# version that tag wrote was saved.
+artifact_turn_link <- function(store, event) {
+  artifact <- if (!is.null(store)) store$artifacts[[event$id]]
+  saved <- vapply(
+    artifact$versions,
+    function(version) identical(version$source, event$body),
+    logical(1)
+  )
+  if (!any(saved)) {
+    return("")
+  }
+  artifact_link_html(store, event$id)
 }
 
 artifact_ensure <- function(store, id) {
@@ -149,10 +311,17 @@ artifact_ensure <- function(store, id) {
     artifact$id <- id
     artifact$title <- id
     artifact$versions <- list()
-    artifact$results <- list()
+    # A restored document keeps its versions, which were never rendered here.
+    pending <- store$pending[[id]]
+    if (!is.null(pending)) {
+      rm(list = id, envir = store$pending)
+      artifact$title <- pending$title
+      artifact$versions <- lapply(
+        pending$sources,
+        function(source) list(source = source, dir = NA_character_)
+      )
+    }
     artifact$units <- list()
-    artifact$calls <- list()
-    artifact$replacements <- character()
     artifact$html <- character()
     artifact$errors <- character()
     artifact$status <- "writing"
@@ -176,15 +345,17 @@ artifact_scan_handler <- function(store) {
         }
         assign(event$id, new_artifact_run(store, artifact), envir = store$streams)
         store$streams[[event$id]]$source <- ""
+        store$streams[[event$id]]$title <- event$title
         artifact_notify(store, event)
       },
       delta = {
         run <- store$streams[[event$id]]
         run$source <- paste0(run$source, event$text)
-        artifact_run_update(run, run$source)
+        artifact_run_update_throttled(run)
       },
       close = {
         run <- store$streams[[event$id]]
+        run$closed <- TRUE
         rm(list = event$id, envir = store$streams)
         committed <- artifact_commit(
           store,
@@ -200,7 +371,10 @@ artifact_scan_handler <- function(store) {
           )
           return("")
         }
-        promises::then(committed$rendered, function(result) {
+        settled <- promises::then(committed$rendered, function(result) {
+          if (run$cancelled || !identical(store$artifacts[[event$id]], run$artifact)) {
+            return(NULL)
+          }
           if (length(result$errors)) {
             artifact_remind(store, artifact_errors_reminder(
               event$id,
@@ -208,7 +382,12 @@ artifact_scan_handler <- function(store) {
               result$errors
             ))
           }
+          NULL
         })
+        store$settling[[length(store$settling) + 1L]] <- promises::catch(
+          settled,
+          function(err) NULL
+        )
         artifact_link_html(store, event$id)
       },
       error = {
@@ -322,46 +501,62 @@ artifact_rerun <- function(store, artifact, doc) {
   signature <- function(units) lapply(units, `[`, c("kind", "text"))
   if (identical(signature(units), signature(artifact$units))) {
     run$units <- artifact$units
-    run$calls <- artifact$calls
-    run$replacements <- artifact$replacements
     run$queued <- length(units)
   }
   run
 }
 
 artifact_settle <- function(store, artifact, version, doc, run, result) {
-  if (version == length(artifact$versions)) {
+  if (!is.null(run)) {
+    artifact_run_unregister(run)
+  }
+  if (!identical(store$artifacts[[artifact$id]], artifact) ||
+      (!is.null(run) && run$cancelled)) {
+    return(result)
+  }
+  latest <- version == length(artifact$versions)
+  # A rewrite of the document can be streaming before it becomes a version, so
+  # only the run on view updates the view.
+  shown <- latest && (is.null(run) || artifact_run_shown(run))
+  if (latest) {
     artifact$html <- result$html
     artifact$errors <- result$errors
     artifact$status <- "ready"
     if (!is.null(run)) {
       artifact$units <- run$units
-      artifact$calls <- run$calls
-      artifact$replacements <- run$replacements
     }
+    artifact$thumbnail <- artifact_thumbnail(artifact$units)
+  }
+  if (shown) {
+    artifact_notify(store, list(
+      type = "thumbnail",
+      id = artifact$id,
+      src = artifact$thumbnail %||% ""
+    ))
   }
   dir <- artifact$versions[[version]]$dir
-  write_artifact_dir(
-    dir,
-    doc,
-    run$calls %||% list(),
-    run$replacements %||% character(),
-    artifact
-  )
+  write_artifact_dir(dir, doc)
   writeLines(
     artifact_document_html(artifact$title, result$html),
     file.path(dir, "report.html"),
     useBytes = TRUE
   )
-  artifact_notify(store, list(
-    type = "status",
-    id = artifact$id,
-    status = "ready",
-    error = if (length(result$errors) && !length(result$html)) {
-      result$errors[[1]]
-    }
-  ))
+  if (shown) {
+    artifact_notify(store, list(
+      type = "status",
+      id = artifact$id,
+      status = "ready",
+      error = artifact_failure(artifact)
+    ))
+  }
   result
+}
+
+# Why a document shows nothing, when it failed before any of it rendered.
+artifact_failure <- function(artifact) {
+  if (length(artifact$errors) && !length(artifact$html)) {
+    artifact$errors[[1]]
+  }
 }
 
 artifact_edit <- function(
@@ -374,7 +569,10 @@ artifact_edit <- function(
 ) {
   artifact <- artifact_get(store, id)
   if (is.null(artifact)) {
-    ids <- Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts))
+    ids <- c(
+      Filter(function(id) !is.null(artifact_get(store, id)), ls(store$artifacts)),
+      ls(store$pending)
+    )
     cli::cli_abort(
       c(
         "There is no document with id {.val {id}}.",
@@ -408,6 +606,12 @@ artifact_edit <- function(
 }
 
 artifact_edit_result <- function(store, artifact, version, result) {
+  if (!identical(store$artifacts[[artifact$id]], artifact)) {
+    return(tool_result(
+      "The conversation was cleared before the edit finished.",
+      title = "Cancelled edit"
+    ))
+  }
   value <- sprintf("Saved version %d of `%s`.", version, artifact$id)
   if (length(result$errors)) {
     value <- paste0(
@@ -420,28 +624,38 @@ artifact_edit_result <- function(store, artifact, version, result) {
     value,
     title = sprintf("Edited %s", artifact$title),
     icon = maybe_icon("file-earmark-text"),
-    html = artifact_link_html(store, artifact$id, version)
+    html = artifact_link_html(store, artifact$id)
   )
 }
 
-artifact_link_html <- function(store, id, version = NULL) {
-  artifact <- artifact_get(store, id)
-  version <- version %||% length(artifact$versions)
-  sprintf(
-    paste0(
-      "<commons-artifact-link artifact=\"%s\" version=\"%d\"%s>",
-      "%s \u00b7 v%d</commons-artifact-link>"
-    ),
-    escape_attr(id),
-    version,
-    if (is.null(store$link_input)) {
-      ""
-    } else {
-      sprintf(" input=\"%s\"", escape_attr(store$link_input))
-    },
-    html_escape(artifact$title),
-    version
+# Opens the document's latest version, wherever in the chat it appears.
+artifact_link_html <- function(store, id) {
+  attrs <- c(
+    artifact = id,
+    view = store$link_view,
+    input = store$link_input
   )
+  sprintf(
+    "<commons-artifact-link %s>%s</commons-artifact-link>",
+    paste0(names(attrs), "=\"", escape_attr(attrs), "\"", collapse = " "),
+    html_escape(store$artifacts[[id]]$title)
+  )
+}
+
+# The first plot a cell drew, for the document's link to preview. Only an
+# embedded PNG qualifies, so the chat page never fetches anything for it.
+artifact_thumbnail <- function(units) {
+  pattern <- "<img[^>]*\\ssrc=\"(data:image/png;base64,[A-Za-z0-9+/=]+)\""
+  for (unit in units) {
+    if (!identical(unit$kind, "cell") || !rlang::is_string(unit$html)) {
+      next
+    }
+    match <- regmatches(unit$html, regexec(pattern, unit$html))[[1]]
+    if (length(match)) {
+      return(match[[2]])
+    }
+  }
+  NULL
 }
 
 # --- documents -----------------------------------------------------------------
@@ -452,8 +666,8 @@ parse_artifact_document <- function(source, call = rlang::caller_env()) {
   split <- split_artifact_source(source)
   if (is.null(split)) {
     artifact_invalid(
-      "missing_frontmatter",
-      "The document must start with YAML frontmatter between `---` lines.",
+      "unterminated_frontmatter",
+      "The frontmatter that opens the document needs a closing `---` line.",
       call = call
     )
   }
@@ -464,8 +678,17 @@ parse_artifact_document <- function(source, call = rlang::caller_env()) {
 }
 
 # NULL until the frontmatter's closing `---` has arrived.
-split_artifact_source <- function(source) {
+# Frontmatter is optional; a document without it gets the tag's title. While
+# the source is still arriving (`complete = FALSE`), NULL means it can't yet
+# tell whether frontmatter opens the document or where it ends.
+split_artifact_source <- function(source, complete = TRUE) {
   text <- sub("^(?:[ \t]*\n)+", "", gsub("\r\n", "\n", source), perl = TRUE)
+  if (!startsWith(text, "---")) {
+    if (!complete && startsWith("---", text)) {
+      return(NULL)
+    }
+    return(list(yaml = "", body = text))
+  }
   match <- regexec(
     "(?s)^---[ \t]*\n(?:(.*?)\n)??(?:---|\\.\\.\\.)[ \t]*(?:\n|$)",
     text,
@@ -497,7 +720,7 @@ validate_artifact_frontmatter <- function(yaml_text, call = rlang::caller_env())
       call = call
     )
   }
-  front <- front %||% list()
+  front <- front %||% rlang::set_names(list())
   if (!is_mapping(front)) {
     artifact_invalid(
       "invalid_yaml",
@@ -604,84 +827,74 @@ is_mapping <- function(x) {
     (length(x) == 0 || (!is.null(names(x)) && all(nzchar(names(x)))))
 }
 
-# --- trusted results and files -------------------------------------------------
+# --- the document's commons ----------------------------------------------------
 
-# A private handle store, so the result isn't advertised to run_r.
-resolve_artifact_input <- function(private, input) {
-  handles <- new_handle_store(max_rows = Inf)
-  args <- input$call
-  result <- switch(
-    input$kind,
-    measure = call_measure_tool(
-      private$registry,
-      args$name,
-      args$arguments,
-      injections = private$injections,
-      handles = handles,
-      sources = private$sources,
-      measure_provenance = private$measure_provenance,
-      measure_display = private$measure_display
-    ),
-    metrics = call_metrics_impl(
-      private$definitions,
-      private$sources,
-      handles,
-      metrics = unlist(args$metrics),
-      dimensions = unlist(args$dimensions),
-      filters = unlist(args$filters),
-      where = args$where,
-      source_name = args$source,
-      arguments = args$arguments
-    ),
-    calculation = call_calculation_impl(
-      private$sources,
-      handles,
-      args$name,
-      args$arguments,
-      source_name = args$source
+# The methods a document's `commons` offers: the trusted calculations, and
+# read-only SQL for what they don't cover.
+artifact_commons_methods <- c("measure", "metrics", "calculation", "run_sql")
+
+# Answers a document's `commons$<method>(...)` on the real commons. Requests
+# come from the sandbox, so only plain values pass in and only tables and
+# vectors pass out: a plot, for one, would carry its environment with it.
+resolve_artifact_input <- function(commons, method, args) {
+  if (!rlang::is_string(method) || !method %in% artifact_commons_methods) {
+    cli::cli_abort(
+      "Documents can call {.code commons${artifact_commons_methods}()} only.",
+      call = NULL
     )
-  )
-  ids <- handle_ids(handles)
-  value <- if (length(ids)) get_handle(handles, ids[[1]])
-  scalar <- is.atomic(value) && !is.null(value)
-  if (scalar) {
-    value <- data.frame(value = value)
   }
-  if (!is.data.frame(value)) {
-    cli::cli_abort("It must return a table or a value, not a plot or nothing.")
+  if (!is.list(args) || !is_plain_value(args)) {
+    cli::cli_abort(
+      "Arguments must be strings, numbers, or lists of them.",
+      call = NULL
+    )
   }
-  provenance <- if (identical(input$kind, "measure")) {
-    private$measure_provenance[[args$name]]
+  value <- do.call(commons[[method]], args)
+  if (identical(method, "measure")) {
+    value <- artifact_measure_data(value)
   }
-  list(
-    value = value,
-    scalar = scalar,
-    sql = result@extra$sql,
-    bindings = result@extra$bindings,
-    provenance = if (length(provenance)) as.list(provenance)
+  if (is.data.frame(value)) {
+    return(as.data.frame(value))
+  }
+  if (is.atomic(value) && !is.null(value) && is_plain_value(unclass(value))) {
+    return(value)
+  }
+  cli::cli_abort(
+    "It returned neither a table nor a value, which documents can't use.",
+    call = NULL
   )
 }
 
-write_artifact_dir <- function(dir, doc, calls, replacements, artifact) {
-  dir.create(file.path(dir, "data"), recursive = TRUE, showWarnings = FALSE)
+is_plain_value <- function(x) {
+  if (!all(names(attributes(x)) %in% "names")) {
+    return(FALSE)
+  }
+  if (is.null(x) || is.atomic(x)) {
+    return(TRUE)
+  }
+  is.list(x) && all(vapply(x, is_plain_value, logical(1)))
+}
+
+# The data behind a measure's value, as call_measure registers it for run_r.
+artifact_measure_data <- function(value) {
+  if (S7::S7_inherits(value, ellmer::ContentToolResult)) {
+    value <- if (is.null(value@error)) value@extra$data
+  }
+  value <- collect_lazy_table(value)
+  if (is_gt_table(value)) {
+    value <- recover_gt_table_data(value)
+  }
+  value
+}
+
+write_artifact_dir <- function(dir, doc) {
+  dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   writeLines(artifact_quarto_yml(), file.path(dir, "_quarto.yml"))
   writeLines(
-    artifact_qmd(doc$frontmatter, rewrite_trusted_text(doc$body, replacements)),
+    artifact_qmd(doc$frontmatter, doc$body),
     file.path(dir, "report.qmd"),
     useBytes = TRUE
   )
-  for (key in names(calls)) {
-    write_trusted_result(
-      artifact$results[[key]]$value,
-      file.path(dir, "data", calls[[key]]$file)
-    )
-  }
-  if (length(calls)) {
-    yaml::write_yaml(
-      trusted_call_manifest(calls, artifact),
-      file.path(dir, "data", "manifest.yaml")
-    )
-  }
   invisible(dir)
 }
 
@@ -710,6 +923,9 @@ artifact_quarto_yml <- function() {
 # documents in the turns it added after the fact and says where they were
 # written.
 save_turn_artifacts <- function(store, turns) {
+  if (is.null(store)) {
+    return(invisible())
+  }
   committed <- list()
   on_artifact <- function(event) {
     if (identical(event$type, "close")) {

@@ -19,5 +19,11 @@
   "landlock_abstract_unix_scope": {
     "flag": "LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET",
     "min_abi": 6
+  },
+  "landlock_pathname_unix_right": {
+    "right": "LANDLOCK_ACCESS_FS_RESOLVE_UNIX",
+    "bit": 16,
+    "min_abi": 9,
+    "granted_to_read_roots": false
   }
 }

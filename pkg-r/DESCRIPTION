@@ -20,7 +20,7 @@ Depends:
     R (>= 4.1.0)
 Imports:
     bslib (>= 0.11.0),
-    callr,
+    callr (>= 3.8.0),
     cli,
     commonmark,
     coro,
@@ -35,6 +35,7 @@ Imports:
     jsonlite,
     knitr,
     later,
+    lifecycle,
     processx,
     promises (>= 1.5.0),
     R6,
@@ -64,6 +65,7 @@ Suggests:
     readr,
     rmarkdown,
     rsconnect,
+    RSQLite,
     shiny (>= 1.11.1),
     shinytest2,
     testthat (>= 3.0.0),

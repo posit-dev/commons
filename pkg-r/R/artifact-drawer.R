@@ -9,9 +9,14 @@ artifact_drawer_server <- function(
   session = shiny::getDefaultReactiveDomain()
 ) {
   store <- client$artifact_store()
+  # A trusted-only agent writes no documents.
+  if (is.null(store)) {
+    return(invisible(NULL))
+  }
   view <- session$ns(id)
   open_input <- paste0(id, "_artifact_open")
   store$link_input <- session$ns(open_input)
+  store$link_view <- view
 
   drawer <- new.env(parent = emptyenv())
   drawer$mounted <- FALSE
@@ -69,7 +74,7 @@ artifact_view_ui <- function(view, share_input = NULL) {
       `share-input` = share_input,
       htmltools::div(
         class = "commons-artifact-actions",
-        htmltools::div(class = "commons-artifact-status"),
+        htmltools::div(class = "commons-artifact-status", role = "status"),
         if (!is.null(share_input)) {
           htmltools::tags$button(
             type = "button",
@@ -79,7 +84,7 @@ artifact_view_ui <- function(view, share_input = NULL) {
           )
         }
       ),
-      htmltools::div(class = "commons-artifact-notice"),
+      htmltools::div(class = "commons-artifact-notice", role = "alert"),
       htmltools::div(class = "commons-artifact-body")
     )
   )
@@ -96,6 +101,7 @@ artifact_select_event <- function(artifact) {
     }),
     count = length(artifact$html),
     status = artifact$status,
-    error = ""
+    error = artifact_failure(artifact) %||% "",
+    thumbnail = artifact$thumbnail %||% ""
   )
 }

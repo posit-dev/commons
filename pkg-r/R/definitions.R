@@ -160,12 +160,18 @@ definition_token_pattern <-
 
 # The expansion step of run_sql, before check_query() so the denylist sees
 # the SQL that will actually execute.
-expand_for_run_sql <- function(registry, sources, source_name, sql) {
+expand_for_run_sql <- function(
+  registry,
+  sources,
+  source_name,
+  sql,
+  call = rlang::current_env()
+) {
   if (is.null(registry) || nrow(registry$defs) == 0) {
     return(list(sql = sql, applied = NULL))
   }
   label <- source_name %||% rlang::names2(sources)[[1]]
-  expand_definitions(sql, registry_defs(registry, label))
+  expand_definitions(sql, registry_defs(registry, label), call = call)
 }
 
 expand_definitions <- function(sql, defs, call = rlang::caller_env()) {
@@ -353,15 +359,22 @@ definition_index_lines <- function(registry) {
   )
 }
 
-definitions_entry_text <- function(definitions) {
+definitions_entry_text <- function(definitions, trusted_only = FALSE) {
   if (length(definitions) == 0) {
     return(NULL)
   }
   paste0(
-    paste0(
-      "Governed definitions (write as `{{name}}` tokens in SQL; use ",
-      "`{{table::name}}` to qualify):\n\n"
-    ),
+    if (trusted_only) {
+      paste0(
+        "Governed definitions (compute metrics with call_metrics; pass ",
+        "filters and derived definitions as its filters or dimensions):\n\n"
+      )
+    } else {
+      paste0(
+        "Governed definitions (write as `{{name}}` tokens in SQL; use ",
+        "`{{table::name}}` to qualify):\n\n"
+      )
+    },
     paste(
       sprintf(
         "- `{{%s}}` %s",

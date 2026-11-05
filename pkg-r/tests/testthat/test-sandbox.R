@@ -74,7 +74,7 @@ test_that("worker_init refuses to run unsandboxed off Linux and macOS", {
         runtime = worker_runtime(),
         name = "worker_init",
         args = list(
-          parent_tmp = tempdir(),
+          callr_dir = tempdir(),
           work_dir = tempdir(),
           dll_path = NA_character_
         )
@@ -93,7 +93,7 @@ test_that("worker_init errors without the compiled library", {
         runtime = worker_runtime(),
         name = "worker_init",
         args = list(
-          parent_tmp = tempdir(),
+          callr_dir = tempdir(),
           work_dir = tempdir(),
           dll_path = NA_character_
         )
@@ -110,7 +110,7 @@ test_that("worker_init permits the explicit guardrail mode", {
       runtime = worker_runtime(),
       name = "worker_init",
       args = list(
-        parent_tmp = tempdir(),
+        callr_dir = tempdir(),
         work_dir = tempdir(),
         dll_path = NA_character_,
         protection = "guardrails"
@@ -135,9 +135,16 @@ sandboxed_worker_probes <- function(
     file.path(outside, "secret.txt")
   )
 
+  # The host keeps files in its own tempdir(), as other conversations would.
+  host_file <- withr::local_tempfile(.local_envir = env)
+  writeLines("secret", host_file)
+
   work_dir <- tempfile("commons-worker-")
   dir.create(work_dir)
   withr::defer(unlink(work_dir, recursive = TRUE), envir = env)
+  callr_dir <- tempfile("commons-callr-")
+  dir.create(callr_dir)
+  withr::defer(unlink(callr_dir, recursive = TRUE), envir = env)
 
   rs <- callr::r_session$new(
     callr::r_session_options(
@@ -145,6 +152,7 @@ sandboxed_worker_probes <- function(
     )
   )
   withr::defer(rs$close(), envir = env)
+  withr::local_envvar(CALLR_TMPDIR = callr_dir, .local_envir = env)
   rs$run(
     function(outside) {
       assign(
@@ -161,7 +169,7 @@ sandboxed_worker_probes <- function(
       runtime = worker_runtime(),
       name = "worker_init",
       args = list(
-        parent_tmp = tempdir(),
+        callr_dir = callr_dir,
         work_dir = work_dir,
         dll_path = commons_dll_path(),
         network = network,
@@ -170,8 +178,26 @@ sandboxed_worker_probes <- function(
     )
   )
 
+  # A host process outside the sandbox listens on a pathname socket in each
+  # directory, as a local database or system daemon would.
+  peer_sockets <- c(
+    outside = file.path(outside, "peer.sock"),
+    work = file.path(work_dir, "peer.sock")
+  )
+  if (
+    identical(Sys.info()[["sysname"]], "Linux") && nzchar(Sys.which("perl"))
+  ) {
+    listen_on_pathname_sockets(peer_sockets, env)
+  }
+
   rs$run(
-    function(outside) {
+    function(outside, host_file, peer_sockets) {
+      perl_report <- function(out) {
+        if (!identical(attr(out, "status"), 127L)) {
+          pairs <- strsplit(out, "=", fixed = TRUE)
+          stats::setNames(lapply(pairs, `[[`, 2), vapply(pairs, `[[`, "", 1))
+        }
+      }
       denied <- function(expr) {
         tryCatch(
           {
@@ -184,6 +210,14 @@ sandboxed_worker_probes <- function(
       }
       list(
         read = denied(readLines(file.path(outside, "secret.txt"), n = 1)),
+        host_tmp_read = denied(readLines(host_file)),
+        host_tmp_write = if (
+          isTRUE(suppressWarnings(file.create(paste0(host_file, "-w"))))
+        ) {
+          "allowed"
+        } else {
+          "denied"
+        },
         inherited = denied({
           con <- get(".commons_inherited_file", envir = globalenv())
           seek(con, where = 100000)
@@ -218,7 +252,7 @@ sandboxed_worker_probes <- function(
           }
         },
         exec = denied({
-          status <- system2("true")
+          status <- system2("/bin/sh", c("-c", shQuote("exit 0")))
           if (!identical(status, 0L)) {
             warning("subprocess failed")
           }
@@ -252,20 +286,80 @@ sandboxed_worker_probes <- function(
             ),
             script
           )
-          out <- suppressWarnings(system2("perl", script, stdout = TRUE))
-          if (!identical(attr(out, "status"), 127L)) {
-            pairs <- strsplit(out, "=", fixed = TRUE)
-            stats::setNames(
-              lapply(pairs, `[[`, 2),
-              vapply(pairs, `[[`, "", 1)
-            )
-          }
+          perl_report(suppressWarnings(system2("perl", script, stdout = TRUE)))
+        },
+        # Each name connects to the host listener in that directory and
+        # reports its errno.
+        pathname_peer = if (identical(Sys.info()[["sysname"]], "Linux")) {
+          script <- tempfile(fileext = ".pl")
+          writeLines(
+            c(
+              "use Socket;",
+              "my %r;",
+              "while (my ($name, $path) = splice(@ARGV, 0, 2)) {",
+              "  socket(my $s, AF_UNIX, SOCK_DGRAM, 0) or die $!;",
+              "  $r{$name} = connect($s, pack_sockaddr_un($path)) ? 0 : $! + 0;",
+              "}",
+              "print map { \"$_=$r{$_}\\n\" } sort keys %r;"
+            ),
+            script
+          )
+          args <- c(script, rbind(names(peer_sockets), shQuote(peer_sockets)))
+          perl_report(suppressWarnings(system2("perl", args, stdout = TRUE)))
         },
         compute = sum(1:10)
       )
     },
-    args = list(outside = outside)
+    args = list(
+      outside = outside,
+      host_file = host_file,
+      peer_sockets = peer_sockets
+    )
   )
+}
+
+# Binds a datagram socket at each path and keeps it open until the test ends.
+listen_on_pathname_sockets <- function(paths, env) {
+  script <- tempfile(fileext = ".pl")
+  writeLines(
+    c(
+      "use Socket;",
+      "my @held;",
+      "for my $path (@ARGV) {",
+      "  socket(my $s, AF_UNIX, SOCK_DGRAM, 0) or die $!;",
+      "  bind($s, pack_sockaddr_un($path)) or die \"$path: $!\";",
+      "  push @held, $s;",
+      "}",
+      "$| = 1;",
+      "print \"ready\\n\";",
+      "sleep 600;"
+    ),
+    script
+  )
+  listener <- processx::process$new(
+    "perl",
+    c(script, unname(paths)),
+    stdout = "|",
+    stderr = "|"
+  )
+  withr::defer(listener$kill(), envir = env)
+  listener$poll_io(10000)
+  if (!identical(listener$read_output_lines(), "ready")) {
+    stop("pathname socket listener failed: ", listener$read_all_error())
+  }
+}
+
+# EACCES is 13. Landlock refuses the socket outside every root and allows the
+# one under the work directory, a write root.
+expect_pathname_peer <- function(pathname_peer) {
+  skip_if(is.null(pathname_peer), "perl is not installed")
+  abi <- sandbox_capabilities()$landlock_abi
+  skip_if(
+    abi < 9,
+    paste("pathname sockets need Landlock ABI 9; this kernel reports", abi)
+  )
+  expect_equal(pathname_peer$outside, "13")
+  expect_equal(pathname_peer$work, "0")
 }
 
 # EPERM is 1. Without the filter, connect() and the addressed send() fail
@@ -293,6 +387,8 @@ test_that("an initialized worker is denied reads, writes, and sockets", {
   probes <- sandboxed_worker_probes("auto")
   expect_equal(probes$read, "denied")
   expect_equal(probes$write, "denied")
+  expect_equal(probes$host_tmp_read, "denied")
+  expect_equal(probes$host_tmp_write, "denied")
   expect_equal(probes$socket, "denied")
   expect_equal(probes$subprocess, "denied")
   expect_equal(probes$exec, "allowed")
@@ -309,6 +405,7 @@ test_that("the user-namespace tier is denied reads, writes, and sockets", {
 
   probes <- sandboxed_worker_probes("userns")
   expect_equal(probes$read, "denied")
+  expect_equal(probes$host_tmp_read, "denied")
   expect_equal(probes$inherited, "denied")
   expect_equal(probes$write, "denied")
   expect_equal(probes$socket, "denied")
@@ -331,9 +428,14 @@ test_that("full network access leaves the filesystem sandboxed", {
   probes <- sandboxed_worker_probes("auto", network = "full")
   expect_equal(probes$read, "denied")
   expect_equal(probes$socket, "allowed")
+  expect_equal(probes$exec, "allowed")
   if (identical(Sys.info()[["sysname"]], "Linux")) {
-    expect_equal(probes$exec, "allowed")
     expect_local_peer(probes$local_peer, screened = FALSE)
   }
   expect_equal(probes$compute, 55)
+  # Under network = "none" the seccomp filter refuses every connect() first,
+  # so only full network shows what Landlock decides.
+  if (identical(Sys.info()[["sysname"]], "Linux")) {
+    expect_pathname_peer(probes$pathname_peer)
+  }
 })

@@ -1,8 +1,8 @@
 test_that("append_turn_reminder matches the shared fixture", {
-  spec <- shared_fixture("turn-reminders")$claude_5_turn_reminder
+  spec <- shared_fixture("turn-reminders")$brevity_turn_reminder
   # An empty fixture would make the loop below vacuously succeed.
   expect_gt(length(spec$cases), 0)
-  expect_identical(claude_5_turn_reminder, spec$text)
+  expect_identical(brevity_turn_reminder, spec$text)
 
   for (case in spec$cases) {
     inputs <- append_turn_reminder(list("What was revenue?"), case$model)
@@ -18,6 +18,15 @@ test_that("append_turn_reminder matches the shared fixture", {
     )
     expect_identical(inputs[[2]]@text, spec$text, info = case$name)
   }
+})
+
+test_that("the extra brevity prompting is temporary", {
+  skip_on_cran()
+  expect_lt(
+    Sys.Date(),
+    as.Date("2027-04-06"),
+    label = "The deadline to remove Claude 5.0 and 5.1 brevity prompting"
+  )
 })
 
 test_that("the restored-conversation reminder renders the shared wording", {

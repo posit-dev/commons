@@ -16,7 +16,7 @@ A \code{commons_semantic_layer} R6 object. Its internals are private and
 may change without notice.
 }
 \description{
-\code{semantic_layer()} collects trusted calculations for a \code{\link[=commons]{commons()}} agent.
+\code{semantic_layer()} collects trusted calculations for \code{\link[=commons]{commons()}}.
 Data dictionary definitions and warehouse semantic models contribute through
 \code{\link[=data_source]{data_source()}}.
 }
@@ -80,10 +80,12 @@ semantic_layer(
 #   DBI::dbGetQuery(warehouse, ...)
 # }
 
-agent <- commons(
+agent <- agent(
   ellmer::chat_anthropic(),
-  data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
-  semantic_layer = semantic_layer("R/semantic_layer.R")
+  commons = commons(
+    data_sources = list(warehouse = data_source(DBI::dbConnect(...))),
+    semantic_layer = semantic_layer("R/semantic_layer.R")
+  )
 )
 }
 

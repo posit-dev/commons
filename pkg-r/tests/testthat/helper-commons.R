@@ -80,11 +80,13 @@ test_agent <- function(
 ) {
   # On Windows, this would error without setting this option.
   withr::local_options(commons.allow_unsafe_fallback = TRUE)
-  commons(
+  agent(
     test_client(),
-    data_sources = data_sources,
-    context_layer = context_layer,
-    semantic_layer = semantic_layer,
+    commons = commons(
+      data_sources = data_sources,
+      context_layer = context_layer,
+      semantic_layer = semantic_layer
+    ),
     log = log,
     ...
   )
@@ -155,4 +157,21 @@ sync_promise <- function(promise) {
   }
 
   success
+}
+
+test_calculation <- function() {
+  new_trusted_calculation(
+    "preview_value",
+    "Preview an allowed column with a bound value.",
+    "SELECT {{column}}, {{value}} AS bound_value FROM sales LIMIT 1",
+    arguments = list(
+      new_typed_argument(
+        "column",
+        "string",
+        identifier = TRUE,
+        choices = c("region", "revenue")
+      ),
+      new_typed_argument("value", "number")
+    )
+  )
 }

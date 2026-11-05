@@ -239,7 +239,7 @@ class DataDictionary(_Permissive):
         """The body of a table's entry, without the heading.
 
         `describe_table` composes its own body from these, so it can merge the
-        live schema and keep sample rows.
+        live schema.
         """
         entry = self.tables.get(table)
         if entry is None:

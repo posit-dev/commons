@@ -12,7 +12,7 @@ import pytest
 from chatlas.types import ContentText
 
 from commons._reminders import (
-    CLAUDE_5_TURN_REMINDER,
+    BREVITY_TURN_REMINDER,
     RESTORED_CONVERSATION_REMINDER,
     ContentTurnReminder,
     append_restored_conversation_reminder,
@@ -22,7 +22,7 @@ from commons._reminders import (
 from ._shared import load_shared_fixture
 
 SPEC = load_shared_fixture("turn-reminders")
-CONCISE: dict[str, Any] = SPEC["claude_5_turn_reminder"]
+CONCISE: dict[str, Any] = SPEC["brevity_turn_reminder"]
 RESTORED: dict[str, Any] = SPEC["restored_conversation_reminder"]
 
 
@@ -43,7 +43,7 @@ def test_the_concise_reminder_follows_the_shared_fixture(case: dict[str, Any]) -
 
 
 def test_the_concise_reminder_text_matches_the_shared_fixture() -> None:
-    assert CLAUDE_5_TURN_REMINDER == CONCISE["text"]
+    assert BREVITY_TURN_REMINDER == CONCISE["text"]
 
 
 def test_the_restored_reminder_renders_the_shared_wording() -> None:
@@ -75,7 +75,7 @@ def test_appending_leaves_the_caller_s_inputs_alone() -> None:
 def test_a_reminder_is_text_the_model_reads() -> None:
     # Providers only accept content they know, so the reminder has to be a
     # kind of text; being its own type is what lets a UI leave it out.
-    reminder = ContentTurnReminder(text=CLAUDE_5_TURN_REMINDER)
+    reminder = ContentTurnReminder(text=BREVITY_TURN_REMINDER)
 
     assert isinstance(reminder, ContentText)
     assert reminder.content_type == "text"

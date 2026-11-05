@@ -1,10 +1,10 @@
 #' Create a context layer
 #'
-#' A context layer contains text that helps a [commons()] agent interpret its
+#' A context layer contains text that helps a commons agent interpret its
 #' data source.
 #'
 #' Context is retrieved when relevant. Facts needed in every conversation
-#' belong in the `instructions` passed to [commons()], not here.
+#' belong in the `instructions` passed to [agent()], not here.
 #'
 #' @param files Character vector of paths to text or Markdown files.
 #'

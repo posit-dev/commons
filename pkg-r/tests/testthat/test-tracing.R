@@ -43,7 +43,12 @@ test_that("the Connect tracing warning checks version before settings", {
     expect_equal(httr2::url_parse(req$url)$path, "/__api__/server_settings")
     if (inherits(settings, "condition")) {
       return(httr2::new_response(
-        "GET", req$url, 500L, list(), raw(), request = req
+        "GET",
+        req$url,
+        500L,
+        list(),
+        raw(),
+        request = req
       ))
     }
     httr2::new_response(
@@ -193,7 +198,9 @@ test_that("share_trajectory_access grants only missing collaborators", {
   local_mocked_bindings(
     connect_client = function(...) list(server = "s", api_key = "k"),
     connect_permission_principals = function(client, guid) "guid-jdoe",
-    connect_user_guid = function(client, username, ...) paste0("guid-", username),
+    connect_user_guid = function(client, username, ...) {
+      paste0("guid-", username)
+    },
     connect_add_collaborator = function(client, guid, principal_guid) {
       state$added <- c(state$added, principal_guid)
       invisible(NULL)
@@ -239,11 +246,15 @@ test_that("share_trajectory_access warns rather than errors on failure", {
 })
 
 test_that("an explicit content-capture opt-out is respected", {
-  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false")
+  withr::local_envvar(
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "false"
+  )
   expect_no_warning(.res <- content_capture_enabled())
   expect_false(.res)
 
-  withr::local_envvar(OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true")
+  withr::local_envvar(
+    OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT = "true"
+  )
   expect_true(content_capture_enabled())
 })
 
@@ -342,4 +353,45 @@ test_that("conversation turn spans are recorded", {
   spans <- recorded$traces
   expect_length(spans, 1)
   expect_equal(spans[[1]]$name, "commons_conversation_turn")
+  expect_null(spans[[1]]$attributes[["commons.connect.user"]])
+})
+
+test_that("trajectory users come only from authenticated session identity", {
+  expect_identical(trajectory_user(NULL), NA_character_)
+  for (user in list(NULL, "", NA_character_, c("alice", "bob"), 1)) {
+    expect_identical(trajectory_user(list(user = user)), NA_character_)
+  }
+  expect_identical(trajectory_user(list(user = "alice")), "alice")
+})
+
+test_that("conversation turn spans capture the active session user", {
+  skip_if_not_installed("otelsdk")
+  skip_if_not_installed("shiny")
+  alice <- shiny::MockShinySession$new()
+  bob <- shiny::MockShinySession$new()
+  withr::defer(alice$close())
+  withr::defer(bob$close())
+  alice$user <- "alice"
+  bob$user <- "bob"
+
+  recorded <- otelsdk::with_otel_record({
+    turn <- function() {
+      local_conversation_turn_span()
+      invisible(NULL)
+    }
+    shiny::withReactiveDomain(alice, turn())
+    shiny::withReactiveDomain(bob, turn())
+    turn()
+  })
+
+  expect_length(recorded$traces, 3)
+  expect_identical(
+    recorded$traces[[1]]$attributes[["commons.connect.user"]],
+    "alice"
+  )
+  expect_identical(
+    recorded$traces[[2]]$attributes[["commons.connect.user"]],
+    "bob"
+  )
+  expect_null(recorded$traces[[3]]$attributes[["commons.connect.user"]])
 })

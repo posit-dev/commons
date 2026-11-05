@@ -5,7 +5,7 @@
 #' assemble the UI and server yourself with [commons_theme()] and 
 #' [commons_server()].
 #'
-#' @param client A [commons()] agent.
+#' @param client An [agent()].
 #' @param ... Extra arguments passed to [shiny::shinyApp()].
 #'
 #' @return A [shiny::shinyApp()] object.
@@ -19,9 +19,9 @@
 #'
 #' @examples
 #' \dontrun{
-#' agent <- commons(
+#' agent <- agent(
 #'   ellmer::chat_anthropic(),
-#'   data_sources = data_source(sales = sales)
+#'   commons = commons(data_sources = data_source(sales = sales))
 #' )
 #' commons_app(agent)
 #' }
@@ -82,7 +82,7 @@ commons_app <- function(client, ...) {
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it
 #' works anywhere a bslib theme does.
 #'
-#' @param client A [commons()] agent. In a deployed app, create the agent
+#' @param client An [agent()]. In a deployed app, create the agent
 #'   inside the server function and pass it to `commons_server()` so each
 #'   Shiny session gets its own agent state.
 #' @param id The ID of the chat element; must match the `id` of the
@@ -104,9 +104,9 @@ commons_app <- function(client, ...) {
 #'
 #' server <- function(input, output, session) {
 #'   # One agent per session, so each user gets their own agent state
-#'   agent <- commons(
+#'   agent <- agent(
 #'     ellmer::chat_anthropic(),
-#'     data_sources = data_source(sales = sales)
+#'     commons = commons(data_sources = data_source(sales = sales))
 #'   )
 #'   commons_server("chat", agent)
 #' }
@@ -137,17 +137,22 @@ commons_server <- function(id, client, ...) {
   # shinychat owns the conversation identity (it sets the client's
   # `conversation_id` binding, which ellmer stamps on its spans); commons
   # only needs to know that a restore happened.
-  store <- client$artifact_store()
-  chat$history$on_save(function(values) {
-    values$commons_documents <- artifact_store_snapshot(store)
-    values$commons_shares <- store$shares
-    values
-  })
   chat$history$on_restore(function(values) {
     client$queue_restore_reminder()
-    artifact_store_restore(store, values$commons_documents)
-    store$shares <- values$commons_shares %||% list()
+    store <- client$artifact_store()
+    if (!is.null(store)) {
+      artifact_store_restore(store, values$commons_artifacts)
+      store$shares <- values$commons_shares %||% list()
+    }
   })
+  if (!is.null(client$artifact_store())) {
+    chat$history$on_save(function(values) {
+      store <- client$artifact_store()
+      values$commons_artifacts <- artifact_store_values(store)
+      values$commons_shares <- store$shares
+      values
+    })
+  }
   chat
 }
 

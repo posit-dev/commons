@@ -174,7 +174,7 @@ test_that("Shiny Chat renders streamed citations as icon markers", {
     fixed = TRUE
   )
   expect_match(answer, "After citations.", fixed = TRUE)
-  expect_no_match(answer_html, "commons-citation", fixed = TRUE)
+  expect_no_match(answer_html, "citation>", fixed = TRUE)
 })
 
 test_that("Shiny Chat distinguishes trusted, cited, and untrusted asides", {
@@ -424,11 +424,40 @@ test_that("a streamed document opens in the drawer and reopens from its chip", {
   ))
   expect_identical(
     app$get_js("document.querySelector('commons-artifact-link').textContent"),
-    "Orders by region · v1"
+    "Orders by region"
+  )
+  chip_image <- paste0(
+    "document.querySelector('commons-artifact-link')",
+    ".shadowRoot.querySelector('.shot img')"
+  )
+  app$wait_for_js(paste0("!!", chip_image), timeout = 30 * 1000)
+  expect_match(
+    app$get_js(paste0(chip_image, ".src")),
+    "^data:image/png;base64,"
   )
   expect_false(app$get_js(
     "document.body.innerText.includes('trusted$measure')"
   ))
+
+  # A link opens in a new tab rather than replacing the document in its frame,
+  # which runs in a target of its own.
+  app$run_js("window.opened = []; window.open = (url) => window.opened.push(url);")
+  browser <- app$get_chromote_session()$parent
+  targets <- browser$Target$getTargets()$targetInfos
+  target <- Filter(function(t) identical(t$type, "iframe"), targets)[[1]]$targetId
+  frame_session <- chromote::ChromoteSession$new(parent = browser, targetId = target)
+  in_frame <- function(js) {
+    frame_session$Runtime$evaluate(js, returnByValue = TRUE)$result$value
+  }
+  link <- "document.querySelector('a[href=\"https://example.com/orders\"]')"
+  deadline <- Sys.time() + 30
+  while (!isTRUE(in_frame(paste0("!!", link))) && Sys.time() < deadline) {
+    Sys.sleep(0.1)
+  }
+  in_frame(paste0(link, ".click()"))
+  app$wait_for_js("window.opened.length > 0")
+  expect_identical(app$get_js("window.opened"), list("https://example.com/orders"))
+  expect_identical(in_frame("location.href"), "about:srcdoc")
 
   app$run_js(paste0(
     frame,

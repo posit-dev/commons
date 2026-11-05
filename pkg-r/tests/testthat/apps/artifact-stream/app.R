@@ -3,10 +3,12 @@ library(commons)
 document <- paste0(
   "---\ntitle: Orders by region\n---\n\n",
   "## Summary\n\n",
-  "```{r}\norders <- trusted$measure(\"orders\")\n```\n\n",
+  "```{r}\norders <- commons$measure(\"orders\")\n```\n\n",
   "There are `r nrow(orders)` orders across **three** regions.\n\n",
   "```{r}\ntable(orders$region)\n```\n\n",
-  "- EMEA leads.\n- APAC trails.\n"
+  "```{r}\nbarplot(table(orders$region))\n```\n\n",
+  "- EMEA leads.\n- APAC trails.\n\n",
+  "See [the source](https://example.com/orders).\n"
 )
 response_chunks <- c(
   "I wrote the report.\n\n<arti",
@@ -65,11 +67,13 @@ sales <- data.frame(
   region = c("EMEA", "EMEA", "Americas", "APAC"),
   revenue = c(500, 1200, 900, 300)
 )
-agent <- commons(
+agent <- agent(
   client,
-  data_sources = list(sales = data_source(sales = sales)),
-  semantic_layer = semantic_layer(
-    measure("orders", "All orders.", function() sales, arguments = list())
+  commons = commons(
+    data_sources = list(sales = data_source(sales = sales)),
+    semantic_layer = semantic_layer(
+      measure("orders", "All orders.", function() sales, arguments = list())
+    )
   )
 )
 

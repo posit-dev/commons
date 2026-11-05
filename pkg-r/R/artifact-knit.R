@@ -4,18 +4,13 @@
 # backtick does. The view is the knitted Markdown, converted to HTML a piece
 # at a time.
 #
-# The first version rendered each saved version with `quarto render` inside
-# the sandboxed worker and showed the resulting HTML. That meant a streamed
-# document showed placeholders for its code until the stream ended and then
-# waited about eight seconds for Quarto (mostly Deno and Pandoc starting up),
-# every edit paid the same cost, and Quarto's runtime needed more than the
+# `quarto render` can't show code results until the whole document has
+# arrived, takes seconds to start (Deno and Pandoc), and needs more than the
 # Linux sandbox grants (`/proc/self/exe`, a large address space, device
-# nodes). Knitting cells as they arrive removes the wait and keeps execution
-# in the same kind of worker as run_r. The cost is that the view is commons'
-# rendering of knitted Markdown rather than Quarto's HTML; the saved source is
-# still a Quarto document. This is close in spirit to Quarto 2's preview,
-# which renders in the browser and replays code outputs it executed
-# separately, and that renderer could replace this one once it's embeddable.
+# nodes). So the view is commons' rendering of knitted Markdown rather than
+# Quarto's HTML, while the saved source is still a Quarto document. Quarto 2's
+# preview, which renders in the browser and replays separately executed
+# outputs, could replace this renderer once it's embeddable.
 
 # A run executes one version of a document. Outputs are kept per code unit (a
 # cell or an inline expression, in document order), so a later version whose
@@ -24,21 +19,26 @@ new_artifact_run <- function(store, artifact) {
   run <- new.env(parent = emptyenv())
   run$store <- store
   run$artifact <- artifact
-  run$dir <- tempfile("commons-run-")
-  dir.create(file.path(run$dir, "figs"), recursive = TRUE)
-  dir.create(file.path(run$dir, "data"))
+  run$id <- basename(tempfile("run-"))
+  run$dir <- NULL
   run$worker <- NULL
   run$tail <- promises::promise_resolve(NULL)
   run$front <- NULL
   run$front_error <- NULL
   run$units <- list()
-  run$calls <- list()
-  run$replacements <- character()
   run$queued <- 0L
   run$sent <- character()
   run$cache <- new.env(parent = emptyenv())
   run$cancelled <- FALSE
+  assign(run$id, run, envir = store$runs)
+  artifact$run <- run
   run
+}
+
+# A run superseded by a newer version keeps going, so its edit can report how
+# it went, but stops updating the view, which shows the newest.
+artifact_run_shown <- function(run) {
+  !run$cancelled && identical(run$artifact$run, run)
 }
 
 # Brings the run up to date with the source received so far: validates the
@@ -49,8 +49,12 @@ artifact_run_update <- function(run, source, complete = FALSE) {
     return(invisible(run))
   }
   if (is.null(run$front) && is.null(run$front_error)) {
-    split <- split_artifact_source(source)
+    split <- split_artifact_source(source, complete = complete)
     if (is.null(split)) {
+      if (complete) {
+        run$front_error <- "The frontmatter that opens the document needs a closing `---` line."
+        artifact_run_status(run, "failed", run$front_error)
+      }
       return(invisible(run))
     }
     run$front <- tryCatch(
@@ -87,6 +91,39 @@ artifact_run_update <- function(run, source, complete = FALSE) {
   invisible(run)
 }
 
+# Each update re-segments the whole source received so far, which takes longer
+# as a document grows and blocks the process while it runs. While a document
+# streams, an update waits at least twice as long as the last one took, so
+# updating takes at most a third of the time; closing brings it up to date.
+artifact_run_update_throttled <- function(run) {
+  if (isTRUE(run$update_scheduled)) {
+    return(invisible(run))
+  }
+  interval <- max(0.1, 2 * (run$update_cost %||% 0))
+  elapsed <- as.numeric(Sys.time() - (run$updated_at %||% 0), units = "secs")
+  if (elapsed >= interval) {
+    artifact_run_update_timed(run)
+    return(invisible(run))
+  }
+  run$update_scheduled <- TRUE
+  later::later(
+    function() {
+      run$update_scheduled <- FALSE
+      if (!isTRUE(run$closed)) artifact_run_update_timed(run)
+    },
+    interval - elapsed
+  )
+  invisible(run)
+}
+
+artifact_run_update_timed <- function(run) {
+  start <- Sys.time()
+  artifact_run_update(run, run$source)
+  run$updated_at <- Sys.time()
+  run$update_cost <- as.numeric(run$updated_at - start, units = "secs")
+  invisible(run)
+}
+
 # Resolves once every queued unit has run. The result holds each piece's HTML
 # and the errors to report to the model.
 artifact_run_finish <- function(run, source) {
@@ -115,6 +152,14 @@ artifact_run_finish <- function(run, source) {
 artifact_run_cancel <- function(run) {
   run$cancelled <- TRUE
   artifact_run_close(run)
+  artifact_run_unregister(run)
+  invisible(run)
+}
+
+artifact_run_unregister <- function(run) {
+  if (exists(run$id, envir = run$store$runs, inherits = FALSE)) {
+    rm(list = run$id, envir = run$store$runs)
+  }
   invisible(run)
 }
 
@@ -162,29 +207,33 @@ artifact_run_unit <- function(run, unit) {
       ))
     )))
   }
-  text <- tryCatch(
-    artifact_run_prepare(run, unit),
-    error = function(err) err
-  )
-  if (inherits(text, "error")) {
-    return(promises::promise_resolve(artifact_unit_failure(conditionMessage(text))))
-  }
   if (is.null(run$worker)) {
     run$worker <- new_r_worker(run$store$network, run$store$protection)
     worker_ensure(run$worker)
+    # The sandbox lets the worker write only inside its own folder.
+    run$dir <- file.path(run$worker$work_dir, "document")
+    dir.create(file.path(run$dir, "figs"), recursive = TRUE)
+    dir.create(file.path(run$dir, ".commons"))
     worker_runtime_call(run$worker, "worker_knit_init", list(dir = run$dir))
   }
   worker <- run$worker
-  worker$rs$call(
-    worker_call,
-    args = list(
-      runtime = worker$runtime,
-      name = "worker_knit_unit",
-      args = list(kind = unit$kind, text = text)
+  with_callr_dir(
+    worker$callr_dir,
+    worker$rs$call(
+      worker_call,
+      args = list(
+        runtime = worker$runtime,
+        name = "worker_knit_unit",
+        args = list(kind = unit$kind, text = unit$text)
+      )
     )
   )
   promises::then(
-    worker_await(worker, getOption("commons.run_r_timeout", 60)),
+    worker_await(
+      worker,
+      getOption("commons.run_r_timeout", worker_defaults$call_timeout),
+      on_message = function(message) artifact_serve_request(run, message)
+    ),
     function(res) {
       if (!is.null(res$failure)) {
         # The worker is gone, so later units start a fresh one.
@@ -202,30 +251,42 @@ artifact_run_unit <- function(run, unit) {
       list(
         status = if (is.null(error)) "done" else "error",
         error = error,
-        html = markdown_fragment_html(embed_figures(res$output, res$figures))
+        html = markdown_fragment_html(res$output)
       )
     }
   )
 }
 
-# Resolves the unit's trusted calls and returns its text with each replaced by
-# a read of the file its result was written to. The run keeps every
-# replacement, so the saved document reads the same files.
-artifact_run_prepare <- function(run, unit) {
-  replacements <- character()
-  for (found in find_trusted_calls(unit_code(unit))) {
-    calls <- register_trusted_call(run$calls, found)
-    result <- resolve_trusted_call(run$store, run$artifact, found)
-    run$calls <- calls
-    entry <- calls[[trusted_call_key(found)]]
-    path <- file.path(run$dir, "data", entry$file)
-    if (!file.exists(path)) {
-      write_trusted_result(result$value, path)
-    }
-    replacements[[found$text]] <- trusted_call_read(entry, result)
-    run$replacements[[found$text]] <- replacements[[found$text]]
+# The document's `commons` is a stand-in: each method call is sent here as a
+# condition while the cell runs, answered on the real commons, and the answer
+# written where the waiting worker reads it. The data sources never enter the
+# sandbox.
+artifact_serve_request <- function(run, message) {
+  id <- message$id
+  if (
+    !inherits(message, "commons_request") ||
+      !rlang::is_string(id) ||
+      !grepl("^[0-9]+-[0-9]+$", id)
+  ) {
+    return(invisible())
   }
-  rewrite_trusted_text(unit$text, replacements)
+  response <- tryCatch(
+    list(value = run$store$resolve_input(message$method, message$args)),
+    error = function(err) {
+      list(error = sprintf(
+        "`commons$%s()` failed: %s",
+        if (rlang::is_string(message$method)) message$method else "?",
+        conditionMessage(err)
+      ))
+    }
+  )
+  # The worker can write in `.commons`, so a file written there directly
+  # could follow a symlink it planted. Write where the worker can't reach,
+  # then rename, which replaces a symlink rather than following it.
+  partial <- tempfile("commons-answer-", fileext = ".rds")
+  saveRDS(response, partial)
+  file.rename(partial, file.path(run$dir, ".commons", paste0(id, ".rds")))
+  invisible()
 }
 
 artifact_unit_failure <- function(message) {
@@ -238,9 +299,12 @@ artifact_unit_failure <- function(message) {
 }
 
 worker_runtime_call <- function(worker, name, args) {
-  worker$rs$run(
-    worker_call,
-    args = list(runtime = worker$runtime, name = name, args = args)
+  with_callr_dir(
+    worker$callr_dir,
+    worker$rs$run(
+      worker_call,
+      args = list(runtime = worker$runtime, name = name, args = args)
+    )
   )
 }
 
@@ -265,6 +329,9 @@ artifact_run_errors <- function(run) {
 }
 
 artifact_run_status <- function(run, status, error = NULL) {
+  if (!artifact_run_shown(run)) {
+    return(invisible(NULL))
+  }
   artifact_notify(run$store, list(
     type = "status",
     id = run$artifact$id,
@@ -278,8 +345,10 @@ artifact_run_emit <- function(run) {
   if (run$cancelled) {
     return(invisible(run))
   }
+  frontmatter <- run$front$frontmatter
+  frontmatter$title <- frontmatter$title %||% run$title %||% run$artifact$title
   html <- c(
-    artifact_header_html(run$front$frontmatter),
+    artifact_header_html(frontmatter),
     vapply(
       run$pieces %||% list(),
       function(piece) artifact_piece_html(run, piece),
@@ -291,7 +360,7 @@ artifact_run_emit <- function(run) {
   changed <- which(is.na(old) | html != old)
   shrunk <- length(html) < length(run$sent)
   run$sent <- html
-  if (length(changed) || shrunk) {
+  if ((length(changed) || shrunk) && artifact_run_shown(run)) {
     artifact_notify(run$store, list(
       type = "pieces",
       id = run$artifact$id,
@@ -508,20 +577,15 @@ div_open_html <- function(line) {
 }
 
 markdown_fragment_html <- function(markdown) {
-  commonmark::markdown_html(markdown, extensions = TRUE, footnotes = TRUE)
+  html <- commonmark::markdown_html(markdown, extensions = TRUE, footnotes = TRUE)
+  strip_navigation_tags(html)
 }
 
-# Only figures the worker reports writing are embedded; a path the model typed
-# stays a plain link the sandboxed view can't load.
-embed_figures <- function(markdown, figures) {
-  for (path in figures) {
-    uri <- paste0(
-      "data:image/png;base64,",
-      gsub("\n", "", jsonlite::base64_enc(readBin(path, "raw", file.size(path))))
-    )
-    markdown <- gsub(path, uri, markdown, fixed = TRUE)
-  }
-  markdown
+# A <meta> refresh, <base>, or <form> can send a reader's browser, and the
+# document's data, elsewhere, and a saved report.html has no drawer to strip
+# them. Removing only the tags leaves a form's contents in place.
+strip_navigation_tags <- function(html) {
+  gsub("</?(meta|base|form)\\b[^>]*>", "", html, perl = TRUE, ignore.case = TRUE)
 }
 
 artifact_header_html <- function(frontmatter) {
@@ -562,7 +626,8 @@ artifact_document_html <- function(title, pieces) {
   paste0(
     "<!doctype html>\n<html><head><meta charset=\"utf-8\">",
     "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src ",
-    "'none'; style-src 'unsafe-inline'; img-src data:\"><title>",
+    "'none'; style-src 'unsafe-inline'; img-src data:; form-action 'none'; ",
+    "base-uri 'none'\"><title>",
     html_escape(title),
     "</title><style>\n", css, "\n</style></head><body><main>\n",
     paste(pieces, collapse = "\n"),

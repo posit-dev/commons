@@ -4,8 +4,6 @@ Work from the relevant package's directory, not the repository root: `pkg-r/` fo
 
 The documentation sites are the exception, because they are published as one tree: the landing page at the root, the R site under `r/`, and the Python site under `py/`. `scripts/preview-docs.sh` builds both into that tree and serves it, so a change can be read in place. It skips a site whose toolchain is missing rather than failing. Only the Python site gets a pull request preview; the R site follows the usual R package arrangement, where `r/dev/` tracks the development version and `r/` is redeployed by hand at release. The Python site is assembled by [great-docs](https://posit-dev.github.io/great-docs/) from `pkg-py/great-docs.yml`, which wraps Quarto rather than replacing it, and publishes a copy per release: the current one at `py/` and the others under `py/v/`. Adding a release to that list is a step in cutting one, not something the build infers.
 
-Neither package has been widely adopted or publicly released; changes can be made without a deprecation cycle (or even reference to the way that it used to work).
-
 Use soft wrapping for prose in Markdown files, including skills and vignettes.
 
 Both packages are first-class implementations. Never describe the Python package as a port, translation, or mirror of the R one, in code comments, docstrings, documentation, commit messages, or package metadata. Where one implementation needs to point at the other, name the shared contract that governs them both, or refer to the sibling file plainly.
@@ -17,6 +15,8 @@ Artifacts both packages ship, rather than behavior both must implement, live at 
 This governs behavior a user can observe, not implementation detail. Each package should read idiomatically in its own language, and minor differences between them are fine. Weigh how often a difference would surface and what it costs when it does: a rare one that fails safely is cheaper to accept than to engineer away. See `tests/shared/README.md` for the worked example.
 
 When writing about provenance, use "provenance tag" for the internal A/B/C code, "provenance outcome" for the answer-level classification (`Trusted`, `Cited`, or `Untrusted`), and "provenance marker" for the visible UI element.
+
+The agents commons builds don't know what "commons" is, and neither do their end users. Keep the name out of model-facing text: prompts, skills, tool descriptions, and markup the model writes, like the `<citation>` tag. Names only developers or the browser see, like exported functions and CSS classes, are fine.
 
 `commons` supports the published table-level `definitions` field in `data-dict.yaml`. Definitions use data-dict's expression language and are compiled to the attached source's SQL dialect. commons temporarily ports the definition-specific export logic until a data-dict R package is available; see [commons #115](https://github.com/posit-dev/commons/issues/115) for the integration design.
 

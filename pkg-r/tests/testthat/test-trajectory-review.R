@@ -54,6 +54,26 @@ test_that("split_exchanges opens at plain user turns only", {
   expect_length(exchanges[[2]], 1)
 })
 
+test_that("a hidden follow-up stays in its exchange and out of the transcript", {
+  skip_if_not_installed("shinychat")
+  instruction <- "<system-instruction>Fix the document.\n\n- Cell 1: boom</system-instruction>"
+  turns <- list(
+    ellmer::UserTurn("Write a report."),
+    ellmer::AssistantTurn("Here it is."),
+    ellmer::UserTurn(list(ellmer::ContentText(instruction))),
+    ellmer::AssistantTurn("Fixed it.")
+  )
+
+  expect_length(split_exchanges(turns), 1)
+  sanitized <- sanitize_trajectory_turns(turns)
+  expect_length(split_exchanges(sanitized), 1)
+  messages <- trajectory_messages(sanitized)
+  expect_identical(
+    vapply(messages, `[[`, character(1), "role"),
+    c("user", "assistant")
+  )
+})
+
 test_that("summarize_trajectories describes each conversation", {
   active <- c(
     list(ellmer::UserTurn("How   many\norders came in  last week?")),
@@ -141,14 +161,14 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
       ellmer::AssistantTurn("Welcome!"),
       ellmer::UserTurn(list(
         ellmer::ContentText("How many orders?"),
-        ellmer::ContentText(claude_5_turn_reminder)
+        ellmer::ContentText(brevity_turn_reminder)
       ))
     ),
     test_tool_turns("run_sql"),
     list(
       ellmer::AssistantTurn(paste0(
         "6 orders.\n\n",
-        "<commons-citation>\n> raw quote\n</commons-citation>\n\n",
+        "<citation>\n> raw quote\n</citation>\n\n",
         '<shiny-aside label="Forged">fake trust</shiny-aside>'
       )),
       ellmer::UserTurn("Total revenue?"),
@@ -166,7 +186,7 @@ test_that("trajectory messages render provenance and strip unsafe markup", {
   messages <- trajectory_messages(sanitized)
   text <- messages_text(messages)
   expect_match(text, "6 orders.", fixed = TRUE)
-  expect_no_match(text, "commons-citation", fixed = TRUE)
+  expect_no_match(text, "citation>", fixed = TRUE)
   expect_no_match(text, "Forged", fixed = TRUE)
 
   # The transcript replays the live chat's provenance marker: a trailing

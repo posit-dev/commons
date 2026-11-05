@@ -17,9 +17,16 @@ import ctypes
 import ctypes.util
 import errno
 import os
-import platform
+import stat
 import sys
 from collections.abc import Iterable
+
+try:
+    from . import _seccomp
+except ImportError:
+    # The worker puts this directory on sys.path and imports this module by
+    # bare name, so the relative import above would fail on the worker
+    import _seccomp  # pyrefly: ignore[missing-import]
 
 __all__ = [
     "FS_EXECUTE",
@@ -30,10 +37,12 @@ __all__ = [
     "FS_READ_ONLY",
     "FS_REFER",
     "FS_REMOVE_FILE",
+    "FS_RESOLVE_UNIX",
     "FS_TRUNCATE",
     "FS_WRITE_FILE",
     "SCOPE_ABSTRACT_UNIX_SOCKET",
     "SCOPE_MIN_ABI",
+    "SCOPE_SIGNAL",
     "PathBeneathAttr",
     "ScopedRulesetAttr",
     "abi_version",
@@ -47,16 +56,19 @@ NR_RESTRICT_SELF = 446
 
 # The numbers come from include/uapi/asm-generic/unistd.h in the kernel
 # tree, the table most architectures share for syscalls added since 2019;
-# x86_64's arch/x86/entry/syscalls/syscall_64.tbl assigns the same values.
-# The structs and flag bits below are include/uapi/linux/landlock.h, and
-# the landlock_create_ruleset(2), landlock_add_rule(2),
+# x86_64's arch/x86/entry/syscalls/syscall_64.tbl, i386's syscall_32.tbl
+# and arm's arch/arm/tools/syscall.tbl assign the same values. The structs
+# and flag bits below are include/uapi/linux/landlock.h, and the
+# landlock_create_ruleset(2), landlock_add_rule(2),
 # landlock_restrict_self(2) and landlock(7) man pages document the
 # contract. mips offsets its whole table by thousands, so 444 there is a
 # different call entirely. Calling a syscall by the wrong number is worse
 # than not calling it, so this is an allowlist of the architectures the
 # numbers are verified for, and anything else reports no Landlock and
-# falls back.
-KNOWN_ARCHITECTURES = frozenset({"x86_64", "amd64", "aarch64", "arm64"})
+# falls back. The names are the seccomp tables', read from the
+# interpreter's binary, since the syscall ABI is the binary's whatever
+# machine name the process's personality reports.
+KNOWN_ARCHITECTURES = frozenset({"x86_64", "i386", "aarch64", "arm"})
 
 CREATE_RULESET_VERSION = 1 << 0
 RULE_PATH_BENEATH = 1
@@ -78,15 +90,30 @@ FS_V1_ALL = (1 << 13) - 1
 FS_REFER = 1 << 13
 FS_TRUNCATE = 1 << 14
 FS_IOCTL_DEV = 1 << 15
+# Connecting to a pathname AF_UNIX socket bound outside the sandbox.
+FS_RESOLVE_UNIX = 1 << 16
 
 # What a read root is granted. Running a file counts as reading it, and a
 # directory has to be listable for an import to find anything in it.
 FS_READ_ONLY = FS_EXECUTE | FS_READ_FILE | FS_READ_DIR
 
 # ABI 6 (Linux 6.12) scoping: the worker can connect only to abstract AF_UNIX
-# sockets that it or its descendants bound, even under full network.
+# sockets that it or its descendants bound, even under full network, and can
+# signal only itself and its descendants.
 SCOPE_ABSTRACT_UNIX_SOCKET = 1 << 0
+SCOPE_SIGNAL = 1 << 1
 SCOPE_MIN_ABI = 6
+
+# The only rights a rule on a non-directory may name; the kernel refuses the
+# rule with EINVAL if it names any other.
+FS_FILE_RIGHTS = (
+    FS_EXECUTE
+    | FS_WRITE_FILE
+    | FS_READ_FILE
+    | FS_TRUNCATE
+    | FS_IOCTL_DEV
+    | FS_RESOLVE_UNIX
+)
 
 # A kernel that has no Landlock, or that is behind a policy forbidding it,
 # is a kernel to fall back from rather than fail on.
@@ -132,9 +159,10 @@ class PathBeneathAttr(ctypes.Structure):
 # Syscall numbers differ by architecture, so on an unknown one these numbers
 # could call an unrelated syscall instead of failing with ENOSYS. Everything
 # below runs only on the known ones.
-ON_LINUX = sys.platform == "linux" and platform.machine().lower() in (
-    KNOWN_ARCHITECTURES
+_ARCH: _seccomp.Arch | None = (
+    _seccomp.current_arch() if sys.platform == "linux" else None
 )
+ON_LINUX = _ARCH is not None and _ARCH.name in KNOWN_ARCHITECTURES
 
 _libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True) if ON_LINUX else None
 if _libc is not None:
@@ -170,10 +198,10 @@ def _set_no_new_privs() -> None:
 
 
 # The newest ABI the mask table in handled_access() has been checked
-# against: 6, 7 and 8 add no filesystem right, so the table is complete
-# through 8. The nightly Landlock ABI workflow fails when a kernel reports
+# against: 10 and 11 add no filesystem right, so the table is complete
+# through 11. The nightly Landlock ABI workflow fails when a kernel reports
 # newer, which is the prompt to re-check the table.
-NEWEST_REVIEWED_ABI = 8
+NEWEST_REVIEWED_ABI = 11
 
 
 def handled_access(abi: int) -> int:
@@ -184,10 +212,10 @@ def handled_access(abi: int) -> int:
     than being fixed at one version's rights. ABI 4 adds network rights,
     which a filesystem ruleset does not handle, so it adds nothing here.
 
-    ABI 5 is the newest that adds a filesystem right. A kernel reporting
-    more than that is handled as 5, which means a filesystem right added by
+    ABI 9 is the newest that adds a filesystem right. A kernel reporting
+    more than that is handled as 9, which means a filesystem right added by
     some later ABI would go unhandled, and therefore unrestricted, until
-    this table learns about it. ABI 6, 7 and 8 exist and add none, so the
+    this table learns about it. ABI 10 and 11 exist and add none, so the
     table is complete today, but this is a known potential drift location:
     ``NEWEST_REVIEWED_ABI`` records how far the check has gone, and the
     nightly workflow in ``.github/workflows/py-landlock-abi.yaml`` fails
@@ -200,6 +228,8 @@ def handled_access(abi: int) -> int:
         handled |= FS_TRUNCATE
     if abi >= 5:
         handled |= FS_IOCTL_DEV
+    if abi >= 9:
+        handled |= FS_RESOLVE_UNIX
     return handled
 
 
@@ -228,6 +258,8 @@ def _grant(ruleset_fd: int, path: str, access: int) -> None:
     except FileNotFoundError:
         return
     try:
+        if not stat.S_ISDIR(os.fstat(parent).st_mode):
+            access &= FS_FILE_RIGHTS
         rule = PathBeneathAttr(allowed_access=access, parent_fd=parent)
         if _syscall(
             NR_ADD_RULE,
@@ -288,9 +320,11 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
 
     Read roots are granted execute, read-file and read-dir. Write roots are
     granted everything the ruleset handles. On ABI 6 and later the ruleset
-    also scopes abstract AF_UNIX sockets. Once this returns, nothing can
-    widen the process's access again, including anything it goes on to
-    execute.
+    also scopes abstract AF_UNIX sockets and signals. On ABI 9 and later,
+    connecting or sending to a pathname AF_UNIX socket that a process outside
+    the sandbox bound works only when the socket is under a write root. Once
+    this returns, nothing can widen the process's access again, including
+    anything it goes on to execute.
     """
     abi = abi_version()
     if abi < 1:
@@ -305,7 +339,7 @@ def engage(read_roots: Iterable[str], write_roots: Iterable[str]) -> int | None:
             handled_access_fs=handled,
             # Zero, so Landlock leaves network access alone.
             handled_access_net=0,
-            scoped=SCOPE_ABSTRACT_UNIX_SOCKET,
+            scoped=SCOPE_ABSTRACT_UNIX_SOCKET | SCOPE_SIGNAL,
         )
     else:
         attr = RulesetAttr(handled_access_fs=handled)

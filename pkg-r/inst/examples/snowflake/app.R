@@ -46,9 +46,9 @@ server <- function(input, output, session) {
   print(identity)
 
   source <- data_source(con, tables = semantic_view)
-  agent <- commons(
+  agent <- agent(
     ellmer::chat_anthropic(),
-    data_sources = list(snowflake = source)
+    commons = commons(data_sources = list(snowflake = source))
   )
 
   commons_server("chat", agent)

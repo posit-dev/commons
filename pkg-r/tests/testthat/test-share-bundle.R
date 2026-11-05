@@ -2,7 +2,7 @@ shared_agent <- function() {
   agent <- test_agent()
   agent$set_turns(list(
     ellmer::UserTurn(list(ellmer::ContentText("How are orders split?"))),
-    ellmer::AssistantTurn(list(ContentDisplayText(
+    ellmer::AssistantTurn(list(ContentProjectedText(
       text = "<artifact id=\"orders\" title=\"Orders\">...</artifact>Split.",
       display = "<commons-artifact-link artifact=\"orders\" version=\"1\">Orders</commons-artifact-link>Split."
     )))

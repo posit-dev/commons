@@ -7,7 +7,7 @@
 commons_app(client, ...)
 }
 \arguments{
-\item{client}{A \code{\link[=commons]{commons()}} agent.}
+\item{client}{An \code{\link[=agent]{agent()}}.}
 
 \item{...}{Extra arguments passed to \code{\link[shiny:shinyApp]{shiny::shinyApp()}}.}
 }
@@ -31,9 +31,9 @@ cites nothing verified.
 
 \examples{
 \dontrun{
-agent <- commons(
+agent <- agent(
   ellmer::chat_anthropic(),
-  data_sources = data_source(sales = sales)
+  commons = commons(data_sources = data_source(sales = sales))
 )
 commons_app(agent)
 }

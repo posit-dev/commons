@@ -78,7 +78,8 @@ warn_if_connect_tracing_unsupported <- function() {
   if (!is.null(version) && version < numeric_version("2026.09.0")) {
     cli::cli_warn(c(
       paste0(
-        "This server is running Connect ", settings$version,
+        "This server is running Connect ",
+        settings$version,
         ", but trajectory logging requires Connect >= 2026.09.0."
       ),
       i = "Please ask your server administration to upgrade."
@@ -180,13 +181,17 @@ check_share_with <- function(share_with, call = rlang::caller_env()) {
 # the parent; everything below it uses explicit parents. The promise domain
 # swaps the active span in and out around promise callbacks so concurrent
 # conversations (e.g. multiple Shiny sessions) don't cross-parent.
-local_conversation_turn_span <- function(envir = parent.frame()) {
+local_conversation_turn_span <- function(
+  user = trajectory_user(),
+  envir = parent.frame()
+) {
   if (!is_installed("otel") || !otel::is_tracing_enabled()) {
     return(invisible(NULL))
   }
 
   span <- otel::start_span(
     "commons_conversation_turn",
+    attributes = if (!is.na(user)) list("commons.connect.user" = user),
     tracer = otel::get_tracer("co.posit.r-package.commons")
   )
   if (is_installed("promises", version = "1.5.0")) {
@@ -196,6 +201,16 @@ local_conversation_turn_span <- function(envir = parent.frame()) {
   defer(otel::end_span(span), envir)
 
   invisible(span)
+}
+
+trajectory_user <- function(
+  session = if (is_installed("shiny")) shiny::getDefaultReactiveDomain()
+) {
+  user <- session$user
+  if (!rlang::is_string(user) || !nzchar(user)) {
+    return(NA_character_)
+  }
+  user
 }
 
 # ellmer reads this semconv setting when its namespace loads. Refresh its cache

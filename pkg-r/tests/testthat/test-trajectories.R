@@ -170,6 +170,114 @@ test_that("conversations carry their last chat activity time", {
   expect_equal(as.numeric(last_active), 101)
 })
 
+test_that("trajectory_read associates session users with their conversations", {
+  path <- withr::local_tempdir()
+  json <- test_turn_json()
+  spans <- list(
+    otlp_test_span(
+      "t1",
+      "turn",
+      name = "commons_conversation_turn",
+      attributes = list(otlp_test_attr("commons.connect.user", "alice"))
+    ),
+    otlp_test_span(
+      "t2",
+      "turn",
+      name = "commons_conversation_turn",
+      attributes = list(otlp_test_attr("commons.connect.user", "bob"))
+    ),
+    chat_test_span(
+      "t2",
+      "chat",
+      parent_span_id = "turn",
+      conversation_id = "conv-b",
+      input_messages = json$input
+    ),
+    chat_test_span(
+      "t1",
+      "chat",
+      parent_span_id = "turn",
+      conversation_id = "conv-a",
+      input_messages = json$input
+    ),
+    conversation_test_span("t3", "turn"),
+    chat_test_span(
+      "t3",
+      "chat",
+      parent_span_id = "turn",
+      conversation_id = "anonymous",
+      input_messages = json$input
+    )
+  )
+  writeLines(otlp_test_line(spans), file.path(path, "trace-0.jsonl"))
+
+  trajectories <- trajectory_read(path)
+
+  expect_identical(trajectories[["conv-a"]]$user, "alice")
+  expect_identical(trajectories[["conv-b"]]$user, "bob")
+  expect_identical(trajectories[["anonymous"]]$user, NA_character_)
+})
+
+test_that("conversation users come from the earliest recorded non-title chat", {
+  json <- test_turn_json()
+  spans <- list(
+    otlp_test_span(
+      "t2",
+      "turn",
+      name = "commons_conversation_turn",
+      attributes = list(otlp_test_attr("commons.connect.user", "bob"))
+    ),
+    chat_test_span(
+      "t2",
+      "chat",
+      parent_span_id = "turn",
+      conversation_id = "conv-a",
+      input_messages = json$input,
+      end_time = "20"
+    ),
+    otlp_test_span(
+      "t0",
+      "turn",
+      name = "commons_conversation_turn",
+      attributes = list(otlp_test_attr("commons.connect.user", "title-user"))
+    ),
+    chat_test_span(
+      "t0",
+      "chat",
+      parent_span_id = "turn",
+      conversation_id = "conv-a",
+      system_instructions = jsonlite::toJSON(
+        list(list(type = "text", content = shinychat_title_prompt)),
+        auto_unbox = TRUE
+      ),
+      input_messages = json$input,
+      end_time = "5"
+    ),
+    otlp_test_span(
+      "t1",
+      "turn",
+      name = "commons_conversation_turn",
+      attributes = list(otlp_test_attr("commons.connect.user", "alice"))
+    ),
+    chat_test_span(
+      "t1",
+      "chat",
+      parent_span_id = "turn",
+      conversation_id = "conv-a",
+      input_messages = json$input,
+      end_time = "10"
+    )
+  )
+
+  trajectories <- build_trajectories(parse_otlp_lines(otlp_test_line(spans)))
+
+  expect_identical(trajectories[["conv-a"]]$user, "alice")
+
+  spans[[5]]$attributes <- list()
+  trajectories <- build_trajectories(parse_otlp_lines(otlp_test_line(spans)))
+  expect_identical(trajectories[["conv-a"]]$user, NA_character_)
+})
+
 test_that("rebuilt turns can be set on an ellmer chat", {
   json <- test_turn_json()
   spans <- parse_otlp_lines(otlp_test_line(list(
@@ -1015,7 +1123,8 @@ test_that("trajectory_read reads OTLP files from a directory", {
 
   expect_length(trajectories, 1)
   expect_length(read_local_spans(path), 1)
-  expect_named(trajectories[[1]], c("turns", "last_active"))
+  expect_named(trajectories[[1]], c("turns", "last_active", "user"))
+  expect_identical(trajectories[[1]]$user, NA_character_)
   expect_s7_class(trajectories[[1]]$turns[[1]], ellmer::UserTurn)
   expect_s3_class(trajectories[[1]]$last_active, "POSIXct")
 })

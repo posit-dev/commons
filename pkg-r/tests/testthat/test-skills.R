@@ -6,7 +6,12 @@ test_that("load_skill returns instructions without frontmatter", {
   expect_error(tool(name = "nonexistent"), "no skill named")
 })
 
-test_that("a skill that requires a tool is offered only beside it", {
-  expect_false("artifacts" %in% names(builtin_skills()))
-  expect_true("artifacts" %in% names(builtin_skills("edit_artifact")))
+test_that("skills are offered beside the tools the shared cases say", {
+  for (case in shared_fixture("skills")$cases) {
+    expect_identical(
+      names(builtin_skills(as.character(unlist(case$tools)))),
+      as.character(unlist(case$offered)),
+      info = case$name
+    )
+  }
 })

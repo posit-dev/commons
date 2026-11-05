@@ -3,12 +3,20 @@ commons_system_prompt <- function(
   definitions = NULL,
   instructions = NULL,
   tools = list(),
-  model = NULL
+  model = NULL,
+  trusted_only = FALSE
 ) {
   definitions <- definitions %||% definitions_registry(sources)
   instructions <- read_instructions(instructions)
   template <- read_system_prompt()
-  data <- system_prompt_data(sources, definitions, instructions, tools, model)
+  data <- system_prompt_data(
+    sources,
+    definitions,
+    instructions,
+    tools,
+    model,
+    trusted_only = trusted_only
+  )
   render_system_prompt(template, data)
 }
 
@@ -17,7 +25,8 @@ system_prompt_data <- function(
   definitions,
   instructions = NULL,
   tools = list(),
-  model = NULL
+  model = NULL,
+  trusted_only = FALSE
 ) {
   dictionary_context <- dictionary_context_text(sources)
   glossary_context <- glossary_context_text(sources)
@@ -28,7 +37,8 @@ system_prompt_data <- function(
   c(
     list(
       date = as.character(Sys.Date()),
-      is_claude_5 = is_claude_5_model(model),
+      needs_brevity_prompting = needs_brevity_prompting(model),
+      trusted_only = trusted_only,
       has_multiple_sources = length(sources) > 1,
       has_catalog_search = any(vapply(sources, catalog_searchable, logical(1))),
       has_dictionary_context = nzchar(dictionary_context) ||
@@ -54,12 +64,14 @@ system_prompt_data <- function(
   )
 }
 
-is_claude_5_model <- function(model) {
+# Claude 5.0 and 5.1 are verbose without extra prompting; Claude 5.5 and later
+# are not, so this matches those two versions alone.
+needs_brevity_prompting <- function(model) {
   if (!rlang::is_string(model)) {
     return(FALSE)
   }
   grepl(
-    "(^|[./:_-])claude-[^-]+-5($|[./:@_-])",
+    "(^|[./:_-])claude-[^-]+-5(?:[.-][01])?(?![.-][0-9])($|[./:@_-])",
     tolower(model),
     perl = TRUE
   )

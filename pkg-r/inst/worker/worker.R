@@ -372,7 +372,7 @@ worker_guardrails <- function(work_dir, network = "none") {
 }
 
 worker_init <- function(
-  parent_tmp,
+  callr_dir,
   work_dir,
   dll_path,
   network = "none",
@@ -447,9 +447,9 @@ worker_init <- function(
   ))
   read_roots <- read_roots[dir.exists(read_roots)]
   read_roots <- unique(c(read_roots, resolve(read_roots)))
-  # callr writes its per-call result files into the parent's tempdir, so the
-  # worker must be able to write there for results to make it back.
-  write_roots <- c(parent_tmp, work_dir)
+  # callr writes each call's result file into callr_dir, so the worker must be
+  # able to write there for results to make it back.
+  write_roots <- c(callr_dir, work_dir)
   write_roots <- unique(c(write_roots, resolve(write_roots)))
   # callr reports status on fd 3 and saves stdout/stderr while a call runs.
   callr_data <- as.environment("tools:callr")[["__callr_data__"]]
@@ -663,12 +663,13 @@ worker_engage_guardrails <- function() {
   }
 }
 
-# Documents knit a piece at a time in the document's own directory, so cells
-# can read `data/` as the deployed document does. Code is folded and data
-# frames print as tables; errors are kept in the output and recorded.
+# Documents knit a piece at a time in the document's own directory. Code is
+# folded and data frames print as tables; errors are kept in the output and
+# recorded.
 worker_knit_init <- function(dir) {
   setwd(dir)
   state <- attach(NULL, name = "commons:knit")
+  state$commons <- worker_commons_proxy(file.path(dir, ".commons"))
   state$errors <- character()
   state$figs <- file.path(dir, "figs")
   escape <- function(x) {
@@ -691,19 +692,21 @@ worker_knit_init <- function(dir) {
     message = FALSE,
     comment = "#>"
   )
+  # The HTML these hooks write ends with a blank line: otherwise Markdown that
+  # follows directly, such as a plot, is read as part of the HTML block.
   knitr::knit_hooks$set(
     source = function(x, options) {
       paste0(
         "\n<details class=\"commons-code\"><summary>Code</summary>\n\n```r\n",
         paste(x, collapse = "\n"),
-        "\n```\n\n</details>\n"
+        "\n```\n\n</details>\n\n"
       )
     },
     error = function(x, options) {
       message <- gsub("(^|\n)#> ?(! )?", "\\1", trimws(x))
       message <- sub("^Error[^:\n]*:\\s*", "", message)
       state$errors <- c(state$errors, trimws(message))
-      paste0("\n<div class=\"commons-cell-error\">", escape(x), "</div>\n")
+      paste0("\n<div class=\"commons-cell-error\">", escape(x), "</div>\n\n")
     }
   )
   registerS3method(
@@ -720,6 +723,66 @@ worker_knit_init <- function(dir) {
   invisible(TRUE)
 }
 
+# A stand-in for the host's commons. Each method asks the host to run the
+# call on the real object, which holds the connections this session must not,
+# and waits for the answer to appear in `dir`.
+worker_commons_proxy <- function(dir) {
+  count <- 0L
+  request <- function(method, args) {
+    count <<- count + 1L
+    id <- paste0(Sys.getpid(), "-", count)
+    path <- file.path(dir, paste0(id, ".rds"))
+    signalCondition(structure(
+      list(message = "commons request", id = id, method = method, args = args),
+      class = c("commons_request", "callr_message", "condition")
+    ))
+    while (!file.exists(path)) {
+      Sys.sleep(0.01)
+    }
+    response <- readRDS(path)
+    unlink(path)
+    if (!is.null(response$error)) {
+      stop(response$error, call. = FALSE)
+    }
+    response$value
+  }
+  structure(
+    list(
+      measure = function(name, arguments = list()) {
+        request("measure", list(name = name, arguments = arguments))
+      },
+      metrics = function(
+        metrics,
+        dimensions = NULL,
+        filters = NULL,
+        where = NULL,
+        arguments = list(),
+        source = NULL
+      ) {
+        request("metrics", list(
+          metrics = metrics,
+          dimensions = dimensions,
+          filters = filters,
+          where = where,
+          arguments = arguments,
+          source = source
+        ))
+      },
+      calculation = function(name, arguments = list(), source = NULL) {
+        request("calculation", list(
+          name = name,
+          arguments = arguments,
+          source = source
+        ))
+      },
+      run_sql = function(query, source = NULL) {
+        request("run_sql", list(query = query, source = source))
+      }
+    ),
+    class = "commons_proxy"
+  )
+}
+
 worker_knit_unit <- function(kind, text) {
   state <- as.environment("commons:knit")
   state$errors <- character()
@@ -729,15 +792,29 @@ worker_knit_unit <- function(kind, text) {
 
   source <- if (kind == "inline") paste0("`r ", text, "`") else text
   output <- tryCatch(
-    knitr::knit(text = source, quiet = TRUE, envir = globalenv()),
+    {
+      output <- knitr::knit(text = source, quiet = TRUE, envir = globalenv())
+      worker_embed_figures(output, list.files(state$figs, full.names = TRUE))
+    },
     error = function(err) {
-      state$errors <- c(state$errors, conditionMessage(err))
-      ""
+      knitr::knit_hooks$get("error")(conditionMessage(err), list())
     }
   )
   list(
     output = output,
-    figures = list.files(state$figs, full.names = TRUE),
     errors = state$errors
   )
+}
+
+# Read figures inside the sandbox: a model-written path may be a symlink to
+# a file the worker can't read. Other paths stay links the view can't load.
+worker_embed_figures <- function(markdown, figures) {
+  for (path in figures) {
+    uri <- paste0(
+      "data:image/png;base64,",
+      gsub("\n", "", jsonlite::base64_enc(readBin(path, "raw", file.size(path))))
+    )
+    markdown <- gsub(path, uri, markdown, fixed = TRUE)
+  }
+  markdown
 }
