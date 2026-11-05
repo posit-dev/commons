@@ -651,7 +651,11 @@ split_exchanges <- function(turns) {
   out <- list()
   current <- NULL
   for (turn in turns) {
-    if (identical(turn@role, "user") && !turn_has_tool_result(turn)) {
+    if (
+      identical(turn@role, "user") &&
+        !turn_has_tool_result(turn) &&
+        !is_internal_turn(turn)
+    ) {
       if (!is.null(current)) {
         out[[length(out) + 1]] <- current
       }

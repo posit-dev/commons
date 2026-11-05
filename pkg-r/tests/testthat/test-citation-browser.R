@@ -387,3 +387,83 @@ test_that("Shiny Chat preserves Markdown blocks around citations", {
     FALSE
   )
 })
+
+test_that("a streamed document opens in the drawer and reopens from its chip", {
+  skip_on_cran()
+  skip_if_not_installed("shinytest2")
+  skip_if_not_installed("chromote")
+  skip_if_browser_tests_disabled()
+  skip_if_ellmer_streaming_hooks_unavailable()
+
+  app <- shinytest2::AppDriver$new(
+    browser_test_app("artifact-stream"),
+    name = "artifact-stream",
+    timeout = 30 * 1000,
+    load_timeout = 30 * 1000
+  )
+  withr::defer(app$stop())
+
+  # The document lives in a sandboxed frame the test can't read, so it reads
+  # the pieces on their way there.
+  app$run_js(paste0(
+    "window.commonsPieces = [];",
+    "$(document).on('shiny:message', (event) => {",
+    "const msg = event.message.custom && event.message.custom['commons-artifact'];",
+    "if (msg && msg.pieces) window.commonsPieces.push(...msg.pieces.map((p) => p.html));",
+    "});"
+  ))
+  frame <- "document.querySelector('commons-artifact-view iframe')"
+  app$wait_for_js(
+    "window.commonsPieces.some((html) => html.includes('There are 4 orders across'))",
+    timeout = 60 * 1000
+  )
+  expect_true(app$get_js(paste0("!!", frame)))
+  app$wait_for_js("document.querySelector('commons-artifact-view').ready")
+  expect_true(app$get_js(
+    "window.commonsPieces.some((html) => html.includes('commons-code'))"
+  ))
+  expect_identical(
+    app$get_js("document.querySelector('commons-artifact-link').textContent"),
+    "Orders by region"
+  )
+  chip_image <- paste0(
+    "document.querySelector('commons-artifact-link')",
+    ".shadowRoot.querySelector('.shot img')"
+  )
+  app$wait_for_js(paste0("!!", chip_image), timeout = 30 * 1000)
+  expect_match(
+    app$get_js(paste0(chip_image, ".src")),
+    "^data:image/png;base64,"
+  )
+  expect_false(app$get_js(
+    "document.body.innerText.includes('trusted$measure')"
+  ))
+
+  # A link opens in a new tab rather than replacing the document in its frame,
+  # which runs in a target of its own.
+  app$run_js("window.opened = []; window.open = (url) => window.opened.push(url);")
+  browser <- app$get_chromote_session()$parent
+  targets <- browser$Target$getTargets()$targetInfos
+  target <- Filter(function(t) identical(t$type, "iframe"), targets)[[1]]$targetId
+  frame_session <- chromote::ChromoteSession$new(parent = browser, targetId = target)
+  in_frame <- function(js) {
+    frame_session$Runtime$evaluate(js, returnByValue = TRUE)$result$value
+  }
+  link <- "document.querySelector('a[href=\"https://example.com/orders\"]')"
+  deadline <- Sys.time() + 30
+  while (!isTRUE(in_frame(paste0("!!", link))) && Sys.time() < deadline) {
+    Sys.sleep(0.1)
+  }
+  in_frame(paste0(link, ".click()"))
+  app$wait_for_js("window.opened.length > 0")
+  expect_identical(app$get_js("window.opened"), list("https://example.com/orders"))
+  expect_identical(in_frame("location.href"), "about:srcdoc")
+
+  app$run_js(paste0(
+    frame,
+    ".remove();",
+    "document.querySelector('commons-artifact-link')",
+    ".shadowRoot.querySelector('button').click();"
+  ))
+  app$wait_for_js(paste0("!!", frame), timeout = 30 * 1000)
+})

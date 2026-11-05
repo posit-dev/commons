@@ -3,10 +3,12 @@
 Each skill is a directory under `prompts/skills/` holding a `SKILL.md` in the
 Agent Skills format: YAML frontmatter with a name and description, then the
 instructions. Only the name and description reach the model until it loads one.
+A skill that `requires` a tool is offered only when that tool is registered.
 """
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 import yaml
@@ -19,11 +21,12 @@ class Skill:
     name: str
     description: str
     topic: str
+    requires: str | None
     body: str
 
 
-def builtin_skills() -> dict[str, Skill]:
-    """The packaged skills, keyed by name, in directory order."""
+def builtin_skills(tool_names: Collection[str] = ()) -> dict[str, Skill]:
+    """The packaged skills the given tools support, keyed by name."""
     dirs = sorted(
         (entry for entry in (_PROMPTS / "skills").iterdir() if entry.is_dir()),
         key=lambda entry: entry.name,
@@ -31,7 +34,11 @@ def builtin_skills() -> dict[str, Skill]:
     skills = [
         _read_skill(entry.joinpath("SKILL.md").read_text("utf-8")) for entry in dirs
     ]
-    return {skill.name: skill for skill in skills}
+    return {
+        skill.name: skill
+        for skill in skills
+        if skill.requires is None or skill.requires in tool_names
+    }
 
 
 def _read_skill(text: str) -> Skill:
@@ -41,5 +48,6 @@ def _read_skill(text: str) -> Skill:
         name=meta["name"],
         description=meta["description"],
         topic=meta["metadata"]["topic"],
+        requires=meta["metadata"].get("requires"),
         body=body.strip(),
     )

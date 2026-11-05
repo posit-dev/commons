@@ -68,6 +68,54 @@ test_that("commons_server queues a restore reminder when history is restored", {
   )
 })
 
+test_that("documents are saved with the chat and editable once restored", {
+  skip_if_not_installed("shiny")
+  skip_if_not_installed("shinychat")
+
+  history_controller <- function(session) {
+    shinychat:::get_session_chat_bookmark_info(
+      session,
+      "chat.history-controller"
+    )
+  }
+
+  values <- NULL
+  shiny::testServer(
+    function(input, output, session) {
+      agent <- test_agent()
+      commons_server("chat", client = agent)
+    },
+    {
+      store <- agent$artifact_store()
+      wait_for_promise(artifact_commit(store, "doc", "Doc", "First.\n")$rendered)
+      wait_for_promise(artifact_edit(store, "doc", "First.", "Second."))
+      # shinychat has no public hook to save under testServer.
+      values <<- history_controller(session)$.__enclos_env__$private$capture_app_state()
+    }
+  )
+  expect_length(values$commons_artifacts$doc$sources, 2)
+  # History persists values as JSON.
+  values <- jsonlite::fromJSON(jsonlite::toJSON(values, auto_unbox = TRUE))
+
+  shiny::testServer(
+    function(input, output, session) {
+      agent <- test_agent()
+      commons_server("chat", client = agent)
+    },
+    {
+      history_controller(session)$restore_app_state(values)
+      store <- agent$artifact_store()
+      result <- wait_for_promise(artifact_edit(store, "doc", "Second.", "Third."))
+      expect_identical(result@value, "Saved version 3 of `doc`.")
+      expect_match(
+        paste(artifact_get(store, "doc")$html, collapse = ""),
+        "Third.",
+        fixed = TRUE
+      )
+    }
+  )
+})
+
 test_that("commons_theme() bundles the commons chat assets", {
   theme <- commons_theme()
 
@@ -77,8 +125,14 @@ test_that("commons_theme() bundles the commons chat assets", {
   expect_true("commons-chat" %in% names)
 
   commons_dep <- deps[[which(names == "commons-chat")]]
-  expect_identical(commons_dep$stylesheet, "commons-chat.css")
-  expect_identical(commons_dep$script, "commons-chat.js")
+  expect_identical(
+    commons_dep$stylesheet,
+    c("commons-chat.css", "commons-artifact.css")
+  )
+  expect_identical(
+    commons_dep$script,
+    c("commons-chat.js", "commons-artifact.js")
+  )
 })
 
 test_that("icon URLs resolve inside the commons-chat dependency", {

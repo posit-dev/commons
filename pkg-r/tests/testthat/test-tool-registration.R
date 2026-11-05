@@ -101,13 +101,14 @@ fixture_tools <- function(spec, shape_name) {
 test_that("tool registration matches the shared contract", {
   spec <- tool_registration_spec()
   execution <- unlist(spec$execution_tools)
+  pending <- unlist(spec$pending_tools$names)
 
   for (case in tool_registration_cases(spec, "registration")) {
     names <- vapply(fixture_tools(spec, case$shape), tool_name, character(1))
     # run_r is built here and run_python is built by its own owner in the
     # Python package, so neither is part of what the two agree on.
     expect_identical(
-      setdiff(names, execution),
+      setdiff(names, c(execution, pending)),
       unlist(case$tools),
       info = case$name
     )

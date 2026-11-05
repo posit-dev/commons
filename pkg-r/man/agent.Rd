@@ -147,9 +147,30 @@ determines and displays answer trust.
 \item \code{run_sql} executes a read-only SQL query.
 \item \code{run_r} executes R code to analyze results and render plots in the agent's
 R session.
+\item \code{edit_artifact} edits a document the agent wrote.
 }
 
-With \code{mode = "trusted only"}, the agent never receives \code{run_sql} or \code{run_r}.
+With \code{mode = "trusted only"}, the agent never receives \code{run_sql}, \code{run_r},
+or \code{edit_artifact}.
+}
+
+\section{Documents}{
+
+When a user asks for a report, the agent writes a Quarto document instead
+of a chat reply. In \code{\link[=commons_server]{commons_server()}}, the document streams into the chat's
+drawer as it's written, with each R cell knitted as soon as it arrives;
+outside Shiny, \code{agent$chat()} knits it and reports where it wrote the
+result.
+
+A document gets its data by calling the \code{\link[=commons]{commons()}} object's
+\verb{$measure()}, \verb{$metrics()}, \verb{$calculation()}, and \verb{$run_sql()} methods in its
+code. The code runs in a fresh sandboxed R session, with the same
+restrictions as \code{run_r}, where \code{commons} is a stand-in that asks the app to
+run each call and returns the result; the data sources never enter the
+sandbox. The saved source keeps its \verb{commons$} calls, so it renders
+wherever a \code{commons} object is defined. Quarto isn't needed to show
+documents, only to render the saved source elsewhere. A trusted-only agent doesn't write
+documents, since their code is the agent's own.
 
 These model-facing tools should be considered private. Their constructors
 are intentionally not exported, and their names, arguments, availability,

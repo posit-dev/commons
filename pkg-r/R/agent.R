@@ -117,8 +117,27 @@
 #' * `run_sql` executes a read-only SQL query.
 #' * `run_r` executes R code to analyze results and render plots in the agent's
 #'   R session.
+#' * `edit_artifact` edits a document the agent wrote.
 #'
-#' With `mode = "trusted only"`, the agent never receives `run_sql` or `run_r`.
+#' With `mode = "trusted only"`, the agent never receives `run_sql`, `run_r`,
+#' or `edit_artifact`.
+#'
+#' @section Documents:
+#' When a user asks for a report, the agent writes a Quarto document instead
+#' of a chat reply. In [commons_server()], the document streams into the chat's
+#' drawer as it's written, with each R cell knitted as soon as it arrives;
+#' outside Shiny, `agent$chat()` knits it and reports where it wrote the
+#' result.
+#'
+#' A document gets its data by calling the [commons()] object's
+#' `$measure()`, `$metrics()`, `$calculation()`, and `$run_sql()` methods in its
+#' code. The code runs in a fresh sandboxed R session, with the same
+#' restrictions as `run_r`, where `commons` is a stand-in that asks the app to
+#' run each call and returns the result; the data sources never enter the
+#' sandbox. The saved source keeps its `commons$` calls, so it renders
+#' wherever a `commons` object is defined. Quarto isn't needed to show
+#' documents, only to render the saved source elsewhere. A trusted-only agent doesn't write
+#' documents, since their code is the agent's own.
 #'
 #' These model-facing tools should be considered private. Their constructors
 #' are intentionally not exported, and their names, arguments, availability,
@@ -301,8 +320,8 @@ Commons <- R6::R6Class(
         sources
       )
       private$restore_reminder_pending <- FALSE
-      # Handles, the worker, and citation requests all serve the fallback
-      # path, which a trusted-only agent doesn't have.
+      # Handles, the worker, citation requests, and documents all serve the
+      # fallback path, which a trusted-only agent doesn't have.
       if (!private$trusted_only) {
         private$handles <- new_handle_store()
         private$worker <- new_r_worker(
@@ -311,6 +330,14 @@ Commons <- R6::R6Class(
         )
         private$citation_request <- new.env(parent = emptyenv())
         private$citation_request$reminder <- citation_reminder_text()
+        private$artifacts <- new_artifact_store(
+          resolve_input = function(method, args) {
+            resolve_artifact_input(private$commons_obj, method, args)
+          },
+          network = network,
+          protection = protection %||% run_r_protection_mode()
+        )
+        private$artifacts$owner <- self
       }
 
       commons_tools <- build_commons_tools(self, private)
@@ -339,6 +366,14 @@ Commons <- R6::R6Class(
 
     set_turns = function(value) {
       private$restore_reminder_pending <- FALSE
+      # Editing a message or switching branches keeps only some of the turns,
+      # so the documents become what those turns wrote, as of their last
+      # version there. They render again when they're next needed.
+      store <- private$own_artifacts()
+      if (!is.null(store)) {
+        artifact_store_reset(store)
+        artifact_store_restore(store, artifact_turns_values(value))
+      }
       super$set_turns(value)
     },
 
@@ -348,8 +383,28 @@ Commons <- R6::R6Class(
       }
       restore_reminder_pending <- private$restore_reminder_pending
       inputs <- private$prepare_turn_inputs(rlang::list2(...))
+      n_turns <- length(self$get_turns())
       result <- withVisible(do.call(super$chat, c(inputs, list(echo = echo))))
       private$consume_restore_reminder(restore_reminder_pending)
+      store <- private$own_artifacts()
+      for (i in seq_len(artifact_followup_limit + 1L)) {
+        turns <- self$get_turns()
+        save_turn_artifacts(store, turns[seq_along(turns) > n_turns])
+        if (
+          i > artifact_followup_limit ||
+            is.null(store) ||
+            length(store$reminders) == 0
+        ) {
+          break
+        }
+        # As in a stream, the model fixes what failed to render in a hidden
+        # turn, and its reply to that turn is what this call returns.
+        n_turns <- length(turns)
+        result <- withVisible(do.call(
+          super$chat,
+          c(private$prepare_turn_inputs(list()), list(echo = echo))
+        ))
+      }
       if (result$visible) result$value else invisible(result$value)
     },
 
@@ -382,7 +437,23 @@ Commons <- R6::R6Class(
       # A trusted-only agent shows no provenance markers. An empty corpus still
       # strips citation markup but rejects every citation, so none renders.
       corpus <- if (trusted_only) list() else private$corpus
+      artifact_store <- private$own_artifacts()
+      on_artifact <- if (!is.null(artifact_store)) {
+        artifact_scan_handler(artifact_store)
+      }
       as_content <- identical(stream, "content")
+      # Bypasses this class's set_turns(), which would drop the artifacts.
+      replace_turns <- function(turns) super$set_turns(turns)
+      # A hidden turn whose only inputs are the pending system instructions.
+      followup_stream <- function() {
+        do.call(
+          super$stream_async,
+          c(
+            private$prepare_turn_inputs(list()),
+            list(tool_mode = tool_mode, stream = stream, controller = controller)
+          )
+        )
+      }
 
       # Always project citations so reserved model markup cannot reach the browser.
       coro::async_generator(function() {
@@ -390,26 +461,66 @@ Commons <- R6::R6Class(
         if (tracing) {
           span <- local_conversation_turn_span(user = user)
         }
-        scanner <- citation_scanner(corpus)
+        scanner <- citation_scanner(
+          corpus,
+          on_artifact = on_artifact
+        )
+        # If the provider stream errors mid-document, finishing the scanner
+        # fails the open document, which stops its run and clears the drawer.
+        on.exit(scanner$finish(), add = TRUE)
 
-        for (chunk in coro::await_each(raw_stream)) {
-          if (is.character(chunk)) {
-            out <- scanner$feed(chunk)
-            if (nzchar(out)) yield(out)
-          } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
-            out <- scanner$feed(chunk@text)
-            if (nzchar(out)) yield(ellmer::ContentText(out))
-          } else {
-            yield(chunk)
+        turn_stream <- raw_stream
+        followups <- 0L
+        repeat {
+          for (chunk in coro::await_each(turn_stream)) {
+            if (is.character(chunk)) {
+              out <- scanner$feed(chunk)
+              if (nzchar(out)) yield(out)
+            } else if (S7::S7_inherits(chunk, ellmer::ContentText)) {
+              out <- scanner$feed(chunk@text)
+              if (nzchar(out)) yield(ellmer::ContentText(out))
+            } else {
+              yield(chunk)
+            }
+          }
+
+          private$consume_restore_reminder(restore_reminder_pending)
+
+          tail <- scanner$finish()
+          if (nzchar(tail)) {
+            yield(if (as_content) ellmer::ContentText(tail) else tail)
+          }
+
+          # Documents written in this reply are still rendering. Once they
+          # finish, any errors go back to the model in a hidden turn, and the
+          # same response carries its fix rather than waiting on the user.
+          if (
+            is.null(artifact_store) ||
+              followups >= artifact_followup_limit ||
+              isTRUE(controller$cancelled)
+          ) {
+            break
+          }
+          await(unless_cancelled(artifact_store_settled(artifact_store), controller))
+          if (
+            length(artifact_store$reminders) == 0 ||
+              isTRUE(controller$cancelled)
+          ) {
+            break
+          }
+          followups <- followups + 1L
+          turn_stream <- followup_stream()
+          gap <- scanner$feed("\n\n")
+          if (nzchar(gap)) {
+            yield(if (as_content) ellmer::ContentText(gap) else gap)
           }
         }
-
-        private$consume_restore_reminder(restore_reminder_pending)
-
-        tail <- scanner$finish()
-        if (nzchar(tail)) {
-          yield(if (as_content) ellmer::ContentText(tail) else tail)
-        }
+        replace_turns(project_turns_display(
+          self$get_turns(),
+          from_index,
+          corpus,
+          artifact_store
+        ))
 
         decisions <- scanner$decisions()
         verified <- any(vapply(
@@ -461,6 +572,10 @@ Commons <- R6::R6Class(
 
     citation_corpus = function() {
       private$corpus
+    },
+
+    artifact_store = function() {
+      private$own_artifacts()
     },
 
     queue_restore_reminder = function() {
@@ -531,14 +646,29 @@ Commons <- R6::R6Class(
     corpus = NULL,
     citation_request = NULL,
     restore_reminder_pending = FALSE,
+    artifacts = NULL,
 
     prepare_turn_inputs = function(inputs) {
       inputs <- append_turn_reminder(inputs, self$get_model())
+      inputs <- c(inputs, take_artifact_reminders(private$own_artifacts()))
       # The restore reminder is about run_r state, which this mode never has.
       if (private$restore_reminder_pending && !private$trusted_only) {
         inputs <- append_restored_conversation_reminder(inputs)
       }
       inputs
+    },
+
+    # `clone()` copies the reference to the store, so a clone, such as the one
+    # shinychat makes to title a conversation, would clear the original's
+    # documents when it sets its own turns. A clone takes its own copy first.
+    own_artifacts = function() {
+      store <- private$artifacts
+      if (is.null(store) || identical(store$owner, self)) {
+        return(store)
+      }
+      private$artifacts <- artifact_store_fork(store)
+      private$artifacts$owner <- self
+      private$artifacts
     },
 
     consume_restore_reminder = function(was_pending) {
@@ -568,8 +698,15 @@ check_trusted_tools <- function(tools) {
   )
 }
 
+# A hidden follow-up turn continues the user's request rather than making one.
 turn_has_user_message <- function(turn) {
-  any(!vapply(turn@contents, is_tool_result_content, logical(1)))
+  any(!vapply(
+    turn@contents,
+    function(content) {
+      is_tool_result_content(content) || S7::S7_inherits(content, ContentTurnReminder)
+    },
+    logical(1)
+  ))
 }
 
 # Measures can take a named source's connection as an argument.

@@ -517,3 +517,22 @@ test_that("a settled call and a closed worker leave the later loop empty", {
     )
   })
 })
+
+test_that("closing a worker releases a call that is still waiting", {
+  later::with_temp_loop({
+    worker <- local_worker()
+    worker_ensure(worker)
+    worker$rs$call(function() Sys.sleep(30))
+    awaiting <- worker_await(worker)
+
+    worker_close(worker)
+    result <- sync_promise(awaiting)
+
+    expect_identical(
+      result$failure, "the R session was closed before the code finished."
+    )
+    expect_null(worker$cancel_await)
+    later::run_now()
+    expect_true(later::loop_empty())
+  })
+})
