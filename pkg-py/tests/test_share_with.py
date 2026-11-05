@@ -289,3 +289,21 @@ def test_a_generator_of_usernames_is_rejected() -> None:
         share_trajectory_access(name for name in ["ada"])  # type: ignore[arg-type]
 
     assert seen == []
+
+
+def test_a_user_guid_that_is_not_a_string_warns() -> None:
+    # The guid flows into a set membership test, so a list here raises on
+    # hashing well after the response was read.
+    def malformed(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/permissions"):
+            return httpx.Response(200, json=[])
+        return httpx.Response(200, json={"results": [{"username": "ada", "guid": []}]})
+
+    client = ConnectClient(
+        "https://connect.example.com",
+        "the-api-key",
+        http=httpx.Client(transport=httpx.MockTransport(malformed)),
+    )
+
+    with pytest.warns(UserWarning, match="Could not share"):
+        share_trajectory_access(["ada"], client=client)

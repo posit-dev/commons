@@ -244,6 +244,11 @@ def user_guid(client: ConnectClient, username: str) -> str:
                 for user in results
                 if user["username"].lower() == username.lower()
             ]
+            # Checked here rather than at the caller: a guid flows into a set
+            # membership test, and a non-string one raises on hashing long
+            # after the response that produced it was read.
+            if not all(isinstance(guid, str) for guid in matched):
+                raise TypeError("guid")
         if matched:
             return matched[0]
         if len(results) < _USER_PAGE_SIZE:
