@@ -201,7 +201,8 @@ artifact_store_restore <- function(store, values) {
       !rlang::is_string(id) ||
         !rlang::is_string(entry$title) ||
         length(sources) == 0 ||
-        !is.null(store$artifacts[[id]])
+        !is.null(store$artifacts[[id]]) ||
+        !is.null(store$pending[[id]])
     ) {
       next
     }
@@ -212,6 +213,78 @@ artifact_store_restore <- function(store, values) {
     )
   }
   invisible(store)
+}
+
+# The documents `turns` wrote, in the form artifact_store_values() returns:
+# each tag, and each edit whose result says it was saved, replayed in order
+# without rendering. A tag is validated as artifact_commit() does, so a
+# rejected one adds no version here either.
+artifact_turns_values <- function(turns) {
+  values <- list()
+  add_version <- function(id, title, source) {
+    doc <- tryCatch(
+      parse_artifact_document(source),
+      commons_artifact_invalid = function(cnd) NULL
+    )
+    if (!is.null(doc)) {
+      values[[id]] <<- list(
+        title = doc$frontmatter$title %||% title,
+        sources = c(values[[id]]$sources, list(source))
+      )
+    }
+  }
+  on_artifact <- function(event) {
+    if (identical(event$type, "close")) {
+      add_version(event$id, event$title, event$body)
+    }
+    NULL
+  }
+  for (turn in turns) {
+    if (S7::S7_inherits(turn, ellmer::AssistantTurn)) {
+      scanner <- citation_scanner(on_artifact = on_artifact)
+      scanner$feed(turn_text(turn))
+      scanner$finish()
+      next
+    }
+    for (content in turn@contents) {
+      edit <- artifact_saved_edit(content)
+      entry <- if (!is.null(edit)) values[[edit$id]]
+      if (is.null(entry)) {
+        next
+      }
+      source <- tryCatch(
+        apply_artifact_edit(
+          entry$sources[[length(entry$sources)]],
+          edit$old_string,
+          edit$new_string,
+          isTRUE(edit$replace_all)
+        ),
+        error = function(err) NULL
+      )
+      if (!is.null(source)) {
+        add_version(edit$id, entry$title, source)
+      }
+    }
+  }
+  values
+}
+
+# The arguments of an edit_artifact call whose result says it saved a version.
+artifact_saved_edit <- function(content) {
+  if (
+    !S7::S7_inherits(content, ellmer::ContentToolResult) ||
+      is.null(content@request) ||
+      !identical(content@request@name, "edit_artifact") ||
+      !is.null(content@error)
+  ) {
+    return(NULL)
+  }
+  value <- content@value
+  if (!rlang::is_string(value) || !startsWith(value, "Saved version ")) {
+    return(NULL)
+  }
+  args <- content@request@arguments
+  if (!rlang::is_string(args$id)) NULL else args
 }
 
 # The link that replaces a document's tag in a saved turn, shown only when the

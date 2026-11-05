@@ -700,6 +700,66 @@ test_that("a restored document renders when it's first needed", {
   expect_true(file.exists(file.path(artifact_latest_dir(artifact), "report.qmd")))
 })
 
+test_that("keeping some turns keeps the documents they wrote, as of then", {
+  edit <- ellmer::ContentToolRequest(
+    id = "call-1",
+    name = "edit_artifact",
+    arguments = list(id = "doc", old_string = "First.", new_string = "Second.")
+  )
+  assistant <- function(...) ellmer::AssistantTurn(list(...))
+  user <- function(...) ellmer::UserTurn(list(...))
+  text <- ellmer::ContentText
+  turns <- list(
+    user(text("Write it.")),
+    assistant(text("<artifact id=\"doc\" title=\"Doc\">\nFirst.\n</artifact>"), edit),
+    user(ellmer::ContentToolResult("Saved version 2 of `doc`.", request = edit)),
+    assistant(text("Done.")),
+    user(text("Rewrite it, and add another.")),
+    assistant(text(paste0(
+      "<artifact id=\"doc\" title=\"Doc\">\nThird.\n</artifact>\n",
+      "<artifact id=\"other\" title=\"Other\">\nOther.\n</artifact>"
+    )))
+  )
+  agent <- test_agent()
+
+  agent$set_turns(turns)
+  values <- artifact_store_values(agent$artifact_store())
+  expect_named(values, c("doc", "other"), ignore.order = TRUE)
+  expect_length(values$doc$sources, 3)
+
+  # As when the user edits their second message.
+  agent$set_turns(turns[1:4])
+  store <- agent$artifact_store()
+  expect_named(artifact_store_values(store), "doc")
+  artifact <- artifact_get(store, "doc")
+  wait_until_ready(store, "doc")
+  expect_length(artifact$versions, 2)
+  expect_match(paste(artifact$html, collapse = ""), "Second.", fixed = TRUE)
+})
+
+test_that("a rejected tag or failed edit adds no version on replay", {
+  edit <- ellmer::ContentToolRequest(
+    id = "call-1",
+    name = "edit_artifact",
+    arguments = list(id = "doc", old_string = "Missing.", new_string = "x")
+  )
+  turns <- list(
+    ellmer::AssistantTurn(list(
+      ellmer::ContentText(paste0(
+        "<artifact id=\"doc\" title=\"Doc\">\nFirst.\n</artifact>\n",
+        "<artifact id=\"doc\" title=\"Doc\">\n---\nengine: knitr\n---\n\nHi.\n</artifact>"
+      )),
+      edit
+    )),
+    ellmer::UserTurn(list(
+      ellmer::ContentToolResult(error = "`old_string` was not found.", request = edit)
+    ))
+  )
+
+  values <- artifact_turns_values(turns)
+  expect_identical(values$doc$sources, list("\nFirst.\n"))
+})
+
 test_that("a restored document can be edited or rewritten before it's opened", {
   values <- artifact_store_values(prose_store())
 

@@ -366,11 +366,13 @@ Commons <- R6::R6Class(
 
     set_turns = function(value) {
       private$restore_reminder_pending <- FALSE
-      # Artifacts live for one conversation; a restored or cleared one starts
-      # without them.
+      # Editing a message or switching branches keeps only some of the turns,
+      # so the documents become what those turns wrote, as of their last
+      # version there. They render again when they're next needed.
       store <- private$own_artifacts()
       if (!is.null(store)) {
         artifact_store_reset(store)
+        artifact_store_restore(store, artifact_turns_values(value))
       }
       super$set_turns(value)
     },
