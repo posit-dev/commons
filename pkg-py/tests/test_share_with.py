@@ -307,3 +307,30 @@ def test_a_user_guid_that_is_not_a_string_warns() -> None:
 
     with pytest.warns(UserWarning, match="Could not share"):
         share_trajectory_access(["ada"], client=client)
+
+
+def test_a_client_created_from_the_environment_is_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, seen = connect_double()
+    closed: list[bool] = []
+    monkeypatch.setattr(client, "close", lambda: closed.append(True))
+    monkeypatch.setattr(ConnectClient, "from_env", classmethod(lambda cls, **_: client))
+
+    share_trajectory_access(["ada"])
+
+    assert grants(seen)
+    assert closed == [True]
+
+
+def test_a_caller_supplied_client_is_left_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, seen = connect_double()
+    closed: list[bool] = []
+    monkeypatch.setattr(client, "close", lambda: closed.append(True))
+
+    share_trajectory_access(["ada"], client=client)
+
+    assert grants(seen)
+    assert closed == []
