@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import warnings
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from typing import Any, Self
 
 import httpx
@@ -182,15 +182,18 @@ def share_trajectory_access(
         return
 
     try:
-        client = ConnectClient.from_env() if client is None else client
-        existing = collaborator_principals(client, guid)
-        for username in pending:
-            principal = user_guid(client, username)
-            if principal not in existing:
-                add_collaborator(client, guid, principal)
-                existing.add(principal)
-            _GRANTED.add((guid, username))
-    except (ConnectError, LookupError, ValueError, httpx.HTTPError) as error:
+        # Close a client created here; leave a caller's client open.
+        with (
+            ConnectClient.from_env() if client is None else nullcontext(client)
+        ) as connect:
+            existing = collaborator_principals(connect, guid)
+            for username in pending:
+                principal = user_guid(connect, username)
+                if principal not in existing:
+                    add_collaborator(connect, guid, principal)
+                    existing.add(principal)
+                _GRANTED.add((guid, username))
+    except (ConnectError, LookupError, ValueError) as error:
         warnings.warn(
             f"Could not share trajectory access. {error}",
             stacklevel=2,
