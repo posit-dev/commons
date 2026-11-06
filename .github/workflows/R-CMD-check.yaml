@@ -16,7 +16,7 @@ permissions: read-all
 jobs:
   check:
     runs-on: ${{ matrix.config.os }}
-    timeout-minutes: 30
+    timeout-minutes: 10
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
     strategy:
       fail-fast: false
@@ -34,7 +34,7 @@ jobs:
     steps: &check-steps
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
-      # Temporary: the runner's Azure Ubuntu mirror stalls apt for 20+ minutes.
+      # Temporary, with the job timeout: the runner's Azure Ubuntu mirror stalls apt.
       - name: Use the main Ubuntu archive for apt
         if: runner.os == 'Linux'
         run: |

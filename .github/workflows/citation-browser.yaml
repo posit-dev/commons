@@ -13,7 +13,7 @@ permissions: read-all
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: pkg-r
@@ -21,7 +21,7 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
-      # Temporary: the runner's Azure Ubuntu mirror stalls apt for 20+ minutes.
+      # Temporary, with the job timeout: the runner's Azure Ubuntu mirror stalls apt.
       - name: Use the main Ubuntu archive for apt
         if: runner.os == 'Linux'
         run: |
