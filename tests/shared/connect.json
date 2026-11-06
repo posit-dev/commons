@@ -52,42 +52,27 @@
     "cases": [
       {
         "name": "a local session is not Connect",
-        "env": {
-          "POSIT_PRODUCT": null,
-          "CONNECT_CONTENT_GUID": null
-        },
+        "env": { "POSIT_PRODUCT": null, "CONNECT_CONTENT_GUID": null },
         "expected": false
       },
       {
         "name": "the product variable identifies Connect",
-        "env": {
-          "POSIT_PRODUCT": "CONNECT",
-          "CONNECT_CONTENT_GUID": null
-        },
+        "env": { "POSIT_PRODUCT": "CONNECT", "CONNECT_CONTENT_GUID": null },
         "expected": true
       },
       {
         "name": "another Posit product is not Connect",
-        "env": {
-          "POSIT_PRODUCT": "WORKBENCH",
-          "CONNECT_CONTENT_GUID": null
-        },
+        "env": { "POSIT_PRODUCT": "WORKBENCH", "CONNECT_CONTENT_GUID": null },
         "expected": false
       },
       {
         "name": "a content guid alone identifies Connect",
-        "env": {
-          "POSIT_PRODUCT": null,
-          "CONNECT_CONTENT_GUID": "01234567-89ab-cdef-0123-456789abcdef"
-        },
+        "env": { "POSIT_PRODUCT": null, "CONNECT_CONTENT_GUID": "01234567-89ab-cdef-0123-456789abcdef" },
         "expected": true
       },
       {
         "name": "an empty content guid is not Connect",
-        "env": {
-          "POSIT_PRODUCT": null,
-          "CONNECT_CONTENT_GUID": ""
-        },
+        "env": { "POSIT_PRODUCT": null, "CONNECT_CONTENT_GUID": "" },
         "expected": false
       }
     ]
@@ -98,37 +83,24 @@
     "cases": [
       {
         "name": "a content item",
-        "path": [
-          "content",
-          "01234567-89ab-cdef-0123-456789abcdef"
-        ],
+        "path": ["content", "01234567-89ab-cdef-0123-456789abcdef"],
         "expected": "https://connect.example.com/__api__/v1/content/01234567-89ab-cdef-0123-456789abcdef"
       },
       {
         "name": "a content item's permissions",
-        "path": [
-          "content",
-          "01234567-89ab-cdef-0123-456789abcdef",
-          "permissions"
-        ],
+        "path": ["content", "01234567-89ab-cdef-0123-456789abcdef", "permissions"],
         "expected": "https://connect.example.com/__api__/v1/content/01234567-89ab-cdef-0123-456789abcdef/permissions"
       },
       {
         "name": "the users collection",
-        "path": [
-          "users"
-        ],
+        "path": ["users"],
         "expected": "https://connect.example.com/__api__/v1/users"
       }
     ]
   },
   "collaborator_grant": {
     "description": "The permission commons creates so a user can read this content's trajectories. Reading traces needs editor-level access, and Connect's permissions API spells that role \"owner\"; it rejects \"editor\". A lesser permission on the content, such as the viewer role someone gets when the app is shared with them, does not carry trace access, so it is not a reason to skip them.",
-    "endpoint": [
-      "content",
-      "{guid}",
-      "permissions"
-    ],
+    "endpoint": ["content", "{guid}", "permissions"],
     "method": "POST",
     "body": {
       "principal_type": "user",
@@ -141,78 +113,45 @@
     "cases": [
       {
         "name": "a user with no permission is granted one",
-        "usernames": [
-          "ada"
-        ],
+        "usernames": ["ada"],
         "permitted": [],
-        "expected": [
-          "guid-ada"
-        ]
+        "expected": ["guid-ada"]
       },
       {
         "name": "a user who already holds the role is left alone",
-        "usernames": [
-          "ada"
-        ],
+        "usernames": ["ada"],
         "permitted": [
-          {
-            "principal_guid": "guid-ada",
-            "role": "owner"
-          }
+          { "principal_guid": "guid-ada", "role": "owner" }
         ],
         "expected": []
       },
       {
         "name": "a user with only viewer access is still granted the role",
-        "usernames": [
-          "ada"
-        ],
+        "usernames": ["ada"],
         "permitted": [
-          {
-            "principal_guid": "guid-ada",
-            "role": "viewer"
-          }
+          { "principal_guid": "guid-ada", "role": "viewer" }
         ],
-        "expected": [
-          "guid-ada"
-        ]
+        "expected": ["guid-ada"]
       },
       {
         "name": "only the user missing the role is granted",
-        "usernames": [
-          "ada",
-          "grace"
-        ],
+        "usernames": ["ada", "grace"],
         "permitted": [
-          {
-            "principal_guid": "guid-ada",
-            "role": "owner"
-          }
+          { "principal_guid": "guid-ada", "role": "owner" }
         ],
-        "expected": [
-          "guid-grace"
-        ]
+        "expected": ["guid-grace"]
       },
       {
         "name": "a username is matched regardless of case",
-        "usernames": [
-          "Ada"
-        ],
+        "usernames": ["Ada"],
         "permitted": [],
-        "expected": [
-          "guid-ada"
-        ]
+        "expected": ["guid-ada"]
       },
       {
         "name": "case variants of one username are granted once",
-        "usernames": [
-          "ada",
-          "ADA"
-        ],
+        "usernames": ["ada", "ADA"],
         "permitted": [],
-        "expected": [
-          "guid-ada"
-        ]
+        "expected": ["guid-ada"]
       }
     ]
   }
