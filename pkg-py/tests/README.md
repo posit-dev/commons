@@ -26,7 +26,7 @@ export SNOWFLAKE_PRIVATE_KEY_FILE=~/.snowflake/keys/rsa_key.p8
 export COMMONS_TEST_SNOWFLAKE_SCHEMA=COMMONS_CI.PUBLIC
 ```
 
-Databricks credentials come from the SDK's [unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth): `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. A client secret scoped to `sql` also needs `COMMONS_TEST_DATABRICKS_SCOPES=sql`, because both clients otherwise request `all-apis`. Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `tests/shared/live-warehouse-env.json` is the full list of variables, including the optional ones that gate individual tests.
+Databricks credentials come from the SDK's [unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth): `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. A client secret scoped to `sql` also needs `COMMONS_TEST_DATABRICKS_SCOPES=sql`, because otherwise the Databricks SDK requests `all-apis`. Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `tests/shared/live-warehouse-env.json` is the full list of variables, including the optional ones that gate individual tests.
 
 ### 3. Create the fixture tables
 
@@ -40,4 +40,16 @@ The access-refusal test needs a table the test principal cannot read, so this st
 
 The second principal is the one that runs the SQL, and it owns the copy. On Databricks, that is the identity you are signed in as in the SQL editor. On Snowflake, it is the worksheet's active role, so run the SQL under a role other than the one passed to `--grant-to`, even when you sign in as a different user. An owner can always read its own tables, so if the test principal owns the copy, nothing is refused. The output ends by naming the variable to export with the copy's identifier (`COMMONS_TEST_DATABRICKS_DENIED_TABLE` or `COMMONS_TEST_SNOWFLAKE_DENIED_TABLE`), and the access-refusal test skips until it is set. Without `--grant-to` the SQL creates no denied table at all.
 
-With those done, `uv run pytest` runs the live tests along with everything else. `test_live_warehouse_fixture.py` covers the half of this that needs no warehouse: the rows load, every corpus definition runs against them, and the provisioning SQL renders. It runs in CI with the rest of the suite. `.github/workflows/py-live-warehouse.yaml` runs the live tests themselves, with credentials from the repository environments it names, and skips a backend whose environment is not configured.
+With those done, `uv run pytest` runs the live tests along with everything else. `test_live_warehouse_fixture.py` covers the half of this that needs no warehouse: the rows load, every corpus definition runs against them, and the provisioning SQL renders. It runs in CI with the rest of the suite. `.github/workflows/py-live-warehouse.yaml` runs the live tests themselves.
+
+## Running the live tests in CI
+
+Each backend runs in its own GitHub environment, named in the workflow's matrix. To configure an environment:
+
+1. Add each value from step 2 as an environment variable, except `SNOWFLAKE_PRIVATE_KEY_FILE`.
+2. For Snowflake, add the private key text as the secret `SNOWFLAKE_PRIVATE_KEY`. The workflow writes it to a file and sets `SNOWFLAKE_PRIVATE_KEY_FILE`.
+3. For Databricks, add `DATABRICKS_CLIENT_ID` as a variable and the client secret as the secret `DATABRICKS_CLIENT_SECRET`.
+
+To use GitHub OIDC for Databricks instead, do not set the client secret. Then give the service principal a federation policy that accepts GitHub tokens for the subject `repo:posit-dev/commons:environment:<name>`. Set `DATABRICKS_TOKEN_AUDIENCE` only if the policy expects an audience other than the token endpoint of the workspace.
+
+A backend with no variables set skips. A backend with only some of the required variables set fails, so a configuration error cannot pass by skipping every test.
