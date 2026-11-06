@@ -29,4 +29,4 @@ export COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL_ARGUMENTS='{"threshold": 100}'
 
 Once a backend is configured, connection and query failures fail its tests.
 
-`.github/workflows/R-live-warehouse.yaml` runs these tests in CI, with credentials from the repository environments it names.
+`.github/workflows/R-live-warehouse.yaml` runs these tests in CI, in the same GitHub environments as the Python live tests. [The Python test README](../../../pkg-py/tests/README.md#running-the-live-tests-in-ci) describes how to configure them.
