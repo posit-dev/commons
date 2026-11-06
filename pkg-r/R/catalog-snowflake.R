@@ -680,9 +680,11 @@ snowflake_semantic_dependencies <- function(id, specification) {
   complete <- TRUE
   for (table in semantic_spec_entries(specification$tables)) {
     base <- table$base_table %||% list()
-    table_name <- base$table
-    catalog <- base$database %||% base$catalog %||% model[["catalog"]]
-    schema <- base$schema %||% model[["schema"]]
+    # If base_table has no database or schema, use the view's as-is.
+    table_name <- snowflake_yaml_identifier(base$table)
+    catalog <- snowflake_yaml_identifier(base$database %||% base$catalog) %||%
+      model[["catalog"]]
+    schema <- snowflake_yaml_identifier(base$schema) %||% model[["schema"]]
     if (
       !rlang::is_string(catalog) ||
         !rlang::is_string(schema) ||
@@ -704,6 +706,17 @@ snowflake_semantic_dependencies <- function(id, specification) {
     backend = "snowflake_semantic_view"
   )
   list(ids = ids[!duplicated(keys)], complete = complete && length(ids) > 0L)
+}
+
+# Strip quotes from a quoted name ("" is one quote); upper-case others (see #446).
+snowflake_yaml_identifier <- function(name) {
+  if (!rlang::is_string(name)) {
+    return(NULL)
+  }
+  if (grepl('^".*"$', name)) {
+    return(gsub('""', '"', substr(name, 2L, nchar(name) - 1L), fixed = TRUE))
+  }
+  toupper(name)
 }
 
 snowflake_semantic_context <- function(
