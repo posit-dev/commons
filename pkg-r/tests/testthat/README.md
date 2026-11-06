@@ -29,4 +29,4 @@ export COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL_ARGUMENTS='{"threshold": 100}'
 
 Once a backend is configured, connection and query failures fail its tests.
 
-`.github/workflows/R-live-warehouse.yaml` runs these tests in CI, with credentials from the repository's `databricks-ci` and `snowflake-ci` environments.
+`.github/workflows/R-live-warehouse.yaml` runs these tests in CI, with credentials from the repository environments it names.
