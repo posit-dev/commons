@@ -10,6 +10,20 @@ commons-artifact-view[empty] {
   display: none;
 }
 
+.commons-artifact-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.commons-artifact-actions:not(:has(.commons-artifact-status:not(:empty), .commons-artifact-share:not([hidden]))) {
+  display: none;
+}
+
+.commons-artifact-share {
+  margin-left: auto;
+}
+
 .commons-artifact-status {
   font-size: 0.875rem;
   color: var(--bs-secondary-color, #6c757d);
