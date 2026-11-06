@@ -1,11 +1,26 @@
+# The variables read, the server forms accepted and the URLs requests land on
+# are shared with pkg-py; see tests/shared/connect.json.
+connect_spec <- shared_fixture("connect")
+
+test_that("the shared fixture carries the cases it promises", {
+  detection <- vapply(
+    connect_spec$runtime_detection$cases,
+    function(case) case$expected,
+    logical(1)
+  )
+  expect_setequal(detection, c(TRUE, FALSE))
+  expect_gte(length(connect_spec$server_normalization$cases), 2)
+  expect_gte(length(connect_spec$api_request$cases), 1)
+})
+
 test_that("connect_client normalizes the server URL", {
-  withr::local_envvar(CONNECT_API_KEY = "key")
+  env <- connect_spec$environment
+  withr::local_envvar(structure(list("key"), names = env$api_key))
 
-  client <- connect_client(server = "https://connect.example.com/")
-  expect_equal(client$server, "https://connect.example.com")
-
-  client <- connect_client(server = "https://connect.example.com/__api__")
-  expect_equal(client$server, "https://connect.example.com")
+  for (case in connect_spec$server_normalization$cases) {
+    client <- connect_client(server = case$configured)
+    expect_equal(client$server, case$expected, info = case$name)
+  }
 })
 
 test_that("connect_client errors without credentials", {
@@ -18,14 +33,24 @@ test_that("connect_client errors without credentials", {
 })
 
 test_that("is_connect_runtime detects Connect env vars", {
-  withr::local_envvar(POSIT_PRODUCT = NA, CONNECT_CONTENT_GUID = NA)
-  expect_false(is_connect_runtime())
+  for (case in connect_spec$runtime_detection$cases) {
+    values <- lapply(case$env, function(value) if (is.null(value)) NA else value)
+    withr::with_envvar(values, {
+      expect_equal(is_connect_runtime(), case$expected, info = case$name)
+    })
+  }
+})
 
-  withr::local_envvar(POSIT_PRODUCT = "CONNECT")
-  expect_true(is_connect_runtime())
+test_that("connect_req addresses the versioned API root", {
+  client <- connect_client(
+    server = connect_spec$api_request$server,
+    api_key = "key"
+  )
 
-  withr::local_envvar(POSIT_PRODUCT = NA, CONNECT_CONTENT_GUID = "guid")
-  expect_true(is_connect_runtime())
+  for (case in connect_spec$api_request$cases) {
+    req <- do.call(connect_req, c(list(client), case$path))
+    expect_equal(req$url, case$expected, info = case$name)
+  }
 })
 
 test_that("connect_vanity_guid matches the full vanity URL", {

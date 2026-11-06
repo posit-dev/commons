@@ -551,6 +551,7 @@ dependencies = [
     { name = "duckdb" },
     { name = "google-re2" },
     { name = "htmltools" },
+    { name = "httpx" },
     { name = "jinja2" },
     { name = "opentelemetry-api" },
     { name = "pyarrow" },
@@ -568,7 +569,6 @@ shiny = [
     { name = "shinychat" },
 ]
 tracing = [
-    { name = "httpx" },
     { name = "opentelemetry-exporter-otlp-json-file" },
     { name = "opentelemetry-sdk" },
 ]
@@ -597,7 +597,7 @@ requires-dist = [
     { name = "duckdb", specifier = ">=1.0" },
     { name = "google-re2", specifier = ">=1.1.20251105" },
     { name = "htmltools", specifier = ">=0.6" },
-    { name = "httpx", marker = "extra == 'tracing'", specifier = ">=0.27" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "jinja2", specifier = ">=3" },
     { name = "opentelemetry-api", specifier = ">=1.0" },
     { name = "opentelemetry-exporter-otlp-json-file", marker = "extra == 'tracing'" },
