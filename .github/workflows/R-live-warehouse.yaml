@@ -94,14 +94,20 @@ jobs:
           sudo sed -i 's|^ODBCInstLib=.*|ODBCInstLib=libodbcinst.so.2|' \
             /usr/lib/snowflake/odbc/lib/simba.snowflake.ini
       - name: Install the Databricks ODBC driver
+        # commons recognizes a Databricks connection by its driver's name, which
+        # the legacy Simba Spark driver does not carry. odbc::databricks() finds
+        # this driver on Linux by the name `Databricks` in odbcinst.ini, and the
+        # package does not register itself.
         if: steps.configured.outputs.run == 'true' && matrix.backend == 'databricks'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q unixodbc
-          curl -fsSL -o "$RUNNER_TEMP/simbaspark.zip" \
-            https://databricks-bi-artifacts.s3.us-east-2.amazonaws.com/simbaspark-drivers/odbc/2.9.2/SimbaSparkODBC-2.9.2.1008-Debian-64bit.zip
-          unzip -j -o "$RUNNER_TEMP/simbaspark.zip" '*.deb' -x '__MACOSX/*' -d "$RUNNER_TEMP/simbaspark"
-          sudo apt-get install -y -q "$RUNNER_TEMP"/simbaspark/*.deb
+          curl -fsSL -o "$RUNNER_TEMP/databricksodbc.zip" \
+            https://databricks-bi-artifacts.s3.us-east-2.amazonaws.com/simba-databricks-odbc-drivers/2.13.1/DatabricksODBC-2.13.1-Debian-64bit.zip
+          unzip -j -o "$RUNNER_TEMP/databricksodbc.zip" '*.deb' -d "$RUNNER_TEMP/databricksodbc"
+          sudo apt-get install -y -q "$RUNNER_TEMP"/databricksodbc/*.deb
+          printf '[Databricks]\nDriver=/opt/databricks/databricksodbc/lib/64/libdatabricksodbc64.so\n' \
+            | sudo tee -a /etc/odbcinst.ini
 
       - uses: r-lib/actions/setup-r@v2
         if: steps.configured.outputs.run == 'true'
