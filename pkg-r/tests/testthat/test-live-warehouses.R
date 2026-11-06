@@ -440,7 +440,12 @@ test_that("live Databricks discovers and describes catalog relations", {
     con,
     tables = DBI::Id(catalog = components[["catalog"]])
   )
-  current_source <- data_source(con)
+  # A second connection, since the session's namespace cannot change under
+  # the sources built on `con`.
+  current_con <- use_databricks_test_schema(
+    local_warehouse_connection("databricks")
+  )
+  current_source <- data_source(current_con)
 
   expect_equal(nrow(session), 1)
   expect_named(session, c("principal", "catalog", "schema"))
@@ -506,9 +511,12 @@ test_that("live Databricks classifies denied query access", {
   con <- local_warehouse_connection("databricks", require_table = FALSE)
 
   expect_equal(catalog_probe_relation(con, denied)$state, "authorization")
+  # Unity Catalog leaves a relation the principal holds no privilege on out
+  # of the listing, and a name the listing never reported is missing rather
+  # than refused (tests/shared/catalog-access-precedence.json).
   expect_error(
     data_source(con, tables = denied),
-    class = "commons_catalog_authorization_error"
+    "not on the connection"
   )
 })
 
@@ -628,7 +636,17 @@ test_that("live Databricks binds native metric-view parameters", {
 test_that("live Databricks handles quoted relation and column names", {
   warehouse_test_table("databricks")
   con <- local_warehouse_connection("databricks")
-  DBI::dbExecute(con, "USE CATALOG `hive_metastore`")
+  # Only the hive_metastore listing reports a session's temporary views, and
+  # a Unity Catalog-only workspace has no hive_metastore.
+  tryCatch(
+    DBI::dbExecute(con, "USE CATALOG `hive_metastore`"),
+    error = function(err) {
+      if (!grepl("NO_SUCH_CATALOG|HIVE_METASTORE_DISABLED", conditionMessage(err))) {
+        stop(err)
+      }
+      skip("The workspace has no hive_metastore catalog")
+    }
+  )
   DBI::dbExecute(con, "USE SCHEMA `default`")
 
   table <- DBI::Id(table = "commons quoted.table")

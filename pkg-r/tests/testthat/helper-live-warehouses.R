@@ -92,6 +92,21 @@ warehouse_test_table <- function(backend) {
   do.call(DBI::Id, c(as.list(schema@name), table = live_warehouse_table))
 }
 
+# A principal's default Databricks schema may be empty, so a test that reads
+# the session's namespace switches it to the fixture schema first.
+use_databricks_test_schema <- function(con) {
+  schema <- live_warehouse_id("databricks", "schema")@name
+  DBI::dbExecute(
+    con,
+    paste("USE CATALOG", DBI::dbQuoteIdentifier(con, schema[["catalog"]]))
+  )
+  DBI::dbExecute(
+    con,
+    paste("USE SCHEMA", DBI::dbQuoteIdentifier(con, schema[["schema"]]))
+  )
+  invisible(con)
+}
+
 warehouse_test_denied_table <- function(backend) {
   live_warehouse_id(backend, "denied_table")
 }
