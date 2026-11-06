@@ -19,7 +19,7 @@ data source.
 }
 \details{
 Context is retrieved when relevant. Facts needed in every conversation
-belong in the \code{instructions} passed to \code{\link[=agent]{agent()}}, not here.
+belong in the \code{instructions} passed to \code{\link[=commons]{commons()}}, not here.
 }
 \examples{
 path <- tempfile(fileext = ".md")

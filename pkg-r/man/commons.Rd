@@ -4,7 +4,13 @@
 \alias{commons}
 \title{Gather trusted calculations and context}
 \usage{
-commons(..., data_sources, semantic_layer = NULL, context_layer = NULL)
+commons(
+  ...,
+  data_sources,
+  semantic_layer = NULL,
+  context_layer = NULL,
+  instructions = NULL
+)
 }
 \arguments{
 \item{...}{These dots are for future extensions and must be empty.}
@@ -16,6 +22,17 @@ can take a source's connection as an argument named after the source; see
 \item{semantic_layer}{An optional \code{\link[=semantic_layer]{semantic_layer()}}.}
 
 \item{context_layer}{An optional \code{\link[=context_layer]{context_layer()}}.}
+
+\item{instructions}{Optional instructions, as a single string or the path
+to a text or Markdown file. They're shown at the end of the object's
+printed overview, and \code{\link[=agent]{agent()}} places them under an
+\verb{## Additional instructions} heading at the end of its system prompt.
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{commons(
+  # ...
+  instructions = "Use the organization's fiscal-year conventions."
+)
+}\if{html}{\out{</div>}}}
 }
 \value{
 A \code{commons} object with methods:

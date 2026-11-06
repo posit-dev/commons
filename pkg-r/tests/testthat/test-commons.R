@@ -290,6 +290,37 @@ test_that("commons() prints its contents and method signatures", {
   expect_snapshot(tr)
 })
 
+test_that("commons() prints its instructions", {
+  expect_snapshot(commons(
+    data_sources = list(sales_db = test_source()),
+    instructions = "Use the organization's fiscal-year conventions."
+  ))
+})
+
+test_that("commons() reads instructions from a file", {
+  path <- withr::local_tempfile(fileext = ".md")
+  writeLines("Prefer fiscal-year comparisons.", path)
+  tr <- commons(
+    data_sources = list(sales_db = test_source()),
+    instructions = path
+  )
+
+  expect_contains(
+    commons_overview(commons_state_of(tr)),
+    "  Prefer fiscal-year comparisons."
+  )
+})
+
+test_that("commons() validates its instructions", {
+  expect_snapshot(
+    commons(
+      data_sources = test_source(),
+      instructions = "missing-instructions.md"
+    ),
+    error = TRUE
+  )
+})
+
 test_that("commons() lists only the calculation methods it can run", {
   expect_snapshot(commons(data_sources = list(sales_db = test_source())))
 })
