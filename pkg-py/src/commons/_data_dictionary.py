@@ -272,9 +272,10 @@ class DataDictionary(_Permissive):
 
         With `live` set, up to `max_columns` of the relation's own columns
         lead in its order, each carrying whatever the dictionary documents
-        about it. A documented column the relation does not have is named at
-        the end so the model does not write SQL against it. `describe_table` is what
-        has a live schema to merge.
+        about it, and documented columns claim the cap first. A documented
+        column the relation does not have is named at the end so the model
+        does not write SQL against it. `describe_table` is what has a live
+        schema to merge.
         """
         entry = self.tables.get(table)
         columns = entry.columns if entry is not None else {}
@@ -285,7 +286,11 @@ class DataDictionary(_Permissive):
                 _column_line(name, column) for name, column in columns.items()
             )
 
-        shown = live[:max_columns]
+        # `sorted` is stable, so each group keeps the relation's order.
+        ranked = sorted(
+            range(len(live)), key=lambda i: str(live[i]["column"]) not in columns
+        )
+        shown = [live[i] for i in sorted(ranked[:max_columns])]
         text = "\n".join(
             _column_line(
                 str(found["column"]),
@@ -294,8 +299,7 @@ class DataDictionary(_Permissive):
             )
             for found in shown
         )
-        if len(live) > len(shown):
-            text += f"\n\nAdditional columns not shown: {len(live) - len(shown)}"
+        text += omitted_columns_note(len(live) - len(shown))
         present = {str(found["column"]) for found in live}
         undocumented = [name for name in columns if name not in present]
         if undocumented:
@@ -389,6 +393,11 @@ def as_data_dictionary(x: Any) -> DataDictionary | None:
     raise TypeError(
         f"dictionary must be a path to a data-dict.yaml file, got {type(x).__name__}."
     )
+
+
+def omitted_columns_note(count: int) -> str:
+    """The note closing a column listing that leaves `count` columns out."""
+    return f"\n\nAdditional columns not shown: {count}" if count > 0 else ""
 
 
 def _flatten_inline(text: str) -> str:

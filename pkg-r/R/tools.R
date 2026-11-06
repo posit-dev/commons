@@ -962,17 +962,14 @@ describe_table_tool <- function(
 
 describe_schema_text <- function(schema) {
   shown <- utils::head(schema, describe_table_max_columns)
-  out <- df_to_markdown(shown, max_rows = nrow(shown))
-  if (nrow(schema) > nrow(shown)) {
-    out <- paste0(
-      out,
-      sprintf(
-        "\n\nAdditional columns not shown: %d",
-        nrow(schema) - nrow(shown)
-      )
-    )
-  }
-  out
+  paste0(
+    df_to_markdown(shown, max_rows = nrow(shown)),
+    omitted_columns_note(nrow(schema) - nrow(shown))
+  )
+}
+
+omitted_columns_note <- function(n) {
+  if (n > 0) sprintf("\n\nAdditional columns not shown: %d", n) else ""
 }
 
 run_sql_tool <- function(

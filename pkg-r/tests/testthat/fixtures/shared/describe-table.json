@@ -1,5 +1,5 @@
 {
-  "description": "The DuckDB column types describe_table reports to the model. Both packages run the case against a real DuckDB table so SQL-native detail, including ENUM labels, cannot be replaced by host-language classes, while values that appear only in inserted rows stay out of model-facing descriptions.",
+  "description": "The DuckDB column types describe_table reports to the model. Both packages run the case against a real DuckDB table so SQL-native detail, including ENUM labels, cannot be replaced by host-language classes, while values that appear only in inserted rows stay out of model-facing descriptions. The wide case caps the columns shown, keeping documented columns ahead of undocumented ones.",
   "duckdb": {
     "table": "typed",
     "create_sql": "CREATE TABLE typed (id INTEGER, amount DECIMAL(12,2), happened TIMESTAMP, active BOOLEAN, label VARCHAR, owner ENUM('Alice Smith', 'Bob | Jones'), details STRUCT(owner ENUM('nested ) secret', 'O''Brien | secret'), n INTEGER))",
@@ -21,6 +21,9 @@
     "column_name_template": "column_%03d",
     "column_type": "INTEGER",
     "max_columns": 50,
-    "omission_note": "Additional columns not shown: 1"
+    "omission_note": "Additional columns not shown: 1",
+    "documented_column": "column_051",
+    "documented_description": "Net revenue in USD.",
+    "omitted_when_documented": "column_050"
   }
 }

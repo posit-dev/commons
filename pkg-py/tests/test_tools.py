@@ -423,8 +423,8 @@ def test_describe_table_caps_wide_table_schemas() -> None:
             tables={
                 spec["table"]: {
                     "columns": {
-                        column_names[-1]: {
-                            "description": "Deprecated low-value field."
+                        spec["documented_column"]: {
+                            "description": spec["documented_description"]
                         }
                     }
                 }
@@ -438,12 +438,13 @@ def test_describe_table_caps_wide_table_schemas() -> None:
         {"column": column, "type": spec["column_type"]}
         for column in column_names[: spec["max_columns"]]
     ]
-    assert rows_to_markdown(expected) in body
+    assert rows_to_markdown(expected, max_rows=spec["max_columns"]) in body
     assert spec["omission_note"] in body
     assert column_names[-1] not in body
 
     assert spec["omission_note"] in documented
-    assert "Deprecated low-value field." not in documented
+    assert spec["documented_description"] in documented
+    assert spec["omitted_when_documented"] not in documented
 
 
 def test_describe_table_delivers_the_dictionary_entry(documented: DataSource) -> None:

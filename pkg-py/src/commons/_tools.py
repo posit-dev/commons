@@ -33,6 +33,7 @@ from ._catalog import (
 )
 from ._citations import CitationRequest, tool_result
 from ._context_layer import ContextLayer
+from ._data_dictionary import omitted_columns_note
 from ._data_source import DataSource, TableId
 from ._definitions import Registry, applied_text, expand_tokens, index_overflows
 from ._display import (
@@ -773,10 +774,8 @@ def _describe_table_text(
 
 def _describe_schema_text(schema: list[dict[str, Any]]) -> str:
     shown = schema[:DESCRIBE_TABLE_MAX_COLUMNS]
-    text = rows_to_markdown(shown, max_rows=len(shown))
-    if len(schema) > len(shown):
-        text += f"\n\nAdditional columns not shown: {len(schema) - len(shown)}"
-    return text
+    omitted = omitted_columns_note(len(schema) - len(shown))
+    return rows_to_markdown(shown, max_rows=len(shown)) + omitted
 
 
 def _relation_columns(

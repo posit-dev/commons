@@ -546,14 +546,18 @@ test_that("describe_table caps wide table schemas", {
 
   description <- describe_table_tool(src, spec$table)@value
 
-  expect_match(description, df_to_markdown(expected), fixed = TRUE)
+  expect_match(
+    description,
+    df_to_markdown(expected, max_rows = spec$max_columns),
+    fixed = TRUE
+  )
   expect_match(description, spec$omission_note, fixed = TRUE)
   expect_no_match(description, column_names[[spec$column_count]], fixed = TRUE)
 
   dictionary <- new_data_dictionary(list(tables = setNames(
     list(list(columns = setNames(
-      list(list(description = "Deprecated low-value field.")),
-      column_names[[spec$column_count]]
+      list(list(description = spec$documented_description)),
+      spec$documented_column
     ))),
     spec$table
   )))
@@ -563,7 +567,8 @@ test_that("describe_table caps wide table schemas", {
   )@value
 
   expect_match(documented, spec$omission_note, fixed = TRUE)
-  expect_no_match(documented, "Deprecated low-value field.", fixed = TRUE)
+  expect_match(documented, spec$documented_description, fixed = TRUE)
+  expect_no_match(documented, spec$omitted_when_documented, fixed = TRUE)
 })
 
 test_that("search_context_tool handles a missing context layer", {

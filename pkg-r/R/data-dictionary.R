@@ -146,9 +146,10 @@ dictionary_entry_parts <- function(
 }
 
 # One bullet per column. With a live schema (from describe_table), up to
-# max_columns live columns appear, documented ones annotated and undocumented
-# ones keeping their inferred type; documented columns missing from the table
-# are flagged. Without one (the run_sql path), only documented columns appear.
+# max_columns live columns appear in table order, documented ones annotated and
+# undocumented ones keeping their inferred type; documented columns missing
+# from the table are flagged. Without one (the run_sql path), only documented
+# columns appear.
 dictionary_columns_text <- function(columns, live = NULL, max_columns = Inf) {
   if (is.null(live)) {
     if (length(columns) == 0) {
@@ -162,11 +163,10 @@ dictionary_columns_text <- function(columns, live = NULL, max_columns = Inf) {
     return(paste(lines, collapse = "\n"))
   }
 
-  shown <- if (is.finite(max_columns)) {
-    utils::head(live, max_columns)
-  } else {
-    live
-  }
+  # Documented columns claim the cap first, since the dictionary marks them as
+  # the ones worth the agent's attention.
+  ranked <- order(!live$column %in% names(columns))
+  shown <- live[sort(utils::head(ranked, max_columns)), , drop = FALSE]
   lines <- vapply(
     seq_len(nrow(shown)),
     function(i) {
@@ -178,16 +178,10 @@ dictionary_columns_text <- function(columns, live = NULL, max_columns = Inf) {
     },
     character(1)
   )
-  out <- paste(lines, collapse = "\n")
-  if (nrow(live) > nrow(shown)) {
-    out <- paste0(
-      out,
-      sprintf(
-        "\n\nAdditional columns not shown: %d",
-        nrow(live) - nrow(shown)
-      )
-    )
-  }
+  out <- paste0(
+    paste(lines, collapse = "\n"),
+    omitted_columns_note(nrow(live) - nrow(shown))
+  )
 
   missing <- setdiff(names(columns), live$column)
   if (length(missing)) {
