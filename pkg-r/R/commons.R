@@ -394,6 +394,9 @@ commons_overview <- function(state) {
       )
     },
     if (state$has_context_layer) "Business context is available.",
+    if (nzchar(state$instructions %||% "")) {
+      c("Instructions:", indent_lines(state$instructions))
+    },
     "Methods:",
     commons_method_signatures(
       hide = c(
@@ -425,11 +428,13 @@ commons_overview <- function(state) {
         "which didn't."
       ),
       collapse = " "
-    )),
-    if (nzchar(state$instructions %||% "")) {
-      c("", state$instructions)
-    }
+    ))
   )
+}
+
+indent_lines <- function(x) {
+  lines <- strsplit(x, "\n", fixed = TRUE)[[1]]
+  ifelse(nzchar(lines), paste0("  ", lines), lines)
 }
 
 # Methods that run a kind of calculation the object has none of are hidden.

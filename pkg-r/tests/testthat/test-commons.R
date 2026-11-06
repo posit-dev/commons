@@ -305,9 +305,9 @@ test_that("commons() reads instructions from a file", {
     instructions = path
   )
 
-  expect_identical(
-    utils::tail(commons_overview(commons_state_of(tr)), 1),
-    "Prefer fiscal-year comparisons."
+  expect_contains(
+    commons_overview(commons_state_of(tr)),
+    "  Prefer fiscal-year comparisons."
   )
 })
 
