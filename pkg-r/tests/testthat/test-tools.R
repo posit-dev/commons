@@ -527,7 +527,7 @@ test_that("describe_table reports native types without exposing row values", {
   }
 })
 
-test_that("describe_table reports every column in wide tables", {
+test_that("describe_table caps wide table schemas", {
   spec <- shared_fixture("describe-table")$wide_duckdb
   column_names <- sprintf(spec$column_name_template, seq_len(spec$column_count))
   create_sql <- sprintf(
@@ -540,17 +540,30 @@ test_that("describe_table reports every column in wide tables", {
   DBI::dbExecute(con, create_sql)
   src <- data_source(con, tables = spec$table)
   expected <- data.frame(
-    column = column_names,
-    type = rep(spec$column_type, spec$column_count)
+    column = column_names[seq_len(spec$max_columns)],
+    type = rep(spec$column_type, spec$max_columns)
   )
 
   description <- describe_table_tool(src, spec$table)@value
 
-  expect_match(
-    description,
-    df_to_markdown(expected, max_rows = nrow(expected)),
-    fixed = TRUE
-  )
+  expect_match(description, df_to_markdown(expected), fixed = TRUE)
+  expect_match(description, spec$omission_note, fixed = TRUE)
+  expect_no_match(description, column_names[[spec$column_count]], fixed = TRUE)
+
+  dictionary <- new_data_dictionary(list(tables = setNames(
+    list(list(columns = setNames(
+      list(list(description = "Deprecated low-value field.")),
+      column_names[[spec$column_count]]
+    ))),
+    spec$table
+  )))
+  documented <- describe_table_tool(
+    data_source(con, tables = spec$table, dictionary = dictionary),
+    spec$table
+  )@value
+
+  expect_match(documented, spec$omission_note, fixed = TRUE)
+  expect_no_match(documented, "Deprecated low-value field.", fixed = TRUE)
 })
 
 test_that("search_context_tool handles a missing context layer", {

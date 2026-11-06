@@ -19,6 +19,8 @@
     "table": "wide_table",
     "column_count": 51,
     "column_name_template": "column_%03d",
-    "column_type": "INTEGER"
+    "column_type": "INTEGER",
+    "max_columns": 50,
+    "omission_note": "Additional columns not shown: 1"
   }
 }

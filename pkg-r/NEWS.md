@@ -1,5 +1,7 @@
 # commons (development version)
 
+* `describe_table` shows at most 50 columns and reports how many additional columns it omits, keeping wide-table descriptions compact (#475).
+
 * `describe_table` describes any table the connection can query, not only the data source's tables, so it agrees with `run_sql`. The result notes when a table is outside the data source. Agents in `mode = "trusted only"` still describe only the data source's tables (#469).
 
 * `data_source()` given a DBI connection and no `tables` selects the tables and views in the connection's current schema. When that schema has too many tables to list in the system prompt, the agent finds them with `search_catalog` instead, as for Snowflake and Databricks connections. A `DBI::Id` naming only a schema, like `DBI::Id(schema = "marts")`, selects every table and view in that schema. A data dictionary can name those tables relatively, like `orders` for `marts.orders`, when the name matches only one selected table.
@@ -29,7 +31,7 @@
   data by calling `commons()` methods in their code, and the agent revises them
   with a new `edit_artifact` tool.
 
-* `describe_table` reports complete table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
+* `describe_table` reports table schemas and documentation without a sampled-row summary. DuckDB descriptions use database-native types. Snowflake and Databricks continue to use native metadata, while other DBI connections infer R column classes from five sampled rows, or zero rows in trusted-only mode (#319).
 
 * `trajectory_read()` now returns a `user` field with the originating Shiny session username supplied by Connect. With `log = TRUE`, authenticated session users are recorded with conversation trajectories; older logs and anonymous sessions return `NA_character_` (#316).
 

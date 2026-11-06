@@ -708,6 +708,9 @@ def _with_citation_request(
 # ---- describe_table -------------------------------------------------------
 
 
+DESCRIBE_TABLE_MAX_COLUMNS = 50
+
+
 def _describe_table(context: ToolContext) -> Tool:
     def describe_table(table: str, source: str | None = None) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
@@ -754,18 +757,26 @@ def _describe_table_text(
         # Without an entry the catalog's own prose is all there is to say.
         if relation is not None and relation.description:
             parts.append(relation.description)
-        parts.append(
-            f"Columns of `{table}`:\n\n{rows_to_markdown(schema, max_rows=len(schema))}"
-        )
+        parts.append(f"Columns of `{table}`:\n\n{_describe_schema_text(schema)}")
     else:
         assert dictionary is not None
-        columns = dictionary.columns_text(table, live=schema)
+        columns = dictionary.columns_text(
+            table, live=schema, max_columns=DESCRIBE_TABLE_MAX_COLUMNS
+        )
         parts.extend(
             dictionary.entry_parts(table, f"Columns of `{table}`:\n\n{columns}")
         )
 
     tracker.mark(label, table)
     return "\n\n".join(parts)
+
+
+def _describe_schema_text(schema: list[dict[str, Any]]) -> str:
+    shown = schema[:DESCRIBE_TABLE_MAX_COLUMNS]
+    text = rows_to_markdown(shown, max_rows=len(shown))
+    if len(schema) > len(shown):
+        text += f"\n\nAdditional columns not shown: {len(schema) - len(shown)}"
+    return text
 
 
 def _relation_columns(

@@ -263,14 +263,17 @@ class DataDictionary(_Permissive):
         return [*parts, terms] if terms else parts
 
     def columns_text(
-        self, table: str, live: list[dict[str, Any]] | None = None
+        self,
+        table: str,
+        live: list[dict[str, Any]] | None = None,
+        max_columns: int | None = None,
     ) -> str | None:
         """A table's documented columns, optionally merged with a live schema.
 
-        With `live` set, the relation's own columns lead and in its order,
-        each carrying whatever the dictionary documents about it, and a
-        documented column the relation does not have is named at the end so
-        the model does not write SQL against it. `describe_table` is what
+        With `live` set, up to `max_columns` of the relation's own columns
+        lead in its order, each carrying whatever the dictionary documents
+        about it. A documented column the relation does not have is named at
+        the end so the model does not write SQL against it. `describe_table` is what
         has a live schema to merge.
         """
         entry = self.tables.get(table)
@@ -282,14 +285,17 @@ class DataDictionary(_Permissive):
                 _column_line(name, column) for name, column in columns.items()
             )
 
+        shown = live[:max_columns]
         text = "\n".join(
             _column_line(
                 str(found["column"]),
                 columns.get(str(found["column"])),
                 live_type=found.get("type"),
             )
-            for found in live
+            for found in shown
         )
+        if len(live) > len(shown):
+            text += f"\n\nAdditional columns not shown: {len(live) - len(shown)}"
         present = {str(found["column"]) for found in live}
         undocumented = [name for name in columns if name not in present]
         if undocumented:
