@@ -32,6 +32,7 @@ connect_client <- function(
   }
   server <- sub("/+$", "", server)
   server <- sub("/__api__$", "", server)
+  server <- sub("/+$", "", server)
   list(server = server, api_key = api_key)
 }
 
