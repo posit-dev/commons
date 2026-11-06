@@ -90,6 +90,22 @@ class DuckDBBackend:
         return None
 
 
+def _databricks_rows(
+    connection: sqlalchemy.Connection, sql: str
+) -> list[dict[str, Any]]:
+    # The Databricks connector builds rows through pandas' nullable floats,
+    # which read NaN as missing, so a NaN double reaches SQLAlchemy as None.
+    # The connector's Arrow table keeps NaN.
+    cursor = connection.connection.cursor()
+    try:
+        cursor.execute(sql)
+        if cursor.description is None:
+            return []
+        return cursor.fetchall_arrow().to_pylist()
+    finally:
+        cursor.close()
+
+
 class EngineBackend:
     def __init__(self, engine: sqlalchemy.Engine) -> None:
         self._engine = engine
@@ -100,6 +116,8 @@ class EngineBackend:
 
     def query(self, sql: str) -> list[dict[str, Any]]:
         with self._engine.connect() as connection:
+            if self.dialect() == "databricks":
+                return _databricks_rows(connection, sql)
             result = connection.execute(sqlalchemy.text(sql))
             return [dict(row) for row in result.mappings()]
 
