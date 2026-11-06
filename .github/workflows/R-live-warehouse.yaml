@@ -82,6 +82,19 @@ jobs:
 
       # Each driver installs where odbc::snowflake() and odbc::databricks()
       # look for it by default.
+      # Temporary, as in R-CMD-check.yaml: the runner's Azure Ubuntu mirror stalls apt.
+      - name: Use the main Ubuntu archive for apt
+        if: steps.configured.outputs.run == 'true'
+        run: |
+          for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*; do
+            if [ -f "$f" ]; then
+              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' "$f"
+            fi
+          done
+          if grep -rqs 'azure\.archive\.ubuntu\.com' /etc/apt; then
+            echo "::error::apt still names azure.archive.ubuntu.com"
+            exit 1
+          fi
       - name: Install the Snowflake ODBC driver
         if: steps.configured.outputs.run == 'true' && matrix.backend == 'snowflake'
         run: |
