@@ -16,7 +16,6 @@ agent(
   client,
   commons,
   ...,
-  instructions = NULL,
   mode = c("normal", "trusted only"),
   network = c("none", "full"),
   log = FALSE,
@@ -33,29 +32,20 @@ agent(
   [`ellmer::chat_anthropic()`](https://ellmer.tidyverse.org/reference/chat_anthropic.html).
   For best results, enable thinking when supported by the selected
   provider and model. A system prompt already set on the client is
-  ignored, with a warning; use `instructions` to add to commons' prompt.
+  ignored, with a warning; use the `instructions` argument of
+  [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
+  to add to commons' prompt.
 
 - commons:
 
   A
   [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
-  object holding the agent's data sources, semantic layer, and context
-  layer.
+  object holding the agent's data sources, semantic layer, context
+  layer, and instructions.
 
 - ...:
 
   These dots are for future extensions and must be empty.
-
-- instructions:
-
-  Optional instructions placed under an `## Additional instructions`
-  heading at the end of commons' built-in system prompt, as a single
-  string or the path to a text or Markdown file.
-
-      agent(
-        # ...
-        instructions = "Use the organization's fiscal-year conventions."
-      )
 
 - mode:
 

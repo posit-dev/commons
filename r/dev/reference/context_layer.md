@@ -24,7 +24,7 @@ change without notice.
 
 Context is retrieved when relevant. Facts needed in every conversation
 belong in the `instructions` passed to
-[`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md),
+[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md),
 not here.
 
 ## Examples

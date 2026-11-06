@@ -61,7 +61,6 @@ calculation, cited, or untrusted.</p>
 <span>  <span class="va">client</span>,</span>
 <span>  <span class="va">commons</span>,</span>
 <span>  <span class="va">...</span>,</span>
-<span>  instructions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"normal"</span>, <span class="st">"trusted only"</span><span class="op">)</span>,</span>
 <span>  network <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"none"</span>, <span class="st">"full"</span><span class="op">)</span>,</span>
 <span>  log <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -77,27 +76,17 @@ calculation, cited, or untrusted.</p>
 <dd><p>An <a href="https://ellmer.tidyverse.org/reference/Chat.html" class="external-link">ellmer::Chat</a> giving the provider and model to use, e.g.
 <code><a href="https://ellmer.tidyverse.org/reference/chat_anthropic.html" class="external-link">ellmer::chat_anthropic()</a></code>. For best results, enable thinking when
 supported by the selected provider and model. A system prompt already set
-on the client is ignored, with a warning; use <code>instructions</code> to add to
-commons' prompt.</p></dd>
+on the client is ignored, with a warning; use the <code>instructions</code> argument
+of <code><a href="commons.html">commons()</a></code> to add to commons' prompt.</p></dd>
 
 
 <dt id="arg-commons">commons<a class="anchor" aria-label="anchor" href="#arg-commons"></a></dt>
 <dd><p>A <code><a href="commons.html">commons()</a></code> object holding the agent's data sources,
-semantic layer, and context layer.</p></dd>
+semantic layer, context layer, and instructions.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
 <dd><p>These dots are for future extensions and must be empty.</p></dd>
-
-
-<dt id="arg-instructions">instructions<a class="anchor" aria-label="anchor" href="#arg-instructions"></a></dt>
-<dd><p>Optional instructions placed under an
-<code>## Additional instructions</code> heading at the end of commons' built-in
-system prompt, as a single string or the path to a text or Markdown file.</p>
-<p></p><div class="sourceCode r"><pre><code><span><span class="fu"><a href="../reference/agent.html">agent</a></span><span class="op">(</span></span>
-<span>  <span class="co"># ...</span></span>
-<span>  instructions <span class="op">=</span> <span class="st">"Use the organization's fiscal-year conventions."</span></span>
-<span><span class="op">)</span></span></code></pre><p></p></div></dd>
 
 
 <dt id="arg-mode">mode<a class="anchor" aria-label="anchor" href="#arg-mode"></a></dt>

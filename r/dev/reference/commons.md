@@ -10,7 +10,13 @@ already controls.
 ## Usage
 
 ``` r
-commons(..., data_sources, semantic_layer = NULL, context_layer = NULL)
+commons(
+  ...,
+  data_sources,
+  semantic_layer = NULL,
+  context_layer = NULL,
+  instructions = NULL
+)
 ```
 
 ## Arguments
@@ -36,6 +42,20 @@ commons(..., data_sources, semantic_layer = NULL, context_layer = NULL)
 
   An optional
   [`context_layer()`](https://posit-dev.github.io/commons/r/dev/reference/context_layer.md).
+
+- instructions:
+
+  Optional instructions, as a single string or the path to a text or
+  Markdown file. They're shown at the end of the object's printed
+  overview, and
+  [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md)
+  places them under an `## Additional instructions` heading at the end
+  of its system prompt.
+
+      commons(
+        # ...
+        instructions = "Use the organization's fiscal-year conventions."
+      )
 
 ## Value
 

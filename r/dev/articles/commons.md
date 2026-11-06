@@ -339,11 +339,10 @@ files:
 Construct an agent in two steps. First, use
 [`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)
 to gather one or more data sources, along with any semantic and context
-layers, into “the commons”. Then pass an ellmer `Chat` and the commons
-to
-[`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
-You can also optionally append information to the commons agent system
-prompt using the `instructions` argument to
+layers, into “the commons”. You can optionally append information to the
+commons agent system prompt using
+[`commons()`](https://posit-dev.github.io/commons/r/dev/reference/commons.md)’s
+`instructions` argument. Then pass an ellmer `Chat` and the commons to
 [`agent()`](https://posit-dev.github.io/commons/r/dev/reference/agent.md).
 
 ``` r
@@ -359,13 +358,13 @@ biodiversity <- data_source(
 commons <- commons(
   data_sources = list(biodiversity = biodiversity),
   semantic_layer = semantic_layer("measures"),
-  context_layer = context_layer("context/context.md")
+  context_layer = context_layer("context/context.md"),
+  instructions = "instructions.md"
 )
 
 agent <- agent(
   client = ellmer::chat("anthropic/claude-sonnet-5"),
-  commons = commons,
-  instructions = "instructions.md"
+  commons = commons
 )
 
 commons_app(agent)
