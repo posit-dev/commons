@@ -10,6 +10,7 @@ URLs requests land on, is pinned for both in ``tests/shared/connect.json``.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -202,13 +203,58 @@ def test_a_redirect_raises() -> None:
     assert raised.value.status_code == 307
 
 
-def test_a_failure_does_not_disclose_the_api_key() -> None:
+def client_refusing() -> ConnectClient:
+    """A client whose every request fails before reaching a server."""
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    http = httpx.Client(transport=httpx.MockTransport(refuse))
+    return ConnectClient("https://connect.example.com", "the-api-key", http=http)
+
+
+def test_a_network_failure_raises_a_connect_error() -> None:
+    # One exception type covers every way a request can fail, so callers
+    # cannot catch the status failures and miss an outage.
+    with pytest.raises(ConnectError) as raised:
+        client_refusing().request("GET", "content", GUID)
+
+    assert raised.value.status_code is None
+    assert f"/content/{GUID}" in str(raised.value)
+
+
+@pytest.mark.parametrize(
+    "fail",
+    [
+        pytest.param(lambda: client_recording(status=500)[0], id="status"),
+        pytest.param(client_refusing, id="network"),
+    ],
+)
+def test_a_failure_does_not_disclose_the_api_key(
+    fail: Callable[[], ConnectClient],
+) -> None:
     # The key is an ephemeral owner-scoped credential; a traceback that
     # reaches a log or an issue report must not carry it.
-    client, _ = client_recording(status=500)
-
     with pytest.raises(ConnectError) as raised:
-        client.request("GET", "content", GUID)
+        fail().request("GET", "content", GUID)
 
     assert "the-api-key" not in str(raised.value)
     assert "the-api-key" not in repr(raised.value)
+    assert "the-api-key" not in repr(raised.value.__cause__)
+
+
+def test_closing_releases_the_client_it_created() -> None:
+    with ConnectClient("https://connect.example.com", "the-api-key") as client:
+        pass
+
+    with pytest.raises(RuntimeError, match="closed"):
+        client.request("GET", "users")
+
+
+def test_closing_leaves_a_caller_supplied_client_open() -> None:
+    http = httpx.Client(transport=httpx.MockTransport(lambda _: httpx.Response(200)))
+
+    with ConnectClient("https://connect.example.com", "the-api-key", http=http):
+        pass
+
+    assert not http.is_closed
