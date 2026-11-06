@@ -16,7 +16,7 @@ permissions: read-all
 jobs:
   check:
     runs-on: ${{ matrix.config.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
     strategy:
       fail-fast: false
@@ -80,6 +80,7 @@ jobs:
   check-devel:
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.config.os }}
+    timeout-minutes: 30
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
     strategy:
       matrix:
