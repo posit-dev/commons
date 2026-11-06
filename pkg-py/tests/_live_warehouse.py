@@ -161,7 +161,13 @@ def _engine(backend: str, namespace: tuple[str, ...]) -> sqlalchemy.Engine:
         # environment: a token, a service principal's secret or GitHub OIDC
         # token, or a CLI login. The connector asks for headers per request,
         # and the SDK refreshes short-lived tokens behind them.
-        config = Config(host=f"https://{host}")
+        # Unset, the SDK requests all-apis, which a scoped secret refuses.
+        scopes_variable = _ENV["backends"]["databricks"]["connection"]["scopes"][
+            "variable"
+        ]
+        config = Config(
+            host=f"https://{host}", scopes=os.environ.get(scopes_variable) or None
+        )
         return sqlalchemy.create_engine(
             url,
             connect_args={
