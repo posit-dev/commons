@@ -94,7 +94,8 @@ def _databricks_rows(
     connection: sqlalchemy.Connection, sql: str
 ) -> list[dict[str, Any]]:
     # The Databricks connector builds rows through pandas' nullable floats,
-    # which read NaN as missing, so a NaN double reaches SQLAlchemy as None.
+    # which read NaN as missing, so the connector returns None to SQLAlchemy
+    # for a NaN double.
     # The connector's Arrow table keeps NaN.
     cursor = connection.connection.cursor()
     try:
