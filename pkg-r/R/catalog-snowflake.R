@@ -591,6 +591,11 @@ snowflake_semantic_model_from_spec <- function(
     specification$variables,
     "Snowflake"
   )
+  for (entry in semantic_spec_entries(specification$variables)) {
+    parameters[[entry$name]]$sql_type <- snowflake_semantic_sql_type(
+      entry$data_type %||% entry$type
+    )
+  }
   calculations <- snowflake_verified_calculations(
     specification$verified_queries
   )
@@ -799,16 +804,7 @@ snowflake_semantic_metric_sql <- function(
       paste(snowflake_semantic_member_references(metrics, con), collapse = ", ")
     ),
     if (length(arguments)) {
-      paste(
-        "VARIABLES",
-        paste(
-          sprintf(
-            "%s => ?",
-            DBI::dbQuoteIdentifier(con, names(arguments))
-          ),
-          collapse = ", "
-        )
-      )
+      snowflake_semantic_variables(con, model, names(arguments))
     }
   )
   conditions <- c(
@@ -822,6 +818,35 @@ snowflake_semantic_metric_sql <- function(
     "SELECT * FROM SEMANTIC_VIEW(\n  ",
     paste(parts, collapse = "\n  "),
     "\n)"
+  )
+}
+
+# Snowflake rejects a value with a mismatched type, so a variable is cast to its
+# declared type. The type is spliced into SQL, so it is kept only when it is a
+# sequence of letters and underscores, optionally followed by a numeric
+# precision and scale (e.g. `TIMESTAMP_TZ`, `VARCHAR(16)`, `NUMBER(10, 2)`).
+snowflake_semantic_sql_type <- function(declared_type) {
+  if (
+    !grepl("^[A-Za-z_]+( *\\( *[0-9]+( *, *[0-9]+)? *\\))?$", declared_type)
+  ) {
+    return(NULL)
+  }
+  toupper(gsub(" ", "", declared_type, fixed = TRUE))
+}
+
+snowflake_semantic_variables <- function(con, model, names) {
+  placeholders <- vapply(names, function(name) {
+    type <- model$parameters[[name]]$sql_type
+    if (is.null(type)) "?" else sprintf("CAST(? AS %s)", type)
+  }, character(1))
+  paste(
+    "VARIABLES",
+    paste(
+      DBI::dbQuoteIdentifier(con, names),
+      "=>",
+      placeholders,
+      collapse = ", "
+    )
   )
 }
 
