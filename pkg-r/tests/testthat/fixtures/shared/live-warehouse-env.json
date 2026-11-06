@@ -3,7 +3,11 @@
   "backends": {
     "databricks": {
       "connection": {
-        "required": ["DATABRICKS_HOST", "DATABRICKS_HTTP_PATH"]
+        "required": ["DATABRICKS_HOST", "DATABRICKS_HTTP_PATH"],
+        "scopes": {
+          "variable": "COMMONS_TEST_DATABRICKS_SCOPES",
+          "description": "OAuth scopes to request with a service principal's client secret, space-separated, such as `sql`. Set it when the secret is scoped; a scoped secret refuses the `all-apis` scope both clients request by default. Databricks has no variable of its own for this."
+        }
       },
       "fixtures": {
         "schema": {

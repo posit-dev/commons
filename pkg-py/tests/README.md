@@ -26,7 +26,7 @@ export SNOWFLAKE_PRIVATE_KEY_FILE=~/.snowflake/keys/rsa_key.p8
 export COMMONS_TEST_SNOWFLAKE_SCHEMA=COMMONS_CI.PUBLIC
 ```
 
-Databricks credentials come from the SDK's [unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth): `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `tests/shared/live-warehouse-env.json` is the full list of variables, including the optional ones that gate individual tests.
+Databricks credentials come from the SDK's [unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth): `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. A client secret scoped to `sql` also needs `COMMONS_TEST_DATABRICKS_SCOPES=sql`, because both clients otherwise request `all-apis`. Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `tests/shared/live-warehouse-env.json` is the full list of variables, including the optional ones that gate individual tests.
 
 ### 3. Create the fixture tables
 
