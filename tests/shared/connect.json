@@ -97,5 +97,62 @@
         "expected": "https://connect.example.com/__api__/v1/users"
       }
     ]
+  },
+  "collaborator_grant": {
+    "description": "The permission commons creates so a user can read this content's trajectories. Reading traces needs editor-level access, and Connect's permissions API spells that role \"owner\"; it rejects \"editor\". A lesser permission on the content, such as the viewer role someone gets when the app is shared with them, does not carry trace access, so it is not a reason to skip them.",
+    "endpoint": ["content", "{guid}", "permissions"],
+    "method": "POST",
+    "body": {
+      "principal_type": "user",
+      "role": "owner",
+      "send_email": false
+    }
+  },
+  "sharing": {
+    "description": "Who gets a grant, given the usernames asked for and the permissions that already exist on the content. `expected` lists the principals granted, in order. Test doubles resolve username `x` to principal `guid-x`.",
+    "cases": [
+      {
+        "name": "a user with no permission is granted one",
+        "usernames": ["ada"],
+        "permitted": [],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "a user who already holds the role is left alone",
+        "usernames": ["ada"],
+        "permitted": [
+          { "principal_guid": "guid-ada", "role": "owner" }
+        ],
+        "expected": []
+      },
+      {
+        "name": "a user with only viewer access is still granted the role",
+        "usernames": ["ada"],
+        "permitted": [
+          { "principal_guid": "guid-ada", "role": "viewer" }
+        ],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "only the user missing the role is granted",
+        "usernames": ["ada", "grace"],
+        "permitted": [
+          { "principal_guid": "guid-ada", "role": "owner" }
+        ],
+        "expected": ["guid-grace"]
+      },
+      {
+        "name": "a username is matched regardless of case",
+        "usernames": ["Ada"],
+        "permitted": [],
+        "expected": ["guid-ada"]
+      },
+      {
+        "name": "case variants of one username are granted once",
+        "usernames": ["ada", "ADA"],
+        "permitted": [],
+        "expected": ["guid-ada"]
+      }
+    ]
   }
 }
