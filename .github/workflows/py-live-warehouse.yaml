@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths: [pkg-py/**, tests/shared/**, .github/workflows/py-live-warehouse.yaml]
   workflow_dispatch:
-  # The Databricks leg waits for a maintainer to approve it in the
-  # databricks-ci environment.
   pull_request:
     paths: [pkg-py/**, tests/shared/**, .github/workflows/py-live-warehouse.yaml]
 
@@ -25,12 +23,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [databricks, snowflake]
-    # Each backend's credentials live in its own environment. The Databricks
-    # federation policy trusts this repository's `databricks-ci` environment
-    # by name.
+        include:
+          # A temporary free Databricks workspace, signed in with a client
+          # secret, stands in until `databricks-ci` has its fixture tables.
+          - backend: databricks
+            environment: databricks-temp-free-ci
+          - backend: snowflake
+            environment: snowflake-ci
+    # Each backend's credentials live in its own environment.
     environment:
-      name: ${{ matrix.backend }}-ci
+      name: ${{ matrix.environment }}
       # No deployment record for a test run.
       deployment: false
     permissions:
