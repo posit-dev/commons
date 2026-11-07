@@ -14,6 +14,10 @@ from typing import cast
 import pytest
 
 from commons._catalog import (
+    CatalogAmbiguousColumnError,
+    CatalogAmbiguousTableError,
+    CatalogClaimedRelationError,
+    CatalogMergeError,
     Manifest,
     MergedDictionary,
     Relation,
@@ -508,14 +512,22 @@ def run_merge_case(case: dict) -> MergedDictionary:
     )
 
 
+_MERGE_ERRORS = {
+    "ambiguous": CatalogAmbiguousTableError,
+    "claimed": CatalogClaimedRelationError,
+    "ambiguous_column": CatalogAmbiguousColumnError,
+}
+
+
 def test_the_dictionary_merge_matches_the_shared_contract():
     cases = load_shared_fixture("catalog-merge")["merge"]
     assert cases
     for case in cases:
         expect = case["expect"]
         if "error" in expect:
-            with pytest.raises(ValueError):
+            with pytest.raises(_MERGE_ERRORS[expect["error"]]):
                 run_merge_case(case)
+            assert issubclass(_MERGE_ERRORS[expect["error"]], CatalogMergeError)
             continue
 
         merged = run_merge_case(case)
