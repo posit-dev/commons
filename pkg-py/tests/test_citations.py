@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from commons._citation_scan import CitationScanner
 from commons._citations import (
     CitationDecision,
     CorpusEntry,
@@ -114,17 +115,32 @@ def test_parsed_citations_are_immutable() -> None:
 @pytest.mark.parametrize("case", DECISION_CASES, ids=lambda case: case["name"])
 def test_decisions_record_the_shared_shape(case: dict[str, Any]) -> None:
     # The R trajectory reviewer reads this JSON out of the span, so the field
-    # names and the omissions are the contract, not the dataclass.
+    # names and the omissions are the contract. The scanner is what records a
+    # decision, so it is driven here rather than building one by hand.
     expected = case["decision"]
+    if expected["status"] == "malformed":
+        text = "<citation>\n\nno blockquote\n\n</citation>"
+        corpus = []
+    else:
+        text = f"<citation>\nwhy\n\n> {expected['quote']}\n</citation>"
+        if expected["status"] == "accepted":
+            corpus = [
+                CorpusEntry(
+                    label=expected["label"],
+                    kind=expected["kind"],
+                    text=expected["quote"],
+                )
+            ]
+        else:
+            corpus = [
+                CorpusEntry(label="documentation", kind="prose", text="No support.")
+            ]
 
-    decision = CitationDecision(
-        quote=expected["quote"],
-        status=expected["status"],
-        label=expected.get("label"),
-        kind=expected.get("kind"),
-    )
+    scanner = CitationScanner(corpus)
+    scanner.feed(text)
+    scanner.finish()
 
-    assert decision.as_record() == expected
+    assert [decision.as_record() for decision in scanner.candidates] == [expected]
 
 
 def test_citation_decisions_are_immutable() -> None:
