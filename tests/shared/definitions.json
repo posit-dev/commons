@@ -184,6 +184,10 @@
         "notes": [],
         "sql": "\"created\" >= DATE '2024-01-01'"
       },
+      "survey::relayed offset": {
+        "notes": [],
+        "sql": "NULL"
+      },
       "survey::right associative arithmetic": {
         "notes": [],
         "sql": "\"amount\" - (\"ratio\" - 1)"
@@ -522,12 +526,12 @@
           "created"
         ],
         "definitions": [
-          "absent offset"
+          "relayed offset"
         ],
-        "expression": "created + `absent offset`",
+        "expression": "created + `relayed offset`",
         "kind": "derived",
         "translation": {
-          "code": "\"created\" + \"absent offset\"",
+          "code": "\"created\" + \"relayed offset\"",
           "error": null,
           "notes": [],
           "target": "SQL(duckdb)"
@@ -847,6 +851,21 @@
         },
         "type": "boolean"
       },
+      "survey::relayed offset": {
+        "columns": [],
+        "definitions": [
+          "absent offset"
+        ],
+        "expression": "`absent offset`",
+        "kind": "metric",
+        "translation": {
+          "code": "\"absent offset\"",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": null
+      },
       "survey::right associative arithmetic": {
         "columns": [
           "amount",
@@ -969,6 +988,7 @@
       "survey::prefix match": false,
       "survey::range predicate": false,
       "survey::recent": false,
+      "survey::relayed offset": false,
       "survey::right associative arithmetic": false,
       "survey::selected dates": false,
       "survey::suffix mismatch": false,
