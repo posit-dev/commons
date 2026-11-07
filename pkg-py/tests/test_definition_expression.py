@@ -294,7 +294,7 @@ def _corpus_expressions(kind: str) -> list[tuple[str, str, str]]:
 def test_every_valid_corpus_expression_parses():
     cases = _corpus_expressions("valid")
     # An empty corpus would otherwise pass this test silently.
-    assert len(cases) == 42
+    assert len(cases) == 44
     for filename, name, expr in cases:
         try:
             parse_expression(expr)

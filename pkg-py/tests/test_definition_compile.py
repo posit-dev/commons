@@ -62,7 +62,7 @@ def test_grain_matches_the_shared_contract():
             grain = mixed_grain(exported[table].definitions)
             assert grain[name] is expected, key
             checked += 1
-    assert checked == 42
+    assert checked == 44
 
 
 def test_composed_sql_matches_the_shared_contract():
@@ -80,7 +80,7 @@ def test_composed_sql_matches_the_shared_contract():
                 assert record.sql == expected["sql"], record.name
                 assert record.notes == expected["notes"], record.name
                 checked += 1
-    assert checked == 42
+    assert checked == 44
 
 
 def test_a_row_expression_holding_an_aggregate_is_mixed_grain():
@@ -362,7 +362,7 @@ def test_every_corpus_definition_compiles_to_sql_duckdb_accepts():
                 assert row is not None
                 assert json.loads(row[0])["error"] is False, record.sql
                 checked += 1
-    assert checked == 42
+    assert checked == 44
 
 
 def test_definitions_on_a_table_the_source_does_not_expose_fail_construction(

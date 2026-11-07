@@ -58,6 +58,10 @@
       }
     },
     "language.yaml": {
+      "survey::absent offset": {
+        "notes": [],
+        "sql": "NULL"
+      },
       "survey::amount band": {
         "notes": [
           "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
@@ -87,6 +91,10 @@
       "survey::constant": {
         "notes": [],
         "sql": "1"
+      },
+      "survey::date shifted by a null sibling": {
+        "notes": [],
+        "sql": "\"created\" + NULL"
       },
       "survey::deep score": {
         "notes": [],
@@ -379,6 +387,19 @@
       }
     },
     "language.yaml": {
+      "survey::absent offset": {
+        "columns": [],
+        "definitions": [],
+        "expression": "NULL",
+        "kind": "metric",
+        "translation": {
+          "code": "NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": null
+      },
       "survey::amount band": {
         "columns": [
           "amount"
@@ -495,6 +516,23 @@
           "target": "SQL(duckdb)"
         },
         "type": "number"
+      },
+      "survey::date shifted by a null sibling": {
+        "columns": [
+          "created"
+        ],
+        "definitions": [
+          "absent offset"
+        ],
+        "expression": "created + `absent offset`",
+        "kind": "derived",
+        "translation": {
+          "code": "\"created\" + \"absent offset\"",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "datetime"
       },
       "survey::deep score": {
         "columns": [
@@ -902,6 +940,7 @@
       "values::strings": false
     },
     "language.yaml": {
+      "survey::absent offset": false,
       "survey::amount band": true,
       "survey::anything missing": false,
       "survey::case without else": false,
@@ -909,6 +948,7 @@
       "survey::complete": false,
       "survey::computed interval": false,
       "survey::constant": false,
+      "survey::date shifted by a null sibling": false,
       "survey::deep score": false,
       "survey::dynamic match": false,
       "survey::exact match": false,
