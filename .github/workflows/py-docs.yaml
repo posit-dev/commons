@@ -123,6 +123,6 @@ jobs:
           github.event.pull_request.head.repo.fork == true
         working-directory: .
         run: |
-          msg="No documentation preview for a pull request from a fork. A maintainer who wants to see the rendered docs can push this branch to the repository, which publishes a preview."
+          msg="Pull requests from forks get no documentation preview. To publish one, a maintainer can push this branch to posit-dev/commons."
           echo "::notice title=No documentation preview::$msg"
           echo "$msg" >> "$GITHUB_STEP_SUMMARY"
