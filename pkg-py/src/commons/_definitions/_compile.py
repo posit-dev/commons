@@ -336,6 +336,7 @@ def _compile_table(
 ) -> list[ExportRecord]:
     grain = mixed_grain(definitions)
     markers = _reference_markers(definitions)
+    null = _null_definitions(definitions)
     # Only the source's own target is lowered, and ExportRecord carries that
     # one target. The R implementation emits every target up front and keeps
     # them on the definition's translations, so an unselected target's error
@@ -344,7 +345,7 @@ def _compile_table(
     for name, definition in definitions.items():
         if definition.ir is None:
             continue
-        marked = _mark_references(definition.ir, markers)
+        marked = _mark_references(definition.ir, markers, null)
         if target == "SQL(duckdb)":
             emitted[name] = emit_duckdb(marked, definition.selection)
             continue
@@ -429,10 +430,41 @@ def _selection_identifiers(selection: dict[str, Any] | None) -> set[str]:
     return out
 
 
-def _mark_references(ir: Ir, markers: dict[str, str]) -> Ir:
-    """Rename each sibling-definition reference to its marker."""
-    attrs = _map_children(ir, lambda child: _mark_references(child, markers))
-    if ir.kind == "column" and ir.attrs.get("reference") == "definition":
+def _null_definitions(definitions: dict[str, DefinitionExport]) -> set[str]:
+    """The definitions that are always NULL: a bare NULL, or a reference to one."""
+    null: set[str] = set()
+    while True:
+        found = {
+            name
+            for name, definition in definitions.items()
+            if definition.ir is not None and _is_null(definition.ir, null)
+        }
+        if found == null:
+            return null
+        null = found
+
+
+def _is_null(ir: Ir, null: set[str]) -> bool:
+    return ir.kind == "null" or (
+        _is_definition_reference(ir) and ir.attrs["path"][0] in null
+    )
+
+
+def _is_definition_reference(ir: Ir) -> bool:
+    return ir.kind == "column" and ir.attrs.get("reference") == "definition"
+
+
+def _mark_references(ir: Ir, markers: dict[str, str], null: set[str]) -> Ir:
+    """Rename each sibling-definition reference to its marker.
+
+    A reference to an always-NULL sibling becomes the NULL itself instead, so
+    the emitters can type it where a dialect needs one: Snowflake refuses
+    DATE + NULL.
+    """
+    if _is_definition_reference(ir) and ir.attrs["path"][0] in null:
+        return Ir(kind="null", type=ir.type, shape="const", attrs={})
+    attrs = _map_children(ir, lambda child: _mark_references(child, markers, null))
+    if _is_definition_reference(ir):
         path = list(attrs["path"])
         path[0] = markers[path[0]]
         attrs["path"] = path
