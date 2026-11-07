@@ -626,8 +626,9 @@ def _resolve_selection(
     if selector["kind"] == "list":
         missing = [name for name in selector["names"] if name not in names]
         if missing:
-            raise ValueError(
-                f"Columns not found: {', '.join(repr(name) for name in missing)}."
+            raise DefinitionInvalidError(
+                f"Columns not found: {', '.join(repr(name) for name in missing)}.",
+                "S20",
             )
         names = selector["names"]
     return {
