@@ -77,6 +77,7 @@ test_that("the dictionary merge matches the shared contract", {
     }
     if (!is.null(case$expect$error)) {
       expect_error(run(), class = merge_error_class[[case$expect$error]])
+      expect_error(run(), class = "commons_catalog_merge_error")
       next
     }
     merged <- run()

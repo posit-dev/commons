@@ -40,15 +40,19 @@ _WORDS = re.compile(r"[^0-9a-z_]+")
 _GLOB_SPECIAL = re.compile(r"([][{}()+.^$|\\])")
 
 
-class CatalogAmbiguousTableError(ValueError):
+class CatalogMergeError(ValueError):
+    """A data dictionary does not match the warehouse catalog."""
+
+
+class CatalogAmbiguousTableError(CatalogMergeError):
     """An authored table name matches more than one selected relation."""
 
 
-class CatalogClaimedRelationError(ValueError):
+class CatalogClaimedRelationError(CatalogMergeError):
     """Two authored tables match the same selected relation."""
 
 
-class CatalogAmbiguousColumnError(ValueError):
+class CatalogAmbiguousColumnError(CatalogMergeError):
     """An authored column name matches more than one discovered column."""
 
 

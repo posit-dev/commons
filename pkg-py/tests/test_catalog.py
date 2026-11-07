@@ -17,6 +17,7 @@ from commons._catalog import (
     CatalogAmbiguousColumnError,
     CatalogAmbiguousTableError,
     CatalogClaimedRelationError,
+    CatalogMergeError,
     Manifest,
     MergedDictionary,
     Relation,
@@ -526,6 +527,7 @@ def test_the_dictionary_merge_matches_the_shared_contract():
         if "error" in expect:
             with pytest.raises(_MERGE_ERRORS[expect["error"]]):
                 run_merge_case(case)
+            assert issubclass(_MERGE_ERRORS[expect["error"]], CatalogMergeError)
             continue
 
         merged = run_merge_case(case)
