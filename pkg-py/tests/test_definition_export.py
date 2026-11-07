@@ -13,7 +13,11 @@ import subprocess
 import pytest
 import yaml
 
-from commons._definitions._export import DefinitionExport, export_spec
+from commons._definitions._export import (
+    DefinitionExport,
+    DefinitionInvalidError,
+    export_spec,
+)
 from tests._shared import SHARED_DIR, load_shared_fixture
 
 
@@ -380,12 +384,14 @@ def test_the_export_matches_the_shared_contract():
     assert checked == 45
 
 
-def test_every_invalid_corpus_fixture_is_refused():
+def test_every_invalid_corpus_fixture_is_refused_with_its_code():
+    codes = load_shared_fixture("definitions")["invalid"]
     paths = _corpus("invalid")
-    assert len(paths) == 11
+    assert sorted(path.name for path in paths) == sorted(codes)
     for path in paths:
-        with pytest.raises(ValueError):
+        with pytest.raises(DefinitionInvalidError) as excinfo:
             export_spec(yaml.safe_load(path.read_text(encoding="utf-8")))
+        assert excinfo.value.code == codes[path.name], path.name
 
 
 # --- agreement with a live data-dict binary --------------------------------
