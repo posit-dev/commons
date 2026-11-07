@@ -8,12 +8,14 @@ live_warehouse_spec <- function(backend) {
   shared_fixture("live-warehouse-env")$backends[[backend]]
 }
 
-# Skips unless the backend's connection variables and schema are all set.
+# Skips unless the backend's connection variables and required fixtures are
+# all set.
 require_live_warehouse <- function(backend) {
   spec <- live_warehouse_spec(backend)
+  required <- Filter(function(fixture) isTRUE(fixture$required), spec$fixtures)
   names <- c(
     unlist(spec$connection$required),
-    spec$fixtures$schema$variable
+    vapply(required, `[[`, character(1), "variable")
   )
   missing <- names[!nzchar(Sys.getenv(names))]
   skip_if(
