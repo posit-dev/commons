@@ -16,6 +16,13 @@ export DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/abc123
 export COMMONS_TEST_DATABRICKS_SCHEMA=main.commons_live
 ```
 
+You can also keep the variables in a `.env` file at the repository root, which git ignores. Write each one as a plain `KEY=value` line without `export`, and give `SNOWFLAKE_PRIVATE_KEY_FILE` an absolute path, because nothing expands `~` in that file. If you keep that file, load it from `pkg-r/` before you run the tests:
+
+```r
+if (file.exists("../.env")) readRenviron("../.env")
+devtools::test()
+```
+
 Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `odbc::databricks()` finds Databricks credentials in the environment: `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. Both need the vendor's ODBC driver.
 
 Create the tables with `scripts/provision-live-warehouse.py`; `pkg-py/tests/README.md` describes it. The R tests use its `orders` table.

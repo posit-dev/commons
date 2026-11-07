@@ -22,6 +22,8 @@ The agents commons builds don't know what "commons" is, and neither do their end
 
 When writing tests for either package, refrain from excessive mocking. Instead, prefer testing the real, live path, skipping the test when the needed package or API key isn't available. Broadly, refrain from `expect_match()` for text that is unconditionally included in a prompt or tool description, and `expect_no_match()` for text that has no feasible path to end up in the prompt or tool descriptions.
 
+The live Snowflake and Databricks tests read their connection variables from the environment. A developer may keep those variables in a git-ignored `.env` file at the repository root. When it exists, load it as `pkg-py/tests/README.md` and `pkg-r/tests/testthat/README.md` describe (`uv run --env-file ../.env` in Python, a guarded `readRenviron()` in R). When it does not exist, run the tests as usual. Never print, echo, or commit the values in that file.
+
 Release tags are prefixed per package: `r-v*` for the R package, `py-v*` for the Python package.
 
 ## GitHub etiquette
