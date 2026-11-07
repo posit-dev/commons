@@ -377,7 +377,7 @@ def test_the_export_matches_the_shared_contract():
             assert record.columns == case["columns"], key
             assert record.definitions == case["definitions"], key
             checked += 1
-    assert checked == 42
+    assert checked == 45
 
 
 def test_every_invalid_corpus_fixture_is_refused():

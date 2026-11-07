@@ -58,6 +58,7 @@ definition_bind_export <- function(
     binding <- definition_source_binding(source, table$name, call = call)
     definition_check_selections(table$definitions, table$name, call = call)
     markers <- definition_reference_markers(table$definitions, binding)
+    null <- definition_null_names(table$definitions)
     definitions <- lapply(table$definitions, function(definition) {
       definition_bind_one(
         definition,
@@ -65,6 +66,7 @@ definition_bind_export <- function(
         binding,
         target,
         markers,
+        null,
         call = call
       )
     })
@@ -131,6 +133,7 @@ definition_bind_one <- function(
   binding,
   target,
   markers,
+  null,
   call
 ) {
   ir <- attr(definition, "ir", exact = TRUE)
@@ -161,7 +164,7 @@ definition_bind_one <- function(
     table,
     call
   )
-  execution_ir <- definition_mark_references(bound_ir, markers)
+  execution_ir <- definition_mark_references(bound_ir, markers, null)
   selected <- definition_emit_translation(
     target,
     execution_ir,
@@ -221,20 +224,52 @@ definition_ir_identifiers <- function(node) {
   ))
 }
 
-definition_mark_references <- function(node, markers) {
+# The definitions that are always NULL: a bare NULL, or a reference to one.
+definition_null_names <- function(definitions) {
+  names <- vapply(definitions, `[[`, character(1), "name")
+  null <- character()
+  repeat {
+    found <- names[vapply(
+      definitions,
+      function(definition) {
+        definition_ir_is_null(attr(definition, "ir", exact = TRUE), null)
+      },
+      logical(1)
+    )]
+    if (setequal(found, null)) {
+      return(null)
+    }
+    null <- found
+  }
+}
+
+definition_ir_is_null <- function(node, null) {
+  is.list(node) &&
+    (identical(node$kind, "null") ||
+      (definition_is_reference(node) && node$path[[1]] %in% null))
+}
+
+definition_is_reference <- function(node) {
+  identical(node$kind, "column") && identical(node$reference, "definition")
+}
+
+# A reference to an always-NULL sibling becomes the NULL itself, so the
+# emitters can type it where a dialect needs one: Snowflake refuses DATE + NULL.
+definition_mark_references <- function(node, markers, null) {
   if (!is.list(node)) {
     return(node)
   }
-  if (
-    identical(node$kind, "column") &&
-      identical(node$reference, "definition")
-  ) {
+  if (definition_is_reference(node)) {
+    if (node$path[[1]] %in% null) {
+      return(list(kind = "null", type = node$type, shape = "const"))
+    }
     node$path[[1]] <- markers[[node$path[[1]]]]
   }
   lapply(
     node,
     definition_mark_references,
-    markers = markers
+    markers = markers,
+    null = null
   )
 }
 

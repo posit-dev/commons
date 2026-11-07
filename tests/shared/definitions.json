@@ -58,6 +58,10 @@
       }
     },
     "language.yaml": {
+      "survey::absent offset": {
+        "notes": [],
+        "sql": "NULL"
+      },
       "survey::amount band": {
         "notes": [
           "DuckDB compares a NaN as equal to itself and greater than every number, where data-dict answers false; a row holding one passes here and is reported there."
@@ -87,6 +91,10 @@
       "survey::constant": {
         "notes": [],
         "sql": "1"
+      },
+      "survey::date shifted by a null sibling": {
+        "notes": [],
+        "sql": "\"created\" + NULL"
       },
       "survey::deep score": {
         "notes": [],
@@ -175,6 +183,10 @@
       "survey::recent": {
         "notes": [],
         "sql": "\"created\" >= DATE '2024-01-01'"
+      },
+      "survey::relayed offset": {
+        "notes": [],
+        "sql": "NULL"
       },
       "survey::right associative arithmetic": {
         "notes": [],
@@ -379,6 +391,19 @@
       }
     },
     "language.yaml": {
+      "survey::absent offset": {
+        "columns": [],
+        "definitions": [],
+        "expression": "NULL",
+        "kind": "metric",
+        "translation": {
+          "code": "NULL",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": null
+      },
       "survey::amount band": {
         "columns": [
           "amount"
@@ -495,6 +520,23 @@
           "target": "SQL(duckdb)"
         },
         "type": "number"
+      },
+      "survey::date shifted by a null sibling": {
+        "columns": [
+          "created"
+        ],
+        "definitions": [
+          "relayed offset"
+        ],
+        "expression": "created + `relayed offset`",
+        "kind": "derived",
+        "translation": {
+          "code": "\"created\" + \"relayed offset\"",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": "datetime"
       },
       "survey::deep score": {
         "columns": [
@@ -809,6 +851,21 @@
         },
         "type": "boolean"
       },
+      "survey::relayed offset": {
+        "columns": [],
+        "definitions": [
+          "absent offset"
+        ],
+        "expression": "`absent offset`",
+        "kind": "metric",
+        "translation": {
+          "code": "\"absent offset\"",
+          "error": null,
+          "notes": [],
+          "target": "SQL(duckdb)"
+        },
+        "type": null
+      },
       "survey::right associative arithmetic": {
         "columns": [
           "amount",
@@ -902,6 +959,7 @@
       "values::strings": false
     },
     "language.yaml": {
+      "survey::absent offset": false,
       "survey::amount band": true,
       "survey::anything missing": false,
       "survey::case without else": false,
@@ -909,6 +967,7 @@
       "survey::complete": false,
       "survey::computed interval": false,
       "survey::constant": false,
+      "survey::date shifted by a null sibling": false,
       "survey::deep score": false,
       "survey::dynamic match": false,
       "survey::exact match": false,
@@ -929,6 +988,7 @@
       "survey::prefix match": false,
       "survey::range predicate": false,
       "survey::recent": false,
+      "survey::relayed offset": false,
       "survey::right associative arithmetic": false,
       "survey::selected dates": false,
       "survey::suffix mismatch": false,
