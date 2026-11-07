@@ -97,7 +97,7 @@ dbi_bind_dictionary <- function(dictionary, ids, call = rlang::caller_env()) {
   }
   list(
     dictionary = dictionary,
-    definition_bindings = list(tables = matches, columns = list(), strict = FALSE)
+    definition_bindings = list(tables = matches, columns = list())
   )
 }
 
