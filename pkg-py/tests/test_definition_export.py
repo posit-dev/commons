@@ -433,10 +433,10 @@ def test_the_local_export_agrees_with_an_installed_data_dict():
 def test_the_invalid_corpus_also_fails_the_installed_data_dict():
     """Each invalid fixture fails upstream for the reason it was written for.
 
-    The local exporter reports its own messages rather than data-dict's
-    problem codes, so the code is asserted against the binary. Without this,
-    a fixture could fail locally for an unrelated reason and still look
-    honest.
+    The local exporter is checked against the code `definitions.json` pins
+    for each fixture, so this confirms the binary reports that code. Without
+    it, a pinned code could drift from data-dict's and both suites would
+    still pass.
     """
     fixture = load_shared_fixture("definitions")["invalid"]
     for path in _corpus("invalid"):
