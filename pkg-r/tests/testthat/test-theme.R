@@ -8,9 +8,8 @@ test_that("the theme layers the shared Sass variables", {
 })
 
 test_that("the theme starts from the shared preset", {
-  # bslib exports no reader for a theme's preset.
-  preset <- bslib:::theme_preset_info(commons_theme())
-  expect_identical(preset$name, chat_theme_fixture$preset)
+  preset <- bslib::bs_get_variables(commons_theme(), "bslib-preset-name")
+  expect_identical(unname(preset), chat_theme_fixture$preset)
 })
 
 test_that("a variable argument beats a shared default", {
