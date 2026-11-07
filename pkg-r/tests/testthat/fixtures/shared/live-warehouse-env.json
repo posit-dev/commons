@@ -31,7 +31,6 @@
         "parameterized_model_arguments": {
           "variable": "COMMONS_TEST_DATABRICKS_PARAMETERIZED_MODEL_ARGUMENTS",
           "required": false,
-          "format": "json",
           "description": "The arguments to call the parameterized model with, as a JSON object. Needed alongside it."
         }
       }
@@ -85,7 +84,6 @@
         "parameterized_model_arguments": {
           "variable": "COMMONS_TEST_SNOWFLAKE_PARAMETERIZED_MODEL_ARGUMENTS",
           "required": false,
-          "format": "json",
           "description": "The arguments to call the parameterized model with, as a JSON object. Needed alongside it."
         }
       }
