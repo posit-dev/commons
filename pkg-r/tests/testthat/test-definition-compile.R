@@ -91,7 +91,7 @@ test_that("composed SQL and notes match the shared contract", {
       }
     }
   }
-  expect_equal(checked, 44L)
+  expect_equal(checked, 45L)
 })
 
 test_that("source compilation rejects metrics over mixed-grain definitions", {

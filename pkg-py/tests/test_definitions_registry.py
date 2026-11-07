@@ -460,7 +460,7 @@ def test_a_typeless_definition_omits_the_type_rather_than_naming_it() -> None:
     # language's null spelling would put "None" in the prompt, so the type is
     # left out and the rest of the gist still reaches the model.
     typeless = [item for item in fixture_records() if item.type is None]
-    assert len(typeless) == 2
+    assert len(typeless) == 3
 
     for item, chunk in zip(typeless, context_chunks(typeless), strict=True):
         assert "None" not in chunk
