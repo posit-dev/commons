@@ -931,14 +931,18 @@
   },
   "invalid": {
     "between-temporal.yaml": "S21",
+    "columns-missing.yaml": "S20",
+    "columns-non-boolean.yaml": "S21",
     "columns-non-filter.yaml": "S21",
     "columns-transitive.yaml": "S21",
     "cycle.yaml": "S34",
+    "duplicate-column.yaml": "S10",
     "duplicate.yaml": "S10",
     "nested-aggregate.yaml": "S30",
     "parse.yaml": "S19",
     "regex-engine.yaml": "S21",
     "shadow.yaml": "S33",
+    "struct-field.yaml": "S20",
     "type.yaml": "S21",
     "unknown.yaml": "S20"
   },
