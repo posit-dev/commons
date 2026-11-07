@@ -460,13 +460,12 @@ def test_a_typeless_definition_omits_the_type_rather_than_naming_it() -> None:
     # language's null spelling would put "None" in the prompt, so the type is
     # left out and the rest of the gist still reaches the model.
     typeless = [item for item in fixture_records() if item.type is None]
-    assert len(typeless) == 1
+    assert len(typeless) == 2
 
-    chunk = context_chunks(typeless)[0]
-
-    assert "None" not in chunk
-    assert "(derived)" in chunk
-    assert "Selected SQL(duckdb)" in chunk
+    for item, chunk in zip(typeless, context_chunks(typeless), strict=True):
+        assert "None" not in chunk
+        assert f"({item.kind})" in chunk
+        assert "Selected SQL(duckdb)" in chunk
 
 
 def test_grain_metadata_reaches_the_records() -> None:

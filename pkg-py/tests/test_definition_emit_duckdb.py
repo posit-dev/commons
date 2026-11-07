@@ -375,7 +375,7 @@ def test_the_translation_matches_the_shared_contract():
             assert translation["code"] == case["translation"]["code"], key
             assert translation["notes"] == case["translation"]["notes"], key
             checked += 1
-    assert checked == 42
+    assert checked == 44
 
 
 @pytest.mark.skipif(DATA_DICT is None, reason="the data-dict CLI is not installed")
