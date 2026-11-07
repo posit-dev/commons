@@ -738,7 +738,12 @@ definition_resolve_selection <- function(selector, columns, call) {
   if (identical(selector$kind, "list")) {
     missing <- setdiff(selector$names, names)
     if (length(missing)) {
-      cli::cli_abort("Columns not found: {.val {missing}}.", call = call)
+      cli::cli_abort(
+        "Columns not found: {.val {missing}}.",
+        class = "commons_definition_invalid_error",
+        code = "S20",
+        call = call
+      )
     }
     names <- selector$names
   }
