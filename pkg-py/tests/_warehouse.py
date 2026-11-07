@@ -10,6 +10,8 @@ answer different queries because the two readers ask different ones, and a
 fake that answered both would hide a reader wired to the wrong warehouse.
 """
 
+from commons._catalog import MergedDictionary, Relation, merge_dictionary
+from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
 from tests._shared import load_shared_fixture
 
@@ -19,6 +21,7 @@ __all__ = [
     "column_row",
     "databricks_column_row",
     "databricks_relation_row",
+    "merge_shared_case",
     "relation_row",
 ]
 
@@ -181,3 +184,26 @@ class FakeDatabricks(_Recorder):
 
     def dialect(self) -> str:
         return "databricks"
+
+
+def merge_shared_case(case: dict) -> MergedDictionary:
+    """Merge a shared fixture case's dictionary into its listed relations."""
+    relations = {}
+    for entry in case["relations"]:
+        relations[entry["label"]] = Relation(
+            id=TableId(
+                catalog=entry.get("catalog"),
+                schema=entry.get("schema"),
+                table=entry["table"],
+            ),
+            kind=entry.get("kind"),
+            description=entry.get("description"),
+        )
+    columns = {entry["label"]: entry["columns"] for entry in case["relations"]}
+    dictionary = DataDictionary.model_validate(case["dictionary"])
+    return merge_dictionary(
+        dictionary,
+        relations,
+        describe_relation=lambda table_id: columns[table_id.label],
+        identifier_case=case["identifier_case"],
+    )
