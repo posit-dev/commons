@@ -92,3 +92,27 @@ def test_metric_origin(case: dict[str, Any]) -> None:
         metric_origin(case["name"], definitions, _members())
         == case["expected"]["origin"]
     )
+
+
+@pytest.mark.parametrize("case", cases("pool_text"), ids=lambda c: c["query"])
+def test_pool_text(case: dict[str, Any]) -> None:
+    from commons._definitions import Registry
+    from commons._pool import search_pool_text
+
+    source = fixture_source(SPEC["models"]["values"], stubs=SPEC["models"]["stubs"])
+    semantic = semantic_registry({"warehouse": source})
+    text = search_pool_text(
+        {}, Registry(), case["query"], tuple(case["source_names"]), semantic=semantic
+    )
+    assert text == case["text"]
+
+
+def test_pool_text_for_an_empty_pool() -> None:
+    from commons._definitions import Registry
+    from commons._pool import search_pool_text
+
+    empty = semantic_registry({"warehouse": fixture_source([])})
+    assert (
+        search_pool_text({}, Registry(), "revenue", semantic=empty)
+        == SPEC["pool_text"]["empty"]
+    )

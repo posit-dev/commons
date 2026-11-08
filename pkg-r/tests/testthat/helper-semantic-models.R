@@ -35,7 +35,7 @@ test_semantic_source <- function(...) {
 }
 
 # A source holding the models a shared fixture declares, keyed by label.
-fixture_semantic_source <- function(models, parameters = list()) {
+fixture_semantic_source <- function(models, parameters = list(), stubs = list()) {
   members <- function(entries, kind) {
     lapply(entries, function(entry) {
       new_semantic_member(
@@ -61,7 +61,13 @@ fixture_semantic_source <- function(models, parameters = list()) {
       metrics = members(model$metrics, "metric"),
       facts = members(model$facts, "fact"),
       filters = members(model$filters, "filter"),
-      parameters = parameters
+      parameters = if (length(parameters)) {
+        parameters
+      } else if (length(model$parameters)) {
+        fixture_parameters(model$parameters)
+      } else {
+        list()
+      }
     )
   })
   source <- test_source()
@@ -70,7 +76,33 @@ fixture_semantic_source <- function(models, parameters = list()) {
     built,
     vapply(models, `[[`, character(1), "label")
   )
+  state$semantic_stubs <- stats::setNames(
+    lapply(stubs, function(stub) {
+      parts <- strsplit(stub$label, ".", fixed = TRUE)[[1]]
+      new_semantic_model_stub(
+        list(
+          id = DBI::Id(catalog = parts[[1]], schema = parts[[2]], table = parts[[3]]),
+          description = stub$description
+        ),
+        "snowflake_semantic_view"
+      )
+    }),
+    vapply(stubs, `[[`, character(1), "label")
+  )
   source
+}
+
+fixture_parameters <- function(specs) {
+  parameters <- lapply(specs, function(spec) {
+    new_typed_argument(
+      spec$name,
+      spec$type,
+      description = spec$description,
+      default = spec$default,
+      has_default = isTRUE(spec$has_default)
+    )
+  })
+  stats::setNames(parameters, vapply(specs, `[[`, character(1), "name"))
 }
 
 # Whether an error matches a shared fixture's pinned kind and mentions.

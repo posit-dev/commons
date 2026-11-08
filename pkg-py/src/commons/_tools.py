@@ -56,6 +56,7 @@ from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
+from ._semantic_models import SemanticRegistry, semantic_registry
 from ._skills import Skill, builtin_skills
 
 __all__ = [
@@ -121,14 +122,20 @@ class ToolContext:
 # ---- registration conditions ---------------------------------------------
 
 
-def pool_searchable(measures: Mapping[str, Measure], definitions: Registry) -> bool:
+def pool_searchable(
+    measures: Mapping[str, Measure],
+    definitions: Registry,
+    semantic: SemanticRegistry | None = None,
+) -> bool:
     """Whether the pool holds anything the system prompt does not already show.
 
     Measures are never listed in the prompt, and definitions past their index
     cap are not either; a search tool over a fully visible pool would only
-    cost the model a round trip to confirm what it can already read.
+    cost the model a round trip to confirm what it can already read. A
+    warehouse's own semantic members and models are never listed either.
     """
-    return bool(measures) or index_overflows(definitions)
+    has_semantic = semantic is not None and bool(semantic.members or semantic.stubs)
+    return bool(measures) or index_overflows(definitions) or has_semantic
 
 
 def registry_has_metrics(definitions: Registry) -> bool:
@@ -147,13 +154,18 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
     The code-execution tool is not among them: it carries a worker process and
     a sandbox, so it is built separately and appended by its owner.
     """
+    semantic = semantic_registry(context.sources)
     tools: list[Tool] = []
-    if pool_searchable(context.measures, context.definitions):
-        tools.append(_search_pool(context))
+    if pool_searchable(context.measures, context.definitions, semantic):
+        tools.append(_search_pool(context, semantic))
     if context.measures:
         tools.append(_call_measure(context))
-    if registry_has_metrics(context.definitions):
-        tools.append(_call_metrics(context))
+    if (
+        registry_has_metrics(context.definitions)
+        or semantic.has_metrics()
+        or semantic.stubs
+    ):
+        tools.append(_call_metrics(context, semantic))
     if any(catalog_searchable(source) for source in context.sources.values()):
         tools.append(_search_catalog(context))
     tools.extend(
@@ -293,7 +305,7 @@ def _resolve_source(
 # ---- search_pool ----------------------------------------------------------
 
 
-def _search_pool(context: ToolContext) -> Tool:
+def _search_pool(context: ToolContext, semantic: SemanticRegistry) -> Tool:
     # The pool's blocks name their source only for an agent that has several.
     source_names = tuple(context.sources) if len(context.sources) > 1 else ()
     kinds = []
@@ -301,11 +313,22 @@ def _search_pool(context: ToolContext) -> Tool:
         kinds.append("measures (run with call_measure)")
     if context.definitions.records:
         kinds.append("governed definitions (apply as {{name}} tokens in run_sql)")
+    if semantic.members:
+        kinds.append("native semantic-model metrics (run with call_metrics)")
+    if semantic.stubs:
+        kinds.append("semantic models (inspect with describe_table)")
+    searched = (
+        "trusted calculations and models" if semantic.stubs else "trusted calculations"
+    )
 
     def search_pool(query: str) -> ContentToolResult:
         return tool_result(
             search_pool_text(
-                context.measures, context.definitions, query, source_names
+                context.measures,
+                context.definitions,
+                query,
+                source_names,
+                semantic=semantic,
             ),
             title=TRUSTED_SEARCH.settled,
         )
@@ -313,7 +336,7 @@ def _search_pool(context: ToolContext) -> Tool:
     return _tool(
         search_pool,
         "search_pool",
-        f"Search the semantic layer's trusted calculations: {' and '.join(kinds)}. "
+        f"Search the semantic layer's {searched}: {' and '.join(kinds)}. "
         "For every data question, use this before any other data tool, even if "
         "a table looks easy to query directly. Use the exact names it returns.",
         _parameters(
@@ -524,10 +547,10 @@ def _format_measure_value(value: Any) -> str:
 # ---- call_metrics ---------------------------------------------------------
 
 
-def _call_metrics(context: ToolContext) -> Tool:
-    if not pool_searchable(context.measures, context.definitions):
+def _call_metrics(context: ToolContext, semantic: SemanticRegistry) -> Tool:
+    if not pool_searchable(context.measures, context.definitions, semantic):
         named = "the system prompt"
-    elif any(source.semantic_stubs for source in context.sources.values()):
+    elif semantic.stubs:
         named = "the system prompt, search_pool, or describe_table"
     else:
         named = "the system prompt or search_pool"
@@ -725,6 +748,11 @@ DESCRIBE_TABLE_MAX_COLUMNS = 50
 
 
 def _describe_table(context: ToolContext) -> Tool:
+    has_models = any(
+        source.semantic_models or source.semantic_stubs
+        for source in context.sources.values()
+    )
+
     def describe_table(table: str, source: str | None = None) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
         return tool_result(
@@ -732,16 +760,24 @@ def _describe_table(context: ToolContext) -> Tool:
             title=TABLE_INSPECTION.settled,
         )
 
+    if has_models:
+        description = (
+            "Describe a catalog object. For tables, return columns, types, and "
+            "documentation. For semantic models, return public members and any "
+            "verified queries."
+        )
+        table = "The object name, as listed in the system prompt or search results."
+    else:
+        description = (
+            "Describe a table: its columns, types, and documentation. Use this "
+            "before writing SQL against an unfamiliar table."
+        )
+        table = "The table name, as listed in the system prompt."
     return _tool(
         describe_table,
         "describe_table",
-        "Describe a table: its columns, types, and documentation. Use this "
-        "before writing SQL against an unfamiliar table.",
-        _parameters(
-            {"table": _string("The table name, as listed in the system prompt.")},
-            ["table"],
-            context.sources,
-        ),
+        description,
+        _parameters({"table": _string(table)}, ["table"], context.sources),
         TABLE_INSPECTION.running,
     )
 

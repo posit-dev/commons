@@ -510,3 +510,38 @@ test_that("metric origins follow the shared fixture", {
     }
   }
 })
+
+test_that("search_pool renders native members and stubs as the shared fixture says", {
+  spec <- semantic_models_spec()
+  source <- fixture_semantic_source(spec$models$values, stubs = spec$models$stubs)
+  registry <- semantic_models_registry(list(warehouse = source))
+  defs <- list(defs = data.frame(
+    name = character(), table = character(), kind = character(),
+    label = character(), description = character(), details = character(),
+    sql = character(), source = character(), mixed_grain = logical()
+  ))
+  cases <- spec$pool_text$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    expect_identical(
+      search_pool_text(
+        list(),
+        defs,
+        case$query,
+        unlist(case$source_names) %||% character(),
+        semantic_models = registry
+      ),
+      case$text,
+      info = case$query
+    )
+  }
+  expect_identical(
+    search_pool_text(
+      list(),
+      defs,
+      "revenue",
+      semantic_models = semantic_models_registry(list(warehouse = test_source()))
+    ),
+    spec$pool_text$empty
+  )
+})

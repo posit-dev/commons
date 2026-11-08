@@ -6,7 +6,12 @@ import pandas as pd
 
 from commons import DataSource, data_source
 from commons._data_source import TableId
-from commons._semantic_models import SemanticMember, SemanticModel, TypedParameter
+from commons._semantic_models import (
+    SemanticMember,
+    SemanticModel,
+    SemanticStub,
+    TypedParameter,
+)
 
 
 def _members(entries: list[dict[str, Any]], kind: str) -> list[SemanticMember]:
@@ -39,17 +44,42 @@ def fixture_model(
         metrics=_members(spec.get("metrics", []), "metric"),
         facts=_members(spec.get("facts", []), "fact"),
         filters=_members(spec.get("filters", []), "filter"),
-        parameters=parameters or {},
+        parameters=parameters or _parameters(spec.get("parameters")),
     )
 
 
+def _parameters(specs: Any) -> dict[str, TypedParameter]:
+    if not isinstance(specs, list):
+        return {}
+    return {
+        spec["name"]: TypedParameter(
+            name=spec["name"],
+            type=spec["type"],
+            description=spec.get("description"),
+            default=spec.get("default"),
+            has_default=bool(spec.get("has_default")),
+        )
+        for spec in specs
+    }
+
+
 def fixture_source(
-    models: list[dict[str, Any]], parameters: dict[str, TypedParameter] | None = None
+    models: list[dict[str, Any]],
+    parameters: dict[str, TypedParameter] | None = None,
+    stubs: list[dict[str, Any]] | None = None,
 ) -> DataSource:
     source = data_source(sales=pd.DataFrame({"revenue": [1.0]}))
     source.semantic_models = {
         spec["label"]: fixture_model(spec, parameters) for spec in models
     }
+    source.semantic_stubs = {}
+    for stub in stubs or []:
+        catalog, schema, table = stub["label"].split(".")
+        source.semantic_stubs[stub["label"]] = SemanticStub(
+            id=TableId(catalog=catalog, schema=schema, table=table),
+            backend="snowflake_semantic_view",
+            description=stub.get("description"),
+        )
     return source
 
 

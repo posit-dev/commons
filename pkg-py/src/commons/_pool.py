@@ -24,11 +24,14 @@ from ._provenance import Tag
 from ._rows import rows_to_markdown
 from ._semantic_models import (
     MemberRow,
+    SemanticRegistry,
     hydrate,
+    member_pool_text,
     metric_origin,
     resolve_filters,
     resolve_members,
     semantic_registry,
+    stub_pool_text,
     validate_arguments,
 )
 from ._sql_guard import sqlglot_dialect
@@ -98,11 +101,14 @@ def search_pool_text(
     registry: Registry,
     query: str,
     source_names: Sequence[str] = (),
+    semantic: SemanticRegistry | None = None,
 ) -> str:
     """The blocks `search_pool` shows for the best matches in the pool."""
     records = registry.records
     entries = list(measures.values())
-    if not entries and not records:
+    members = semantic.members if semantic is not None else []
+    stubs = semantic.stubs if semantic is not None else []
+    if not entries and not records and not members and not stubs:
         return "The semantic layer is empty."
 
     catalog = [f"{record.name} {record.description}" for record in entries]
@@ -121,6 +127,26 @@ def search_pool_text(
         )
         for record in records
     ]
+    catalog += [
+        " ".join(
+            part or ""
+            for part in (
+                row.name,
+                row.model,
+                row.kind,
+                row.label,
+                row.description,
+                row.synonyms,
+            )
+        )
+        for row in members
+    ]
+    catalog += [
+        " ".join(
+            part or "" for part in (row.name, row.model, row.backend, row.description)
+        )
+        for row in stubs
+    ]
 
     hits = lexical_rank(query, catalog)
     if not hits:
@@ -128,12 +154,29 @@ def search_pool_text(
             f'Nothing in the semantic layer matches "{query}". '
             "Consider writing a SQL query."
         )
-    blocks = [
-        measure_schema_text(entries[hit], source_names=source_names)
-        if hit < len(entries)
-        else definition_pool_text(records[hit - len(entries)], records)
-        for hit in hits
-    ]
+    blocks = []
+    for hit in hits:
+        if hit < len(entries):
+            blocks.append(measure_schema_text(entries[hit], source_names=source_names))
+            continue
+        hit -= len(entries)
+        if hit < len(records):
+            blocks.append(definition_pool_text(records[hit], records))
+            continue
+        hit -= len(records)
+        if hit < len(members):
+            row = members[hit]
+            assert semantic is not None
+            blocks.append(
+                member_pool_text(
+                    row,
+                    members,
+                    source_names,
+                    semantic.parameters.get((row.source, row.model)),
+                )
+            )
+            continue
+        blocks.append(stub_pool_text(stubs[hit - len(members)], source_names))
     return "\n\n".join(blocks)
 
 

@@ -1,7 +1,7 @@
 {
   "description": "How a warehouse's semantic models become names an agent can call. Every source's models feed one registry of members: each model's dimensions and metrics, and the facts labelled as filters. A member answers to its bare name, to `parent.name`, and to either qualified by its model as `MODEL::name` or `MODEL::parent.name`; the last of these is its key. Errors are pinned as a kind and the names the message must mention, since the wording belongs to each language.",
   "models": {
-    "description": "The models every case below reads, all on the source `warehouse`, with the governed data-dict definitions on the same source. Members not given a parent belong to no logical table.",
+    "description": "The models every case below reads, all on the source `warehouse`, with the governed data-dict definitions on the same source. Members not given a parent belong to no logical table. `parameters` are a model's typed parameters, and `stubs` are models listed on the same source but not yet read.",
     "values": [
       {
         "label": "REVENUE",
@@ -44,6 +44,29 @@
             "name": "recent_only",
             "parent": "orders"
           }
+        ],
+        "parameters": [
+          {
+            "name": "FY",
+            "type": "integer",
+            "description": "Fiscal year.",
+            "default": 2024,
+            "has_default": true
+          },
+          {
+            "name": "REGION_CODE",
+            "type": "string",
+            "description": null,
+            "default": null,
+            "has_default": false
+          },
+          {
+            "name": "INCLUDE_TEST",
+            "type": "logical",
+            "description": "",
+            "default": true,
+            "has_default": true
+          }
         ]
       },
       {
@@ -79,6 +102,16 @@
         "name": "emea",
         "table": "sales",
         "kind": "filter"
+      }
+    ],
+    "stubs": [
+      {
+        "label": "ANALYTICS.PUBLIC.LEDGER_MODEL",
+        "description": "Ledger semantics for finance."
+      },
+      {
+        "label": "ANALYTICS.PUBLIC.EMPTY_MODEL",
+        "description": null
       }
     ]
   },
@@ -396,5 +429,49 @@
         }
       }
     ]
+  },
+  "pool_text": {
+    "description": "What search_pool returns when the pool holds only these models, the stubs beside them, and no measures or definitions. Members and stubs are ranked with the pool's lexical ranking: a member by its name, model, kind, label, description, and synonyms, and a stub by its name, label, backend, and description. A member is written by its bare name when that is unambiguous and by its key otherwise. `source_names` are the sources an agent with several names; a member on one of them says so. `empty` is the reply for a pool with nothing in it.",
+    "cases": [
+      {
+        "query": "revenue",
+        "source_names": [],
+        "text": "### REVENUE::orders.region --- native dimension on semantic model `REVENUE`\nSales region.\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: REVENUE::orders.region.\n\n### active_only --- native dimension on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: active_only.\nMay be applied as a call_metrics filter: active_only.\n\n### REVENUE::orders.revenue --- native metric on semantic model `REVENUE`\nBooked revenue.\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nQuery with call_metrics (metrics = [\"REVENUE::orders.revenue\"]).\n\n### order_count --- native metric on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nQuery with call_metrics (metrics = [\"order_count\"]).\n\n### amount --- native fact on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nMay be applied as a call_metrics filter: amount."
+      },
+      {
+        "query": "region",
+        "source_names": [
+          "warehouse",
+          "archive"
+        ],
+        "text": "### REVENUE::orders.region --- native dimension on semantic model `REVENUE`\nSales region.\nsources: warehouse\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: REVENUE::orders.region.\n\n### FINANCE::ledger.region --- native dimension on semantic model `FINANCE`\n\nsources: warehouse\nUse as a call_metrics dimension: FINANCE::ledger.region."
+      },
+      {
+        "query": "ledger finance",
+        "source_names": [],
+        "text": "### ANALYTICS.PUBLIC.LEDGER_MODEL --- Snowflake semantic view\nLedger semantics for finance.\nInspect with `describe_table` to find its public members and verified queries.\n\n### FINANCE::ledger.region --- native dimension on semantic model `FINANCE`\n\nUse as a call_metrics dimension: FINANCE::ledger.region.\n\n### FINANCE::ledger.revenue --- native metric on semantic model `FINANCE`\n\nQuery with call_metrics (metrics = [\"FINANCE::ledger.revenue\"])."
+      },
+      {
+        "query": "order count",
+        "source_names": [],
+        "text": "### order_count --- native metric on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nQuery with call_metrics (metrics = [\"order_count\"])."
+      },
+      {
+        "query": "active",
+        "source_names": [],
+        "text": "### active_only --- native dimension on semantic model `REVENUE`\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\nUse as a call_metrics dimension: active_only.\nMay be applied as a call_metrics filter: active_only."
+      },
+      {
+        "query": "EMPTY_MODEL",
+        "source_names": [],
+        "text": "### ANALYTICS.PUBLIC.EMPTY_MODEL --- Snowflake semantic view\n\nInspect with `describe_table` to find its public members and verified queries.\n\n### ANALYTICS.PUBLIC.LEDGER_MODEL --- Snowflake semantic view\nLedger semantics for finance.\nInspect with `describe_table` to find its public members and verified queries."
+      },
+      {
+        "query": "nothing like it",
+        "source_names": [],
+        "text": "Nothing in the semantic layer matches \"nothing like it\". Consider writing a SQL query."
+      }
+    ],
+    "empty": "The semantic layer is empty."
   }
 }

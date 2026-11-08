@@ -570,3 +570,77 @@ def hydrate(source: Any, names: Sequence[str]) -> None:
         source.semantic_models[label] = model_from_stub(
             source, source.semantic_stubs[label], label
         )
+
+
+_BACKEND_NAMES = {
+    "snowflake_semantic_view": "Snowflake semantic view",
+    "databricks_metric_view": "Databricks metric view",
+}
+
+
+def _default_text(value: Any) -> str:
+    """A default as the pool shows it: TRUE/FALSE, and whole numbers bare."""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def parameters_pool_text(parameters: Mapping[str, TypedParameter]) -> str | None:
+    if not parameters:
+        return None
+    entries = []
+    for parameter in parameters.values():
+        default = (
+            f", optional; default: {_default_text(parameter.default)}"
+            if parameter.has_default
+            else ", required"
+        )
+        description = f": {parameter.description}" if parameter.description else ""
+        entries.append(f"`{parameter.name}` ({parameter.type}{default}){description}")
+    return f"call_metrics arguments JSON: {', '.join(entries)}."
+
+
+def member_pool_text(
+    row: MemberRow,
+    rows: list[MemberRow],
+    source_names: Sequence[str] = (),
+    parameters: Mapping[str, TypedParameter] | None = None,
+) -> str:
+    from ._pool import _prose_detail
+
+    reference = (
+        row.name if len(member_candidates(row.name, rows)) == 1 else member_key(row)
+    )
+    heading = f"### {reference} --- native {row.kind} on semantic model `{row.model}`"
+    lines = [f"{heading}\n{_prose_detail(row.description, None)}"]
+    if row.source in source_names:
+        lines.append(f"sources: {row.source}")
+    parameter_text = parameters_pool_text(parameters or {})
+    if parameter_text:
+        lines.append(parameter_text)
+    if row.kind == "metric":
+        lines.append(f'Query with call_metrics (metrics = ["{reference}"]).')
+    elif row.kind == "dimension":
+        lines.append(f"Use as a call_metrics dimension: {reference}.")
+    if row.filter:
+        lines.append(f"May be applied as a call_metrics filter: {reference}.")
+    return "\n".join(lines)
+
+
+def stub_pool_text(row: StubRow, source_names: Sequence[str] = ()) -> str:
+    from ._pool import _prose_detail
+
+    backend = _BACKEND_NAMES.get(row.backend, "semantic model")
+    source = f"\nSource: `{row.source}`." if row.source in source_names else ""
+    finds = (
+        "its public members and verified queries"
+        if row.backend == "snowflake_semantic_view"
+        else "its public members"
+    )
+    return (
+        f"### {row.model} --- {backend}\n"
+        f"{_prose_detail(row.description, None)}{source}\n"
+        f"Inspect with `describe_table` to find {finds}."
+    )
