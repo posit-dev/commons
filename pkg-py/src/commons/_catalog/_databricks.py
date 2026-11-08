@@ -83,18 +83,20 @@ def _complete(backend: Any, selector: Selector) -> Selector:
 
 def relations_from_information_schema(
     rows: list[dict[str, Any]],
+    object_types: dict[tuple[str, str], str] | None = None,
 ) -> list[Relation]:
     """Relations from `system.information_schema.tables`.
 
-    A metric view reports as a view here. Telling the two apart needs the ODBC
-    object type, which only matters once metric views are supported; see kata
-    gcgj.
+    A metric view can report as a plain view here, so `object_types`, keyed by
+    schema and table, gives the type the warehouse's table metadata reports;
+    it decides the kind when it has one.
     """
+    from ._databricks_semantic import relation_kind
+
     out: list[Relation] = []
     for raw in rows:
         row = _lower_keys(raw)
-        table_type = str(row.get("table_type") or "")
-        kind = "view" if "view" in table_type.lower() else "table"
+        object_type = (object_types or {}).get((row["table_schema"], row["table_name"]))
         out.append(
             Relation(
                 id=TableId(
@@ -102,7 +104,7 @@ def relations_from_information_schema(
                     schema=row["table_schema"],
                     table=row["table_name"],
                 ),
-                kind=kind,
+                kind=relation_kind(row.get("table_type"), object_type),
                 description=_prose(row.get("comment")),
             )
         )

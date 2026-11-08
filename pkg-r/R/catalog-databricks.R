@@ -695,6 +695,8 @@ databricks_semantic_model_from_spec <- function(
   )
   dependencies <- databricks_semantic_dependencies(specification)
   relationships <- specification$joins %||% list()
+  # A metric view's filter is SQL the view always applies, not a member the
+  # agent can name, so it is described in the context and not listed.
   filters <- Filter(Negate(is.null), list(specification$filter))
   parameters <- semantic_parameters_from_spec(
     specification$parameters,
@@ -712,7 +714,6 @@ databricks_semantic_model_from_spec <- function(
     backend = "databricks_metric_view",
     dimensions = dimensions,
     metrics = metrics,
-    filters = filters,
     parameters = parameters,
     dependencies = dependencies$ids,
     dependencies_complete = dependencies$complete,
