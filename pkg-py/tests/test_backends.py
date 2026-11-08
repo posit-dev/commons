@@ -42,13 +42,24 @@ def test_read_only_check_still_applies_with_params(engine: sqlalchemy.Engine) ->
         source.query("DELETE FROM sales WHERE region = :p0", {"p0": "APAC"})
 
 
-def test_compiled_query_skips_the_read_only_parse(engine: sqlalchemy.Engine) -> None:
+def test_query_has_no_way_to_skip_the_read_only_check(
+    engine: sqlalchemy.Engine,
+) -> None:
     source = data_source(engine, tables=["sales"])
-    # SQLite has no SEMANTIC_VIEW; a parse failure from the guard would raise
-    # ValueError first, so reaching the driver proves the guard was skipped.
+    with pytest.raises(TypeError):
+        source.query("DELETE FROM sales", compiled=True)  # pyrefly: ignore
+
+
+def test_compiled_query_skips_the_parse_but_not_the_select_check(
+    engine: sqlalchemy.Engine,
+) -> None:
+    source = data_source(engine, tables=["sales"])
+    # SQLite has no SEMANTIC_VIEW, so reaching the driver proves the parse that
+    # would refuse VARIABLES was skipped.
     with pytest.raises(sqlalchemy.exc.OperationalError):
-        source.query(
-            "SELECT * FROM SEMANTIC_VIEW(x VARIABLES y => :p0)",
-            {"p0": 1},
-            compiled=True,
+        source._query_compiled(
+            "SELECT * FROM SEMANTIC_VIEW(x VARIABLES y => :p0)", {"p0": 1}
         )
+    for sql in ("DELETE FROM sales", "SELECT 1; DELETE FROM sales"):
+        with pytest.raises(ValueError, match="read-only"):
+            source._query_compiled(sql)

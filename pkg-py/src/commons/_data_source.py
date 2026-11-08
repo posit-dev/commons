@@ -287,34 +287,44 @@ class DataSource:
         )
 
     def query(
-        self,
-        sql: str,
-        params: Mapping[str, Any] | None = None,
-        *,
-        compiled: bool = False,
+        self, sql: str, params: Mapping[str, Any] | None = None
     ) -> list[dict[str, Any]]:
         """Run one read-only statement, rejecting anything else first.
 
         On a warehouse source the connection identity is checked before the
         statement is read: access to these tables was decided for one
         principal, role, and namespace, so a query raises rather than runs
-        once any of those has moved.
-
-        `params` binds named values written `:name`. `compiled` marks SQL
-        commons built itself from quoted identifiers, quoted literals, and
-        binds; it skips the read-only parse, which does not know every
-        warehouse clause commons emits (Snowflake's `VARIABLES`).
+        once any of those has moved. `params` binds named values written
+        `:name`.
         """
         from ._catalog import check_session
 
         check_session(self.backend, self.session)
-        if not compiled:
-            check_query(sql, dialect=self.backend.dialect())
+        check_query(sql, dialect=self.backend.dialect())
         if params:
             return self.backend.query(sql, params)
         if self.pending is None:
             return self.backend.query(sql)
         return self._query_loading_pins(sql)
+
+    def _query_compiled(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Run SQL commons compiled from quoted identifiers, literals, and binds.
+
+        The read-only parse is skipped because it does not know every clause
+        commons emits (Snowflake's `VARIABLES`). The statement must still be a
+        single SELECT, and the session is still checked.
+        """
+        from ._catalog import check_session
+
+        check_session(self.backend, self.session)
+        statement = sql.strip().removesuffix(";")
+        if ";" in statement or not statement.upper().startswith("SELECT"):
+            raise ValueError("Only a single read-only SELECT statement is allowed.")
+        if params:
+            return self.backend.query(sql, params)
+        return self.backend.query(sql)
 
     def _query_loading_pins(self, sql: str) -> list[dict[str, Any]]:
         # Let DuckDB resolve the query's table references and drive loading off
