@@ -357,7 +357,7 @@ def test_the_result_is_reachable_as_a_handle(source: DataSource) -> None:
 
 
 def test_no_metric_at_all_is_refused(source: DataSource) -> None:
-    with pytest.raises(ValueError, match="at least one governed metric"):
+    with pytest.raises(ValueError, match="at least one metric name"):
         metrics(source, Registry([record("net_revenue")]), metrics=[])
 
 

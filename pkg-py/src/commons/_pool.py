@@ -267,7 +267,7 @@ def call_metrics(
     whose parameters `arguments` binds.
     """
     if not metrics:
-        raise ValueError("metrics must name at least one governed metric.")
+        raise ValueError("`metrics` must contain at least one metric name.")
     defs = registry.for_source(label)
     hydrate(source, metrics)
     members = semantic_registry({label: source}).members

@@ -545,3 +545,35 @@ test_that("search_pool renders native members and stubs as the shared fixture sa
     spec$pool_text$empty
   )
 })
+
+test_that("refused native metric calls match the shared fixture", {
+  spec <- semantic_models_spec()
+  source <- fixture_semantic_source(spec$models$values)
+  definitions <- spec$models$definitions
+  defs <- data.frame(
+    name = vapply(definitions, `[[`, character(1), "name"),
+    table = vapply(definitions, `[[`, character(1), "table"),
+    kind = vapply(definitions, `[[`, character(1), "kind"),
+    source = "warehouse",
+    label = NA_character_,
+    description = NA_character_,
+    details = NA_character_,
+    sql = "1",
+    mixed_grain = FALSE
+  )
+  cases <- spec$call_metrics$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    result <- tryCatch(
+      query_metrics(
+        list(defs = defs),
+        list(warehouse = source),
+        unlist(case$metrics),
+        unlist(case$dimensions),
+        arguments = case$arguments %||% "{}"
+      ),
+      error = function(err) err
+    )
+    expect_fixture_error(result, case$expected, info = case$name)
+  }
+})

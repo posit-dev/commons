@@ -1,4 +1,9 @@
-"""call_metrics over a warehouse's native semantic metrics."""
+"""call_metrics over a warehouse's native semantic metrics, end to end.
+
+Which calls are refused is pinned by tests/shared/semantic-models.json; these
+cover the run itself: the query sent, the values bound, and reading a listed
+model on first use.
+"""
 
 import pytest
 
@@ -8,7 +13,6 @@ from commons._handles import HandleStore
 from commons._pool import call_metrics
 
 from ._warehouse import FakeWarehouse
-from .test_pool import record
 
 REVENUE = """name: revenue
 tables:
@@ -21,12 +25,6 @@ tables:
         description: Booked revenue.
 """
 
-FINANCE = """tables:
-  - name: ledger
-    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}
-    metrics:
-      - name: margin
-"""
 
 UNSUPPORTED = """variables:
   - name: payload
@@ -106,41 +104,9 @@ def test_an_unsupported_stub_reports_why() -> None:
         run(source, metrics=[f"{VIEW}::revenue"])
 
 
-def test_call_metrics_refuses_mixed_origins() -> None:
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": REVENUE})
-    source = warehouse_source(warehouse, [VIEW])
-    registry = Registry([record("net_revenue", source="warehouse")])
-    with pytest.raises(ValueError, match="either data-dict definitions or one"):
-        run(source, registry, metrics=["revenue", "net_revenue"])
-
-
-def test_call_metrics_refuses_metrics_across_models() -> None:
-    warehouse = FakeWarehouse(
-        semantic_views={"REVENUE_MODEL": REVENUE, "FINANCE_MODEL": FINANCE}
-    )
-    source = warehouse_source(warehouse, [VIEW, "ANALYTICS.PUBLIC.FINANCE_MODEL"])
-    with pytest.raises(ValueError, match="one native semantic model"):
-        run(source, metrics=["revenue", "margin"])
-
-
 def test_call_metrics_binds_arguments() -> None:
     warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": PARAMETERIZED})
     source = warehouse_source(warehouse, [VIEW])
     run(source, metrics=["revenue"], arguments={"REGION": "EMEA"})
     assert 'VARIABLES "REGION" => CAST(:p0 AS VARCHAR(16))' in warehouse.queries[-1]
     assert warehouse.params[-1] == {"p0": "EMEA"}
-
-
-def test_call_metrics_checks_arguments_against_the_model() -> None:
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": PARAMETERIZED})
-    source = warehouse_source(warehouse, [VIEW])
-    with pytest.raises(ValueError, match="Missing required argument: 'REGION'"):
-        run(source, metrics=["revenue"])
-
-
-def test_arguments_are_refused_for_definitions() -> None:
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": REVENUE})
-    source = warehouse_source(warehouse, [VIEW])
-    registry = Registry([record("net_revenue", source="warehouse")])
-    with pytest.raises(ValueError, match="only for native semantic metrics"):
-        run(source, registry, metrics=["net_revenue"], arguments={"x": 1})

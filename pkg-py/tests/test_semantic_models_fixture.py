@@ -116,3 +116,25 @@ def test_pool_text_for_an_empty_pool() -> None:
         search_pool_text({}, Registry(), "revenue", semantic=empty)
         == SPEC["pool_text"]["empty"]
     )
+
+
+@pytest.mark.parametrize("case", cases("call_metrics"), ids=lambda c: c["name"])
+def test_refused_call_metrics(case: dict[str, Any]) -> None:
+    import json
+
+    from commons._definitions import Registry
+    from commons._pool import call_metrics
+
+    source = fixture_source(SPEC["models"]["values"])
+    registry = Registry([_definition(spec) for spec in SPEC["models"]["definitions"]])
+    with pytest.raises(ValueError) as raised:
+        call_metrics(
+            registry,
+            source,
+            "warehouse",
+            None,
+            metrics=case["metrics"],
+            dimensions=case.get("dimensions"),
+            arguments=json.loads(case.get("arguments", "{}")),
+        )
+    assert_fixture_error(raised.value, case["expected"])

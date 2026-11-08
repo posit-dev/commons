@@ -473,5 +473,116 @@
       }
     ],
     "empty": "The semantic layer is empty."
+  },
+  "call_metrics": {
+    "description": "Calls over native metrics that are refused before any SQL runs, on the source holding these models and definitions. A call draws its metrics from data-dict definitions or from one native semantic model, never both and never two models, resolves its dimensions within that model, and binds `arguments` only to that model's declared parameters. `arguments` is the JSON text the model writes. Each pinned phrase must appear in the error.",
+    "cases": [
+      {
+        "name": "metrics from both pools in one call are refused",
+        "metrics": [
+          "net_revenue",
+          "REVENUE::revenue"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Metrics in one call must come from either data-dict definitions or one native semantic model."
+          ]
+        }
+      },
+      {
+        "name": "native metrics from two models in one call are refused",
+        "metrics": [
+          "REVENUE::revenue",
+          "FINANCE::revenue"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Metrics in one call must belong to one native semantic model."
+          ]
+        }
+      },
+      {
+        "name": "arguments are refused for data-dict metrics",
+        "metrics": [
+          "net_revenue"
+        ],
+        "arguments": "{\"FY\": 2024}",
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "`arguments` is supported only for native semantic metrics."
+          ]
+        }
+      },
+      {
+        "name": "a required parameter must be given",
+        "metrics": [
+          "REVENUE::revenue"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Missing required argument",
+            "REGION_CODE"
+          ]
+        }
+      },
+      {
+        "name": "an argument the model does not declare is refused",
+        "metrics": [
+          "REVENUE::revenue"
+        ],
+        "arguments": "{\"REGION_CODE\": \"EU\", \"YEAR\": 2024}",
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "Unexpected argument",
+            "YEAR"
+          ]
+        }
+      },
+      {
+        "name": "an argument of the wrong type is refused",
+        "metrics": [
+          "REVENUE::revenue"
+        ],
+        "arguments": "{\"REGION_CODE\": \"EU\", \"FY\": \"next\"}",
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "FY",
+            "must be an integer value"
+          ]
+        }
+      },
+      {
+        "name": "a dimension resolves within the metrics' model",
+        "metrics": [
+          "FINANCE::revenue"
+        ],
+        "dimensions": [
+          "orders.region"
+        ],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "No native semantic dimension is named",
+            "orders.region"
+          ]
+        }
+      },
+      {
+        "name": "no metrics is refused",
+        "metrics": [],
+        "expected": {
+          "error": "refused",
+          "mentions": [
+            "`metrics` must contain at least one metric name."
+          ]
+        }
+      }
+    ]
   }
 }
