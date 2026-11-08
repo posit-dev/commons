@@ -312,9 +312,13 @@ def test_live_snowflake_binds_native_semantic_variables():
     assert model.metrics
     arguments = live.provisioned["parameterized_model_arguments"]
 
-    result, _ = _run_metrics(source, [model.metrics[0].name], arguments)
+    result, handles = _run_metrics(source, [model.metrics[0].name], arguments)
+    _, defaults = _run_metrics(source, [model.metrics[0].name])
 
     assert result.extra[TAG_EXTRA_KEY] == Tag.A
+    # The configured arguments differ from the view's defaults, so a value
+    # that was not bound would answer as the defaults do.
+    assert not handles.get("r1").equals(defaults.get("r1"))
 
 
 def test_live_snowflake_scopes_models_associated_with_physical_tables():
@@ -370,6 +374,8 @@ def test_live_snowflake_hydrates_a_namespace_stub():
     assert view.label not in source.semantic_models
 
     exact = _semantic_source(live, view.label).semantic_models[view.label]
+    if not exact.metrics:
+        pytest.skip("The selected Snowflake semantic view has no public metrics")
     result, _ = _run_metrics(source, [f"{view.label}::{exact.metrics[0].name}"])
 
     assert view.label in source.semantic_models

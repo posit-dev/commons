@@ -461,7 +461,8 @@ def data_source(
     public metrics and dimensions become trusted calculations. A view named
     in `tables` is read and checked for access when the source is created,
     and raises if it cannot be used. A view a namespace selection reaches is
-    listed and read only when the agent first inspects or uses it. Naming
+    listed when the source is created and read only when the agent first
+    inspects or uses it. Naming
     relations exactly also imports the views over them, when the selection
     includes every table a view reads.
     """
