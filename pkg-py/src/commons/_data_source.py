@@ -456,6 +456,14 @@ def data_source(
     raises there only if a table declaring definitions matched no exposed
     relation, or if a definition names an authored column the selected
     relation does not have.
+
+    A Snowflake selection also imports the warehouse's semantic views, whose
+    public metrics and dimensions become trusted calculations. A view named
+    in `tables` is read and checked for access when the source is created,
+    and raises if it cannot be used. A view a namespace selection reaches is
+    listed and read only when the agent first inspects or uses it. Naming
+    relations exactly also imports the views over them, when the selection
+    includes every table a view reads.
     """
     from ._data_dictionary import as_data_dictionary
 
