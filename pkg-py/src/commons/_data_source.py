@@ -8,6 +8,7 @@ the constructor functions, which is where a bad argument can still be named.
 from __future__ import annotations
 
 import string
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -285,18 +286,32 @@ class DataSource:
             )
         )
 
-    def query(self, sql: str) -> list[dict[str, Any]]:
+    def query(
+        self,
+        sql: str,
+        params: Mapping[str, Any] | None = None,
+        *,
+        compiled: bool = False,
+    ) -> list[dict[str, Any]]:
         """Run one read-only statement, rejecting anything else first.
 
         On a warehouse source the connection identity is checked before the
         statement is read: access to these tables was decided for one
         principal, role, and namespace, so a query raises rather than runs
         once any of those has moved.
+
+        `params` binds named values written `:name`. `compiled` marks SQL
+        commons built itself from quoted identifiers, quoted literals, and
+        binds; it skips the read-only parse, which does not know every
+        warehouse clause commons emits (Snowflake's `VARIABLES`).
         """
         from ._catalog import check_session
 
         check_session(self.backend, self.session)
-        check_query(sql, dialect=self.backend.dialect())
+        if not compiled:
+            check_query(sql, dialect=self.backend.dialect())
+        if params:
+            return self.backend.query(sql, params)
         if self.pending is None:
             return self.backend.query(sql)
         return self._query_loading_pins(sql)

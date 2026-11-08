@@ -85,8 +85,8 @@ def test_an_excluded_relation_is_left_out():
 
 def test_a_session_that_moves_during_discovery_is_refused():
     class Moving(FakeWarehouse):
-        def query(self, sql):
-            rows = super().query(sql)
+        def query(self, sql, params=None):
+            rows = super().query(sql, params)
             if sql.startswith("SELECT CURRENT_USER()"):
                 self.role = "ADMIN"
             return rows

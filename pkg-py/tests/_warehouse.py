@@ -55,9 +55,7 @@ def column_row(name: str) -> dict:
 
 def databricks_relation_row(name: str, catalog: str = "main", schema: str = "sales"):
     row = _shape("databricks", "relations", lambda row: row["table_type"] != "VIEW")
-    row.update(
-        table_catalog=catalog, table_schema=schema, table_name=name, comment=""
-    )
+    row.update(table_catalog=catalog, table_schema=schema, table_name=name, comment="")
     return row
 
 
@@ -76,6 +74,7 @@ def databricks_column_row(name: str) -> dict:
 class _Recorder:
     def __init__(self):
         self.queries: list[str] = []
+        self.params: list[dict | None] = []
         self.refuse: set[str] = set()
 
     def _probe(self, sql: str):
@@ -108,8 +107,9 @@ class FakeWarehouse(_Recorder):
         self._columns = list(columns)
         self.role = role
 
-    def query(self, sql: str):
+    def query(self, sql: str, params=None):
         self.queries.append(sql)
+        self.params.append(params)
         if sql.startswith("SELECT CURRENT_USER()"):
             return [
                 {
@@ -153,11 +153,16 @@ class FakeDatabricks(_Recorder):
         self._relations = relations if relations is not None else ["sales", "orders"]
         self._columns = list(columns)
 
-    def query(self, sql: str):
+    def query(self, sql: str, params=None):
         self.queries.append(sql)
+        self.params.append(params)
         if sql.startswith("SELECT CURRENT_USER()"):
             return [
-                {"principal": "analyst@example.com", "catalog": "main", "schema": "sales"}
+                {
+                    "principal": "analyst@example.com",
+                    "catalog": "main",
+                    "schema": "sales",
+                }
             ]
         if sql.startswith("SELECT CURRENT_CATALOG()"):
             return [{"catalog": "main", "schema": "sales"}]

@@ -9,7 +9,7 @@ are DuckDB-specific and gain nothing from it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any, Protocol
 
 import duckdb
@@ -22,8 +22,13 @@ if TYPE_CHECKING:
 
 __all__ = ["Backend", "DuckDBBackend", "EngineBackend"]
 
+
 class Backend(Protocol):
-    def query(self, sql: str) -> list[dict[str, Any]]: ...
+    def query(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Run one statement; `params` binds named values written `:name`."""
+        ...
 
     def list_tables(self) -> list[str]: ...
 
@@ -57,7 +62,11 @@ class DuckDBBackend:
     def connection(self) -> duckdb.DuckDBPyConnection:
         return self._con
 
-    def query(self, sql: str) -> list[dict[str, Any]]:
+    def query(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        if params:
+            raise ValueError("The DuckDB backend does not bind parameters.")
         cursor = self._con.execute(sql)
         if cursor.description is None:
             return []
@@ -91,7 +100,9 @@ class DuckDBBackend:
 
 
 def _databricks_rows(
-    connection: sqlalchemy.Connection, sql: str
+    connection: sqlalchemy.Connection,
+    sql: str,
+    params: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     # The Databricks connector builds rows through pandas' nullable floats,
     # which read NaN as missing, so the connector returns None to SQLAlchemy
@@ -99,7 +110,10 @@ def _databricks_rows(
     # The connector's Arrow table keeps NaN.
     cursor = connection.connection.cursor()
     try:
-        cursor.execute(sql)
+        if params:
+            cursor.execute(sql, dict(params))
+        else:
+            cursor.execute(sql)
         if cursor.description is None:
             return []
         return cursor.fetchall_arrow().to_pylist()
@@ -115,11 +129,13 @@ class EngineBackend:
     def engine(self) -> sqlalchemy.Engine:
         return self._engine
 
-    def query(self, sql: str) -> list[dict[str, Any]]:
+    def query(
+        self, sql: str, params: Mapping[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         with self._engine.connect() as connection:
             if self.dialect() == "databricks":
-                return _databricks_rows(connection, sql)
-            result = connection.execute(sqlalchemy.text(sql))
+                return _databricks_rows(connection, sql, params)
+            result = connection.execute(sqlalchemy.text(sql), dict(params or {}))
             return [dict(row) for row in result.mappings()]
 
     def list_tables(self) -> list[str]:

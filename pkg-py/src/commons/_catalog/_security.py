@@ -16,6 +16,7 @@ longer apply and the source has to be rebuilt.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, NoReturn
 
@@ -217,9 +218,9 @@ def changed_session_fields(
     ]
 
 
-def probe_sql(backend: Any, sql: str) -> Probe:
+def probe_sql(backend: Any, sql: str, params: Mapping[str, Any] | None = None) -> Probe:
     try:
-        backend.query(sql)
+        backend.query(sql, params) if params else backend.query(sql)
     except Exception as error:  # noqa: BLE001 - the failure is the answer
         return Probe(classify_access_error(error), error)
     return Probe("queryable")
