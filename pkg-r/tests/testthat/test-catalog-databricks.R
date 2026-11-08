@@ -371,10 +371,13 @@ local_truncating_describe <- function(view_text, limit, env = parent.frame()) {
         json <- strrep("{\"table_name\":\"metrics\"", 100L)
         return(data.frame(json_metadata = substr(json, 1L, limit)))
       }
+      # The shape a live Unity Catalog metric view's plain DESCRIBE has.
       data.frame(
-        col_name = c("revenue", "View Text"),
-        data_type = c("double", view_text),
-        comment = NA_character_
+        col_name = c(
+          "order_id", "revenue", "", "# Detailed Table Information", "View Text"
+        ),
+        data_type = c("bigint", "double measure", "", "", view_text),
+        comment = c("Order identifier.", NA, "", "", "")
       )
     },
     .package = "DBI",
@@ -401,6 +404,34 @@ test_that("Databricks reads a metric view's YAML when ODBC truncates its JSON", 
 
   model <- databricks_read_semantic_model(view, DBI::ANSI())
 
+  expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
+})
+
+test_that("Databricks expands wildcard fields from DESCRIBE when ODBC truncates its JSON", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  local_truncating_describe(
+    paste(
+      "version: 1.1",
+      "source: main.analytics.orders",
+      "fields:",
+      "  - expr: source.*",
+      "measures:",
+      "  - name: revenue",
+      "    expr: SUM(total)",
+      sep = "\n"
+    ),
+    limit = 1023L
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+
+  expect_s3_class(model, "commons_semantic_model")
+  expect_equal(vapply(model$dimensions, `[[`, character(1), "name"), "order_id")
+  expect_equal(model$dimensions[[1]]$type, "bigint")
+  expect_equal(model$dimensions[[1]]$description, "Order identifier.")
   expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
 })
 

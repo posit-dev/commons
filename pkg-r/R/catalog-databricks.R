@@ -448,16 +448,8 @@ databricks_read_semantic_model <- function(
   metadata <- NULL
   text <- databricks_view_definition(con, id)
   if (is.null(text)) {
-    metadata <- databricks_metric_view_metadata(con, id)
-    text <- metadata$view_text %||%
-      metadata$viewText %||%
-      databricks_described_view_text(
-        con,
-        id,
-        limit = attr(metadata, "truncated_at"),
-        label = label,
-        call = call
-      )
+    metadata <- databricks_metric_view_metadata(con, id, label, call)
+    text <- metadata$view_text %||% metadata$viewText
   }
   if (is.null(text)) {
     cli::cli_abort(
@@ -490,7 +482,8 @@ databricks_read_semantic_model <- function(
     )
   }
   if (databricks_semantic_has_wildcards(specification)) {
-    metadata <- metadata %||% databricks_metric_view_metadata(con, id)
+    metadata <- metadata %||%
+      databricks_metric_view_metadata(con, id, label, call)
     if (length(metadata$columns %||% list()) == 0L) {
       return(databricks_unsupported_metric_view(
         view$id,
@@ -516,7 +509,12 @@ databricks_read_semantic_model <- function(
   model
 }
 
-databricks_metric_view_metadata <- function(con, id) {
+databricks_metric_view_metadata <- function(
+  con,
+  id,
+  label = table_id_label(id),
+  call = rlang::caller_env()
+) {
   text <- tryCatch(
     DBI::dbGetQuery(
       con,
@@ -528,24 +526,27 @@ databricks_metric_view_metadata <- function(con, id) {
     )[[1]][[1]],
     error = function(err) NULL
   )
-  if (is.null(text)) {
-    return(list())
+  metadata <- if (!is.null(text)) {
+    tryCatch(
+      jsonlite::fromJSON(text, simplifyVector = FALSE),
+      error = function(err) NULL
+    )
+  }
+  if (!is.null(metadata)) {
+    return(metadata)
   }
   # The ODBC driver cuts a string column at its DefaultStringColumnLength, so
-  # JSON that fails to parse records the length it was cut to.
-  tryCatch(
-    jsonlite::fromJSON(text, simplifyVector = FALSE),
-    error = function(err) {
-      structure(list(), truncated_at = nchar(text, type = "bytes"))
-    }
-  )
+  # JSON that fails to parse gives the length it was cut to.
+  limit <- if (!is.null(text)) nchar(text, type = "bytes")
+  databricks_described_metric_view(con, id, limit, label, call) %||% list()
 }
 
-# A metric view is absent from information_schema.views, and its JSON
-# metadata outgrows the ODBC driver's string length, so the plain DESCRIBE's
-# "View Text" row is the remaining source of its YAML. YAML cut at `limit`
-# could still parse with members missing, so text that reaches it is refused.
-databricks_described_view_text <- function(
+# A metric view's JSON metadata can outgrow the ODBC driver's string length,
+# so the plain DESCRIBE gives the same metadata in rows: the columns, with
+# " measure" after a measure's type, and the YAML in the "View Text" row.
+# YAML cut at `limit` could still parse with members missing, so text that
+# reaches it is refused.
+databricks_described_metric_view <- function(
   con,
   id,
   limit = NULL,
@@ -563,12 +564,22 @@ databricks_described_view_text <- function(
     return(NULL)
   }
   names(rows) <- tolower(names(rows))
-  text <- rows$data_type[which(rows$col_name == "View Text")]
-  if (length(text) == 0L || is.na(text[[1]])) {
-    return(NULL)
-  }
-  text <- text[[1]]
-  if (!is.null(limit) && nchar(text, type = "bytes") >= limit) {
+  names <- rows$col_name
+  section <- which(is.na(names) | !nzchar(trimws(names)) | startsWith(names, "#"))
+  count <- if (length(section) > 0L) section[[1]] - 1L else nrow(rows)
+  columns <- lapply(seq_len(count), function(i) {
+    type <- rows$data_type[[i]]
+    comment <- rows$comment[[i]]
+    list(
+      name = names[[i]],
+      type = sub("\\s+measure$", "", type),
+      comment = if (!is.na(comment) && nzchar(comment)) comment,
+      is_measure = grepl("\\s+measure$", type)
+    )
+  })
+  text <- rows$data_type[which(names == "View Text")]
+  text <- if (length(text) > 0L && !is.na(text[[1]])) text[[1]]
+  if (!is.null(text) && !is.null(limit) && nchar(text, type = "bytes") >= limit) {
     cli::cli_abort(
       c(
         "Databricks metric view {.val {label}} has a definition longer than the ODBC driver returns.",
@@ -577,7 +588,7 @@ databricks_described_view_text <- function(
       call = call
     )
   }
-  text
+  list(view_text = text, columns = columns)
 }
 
 databricks_unsupported_metric_view <- function(id, reason) {
