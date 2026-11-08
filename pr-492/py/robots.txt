@@ -4,3 +4,7 @@ User-agent: *
 Allow: /
 
 Sitemap: https://posit-dev.github.io/commons/sitemap.xml
+
+# AI agent context files
+Llms-txt: https://posit-dev.github.io/commons/llms.txt
+Llms-txt: https://posit-dev.github.io/commons/llms-full.txt
