@@ -102,6 +102,10 @@
       {
         "declared": "",
         "type": null
+      },
+      {
+        "declared": null,
+        "type": null
       }
     ]
   },
@@ -283,6 +287,11 @@
       {
         "type": "datetime",
         "value": "2024-01-01T10:00:00+05:30",
+        "valid": true
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01 10:00:00.5Z",
         "valid": true
       },
       {
