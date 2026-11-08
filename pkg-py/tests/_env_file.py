@@ -5,7 +5,6 @@ under `env_file`, and tests/README.md describes the file.
 """
 
 import os
-from collections.abc import MutableMapping
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -21,8 +20,14 @@ def env_file_path(root: Path = REPO_ROOT) -> Path | None:
     return None
 
 
-def apply_env_file(path: Path, environ: MutableMapping[str, str] = os.environ) -> None:
-    """Set each variable the file names, unless `environ` already has it."""
+def apply_env_file(path: Path) -> None:
+    """Set each variable the file names, unless the environment already has it."""
     for name, value in dotenv_values(path).items():
         if value is not None:
-            environ.setdefault(name, value)
+            os.environ.setdefault(name, value)
+
+
+def load_repo_env_file(root: Path = REPO_ROOT) -> None:
+    """Read the checkout's `.env`, when there is one."""
+    if path := env_file_path(root):
+        apply_env_file(path)

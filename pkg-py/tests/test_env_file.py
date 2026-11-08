@@ -7,7 +7,12 @@ from unittest import mock
 
 import pytest
 
-from tests._env_file import REPO_ROOT, apply_env_file, env_file_path
+from tests._env_file import (
+    REPO_ROOT,
+    apply_env_file,
+    env_file_path,
+    load_repo_env_file,
+)
 from tests._shared import load_shared_fixture
 
 _CASES = load_shared_fixture("live-warehouse-env")["env_file"]["cases"]
@@ -47,3 +52,13 @@ def test_an_env_file_outside_a_checkout_is_not_read(tmp_path: Path) -> None:
 
     (tmp_path / "tests" / "shared").mkdir(parents=True)
     assert env_file_path(tmp_path) == tmp_path / ".env"
+
+
+def test_the_checkout_env_file_is_loaded(tmp_path: Path) -> None:
+    (tmp_path / "tests" / "shared").mkdir(parents=True)
+    (tmp_path / ".env").write_text("COMMONS_ENV_FILE_CHECKOUT=yes\n")
+
+    with mock.patch.dict(os.environ):
+        os.environ.pop("COMMONS_ENV_FILE_CHECKOUT", None)
+        load_repo_env_file(tmp_path)
+        assert os.environ.get("COMMONS_ENV_FILE_CHECKOUT") == "yes"

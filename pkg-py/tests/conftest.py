@@ -5,7 +5,7 @@ from collections.abc import Iterator
 import pytest
 
 from commons._icons import get_asset_base_url, set_asset_base_url
-from tests._env_file import apply_env_file, env_file_path
+from tests._env_file import load_repo_env_file
 
 # A stand-in for a served bundle: the live URL carries the assets' newest
 # mtime, so no literal can name it.
@@ -13,8 +13,7 @@ _BUNDLE = "lib/commons-chat-0.1.0.1"
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    if path := env_file_path():
-        apply_env_file(path)
+    load_repo_env_file()
 
 
 @pytest.fixture(autouse=True)

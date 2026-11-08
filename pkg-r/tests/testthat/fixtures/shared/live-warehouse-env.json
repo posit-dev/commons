@@ -90,7 +90,7 @@
     }
   },
   "env_file": {
-    "note": "A developer may keep these variables in a git-ignored .env at the repository root. Each suite reads it with its language's standard reader, python-dotenv and base R's readRenviron(), and only when the tests run from a checkout, so a missing file or an installed package changes nothing. These cases are the part of the format both readers agree on: KEY=value lines, blank lines and # comment lines skipped, one pair of quotes stripped, ${VAR} expanded from the environment, ~ left alone, and the last of a repeated name kept. A variable already set in the environment wins over the file, and the file's variables last only for the test run.",
+    "note": "A developer may keep these variables in a git-ignored .env at the repository root. Each suite reads it with its language's standard reader, python-dotenv and base R's readRenviron(), and only when the tests run from a checkout, so a missing file or an installed package changes nothing. These cases are the part of the format both readers agree on: KEY=value lines, blank lines and # comment lines skipped, one pair of quotes stripped, backslashes kept inside single quotes, ${VAR} expanded from earlier lines of the file and then from the environment, ~ left alone, and the last of a repeated name kept. The readers differ on comments after a value, an export prefix, a line without '=', an empty value, and backslashes inside double quotes. A variable already set in the environment wins over the file, and the file's variables last only for the test run.",
     "cases": [
       {
         "name": "plain lines set unset variables",
@@ -134,6 +134,17 @@
         "unset": []
       },
       {
+        "name": "backslashes inside single quotes are kept",
+        "lines": [
+          "COMMONS_ENV_FILE_WINDOWS_PATH='C:\\keys\\rsa_key.p8'"
+        ],
+        "environment": {},
+        "expected": {
+          "COMMONS_ENV_FILE_WINDOWS_PATH": "C:\\keys\\rsa_key.p8"
+        },
+        "unset": []
+      },
+      {
         "name": "${VAR} expands from the environment and ~ does not",
         "lines": [
           "COMMONS_ENV_FILE_REFERENCE=${COMMONS_ENV_FILE_BASE}/key.p8",
@@ -145,6 +156,21 @@
         "expected": {
           "COMMONS_ENV_FILE_REFERENCE": "/base/key.p8",
           "SNOWFLAKE_PRIVATE_KEY_FILE": "~/.snowflake/keys/rsa_key.p8"
+        },
+        "unset": []
+      },
+      {
+        "name": "${VAR} expands from an earlier line before the environment",
+        "lines": [
+          "COMMONS_ENV_FILE_BASE=/file",
+          "COMMONS_ENV_FILE_REFERENCE=${COMMONS_ENV_FILE_BASE}/key.p8"
+        ],
+        "environment": {
+          "COMMONS_ENV_FILE_BASE": "/environment"
+        },
+        "expected": {
+          "COMMONS_ENV_FILE_BASE": "/environment",
+          "COMMONS_ENV_FILE_REFERENCE": "/file/key.p8"
         },
         "unset": []
       },
