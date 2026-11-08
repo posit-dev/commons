@@ -605,3 +605,37 @@ test_that("semantic model descriptions match the shared fixture", {
     )
   }
 })
+
+test_that("semantic first-touch context follows the shared fixture", {
+  section <- semantic_models_spec()$first_touch
+  source <- test_source()
+  state <- data_source_state(source)
+  state$manifest <- NULL
+  state$relations <- lapply(section$relations, function(relation) {
+    list(
+      id = do.call(DBI::Id, relation$id),
+      identity = if (!is.null(relation$identity)) do.call(DBI::Id, relation$identity)
+    )
+  })
+  models <- lapply(section$models, function(model) {
+    new_semantic_model(
+      DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = model$label),
+      model$label,
+      backend = "snowflake_semantic_view",
+      dependencies = lapply(model$dependencies, function(id) do.call(DBI::Id, id)),
+      context = list(first_touch = unlist(model$context))
+    )
+  })
+  state$semantic_models <- stats::setNames(
+    models,
+    vapply(section$models, `[[`, character(1), "label")
+  )
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    expect_identical(
+      as.list(semantic_model_first_touch(source, case$table)),
+      case$expected,
+      info = case$table
+    )
+  }
+})

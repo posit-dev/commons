@@ -618,5 +618,109 @@
         "text": "Semantic model `ANALYTICS.PUBLIC.LEDGER_MODEL` is listed in the catalog, but its definition could not be read.\n\nThe view was dropped."
       }
     ]
+  },
+  "first_touch": {
+    "description": "The semantic-model prose a table's first touch adds: the first-touch context of every model that reads the table, de-duplicated in model order. A model reads a table when one of its dependencies is the relation's warehouse identity, or its id when it has none, compared exactly, so a Snowflake name differing only in case is another table. A label that names no relation gets nothing.",
+    "relations": {
+      "ANALYTICS.PUBLIC.ORDERS": {
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS"
+        }
+      },
+      "orders": {
+        "id": {
+          "table": "orders"
+        },
+        "identity": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "ORDERS"
+        }
+      },
+      "ANALYTICS.PUBLIC.SALES": {
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "SALES"
+        }
+      },
+      "ANALYTICS.PUBLIC.orders": {
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "orders"
+        }
+      }
+    },
+    "models": [
+      {
+        "label": "REVENUE",
+        "dependencies": [
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC",
+            "table": "ORDERS"
+          }
+        ],
+        "context": [
+          "Use booked revenue.",
+          "Shared note."
+        ]
+      },
+      {
+        "label": "MARGIN",
+        "dependencies": [
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC",
+            "table": "ORDERS"
+          },
+          {
+            "catalog": "ANALYTICS",
+            "schema": "PUBLIC",
+            "table": "SALES"
+          }
+        ],
+        "context": [
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      }
+    ],
+    "cases": [
+      {
+        "table": "ANALYTICS.PUBLIC.ORDERS",
+        "expected": [
+          "Use booked revenue.",
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "table": "orders",
+        "expected": [
+          "Use booked revenue.",
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "table": "ANALYTICS.PUBLIC.SALES",
+        "expected": [
+          "Shared note.",
+          "Margin is net of cost."
+        ]
+      },
+      {
+        "table": "ANALYTICS.PUBLIC.orders",
+        "expected": []
+      },
+      {
+        "table": "missing",
+        "expected": []
+      }
+    ]
   }
 }

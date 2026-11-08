@@ -159,3 +159,33 @@ def test_description_text(case: dict[str, Any]) -> None:
         error=ValueError(case["error"]) if "error" in case else None,
     )
     assert description_text(described) == case["text"]
+
+
+@pytest.mark.parametrize("case", SPEC["first_touch"]["cases"], ids=lambda c: c["table"])
+def test_first_touch(case: dict[str, Any]) -> None:
+    from commons._catalog import Relation
+    from commons._data_source import TableId
+    from commons._semantic_models import SemanticModel, semantic_first_touch
+
+    section = SPEC["first_touch"]
+    source = fixture_source([])
+    source.relations = {
+        label: Relation(
+            id=TableId(**relation["id"]),
+            identity=TableId(**relation["identity"])
+            if "identity" in relation
+            else None,
+        )
+        for label, relation in section["relations"].items()
+    }
+    source.semantic_models = {
+        model["label"]: SemanticModel(
+            id=TableId(catalog="ANALYTICS", schema="PUBLIC", table=model["label"]),
+            name=model["label"],
+            backend="snowflake_semantic_view",
+            dependencies=[TableId(**d) for d in model["dependencies"]],
+            first_touch=model["context"],
+        )
+        for model in section["models"]
+    }
+    assert semantic_first_touch(source, case["table"]) == case["expected"]

@@ -44,6 +44,20 @@ test_that("augment_context_layer matches the shared cases", {
       dictionary <- if (is.null(spec)) NULL else new_data_dictionary(spec)
       suppressMessages(data_source(sales = test_sales(), dictionary = dictionary))
     })
+    for (i in seq_along(case$semantic_retrieval)) {
+      retrieval <- unlist(case$semantic_retrieval[[i]])
+      models <- lapply(seq_along(retrieval), function(j) {
+        new_semantic_model(
+          DBI::Id(table = paste0("MODEL", j)),
+          paste0("MODEL", j),
+          backend = "snowflake_semantic_view",
+          context = list(retrieval = retrieval[[j]])
+        )
+      })
+      names(models) <- paste0("MODEL", seq_along(retrieval))
+      state <- data_source_state(sources[[i]])
+      state$semantic_models <- models
+    }
 
     augmented <- augment_context_layer(layer, sources)
 

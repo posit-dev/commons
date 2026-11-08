@@ -1,4 +1,9 @@
-"""describe_table, first-touch context, and retrieval for semantic models."""
+"""describe_table, first-touch delivery, and retrieval for semantic models.
+
+What the prose says and which models a table gets it from are pinned by
+tests/shared/semantic-models.json and context_layer.json; these cover the
+tool wiring around them.
+"""
 
 import pytest
 
@@ -69,12 +74,6 @@ def test_first_touch_includes_semantic_context_once() -> None:
         _first_touch_entries(over_orders, "SELECT * FROM ORDERS", "warehouse", fresh)
         == []
     )
-
-
-def test_augment_context_layer_folds_semantic_retrieval() -> None:
-    layer = augment_context_layer(None, [source(tables=[ORDERS])])
-    assert layer is not None
-    assert "Use booked revenue for finance questions." in layer.docs
 
 
 @pytest.mark.parametrize("tables", [None])
