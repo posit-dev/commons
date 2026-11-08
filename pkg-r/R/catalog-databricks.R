@@ -449,7 +449,15 @@ databricks_read_semantic_model <- function(
   text <- databricks_view_definition(con, id)
   if (is.null(text)) {
     metadata <- databricks_metric_view_metadata(con, id)
-    text <- metadata$view_text %||% metadata$viewText
+    text <- metadata$view_text %||%
+      metadata$viewText %||%
+      databricks_described_view_text(
+        con,
+        id,
+        limit = attr(metadata, "truncated_at"),
+        label = label,
+        call = call
+      )
   }
   if (is.null(text)) {
     cli::cli_abort(
@@ -523,10 +531,53 @@ databricks_metric_view_metadata <- function(con, id) {
   if (is.null(text)) {
     return(list())
   }
+  # The ODBC driver cuts a string column at its DefaultStringColumnLength, so
+  # JSON that fails to parse records the length it was cut to.
   tryCatch(
     jsonlite::fromJSON(text, simplifyVector = FALSE),
-    error = function(err) list()
+    error = function(err) {
+      structure(list(), truncated_at = nchar(text, type = "bytes"))
+    }
   )
+}
+
+# A metric view is absent from information_schema.views, and its JSON
+# metadata outgrows the ODBC driver's string length, so the plain DESCRIBE's
+# "View Text" row is the remaining source of its YAML. YAML cut at `limit`
+# could still parse with members missing, so text that reaches it is refused.
+databricks_described_view_text <- function(
+  con,
+  id,
+  limit = NULL,
+  label = table_id_label(id),
+  call = rlang::caller_env()
+) {
+  rows <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste("DESCRIBE TABLE EXTENDED", DBI::dbQuoteIdentifier(con, id))
+    ),
+    error = function(err) NULL
+  )
+  if (is.null(rows) || nrow(rows) == 0L) {
+    return(NULL)
+  }
+  names(rows) <- tolower(names(rows))
+  text <- rows$data_type[which(rows$col_name == "View Text")]
+  if (length(text) == 0L || is.na(text[[1]])) {
+    return(NULL)
+  }
+  text <- text[[1]]
+  if (!is.null(limit) && nchar(text, type = "bytes") >= limit) {
+    cli::cli_abort(
+      c(
+        "Databricks metric view {.val {label}} has a definition longer than the ODBC driver returns.",
+        i = "Raise the connection's {.code DefaultStringColumnLength}, for example to 32767."
+      ),
+      call = call
+    )
+  }
+  text
 }
 
 databricks_unsupported_metric_view <- function(id, reason) {

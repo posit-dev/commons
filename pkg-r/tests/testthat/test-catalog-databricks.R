@@ -360,6 +360,71 @@ test_that("Databricks reads unsupported parameter types as unsupported models", 
   expect_match(model$reason, "unsupported type", fixed = TRUE)
 })
 
+local_truncating_describe <- function(view_text, limit, env = parent.frame()) {
+  local_mocked_bindings(
+    databricks_view_definition = function(...) NULL,
+    .env = env
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(con, sql) {
+      if (grepl("AS JSON", sql, fixed = TRUE)) {
+        json <- strrep("{\"table_name\":\"metrics\"", 100L)
+        return(data.frame(json_metadata = substr(json, 1L, limit)))
+      }
+      data.frame(
+        col_name = c("revenue", "View Text"),
+        data_type = c("double", view_text),
+        comment = NA_character_
+      )
+    },
+    .package = "DBI",
+    .env = env
+  )
+}
+
+test_that("Databricks reads a metric view's YAML when ODBC truncates its JSON", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  local_truncating_describe(
+    paste(
+      "version: 1.1",
+      "source: main.analytics.orders",
+      "measures:",
+      "  - name: revenue",
+      "    expr: SUM(total)",
+      sep = "\n"
+    ),
+    limit = 1023L
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+
+  expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
+})
+
+test_that("Databricks refuses metric view YAML cut at the ODBC string length", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  yaml <- paste(
+    "version: 1.1",
+    "source: main.analytics.orders",
+    "measures:",
+    "  - name: revenue",
+    "    expr: SUM(total)",
+    sep = "\n"
+  )
+  local_truncating_describe(yaml, limit = nchar(yaml, type = "bytes"))
+
+  expect_error(
+    databricks_read_semantic_model(view, DBI::ANSI()),
+    "longer than the ODBC driver returns"
+  )
+})
+
 test_that("Databricks metric SQL uses MEASURE and model fields", {
   model <- databricks_semantic_model_from_spec(
     DBI::Id(
