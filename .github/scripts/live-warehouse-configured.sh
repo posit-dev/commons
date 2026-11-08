@@ -12,7 +12,7 @@ set -euo pipefail
 backend="$1"
 contract="$(dirname "$0")/../../tests/shared/live-warehouse-env.json"
 names=$(jq -r --arg b "$backend" \
-  '.backends[$b] | .connection.required[], .fixtures.schema.variable' "$contract")
+  '.backends[$b].connection.required[]' "$contract")
 
 missing=()
 for name in $names; do

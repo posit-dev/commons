@@ -3,23 +3,23 @@
 
 The tables, columns and rows come from ``tests/shared/live-warehouse-rows.json``
 so that the warehouse and the DuckDB the suites compare against hold the same
-data. Nothing is generated into the repository: the SQL is printed for a person
-to run, which leaves no committed artifact to go stale.
+data. The schema, the denied table, the semantic models and the Snowflake
+alternate role are named in ``tests/shared/live-warehouse-env.json``, which the
+tests read too. Nothing is generated into the repository: the SQL is printed for
+a person to run, which leaves no committed artifact to go stale.
 
-    python3 scripts/provision-live-warehouse.py databricks main.commons_live
-    python3 scripts/provision-live-warehouse.py snowflake COMMONS_CI.PUBLIC --grant-to COMMONS_CI_ROLE
+    python3 scripts/provision-live-warehouse.py databricks <application-id>
+    python3 scripts/provision-live-warehouse.py snowflake <role>
 
-`--grant-to` names the principal the tests connect as: a Snowflake role, or a
-Databricks service principal's application ID. Its grants cover the fixture
-tables and leave out a copy of one, which becomes the denied-table fixture.
-That works because the principal that runs this SQL owns the copy, and on
-Snowflake that is the active role. Run it under a role other than the test
-principal, or the test principal owns the copy and can read it. Without
-`--grant-to` the tests run as the owner, who can read everything, so the
-denied table is left to do by hand.
+The second argument names the principal the tests connect as: a Databricks
+service principal's application ID, or a Snowflake role. Its grants cover the
+fixture tables and models and leave out a copy of one table, which becomes the
+denied table. That works because the principal that runs this SQL owns the
+copy, and on Snowflake that is the active role. Run it under a role other than
+the test principal, or the test principal owns the copy and can read it.
 
-On Snowflake it also creates the semantic views the R suite's semantic model
-tests read, over the orders table.
+On Snowflake it also creates the semantic views and grants the test role the
+alternate role. On Databricks it creates the parameterized metric view.
 """
 
 from __future__ import annotations
@@ -32,13 +32,13 @@ from typing import Any
 SHARED = Path(__file__).resolve().parent.parent / "tests" / "shared"
 FIXTURE = SHARED / "live-warehouse-rows.json"
 ENV = SHARED / "live-warehouse-env.json"
-DENIED_TABLE = "denied_orders"
 
-# Snowflake semantic views over the orders table, for the R suite's semantic
-# model tests. Each is YAML for SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with
-# {database} and {schema} filled in as YAML scalars and {namespace} as the
-# quoted identifiers the verified query's SQL names. ORDERS_MODEL serves both the semantic view
-# and the verified query fixtures; ORDERS_PARAM_MODEL declares a variable.
+# Snowflake semantic views over the orders table. Each is YAML for
+# SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with {database} and {schema} filled in
+# as YAML scalars and {namespace} as the quoted identifiers the verified query's
+# SQL names. The view names are the ones live-warehouse-env.json gives. Snowflake
+# stores a semantic view's member names in upper case, so the YAML spells them
+# that way too.
 SEMANTIC_VIEWS = {
     "ORDERS_MODEL": """\
 name: ORDERS_MODEL
@@ -90,15 +90,27 @@ tables:
         expr: SUM(CASE WHEN orders.order_total >= MIN_TOTAL THEN orders.order_total ELSE 0 END)
 """,
 }
-# The env fixture each semantic view fills, and the arguments the
-# parameterized model is called with. Snowflake stores a semantic view's
-# member names in upper case, so the YAML spells them that way too.
-SEMANTIC_FIXTURES = {
-    "semantic_view": "ORDERS_MODEL",
-    "verified_query_view": "ORDERS_MODEL",
-    "parameterized_model": "ORDERS_PARAM_MODEL",
-}
-PARAMETERIZED_ARGUMENTS = {"MIN_TOTAL": 50}
+
+# The Databricks metric view, with {source} filled in as the orders table's
+# dotted name, left unquoted because YAML reserves a leading backtick. The arguments the tests bind (live-warehouse-env.json) differ
+# from the default, so a bound value changes the answer.
+METRIC_VIEW = """\
+version: 1.1
+comment: Orders from the commons live-test fixture, with a threshold parameter.
+source: {source}
+parameters:
+  - name: min_total
+    data_type: double
+    default: 0
+    comment: Only orders whose total is at least this amount count.
+dimensions:
+  - name: tile_size
+    expr: tile_size
+measures:
+  - name: total_above_min
+    comment: Sum of order totals at or above min_total.
+    expr: SUM(CASE WHEN order_total >= min_total THEN order_total ELSE 0 END)
+"""
 
 SPECIAL_DOUBLES = {
     "databricks": {"NaN": "double('NaN')", "Infinity": "double('Infinity')", "-Infinity": "double('-Infinity')"},
@@ -180,12 +192,16 @@ def quote_identifier(name: str, dialect: str) -> str:
     return '"' + name.replace('"', '""') + '"'
 
 
-def render(dialect: str, namespace: str, grantee: str | None = None) -> str:
+def provisioned(dialect: str) -> dict[str, Any]:
+    """The names live-warehouse-env.json fixes for one backend."""
+    return json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["provisioned"]
+
+
+def render(dialect: str, grantee: str) -> str:
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    names = provisioned(dialect)
     types = fixture["types"]
-    parts = namespace.split(".")
-    if len(parts) != 2:
-        raise SystemExit(f"Expected `catalog.schema`, got {namespace!r}")
+    parts = names["namespace"]
     qualified = ".".join(quote_identifier(part, dialect) for part in parts)
 
     lines = [
@@ -233,23 +249,18 @@ def render(dialect: str, namespace: str, grantee: str | None = None) -> str:
 
     if dialect == "snowflake":
         lines += semantic_views(parts)
-    if grantee is None:
-        lines += [
-            "-- Still to do by hand, because an owner can always read their own relation:",
-            f"--   Create a copy of {qualified}.{quote_identifier('orders', dialect)} owned by another",
-            "--   principal, in a schema this one has no SELECT on, and export its identifier as the",
-            "--   denied-table variable named in tests/shared/live-warehouse-env.json. Until then the",
-            "--   access-refusal tests skip.",
-        ]
     else:
-        lines += grants(dialect, parts, qualified, list(fixture["tables"]), grantee)
+        lines += metric_view(parts, names["parameterized_model"])
+    lines += grants(dialect, names, qualified, list(fixture["tables"]), grantee)
     return "\n".join(lines) + "\n"
 
 
-def grants(dialect: str, parts: list[str], qualified: str, tables: list[str], grantee: str) -> list[str]:
+def grants(
+    dialect: str, names: dict[str, Any], qualified: str, tables: list[str], grantee: str
+) -> list[str]:
     """Read access for the test principal, and a table it is refused."""
     principal = quote_identifier(grantee, dialect)
-    denied = f"{qualified}.{quote_identifier(DENIED_TABLE, dialect)}"
+    denied = f"{qualified}.{quote_identifier(names['denied_table'], dialect)}"
     lines = [
         f"-- Run this as a principal other than {principal}. An owner can read its own",
         f"-- tables, so {principal} must not own {denied}.",
@@ -258,31 +269,38 @@ def grants(dialect: str, parts: list[str], qualified: str, tables: list[str], gr
         "",
     ]
     if dialect == "databricks":
+        catalog = quote_identifier(names["namespace"][0], dialect)
         lines += [
-            f"-- {principal} also needs USE CATALOG on {quote_identifier(parts[0], dialect)}, from its owner.",
+            f"-- {principal} also needs USE CATALOG on {catalog}, from its owner.",
             f"GRANT USE SCHEMA ON SCHEMA {qualified} TO {principal};",
         ]
-        lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO {principal};" for t in tables]
-    else:
+        relations = [*tables, names["parameterized_model"]]
         lines += [
-            f"GRANT USAGE ON DATABASE {quote_identifier(parts[0], dialect)} TO ROLE {principal};",
-            f"GRANT USAGE ON SCHEMA {qualified} TO ROLE {principal};",
+            f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO {principal};"
+            for t in relations
         ]
-        lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO ROLE {principal};" for t in tables]
-        lines += [
-            f"GRANT REFERENCES, SELECT ON SEMANTIC VIEW {qualified}.{quote_identifier(view, dialect)} TO ROLE {principal};"
-            for view in SEMANTIC_VIEWS
-        ]
-    fixtures = json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["fixtures"]
-    namespace = ".".join(parts)
-    exports = [f"{fixtures['denied_table']['variable']}={namespace}.{DENIED_TABLE}"]
-    if dialect == "snowflake":
-        exports += [
-            f"{fixtures[fixture]['variable']}={namespace}.{view}" for fixture, view in SEMANTIC_FIXTURES.items()
-        ]
-        arguments = json.dumps(PARAMETERIZED_ARGUMENTS)
-        exports.append(f"{fixtures['parameterized_model_arguments']['variable']}='{arguments}'")
-    return lines + ["", "-- Then:"] + [f"--   export {export}" for export in exports]
+        return lines
+
+    database = quote_identifier(names["namespace"][0], dialect)
+    lines += [
+        f"GRANT USAGE ON DATABASE {database} TO ROLE {principal};",
+        f"GRANT USAGE ON SCHEMA {qualified} TO ROLE {principal};",
+    ]
+    lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO ROLE {principal};" for t in tables]
+    lines += [
+        f"GRANT REFERENCES, SELECT ON SEMANTIC VIEW {qualified}.{quote_identifier(view, dialect)} TO ROLE {principal};"
+        for view in SEMANTIC_VIEWS
+    ]
+    # The active-role test switches to this role and back, so the test role
+    # must be able to assume it. Creating a role needs USERADMIN or a role
+    # with CREATE ROLE.
+    alternate = quote_identifier(names["alternate_role"], dialect)
+    lines += [
+        "",
+        f"CREATE ROLE IF NOT EXISTS {alternate};",
+        f"GRANT ROLE {alternate} TO ROLE {principal};",
+    ]
+    return lines
 
 
 def semantic_views(parts: list[str]) -> list[str]:
@@ -313,24 +331,31 @@ def semantic_views(parts: list[str]) -> list[str]:
     return lines
 
 
+def metric_view(parts: list[str], name: str) -> list[str]:
+    """The Databricks metric view, created from YAML."""
+    qualified = ".".join(quote_identifier(part, "databricks") for part in parts)
+    source = ".".join([*parts, "orders"])
+    return [
+        f"CREATE OR REPLACE VIEW {qualified}.{quote_identifier(name, 'databricks')}",
+        "WITH METRICS",
+        "LANGUAGE YAML",
+        "AS $$",
+        METRIC_VIEW.format(source=source).rstrip("\n"),
+        "$$;",
+        "",
+    ]
+
+
 def main(argv: list[str]) -> int:
     args = argv[1:]
-    grantee = None
-    if "--grant-to" in args:
-        at = args.index("--grant-to")
-        if at + 1 >= len(args):
-            args = []
-        else:
-            grantee = args[at + 1]
-            del args[at : at + 2]
     if len(args) != 2 or args[0] not in ("databricks", "snowflake"):
         print(__doc__, file=sys.stderr)
         print(
-            "Usage: provision-live-warehouse.py {databricks|snowflake} <catalog.schema> [--grant-to <principal>]",
+            "Usage: provision-live-warehouse.py {databricks|snowflake} <test-principal>",
             file=sys.stderr,
         )
         return 2
-    print(render(args[0], args[1], grantee), end="")
+    print(render(args[0], args[1]), end="")
     return 0
 
 

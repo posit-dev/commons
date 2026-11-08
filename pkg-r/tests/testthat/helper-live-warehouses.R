@@ -1,6 +1,7 @@
-# The variable names come from tests/shared/live-warehouse-env.json, which the
-# Python suite reads as well. The test table is one of the tables
-# scripts/provision-live-warehouse.py creates in the configured schema.
+# The connection variable names and the provisioned schema and objects come
+# from tests/shared/live-warehouse-env.json, which the Python suite and
+# scripts/provision-live-warehouse.py read as well. The test table is one of
+# the tables that script creates.
 live_warehouse_table <- "orders"
 
 live_warehouse_spec <- function(backend) {
@@ -8,15 +9,10 @@ live_warehouse_spec <- function(backend) {
   shared_fixture("live-warehouse-env")$backends[[backend]]
 }
 
-# Skips unless the backend's connection variables and required fixtures are
-# all set.
+# Skips unless the backend's connection variables are all set.
 require_live_warehouse <- function(backend) {
   spec <- live_warehouse_spec(backend)
-  required <- Filter(function(fixture) isTRUE(fixture$required), spec$fixtures)
-  names <- c(
-    unlist(spec$connection$required),
-    vapply(required, `[[`, character(1), "variable")
-  )
+  names <- unlist(spec$connection$required)
   missing <- names[!nzchar(Sys.getenv(names))]
   skip_if(
     length(missing) > 0L,
@@ -25,25 +21,16 @@ require_live_warehouse <- function(backend) {
   invisible(spec)
 }
 
-live_warehouse_value <- function(backend, fixture) {
-  variable <- live_warehouse_spec(backend)$fixtures[[fixture]]$variable
-  value <- Sys.getenv(variable)
-  skip_if(!nzchar(value), paste("Set", variable, "to run this test"))
-  value
+live_warehouse_namespace <- function(backend) {
+  namespace <- unlist(live_warehouse_spec(backend)$provisioned$namespace)
+  c(catalog = namespace[[1]], schema = namespace[[2]])
 }
 
-live_warehouse_id <- function(backend, fixture, call = rlang::caller_env()) {
-  spec <- live_warehouse_spec(backend)$fixtures[[fixture]]
-  value <- live_warehouse_value(backend, fixture)
-  parts <- strsplit(value, ".", fixed = TRUE)[[1]]
-  if (length(parts) != spec$arity) {
-    cli::cli_abort(
-      "{.envvar {spec$variable}} must name {spec$arity} dotted identifier parts, not {.val {value}}.",
-      call = call
-    )
-  }
-  names(parts) <- c("catalog", "schema", "table")[seq_along(parts)]
-  do.call(DBI::Id, as.list(parts))
+# A relation the provisioning script creates, such as `denied_table`.
+live_warehouse_id <- function(backend, name) {
+  require_live_warehouse(backend)
+  table <- live_warehouse_spec(backend)$provisioned[[name]]
+  do.call(DBI::Id, c(as.list(live_warehouse_namespace(backend)), table = table))
 }
 
 local_warehouse_connection <- function(
@@ -69,35 +56,32 @@ local_warehouse_connection <- function(
       warehouse = Sys.getenv("SNOWFLAKE_WAREHOUSE")
     ),
     # odbc::databricks() resolves credentials from the environment: a token,
-    # a client secret, or a federated OIDC token.
-    databricks = rlang::inject(DBI::dbConnect(
+    # a client secret, or a federated OIDC token. The driver requests all-apis
+    # for a client secret unless told otherwise, and a secret scoped to sql
+    # refuses it. The tests need only sql.
+    databricks = DBI::dbConnect(
       odbc::databricks(),
       workspace = Sys.getenv("DATABRICKS_HOST"),
       httpPath = Sys.getenv("DATABRICKS_HTTP_PATH"),
-      !!!databricks_scope_args(spec)
-    ))
+      Auth_Scope = spec$connection$scopes
+    )
   )
   withr::defer(DBI::dbDisconnect(con), envir = env)
   con
 }
 
-# The Databricks ODBC driver requests all-apis for a client secret unless told
-# otherwise, and a scoped secret refuses it.
-databricks_scope_args <- function(spec) {
-  scopes <- Sys.getenv(spec$connection$scopes$variable)
-  if (nzchar(scopes)) list(Auth_Scope = scopes) else list()
-}
-
 warehouse_test_table <- function(backend) {
   require_live_warehouse(backend)
-  schema <- live_warehouse_id(backend, "schema")
-  do.call(DBI::Id, c(as.list(schema@name), table = live_warehouse_table))
+  do.call(
+    DBI::Id,
+    c(as.list(live_warehouse_namespace(backend)), table = live_warehouse_table)
+  )
 }
 
 # A principal's default Databricks schema may be empty, so a test that reads
 # the session's namespace switches it to the fixture schema first.
 use_databricks_test_schema <- function(con) {
-  schema <- live_warehouse_id("databricks", "schema")@name
+  schema <- live_warehouse_namespace("databricks")
   DBI::dbExecute(
     con,
     paste("USE CATALOG", DBI::dbQuoteIdentifier(con, schema[["catalog"]]))
@@ -114,7 +98,8 @@ warehouse_test_denied_table <- function(backend) {
 }
 
 warehouse_test_alternate_role <- function() {
-  live_warehouse_value("snowflake", "alternate_role")
+  require_live_warehouse("snowflake")
+  live_warehouse_spec("snowflake")$provisioned$alternate_role
 }
 
 warehouse_test_semantic_view <- function() {
@@ -125,23 +110,11 @@ warehouse_test_verified_query_view <- function() {
   live_warehouse_id("snowflake", "verified_query_view")
 }
 
-warehouse_test_parameterized_model <- function(
-  backend,
-  call = rlang::caller_env()
-) {
-  model <- live_warehouse_id(backend, "parameterized_model")
-  variable <- live_warehouse_spec(backend)$fixtures$parameterized_model_arguments$variable
-  arguments <- jsonlite::fromJSON(
-    live_warehouse_value(backend, "parameterized_model_arguments"),
-    simplifyVector = FALSE
+warehouse_test_parameterized_model <- function(backend) {
+  list(
+    id = live_warehouse_id(backend, "parameterized_model"),
+    arguments = live_warehouse_spec(backend)$provisioned$parameterized_model_arguments
   )
-  if (!is.list(arguments) || is.null(names(arguments))) {
-    cli::cli_abort(
-      "{.envvar {variable}} must be a JSON object.",
-      call = call
-    )
-  }
-  list(id = model, arguments = arguments)
 }
 
 warehouse_read_one <- function(con, id) {

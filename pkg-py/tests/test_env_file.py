@@ -2,7 +2,6 @@
 
 import io
 import os
-import re
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -67,41 +66,14 @@ def test_the_checkout_env_file_is_loaded(tmp_path: Path) -> None:
         assert os.environ.get("COMMONS_ENV_FILE_CHECKOUT") == "yes"
 
 
-def _fixture_variables() -> tuple[set[str], set[str]]:
-    """The required and optional variable names in the shared fixture."""
-    required: set[str] = set()
-    optional: set[str] = set()
-    backends = load_shared_fixture("live-warehouse-env")["backends"]
-    for backend in backends.values():
-        connection = backend["connection"]
-        required.update(connection["required"])
-        if scopes := connection.get("scopes"):
-            optional.add(scopes["variable"])
-        for fixture in backend["fixtures"].values():
-            target = required if fixture["required"] else optional
-            target.add(fixture["variable"])
-    return required, optional
-
-
-def test_the_env_example_names_every_fixture_variable() -> None:
-    example = (REPO_ROOT / ".env.example").read_text().splitlines()
-    active = dotenv_values(stream=io.StringIO("\n".join(example)))
-    # Optional variables are commented out as `# NAME=value`.
-    commented = dotenv_values(
-        stream=io.StringIO(
-            "\n".join(
-                line.removeprefix("# ")
-                for line in example
-                if re.match(r"# [A-Z_]+=", line)
-            )
-        )
-    )
-    required, optional = _fixture_variables()
+def test_the_env_example_sets_every_connection_variable() -> None:
+    example = (REPO_ROOT / ".env.example").read_text()
+    active = dotenv_values(stream=io.StringIO(example))
+    backends = load_shared_fixture("live-warehouse-env")["backends"].values()
+    required = {
+        name for backend in backends for name in backend["connection"]["required"]
+    }
 
     assert set(active) == required
-    # The fixture owns the COMMONS_TEST_ names; vendor credentials it leaves
-    # to the vendor's own authentication may appear as extras.
-    assert optional <= set(commented)
-    assert not {
-        name for name in set(commented) - optional if name.startswith("COMMONS_TEST_")
-    }
+    # The provisioned names are fixed in the contract, not configured.
+    assert "COMMONS_TEST_" not in example
