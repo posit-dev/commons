@@ -90,7 +90,7 @@
     }
   },
   "env_file": {
-    "note": "A developer may keep these variables in a git-ignored .env at the repository root, and both suites read it when it exists. A missing file changes nothing. Each line is KEY=value; blank lines, comments, lines without '=', and lines with an empty name are skipped, and one pair of matching quotes around a value is stripped. Nothing is expanded, so a path in the file must be absolute. A variable already set in the environment wins over the file, and the file's variables last only for the test run.",
+    "note": "A developer may keep these variables in a git-ignored .env at the repository root. Each suite reads it with its language's standard reader, python-dotenv and base R's readRenviron(), and only when the tests run from a checkout, so a missing file or an installed package changes nothing. These cases are the part of the format both readers agree on: KEY=value lines, blank lines and # comment lines skipped, one pair of quotes stripped, ${VAR} expanded from the environment, ~ left alone, and the last of a repeated name kept. A variable already set in the environment wins over the file, and the file's variables last only for the test run.",
     "cases": [
       {
         "name": "plain lines set unset variables",
@@ -106,12 +106,10 @@
         "unset": []
       },
       {
-        "name": "blank lines, comments, and lines without a name are skipped",
+        "name": "blank lines and comments are skipped",
         "lines": [
           "",
           "# COMMONS_ENV_FILE_COMMENTED=yes",
-          "COMMONS_ENV_FILE_NO_EQUALS",
-          "=orphan",
           "COMMONS_ENV_FILE_KEPT=yes"
         ],
         "environment": {},
@@ -119,37 +117,46 @@
           "COMMONS_ENV_FILE_KEPT": "yes"
         },
         "unset": [
-          "COMMONS_ENV_FILE_COMMENTED",
-          "COMMONS_ENV_FILE_NO_EQUALS"
+          "COMMONS_ENV_FILE_COMMENTED"
         ]
       },
       {
-        "name": "one pair of matching quotes is stripped",
+        "name": "one pair of quotes is stripped",
         "lines": [
           "COMMONS_ENV_FILE_DOUBLE=\"a b\"",
-          "COMMONS_ENV_FILE_SINGLE='{\"threshold\": 100}'",
-          "COMMONS_ENV_FILE_MISMATCHED=\"a'",
-          "COMMONS_ENV_FILE_INNER=a=\"b\""
+          "COMMONS_ENV_FILE_SINGLE='{\"threshold\": 100}'"
         ],
         "environment": {},
         "expected": {
           "COMMONS_ENV_FILE_DOUBLE": "a b",
-          "COMMONS_ENV_FILE_SINGLE": "{\"threshold\": 100}",
-          "COMMONS_ENV_FILE_MISMATCHED": "\"a'",
-          "COMMONS_ENV_FILE_INNER": "a=\"b\""
+          "COMMONS_ENV_FILE_SINGLE": "{\"threshold\": 100}"
         },
         "unset": []
       },
       {
-        "name": "nothing is expanded",
+        "name": "${VAR} expands from the environment and ~ does not",
         "lines": [
-          "SNOWFLAKE_PRIVATE_KEY_FILE=~/.snowflake/keys/rsa_key.p8",
-          "COMMONS_ENV_FILE_REFERENCE=${HOME}/key.p8"
+          "COMMONS_ENV_FILE_REFERENCE=${COMMONS_ENV_FILE_BASE}/key.p8",
+          "SNOWFLAKE_PRIVATE_KEY_FILE=~/.snowflake/keys/rsa_key.p8"
+        ],
+        "environment": {
+          "COMMONS_ENV_FILE_BASE": "/base"
+        },
+        "expected": {
+          "COMMONS_ENV_FILE_REFERENCE": "/base/key.p8",
+          "SNOWFLAKE_PRIVATE_KEY_FILE": "~/.snowflake/keys/rsa_key.p8"
+        },
+        "unset": []
+      },
+      {
+        "name": "the last of a repeated name is kept",
+        "lines": [
+          "COMMONS_ENV_FILE_REPEATED=first",
+          "COMMONS_ENV_FILE_REPEATED=second"
         ],
         "environment": {},
         "expected": {
-          "SNOWFLAKE_PRIVATE_KEY_FILE": "~/.snowflake/keys/rsa_key.p8",
-          "COMMONS_ENV_FILE_REFERENCE": "${HOME}/key.p8"
+          "COMMONS_ENV_FILE_REPEATED": "second"
         },
         "unset": []
       },
@@ -169,6 +176,26 @@
           "SNOWFLAKE_ROLE": "",
           "SNOWFLAKE_ACCOUNT": "from-file"
         },
+        "unset": []
+      },
+      {
+        "name": "a file whose every variable is already set changes nothing",
+        "lines": [
+          "SNOWFLAKE_USER=FROM_FILE"
+        ],
+        "environment": {
+          "SNOWFLAKE_USER": "FROM_ENVIRONMENT"
+        },
+        "expected": {
+          "SNOWFLAKE_USER": "FROM_ENVIRONMENT"
+        },
+        "unset": []
+      },
+      {
+        "name": "an empty file changes nothing",
+        "lines": [],
+        "environment": {},
+        "expected": {},
         "unset": []
       }
     ]

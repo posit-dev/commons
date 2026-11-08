@@ -10,7 +10,7 @@
 
 The drivers are in the `dev` group, so `uv sync` installs them.
 
-### 2. Export the connection variables
+### 2. Set the connection variables
 
 The variables are the vendor's own, so the same export block works for the vendor CLIs and the R suite:
 
@@ -26,7 +26,7 @@ export SNOWFLAKE_PRIVATE_KEY_FILE=~/.snowflake/keys/rsa_key.p8
 export COMMONS_TEST_SNOWFLAKE_SCHEMA=COMMONS_CI.PUBLIC
 ```
 
-You can also keep the variables in a `.env` file at the repository root, which git ignores. Both test suites read that file when it exists, and a variable already set in the environment wins over it. Write each variable as a plain `KEY=value` line without `export`, and give `SNOWFLAKE_PRIVATE_KEY_FILE` an absolute path, because nothing expands `~` in that file.
+You can also keep the variables in a `.env` file at the repository root, which git ignores. The tests read it with python-dotenv when you run them from a checkout, and a variable already set in the environment wins over it. Write each variable as a plain `KEY=value` line without `export`. `~` is not expanded there, so start `SNOWFLAKE_PRIVATE_KEY_FILE` with `${HOME}` or give an absolute path. `tests/shared/live-warehouse-env.json` lists the rules both suites follow under `env_file`.
 
 Databricks credentials come from the SDK's [unified authentication](https://docs.databricks.com/aws/en/dev-tools/auth/unified-auth): `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. A client secret scoped to `sql` also needs `COMMONS_TEST_DATABRICKS_SCOPES=sql`, because otherwise the Databricks SDK requests `all-apis`. Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `tests/shared/live-warehouse-env.json` is the full list of variables, including the optional ones that gate individual tests.
 

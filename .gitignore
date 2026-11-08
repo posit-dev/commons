@@ -18,3 +18,4 @@ commons-reviews/
 /sandbox/commons-openai-citation-smoke/
 .kata.local.toml
 .env
+.env.*

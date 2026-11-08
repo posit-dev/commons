@@ -1,12 +1,11 @@
 """Fixtures every test module gets."""
 
-import os
 from collections.abc import Iterator
 
 import pytest
 
 from commons._icons import get_asset_base_url, set_asset_base_url
-from tests._env_file import ENV_FILE, apply_env_file
+from tests._env_file import apply_env_file, env_file_path
 
 # A stand-in for a served bundle: the live URL carries the assets' newest
 # mtime, so no literal can name it.
@@ -14,8 +13,8 @@ _BUNDLE = "lib/commons-chat-0.1.0.1"
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    if ENV_FILE.is_file():
-        apply_env_file(ENV_FILE.read_text().splitlines(), os.environ)
+    if path := env_file_path():
+        apply_env_file(path)
 
 
 @pytest.fixture(autouse=True)

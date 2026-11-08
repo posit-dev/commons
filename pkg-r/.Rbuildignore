@@ -22,3 +22,4 @@ inst/manifest.json
 inst/pkgs/
 .shinychat/
 inst/rsconnect/
+^\.env(\..*)?$
