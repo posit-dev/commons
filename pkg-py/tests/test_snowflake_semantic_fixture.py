@@ -235,3 +235,22 @@ def test_hydration(case: dict[str, Any]) -> None:
             run(step)
     assert backend.yaml_reads == case["expected"]["reads"]
     assert list(source.semantic_models) == case["expected"]["models"]
+
+
+@pytest.mark.parametrize("case", cases("verified_queries"), ids=lambda c: c["name"])
+def test_verified_queries(case: dict[str, Any]) -> None:
+    from commons._catalog._snowflake_semantic import verified_calculations
+
+    from ._semantic_fixture import assert_fixture_error
+
+    entries = (yaml.safe_load(case["yaml"]) or {}).get("verified_queries")
+    if "error" in case["expected"]:
+        with pytest.raises(ValueError) as raised:
+            verified_calculations(entries)
+        assert_fixture_error(raised.value, case["expected"])
+        return
+    actual = [
+        {"name": c.name, "description": c.description, "sql": c.sql}
+        for c in verified_calculations(entries)
+    ]
+    assert actual == case["expected"]["calculations"]

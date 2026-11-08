@@ -877,3 +877,25 @@ test_that("listed Snowflake semantic views are read as the shared fixture says",
     )
   }
 })
+
+test_that("Snowflake verified queries read as the shared fixture says", {
+  cases <- snowflake_semantic_cases("verified_queries")
+  for (case in cases) {
+    result <- tryCatch(
+      snowflake_verified_calculations(yaml::yaml.load(case$yaml)$verified_queries),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(result, case$expected, info = case$name)
+      next
+    }
+    actual <- unname(lapply(result, function(calculation) {
+      list(
+        name = calculation$name,
+        description = calculation$description,
+        sql = calculation$sql
+      )
+    }))
+    expect_equal(actual, case$expected$calculations, info = case$name)
+  }
+})

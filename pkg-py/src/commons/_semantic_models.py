@@ -50,6 +50,59 @@ class TypedParameter:
             _check_value(self.name, self.default, self.type)
 
 
+@dataclass(frozen=True)
+class TrustedCalculation:
+    """An exact query a warehouse model declares, run as written."""
+
+    name: str
+    description: str
+    sql: str
+    # The label of the model that declares it, once it is on a source.
+    model: str | None = None
+
+
+_PLACEHOLDER = re.compile(r"\{\{[^{}]+\}\}")
+
+
+def check_trusted_query(sql: str) -> None:
+    """Refuse SQL that is not one read-only SELECT or WITH query.
+
+    A structural check from the tokens, so it holds for warehouse SQL the
+    parser does not know; the query is parsed again when it runs.
+    """
+    from sqlglot import tokenize
+    from sqlglot.tokens import TokenType
+
+    try:
+        tokens = tokenize(sql)
+    except Exception:  # noqa: BLE001 - unreadable SQL is refused below
+        tokens = []
+    while tokens and tokens[-1].token_type == TokenType.SEMICOLON:
+        tokens.pop()
+    if (
+        not tokens
+        or tokens[0].token_type not in (TokenType.SELECT, TokenType.WITH)
+        or any(token.token_type == TokenType.SEMICOLON for token in tokens)
+    ):
+        raise ValueError(
+            "Trusted calculations must contain exactly one read-only SELECT query."
+        )
+
+
+def new_trusted_calculation(
+    name: str, description: str, sql: str
+) -> TrustedCalculation:
+    """A calculation with no arguments, so its SQL may hold no placeholder."""
+    check_trusted_query(sql)
+    unknown = [token[2:-2] for token in _PLACEHOLDER.findall(sql)]
+    if unknown:
+        raise ValueError(
+            "Calculation placeholders must match its arguments exactly. "
+            f"Unknown placeholders: {_vals(unknown)}."
+        )
+    return TrustedCalculation(name=name, description=description, sql=sql)
+
+
 def _context(values: list[str]) -> list[str]:
     return list(dict.fromkeys(v for v in values if v))
 
@@ -69,6 +122,7 @@ class SemanticModel:
     dependencies: list[TableId] = field(default_factory=list)
     dependencies_complete: bool = True
     relationships: list[Any] = field(default_factory=list)
+    calculations: list[TrustedCalculation] = field(default_factory=list)
     first_touch: list[str] = field(default_factory=list)
     retrieval: list[str] = field(default_factory=list)
 
