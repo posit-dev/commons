@@ -505,7 +505,9 @@ def where_conditions(
     conditions = []
     for entry in entries:
         if not isinstance(entry, Mapping):
-            raise ValueError("Each `where` entry needs column, op, and value.")
+            raise TypeError(
+                "Each `where` entry needs column, op, and value, as an object."
+            )
         values = {}
         for key in ("column", "op", "value"):
             value = entry.get(key)
