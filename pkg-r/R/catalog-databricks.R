@@ -448,8 +448,17 @@ databricks_read_semantic_model <- function(
   metadata <- NULL
   text <- databricks_view_definition(con, id)
   if (is.null(text)) {
-    metadata <- databricks_metric_view_metadata(con, id, label, call)
+    metadata <- databricks_metric_view_metadata(con, id)
     text <- metadata$view_text %||% metadata$viewText
+    if (is.null(text) && isTRUE(metadata$view_text_truncated)) {
+      cli::cli_abort(
+        c(
+          "Databricks metric view {.val {label}} has a definition longer than the ODBC driver returns.",
+          i = "Raise the connection's {.code DefaultStringColumnLength}, for example to 32767."
+        ),
+        call = call
+      )
+    }
   }
   if (is.null(text)) {
     cli::cli_abort(
@@ -482,8 +491,7 @@ databricks_read_semantic_model <- function(
     )
   }
   if (databricks_semantic_has_wildcards(specification)) {
-    metadata <- metadata %||%
-      databricks_metric_view_metadata(con, id, label, call)
+    metadata <- metadata %||% databricks_metric_view_metadata(con, id)
     if (length(metadata$columns %||% list()) == 0L) {
       return(databricks_unsupported_metric_view(
         view$id,
@@ -509,12 +517,7 @@ databricks_read_semantic_model <- function(
   model
 }
 
-databricks_metric_view_metadata <- function(
-  con,
-  id,
-  label = table_id_label(id),
-  call = rlang::caller_env()
-) {
+databricks_metric_view_metadata <- function(con, id) {
   text <- tryCatch(
     DBI::dbGetQuery(
       con,
@@ -538,21 +541,15 @@ databricks_metric_view_metadata <- function(
   # The ODBC driver cuts a string column at its DefaultStringColumnLength, so
   # JSON that fails to parse gives the length it was cut to.
   limit <- if (!is.null(text)) nchar(text, type = "bytes")
-  databricks_described_metric_view(con, id, limit, label, call) %||% list()
+  databricks_described_metric_view(con, id, limit) %||% list()
 }
 
 # A metric view's JSON metadata can outgrow the ODBC driver's string length,
 # so the plain DESCRIBE gives the same metadata in rows: the columns, with
 # " measure" after a measure's type, and the YAML in the "View Text" row.
 # YAML cut at `limit` could still parse with members missing, so text that
-# reaches it is refused.
-databricks_described_metric_view <- function(
-  con,
-  id,
-  limit = NULL,
-  label = table_id_label(id),
-  call = rlang::caller_env()
-) {
+# reaches it is dropped and reported as truncated.
+databricks_described_metric_view <- function(con, id, limit = NULL) {
   rows <- tryCatch(
     DBI::dbGetQuery(
       con,
@@ -579,16 +576,14 @@ databricks_described_metric_view <- function(
   })
   text <- rows$data_type[which(names == "View Text")]
   text <- if (length(text) > 0L && !is.na(text[[1]])) text[[1]]
-  if (!is.null(text) && !is.null(limit) && nchar(text, type = "bytes") >= limit) {
-    cli::cli_abort(
-      c(
-        "Databricks metric view {.val {label}} has a definition longer than the ODBC driver returns.",
-        i = "Raise the connection's {.code DefaultStringColumnLength}, for example to 32767."
-      ),
-      call = call
-    )
-  }
-  list(view_text = text, columns = columns)
+  truncated <- !is.null(text) &&
+    !is.null(limit) &&
+    nchar(text, type = "bytes") >= limit
+  list(
+    view_text = if (!truncated) text,
+    view_text_truncated = truncated,
+    columns = columns
+  )
 }
 
 databricks_unsupported_metric_view <- function(id, reason) {

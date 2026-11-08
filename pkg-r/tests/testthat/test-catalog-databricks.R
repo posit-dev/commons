@@ -360,9 +360,14 @@ test_that("Databricks reads unsupported parameter types as unsupported models", 
   expect_match(model$reason, "unsupported type", fixed = TRUE)
 })
 
-local_truncating_describe <- function(view_text, limit, env = parent.frame()) {
+local_truncating_describe <- function(
+  view_text,
+  limit,
+  definition = NULL,
+  env = parent.frame()
+) {
   local_mocked_bindings(
-    databricks_view_definition = function(...) NULL,
+    databricks_view_definition = function(...) definition,
     .env = env
   )
   local_mocked_bindings(
@@ -432,6 +437,34 @@ test_that("Databricks expands wildcard fields from DESCRIBE when ODBC truncates 
   expect_equal(vapply(model$dimensions, `[[`, character(1), "name"), "order_id")
   expect_equal(model$dimensions[[1]]$type, "bigint")
   expect_equal(model$dimensions[[1]]$description, "Order identifier.")
+  expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
+})
+
+test_that("Databricks expands wildcards from DESCRIBE beside a full information schema definition", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  yaml <- paste(
+    "version: 1.1",
+    "source: main.analytics.orders",
+    "fields:",
+    "  - expr: source.*",
+    "measures:",
+    "  - name: revenue",
+    "    expr: SUM(total)",
+    sep = "\n"
+  )
+  limit <- 20L
+  local_truncating_describe(
+    substr(yaml, 1L, limit),
+    limit = limit,
+    definition = yaml
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+
+  expect_equal(vapply(model$dimensions, `[[`, character(1), "name"), "order_id")
   expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
 })
 
