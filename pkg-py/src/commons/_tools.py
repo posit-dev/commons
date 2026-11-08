@@ -56,7 +56,13 @@ from ._measures import Measure
 from ._pool import call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
-from ._semantic_models import SemanticRegistry, semantic_registry
+from ._semantic_models import (
+    SemanticRegistry,
+    describe,
+    description_text,
+    semantic_first_touch,
+    semantic_registry,
+)
 from ._skills import Skill, builtin_skills
 
 __all__ = [
@@ -786,11 +792,16 @@ def _describe_table_text(
     source: DataSource, label: str, table: str, tracker: FirstTouch
 ) -> str:
     check_session(source.backend, source.session)
+    if table in source.semantic_models or table in source.semantic_stubs:
+        return description_text(describe(source, table))
     table_id = source.table_ids.get(table)
     if table_id is None:
         raise ValueError(
             f"No table named {table!r}. Available tables: {', '.join(source.tables)}."
         )
+    context = (
+        [] if tracker.touched(label, table) else semantic_first_touch(source, table)
+    )
     ensure_queryable(source.backend, source.manifest, table, table_id)
     source.ensure_tables_loaded([table])
 
@@ -815,6 +826,7 @@ def _describe_table_text(
         parts.extend(
             dictionary.entry_parts(table, f"Columns of `{table}`:\n\n{columns}")
         )
+    parts += context
 
     tracker.mark(label, table)
     return "\n\n".join(parts)
@@ -912,19 +924,23 @@ def _first_touch_entries(
 ) -> list[str]:
     """Entries for the tables this query touches that the model has not seen.
 
-    Matching is by table name in the SQL text, which is reliable in a way
-    column matching is not; a false positive appends a harmless note.
+    An entry is the table's dictionary text and the context of the semantic
+    models that read it. Matching is by table name in the SQL text, which is
+    reliable in a way column matching is not; a false positive appends a
+    harmless note.
     """
     dictionary = source.dictionary
-    if dictionary is None:
-        return []
     entries: list[str] = []
     for table in source.tables:
         if tracker.touched(label, table):
             continue
         if not _table_mentioned(source, table, sql):
             continue
-        entry = dictionary.entry_text(table)
+        parts = []
+        if dictionary is not None and table in dictionary.tables:
+            parts.append(dictionary.entry_text(table))
+        parts += semantic_first_touch(source, table)
+        entry = "\n\n".join(part for part in parts if part)
         if not entry:
             continue
         tracker.mark(label, table)

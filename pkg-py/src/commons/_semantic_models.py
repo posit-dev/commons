@@ -644,3 +644,81 @@ def stub_pool_text(row: StubRow, source_names: Sequence[str] = ()) -> str:
         f"{_prose_detail(row.description, None)}{source}\n"
         f"Inspect with `describe_table` to find {finds}."
     )
+
+
+@dataclass
+class SemanticDescription:
+    """What describe_table says about a semantic model, or why it cannot."""
+
+    name: str
+    kind: str
+    description: str | None
+    model: SemanticModel | None
+    error: BaseException | None = None
+
+
+def describe(source: Any, label: str) -> SemanticDescription:
+    """A loaded model as it is, or a listed one read without keeping it.
+
+    A listed model stays listed: describing it is a look, and the read is
+    repeated on the next look rather than kept. A model whose definition
+    cannot be read is described by that failure.
+    """
+    loaded = source.semantic_models.get(label)
+    if loaded is not None:
+        return SemanticDescription(label, loaded.backend, loaded.description, loaded)
+    stub = source.semantic_stubs[label]
+    try:
+        model = model_from_stub(source, stub, label)
+    except Exception as error:  # noqa: BLE001 - described, not raised
+        return SemanticDescription(label, stub.backend, stub.description, None, error)
+    description = (
+        model.description if model.description is not None else stub.description
+    )
+    return SemanticDescription(label, stub.backend, description, model)
+
+
+def _member_line(model: str, member: SemanticMember) -> str:
+    reference = ".".join(part for part in (member.parent, member.name) if part)
+    detail = member.label if member.description is None else member.description
+    suffix = f": {detail}" if detail else ""
+    return f"- `{model}::{reference}` ({member.kind}){suffix}"
+
+
+def description_text(described: SemanticDescription) -> str:
+    if described.error is not None or described.model is None:
+        return (
+            f"Semantic model `{described.name}` is listed in the catalog, but its "
+            f"definition could not be read.\n\n{described.error}"
+        )
+    model = described.model
+    members = [*model.metrics, *model.dimensions, *model.facts, *model.filters]
+    parts = [f"Semantic model `{described.name}`."]
+    if described.description is not None:
+        parts.append(described.description)
+    parts.append("Public members:")
+    parts += [_member_line(described.name, m) for m in members] or [
+        "- No public members."
+    ]
+    parameters = parameters_pool_text(model.parameters)
+    if parameters:
+        parts.append(parameters)
+    parts += list(dict.fromkeys([*model.first_touch, *model.retrieval]))
+    return "\n\n".join(parts)
+
+
+def semantic_first_touch(source: Any, table: str) -> list[str]:
+    """First-touch prose of the models that read `table`."""
+    relation = (source.relations or {}).get(table)
+    if relation is None:
+        return []
+    key = relation.identity or relation.id
+    return list(
+        dict.fromkeys(
+            text
+            for model in source.semantic_models.values()
+            if key in model.dependencies
+            for text in model.first_touch
+            if text
+        )
+    )

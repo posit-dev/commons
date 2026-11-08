@@ -1,7 +1,7 @@
 {
   "description": "How a warehouse's semantic models become names an agent can call. Every source's models feed one registry of members: each model's dimensions and metrics, and the facts labelled as filters. A member answers to its bare name, to `parent.name`, and to either qualified by its model as `MODEL::name` or `MODEL::parent.name`; the last of these is its key. Errors are pinned as a kind and the names the message must mention, since the wording belongs to each language.",
   "models": {
-    "description": "The models every case below reads, all on the source `warehouse`, with the governed data-dict definitions on the same source. Members not given a parent belong to no logical table. `parameters` are a model's typed parameters, and `stubs` are models listed on the same source but not yet read.",
+    "description": "The models every case below reads, all on the source `warehouse`, with the governed data-dict definitions on the same source. Members not given a parent belong to no logical table. `parameters` are a model's typed parameters, and `stubs` are models listed on the same source but not yet read. `context` is a model's first-touch and retrieval prose.",
     "values": [
       {
         "label": "REVENUE",
@@ -67,6 +67,11 @@
             "default": true,
             "has_default": true
           }
+        ],
+        "description": "Revenue semantics.",
+        "context": [
+          "Use booked revenue for finance questions.",
+          "Native semantic facts:\n- `orders.amount`"
         ]
       },
       {
@@ -83,6 +88,13 @@
             "parent": "ledger"
           }
         ],
+        "facts": [],
+        "filters": []
+      },
+      {
+        "label": "EMPTY",
+        "dimensions": [],
+        "metrics": [],
         "facts": [],
         "filters": []
       }
@@ -582,6 +594,28 @@
             "`metrics` must contain at least one metric name."
           ]
         }
+      }
+    ]
+  },
+  "description_text": {
+    "description": "What describe_table returns for a semantic model: its name and description, every public member qualified by the model with its kind and detail, the parameters call_metrics binds, and the model's context prose. A member's detail is its description, or its label when it has none. `error` is the reason a listed model's definition could not be read, which is described in place of its members.",
+    "cases": [
+      {
+        "model": "REVENUE",
+        "text": "Semantic model `REVENUE`.\n\nRevenue semantics.\n\nPublic members:\n\n- `REVENUE::orders.revenue` (metric): Booked revenue.\n\n- `REVENUE::order_count` (metric)\n\n- `REVENUE::orders.region` (dimension): Sales region.\n\n- `REVENUE::orders.active_only` (dimension)\n\n- `REVENUE::orders.amount` (fact)\n\n- `REVENUE::orders.cost` (fact)\n\n- `REVENUE::orders.recent_only` (filter)\n\ncall_metrics arguments JSON: `FY` (integer, optional; default: 2024): Fiscal year., `REGION_CODE` (string, required), `INCLUDE_TEST` (logical, optional; default: TRUE).\n\nUse booked revenue for finance questions.\n\nNative semantic facts:\n- `orders.amount`"
+      },
+      {
+        "model": "FINANCE",
+        "text": "Semantic model `FINANCE`.\n\nPublic members:\n\n- `FINANCE::ledger.revenue` (metric)\n\n- `FINANCE::ledger.region` (dimension)"
+      },
+      {
+        "model": "EMPTY",
+        "text": "Semantic model `EMPTY`.\n\nPublic members:\n\n- No public members."
+      },
+      {
+        "model": "ANALYTICS.PUBLIC.LEDGER_MODEL",
+        "error": "The view was dropped.",
+        "text": "Semantic model `ANALYTICS.PUBLIC.LEDGER_MODEL` is listed in the catalog, but its definition could not be read.\n\nThe view was dropped."
       }
     ]
   }

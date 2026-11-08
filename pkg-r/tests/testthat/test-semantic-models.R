@@ -577,3 +577,31 @@ test_that("refused native metric calls match the shared fixture", {
     expect_fixture_error(result, case$expected, info = case$name)
   }
 })
+
+test_that("semantic model descriptions match the shared fixture", {
+  spec <- semantic_models_spec()
+  models <- data_source_state(
+    fixture_semantic_source(spec$models$values)
+  )$semantic_models
+  cases <- spec$description_text$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    model <- models[[case$model]]
+    stub <- Filter(function(s) identical(s$label, case$model), spec$models$stubs)
+    description <- structure(
+      list(
+        name = case$model,
+        kind = "snowflake_semantic_view",
+        description = if (is.null(model)) stub[[1]]$description else model$description,
+        model = model,
+        error = if (!is.null(case$error)) simpleError(case$error)
+      ),
+      class = "commons_semantic_model_description"
+    )
+    expect_identical(
+      semantic_model_description_text(description),
+      case$text,
+      info = case$model
+    )
+  }
+})

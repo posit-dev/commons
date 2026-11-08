@@ -56,7 +56,12 @@ fixture_semantic_source <- function(models, parameters = list(), stubs = list())
         table = model$label
       )),
       model$label,
+      description = model$description,
       backend = "snowflake_semantic_view",
+      context = list(
+        first_touch = unlist(model$context),
+        retrieval = unlist(model$context)
+      ),
       dimensions = members(model$dimensions, "dimension"),
       metrics = members(model$metrics, "metric"),
       facts = members(model$facts, "fact"),

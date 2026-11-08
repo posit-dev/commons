@@ -138,3 +138,24 @@ def test_refused_call_metrics(case: dict[str, Any]) -> None:
             arguments=json.loads(case.get("arguments", "{}")),
         )
     assert_fixture_error(raised.value, case["expected"])
+
+
+@pytest.mark.parametrize("case", cases("description_text"), ids=lambda c: c["model"])
+def test_description_text(case: dict[str, Any]) -> None:
+    from commons._semantic_models import SemanticDescription, description_text
+
+    models = fixture_source(SPEC["models"]["values"]).semantic_models
+    model = models.get(case["model"])
+    stubs = {stub["label"]: stub for stub in SPEC["models"]["stubs"]}
+    described = SemanticDescription(
+        name=case["model"],
+        kind="snowflake_semantic_view",
+        description=(
+            model.description
+            if model is not None
+            else stubs[case["model"]]["description"]
+        ),
+        model=model,
+        error=ValueError(case["error"]) if "error" in case else None,
+    )
+    assert description_text(described) == case["text"]
