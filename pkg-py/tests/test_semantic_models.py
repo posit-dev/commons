@@ -115,3 +115,10 @@ def test_huge_integer_argument_is_rejected_not_overflowed():
     assert validate_arguments(params, {"n": 10**20}) == {"n": 10**20}
     with pytest.raises(ValueError, match="'n' must be a number value"):
         validate_arguments(params, {"n": 10**400})
+
+
+def test_where_entry_must_be_an_object():
+    from commons._semantic_models import where_conditions
+
+    with pytest.raises(TypeError, match="as an object"):
+        where_conditions(["invalid"], [], str, str)
