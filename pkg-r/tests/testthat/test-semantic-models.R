@@ -433,3 +433,80 @@ test_that("native semantic metrics add pool and metric tools", {
   expect_contains(tools, "search_pool")
   expect_contains(tools, "call_metrics")
 })
+
+# The semantic model registry and resolution contract both packages consume.
+# The Python suite runs the same cases from the same file. See
+# tests/shared/README.md.
+semantic_models_spec <- function() shared_fixture("semantic-models")
+
+semantic_fixture_members <- function(spec) {
+  source <- fixture_semantic_source(spec$models$values)
+  registry_semantic_members(
+    semantic_models_registry(list(warehouse = source)),
+    "warehouse"
+  )
+}
+
+test_that("the semantic registry lists the members the shared fixture says", {
+  spec <- semantic_models_spec()
+  members <- semantic_fixture_members(spec)
+  expected <- spec$registry$members
+  expect_gt(length(expected), 0)
+  actual <- lapply(seq_len(nrow(members)), function(i) {
+    row <- as.list(members[i, ])
+    lapply(row, function(x) if (length(x) == 1L && is.na(x)) NULL else x)
+  })
+  expect_equal(actual, expected)
+})
+
+test_that("semantic names resolve as the shared fixture says", {
+  spec <- semantic_models_spec()
+  members <- semantic_fixture_members(spec)
+  cases <- spec$resolution$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    names <- unlist(case$names)
+    info <- paste(case$kind, paste(names, collapse = ","))
+    result <- tryCatch(
+      if (identical(case$kind, "filter")) {
+        resolve_semantic_filters(names, members)
+      } else {
+        resolve_semantic_members(names, members, case$kind)
+      },
+      error = function(err) err
+    )
+    if (is.null(case$expected$error)) {
+      keys <- vapply(seq_len(nrow(result)), function(i) {
+        semantic_member_key(result[i, , drop = FALSE])
+      }, character(1))
+      expect_identical(as.list(keys), case$expected$keys, info = info)
+    } else {
+      expect_fixture_error(result, case$expected, info = info)
+    }
+  }
+})
+
+test_that("metric origins follow the shared fixture", {
+  spec <- semantic_models_spec()
+  members <- semantic_fixture_members(spec)
+  definitions <- spec$models$definitions
+  defs <- data.frame(
+    name = vapply(definitions, `[[`, character(1), "name"),
+    table = vapply(definitions, `[[`, character(1), "table"),
+    kind = vapply(definitions, `[[`, character(1), "kind"),
+    source = "warehouse"
+  )
+  cases <- spec$metric_origin$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    result <- tryCatch(
+      metric_origin(strip_token_braces(case$name), defs, members),
+      error = function(err) err
+    )
+    if (is.null(case$expected$error)) {
+      expect_identical(result, case$expected$origin, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
+})

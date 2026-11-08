@@ -15,6 +15,7 @@ import yaml
 
 from .._data_source import TableId
 from .._semantic_models import (
+    MemberRow,
     SemanticMember,
     SemanticModel,
     SemanticStub,
@@ -22,6 +23,7 @@ from .._semantic_models import (
     members_context,
     parameters_from_spec,
     spec_entries,
+    where_conditions,
 )
 from ._core import Relation, Selector, check_object_limit, excluded, id_type
 from ._snowflake import (
@@ -42,6 +44,7 @@ __all__ = [
     "exact_semantic_view",
     "list_semantic_views",
     "member_reference",
+    "metric_sql",
     "model_from_spec",
     "probe_sql",
     "read_semantic_model",
@@ -485,3 +488,32 @@ def associated_models(
         if all(dependency in selected for dependency in model.dependencies):
             models[model.id.label] = model
     return models
+
+
+def metric_sql(
+    model: SemanticModel,
+    metrics: list[MemberRow],
+    dimensions: list[MemberRow],
+    filters: list[MemberRow],
+    where: Any,
+    members: list[MemberRow],
+    arguments: list[str],
+) -> str:
+    """The `SEMANTIC_VIEW` query for native metrics, binding `arguments`.
+
+    Each argument is bound as `:p0`, `:p1`, ... in the order given.
+    """
+    parts = [_quote_path(model.id.parts)]
+    if dimensions:
+        parts.append(
+            "DIMENSIONS " + ", ".join(member_reference(row) for row in dimensions)
+        )
+    parts.append("METRICS " + ", ".join(member_reference(row) for row in metrics))
+    if arguments:
+        clause, _ = variables_clause(model, list(arguments))
+        parts.append(clause)
+    conditions = [member_reference(row) for row in filters]
+    conditions += where_conditions(where, members, member_reference, _quote_string)
+    if conditions:
+        parts.append("WHERE " + " AND ".join(conditions))
+    return "SELECT * FROM SEMANTIC_VIEW(\n  " + "\n  ".join(parts) + "\n)"

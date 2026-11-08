@@ -96,3 +96,52 @@ def test_specification(case: dict[str, Any]) -> None:
 @pytest.mark.parametrize("case", cases("sql_types"), ids=lambda c: c["declared"])
 def test_sql_type(case: dict[str, Any]) -> None:
     assert sql_type(case["declared"]) == case["sql_type"]
+
+
+def test_metric_sql() -> None:
+    import re
+
+    from commons._catalog._snowflake_semantic import metric_sql
+    from commons._semantic_models import (
+        TypedParameter,
+        resolve_filters,
+        resolve_members,
+        semantic_registry,
+    )
+
+    from ._semantic_fixture import assert_fixture_error, fixture_source
+
+    section = SPEC["metric_sql"]
+    spec = section["model"]
+    parameters = {
+        name: TypedParameter(
+            name=name,
+            type="string",
+            description=None,
+            default=None,
+            has_default=False,
+            sql_type=sql_type(declared),
+        )
+        for name, declared in spec["parameters"].items()
+    }
+    source = fixture_source([spec], parameters)
+    model = source.semantic_models[spec["label"]]
+    members = semantic_registry({"warehouse": source}).members
+    assert section["cases"]
+    for case in section["cases"]:
+        try:
+            sql = metric_sql(
+                model,
+                resolve_members(case["metrics"], members, "metric"),
+                resolve_members(case.get("dimensions"), members, "dimension"),
+                resolve_filters(case.get("filters"), members),
+                case.get("where"),
+                members,
+                case.get("arguments") or [],
+            )
+        except ValueError as error:
+            assert "error" in case["expected"], (case["name"], error)
+            assert_fixture_error(error, case["expected"])
+            continue
+        assert "sql" in case["expected"], case["name"]
+        assert re.sub(r":p\d+", "?", sql) == case["expected"]["sql"], case["name"]

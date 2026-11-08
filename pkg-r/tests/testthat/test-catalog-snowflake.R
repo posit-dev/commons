@@ -725,3 +725,44 @@ test_that("Snowflake variable SQL types follow the shared fixture", {
     )
   }
 })
+
+test_that("Snowflake SEMANTIC_VIEW queries compile as the shared fixture says", {
+  section <- shared_fixture("snowflake-semantic-views")$metric_sql
+  model_spec <- section$model
+  parameters <- lapply(names(model_spec$parameters), function(name) {
+    parameter <- new_typed_argument(name, "string")
+    parameter$sql_type <- snowflake_semantic_sql_type(model_spec$parameters[[name]])
+    parameter
+  })
+  names(parameters) <- names(model_spec$parameters)
+  source <- fixture_semantic_source(list(model_spec), parameters = parameters)
+  model <- data_source_state(source)$semantic_models[[model_spec$label]]
+  members <- registry_semantic_members(
+    semantic_models_registry(list(warehouse = source)),
+    "warehouse"
+  )
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    result <- tryCatch({
+      arguments <- stats::setNames(
+        as.list(seq_along(case$arguments)),
+        unlist(case$arguments)
+      )
+      snowflake_semantic_metric_sql(
+        model,
+        resolve_semantic_members(unlist(case$metrics), members, "metric"),
+        resolve_semantic_members(unlist(case$dimensions), members, "dimension"),
+        resolve_semantic_filters(unlist(case$filters), members),
+        case$where,
+        members,
+        DBI::ANSI(),
+        arguments = arguments
+      )
+    }, error = function(err) err)
+    if (is.null(case$expected$error)) {
+      expect_identical(result, case$expected$sql, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
+})

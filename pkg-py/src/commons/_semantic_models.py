@@ -9,8 +9,8 @@ from __future__ import annotations
 import datetime as dt
 import math
 import re
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from ._data_source import TableId
@@ -305,3 +305,223 @@ def members_context(members: list[SemanticMember], heading: str) -> list[str]:
             line += " (usable as a named filter)"
         lines.append(line)
     return ["\n".join(lines)]
+
+
+@dataclass(frozen=True)
+class MemberRow:
+    """One member a semantic model offers, with the model and source it is on."""
+
+    name: str
+    model: str
+    source: str
+    kind: str
+    parent: str | None
+    label: str | None
+    description: str | None
+    type: str | None
+    synonyms: str
+    filter: bool
+
+
+@dataclass(frozen=True)
+class StubRow:
+    """One semantic model listed but not yet read."""
+
+    name: str
+    model: str
+    source: str
+    backend: str
+    description: str | None
+
+
+@dataclass
+class SemanticRegistry:
+    members: list[MemberRow] = field(default_factory=list)
+    # Each model's parameters, keyed by source label and model label.
+    parameters: dict[tuple[str, str], dict[str, TypedParameter]] = field(
+        default_factory=dict
+    )
+    stubs: list[StubRow] = field(default_factory=list)
+
+    def for_source(self, source: str) -> list[MemberRow]:
+        return [row for row in self.members if row.source == source]
+
+    def has_metrics(self) -> bool:
+        return any(row.kind == "metric" for row in self.members)
+
+
+def semantic_registry(sources: Mapping[str, Any]) -> SemanticRegistry:
+    """Every source's semantic members and stubs, in one registry.
+
+    A model lists its dimensions, its metrics, and the facts labelled as
+    filters; its named filters and other facts are context only.
+    """
+    registry = SemanticRegistry()
+    for source_label, source in sources.items():
+        for model_label, model in source.semantic_models.items():
+            registry.parameters[(source_label, model_label)] = dict(model.parameters)
+            for member in [
+                *model.dimensions,
+                *model.metrics,
+                *(fact for fact in model.facts if fact.filter),
+            ]:
+                registry.members.append(
+                    MemberRow(
+                        name=member.name,
+                        model=model_label,
+                        source=source_label,
+                        kind=member.kind,
+                        parent=member.parent,
+                        label=member.label,
+                        description=member.description,
+                        type=member.type,
+                        synonyms=" ".join(member.synonyms),
+                        filter=member.filter,
+                    )
+                )
+        for model_label, stub in source.semantic_stubs.items():
+            registry.stubs.append(
+                StubRow(
+                    name=stub.id.table,
+                    model=model_label,
+                    source=source_label,
+                    backend=stub.backend,
+                    description=stub.description,
+                )
+            )
+    return registry
+
+
+def member_aliases(row: MemberRow) -> list[str]:
+    """Every name a member answers to; the last, fully qualified, is its key."""
+    aliases = [row.name]
+    if row.parent:
+        aliases.append(f"{row.parent}.{row.name}")
+    aliases.append(f"{row.model}::{row.name}")
+    if row.parent:
+        aliases.append(f"{row.model}::{row.parent}.{row.name}")
+    return list(dict.fromkeys(aliases))
+
+
+def member_key(row: MemberRow) -> str:
+    return member_aliases(row)[-1]
+
+
+def member_candidates(name: str, rows: list[MemberRow]) -> list[MemberRow]:
+    return [row for row in rows if name in member_aliases(row)]
+
+
+def _strip_braces(name: str) -> str:
+    from ._pool import _strip_token_braces
+
+    return _strip_token_braces(name)
+
+
+def resolve_member(name: str, rows: list[MemberRow], kind: str) -> MemberRow:
+    named = member_candidates(name, rows)
+    matched = [row for row in named if row.kind == kind]
+    if len(matched) == 1:
+        return matched[0]
+    if matched:
+        choices = list(dict.fromkeys(member_key(row) for row in matched))
+        raise ValueError(
+            f"Native semantic name {name!r} is ambiguous. Use a qualified name: "
+            f"{_vals(choices)}."
+        )
+    if named:
+        raise ValueError(f"{name!r} is a native {named[0].kind}, not a {kind}.")
+    available = [row.name for row in rows if row.kind == kind]
+    raise ValueError(
+        f"No native semantic {kind} is named {name!r}. "
+        f"Available {kind}s: {_vals(available)}."
+    )
+
+
+def resolve_members(
+    names: list[str] | None, rows: list[MemberRow], kind: str
+) -> list[MemberRow]:
+    return [resolve_member(_strip_braces(name), rows, kind) for name in names or []]
+
+
+def resolve_filters(names: list[str] | None, rows: list[MemberRow]) -> list[MemberRow]:
+    """Resolve names against the members labelled as filters, as filters."""
+    filters = [replace(row, kind="filter") for row in rows if row.filter]
+    return resolve_members(names, filters, "filter")
+
+
+def metric_origin(name: str, definitions: Sequence[Any], rows: list[MemberRow]) -> str:
+    """Whether a metric name is a data-dict definition or a native metric."""
+    from ._pool import _candidates
+
+    name = _strip_braces(name)
+    definition_named = _candidates(name, definitions)
+    definition_metrics = [d for d in definition_named if d.kind == "metric"]
+    semantic_named = member_candidates(name, rows)
+    semantic_metrics = [row for row in semantic_named if row.kind == "metric"]
+    matches = len(definition_metrics) + len(semantic_metrics)
+    if matches == 1:
+        return "definition" if definition_metrics else "semantic_model"
+    if matches > 1:
+        choices = [f"{d.table}::{d.name}" for d in definition_metrics] + [
+            member_key(row) for row in semantic_metrics
+        ]
+        raise ValueError(
+            f"Metric name {name!r} is ambiguous. Use a qualified name: {_vals(choices)}."
+        )
+    if definition_named or semantic_named:
+        kinds = list(
+            dict.fromkeys(
+                [d.kind for d in definition_named] + [r.kind for r in semantic_named]
+            )
+        )
+        raise ValueError(f"{name!r} is a {' or a '.join(kinds)}, not a metric.")
+    available = [d.name for d in definitions if d.kind == "metric"] + [
+        row.name for row in rows if row.kind == "metric"
+    ]
+    if available:
+        raise ValueError(
+            f"No governed metric is named {name!r}. Available metrics: {_vals(available)}."
+        )
+    raise ValueError(
+        f"No governed metric is named {name!r}. No governed metrics are defined."
+    )
+
+
+_NUMERIC = re.compile(r"-?[0-9]+(\.[0-9]+)?")
+
+
+def where_conditions(
+    where: Any,
+    rows: list[MemberRow],
+    reference: Callable[[MemberRow], str],
+    quote_string: Callable[[str], str],
+) -> list[str]:
+    """Each `where` entry as a comparison on a native dimension."""
+    from ._pool import WHERE_OPERATORS
+
+    if not where:
+        return []
+    entries = [where] if isinstance(where, Mapping) else list(where)
+    conditions = []
+    for entry in entries:
+        if not isinstance(entry, Mapping):
+            raise ValueError("Each `where` entry needs column, op, and value.")
+        values = {}
+        for key in ("column", "op", "value"):
+            value = entry.get(key)
+            if value is None or not str(value):
+                raise ValueError("Each `where` entry needs column, op, and value.")
+            values[key] = str(value)
+        if values["op"] not in WHERE_OPERATORS:
+            raise ValueError(
+                f"`where` operator must be one of {_vals(list(WHERE_OPERATORS))}, "
+                f"not {values['op']!r}."
+            )
+        dimension = resolve_member(values["column"], rows, "dimension")
+        literal = (
+            values["value"]
+            if not entry.get("quoted") and _NUMERIC.fullmatch(values["value"])
+            else quote_string(values["value"])
+        )
+        conditions.append(f"({reference(dimension)} {values['op']} {literal})")
+    return conditions

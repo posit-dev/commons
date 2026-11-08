@@ -605,5 +605,241 @@
         "sql_type": null
       }
     ]
+  },
+  "metric_sql": {
+    "description": "The `SEMANTIC_VIEW` query a call over native metrics compiles to. Names resolve against the model's members as `semantic-models.json` pins. Members are referenced by logical table and name, named filters become bare conditions, and each `where` entry becomes a comparison on a dimension: a value matching an optional minus, digits, and an optional fraction is written bare unless the entry sets `quoted`, and anything else is a quoted string. Each `arguments` name is bound as `?`, cast to the type the view declares when that type is safe to splice. Errors are pinned as a kind and the names the message must mention.",
+    "model": {
+      "id": {
+        "catalog": "ANALYTICS",
+        "schema": "PUBLIC",
+        "table": "REVENUE_MODEL"
+      },
+      "label": "REVENUE",
+      "dimensions": [
+        {
+          "name": "region",
+          "parent": "orders"
+        },
+        {
+          "name": "tier"
+        },
+        {
+          "name": "active_only",
+          "parent": "orders",
+          "filter": true
+        }
+      ],
+      "metrics": [
+        {
+          "name": "revenue",
+          "parent": "orders"
+        },
+        {
+          "name": "order_count"
+        }
+      ],
+      "facts": [
+        {
+          "name": "amount",
+          "parent": "orders",
+          "filter": true
+        }
+      ],
+      "parameters": {
+        "FY": "NUMBER(10, 2)",
+        "REGION CODE": "VARCHAR(16) NOT NULL"
+      }
+    },
+    "cases": [
+      {
+        "name": "metrics alone",
+        "metrics": [
+          "revenue"
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n)"
+        }
+      },
+      {
+        "name": "dimensions with and without a logical table",
+        "metrics": [
+          "revenue",
+          "order_count"
+        ],
+        "dimensions": [
+          "region",
+          "tier"
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  DIMENSIONS \"orders\".\"region\", \"tier\"\n  METRICS \"orders\".\"revenue\", \"order_count\"\n)"
+        }
+      },
+      {
+        "name": "named filters become conditions",
+        "metrics": [
+          "revenue"
+        ],
+        "filters": [
+          "active_only",
+          "amount"
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  WHERE \"orders\".\"active_only\" AND \"orders\".\"amount\"\n)"
+        }
+      },
+      {
+        "name": "a quote in a value is doubled",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "region",
+            "op": "=",
+            "value": "O'Brien"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  WHERE (\"orders\".\"region\" = 'O''Brien')\n)"
+        }
+      },
+      {
+        "name": "a number is written bare and anything else quoted",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "orders.region",
+            "op": ">=",
+            "value": "-1.5"
+          },
+          {
+            "column": "tier",
+            "op": "<",
+            "value": "1e5"
+          },
+          {
+            "column": "tier",
+            "op": "!=",
+            "value": "7"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  WHERE (\"orders\".\"region\" >= -1.5) AND (\"tier\" < '1e5') AND (\"tier\" != 7)\n)"
+        }
+      },
+      {
+        "name": "quoted keeps a numeric-looking value a string",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "tier",
+            "op": "=",
+            "value": "007",
+            "quoted": true
+          }
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  WHERE (\"tier\" = '007')\n)"
+        }
+      },
+      {
+        "name": "filters and where are joined",
+        "metrics": [
+          "revenue"
+        ],
+        "dimensions": [
+          "region"
+        ],
+        "filters": [
+          "active_only"
+        ],
+        "where": [
+          {
+            "column": "tier",
+            "op": "=",
+            "value": "gold"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  DIMENSIONS \"orders\".\"region\"\n  METRICS \"orders\".\"revenue\"\n  WHERE \"orders\".\"active_only\" AND (\"tier\" = 'gold')\n)"
+        }
+      },
+      {
+        "name": "variables are cast to a safe declared type",
+        "metrics": [
+          "revenue"
+        ],
+        "arguments": [
+          "FY",
+          "REGION CODE"
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  VARIABLES \"FY\" => CAST(? AS NUMBER(10,2)), \"REGION CODE\" => ?\n)"
+        }
+      },
+      {
+        "name": "an unknown operator is refused",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "tier",
+            "op": "LIKE",
+            "value": "g%"
+          }
+        ],
+        "expected": {
+          "error": "operator",
+          "mentions": [
+            "LIKE"
+          ]
+        }
+      },
+      {
+        "name": "a where entry needs every field",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "tier",
+            "op": "="
+          }
+        ],
+        "expected": {
+          "error": "fields",
+          "mentions": [
+            "column",
+            "op",
+            "value"
+          ]
+        }
+      },
+      {
+        "name": "a where column must be a dimension",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "amount",
+            "op": "=",
+            "value": "1"
+          }
+        ],
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "amount",
+            "native fact"
+          ]
+        }
+      }
+    ]
   }
 }
