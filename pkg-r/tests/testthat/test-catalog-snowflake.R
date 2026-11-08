@@ -617,3 +617,111 @@ test_that("Snowflake current namespace requires a database and schema", {
     error = TRUE
   )
 })
+
+# The Snowflake semantic view contract both packages consume. The Python suite
+# runs the same cases from the same file. See tests/shared/README.md.
+snowflake_semantic_cases <- function(section) {
+  cases <- shared_fixture("snowflake-semantic-views")[[section]]$cases
+  # An empty section would enumerate no cases and the runner would pass.
+  expect_gt(length(cases), 0)
+  cases
+}
+
+fixture_id <- function(id) as.list(id@name)
+
+fixture_member <- function(member) {
+  list(
+    name = member$name,
+    kind = member$kind,
+    parent = member$parent,
+    label = member$label,
+    description = member$description,
+    type = member$type,
+    synonyms = as.list(member$synonyms),
+    filter = member$filter
+  )
+}
+
+fixture_parameter <- function(parameter) {
+  list(
+    type = parameter$type,
+    description = parameter$description,
+    has_default = parameter$has_default,
+    default = parameter$default,
+    sql_type = parameter$sql_type
+  )
+}
+
+test_that("Snowflake SHOW rows read as the shared fixture says", {
+  for (case in snowflake_semantic_cases("show_rows")) {
+    rows <- if (length(case$rows)) {
+      do.call(rbind, lapply(case$rows, function(row) {
+        row[vapply(row, is.null, logical(1))] <- NA_character_
+        as.data.frame(row, stringsAsFactors = FALSE)
+      }))
+    } else {
+      data.frame(
+        name = character(),
+        database_name = character(),
+        schema_name = character(),
+        comment = character()
+      )
+    }
+    views <- lapply(snowflake_semantic_views_from_show(rows), function(view) {
+      list(id = fixture_id(view$id), description = view$description)
+    })
+    expect_equal(views, case$views, info = case$name)
+  }
+})
+
+test_that("Snowflake semantic YAML reads as the shared fixture says", {
+  for (case in snowflake_semantic_cases("specifications")) {
+    id <- do.call(DBI::Id, case$id)
+    model <- tryCatch(
+      snowflake_semantic_model_from_spec(
+        id,
+        yaml::yaml.load(case$yaml),
+        description = case$description
+      ),
+      commons_unsupported_semantic_parameter = function(err) err
+    )
+    if (!is.null(case$expected$unsupported)) {
+      expect_s3_class(model, "commons_unsupported_semantic_parameter")
+      expect_identical(
+        cli::ansi_strip(conditionMessage(model)),
+        case$expected$unsupported,
+        info = case$name
+      )
+      next
+    }
+    actual <- list(
+      name = model$name,
+      description = model$description,
+      dimensions = lapply(model$dimensions, fixture_member),
+      metrics = lapply(model$metrics, fixture_member),
+      facts = lapply(model$facts, fixture_member),
+      filters = lapply(model$filters, fixture_member),
+      parameters = lapply(model$parameters, fixture_parameter),
+      dependencies = lapply(model$dependencies, fixture_id),
+      dependencies_complete = model$dependencies_complete,
+      first_touch = as.list(model$context$first_touch),
+      retrieval = as.list(model$context$retrieval)
+    )
+    expected <- case$expected
+    if (length(expected$parameters) == 0L) {
+      expected$parameters <- list()
+      actual$parameters <- list()
+    }
+    expect_equal(actual, expected, info = case$name)
+  }
+})
+
+test_that("Snowflake variable SQL types follow the shared fixture", {
+  for (case in snowflake_semantic_cases("sql_types")) {
+    expect_identical(
+      snowflake_semantic_sql_type(case$declared),
+      case$sql_type,
+      info = case$declared
+    )
+  }
+})

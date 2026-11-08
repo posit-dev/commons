@@ -288,3 +288,20 @@ def validate_arguments(
         _check_value(name, value, spec.type)
         values[name] = value
     return values
+
+
+def members_context(members: list[SemanticMember], heading: str) -> list[str]:
+    """Members as one context block, or nothing when there are none."""
+    if not members:
+        return []
+    lines = [f"{heading}:"]
+    for member in members:
+        reference = ".".join(part for part in (member.parent, member.name) if part)
+        detail = member.description or member.label
+        line = f"- `{reference}`"
+        if detail:
+            line += f": {detail}"
+        if member.filter:
+            line += " (usable as a named filter)"
+        lines.append(line)
+    return ["\n".join(lines)]

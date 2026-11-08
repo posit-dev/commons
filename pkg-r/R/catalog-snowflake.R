@@ -661,7 +661,7 @@ snowflake_semantic_members <- function(entries, kind, parent = NULL) {
       name,
       kind,
       parent = parent,
-      label = item$label,
+      label = item[["label"]],
       description = item$description %||% item$comment,
       type = item$data_type,
       synonyms = unlist(item$synonyms %||% character(), use.names = FALSE),

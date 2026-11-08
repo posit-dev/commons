@@ -1,0 +1,556 @@
+{
+  "description": "How a Snowflake semantic view is read. `SHOW SEMANTIC VIEWS` lists the views a selection reaches, and `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW` returns each one's specification as YAML. What the reader takes from that YAML is what the model is offered: the public members it can query, the variables it must bind, the tables the view depends on, and the prose that becomes first-touch and retrieval context. Both packages read the same YAML into the same model, so an agent sees the same view whichever package built it.",
+  "show_rows": {
+    "description": "Rows of `SHOW SEMANTIC VIEWS` and the views they list. Drivers report the column names in either case, every column but the name, namespace, and comment is ignored, and a blank or null comment is no description.",
+    "cases": [
+      {
+        "name": "lower-case keys, and a blank comment is no description",
+        "rows": [
+          {
+            "name": "REVENUE_MODEL",
+            "database_name": "ANALYTICS",
+            "schema_name": "PUBLIC",
+            "comment": "Revenue semantics",
+            "owner": "SYSADMIN"
+          },
+          {
+            "name": "FINANCE_MODEL",
+            "database_name": "ANALYTICS",
+            "schema_name": "PUBLIC",
+            "comment": "",
+            "owner": "SYSADMIN"
+          }
+        ],
+        "views": [
+          {
+            "id": {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "REVENUE_MODEL"
+            },
+            "description": "Revenue semantics"
+          },
+          {
+            "id": {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "FINANCE_MODEL"
+            },
+            "description": null
+          }
+        ]
+      },
+      {
+        "name": "upper-case keys, and a null comment",
+        "rows": [
+          {
+            "NAME": "Mixed",
+            "DATABASE_NAME": "Analytics",
+            "SCHEMA_NAME": "Public",
+            "COMMENT": null
+          }
+        ],
+        "views": [
+          {
+            "id": {
+              "catalog": "Analytics",
+              "schema": "Public",
+              "table": "Mixed"
+            },
+            "description": null
+          }
+        ]
+      },
+      {
+        "name": "no rows",
+        "rows": [],
+        "views": []
+      }
+    ]
+  },
+  "specifications": {
+    "description": "A view's id, its YAML specification exactly as Snowflake returns it, and the model read from it. `description` is the comment `SHOW SEMANTIC VIEWS` reported, used when the YAML has none. Entries may be a list or a mapping keyed by name. Members marked private are dropped, `labels` containing `filter` (in any case) marks a dimension or fact usable as a named filter, and a member's type is its `data_type`. A base table's database, schema, and table are SQL identifiers: a quoted one is exact, with doubled quotes undone, an unquoted one is upper-cased, and a missing database or schema is the view's own. Dependencies are complete only when every table names one and there is at least one. `expected` is either the model, or `unsupported` with the reason when a variable has no bindable type.",
+    "cases": [
+      {
+        "name": "a parameterized view in the list form Snowflake returns",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "name: ORDERS_PARAM_MODEL\ndescription: \"Orders, with a threshold variable.\"\nvariables:\n  - name: MIN_TOTAL\n    description: Only orders whose total is at least this amount count.\n    data_type: \"NUMBER(10,2)\"\n    default_value: \"0\"\ntables:\n  - name: ORDERS\n    base_table:\n      database: ANALYTICS\n      schema: PUBLIC\n      table: '\"orders\"'\n    facts:\n      - name: ORDER_TOTAL\n        expr: '\"order_total\"'\n        data_type: FLOAT\n        access_modifier: public_access\n    metrics:\n      - name: TOTAL_ABOVE_MIN\n        description: Sum of order totals at or above MIN_TOTAL.\n        expr: SUM(orders.order_total)\n        access_modifier: public_access\n",
+        "expected": {
+          "name": "ORDERS_PARAM_MODEL",
+          "description": "Orders, with a threshold variable.",
+          "dimensions": [],
+          "metrics": [
+            {
+              "name": "TOTAL_ABOVE_MIN",
+              "kind": "metric",
+              "parent": "ORDERS",
+              "label": null,
+              "description": "Sum of order totals at or above MIN_TOTAL.",
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [
+            {
+              "name": "ORDER_TOTAL",
+              "kind": "fact",
+              "parent": "ORDERS",
+              "label": null,
+              "description": null,
+              "type": "FLOAT",
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "filters": [],
+          "parameters": {
+            "MIN_TOTAL": {
+              "type": "number",
+              "description": "Only orders whose total is at least this amount count.",
+              "has_default": true,
+              "default": 0,
+              "sql_type": "NUMBER(10,2)"
+            }
+          },
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "orders"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [
+            "Native semantic facts:\n- `ORDERS.ORDER_TOTAL`"
+          ],
+          "retrieval": [
+            "Native semantic facts:\n- `ORDERS.ORDER_TOTAL`"
+          ]
+        }
+      },
+      {
+        "name": "members: private ones dropped, time dimensions read as dimensions, top-level metrics have no parent",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "name: revenue\ndescription: Revenue model.\ntables:\n  orders:\n    base_table:\n      database: ANALYTICS\n      schema: PUBLIC\n      table: ORDERS\n    dimensions:\n      region:\n        description: Sales region.\n        label: Region\n        data_type: VARCHAR(16)\n        synonyms: [territory, area]\n      secret:\n        access_modifier: private_access\n    time_dimensions:\n      ordered_at:\n        data_type: TIMESTAMP_NTZ\n        comment: When the order was placed.\n    metrics:\n      order_count:\n        description: Orders.\n      hidden_count:\n        access_modifier: PRIVATE\nmetrics:\n  - name: total_revenue\n    description: Revenue.\n    synonyms: sales\n",
+        "expected": {
+          "name": "revenue",
+          "description": "Revenue model.",
+          "dimensions": [
+            {
+              "name": "region",
+              "kind": "dimension",
+              "parent": "orders",
+              "label": "Region",
+              "description": "Sales region.",
+              "type": "VARCHAR(16)",
+              "synonyms": [
+                "territory",
+                "area"
+              ],
+              "filter": false
+            },
+            {
+              "name": "ordered_at",
+              "kind": "dimension",
+              "parent": "orders",
+              "label": null,
+              "description": "When the order was placed.",
+              "type": "TIMESTAMP_NTZ",
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "metrics": [
+            {
+              "name": "order_count",
+              "kind": "metric",
+              "parent": "orders",
+              "label": null,
+              "description": "Orders.",
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            },
+            {
+              "name": "total_revenue",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": "Revenue.",
+              "type": null,
+              "synonyms": [
+                "sales"
+              ],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "filter labels mark facts and dimensions, and named filters are context only",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "custom_instructions: Use booked revenue for finance questions.\nmodule_custom_instructions:\n  - Use booked revenue for finance questions.\n  - Exclude test orders.\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    dimensions:\n      - name: active_only\n        labels: filter\n        description: Active orders.\n    facts:\n      - name: amount\n        description: Order amount.\n        labels: [Filter, finance]\n      - name: cost\n        access_modifier: private_access\n      - name: discount\n    filters:\n      - name: recent_only\n        description: Recent orders.\n    metrics:\n      - name: revenue\nrelationships:\n  - name: orders_to_customers\n    left_table: orders\n    right_table: customers\n    relationship_columns:\n      - left_column: customer_id\n        right_column: id\n      - left_column: region\n        right_column: region\n  - from_table: orders\n    to_table: regions\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": null,
+          "dimensions": [
+            {
+              "name": "active_only",
+              "kind": "dimension",
+              "parent": "orders",
+              "label": null,
+              "description": "Active orders.",
+              "type": null,
+              "synonyms": [],
+              "filter": true
+            }
+          ],
+          "metrics": [
+            {
+              "name": "revenue",
+              "kind": "metric",
+              "parent": "orders",
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [
+            {
+              "name": "amount",
+              "kind": "fact",
+              "parent": "orders",
+              "label": null,
+              "description": "Order amount.",
+              "type": null,
+              "synonyms": [],
+              "filter": true
+            },
+            {
+              "name": "discount",
+              "kind": "fact",
+              "parent": "orders",
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "filters": [
+            {
+              "name": "recent_only",
+              "kind": "filter",
+              "parent": "orders",
+              "label": null,
+              "description": "Recent orders.",
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [
+            "Use booked revenue for finance questions.",
+            "Exclude test orders.",
+            "Semantic relationship `orders_to_customers` links `orders` to `customers` on customer_id = id, region = region.",
+            "Semantic relationship `unnamed` links `orders` to `regions`.",
+            "Native semantic facts:\n- `orders.amount`: Order amount. (usable as a named filter)\n- `orders.discount`",
+            "Native semantic filters:\n- `orders.active_only`: Active orders. (usable as a named filter)\n- `orders.amount`: Order amount. (usable as a named filter)\n- `orders.recent_only`: Recent orders."
+          ],
+          "retrieval": [
+            "Use booked revenue for finance questions.",
+            "Exclude test orders.",
+            "Semantic relationship `orders_to_customers` links `orders` to `customers` on customer_id = id, region = region.",
+            "Semantic relationship `unnamed` links `orders` to `regions`.",
+            "Native semantic facts:\n- `orders.amount`: Order amount. (usable as a named filter)\n- `orders.discount`",
+            "Native semantic filters:\n- `orders.active_only`: Active orders. (usable as a named filter)\n- `orders.amount`: Order amount. (usable as a named filter)\n- `orders.recent_only`: Recent orders."
+          ]
+        }
+      },
+      {
+        "name": "base tables are SQL identifiers: quoted kept exact, unquoted upper-cased",
+        "id": {
+          "catalog": "COMMONS",
+          "schema": "LIVE",
+          "table": "MODEL"
+        },
+        "yaml": "tables:\n  - name: lines\n    base_table:\n      database: '\"Commons\"'\n      schema: live\n      table: '\"order \"\"lines\"\"\"'\n  - name: lines_again\n    base_table:\n      catalog: '\"Commons\"'\n      schema: LIVE\n      table: '\"order \"\"lines\"\"\"'\n",
+        "expected": {
+          "name": "MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "Commons",
+              "schema": "LIVE",
+              "table": "order \"lines\""
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "a base table without a namespace inherits the view's own",
+        "id": {
+          "catalog": "MyDb",
+          "schema": "MySchema",
+          "table": "MODEL"
+        },
+        "yaml": "tables:\n  - name: orders\n    base_table:\n      table: orders\n",
+        "expected": {
+          "name": "MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "MyDb",
+              "schema": "MySchema",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "a base table without a table name leaves the dependencies incomplete",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n  - name: mystery\n    base_table: {database: ANALYTICS}\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": false,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "a view with no tables has no complete dependencies",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "description": "From SHOW.",
+        "yaml": "metrics:\n  - name: constant\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": "From SHOW.",
+          "dimensions": [],
+          "metrics": [
+            {
+              "name": "constant",
+              "kind": "metric",
+              "parent": null,
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [],
+          "dependencies_complete": false,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "typed variables keep a safe declared SQL type and coerce defaults",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: region\n    data_type: VARCHAR(16)\n  - name: since\n    data_type: DATE\n    default_value: \"2024-01-01\"\n  - name: include_test\n    data_type: BOOLEAN\n    default_value: \"TRUE\"\n  - name: limit_rows\n    data_type: number(10, 2)\n    comment: Upper bound.\n  - name: odd\n    data_type: \"TIMESTAMP_TZ(9) WITH SPACE\"\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [],
+          "facts": [],
+          "filters": [],
+          "parameters": {
+            "region": {
+              "type": "string",
+              "description": null,
+              "has_default": false,
+              "default": null,
+              "sql_type": "VARCHAR(16)"
+            },
+            "since": {
+              "type": "date",
+              "description": null,
+              "has_default": true,
+              "default": "2024-01-01",
+              "sql_type": "DATE"
+            },
+            "include_test": {
+              "type": "logical",
+              "description": null,
+              "has_default": true,
+              "default": true,
+              "sql_type": "BOOLEAN"
+            },
+            "limit_rows": {
+              "type": "number",
+              "description": "Upper bound.",
+              "has_default": false,
+              "default": null,
+              "sql_type": "NUMBER(10,2)"
+            },
+            "odd": {
+              "type": "datetime",
+              "description": null,
+              "has_default": false,
+              "default": null,
+              "sql_type": null
+            }
+          },
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
+        "name": "an unsupported variable type makes the view unsupported",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: payload\n    data_type: VARIANT\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "unsupported": "Snowflake semantic parameter \"payload\" has unsupported type \"VARIANT\"."
+        }
+      },
+      {
+        "name": "a variable without a type makes the view unsupported",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "variables:\n  - name: payload\ntables:\n  - name: orders\n    base_table: {table: ORDERS}\n",
+        "expected": {
+          "unsupported": "Snowflake semantic parameter \"payload\" has unsupported type \"missing\"."
+        }
+      }
+    ]
+  },
+  "sql_types": {
+    "description": "A variable's declared type and the SQL type its bound value is cast to, or null when the declared text is not safe to splice into SQL: letters and underscores, optionally followed by a precision and scale.",
+    "cases": [
+      {
+        "declared": "NUMBER(10, 2)",
+        "sql_type": "NUMBER(10,2)"
+      },
+      {
+        "declared": "number(10,2)",
+        "sql_type": "NUMBER(10,2)"
+      },
+      {
+        "declared": "VARCHAR(16)",
+        "sql_type": "VARCHAR(16)"
+      },
+      {
+        "declared": "TIMESTAMP_TZ",
+        "sql_type": "TIMESTAMP_TZ"
+      },
+      {
+        "declared": "DATE",
+        "sql_type": "DATE"
+      },
+      {
+        "declared": "VARCHAR(16) NOT NULL",
+        "sql_type": null
+      },
+      {
+        "declared": "NUMBER(10;2)",
+        "sql_type": null
+      },
+      {
+        "declared": "TIMESTAMP_TZ(9) WITH SPACE",
+        "sql_type": null
+      },
+      {
+        "declared": "my type",
+        "sql_type": null
+      }
+    ]
+  }
+}
