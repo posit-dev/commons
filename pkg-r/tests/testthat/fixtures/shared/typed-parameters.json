@@ -1,0 +1,332 @@
+{
+  "description": "How a warehouse semantic model's typed parameters are declared and checked. A Snowflake semantic view declares each variable with a SQL data type, and the declared type decides which values a caller may bind: a type with no mapping makes the whole view unsupported, and a value of the wrong type is refused before any SQL runs. Both packages read the declared type the same way and accept the same values, so an argument the model writes succeeds or fails identically in either.",
+  "declared_types": {
+    "description": "A declared SQL data type and the parameter type it maps to, or null when the type has no mapping. A NUMBER with scale 0, including a bare NUMBER, maps to integer, because casting a fraction to scale 0 rounds it silently and an integer parameter refuses the fraction instead.",
+    "cases": [
+      {
+        "declared": "VARCHAR(16)",
+        "type": "string"
+      },
+      {
+        "declared": "STRING",
+        "type": "string"
+      },
+      {
+        "declared": "text",
+        "type": "string"
+      },
+      {
+        "declared": "CHAR",
+        "type": "string"
+      },
+      {
+        "declared": "BYTEINT",
+        "type": "integer"
+      },
+      {
+        "declared": "int",
+        "type": "integer"
+      },
+      {
+        "declared": "BIGINT",
+        "type": "integer"
+      },
+      {
+        "declared": "NUMBER",
+        "type": "integer"
+      },
+      {
+        "declared": "NUMBER(10,0)",
+        "type": "integer"
+      },
+      {
+        "declared": "NUMBER(10, 2)",
+        "type": "number"
+      },
+      {
+        "declared": "NUMBER(38, 0)",
+        "type": "integer"
+      },
+      {
+        "declared": "decimal(5,1)",
+        "type": "number"
+      },
+      {
+        "declared": "FLOAT",
+        "type": "number"
+      },
+      {
+        "declared": "double",
+        "type": "number"
+      },
+      {
+        "declared": "REAL",
+        "type": "number"
+      },
+      {
+        "declared": "BOOLEAN",
+        "type": "logical"
+      },
+      {
+        "declared": "bool",
+        "type": "logical"
+      },
+      {
+        "declared": "DATE",
+        "type": "date"
+      },
+      {
+        "declared": "TIMESTAMP_NTZ",
+        "type": "datetime"
+      },
+      {
+        "declared": "TIMESTAMP_TZ(9)",
+        "type": "datetime"
+      },
+      {
+        "declared": "DATETIME",
+        "type": "datetime"
+      },
+      {
+        "declared": "VARIANT",
+        "type": null
+      },
+      {
+        "declared": "ARRAY",
+        "type": null
+      },
+      {
+        "declared": "GEOGRAPHY",
+        "type": null
+      },
+      {
+        "declared": "",
+        "type": null
+      }
+    ]
+  },
+  "values": {
+    "description": "Whether a value is accepted for a parameter of each type. `error` names why a refused value fails: `missing` for a null, `type` for a value of the wrong type or shape. Dates are ISO 8601 calendar dates and datetimes add a time with optional seconds, fraction, and offset; the whole string must match, so a trailing newline is refused.",
+    "cases": [
+      {
+        "type": "string",
+        "value": "EMEA",
+        "valid": true
+      },
+      {
+        "type": "string",
+        "value": "",
+        "valid": true
+      },
+      {
+        "type": "string",
+        "value": 3,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "string",
+        "value": true,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "string",
+        "value": null,
+        "valid": false,
+        "error": "missing"
+      },
+      {
+        "type": "integer",
+        "value": 3,
+        "valid": true
+      },
+      {
+        "type": "integer",
+        "value": -7,
+        "valid": true
+      },
+      {
+        "type": "integer",
+        "value": 3.0,
+        "valid": true
+      },
+      {
+        "type": "integer",
+        "value": 3.5,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "integer",
+        "value": "3",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "integer",
+        "value": true,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "integer",
+        "value": 9007199254740991,
+        "valid": true
+      },
+      {
+        "type": "integer",
+        "value": 9007199254740992,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "integer",
+        "value": null,
+        "valid": false,
+        "error": "missing"
+      },
+      {
+        "type": "number",
+        "value": 3.5,
+        "valid": true
+      },
+      {
+        "type": "number",
+        "value": -2,
+        "valid": true
+      },
+      {
+        "type": "number",
+        "value": "3.5",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "number",
+        "value": false,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "logical",
+        "value": true,
+        "valid": true
+      },
+      {
+        "type": "logical",
+        "value": false,
+        "valid": true
+      },
+      {
+        "type": "logical",
+        "value": "true",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "logical",
+        "value": 1,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "date",
+        "value": "2024-02-29",
+        "valid": true
+      },
+      {
+        "type": "date",
+        "value": "2023-02-29",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "date",
+        "value": "2024-1-01",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "date",
+        "value": "2024-01-01T00:00:00",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "date",
+        "value": "2024-01-01\n",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "date",
+        "value": 20240101,
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01 10:00",
+        "valid": true
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:00:00",
+        "valid": true
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:00:00.123Z",
+        "valid": true
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:00:00+05:30",
+        "valid": true
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T24:00:00",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:60:00",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:00:60",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:00:00+24:00",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01T10:00:00\n",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-01-01",
+        "valid": false,
+        "error": "type"
+      },
+      {
+        "type": "datetime",
+        "value": "2024-13-01T10:00:00",
+        "valid": false,
+        "error": "type"
+      }
+    ]
+  }
+}
