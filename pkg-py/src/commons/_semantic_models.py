@@ -196,16 +196,16 @@ def _plural(names: list[str]) -> str:
     return "argument" if len(names) == 1 else "arguments"
 
 
-_DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+_DATE_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _DATETIME_RE = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[ T]"
     r"[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]+)?)?"
-    r"(Z|[+-][0-9]{2}:[0-9]{2})?$"
+    r"(Z|[+-][0-9]{2}:[0-9]{2})?"
 )
 
 
 def _valid_date(value: str) -> bool:
-    if not _DATE_RE.match(value):
+    if not _DATE_RE.fullmatch(value):
         return False
     try:
         dt.date.fromisoformat(value)
@@ -215,7 +215,7 @@ def _valid_date(value: str) -> bool:
 
 
 def _valid_datetime(value: str) -> bool:
-    if not _DATETIME_RE.match(value):
+    if not _DATETIME_RE.fullmatch(value):
         return False
     hour, minute = int(value[11:13]), int(value[14:16])
     second = int(value[17:19]) if value[16:17] == ":" else 0

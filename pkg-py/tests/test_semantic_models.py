@@ -136,3 +136,40 @@ def test_huge_integer_argument_is_rejected_not_overflowed():
     assert validate_arguments(params, {"n": 10**20}) == {"n": 10**20}
     with pytest.raises(ValueError, match="'n' must be a number value"):
         validate_arguments(params, {"n": 10**400})
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2024-01-01\n",
+        "2024-01-01T10:00:00\n",
+        "2024-01-01T24:00:00",
+        "2024-01-01T10:60:00",
+        "2024-01-01T10:00:00+24:00",
+    ],
+)
+def test_malformed_dates_and_datetimes_are_rejected(value):
+    params = parameters_from_spec(
+        [
+            {"name": "d", "data_type": "DATE"},
+            {"name": "t", "data_type": "TIMESTAMP_NTZ"},
+        ],
+        "Snowflake",
+    )
+    name = "d" if len(value.strip()) == 10 else "t"
+    with pytest.raises(ValueError, match=f"'{name}' must be"):
+        validate_arguments(
+            params, {"d": "2024-01-01", "t": "2024-01-01 10:00", name: value}
+        )
+
+
+def test_datetime_with_offset_is_accepted():
+    params = parameters_from_spec(
+        [{"name": "t", "data_type": "TIMESTAMP_TZ"}], "Snowflake"
+    )
+    for value in (
+        "2024-01-01T10:00:00+05:30",
+        "2024-01-01 10:00:00.5Z",
+        "2024-01-01T10:00",
+    ):
+        assert validate_arguments(params, {"t": value}) == {"t": value}
