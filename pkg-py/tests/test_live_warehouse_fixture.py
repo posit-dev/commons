@@ -10,6 +10,7 @@ answer.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -177,6 +178,20 @@ def test_every_semantic_view_the_tests_name_is_provisioned_on_snowflake():
     for argument in names["parameterized_model_arguments"]:
         assert f"- name: {argument}\n" in sql
     assert "SEMANTIC VIEW" not in generator.render("databricks", "tester")
+
+
+def test_a_verified_query_view_apart_from_the_semantic_view_is_refused(tmp_path):
+    # One YAML template serves both, so distinct names would leave the
+    # verified query view uncreated.
+    contract = load_shared_fixture("live-warehouse-env")
+    contract["backends"]["snowflake"]["provisioned"]["verified_query_view"] = "OTHER"
+    path = tmp_path / "live-warehouse-env.json"
+    path.write_text(json.dumps(contract), encoding="utf-8")
+    generator = _generator()
+    generator.render.__globals__["ENV"] = path
+
+    with pytest.raises(SystemExit, match="verified query view"):
+        generator.render("snowflake", "tester")
 
 
 def test_the_snowflake_test_role_can_assume_the_alternate_role():
