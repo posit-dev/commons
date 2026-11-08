@@ -178,3 +178,48 @@ fixture_snowflake_reply <- function(warehouse) {
     stop("unexpected query: ", sql)
   }
 }
+
+# A dbGetQuery stand-in answering a Databricks catalog listing from a shared
+# fixture's `warehouse`: tables and metric views, all in main.sales.
+fixture_databricks_reply <- function(warehouse) {
+  views <- warehouse$metric_views %||% list()
+  metadata <- warehouse$metadata %||% list()
+  tables <- unlist(warehouse$tables %||% list())
+  named <- function(sql) {
+    match <- regmatches(sql, regexec("table_name = '([^']*)'", sql))[[1]]
+    if (length(match)) match[[2]] else NULL
+  }
+  function(con, sql, ...) {
+    if (startsWith(sql, "SELECT CURRENT_CATALOG()")) {
+      return(data.frame(catalog = "main", schema = "sales"))
+    }
+    if (grepl("system.information_schema.tables", sql, fixed = TRUE)) {
+      names <- c(tables, names(views))
+      types <- c(rep("MANAGED", length(tables)), rep("METRIC_VIEW", length(views)))
+      keep <- if (is.null(named(sql))) rep(TRUE, length(names)) else names == named(sql)
+      return(data.frame(
+        table_catalog = rep("main", sum(keep)),
+        table_schema = rep("sales", sum(keep)),
+        table_name = names[keep],
+        table_type = types[keep],
+        comment = rep(NA_character_, sum(keep))
+      ))
+    }
+    if (grepl("system.information_schema.views", sql, fixed = TRUE)) {
+      text <- views[[named(sql)]]
+      if (startsWith(sql, "SELECT length(")) {
+        return(data.frame(definition_length = nchar(text)))
+      }
+      starts <- as.integer(regmatches(sql, gregexpr("(?<=substring\\(view_definition, )[0-9]+", sql, perl = TRUE))[[1]])
+      chunks <- lapply(starts, function(start) substr(text, start, start + 899L))
+      names(chunks) <- paste0("chunk_", seq_along(chunks))
+      return(as.data.frame(chunks))
+    }
+    if (startsWith(sql, "DESCRIBE TABLE EXTENDED")) {
+      name <- sub(".*`([^`]*)` AS JSON$", "\\1", sql)
+      if (is.null(metadata[[name]])) stop("no metadata")
+      return(data.frame(json_metadata = metadata[[name]]))
+    }
+    stop("unexpected query: ", sql)
+  }
+}

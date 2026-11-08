@@ -15,7 +15,7 @@ from typing import Any
 
 from .._data_source import TableId
 from .._semantic_models import SemanticModel, SemanticStub
-from . import _databricks, _snowflake, _snowflake_semantic
+from . import _databricks, _databricks_semantic, _snowflake, _snowflake_semantic
 from ._core import (
     Manifest,
     Relation,
@@ -89,10 +89,14 @@ def import_catalog(
         list_relations=lambda selector: reader.list_relations(backend, selector),
         exclude=exclude,
     )
+    module: Any = _snowflake_semantic
+    if reader is _databricks:
+        module = _databricks_semantic
+        semantic = _metric_views(registry)
     models: dict[str, SemanticModel] = {}
     stubs: dict[str, SemanticStub] = {}
     if semantic is not None:
-        # A namespace listing reports a semantic view among its objects too.
+        # A listing reports a semantic model among its relations too.
         for label in semantic.views:
             registry.relations.pop(label, None)
             registry.validate.pop(label, None)
@@ -101,7 +105,7 @@ def import_catalog(
         require_queryable_relations(backend, registry.validate, registry.relations)
     if semantic is not None:
         models = _semantic_models(
-            backend, semantic, registry.relations, registry.validate, exclude
+            backend, module, semantic, registry.relations, registry.validate, exclude
         )
         stubs = {
             label: view
@@ -146,7 +150,7 @@ def import_catalog(
         namespace_selected=registry.namespace_selected,
         semantic_stubs={
             label: Relation(
-                id=stub.id, kind="semantic_view", description=stub.description
+                id=stub.id, kind=stub.kind, description=stub.description
             )
             for label, stub in stubs.items()
         },
@@ -164,8 +168,34 @@ def import_catalog(
     )
 
 
+def _metric_views(registry: Any) -> _snowflake_semantic.SemanticSelection:
+    """The metric views a Databricks listing reported among its relations."""
+    views = {
+        label: SemanticStub(
+            id=relation.id,
+            backend=_databricks_semantic.BACKEND,
+            description=relation.description,
+            identity=relation.identity,
+        )
+        for label, relation in registry.relations.items()
+        if relation.kind == "metric_view"
+    }
+    return _snowflake_semantic.SemanticSelection(
+        views=views,
+        validate=[label for label in views if label in registry.validate],
+        relation_selectors=[],
+    )
+
+
+_UNSUPPORTED = {
+    _snowflake_semantic.BACKEND: "Some selected Snowflake semantic views are not supported:",
+    _databricks_semantic.BACKEND: "Some selected Databricks metric views are not supported:",
+}
+
+
 def _semantic_models(
     backend: Any,
+    module: Any,
     semantic: _snowflake_semantic.SemanticSelection,
     relations: dict[str, Relation],
     validate: dict[str, TableId],
@@ -179,7 +209,7 @@ def _semantic_models(
     models: dict[str, SemanticModel] = {}
     unsupported: list[str] = []
     for label in semantic.validate:
-        model = _snowflake_semantic.read_semantic_model(backend, semantic.views[label])
+        model = module.read_semantic_model(backend, semantic.views[label])
         if isinstance(model, _snowflake_semantic.Unsupported):
             unsupported.append(f"{label}: {model.reason}")
         elif not (model.metrics or model.dimensions or model.facts):
@@ -188,10 +218,11 @@ def _semantic_models(
             models[label] = model
     if unsupported:
         raise ValueError(
-            "Some selected Snowflake semantic views are not supported:\n"
+            _UNSUPPORTED[module.BACKEND]
+            + "\n"
             + "\n".join(f"* {line}" for line in unsupported)
         )
-    associated = _snowflake_semantic.associated_models(
+    associated = module.associated_models(
         backend, relations, list(validate), models, exclude
     )
     for label, model in associated.items():

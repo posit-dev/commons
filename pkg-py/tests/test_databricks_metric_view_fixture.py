@@ -118,3 +118,27 @@ def test_relation_kinds(case: dict[str, Any]) -> None:
     )
     [relation] = relations_from_information_schema([row], object_types)
     assert relation.kind == case["kind"]
+
+
+@pytest.mark.parametrize("case", cases("selection"), ids=lambda c: c["name"])
+def test_selection(case: dict[str, Any]) -> None:
+    from commons._catalog._import import import_catalog
+
+    from ._warehouse import FakeDatabricks
+
+    warehouse = SPEC["selection"]["warehouse"]
+    backend = FakeDatabricks(
+        relations=warehouse["tables"],
+        metric_views=warehouse["metric_views"],
+        metadata=warehouse["metadata"],
+    )
+    expected = case["expected"]
+    if "error" in expected:
+        with pytest.raises(ValueError) as raised:
+            import_catalog(backend, case["tables"], case.get("exclude"))
+        assert_fixture_error(raised.value, expected)
+        return
+    imported = import_catalog(backend, case["tables"], case.get("exclude"))
+    assert imported.tables == expected["tables"]
+    assert list(imported.semantic_models) == expected["models"]
+    assert list(imported.semantic_stubs) == expected["stubs"]

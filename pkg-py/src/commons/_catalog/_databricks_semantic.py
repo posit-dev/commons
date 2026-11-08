@@ -12,16 +12,24 @@ from .._data_source import TableId
 from .._semantic_models import (
     SemanticMember,
     SemanticModel,
+    UnsupportedSemanticParameter,
     parameters_from_spec,
+    semantic_key,
     spec_entries,
 )
+from ._databricks import _quote, _quote_path, _quote_string
+from ._snowflake_semantic import Unsupported
 
 __all__ = [
     "BACKEND",
+    "associated_models",
     "dependencies",
     "model_from_spec",
+    "probe_sql",
     "qualified_name_parts",
+    "read_semantic_model",
     "relation_kind",
+    "relation_reference",
     "type_text",
 ]
 
@@ -248,3 +256,190 @@ def model_from_spec(
         first_touch=context,
         retrieval=list(context),
     )
+
+
+# ---- reading from the warehouse --------------------------------------------
+
+# A definition longer than this is read from the table metadata instead.
+VIEW_DEFINITION_MAX_SIZE = 200_000
+
+
+def _view_definition(backend: Any, table_id: TableId) -> str | None:
+    where = " AND ".join(
+        [
+            f"table_catalog = {_quote_string(table_id.catalog or '')}",
+            f"table_schema = {_quote_string(table_id.schema or '')}",
+            f"table_name = {_quote_string(table_id.table)}",
+        ]
+    )
+    try:
+        rows = backend.query(
+            "SELECT length(view_definition) AS definition_length, view_definition "
+            f"FROM system.information_schema.views WHERE {where}"
+        )
+    except Exception:  # noqa: BLE001 - the metadata is read instead
+        return None
+    if not rows:
+        return None
+    row = {str(key).lower(): value for key, value in rows[0].items()}
+    length = row.get("definition_length")
+    if length is None or int(length) > VIEW_DEFINITION_MAX_SIZE:
+        return None
+    text = row.get("view_definition")
+    return text if isinstance(text, str) else None
+
+
+def _metadata(backend: Any, table_id: TableId) -> dict[str, Any]:
+    import json
+
+    try:
+        rows = backend.query(
+            f"DESCRIBE TABLE EXTENDED {_quote_path(table_id.parts)} AS JSON"
+        )
+        parsed = json.loads(next(iter(rows[0].values())))
+    except Exception:  # noqa: BLE001 - metadata is optional
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _complete_id(backend: Any, table_id: TableId) -> TableId:
+    if table_id.catalog and table_id.schema:
+        return table_id
+    from ._databricks import current_namespace
+
+    current = current_namespace(backend)
+    return TableId(
+        table=table_id.table,
+        schema=table_id.schema or current.schema,
+        catalog=table_id.catalog or current.catalog,
+    )
+
+
+def read_semantic_model(backend: Any, view: Any) -> SemanticModel | Unsupported:
+    """Read a metric view's definition. Raises when it cannot be read at all.
+
+    `view` is anything with `id`, `description`, and `identity`: a listed
+    relation or a stub.
+    """
+    import yaml
+
+    table_id = _complete_id(backend, view.id)
+    label = table_id.label
+    metadata: dict[str, Any] | None = None
+    text = _view_definition(backend, table_id)
+    if text is None:
+        metadata = _metadata(backend, table_id)
+        text = metadata.get("view_text") or metadata.get("viewText")
+    if text is None:
+        raise ValueError(f"Failed to read Databricks metric view {label!r}.")
+    try:
+        spec = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise ValueError(
+            f"Databricks metric view {label!r} returned invalid YAML."
+        ) from error
+    if (
+        not isinstance(spec, dict)
+        or spec.get("version") is None
+        or all(spec.get(key) is None for key in ("fields", "dimensions", "measures"))
+    ):
+        raise ValueError(
+            f"Databricks metric view {label!r} returned an invalid specification."
+        )
+    if has_wildcards(spec):
+        metadata = metadata if metadata is not None else _metadata(backend, table_id)
+        if not metadata.get("columns"):
+            return Unsupported(
+                view.id, "wildcard members could not be expanded from column metadata"
+            )
+    try:
+        model = model_from_spec(
+            view.id,
+            spec,
+            description=view.description,
+            columns=(metadata or {}).get("columns") or [],
+        )
+    except UnsupportedSemanticParameter as error:
+        return Unsupported(view.id, str(error))
+    model.identity = view.identity or view.id
+    return model
+
+
+def relation_reference(model: SemanticModel, names: list[str]) -> str:
+    """The view, called with a bind for each named parameter."""
+    relation = _quote_path(model.id.parts)
+    if names:
+        binds = ", ".join(f"{_quote(name)} => :p{i}" for i, name in enumerate(names))
+        relation += f"({binds})"
+    return relation
+
+
+def probe_sql(model: SemanticModel, names: list[str]) -> str | None:
+    """A zero-row query over the view's first measure or dimension."""
+    relation = relation_reference(model, names)
+    if model.metrics:
+        return (
+            f"SELECT MEASURE({_quote(model.metrics[0].name)}) FROM {relation} LIMIT 0"
+        )
+    if model.dimensions:
+        return f"SELECT {_quote(model.dimensions[0].name)} FROM {relation} LIMIT 0"
+    return None
+
+
+def associated_models(
+    backend: Any,
+    relations: dict[str, Any],
+    validate: list[str],
+    loaded: dict[str, SemanticModel],
+    exclude: list[str] | None,
+) -> dict[str, SemanticModel]:
+    """The metric views over the exactly named relations that those cover.
+
+    Databricks identifiers compare without regard to case.
+    """
+    from ._core import Selector, check_object_limit, excluded
+    from ._databricks import list_relations
+
+    seeds = [relations[label] for label in validate if label in relations]
+    namespaces = list(
+        dict.fromkeys(
+            (r.identity.catalog, r.identity.schema)
+            for r in seeds
+            if r.kind is not None
+            and r.identity is not None
+            and all((r.identity.catalog, r.identity.schema, r.identity.table))
+        )
+    )
+    if not namespaces:
+        return {}
+    candidates = [
+        relation
+        for catalog, schema in namespaces
+        for relation in list_relations(
+            backend, Selector(catalog=catalog, schema=schema)
+        )
+        if relation.kind == "metric_view"
+    ]
+    hidden = excluded([c.id.table for c in candidates], exclude)
+    taken = {semantic_key(m.identity or m.id, BACKEND) for m in loaded.values()}
+    unique: dict[tuple[str, ...], Any] = {}
+    for candidate, drop in zip(candidates, hidden):
+        key = semantic_key(candidate.id, BACKEND)
+        if not drop and key not in taken and key not in unique:
+            unique[key] = candidate
+    check_object_limit(len(relations) + len(loaded) + len(unique))
+
+    selected = {semantic_key(r.identity or r.id, BACKEND) for r in relations.values()}
+    models: dict[str, SemanticModel] = {}
+    for view in unique.values():
+        try:
+            model = read_semantic_model(backend, view)
+        except Exception:  # noqa: BLE001, S112 - an unreadable view is left out
+            continue
+        if isinstance(model, Unsupported):
+            continue
+        if not model.dependencies_complete or not model.dependencies:
+            continue
+        if all(semantic_key(d, BACKEND) in selected for d in model.dependencies):
+            models[model.id.label] = model
+    return models

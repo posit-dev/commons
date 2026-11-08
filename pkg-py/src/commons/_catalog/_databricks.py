@@ -128,7 +128,32 @@ def _list_unity_relations(backend: Any, selector: Selector) -> list[Relation]:
         + " AND ".join(predicates)
         + " ORDER BY table_catalog, table_schema, table_name"
     )
-    return relations_from_information_schema(rows)
+    return relations_from_information_schema(
+        rows, _object_types(backend, selector, rows)
+    )
+
+
+def _object_types(
+    backend: Any, selector: Selector, rows: list[dict[str, Any]]
+) -> dict[tuple[str, str], str] | None:
+    """Table metadata types for the schemas whose rows could be metric views."""
+    table_types = getattr(backend, "table_types", None)
+    if table_types is None:
+        return None
+    schemas = list(
+        dict.fromkeys(
+            str(row["table_schema"])
+            for row in map(_lower_keys, rows)
+            if any(
+                word in str(row.get("table_type") or "").lower()
+                for word in ("view", "metric")
+            )
+        )
+    )
+    found: dict[tuple[str, str], str] = {}
+    for schema in schemas:
+        found.update(table_types(selector.catalog or "", schema) or {})
+    return found
 
 
 def _list_hive_relations(backend: Any, selector: Selector) -> list[Relation]:

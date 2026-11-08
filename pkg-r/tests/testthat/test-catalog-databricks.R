@@ -716,3 +716,29 @@ test_that("Databricks relation kinds follow the shared fixture", {
     )
   }
 })
+
+test_that("Databricks metric view selection follows the shared fixture", {
+  section <- shared_fixture("databricks-metric-views")$selection
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    local_mocked_bindings(
+      dbGetQuery = fixture_databricks_reply(section$warehouse),
+      .package = "DBI"
+    )
+    result <- tryCatch(
+      databricks_table_registry(
+        DBI::ANSI(),
+        if (is.null(case$tables)) NULL else unlist(case$tables),
+        exclude = unlist(case$exclude)
+      ),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(result, case$expected, info = case$name)
+      next
+    }
+    expect_equal(as.list(result$labels), case$expected$tables, info = case$name)
+    expect_equal(as.list(names(result$semantic_models)), case$expected$models, info = case$name)
+    expect_equal(as.list(names(result$semantic_stubs)), case$expected$stubs, info = case$name)
+  }
+})

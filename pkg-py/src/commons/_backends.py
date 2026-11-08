@@ -208,6 +208,27 @@ class EngineBackend:
     def dialect(self) -> str:
         return self._engine.dialect.name
 
+    def table_types(self, catalog: str, schema: str | None) -> dict[tuple[str, str], str] | None:
+        """Each table's type as Databricks' table metadata reports it.
+
+        `information_schema` can report a metric view as a plain view; the
+        connector's table metadata names it. None off Databricks, or when the
+        metadata cannot be read.
+        """
+        if self.dialect() != "databricks":
+            return None
+        try:
+            with self._engine.connect() as connection:
+                cursor = connection.connection.cursor()
+                try:
+                    cursor.tables(catalog_name=catalog, schema_name=schema)
+                    rows = cursor.fetchall()
+                finally:
+                    cursor.close()
+        except Exception:  # noqa: BLE001 - the table type is the fallback
+            return None
+        return {(str(row[1]), str(row[2])): str(row[3]) for row in rows}
+
     def inspector(self) -> Callable[[TableId], bool] | None:
         inspector = sqlalchemy.inspect(self._engine)
 
