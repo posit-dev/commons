@@ -81,3 +81,48 @@ expect_fixture_error <- function(err, expected, info = NULL) {
     expect_true(grepl(mention, message, fixed = TRUE), info = paste(info, mention))
   }
 }
+
+# A dbGetQuery stand-in answering a Snowflake catalog listing from a shared
+# fixture's `warehouse`: relations and semantic views, all in ANALYTICS.PUBLIC.
+fixture_snowflake_reply <- function(warehouse) {
+  views <- warehouse$semantic_views %||% list()
+  relations <- unlist(warehouse$relations %||% list())
+  like <- function(sql) {
+    match <- regmatches(sql, regexec("LIKE '([^']*)'", sql))[[1]]
+    if (length(match)) match[[2]] else NULL
+  }
+  function(con, sql, ...) {
+    if (startsWith(sql, "SELECT CURRENT_DATABASE()")) {
+      return(data.frame(CATALOG = "ANALYTICS", SCHEMA = "PUBLIC"))
+    }
+    if (startsWith(sql, "SHOW OBJECTS")) {
+      names <- relations
+      if (!is.null(like(sql))) names <- intersect(names, like(sql))
+      return(data.frame(
+        name = names,
+        database_name = rep("ANALYTICS", length(names)),
+        schema_name = rep("PUBLIC", length(names)),
+        kind = rep("TABLE", length(names)),
+        comment = rep("", length(names))
+      ))
+    }
+    if (startsWith(sql, "SHOW SEMANTIC VIEWS")) {
+      if (isTRUE(warehouse$semantic_listing_fails)) {
+        stop("SHOW SEMANTIC VIEWS is not authorized")
+      }
+      names <- names(views)
+      if (!is.null(like(sql))) names <- intersect(names, like(sql))
+      return(data.frame(
+        name = names,
+        database_name = rep("ANALYTICS", length(names)),
+        schema_name = rep("PUBLIC", length(names)),
+        comment = rep("", length(names))
+      ))
+    }
+    if (startsWith(sql, "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW")) {
+      name <- sub('.*"([^"]*)"\'\\).*', "\\1", sql)
+      return(data.frame(specification = views[[name]]))
+    }
+    stop("unexpected query: ", sql)
+  }
+}

@@ -766,3 +766,39 @@ test_that("Snowflake SEMANTIC_VIEW queries compile as the shared fixture says", 
     }
   }
 })
+
+test_that("Snowflake semantic view selection follows the shared fixture", {
+  section <- shared_fixture("snowflake-semantic-views")$selection
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    warehouse <- section$warehouse
+    warehouse$semantic_listing_fails <- case$semantic_listing_fails
+    local_mocked_bindings(
+      dbGetQuery = fixture_snowflake_reply(warehouse),
+      .package = "DBI"
+    )
+    result <- tryCatch(
+      snowflake_table_registry(
+        DBI::ANSI(),
+        if (is.null(case$tables)) NULL else unlist(case$tables),
+        exclude = unlist(case$exclude)
+      ),
+      error = function(err) err
+    )
+    if (!is.null(case$expected$error)) {
+      expect_fixture_error(result, case$expected, info = case$name)
+      next
+    }
+    expect_equal(as.list(result$labels), case$expected$tables, info = case$name)
+    expect_equal(
+      as.list(names(result$semantic_models)),
+      case$expected$models,
+      info = case$name
+    )
+    expect_equal(
+      as.list(names(result$semantic_stubs)),
+      case$expected$stubs,
+      info = case$name
+    )
+  }
+})

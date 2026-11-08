@@ -10,6 +10,8 @@ answer different queries because the two readers ask different ones, and a
 fake that answered both would hide a reader wired to the wrong warehouse.
 """
 
+import re
+
 from commons._catalog import MergedDictionary, Relation, merge_dictionary
 from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
@@ -161,7 +163,7 @@ class FakeWarehouse(_Recorder):
                 if f"'{name}'" in sql or "LIKE" not in sql
             ]
         if sql.startswith("SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW"):
-            name = sql.split('"."')[-1].split('"')[0]
+            name = re.findall(r'"([^"]*)"', sql)[-1]
             self.yaml_reads.append(name)
             return [{"SPECIFICATION": self.semantic_views[name]}]
         if sql.startswith("SELECT * FROM"):

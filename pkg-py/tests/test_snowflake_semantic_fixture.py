@@ -145,3 +145,28 @@ def test_metric_sql() -> None:
             continue
         assert "sql" in case["expected"], case["name"]
         assert re.sub(r":p\d+", "?", sql) == case["expected"]["sql"], case["name"]
+
+
+@pytest.mark.parametrize("case", cases("selection"), ids=lambda c: c["name"])
+def test_selection(case: dict[str, Any]) -> None:
+    from commons._catalog._import import import_catalog
+
+    from ._semantic_fixture import assert_fixture_error
+    from ._warehouse import FakeWarehouse
+
+    warehouse = SPEC["selection"]["warehouse"]
+    backend = FakeWarehouse(
+        relations=warehouse["relations"],
+        semantic_views=warehouse["semantic_views"],
+        semantic_listing_fails=bool(case.get("semantic_listing_fails")),
+    )
+    expected = case["expected"]
+    if "error" in expected:
+        with pytest.raises(ValueError) as raised:
+            import_catalog(backend, case["tables"], case.get("exclude"))
+        assert_fixture_error(raised.value, expected)
+        return
+    imported = import_catalog(backend, case["tables"], case.get("exclude"))
+    assert imported.tables == expected["tables"]
+    assert list(imported.semantic_models) == expected["models"]
+    assert list(imported.semantic_stubs) == expected["stubs"]

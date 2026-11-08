@@ -841,5 +841,169 @@
         }
       }
     ]
+  },
+  "selection": {
+    "description": "Which semantic views a `tables` selection reads up front, which it leaves as stubs, and which relations remain tables. A view an entry names exactly is read up front and keeps the label it was named by, and one that cannot be used fails the selection. A namespace's views are stubs, read only when inspected or used, so one that cannot be used is found out then. A view over exactly named relations is read up front when those relations include every table it reads, and is skipped quietly when it cannot be read or used. `exclude` drops views by name, and a listing that fails lists no views. `warehouse` is the catalog every case reads, all in ANALYTICS.PUBLIC, whose current namespace it is.",
+    "warehouse": {
+      "relations": [
+        "SALES",
+        "ORDERS"
+      ],
+      "semantic_views": {
+        "REVENUE_MODEL": "name: revenue\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n",
+        "ACROSS_MODEL": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n  - name: sales\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: SALES}\n",
+        "PAYLOAD_MODEL": "variables:\n  - name: payload\n    data_type: VARIANT\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n"
+      }
+    },
+    "cases": [
+      {
+        "name": "a namespace's views are stubs, including one that could not be used",
+        "tables": null,
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.SALES",
+            "ANALYTICS.PUBLIC.ORDERS"
+          ],
+          "models": [],
+          "stubs": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL",
+            "ANALYTICS.PUBLIC.ACROSS_MODEL",
+            "ANALYTICS.PUBLIC.PAYLOAD_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "an exact view is read",
+        "tables": [
+          "ANALYTICS.PUBLIC.REVENUE_MODEL"
+        ],
+        "expected": {
+          "tables": [],
+          "models": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "a bare view name keeps the label it was named by",
+        "tables": [
+          "REVENUE_MODEL"
+        ],
+        "expected": {
+          "tables": [],
+          "models": [
+            "REVENUE_MODEL"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "views over an exact relation are brought in when it covers every table they read",
+        "tables": [
+          "ANALYTICS.PUBLIC.ORDERS"
+        ],
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.ORDERS"
+          ],
+          "models": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "a view over two tables needs both selected",
+        "tables": [
+          "ANALYTICS.PUBLIC.ORDERS",
+          "ANALYTICS.PUBLIC.SALES"
+        ],
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.ORDERS",
+            "ANALYTICS.PUBLIC.SALES"
+          ],
+          "models": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL",
+            "ANALYTICS.PUBLIC.ACROSS_MODEL"
+          ],
+          "stubs": []
+        }
+      },
+      {
+        "name": "exclude drops listed views",
+        "exclude": [
+          "REVENUE*",
+          "PAY*"
+        ],
+        "tables": null,
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.SALES",
+            "ANALYTICS.PUBLIC.ORDERS"
+          ],
+          "models": [],
+          "stubs": [
+            "ANALYTICS.PUBLIC.ACROSS_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "exclude drops associated views",
+        "tables": [
+          "ANALYTICS.PUBLIC.ORDERS"
+        ],
+        "exclude": [
+          "REVENUE*"
+        ],
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.ORDERS"
+          ],
+          "models": [],
+          "stubs": []
+        }
+      },
+      {
+        "name": "a failed listing lists no views",
+        "semantic_listing_fails": true,
+        "tables": null,
+        "expected": {
+          "tables": [
+            "ANALYTICS.PUBLIC.SALES",
+            "ANALYTICS.PUBLIC.ORDERS"
+          ],
+          "models": [],
+          "stubs": []
+        }
+      },
+      {
+        "name": "an exact view that cannot be used fails the selection",
+        "tables": [
+          "ANALYTICS.PUBLIC.PAYLOAD_MODEL"
+        ],
+        "expected": {
+          "error": "unsupported",
+          "mentions": [
+            "ANALYTICS.PUBLIC.PAYLOAD_MODEL",
+            "VARIANT"
+          ]
+        }
+      },
+      {
+        "name": "a view named twice fails the selection",
+        "tables": [
+          "ANALYTICS.PUBLIC.REVENUE_MODEL",
+          "ANALYTICS.PUBLIC.REVENUE_MODEL"
+        ],
+        "expected": {
+          "error": "duplicate",
+          "mentions": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          ]
+        }
+      }
+    ]
   }
 }
