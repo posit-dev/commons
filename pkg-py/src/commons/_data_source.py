@@ -17,7 +17,7 @@ import sqlalchemy
 from . import _duckdb
 from ._backends import Backend, DuckDBBackend, EngineBackend
 from ._frames import is_frame
-from ._sql_guard import check_query
+from ._sql_guard import check_query, is_single_select
 
 if TYPE_CHECKING:
     from ._catalog import Manifest, Relation, SessionSnapshot
@@ -326,8 +326,7 @@ class DataSource:
         from ._catalog import check_session
 
         check_session(self.backend, self.session)
-        statement = sql.strip().removesuffix(";")
-        if ";" in statement or not statement.upper().startswith("SELECT"):
+        if not is_single_select(sql, dialect=self.backend.dialect()):
             raise ValueError("Only a single read-only SELECT statement is allowed.")
         if params:
             return self.backend.query(sql, params)

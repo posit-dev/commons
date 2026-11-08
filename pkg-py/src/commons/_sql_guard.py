@@ -19,8 +19,9 @@ from __future__ import annotations
 import sqlglot
 import sqlglot.errors
 from sqlglot import expressions as exp
+from sqlglot.tokens import TokenType
 
-__all__ = ["check_query", "sqlglot_dialect"]
+__all__ = ["check_query", "is_single_select", "sqlglot_dialect"]
 
 # Statement forms that only read. A set operation carries its branches, and
 # sqlglot parses a leading CTE list onto the statement it belongs to, so
@@ -139,3 +140,20 @@ def _operation_name(statement: sqlglot.Expr) -> str | None:
         this = statement.this
         return str(this).upper() if this else None
     return statement.key.upper()
+
+
+def is_single_select(sql: str, dialect: str | None = None) -> bool:
+    """Whether `sql` is one statement that starts with SELECT.
+
+    A structural check from the tokens alone, so it holds for SQL the parser
+    does not know (Snowflake's `VARIABLES`) while still seeing a semicolon
+    inside a quoted literal or identifier for what it is.
+    """
+    tokens = sqlglot.tokenize(sql, read=sqlglot_dialect(dialect))
+    while tokens and tokens[-1].token_type == TokenType.SEMICOLON:
+        tokens.pop()
+    return (
+        bool(tokens)
+        and tokens[0].token_type == TokenType.SELECT
+        and all(token.token_type != TokenType.SEMICOLON for token in tokens)
+    )

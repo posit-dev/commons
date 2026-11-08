@@ -63,3 +63,12 @@ def test_compiled_query_skips_the_parse_but_not_the_select_check(
     for sql in ("DELETE FROM sales", "SELECT 1; DELETE FROM sales"):
         with pytest.raises(ValueError, match="read-only"):
             source._query_compiled(sql)
+
+
+def test_compiled_query_allows_a_semicolon_inside_a_literal(
+    engine: sqlalchemy.Engine,
+) -> None:
+    source = data_source(engine, tables=["sales"])
+    assert source._query_compiled(
+        "SELECT 'a;b' AS v, \"n\" FROM sales WHERE n = 1"
+    ) == [{"v": "a;b", "n": 1}]
