@@ -23,6 +23,7 @@ __all__ = [
     "databricks_relation_row",
     "merge_shared_case",
     "relation_row",
+    "semantic_view_row",
 ]
 
 
@@ -43,6 +44,16 @@ def _shape(backend: str, group: str, accept) -> dict:
 def relation_row(name: str, catalog: str = "ANALYTICS", schema: str = "PUBLIC") -> dict:
     row = _shape("snowflake", "relations", lambda row: row["kind"] == "TABLE")
     row.update(name=name, database_name=catalog, schema_name=schema, comment="")
+    return row
+
+
+def semantic_view_row(
+    name: str, catalog: str = "ANALYTICS", schema: str = "PUBLIC"
+) -> dict:
+    """A `SHOW SEMANTIC VIEWS` row, shaped like the shared fixture's."""
+    case = load_shared_fixture("snowflake-semantic-views")["show_rows"]["cases"][0]
+    row = dict(case["rows"][0])
+    row.update(name=name, database_name=catalog, schema_name=schema)
     return row
 
 
@@ -99,13 +110,24 @@ class FakeWarehouse(_Recorder):
     """A Snowflake standing in for the network, answering from canned rows."""
 
     def __init__(
-        self, dialect="snowflake", relations=None, role="REPORTER", columns=("ID",)
+        self,
+        dialect="snowflake",
+        relations=None,
+        role="REPORTER",
+        columns=("ID",),
+        semantic_views=None,
+        semantic_listing_fails=False,
     ):
         super().__init__()
         self._dialect = dialect
         self._relations = relations if relations is not None else ["SALES", "ORDERS"]
         self._columns = list(columns)
         self.role = role
+        # View name to the YAML specification Snowflake returns for it, all in
+        # ANALYTICS.PUBLIC.
+        self.semantic_views = dict(semantic_views or {})
+        self.semantic_listing_fails = semantic_listing_fails
+        self.yaml_reads: list[str] = []
 
     def query(self, sql: str, params=None):
         self.queries.append(sql)
@@ -130,6 +152,18 @@ class FakeWarehouse(_Recorder):
             ]
         if sql.startswith("DESC TABLE"):
             return [column_row(name) for name in self._columns]
+        if sql.startswith("SHOW SEMANTIC VIEWS"):
+            if self.semantic_listing_fails:
+                raise PermissionError("SHOW SEMANTIC VIEWS is not authorized")
+            return [
+                semantic_view_row(name)
+                for name in self.semantic_views
+                if f"'{name}'" in sql or "LIKE" not in sql
+            ]
+        if sql.startswith("SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW"):
+            name = sql.split('"."')[-1].split('"')[0]
+            self.yaml_reads.append(name)
+            return [{"SPECIFICATION": self.semantic_views[name]}]
         if sql.startswith("SELECT * FROM"):
             return self._probe(sql)
         raise AssertionError(f"unexpected query: {sql}")

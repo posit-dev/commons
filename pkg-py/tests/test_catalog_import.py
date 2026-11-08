@@ -136,7 +136,9 @@ def _kinds(queries: list[str]) -> list[str]:
             steps.append("session")
         elif sql.startswith(("SELECT CURRENT_DATABASE()", "SELECT CURRENT_CATALOG()")):
             steps.append("namespace")
-        elif sql.startswith("SHOW OBJECTS") or "information_schema.tables" in sql:
+        elif sql.startswith(("SHOW OBJECTS", "SHOW SEMANTIC VIEWS")) or (
+            "information_schema.tables" in sql
+        ):
             steps.append("list")
         elif (
             sql.startswith(("DESC TABLE", "DESCRIBE TABLE"))
@@ -272,8 +274,6 @@ def test_excluding_a_name_the_warehouse_never_had_does_not_blame_exclude():
     # The relation was absent, not dropped, so exclude is not the reason
     # there is nothing left to expose.
     with pytest.raises(ValueError, match="contains no objects") as refusal:
-        import_catalog(
-            FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING", exclude=["MISSING"]
-        )
+        import_catalog(FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING", exclude=["MISSING"])
 
     assert "dropped every relation" not in str(refusal.value)

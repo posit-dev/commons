@@ -654,6 +654,10 @@ def _catalog_search(
 
 def _queryable(source: DataSource, manifest: Manifest) -> Callable[[str], bool]:
     def queryable(label: str) -> bool:
+        # A semantic view is not a relation a zero-row select can probe; its
+        # access is checked when it is read.
+        if label in source.semantic_stubs:
+            return True
         relation = manifest.objects[label]
         try:
             ensure_queryable(

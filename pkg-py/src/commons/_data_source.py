@@ -22,6 +22,7 @@ from ._sql_guard import check_query
 if TYPE_CHECKING:
     from ._catalog import Manifest, Relation, SessionSnapshot
     from ._data_dictionary import DataDictionary
+    from ._semantic_models import SemanticModel, SemanticStub
 
 __all__ = ["DataSource", "TableId", "data_source", "list_tables"]
 
@@ -128,6 +129,10 @@ class DataSource:
     manifest: Manifest | None = None
     session: SessionSnapshot | None = None
     definition_bindings: dict[str, Any] | None = None
+    # A warehouse's own semantic models, by label: read ones, and ones listed
+    # but not read until they are inspected or used.
+    semantic_models: dict[str, SemanticModel] = field(default_factory=dict)
+    semantic_stubs: dict[str, SemanticStub] = field(default_factory=dict)
 
     @classmethod
     def from_frames(cls, **frames: Any) -> DataSource:
@@ -237,6 +242,8 @@ class DataSource:
             manifest=imported.manifest,
             session=imported.session,
             definition_bindings=imported.definition_bindings,
+            semantic_models=imported.semantic_models,
+            semantic_stubs=imported.semantic_stubs,
         )
 
     @classmethod

@@ -8,27 +8,49 @@ without I/O; tests/shared/snowflake-semantic-views.json pins what they read.
 from __future__ import annotations
 
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
+
+import yaml
 
 from .._data_source import TableId
 from .._semantic_models import (
     SemanticMember,
     SemanticModel,
     SemanticStub,
+    UnsupportedSemanticParameter,
     members_context,
     parameters_from_spec,
     spec_entries,
 )
+from ._core import Relation, Selector, check_object_limit, excluded, id_type
+from ._snowflake import (
+    _namespace_target,
+    _quote,
+    _quote_path,
+    _quote_string,
+    check_show_complete,
+    current_namespace,
+)
 
 __all__ = [
     "BACKEND",
+    "SemanticSelection",
+    "Unsupported",
+    "associated_models",
     "dependencies",
+    "exact_semantic_view",
+    "list_semantic_views",
+    "member_reference",
     "model_from_spec",
+    "probe_sql",
+    "read_semantic_model",
     "relationship_text",
+    "select_semantic_views",
     "semantic_context",
     "semantic_views_from_show",
     "sql_type",
+    "variables_clause",
     "yaml_identifier",
 ]
 
@@ -219,3 +241,247 @@ def model_from_spec(
         first_touch=context,
         retrieval=list(context),
     )
+
+
+@dataclass(frozen=True)
+class Unsupported:
+    """A view whose specification commons cannot use, and why."""
+
+    id: TableId
+    reason: str
+
+
+def list_semantic_views(
+    backend: Any, selector: Selector, name: str | None = None
+) -> list[SemanticStub]:
+    """The views in a namespace, or none when the listing itself fails.
+
+    Missing semantic metadata, or a role without the privilege to list it,
+    must not block ordinary relation discovery.
+    """
+    like = f"LIKE {_quote_string(name)} " if name is not None else ""
+    try:
+        rows = backend.query(f"SHOW SEMANTIC VIEWS {like}{_namespace_target(selector)}")
+    except Exception:  # noqa: BLE001 - an unreadable listing lists nothing
+        return []
+    check_show_complete(rows, "semantic views")
+    return semantic_views_from_show(rows)
+
+
+def exact_semantic_view(backend: Any, selector: Selector) -> SemanticStub | None:
+    """The view a relation entry names, if it names one.
+
+    The stub keeps the id the caller wrote, which is its label, and the
+    warehouse's own id as its identity.
+    """
+    catalog, schema = selector.catalog, selector.schema
+    if catalog is None or schema is None:
+        current = current_namespace(backend)
+        catalog = catalog if catalog is not None else current.catalog
+        schema = schema if schema is not None else current.schema
+    for view in list_semantic_views(
+        backend, Selector(catalog=catalog, schema=schema), name=selector.table
+    ):
+        if view.id.table == selector.table:
+            return replace(view, id=_selector_id(selector), identity=view.id)
+    return None
+
+
+def read_semantic_model(
+    backend: Any, view: SemanticStub
+) -> SemanticModel | Unsupported:
+    """Read a view's specification. Raises when it cannot be read at all."""
+    label = _quote_path(view.id.parts)
+    sql = (
+        f"SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW({_quote_string(label)}) "
+        "AS specification"
+    )
+    try:
+        rows = backend.query(sql)
+        text = next(iter(rows[0].values()))
+    except Exception as error:
+        raise ValueError(
+            f"Failed to read Snowflake semantic view {label!r}."
+        ) from error
+    try:
+        spec = yaml.safe_load(text)
+    except yaml.YAMLError as error:
+        raise ValueError(
+            f"Snowflake semantic view {label!r} returned invalid YAML."
+        ) from error
+    try:
+        model = model_from_spec(view.id, spec, description=view.description)
+    except UnsupportedSemanticParameter as error:
+        return Unsupported(view.id, str(error))
+    model.identity = view.identity or view.id
+    return model
+
+
+def member_reference(member: Any) -> str:
+    """A member as SEMANTIC_VIEW names it: its logical table, then its name.
+
+    Takes anything with `name` and `parent`, so a model's member and a
+    registry row both qualify.
+    """
+    if not member.parent:
+        return _quote(member.name)
+    return _quote_path([member.parent, member.name])
+
+
+def variables_clause(
+    model: SemanticModel, names: list[str]
+) -> tuple[str, dict[str, str]]:
+    """`VARIABLES` for the named parameters, and the bind name each takes.
+
+    Snowflake rejects a value of the wrong type, so each bind is cast to the
+    type the view declares when that type is safe to splice.
+    """
+    binds: dict[str, str] = {}
+    entries = []
+    for index, name in enumerate(names):
+        bind = f"p{index}"
+        binds[name] = bind
+        declared = model.parameters[name].sql_type
+        value = f"CAST(:{bind} AS {declared})" if declared else f":{bind}"
+        entries.append(f"{_quote(name)} => {value}")
+    return "VARIABLES " + ", ".join(entries), binds
+
+
+def probe_sql(model: SemanticModel, names: list[str]) -> str | None:
+    """A zero-row query over the view's first public member, if it has one."""
+    for role, members in (
+        ("METRICS", model.metrics),
+        ("DIMENSIONS", model.dimensions),
+        ("FACTS", model.facts),
+    ):
+        if members:
+            break
+    else:
+        return None
+    variables = ""
+    if names:
+        clause, _ = variables_clause(model, names)
+        variables = f"\n  {clause}"
+    return (
+        f"SELECT * FROM SEMANTIC_VIEW(\n  {_quote_path(model.id.parts)}"
+        f"\n  {role} {member_reference(members[0])}{variables}\n)\nLIMIT 0"
+    )
+
+
+@dataclass
+class SemanticSelection:
+    """What a `tables` selection says about semantic views."""
+
+    # Every view the selection reaches, by label.
+    views: dict[str, SemanticStub]
+    # The views an entry named exactly, which are read and probed up front.
+    validate: list[str]
+    # The selection without the entries that named a view.
+    relation_selectors: list[Selector]
+
+
+def _selector_id(selector: Selector) -> TableId:
+    return TableId(
+        table=selector.table or "", schema=selector.schema, catalog=selector.catalog
+    )
+
+
+def select_semantic_views(
+    backend: Any, selectors: list[Selector], exclude: list[str] | None
+) -> SemanticSelection:
+    views: list[SemanticStub] = []
+    for selector in selectors:
+        if id_type(selector) == "namespace":
+            views += list_semantic_views(backend, selector)
+        else:
+            view = exact_semantic_view(backend, selector)
+            if view is not None:
+                views.append(view)
+    hidden = excluded([view.id.table for view in views], exclude)
+    views = [view for view, drop in zip(views, hidden) if not drop]
+    labels = [view.id.label for view in views]
+    duplicated = list(
+        dict.fromkeys(label for label in labels if labels.count(label) > 1)
+    )
+    if duplicated:
+        listed = ", ".join(repr(label) for label in duplicated)
+        raise ValueError(f"tables must not select duplicate semantic models: {listed}.")
+    exact = {
+        _selector_id(selector).label
+        for selector in selectors
+        if id_type(selector) == "relation"
+    }
+    return SemanticSelection(
+        views=dict(zip(labels, views)),
+        validate=[label for label in labels if label in exact],
+        relation_selectors=[
+            selector
+            for selector in selectors
+            if id_type(selector) == "namespace"
+            or _selector_id(selector).label not in labels
+        ],
+    )
+
+
+def _seed(relation: Relation) -> bool:
+    identity = relation.identity
+    return (
+        relation.kind is not None
+        and identity is not None
+        and all((identity.catalog, identity.schema, identity.table))
+    )
+
+
+def associated_models(
+    backend: Any,
+    relations: dict[str, Relation],
+    validate: list[str],
+    loaded: dict[str, SemanticModel],
+    exclude: list[str] | None,
+) -> dict[str, SemanticModel]:
+    """The views over the exactly named relations that those relations cover.
+
+    A view is brought in only when every table it reads is selected, so a
+    model never reaches a table the caller left out. One that cannot be read
+    or used is skipped rather than failing a selection that never named it.
+    """
+    seeds = [relations[label] for label in validate if label in relations]
+    namespaces = list(
+        dict.fromkeys(
+            (relation.identity.catalog, relation.identity.schema)
+            for relation in seeds
+            if _seed(relation) and relation.identity is not None
+        )
+    )
+    if not namespaces:
+        return {}
+    views = [
+        view
+        for catalog, schema in namespaces
+        for view in list_semantic_views(
+            backend, Selector(catalog=catalog, schema=schema)
+        )
+    ]
+    hidden = excluded([view.id.table for view in views], exclude)
+    taken = {model.identity or model.id for model in loaded.values()}
+    unique: dict[TableId, SemanticStub] = {}
+    for view, drop in zip(views, hidden):
+        key = view.identity or view.id
+        if not drop and key not in taken and key not in unique:
+            unique[key] = view
+    check_object_limit(len(relations) + len(loaded) + len(unique))
+
+    selected = {relation.identity or relation.id for relation in relations.values()}
+    models: dict[str, SemanticModel] = {}
+    for view in unique.values():
+        try:
+            model = read_semantic_model(backend, view)
+        except Exception:  # noqa: BLE001, S112 - an unreadable view is left out
+            continue
+        if isinstance(model, Unsupported):
+            continue
+        if not model.dependencies_complete or not model.dependencies:
+            continue
+        if all(dependency in selected for dependency in model.dependencies):
+            models[model.id.label] = model
+    return models
