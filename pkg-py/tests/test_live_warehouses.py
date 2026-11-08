@@ -353,3 +353,18 @@ def test_live_snowflake_hydrates_a_namespace_stub():
 
     assert view.label in source.semantic_models
     assert result.extra[TAG_EXTRA_KEY] == Tag.A
+
+
+def test_live_snowflake_executes_an_imported_verified_query():
+    from commons._pool import call_calculation
+    from commons._semantic_models import calculations_registry
+
+    live = require_live_warehouse("snowflake")
+    view = live.fixture_table_id("verified_query_view")
+    source = _semantic_source(live, view.label)
+    calculations = calculations_registry({"snowflake": source})
+    assert calculations
+
+    result = call_calculation(source, "snowflake", None, calculations[0].key)
+
+    assert result.extra[TAG_EXTRA_KEY] == Tag.A
