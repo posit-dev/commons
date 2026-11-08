@@ -385,13 +385,14 @@ def test_live_databricks_binds_native_metric_view_parameters():
     from commons._handles import HandleStore
     from commons._pool import call_metrics
 
+    handles, defaults = HandleStore(), HandleStore()
+    metric = [model.metrics[0].name]
     result = call_metrics(
-        Registry(),
-        source,
-        "databricks",
-        HandleStore(),
-        metrics=[model.metrics[0].name],
-        arguments=arguments,
+        Registry(), source, "databricks", handles, metrics=metric, arguments=arguments
     )
+    call_metrics(Registry(), source, "databricks", defaults, metrics=metric)
 
     assert result.extra[TAG_EXTRA_KEY] == Tag.A
+    # The configured arguments differ from the view's defaults, so a value
+    # that was not bound would answer as the defaults do.
+    assert not handles.get("r1").equals(defaults.get("r1"))
