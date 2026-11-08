@@ -99,4 +99,9 @@ def test_the_env_example_names_every_fixture_variable() -> None:
     required, optional = _fixture_variables()
 
     assert set(active) == required
-    assert set(commented) == optional
+    # The fixture owns the COMMONS_TEST_ names; vendor credentials it leaves
+    # to the vendor's own authentication may appear as extras.
+    assert optional <= set(commented)
+    assert not {
+        name for name in set(commented) - optional if name.startswith("COMMONS_TEST_")
+    }
