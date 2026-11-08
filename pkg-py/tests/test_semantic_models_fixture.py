@@ -161,7 +161,7 @@ def test_description_text(case: dict[str, Any]) -> None:
     assert description_text(described) == case["text"]
 
 
-@pytest.mark.parametrize("case", SPEC["first_touch"]["cases"], ids=lambda c: c["table"])
+@pytest.mark.parametrize("case", cases("first_touch"), ids=lambda c: c["table"])
 def test_first_touch(case: dict[str, Any]) -> None:
     from commons._catalog import Relation
     from commons._data_source import TableId
