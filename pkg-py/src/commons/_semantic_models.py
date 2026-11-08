@@ -46,6 +46,8 @@ class TypedParameter:
     def __post_init__(self) -> None:
         if self.type not in _TYPES:
             raise ValueError(f"Parameter {self.name!r} has unknown type {self.type!r}.")
+        if self.has_default:
+            _check_value(self.name, self.default, self.type)
 
 
 def _context(values: list[str]) -> list[str]:
@@ -146,7 +148,7 @@ def _coerce_default(value: Any, type_: str) -> Any:
     if type_ in ("integer", "number"):
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             return math.nan
     if type_ == "logical":
         if isinstance(value, bool):
@@ -224,11 +226,11 @@ def _valid_datetime(value: str) -> bool:
 
 
 def _is_number(value: Any) -> bool:
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, float) and math.isfinite(value)
 
 
 def _is_valid(value: Any, type_: str) -> bool:
@@ -243,6 +245,18 @@ def _is_valid(value: Any, type_: str) -> bool:
     if type_ == "date":
         return isinstance(value, str) and _valid_date(value)
     return isinstance(value, str) and _valid_datetime(value)
+
+
+def _check_value(name: str, value: Any, type_: str) -> None:
+    if (
+        value is None
+        or isinstance(value, (list, tuple, dict, set))
+        or (isinstance(value, float) and math.isnan(value))
+    ):
+        raise ValueError(f"Argument {name!r} must be one non-missing value.")
+    if not _is_valid(value, type_):
+        article = "an" if type_ == "integer" else "a"
+        raise ValueError(f"Argument {name!r} must be {article} {type_} value.")
 
 
 def validate_arguments(
@@ -268,14 +282,6 @@ def validate_arguments(
         if name not in supplied:
             continue
         value = supplied[name]
-        if (
-            value is None
-            or isinstance(value, (list, tuple, dict, set))
-            or (isinstance(value, float) and math.isnan(value))
-        ):
-            raise ValueError(f"Argument {name!r} must be one non-missing value.")
-        if not _is_valid(value, spec.type):
-            article = "an" if spec.type == "integer" else "a"
-            raise ValueError(f"Argument {name!r} must be {article} {spec.type} value.")
+        _check_value(name, value, spec.type)
         values[name] = value
     return values

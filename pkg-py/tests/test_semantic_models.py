@@ -115,3 +115,22 @@ def test_model_context_deduplicates():
 def test_stub_kind():
     stub = SemanticStub(id=TableId("v"), backend="snowflake_semantic_view")
     assert stub.kind == "semantic_view"
+
+
+def test_invalid_defaults_raise():
+    for default in (None, "not-a-date", 10**400):
+        with pytest.raises(ValueError, match="'d' must be"):
+            parameters_from_spec(
+                [{"name": "d", "data_type": "DATE", "default_value": default}],
+                "Snowflake",
+            )
+    with pytest.raises(ValueError, match="'n' must be"):
+        parameters_from_spec(
+            [{"name": "n", "data_type": "NUMBER", "default_value": 10**400}],
+            "Snowflake",
+        )
+
+
+def test_huge_integer_argument_is_rejected_not_overflowed():
+    params = parameters_from_spec([{"name": "n", "data_type": "FLOAT"}], "Snowflake")
+    assert validate_arguments(params, {"n": 10**20}) == {"n": 10**20}
