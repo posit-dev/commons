@@ -317,13 +317,14 @@ databricks_relations_from_information_schema <- function(
       rows$table_schema[[i]],
       rows$table_name[[i]]
     )
-    object_type <- unname(object_types[key])
-    if (length(object_type) == 0L || is.na(object_type)) {
-      object_type <- rows$table_type[[i]]
-    }
-    kind <- if (grepl("metric", object_type, ignore.case = TRUE)) {
+    # ODBC reports a Unity Catalog metric view as VIEW, where
+    # information_schema says METRIC_VIEW, so either source naming a metric
+    # view decides.
+    types <- c(rows$table_type[[i]], unname(object_types[key]))
+    types <- types[!is.na(types)]
+    kind <- if (any(grepl("metric", types, ignore.case = TRUE))) {
       "metric_view"
-    } else if (grepl("view", object_type, ignore.case = TRUE)) {
+    } else if (any(grepl("view", types, ignore.case = TRUE))) {
       "view"
     } else {
       "table"

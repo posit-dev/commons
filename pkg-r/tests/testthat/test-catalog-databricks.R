@@ -48,6 +48,25 @@ test_that("Databricks ODBC metadata identifies metric views", {
   expect_equal(relations[[3]]$description, "Governed sales metrics.")
 })
 
+test_that("Databricks information schema identifies a metric view ODBC calls a view", {
+  rows <- data.frame(
+    table_catalog = "main",
+    table_schema = "analytics",
+    table_name = "sales_metrics",
+    table_type = "METRIC_VIEW",
+    comment = "",
+    stringsAsFactors = FALSE
+  )
+  object_types <- stats::setNames(
+    "VIEW",
+    databricks_object_key("analytics", "sales_metrics")
+  )
+
+  relations <- databricks_relations_from_information_schema(rows, object_types)
+
+  expect_equal(relations[[1]]$kind, "metric_view")
+})
+
 test_that("Databricks normalizes information schema names before ODBC lookup", {
   schemas <- NULL
   local_mocked_bindings(
