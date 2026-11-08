@@ -57,8 +57,14 @@ class TrustedCalculation:
     name: str
     description: str
     sql: str
-    # The label of the model that declares it, once it is on a source.
+    # The model that declares it and the source that model is on, once it is
+    # in a registry.
     model: str | None = None
+    source: str | None = None
+
+    @property
+    def key(self) -> str:
+        return f"{self.model}::{self.name}" if self.model else self.name
 
 
 _PLACEHOLDER = re.compile(r"\{\{[^{}]+\}\}")
@@ -406,6 +412,7 @@ class SemanticRegistry:
         default_factory=dict
     )
     stubs: list[StubRow] = field(default_factory=list)
+    calculations: list[TrustedCalculation] = field(default_factory=list)
 
     def for_source(self, source: str) -> list[MemberRow]:
         return [row for row in self.members if row.source == source]
@@ -453,7 +460,46 @@ def semantic_registry(sources: Mapping[str, Any]) -> SemanticRegistry:
                     description=stub.description,
                 )
             )
+    registry.calculations = calculations_registry(sources)
     return registry
+
+
+def calculations_registry(sources: Mapping[str, Any]) -> list[TrustedCalculation]:
+    """Every source's verified queries, each keyed by the model declaring it."""
+    return [
+        replace(calculation, model=model_label, source=source_label)
+        for source_label, source in sources.items()
+        for model_label, model in source.semantic_models.items()
+        for calculation in model.calculations
+    ]
+
+
+def resolve_calculation(
+    calculations: list[TrustedCalculation], name: str, source: str | None = None
+) -> TrustedCalculation:
+    candidates = [
+        calculation
+        for calculation in calculations
+        if (source is None or calculation.source == source)
+        and name in (calculation.name, calculation.key)
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        choices = list(dict.fromkeys(calculation.key for calculation in candidates))
+        raise ValueError(
+            f"Trusted calculation name {name!r} is ambiguous. Use a qualified name: "
+            f"{_vals(choices)}."
+        )
+    available = list(dict.fromkeys(calculation.key for calculation in calculations))
+    if available:
+        raise ValueError(
+            f"No trusted calculation is named {name!r}. "
+            f"Available calculations: {_vals(available)}."
+        )
+    raise ValueError(
+        f"No trusted calculation is named {name!r}. No trusted calculations are defined."
+    )
 
 
 def member_aliases(row: MemberRow) -> list[str]:
@@ -799,6 +845,12 @@ def description_text(described: SemanticDescription) -> str:
     parameters = parameters_pool_text(model.parameters)
     if parameters:
         parts.append(parameters)
+    if model.calculations:
+        parts.append("Verified queries (run with `call_calculation`):")
+        parts += [
+            f"- `{described.name}::{c.name}`: {c.description}"
+            for c in model.calculations
+        ]
     parts += list(dict.fromkeys([*model.first_touch, *model.retrieval]))
     return "\n\n".join(parts)
 
@@ -817,4 +869,18 @@ def semantic_first_touch(source: Any, table: str) -> list[str]:
             for text in model.first_touch
             if text
         )
+    )
+
+
+def calculation_pool_text(
+    calculation: TrustedCalculation, source_names: Sequence[str] = ()
+) -> str:
+    source = (
+        f"\nSource: `{calculation.source}`."
+        if source_names and calculation.source
+        else ""
+    )
+    return (
+        f"### {calculation.key} --- trusted query\n{calculation.description}\n"
+        f"Arguments: none.{source}\nRun with `call_calculation`."
     )

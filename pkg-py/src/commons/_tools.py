@@ -53,7 +53,7 @@ from ._frames import describe_frame, is_frame
 from ._handles import HandleStore
 from ._measure_results import rich_measure_result
 from ._measures import Measure
-from ._pool import call_metrics, search_pool_text
+from ._pool import call_calculation, call_metrics, search_pool_text
 from ._provenance import TAG_EXTRA_KEY, Tag
 from ._rows import frame_rows, render_value, rows_to_markdown
 from ._semantic_models import (
@@ -140,7 +140,9 @@ def pool_searchable(
     cost the model a round trip to confirm what it can already read. A
     warehouse's own semantic members and models are never listed either.
     """
-    has_semantic = semantic is not None and bool(semantic.members or semantic.stubs)
+    has_semantic = semantic is not None and bool(
+        semantic.members or semantic.stubs or semantic.calculations
+    )
     return bool(measures) or index_overflows(definitions) or has_semantic
 
 
@@ -172,6 +174,10 @@ def build_commons_tools(context: ToolContext) -> list[Tool]:
         or semantic.stubs
     ):
         tools.append(_call_metrics(context, semantic))
+    if semantic.calculations or any(
+        row.backend == "snowflake_semantic_view" for row in semantic.stubs
+    ):
+        tools.append(_call_calculation(context))
     if any(catalog_searchable(source) for source in context.sources.values()):
         tools.append(_search_catalog(context))
     tools.extend(
@@ -323,6 +329,8 @@ def _search_pool(context: ToolContext, semantic: SemanticRegistry) -> Tool:
         kinds.append("native semantic-model metrics (run with call_metrics)")
     if semantic.stubs:
         kinds.append("semantic models (inspect with describe_table)")
+    if semantic.calculations:
+        kinds.append("exact trusted queries (run with call_calculation)")
     searched = (
         "trusted calculations and models" if semantic.stubs else "trusted calculations"
     )
@@ -627,6 +635,42 @@ def _call_metrics(context: ToolContext, semantic: SemanticRegistry) -> Tool:
                 ),
             },
             ["metrics"],
+            context.sources,
+        ),
+        TRUSTED_CALL.running,
+    )
+
+
+# ---- call_calculation -----------------------------------------------------
+
+
+def _call_calculation(context: ToolContext) -> Tool:
+    def call_calculation_tool(
+        name: str, arguments: str = "{}", source: str | None = None
+    ) -> ContentToolResult:
+        label, resolved = _resolve_source(context.sources, source)
+        return call_calculation(
+            resolved,
+            label,
+            context.handles,
+            name,
+            arguments=_parse_json_arguments(arguments),
+        )
+
+    return _tool(
+        call_calculation_tool,
+        "call_calculation",
+        "Run an exact trusted query returned by search_pool or describe_table. "
+        "Arguments are validated and bound; identifier arguments accept only the "
+        "values listed by search_pool or describe_table.",
+        _parameters(
+            {
+                "name": _string(
+                    "The calculation name, exactly as returned by search_pool."
+                ),
+                "arguments": _string("A JSON object of the calculation's arguments."),
+            },
+            ["name"],
             context.sources,
         ),
         TRUSTED_CALL.running,

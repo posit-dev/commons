@@ -10,6 +10,7 @@ from commons._semantic_models import (
     SemanticMember,
     SemanticModel,
     SemanticStub,
+    TrustedCalculation,
     TypedParameter,
 )
 
@@ -48,6 +49,10 @@ def fixture_model(
         facts=_members(spec.get("facts", []), "fact"),
         filters=_members(spec.get("filters", []), "filter"),
         parameters=parameters or _parameters(spec.get("parameters")),
+        calculations=[
+            TrustedCalculation(c["name"], c["description"], c["sql"])
+            for c in spec.get("calculations", [])
+        ],
     )
 
 

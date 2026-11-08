@@ -66,6 +66,16 @@ fixture_semantic_source <- function(models, parameters = list(), stubs = list())
       metrics = members(model$metrics, "metric"),
       facts = members(model$facts, "fact"),
       filters = members(model$filters, "filter"),
+      calculations = stats::setNames(
+        lapply(model$calculations, function(calculation) {
+          new_trusted_calculation(
+            calculation$name,
+            calculation$description,
+            calculation$sql
+          )
+        }),
+        vapply(model$calculations, `[[`, character(1), "name")
+      ),
       parameters = if (length(parameters)) {
         parameters
       } else if (length(model$parameters)) {
@@ -81,6 +91,7 @@ fixture_semantic_source <- function(models, parameters = list(), stubs = list())
     built,
     vapply(models, `[[`, character(1), "label")
   )
+  state$calculations <- semantic_model_calculations(state$semantic_models)
   state$semantic_stubs <- stats::setNames(
     lapply(stubs, function(stub) {
       parts <- strsplit(stub$label, ".", fixed = TRUE)[[1]]

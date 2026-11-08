@@ -2,11 +2,11 @@
   "description": "Which tools an agent registers for a given composition, and what each registered tool tells the model it is for. Registration is what the model can reach at all, and a tool description is prompt text it reads before choosing, so both must agree across the two packages. Cases declare only what registration and the descriptions turn on: the measures, the governed definitions, whether a source's catalog is too broad to list, and how many sources there are. Everything else about a source is each package's own business, so a runner fills it in. Tool arguments are deliberately not pinned here: a JSON Schema property and an ellmer type are different objects, and normalizing one into the other would pin the shape of the plumbing rather than what the model reads. The execution tool is left out for the same reason from the other end: it is run_r in R and run_python in Python, each built by its own owner rather than by build_commons_tools(), so a runner drops every name in execution_tools from what it enumerated before comparing.",
   "execution_tools": ["run_r", "run_python"],
   "pending_tools": {
-    "description": "Tools one package registers ahead of the other. Each runner drops these names from what it enumerated before comparing, and an entry is removed once both packages register the tool. edit_artifact belongs to documents, which the R package implements first; tests/shared/artifact-edit.json pins its behavior for when the Python package does. call_calculation runs a warehouse semantic model's verified queries, which only the R package reads so far; a Snowflake semantic model left as a stub earns it in R.",
-    "names": ["edit_artifact", "call_calculation"]
+    "description": "Tools one package registers ahead of the other. Each runner drops these names from what it enumerated before comparing, and an entry is removed once both packages register the tool. edit_artifact belongs to documents, which the R package implements first; tests/shared/artifact-edit.json pins its behavior for when the Python package does.",
+    "names": ["edit_artifact"]
   },
   "shapes": {
-    "description": "The compositions the cases below are built from. `measures` and `definitions` are the pool's two halves; a definition entry with `count` stands for that many definitions with the name as a prefix and a number after it, which is how a case reaches an index too long for the prompt. `catalog_searchable` marks the sources whose catalog listing is too broad to name in the prompt. `semantic_models` and `semantic_stubs` are a warehouse's own semantic models on the first source: models read with the metrics and dimensions they offer, and models listed but not yet read.",
+    "description": "The compositions the cases below are built from. `measures` and `definitions` are the pool's two halves; a definition entry with `count` stands for that many definitions with the name as a prefix and a number after it, which is how a case reaches an index too long for the prompt. `catalog_searchable` marks the sources whose catalog listing is too broad to name in the prompt. `semantic_models` and `semantic_stubs` are a warehouse's own semantic models on the first source: models read with the metrics, dimensions, and verified queries (`calculations`) they offer, and models listed but not yet read.",
     "values": {
       "bare": {
         "sources": ["sales_db"],
@@ -142,6 +142,25 @@
             "name": "FINANCE_MODEL"
           }
         ]
+      },
+      "verified_queries": {
+        "sources": [
+          "sales_db"
+        ],
+        "measures": [],
+        "definitions": [],
+        "catalog_searchable": [],
+        "semantic_models": [
+          {
+            "name": "REVENUE_MODEL",
+            "calculations": [
+              {
+                "name": "revenue_by_region",
+                "description": "What is booked revenue in each region?"
+              }
+            ]
+          }
+        ]
       }
     }
   },
@@ -251,11 +270,12 @@
         ]
       },
       {
-        "name": "a semantic model left as a stub earns the pool and call_metrics",
+        "name": "a semantic model left as a stub earns the pool, call_metrics, and call_calculation",
         "shape": "semantic_stubs",
         "tools": [
           "search_pool",
           "call_metrics",
+          "call_calculation",
           "search_context",
           "describe_table",
           "run_sql",
@@ -269,6 +289,19 @@
           "search_pool",
           "call_measure",
           "call_metrics",
+          "call_calculation",
+          "search_context",
+          "describe_table",
+          "run_sql",
+          "load_skill"
+        ]
+      },
+      {
+        "name": "a verified query earns the pool and call_calculation",
+        "shape": "verified_queries",
+        "tools": [
+          "search_pool",
+          "call_calculation",
           "search_context",
           "describe_table",
           "run_sql",
@@ -411,6 +444,18 @@
         "shape": "native_metrics",
         "tool": "run_sql",
         "text": "Run a read-only SELECT query against a data source."
+      },
+      {
+        "name": "search_pool over verified queries",
+        "shape": "verified_queries",
+        "tool": "search_pool",
+        "text": "Search the semantic layer's trusted calculations: exact trusted queries (run with call_calculation). For every data question, use this before any other data tool, even if a table looks easy to query directly. Use the exact names it returns."
+      },
+      {
+        "name": "call_calculation",
+        "shape": "verified_queries",
+        "tool": "call_calculation",
+        "text": "Run an exact trusted query returned by search_pool or describe_table. Arguments are validated and bound; identifier arguments accept only the values listed by search_pool or describe_table."
       }
     ]
   }

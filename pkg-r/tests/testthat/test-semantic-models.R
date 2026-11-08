@@ -536,7 +536,8 @@ test_that("search_pool renders native members and stubs as the shared fixture sa
         defs,
         case$query,
         unlist(case$source_names) %||% character(),
-        semantic_models = registry
+        semantic_models = registry,
+        calculations = calculations_registry(list(warehouse = source))
       ),
       case$text,
       info = case$query
@@ -644,5 +645,28 @@ test_that("semantic first-touch context follows the shared fixture", {
       case$expected,
       info = case$table
     )
+  }
+})
+
+test_that("verified queries resolve as the shared fixture says", {
+  spec <- semantic_models_spec()
+  source <- fixture_semantic_source(spec$models$values)
+  calculations <- calculations_registry(list(warehouse = source))
+  expect_identical(
+    as.list(vapply(calculations, `[[`, character(1), "key")),
+    spec$calculations$keys
+  )
+  cases <- spec$calculations$cases
+  expect_gt(length(cases), 0)
+  for (case in cases) {
+    result <- tryCatch(
+      resolve_calculation(calculations, case$name, source_name = case$source),
+      error = function(err) err
+    )
+    if (is.null(case$expected$error)) {
+      expect_identical(result$key, case$expected$key, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
   }
 })
