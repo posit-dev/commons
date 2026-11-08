@@ -195,9 +195,17 @@ class FakeDatabricks(_Recorder):
     """
 
     def __init__(
-        self, relations=None, columns=("id",), metric_views=None, metadata=None
+        self,
+        relations=None,
+        columns=("id",),
+        metric_views=None,
+        metadata=None,
+        metric_view_type="METRIC_VIEW",
     ):
         super().__init__()
+        # What information_schema reports for a metric view. When it reports
+        # VIEW, only the connector's table metadata (table_types) names it.
+        self.metric_view_type = metric_view_type
         self._relations = relations if relations is not None else ["sales", "orders"]
         self._columns = list(columns)
         # Metric view name to its YAML definition, and to the JSON table
@@ -205,6 +213,11 @@ class FakeDatabricks(_Recorder):
         self.metric_views = dict(metric_views or {})
         self.metadata = dict(metadata or {})
         self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
+
+    def table_types(self, catalog: str, schema: str | None):
+        if self.metric_view_type == "METRIC_VIEW":
+            return None
+        return {(schema or "", name): "METRIC_VIEW" for name in self.metric_views}
 
     def query(self, sql: str, params=None):
         self.queries.append(sql)
@@ -224,7 +237,7 @@ class FakeDatabricks(_Recorder):
         if "system.information_schema.tables" in sql:
             rows = [databricks_relation_row(name) for name in self._relations]
             rows += [
-                {**databricks_relation_row(name), "table_type": "METRIC_VIEW"}
+                {**databricks_relation_row(name), "table_type": self.metric_view_type}
                 for name in self.metric_views
             ]
             return [

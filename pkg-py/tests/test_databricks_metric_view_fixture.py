@@ -144,6 +144,30 @@ def test_selection(case: dict[str, Any]) -> None:
     assert list(imported.semantic_stubs) == expected["stubs"]
 
 
+def test_table_metadata_names_a_metric_view_the_listing_calls_a_view() -> None:
+    """The connector's table metadata, read when information_schema says VIEW.
+
+    The shared selection cases list metric views by their own table type, so
+    this is the one path that reaches the backend's table_types().
+    """
+    from commons._catalog._import import import_catalog
+
+    from ._warehouse import FakeDatabricks
+
+    warehouse = SPEC["selection"]["warehouse"]
+    case = next(c for c in cases("selection") if c["expected"].get("models"))
+    backend = FakeDatabricks(
+        relations=warehouse["tables"],
+        metric_views=warehouse["metric_views"],
+        metadata=warehouse["metadata"],
+        metric_view_type="VIEW",
+    )
+
+    imported = import_catalog(backend, case["tables"], case.get("exclude"))
+
+    assert list(imported.semantic_models) == case["expected"]["models"]
+
+
 def test_metric_sql() -> None:
     import re
 
