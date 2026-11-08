@@ -130,6 +130,8 @@ class FakeWarehouse(_Recorder):
         self.semantic_views = dict(semantic_views or {})
         self.semantic_listing_fails = semantic_listing_fails
         self.yaml_reads: list[str] = []
+        # What a SEMANTIC_VIEW query that is not a zero-row probe returns.
+        self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
 
     def query(self, sql: str, params=None):
         self.queries.append(sql)
@@ -166,6 +168,9 @@ class FakeWarehouse(_Recorder):
             name = re.findall(r'"([^"]*)"', sql)[-1]
             self.yaml_reads.append(name)
             return [{"SPECIFICATION": self.semantic_views[name]}]
+        if sql.startswith("SELECT * FROM SEMANTIC_VIEW(") and "LIMIT 0" not in sql:
+            self._probe(sql)
+            return [dict(row) for row in self.semantic_rows]
         if sql.startswith("SELECT * FROM"):
             return self._probe(sql)
         raise AssertionError(f"unexpected query: {sql}")

@@ -15,12 +15,22 @@ from typing import TYPE_CHECKING, Any
 from chatlas import ContentToolResult
 from sqlglot import expressions as exp
 
+from ._catalog._snowflake_semantic import metric_sql
 from ._citations import tool_result
 from ._definitions import ExportRecord, applied_text
 from ._display import TRUSTED_CALL, measure_display_html
 from ._measures import Measure, measure_schema_text
 from ._provenance import Tag
 from ._rows import rows_to_markdown
+from ._semantic_models import (
+    MemberRow,
+    hydrate,
+    metric_origin,
+    resolve_filters,
+    resolve_members,
+    semantic_registry,
+    validate_arguments,
+)
 from ._sql_guard import sqlglot_dialect
 
 if TYPE_CHECKING:
@@ -203,16 +213,33 @@ def call_metrics(
     dimensions: list[str] | None = None,
     filters: list[str] | None = None,
     where: list[dict[str, Any]] | None = None,
+    arguments: Mapping[str, Any] | None = None,
 ) -> ContentToolResult:
     """Compile and run a governed query over one table's definitions.
 
     The shape semantic layers converge on: metrics by dimensions with
     filters, plus simple column predicates. Names arrive as strings and are
     validated here, because the provider only ever sees `call_metrics`.
+    Metrics may instead come from one of the warehouse's own semantic models,
+    whose parameters `arguments` binds.
     """
     if not metrics:
         raise ValueError("metrics must name at least one governed metric.")
     defs = registry.for_source(label)
+    hydrate(source, metrics)
+    members = semantic_registry({label: source}).members
+    origins = {metric_origin(name, defs, members) for name in metrics}
+    if len(origins) > 1:
+        raise ValueError(
+            "Metrics in one call must come from either data-dict definitions or "
+            "one native semantic model."
+        )
+    if origins == {"semantic_model"}:
+        return _semantic_metrics(
+            source, handles, members, metrics, dimensions, filters, where, arguments
+        )
+    if arguments:
+        raise ValueError("`arguments` is supported only for native semantic metrics.")
     metric_records = _resolve_names(metrics, defs, "metric")
     _refuse_mixed_grain(
         metric_records,
@@ -286,6 +313,60 @@ def call_metrics(
         markdown=f"```sql\n{sql}\n```\n\n{rows_to_markdown(rows)}",
         # Only the arguments the caller gave: an omitted one is not how the
         # query ran, unlike a measure argument explicitly set to null.
+        html=measure_display_html(
+            {
+                name: value
+                for name, value in (
+                    ("metrics", metrics),
+                    ("dimensions", dimensions),
+                    ("filters", filters),
+                )
+                if value is not None
+            },
+            rows,
+            from_query=True,
+        ),
+    )
+
+
+def _semantic_metrics(
+    source: DataSource,
+    handles: HandleStore | None,
+    members: list[MemberRow],
+    metrics: list[str],
+    dimensions: list[str] | None,
+    filters: list[str] | None,
+    where: list[dict[str, Any]] | None,
+    arguments: Mapping[str, Any] | None,
+) -> ContentToolResult:
+    """Run native metrics through the one semantic model they belong to."""
+    metric_rows = resolve_members(metrics, members, "metric")
+    models = list(dict.fromkeys(row.model for row in metric_rows))
+    if len(models) != 1:
+        raise ValueError(
+            "Metrics in one call must belong to one native semantic model."
+        )
+    model = source.semantic_models[models[0]]
+    on_model = [row for row in members if row.model == models[0]]
+    values = validate_arguments(model.parameters, dict(arguments or {}))
+    sql = metric_sql(
+        model,
+        metric_rows,
+        resolve_members(dimensions, on_model, "dimension"),
+        resolve_filters(filters, on_model),
+        where,
+        on_model,
+        list(values),
+    )
+    params = {f"p{index}": value for index, value in enumerate(values.values())}
+    rows = source._query_compiled(sql, params or None)
+    advert = handles.register_rows(rows) if handles is not None else None
+    body = "\n\n".join(part for part in (rows_to_markdown(rows), advert) if part)
+    return tool_result(
+        body,
+        tag=Tag.A,
+        title=TRUSTED_CALL.settled,
+        markdown=f"```sql\n{sql}\n```\n\n{rows_to_markdown(rows)}",
         html=measure_display_html(
             {
                 name: value

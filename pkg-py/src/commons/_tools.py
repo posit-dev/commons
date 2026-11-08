@@ -525,17 +525,19 @@ def _format_measure_value(value: Any) -> str:
 
 
 def _call_metrics(context: ToolContext) -> Tool:
-    named = (
-        "the system prompt or search_pool"
-        if pool_searchable(context.measures, context.definitions)
-        else "the system prompt"
-    )
+    if not pool_searchable(context.measures, context.definitions):
+        named = "the system prompt"
+    elif any(source.semantic_stubs for source in context.sources.values()):
+        named = "the system prompt, search_pool, or describe_table"
+    else:
+        named = "the system prompt or search_pool"
 
     def call_metrics_tool(
         metrics: list[str],
         dimensions: list[str] | None = None,
         filters: list[str] | None = None,
         where: list[dict[str, Any]] | None = None,
+        arguments: str = "{}",
         source: str | None = None,
     ) -> ContentToolResult:
         label, resolved = _resolve_source(context.sources, source)
@@ -548,6 +550,7 @@ def _call_metrics(context: ToolContext) -> Tool:
             dimensions=dimensions,
             filters=filters,
             where=where,
+            arguments=_parse_json_arguments(arguments),
         )
 
     return _tool(
@@ -560,11 +563,11 @@ def _call_metrics(context: ToolContext) -> Tool:
             {
                 "metrics": _string_array(
                     "Metric names to compute. All metrics in one call must "
-                    "belong to the same table."
+                    "belong to the same table or native semantic model."
                 ),
                 "dimensions": _string_array(
-                    "Derived or filter definition names, or documented column "
-                    "names, to group by."
+                    "Derived or filter definition names, documented column "
+                    "names, or native semantic dimensions to group by."
                 ),
                 "filters": _string_array("Governed filter names to apply."),
                 "where": {
@@ -573,7 +576,9 @@ def _call_metrics(context: ToolContext) -> Tool:
                     "items": {
                         "type": "object",
                         "properties": {
-                            "column": _string("A documented column name."),
+                            "column": _string(
+                                "A documented column or native semantic dimension name."
+                            ),
                             "op": {
                                 "type": "string",
                                 "enum": ["=", "!=", "<", "<=", ">", ">="],
@@ -588,6 +593,9 @@ def _call_metrics(context: ToolContext) -> Tool:
                         "additionalProperties": False,
                     },
                 },
+                "arguments": _string(
+                    "A JSON object of native semantic-model parameter values."
+                ),
             },
             ["metrics"],
             context.sources,

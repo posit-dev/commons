@@ -527,3 +527,46 @@ def where_conditions(
         )
         conditions.append(f"({reference(dimension)} {values['op']} {literal})")
     return conditions
+
+
+def model_qualifier(name: str) -> str:
+    """The model a `MODEL::member` name names, or "" when it names none."""
+    name = _strip_braces(name)
+    return name.split("::", 1)[0] if "::" in name else ""
+
+
+def model_from_stub(source: Any, stub: SemanticStub, label: str) -> SemanticModel:
+    """Read a listed model. Raises when it is unreadable or unsupported."""
+    from ._catalog import _snowflake_semantic
+
+    if stub.backend != _snowflake_semantic.BACKEND:
+        raise ValueError(f"Unsupported semantic-model backend {stub.backend!r}.")
+    model = _snowflake_semantic.read_semantic_model(source.backend, stub)
+    if isinstance(model, _snowflake_semantic.Unsupported):
+        raise ValueError(  # noqa: TRY004 - an unusable model, not a wrong argument type
+            f"Semantic model {label!r} is not supported: {model.reason}."
+        )
+    return model
+
+
+def hydrate(source: Any, names: Sequence[str]) -> None:
+    """Read the listed models that `MODEL::member` names point at.
+
+    Before a model is read, its qualifier is the only way to tell which model
+    a member is on. A model already read, by this agent or another sharing the
+    source, is not read again.
+    """
+    from ._catalog import check_session
+
+    labels = [
+        label
+        for label in dict.fromkeys(model_qualifier(name) for name in names)
+        if label in source.semantic_stubs and label not in source.semantic_models
+    ]
+    if not labels:
+        return
+    check_session(source.backend, source.session)
+    for label in labels:
+        source.semantic_models[label] = model_from_stub(
+            source, source.semantic_stubs[label], label
+        )
