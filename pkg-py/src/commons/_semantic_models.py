@@ -229,7 +229,10 @@ def _is_number(value: Any) -> bool:
     if isinstance(value, bool):
         return False
     if isinstance(value, int):
-        return True
+        try:
+            return math.isfinite(float(value))
+        except OverflowError:
+            return False
     return isinstance(value, float) and math.isfinite(value)
 
 

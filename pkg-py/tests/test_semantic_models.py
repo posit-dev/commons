@@ -134,3 +134,5 @@ def test_invalid_defaults_raise():
 def test_huge_integer_argument_is_rejected_not_overflowed():
     params = parameters_from_spec([{"name": "n", "data_type": "FLOAT"}], "Snowflake")
     assert validate_arguments(params, {"n": 10**20}) == {"n": 10**20}
+    with pytest.raises(ValueError, match="'n' must be a number value"):
+        validate_arguments(params, {"n": 10**400})
