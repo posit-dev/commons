@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
 __all__ = ["Backend", "DuckDBBackend", "EngineBackend"]
 
-
 class Backend(Protocol):
     def query(
         self, sql: str, params: Mapping[str, Any] | None = None

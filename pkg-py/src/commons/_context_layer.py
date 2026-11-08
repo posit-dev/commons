@@ -72,7 +72,9 @@ class ContextLayer:
                 # and non-empty, so each gets a distinct synthetic origin.
                 store.ingest(
                     [
-                        MarkdownDocument(content=doc, origin=f"commons-context-{i}")
+                        MarkdownDocument(
+                            content=doc, origin=f"commons-context-{i}"
+                        )
                         for i, doc in enumerate(self._docs)
                     ],
                     prepare=chunker.chunk,

@@ -274,6 +274,8 @@ def test_excluding_a_name_the_warehouse_never_had_does_not_blame_exclude():
     # The relation was absent, not dropped, so exclude is not the reason
     # there is nothing left to expose.
     with pytest.raises(ValueError, match="contains no objects") as refusal:
-        import_catalog(FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING", exclude=["MISSING"])
+        import_catalog(
+            FakeWarehouse(), "ANALYTICS.PUBLIC.MISSING", exclude=["MISSING"]
+        )
 
     assert "dropped every relation" not in str(refusal.value)
