@@ -297,7 +297,7 @@ def members_context(members: list[SemanticMember], heading: str) -> list[str]:
     lines = [f"{heading}:"]
     for member in members:
         reference = ".".join(part for part in (member.parent, member.name) if part)
-        detail = member.description or member.label
+        detail = member.label if member.description is None else member.description
         line = f"- `{reference}`"
         if detail:
             line += f": {detail}"

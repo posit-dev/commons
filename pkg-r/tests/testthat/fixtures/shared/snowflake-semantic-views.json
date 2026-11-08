@@ -509,6 +509,59 @@
         "expected": {
           "unsupported": "Snowflake semantic parameter \"payload\" has unsupported type \"missing\"."
         }
+      },
+      {
+        "name": "a blank description is no detail, even beside a label",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "REVENUE_MODEL"
+        },
+        "yaml": "tables:\n  - name: orders\n    base_table: {table: ORDERS}\n    facts:\n      - name: amount\n        description: \"\"\n        label: Amount\n      - name: tax\n        label: Tax\n",
+        "expected": {
+          "name": "REVENUE_MODEL",
+          "description": null,
+          "dimensions": [],
+          "metrics": [],
+          "facts": [
+            {
+              "name": "amount",
+              "kind": "fact",
+              "parent": "orders",
+              "label": "Amount",
+              "description": "",
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            },
+            {
+              "name": "tax",
+              "kind": "fact",
+              "parent": "orders",
+              "label": "Tax",
+              "description": null,
+              "type": null,
+              "synonyms": [],
+              "filter": false
+            }
+          ],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [
+            "Native semantic facts:\n- `orders.amount`\n- `orders.tax`: Tax"
+          ],
+          "retrieval": [
+            "Native semantic facts:\n- `orders.amount`\n- `orders.tax`: Tax"
+          ]
+        }
       }
     ]
   },
