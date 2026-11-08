@@ -1,11 +1,14 @@
 """The repository-root `.env` reader, against the shared cases."""
 
+import io
 import os
+import re
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 import pytest
+from dotenv import dotenv_values
 
 from tests._env_file import (
     REPO_ROOT,
@@ -62,3 +65,38 @@ def test_the_checkout_env_file_is_loaded(tmp_path: Path) -> None:
         os.environ.pop("COMMONS_ENV_FILE_CHECKOUT", None)
         load_repo_env_file(tmp_path)
         assert os.environ.get("COMMONS_ENV_FILE_CHECKOUT") == "yes"
+
+
+def _fixture_variables() -> tuple[set[str], set[str]]:
+    """The required and optional variable names in the shared fixture."""
+    required: set[str] = set()
+    optional: set[str] = set()
+    backends = load_shared_fixture("live-warehouse-env")["backends"]
+    for backend in backends.values():
+        connection = backend["connection"]
+        required.update(connection["required"])
+        if scopes := connection.get("scopes"):
+            optional.add(scopes["variable"])
+        for fixture in backend["fixtures"].values():
+            target = required if fixture["required"] else optional
+            target.add(fixture["variable"])
+    return required, optional
+
+
+def test_the_env_example_names_every_fixture_variable() -> None:
+    example = (REPO_ROOT / ".env.example").read_text().splitlines()
+    active = dotenv_values(stream=io.StringIO("\n".join(example)))
+    # Optional variables are commented out as `# NAME=value`.
+    commented = dotenv_values(
+        stream=io.StringIO(
+            "\n".join(
+                line.removeprefix("# ")
+                for line in example
+                if re.match(r"# [A-Z_]+=", line)
+            )
+        )
+    )
+    required, optional = _fixture_variables()
+
+    assert set(active) == required
+    assert set(commented) == optional
