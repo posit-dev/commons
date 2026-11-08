@@ -648,9 +648,9 @@ def _call_calculation(context: ToolContext) -> Tool:
     def call_calculation_tool(
         name: str, arguments: str = "{}", source: str | None = None
     ) -> ContentToolResult:
-        label, resolved = _resolve_source(context.sources, source)
+        label, _ = _resolve_source(context.sources, source)
         return call_calculation(
-            resolved,
+            context.sources,
             label,
             context.handles,
             name,

@@ -365,6 +365,8 @@ def test_live_snowflake_executes_an_imported_verified_query():
     calculations = calculations_registry({"snowflake": source})
     assert calculations
 
-    result = call_calculation(source, "snowflake", None, calculations[0].key)
+    result = call_calculation(
+        {"snowflake": source}, "snowflake", None, calculations[0].key
+    )
 
     assert result.extra[TAG_EXTRA_KEY] == Tag.A

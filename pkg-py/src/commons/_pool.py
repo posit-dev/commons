@@ -388,17 +388,20 @@ def call_metrics(
 
 
 def call_calculation(
-    source: DataSource,
+    sources: Mapping[str, DataSource],
     label: str,
     handles: HandleStore | None,
     name: str,
     arguments: Mapping[str, Any] | None = None,
 ) -> ContentToolResult:
-    """Run a verified query exactly as the warehouse model declares it."""
+    """Run a verified query exactly as the warehouse model declares it.
+
+    The query runs on the source `label` names, but is looked up among every
+    source's, so a name on another source is listed when it is not found.
+    """
+    source = sources[label]
     hydrate(source, [name])
-    calculation = resolve_calculation(
-        calculations_registry({label: source}), name, label
-    )
+    calculation = resolve_calculation(calculations_registry(sources), name, label)
     # Verified queries take no arguments, so any given is unexpected.
     values = validate_arguments({}, dict(arguments or {}))
     rows = source.query(calculation.sql)

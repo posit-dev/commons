@@ -111,7 +111,9 @@ def test_call_calculation_reads_a_stub_and_runs_its_verified_query() -> None:
 
     warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": VERIFIED})
     source = warehouse_source(warehouse)
-    result = call_calculation(source, "warehouse", HandleStore(), f"{VIEW}::all_orders")
+    result = call_calculation(
+        {"warehouse": source}, "warehouse", HandleStore(), f"{VIEW}::all_orders"
+    )
     assert warehouse.yaml_reads == ["REVENUE_MODEL"]
     assert warehouse.queries[-1] == 'SELECT * FROM "ANALYTICS"."PUBLIC"."ORDERS"'
     assert result.extra[TAG_EXTRA_KEY] == Tag.A
@@ -123,4 +125,17 @@ def test_call_calculation_refuses_arguments() -> None:
     warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": VERIFIED})
     source = warehouse_source(warehouse, [VIEW])
     with pytest.raises(ValueError, match="Unexpected argument"):
-        call_calculation(source, "warehouse", None, "all_orders", {"region": "EMEA"})
+        call_calculation(
+            {"warehouse": source}, "warehouse", None, "all_orders", {"region": "EMEA"}
+        )
+
+
+def test_call_calculation_names_queries_on_other_sources() -> None:
+    from commons._pool import call_calculation
+
+    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": VERIFIED})
+    source = warehouse_source(warehouse, [VIEW])
+    other = warehouse_source(FakeWarehouse(), ["ANALYTICS.PUBLIC.SALES"])
+    sources = {"warehouse": source, "archive": other}
+    with pytest.raises(ValueError, match=f"{VIEW}::all_orders"):
+        call_calculation(sources, "archive", None, "all_orders")
