@@ -142,3 +142,35 @@ def test_selection(case: dict[str, Any]) -> None:
     assert imported.tables == expected["tables"]
     assert list(imported.semantic_models) == expected["models"]
     assert list(imported.semantic_stubs) == expected["stubs"]
+
+
+def test_metric_sql() -> None:
+    import re
+
+    from commons._catalog._databricks_semantic import metric_sql
+    from commons._semantic_models import resolve_members, semantic_registry
+
+    from ._semantic_fixture import fixture_source
+
+    section = SPEC["metric_sql"]
+    spec = section["model"]
+    source = fixture_source([spec])
+    model = source.semantic_models[spec["label"]]
+    model.backend = "databricks_metric_view"
+    members = semantic_registry({"warehouse": source}).members
+    assert section["cases"]
+    for case in section["cases"]:
+        try:
+            sql = metric_sql(
+                model,
+                resolve_members(case["metrics"], members, "metric"),
+                resolve_members(case.get("dimensions"), members, "dimension"),
+                case.get("where"),
+                members,
+                case.get("arguments") or [],
+            )
+        except ValueError as error:
+            assert "error" in case["expected"], (case["name"], error)
+            assert_fixture_error(error, case["expected"])
+            continue
+        assert re.sub(r":p\d+", "?", sql) == case["expected"]["sql"], case["name"]

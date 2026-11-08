@@ -24,6 +24,7 @@ __all__ = [
     "BACKEND",
     "associated_models",
     "dependencies",
+    "metric_sql",
     "model_from_spec",
     "probe_sql",
     "qualified_name_parts",
@@ -443,3 +444,36 @@ def associated_models(
         if all(semantic_key(d, BACKEND) in selected for d in model.dependencies):
             models[model.id.label] = model
     return models
+
+
+def _member_reference(row: Any) -> str:
+    return _quote(row.name)
+
+
+def metric_sql(
+    model: SemanticModel,
+    metrics: list[Any],
+    dimensions: list[Any],
+    where: Any,
+    members: list[Any],
+    arguments: list[str],
+) -> str:
+    """The query over a metric view's measures, binding `arguments`.
+
+    Each argument is passed to the view as `:p0`, `:p1`, ... in the order given.
+    """
+    from .._semantic_models import where_conditions
+
+    dimension_sql = [_member_reference(row) for row in dimensions]
+    select = dimension_sql + [
+        f"MEASURE({_quote(row.name)}) AS {_quote(row.name)}" for row in metrics
+    ]
+    sql = (
+        f"SELECT {', '.join(select)} FROM {relation_reference(model, list(arguments))}"
+    )
+    conditions = where_conditions(where, members, _member_reference, _quote_string)
+    if conditions:
+        sql += " WHERE " + " AND ".join(conditions)
+    if dimension_sql:
+        sql += " GROUP BY " + ", ".join(dimension_sql)
+    return sql

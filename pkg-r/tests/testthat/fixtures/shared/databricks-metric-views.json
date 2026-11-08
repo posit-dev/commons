@@ -645,5 +645,114 @@
         }
       }
     ]
+  },
+  "metric_sql": {
+    "description": "The query a call over a metric view's measures compiles to. Measures are read with `MEASURE()` under their own names, dimensions are selected and grouped by, each `where` entry compares a dimension as `semantic-models.json` and the Snowflake fixture describe, and each `arguments` name is passed to the view as a `?` bind. Identifiers are written as Databricks quotes them, in backticks; R renders with `DBI::ANSI()` and its runner swaps the double quotes for backticks.",
+    "model": {
+      "id": {
+        "catalog": "main",
+        "schema": "sales",
+        "table": "order_metrics"
+      },
+      "label": "main.sales.order_metrics",
+      "dimensions": [
+        {
+          "name": "region"
+        },
+        {
+          "name": "tier"
+        }
+      ],
+      "metrics": [
+        {
+          "name": "revenue"
+        },
+        {
+          "name": "orders"
+        }
+      ]
+    },
+    "cases": [
+      {
+        "name": "measures alone",
+        "metrics": [
+          "revenue"
+        ],
+        "expected": {
+          "sql": "SELECT MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics`"
+        }
+      },
+      {
+        "name": "dimensions are selected and grouped by",
+        "metrics": [
+          "revenue",
+          "orders"
+        ],
+        "dimensions": [
+          "region",
+          "tier"
+        ],
+        "expected": {
+          "sql": "SELECT `region`, `tier`, MEASURE(`revenue`) AS `revenue`, MEASURE(`orders`) AS `orders` FROM `main`.`sales`.`order_metrics` GROUP BY `region`, `tier`"
+        }
+      },
+      {
+        "name": "a where value is quoted or written bare",
+        "metrics": [
+          "revenue"
+        ],
+        "dimensions": [
+          "region"
+        ],
+        "where": [
+          {
+            "column": "region",
+            "op": "=",
+            "value": "O'Brien"
+          },
+          {
+            "column": "tier",
+            "op": ">",
+            "value": "2"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT `region`, MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics` WHERE (`region` = 'O''Brien') AND (`tier` > 2) GROUP BY `region`"
+        }
+      },
+      {
+        "name": "parameters are passed to the view",
+        "metrics": [
+          "revenue"
+        ],
+        "arguments": [
+          "min_total",
+          "since"
+        ],
+        "expected": {
+          "sql": "SELECT MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics`(`min_total` => ?, `since` => ?)"
+        }
+      },
+      {
+        "name": "a where column must be a dimension",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "orders",
+            "op": "=",
+            "value": "1"
+          }
+        ],
+        "expected": {
+          "error": "wrong_kind",
+          "mentions": [
+            "orders",
+            "native metric"
+          ]
+        }
+      }
+    ]
   }
 }

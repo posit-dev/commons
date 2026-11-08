@@ -147,3 +147,53 @@ def test_a_trusted_query_still_refuses_dml() -> None:
     with pytest.raises(ValueError, match="exactly one read-only SELECT"):
         source._query_trusted("WITH t AS (SELECT 1) DELETE FROM orders")
     assert not any("DELETE" in query for query in warehouse.queries)
+
+
+ORDER_METRICS = """version: 1.1
+source: main.sales.orders
+parameters:
+  - name: min_total
+    data_type: DOUBLE
+    default: 0
+dimensions:
+  - name: region
+    expr: region
+measures:
+  - name: revenue
+    expr: SUM(total)
+"""
+
+
+def databricks_source(tables=None):
+    from ._warehouse import FakeDatabricks
+
+    warehouse = FakeDatabricks(
+        relations=["orders"], metric_views={"order_metrics": ORDER_METRICS}
+    )
+    return warehouse, DataSource._from_warehouse(warehouse, tables, None, None)
+
+
+def test_call_metrics_runs_a_metric_view_with_bound_parameters() -> None:
+    warehouse, source = databricks_source(["main.sales.order_metrics"])
+    run(
+        source, metrics=["revenue"], dimensions=["region"], arguments={"min_total": 5.0}
+    )
+    assert warehouse.queries[-1] == (
+        "SELECT `region`, MEASURE(`revenue`) AS `revenue` "
+        "FROM `main`.`sales`.`order_metrics`(`min_total` => :p0) GROUP BY `region`"
+    )
+    assert warehouse.params[-1] == {"p0": 5.0}
+
+
+def test_call_metrics_reads_a_metric_view_stub_on_first_use() -> None:
+    _, source = databricks_source()
+    label = "main.sales.order_metrics"
+    assert label in source.semantic_stubs
+    run(source, metrics=[f"{label}::revenue"])
+    assert label in source.semantic_models
+
+
+def test_named_filters_are_refused_for_metric_views() -> None:
+    _, source = databricks_source(["main.sales.order_metrics"])
+    with pytest.raises(ValueError, match="No native semantic filter"):
+        run(source, metrics=["revenue"], filters=["region"])

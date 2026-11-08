@@ -742,3 +742,50 @@ test_that("Databricks metric view selection follows the shared fixture", {
     expect_equal(as.list(names(result$semantic_stubs)), case$expected$stubs, info = case$name)
   }
 })
+
+test_that("Databricks metric view queries compile as the shared fixture says", {
+  section <- shared_fixture("databricks-metric-views")$metric_sql
+  spec <- section$model
+  member <- function(entries, kind) {
+    lapply(entries, function(entry) new_semantic_member(entry$name, kind))
+  }
+  model <- new_semantic_model(
+    do.call(DBI::Id, spec$id),
+    spec$label,
+    backend = "databricks_metric_view",
+    dimensions = member(spec$dimensions, "dimension"),
+    metrics = member(spec$metrics, "metric")
+  )
+  source <- test_source()
+  state <- data_source_state(source)
+  state$semantic_models <- stats::setNames(list(model), spec$label)
+  members <- registry_semantic_members(
+    semantic_models_registry(list(warehouse = source)),
+    "warehouse"
+  )
+  # DBI::ANSI() quotes identifiers in double quotes; Databricks uses backticks.
+  backticks <- function(sql) gsub('"([^"]*)"', "`\\1`", sql)
+  expect_gt(length(section$cases), 0)
+  for (case in section$cases) {
+    result <- tryCatch({
+      arguments <- stats::setNames(
+        as.list(seq_along(case$arguments)),
+        unlist(case$arguments)
+      )
+      backticks(databricks_semantic_metric_sql(
+        model,
+        resolve_semantic_members(unlist(case$metrics), members, "metric"),
+        resolve_semantic_members(unlist(case$dimensions), members, "dimension"),
+        case$where,
+        members,
+        DBI::ANSI(),
+        arguments = arguments
+      ))
+    }, error = function(err) err)
+    if (is.null(case$expected$error)) {
+      expect_identical(result, case$expected$sql, info = case$name)
+    } else {
+      expect_fixture_error(result, case$expected, info = case$name)
+    }
+  }
+})

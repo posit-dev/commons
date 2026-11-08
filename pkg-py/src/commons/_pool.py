@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 from chatlas import ContentToolResult
 from sqlglot import expressions as exp
 
+from ._catalog import _databricks_semantic as databricks_semantic
 from ._catalog._snowflake_semantic import metric_sql
 from ._citations import tool_result
 from ._definitions import ExportRecord, applied_text
@@ -435,16 +436,27 @@ def _semantic_metrics(
         )
     model = source.semantic_models[models[0]]
     on_model = [row for row in members if row.model == models[0]]
+    dimension_rows = resolve_members(dimensions, on_model, "dimension")
+    filter_rows = resolve_filters(filters, on_model)
     values = validate_arguments(model.parameters, dict(arguments or {}))
-    sql = metric_sql(
-        model,
-        metric_rows,
-        resolve_members(dimensions, on_model, "dimension"),
-        resolve_filters(filters, on_model),
-        where,
-        on_model,
-        list(values),
-    )
+    if model.backend == databricks_semantic.BACKEND:
+        if filter_rows:
+            raise ValueError(
+                "Named filters from Databricks metric views are not supported."
+            )
+        sql = databricks_semantic.metric_sql(
+            model, metric_rows, dimension_rows, where, on_model, list(values)
+        )
+    else:
+        sql = metric_sql(
+            model,
+            metric_rows,
+            dimension_rows,
+            filter_rows,
+            where,
+            on_model,
+            list(values),
+        )
     params = {f"p{index}": value for index, value in enumerate(values.values())}
     rows = source._query_compiled(sql, params or None)
     advert = handles.register_rows(rows) if handles is not None else None
