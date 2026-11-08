@@ -145,10 +145,10 @@ def test_selection(case: dict[str, Any]) -> None:
 
 
 def test_table_metadata_names_a_metric_view_the_listing_calls_a_view() -> None:
-    """The connector's table metadata, read when information_schema says VIEW.
+    """The connector's table metadata names a metric view information_schema calls VIEW.
 
-    The shared selection cases list metric views by their own table type, so
-    this is the one path that reaches the backend's table_types().
+    The shared selection cases run with the types Unity Catalog reports, where
+    information_schema names the metric view; this covers the reverse.
     """
     from commons._catalog._import import import_catalog
 

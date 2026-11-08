@@ -76,10 +76,12 @@ def test_the_listing_reports_the_provisioned_relations(backend):
 
     relations = reader.list_relations(live.engine_backend, _selector(live))
 
-    listed = {_folded(live, relation.id.table) for relation in relations}
-    assert {_folded(live, table) for table in FIXTURE_TABLES} <= listed
-    for relation in relations:
-        assert relation.kind in ("table", "view")
+    kinds = {_folded(live, relation.id.table): relation.kind for relation in relations}
+    fixture = {_folded(live, table): "table" for table in FIXTURE_TABLES}
+    assert fixture.items() <= kinds.items()
+    if backend == "databricks":
+        model = _folded(live, live.provisioned["parameterized_model"])
+        assert kinds[model] == "metric_view"
 
 
 @pytest.mark.parametrize("backend", BACKENDS)

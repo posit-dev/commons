@@ -38,11 +38,16 @@ BACKEND = "databricks_metric_view"
 
 
 def relation_kind(table_type: Any, object_type: Any = None) -> str:
-    """A listed relation's kind, preferring the metadata's object type."""
-    kind = str(object_type if object_type else table_type or "").lower()
-    if "metric" in kind:
+    """A listed relation's kind from either type the warehouse reports.
+
+    The connector's table metadata reports a Unity Catalog metric view as
+    VIEW where `information_schema` says METRIC_VIEW, so either source
+    naming a metric view decides.
+    """
+    kinds = [str(value).lower() for value in (table_type, object_type) if value]
+    if any("metric" in kind for kind in kinds):
         return "metric_view"
-    if "view" in kind:
+    if any("view" in kind for kind in kinds):
         return "view"
     return "table"
 

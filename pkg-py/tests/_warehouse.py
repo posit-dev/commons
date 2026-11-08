@@ -203,8 +203,9 @@ class FakeDatabricks(_Recorder):
         metric_view_type="METRIC_VIEW",
     ):
         super().__init__()
-        # What information_schema reports for a metric view. When it reports
-        # VIEW, only the connector's table metadata (table_types) names it.
+        # What information_schema reports for a metric view. The connector's
+        # table metadata (table_types) reports the other type: VIEW, as Unity
+        # Catalog does, beside METRIC_VIEW, and METRIC_VIEW beside VIEW.
         self.metric_view_type = metric_view_type
         self._relations = relations if relations is not None else ["sales", "orders"]
         self._columns = list(columns)
@@ -215,9 +216,8 @@ class FakeDatabricks(_Recorder):
         self.semantic_rows: list[dict] = [{"revenue": 1200.0}]
 
     def table_types(self, catalog: str, schema: str | None):
-        if self.metric_view_type == "METRIC_VIEW":
-            return None
-        return {(schema or "", name): "METRIC_VIEW" for name in self.metric_views}
+        other = "VIEW" if self.metric_view_type == "METRIC_VIEW" else "METRIC_VIEW"
+        return {(schema or "", name): other for name in self.metric_views}
 
     def query(self, sql: str, params=None):
         self.queries.append(sql)

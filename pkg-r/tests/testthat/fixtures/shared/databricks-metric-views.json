@@ -494,7 +494,7 @@
     ]
   },
   "relation_kinds": {
-    "description": "Which listed relations are metric views. The object type the warehouse's table metadata reports decides when there is one, and `information_schema.tables.table_type` otherwise: a type mentioning `metric` is a metric view, one mentioning `view` is a view, and anything else is a table.",
+    "description": "Which listed relations are metric views, from `information_schema.tables.table_type` and the object type the warehouse's table metadata reports. Either type mentioning `metric` makes a metric view, then either mentioning `view` makes a view, and anything else is a table. Unity Catalog's table metadata reports a metric view as `VIEW`.",
     "cases": [
       {
         "table_type": "MANAGED",
@@ -511,6 +511,11 @@
       {
         "table_type": "VIEW",
         "object_type": "METRIC_VIEW",
+        "kind": "metric_view"
+      },
+      {
+        "table_type": "METRIC_VIEW",
+        "object_type": "VIEW",
         "kind": "metric_view"
       },
       {

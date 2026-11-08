@@ -87,9 +87,8 @@ def relations_from_information_schema(
 ) -> list[Relation]:
     """Relations from `system.information_schema.tables`.
 
-    A metric view can report as a plain view here, so `object_types`, keyed by
-    schema and table, gives the type the warehouse's table metadata reports;
-    it decides the kind when it has one.
+    `object_types`, keyed by schema and table, gives the type the
+    warehouse's table metadata reports; `relation_kind` reads both.
     """
     from ._databricks_semantic import relation_kind
 
