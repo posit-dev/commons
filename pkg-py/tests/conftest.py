@@ -2,34 +2,20 @@
 
 import os
 from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
 
 from commons._icons import get_asset_base_url, set_asset_base_url
+from tests._env_file import ENV_FILE, apply_env_file
 
 # A stand-in for a served bundle: the live URL carries the assets' newest
 # mtime, so no literal can name it.
 _BUNDLE = "lib/commons-chat-0.1.0.1"
 
-_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
-
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Read the optional repository-root `.env`; tests/README.md describes it."""
-    if not _ENV_FILE.is_file():
-        return
-    for line in _ENV_FILE.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = (part.strip() for part in line.split("=", 1))
-        if not name:
-            continue
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        # A variable set in the environment wins over the file.
-        os.environ.setdefault(name, value)
+    if ENV_FILE.is_file():
+        apply_env_file(ENV_FILE.read_text().splitlines(), os.environ)
 
 
 @pytest.fixture(autouse=True)

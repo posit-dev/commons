@@ -88,5 +88,89 @@
         }
       }
     }
+  },
+  "env_file": {
+    "note": "A developer may keep these variables in a git-ignored .env at the repository root, and both suites read it when it exists. A missing file changes nothing. Each line is KEY=value; blank lines, comments, lines without '=', and lines with an empty name are skipped, and one pair of matching quotes around a value is stripped. Nothing is expanded, so a path in the file must be absolute. A variable already set in the environment wins over the file, and the file's variables last only for the test run.",
+    "cases": [
+      {
+        "name": "plain lines set unset variables",
+        "lines": [
+          "SNOWFLAKE_USER=SVC_EXAMPLE",
+          "  SNOWFLAKE_WAREHOUSE = CI_WH  "
+        ],
+        "environment": {},
+        "expected": {
+          "SNOWFLAKE_USER": "SVC_EXAMPLE",
+          "SNOWFLAKE_WAREHOUSE": "CI_WH"
+        },
+        "unset": []
+      },
+      {
+        "name": "blank lines, comments, and lines without a name are skipped",
+        "lines": [
+          "",
+          "# COMMONS_ENV_FILE_COMMENTED=yes",
+          "COMMONS_ENV_FILE_NO_EQUALS",
+          "=orphan",
+          "COMMONS_ENV_FILE_KEPT=yes"
+        ],
+        "environment": {},
+        "expected": {
+          "COMMONS_ENV_FILE_KEPT": "yes"
+        },
+        "unset": [
+          "COMMONS_ENV_FILE_COMMENTED",
+          "COMMONS_ENV_FILE_NO_EQUALS"
+        ]
+      },
+      {
+        "name": "one pair of matching quotes is stripped",
+        "lines": [
+          "COMMONS_ENV_FILE_DOUBLE=\"a b\"",
+          "COMMONS_ENV_FILE_SINGLE='{\"threshold\": 100}'",
+          "COMMONS_ENV_FILE_MISMATCHED=\"a'",
+          "COMMONS_ENV_FILE_INNER=a=\"b\""
+        ],
+        "environment": {},
+        "expected": {
+          "COMMONS_ENV_FILE_DOUBLE": "a b",
+          "COMMONS_ENV_FILE_SINGLE": "{\"threshold\": 100}",
+          "COMMONS_ENV_FILE_MISMATCHED": "\"a'",
+          "COMMONS_ENV_FILE_INNER": "a=\"b\""
+        },
+        "unset": []
+      },
+      {
+        "name": "nothing is expanded",
+        "lines": [
+          "SNOWFLAKE_PRIVATE_KEY_FILE=~/.snowflake/keys/rsa_key.p8",
+          "COMMONS_ENV_FILE_REFERENCE=${HOME}/key.p8"
+        ],
+        "environment": {},
+        "expected": {
+          "SNOWFLAKE_PRIVATE_KEY_FILE": "~/.snowflake/keys/rsa_key.p8",
+          "COMMONS_ENV_FILE_REFERENCE": "${HOME}/key.p8"
+        },
+        "unset": []
+      },
+      {
+        "name": "a variable set in the environment wins, even when empty",
+        "lines": [
+          "SNOWFLAKE_USER=FROM_FILE",
+          "SNOWFLAKE_ROLE=FROM_FILE",
+          "SNOWFLAKE_ACCOUNT=from-file"
+        ],
+        "environment": {
+          "SNOWFLAKE_USER": "FROM_ENVIRONMENT",
+          "SNOWFLAKE_ROLE": ""
+        },
+        "expected": {
+          "SNOWFLAKE_USER": "FROM_ENVIRONMENT",
+          "SNOWFLAKE_ROLE": "",
+          "SNOWFLAKE_ACCOUNT": "from-file"
+        },
+        "unset": []
+      }
+    ]
   }
 }
