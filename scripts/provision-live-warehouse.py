@@ -33,15 +33,15 @@ SHARED = Path(__file__).resolve().parent.parent / "tests" / "shared"
 FIXTURE = SHARED / "live-warehouse-rows.json"
 ENV = SHARED / "live-warehouse-env.json"
 
-# Snowflake semantic views over the orders table. Each is YAML for
-# SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with {database} and {schema} filled in
-# as YAML scalars and {namespace} as the quoted identifiers the verified query's
-# SQL names. The view names are the ones live-warehouse-env.json gives. Snowflake
-# stores a semantic view's member names in upper case, so the YAML spells them
-# that way too.
+# Snowflake semantic views over the orders table, keyed by the name in
+# live-warehouse-env.json each one fills. Each is YAML for
+# SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML, with {name} and {argument} filled in
+# from that file, {database} and {schema} as YAML scalars, and {namespace} as
+# the quoted identifiers the verified query's SQL names. The semantic view
+# also serves as the verified query view.
 SEMANTIC_VIEWS = {
-    "ORDERS_MODEL": """\
-name: ORDERS_MODEL
+    "semantic_view": """\
+name: {name}
 description: Orders from the commons live-test fixture.
 tables:
   - name: orders
@@ -66,11 +66,11 @@ verified_queries:
     question: What is the total order value for each tile size?
     sql: SELECT "tile_size", SUM("order_total") AS total_order_value FROM {namespace}."orders" GROUP BY "tile_size"
 """,
-    "ORDERS_PARAM_MODEL": """\
-name: ORDERS_PARAM_MODEL
+    "parameterized_model": """\
+name: {name}
 description: Orders from the commons live-test fixture, with a threshold variable.
 variables:
-  - name: MIN_TOTAL
+  - name: {argument}
     data_type: NUMBER(10,2)
     default_value: "0"
     description: Only orders whose total is at least this amount count.
@@ -86,20 +86,21 @@ tables:
         data_type: FLOAT
     metrics:
       - name: total_above_min
-        description: Sum of order totals at or above MIN_TOTAL.
-        expr: SUM(CASE WHEN orders.order_total >= MIN_TOTAL THEN orders.order_total ELSE 0 END)
+        description: Sum of order totals at or above {argument}.
+        expr: SUM(CASE WHEN orders.order_total >= {argument} THEN orders.order_total ELSE 0 END)
 """,
 }
 
 # The Databricks metric view, with {source} filled in as the orders table's
-# dotted name, left unquoted because YAML reserves a leading backtick. The arguments the tests bind (live-warehouse-env.json) differ
-# from the default, so a bound value changes the answer.
+# dotted name, left unquoted because YAML reserves a leading backtick, and
+# {argument} as the parameter live-warehouse-env.json binds. The value bound
+# there differs from the default, so a bound value changes the answer.
 METRIC_VIEW = """\
 version: 1.1
 comment: Orders from the commons live-test fixture, with a threshold parameter.
 source: {source}
 parameters:
-  - name: min_total
+  - name: {argument}
     data_type: double
     default: 0
     comment: Only orders whose total is at least this amount count.
@@ -108,8 +109,8 @@ dimensions:
     expr: tile_size
 measures:
   - name: total_above_min
-    comment: Sum of order totals at or above min_total.
-    expr: SUM(CASE WHEN order_total >= min_total THEN order_total ELSE 0 END)
+    comment: Sum of order totals at or above {argument}.
+    expr: SUM(CASE WHEN order_total >= {argument} THEN order_total ELSE 0 END)
 """
 
 SPECIAL_DOUBLES = {
@@ -194,7 +195,16 @@ def quote_identifier(name: str, dialect: str) -> str:
 
 def provisioned(dialect: str) -> dict[str, Any]:
     """The names live-warehouse-env.json fixes for one backend."""
-    return json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["provisioned"]
+    names = json.loads(ENV.read_text(encoding="utf-8"))["backends"][dialect]["provisioned"]
+    if dialect == "snowflake" and names["verified_query_view"] != names["semantic_view"]:
+        raise SystemExit("The verified query view is the semantic view; name them alike.")
+    return names
+
+
+def argument_name(names: dict[str, Any]) -> str:
+    """The parameter the parameterized model declares and the tests bind."""
+    (argument,) = names["parameterized_model_arguments"]
+    return argument
 
 
 def render(dialect: str, grantee: str) -> str:
@@ -248,9 +258,9 @@ def render(dialect: str, grantee: str) -> str:
             lines += [f"INSERT INTO {target} ({column_list}) VALUES", values + ";", ""]
 
     if dialect == "snowflake":
-        lines += semantic_views(parts)
+        lines += semantic_views(names)
     else:
-        lines += metric_view(parts, names["parameterized_model"])
+        lines += metric_view(names)
     lines += grants(dialect, names, qualified, list(fixture["tables"]), grantee)
     return "\n".join(lines) + "\n"
 
@@ -288,7 +298,7 @@ def grants(
     ]
     lines += [f"GRANT SELECT ON TABLE {qualified}.{quote_identifier(t, dialect)} TO ROLE {principal};" for t in tables]
     lines += [
-        f"GRANT REFERENCES, SELECT ON SEMANTIC VIEW {qualified}.{quote_identifier(view, dialect)} TO ROLE {principal};"
+        f"GRANT REFERENCES, SELECT ON SEMANTIC VIEW {qualified}.{quote_identifier(names[view], dialect)} TO ROLE {principal};"
         for view in SEMANTIC_VIEWS
     ]
     # The active-role test switches to this role and back, so the test role
@@ -303,20 +313,23 @@ def grants(
     return lines
 
 
-def semantic_views(parts: list[str]) -> list[str]:
+def semantic_views(names: dict[str, Any]) -> list[str]:
     """The Snowflake semantic views, created from YAML.
 
     Dollar quoting keeps the YAML's own quotes intact. The procedure takes
     the schema, and the view's name comes from the YAML. A semantic view
     takes a qualified base table, so the catalog and schema are written in.
     """
-    database, schema = (quote_identifier(part, "snowflake") for part in parts)
+    database, schema = (quote_identifier(part, "snowflake") for part in names["namespace"])
     namespace = f"{database}.{schema}"
     lines = []
-    for view, spec in SEMANTIC_VIEWS.items():
+    for key, spec in SEMANTIC_VIEWS.items():
+        view = names[key]
         # A YAML single-quoted scalar doubles a quote inside it; the SQL in
         # the verified query takes the identifiers as they are.
         body = spec.format(
+            name=view,
+            argument=argument_name(names),
             database=database.replace("'", "''"),
             schema=schema.replace("'", "''"),
             namespace=namespace,
@@ -331,16 +344,18 @@ def semantic_views(parts: list[str]) -> list[str]:
     return lines
 
 
-def metric_view(parts: list[str], name: str) -> list[str]:
+def metric_view(names: dict[str, Any]) -> list[str]:
     """The Databricks metric view, created from YAML."""
+    parts = names["namespace"]
     qualified = ".".join(quote_identifier(part, "databricks") for part in parts)
     source = ".".join([*parts, "orders"])
+    view = quote_identifier(names["parameterized_model"], "databricks")
     return [
-        f"CREATE OR REPLACE VIEW {qualified}.{quote_identifier(name, 'databricks')}",
+        f"CREATE OR REPLACE VIEW {qualified}.{view}",
         "WITH METRICS",
         "LANGUAGE YAML",
         "AS $$",
-        METRIC_VIEW.format(source=source).rstrip("\n"),
+        METRIC_VIEW.format(source=source, argument=argument_name(names)).rstrip("\n"),
         "$$;",
         "",
     ]

@@ -169,8 +169,7 @@ def test_every_semantic_view_the_tests_name_is_provisioned_on_snowflake():
     namespace = ".".join(f'"{part}"' for part in names["namespace"])
 
     for fixture in ("semantic_view", "verified_query_view", "parameterized_model"):
-        assert names[fixture] in generator.SEMANTIC_VIEWS
-    for view in generator.SEMANTIC_VIEWS:
+        view = names[fixture]
         assert f"name: {view}\n" in sql
         assert f'SEMANTIC VIEW {namespace}."{view}" TO ROLE' in sql
     # Snowflake folds an unquoted variable name to upper case, as the
@@ -199,7 +198,8 @@ def test_the_parameterized_metric_view_is_provisioned_on_databricks():
 
 
 def test_a_semantic_view_escapes_the_namespace_for_yaml_alone():
-    sql = "\n".join(_generator().semantic_views(["O'Brien", "schema"]))
+    names = {**PROVISIONED["snowflake"], "namespace": ["O'Brien", "schema"]}
+    sql = "\n".join(_generator().semantic_views(names))
 
     assert "database: '\"O''Brien\"'" in sql
     assert 'FROM "O\'Brien"."schema"."orders"' in sql
