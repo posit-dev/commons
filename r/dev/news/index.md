@@ -2,6 +2,13 @@
 
 ## commons (development version)
 
+- `describe_table` shows at most 50 columns and reports how many
+  additional columns it omits, keeping wide-table descriptions compact.
+  Columns documented in the data dictionary are shown first. The system
+  prompt no longer limits the agent to columns that `describe_table` or
+  `search_context` confirmed
+  ([\#475](https://github.com/posit-dev/commons/issues/475)).
+
 - `describe_table` describes any table the connection can query, not
   only the data source’s tables, so it agrees with `run_sql`. The result
   notes when a table is outside the data source. Agents in
@@ -71,11 +78,11 @@
   methods in their code, and the agent revises them with a new
   `edit_artifact` tool.
 
-- `describe_table` reports complete table schemas and documentation
-  without a sampled-row summary. DuckDB descriptions use database-native
-  types. Snowflake and Databricks continue to use native metadata, while
-  other DBI connections infer R column classes from five sampled rows,
-  or zero rows in trusted-only mode
+- `describe_table` reports table schemas and documentation without a
+  sampled-row summary. DuckDB descriptions use database-native types.
+  Snowflake and Databricks continue to use native metadata, while other
+  DBI connections infer R column classes from five sampled rows, or zero
+  rows in trusted-only mode
   ([\#319](https://github.com/posit-dev/commons/issues/319)).
 
 - [`trajectory_read()`](https://posit-dev.github.io/commons/r/dev/reference/trajectory_read.md)
