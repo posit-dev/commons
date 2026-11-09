@@ -176,6 +176,7 @@ class FakeWarehouse(_Recorder):
         if sql.startswith("SELECT * FROM"):
             return self._probe(sql)
         if sql.startswith("WITH "):
+            self._probe(sql)
             return [{"N": 1}]
         raise AssertionError(f"unexpected query: {sql}")
 
