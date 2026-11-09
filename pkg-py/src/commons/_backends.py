@@ -118,6 +118,15 @@ def escape_quoted_colons(sql: str) -> str:
     while i < len(sql):
         char = sql[i]
         if quote is None:
+            # A comment is copied as it is, so a quote in it opens nothing.
+            pair = sql[i : i + 2]
+            if pair in ("--", "/*"):
+                close = "\n" if pair == "--" else "*/"
+                end = sql.find(close, i + 2)
+                end = len(sql) if end == -1 else end + len(close)
+                out.append(sql[i:end])
+                i = end
+                continue
             if char in "'\"":
                 quote = char
             out.append(char)

@@ -27,7 +27,19 @@ def test_engine_query_binds_named_params(engine: sqlalchemy.Engine) -> None:
 
 def test_engine_query_keeps_quoted_colons(engine: sqlalchemy.Engine) -> None:
     # Catalog queries name objects in quotes, and a name may hold a colon.
-    assert EngineBackend(engine).query("SELECT ' :x' AS \"a:b\"") == [{"a:b": " :x"}]
+    assert EngineBackend(engine).query("SELECT ' :x' AS \":x\"") == [{":x": " :x"}]
+
+
+def test_engine_query_binds_after_a_comment_with_a_quote(
+    engine: sqlalchemy.Engine,
+) -> None:
+    backend = EngineBackend(engine)
+    assert backend.query("SELECT 1 AS n -- don't\n, :p AS v", {"p": 2}) == [
+        {"n": 1, "v": 2}
+    ]
+    assert backend.query("SELECT 1 AS n /* it's */, :p AS v", {"p": 3}) == [
+        {"n": 1, "v": 3}
+    ]
 
 
 def test_duckdb_query_refuses_params() -> None:
