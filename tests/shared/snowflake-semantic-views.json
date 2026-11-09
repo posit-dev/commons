@@ -1455,5 +1455,26 @@
         }
       }
     ]
+  },
+  "calculation_runs": {
+    "description": "The SQL `call_calculation` sends to the warehouse for a verified query: the query exactly as the view declares it. Every case lists one view, `REVENUE_MODEL` in ANALYTICS.PUBLIC with the case's `yaml`, beside the relation ORDERS, and calls `calculation` on a source over that listing, so the call reads the view first. `sent` is the last statement the warehouse receives.",
+    "cases": [
+      {
+        "name": "a query using SEMANTIC_VIEW syntax the SQL parser does not know runs as written",
+        "yaml": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\nverified_queries:\n  - name: emea_revenue\n    sql: SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')\n",
+        "calculation": "ANALYTICS.PUBLIC.REVENUE_MODEL::emea_revenue",
+        "expected": {
+          "sent": "SELECT * FROM SEMANTIC_VIEW(\"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\" METRICS \"orders\".\"revenue\" VARIABLES \"REGION\" => 'EMEA')"
+        }
+      },
+      {
+        "name": "a query that starts with WITH runs as written",
+        "yaml": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\nverified_queries:\n  - name: order_count\n    sql: WITH o AS (SELECT * FROM ANALYTICS.PUBLIC.ORDERS) SELECT COUNT(*) AS n FROM o\n",
+        "calculation": "ANALYTICS.PUBLIC.REVENUE_MODEL::order_count",
+        "expected": {
+          "sent": "WITH o AS (SELECT * FROM ANALYTICS.PUBLIC.ORDERS) SELECT COUNT(*) AS n FROM o"
+        }
+      }
+    ]
   }
 }

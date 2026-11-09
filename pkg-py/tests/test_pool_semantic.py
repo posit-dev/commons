@@ -141,26 +141,6 @@ def test_call_calculation_names_queries_on_other_sources() -> None:
         call_calculation(sources, "archive", None, "all_orders")
 
 
-VARIABLES_QUERY = (
-    'SELECT * FROM SEMANTIC_VIEW("ANALYTICS"."PUBLIC"."REVENUE_MODEL" '
-    'METRICS "orders"."revenue" VARIABLES "REGION" => \'EMEA\')'
-)
-
-
-def test_call_calculation_runs_a_query_the_parser_does_not_know() -> None:
-    from commons._pool import call_calculation
-
-    spec = VERIFIED.replace(
-        'sql: SELECT * FROM "ANALYTICS"."PUBLIC"."ORDERS"',
-        f"sql: {VARIABLES_QUERY}",
-    )
-    assert VARIABLES_QUERY in spec
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": spec})
-    source = warehouse_source(warehouse, [VIEW])
-    call_calculation({"warehouse": source}, "warehouse", None, "all_orders")
-    assert warehouse.queries[-1] == VARIABLES_QUERY
-
-
 def test_a_trusted_query_still_refuses_dml() -> None:
     warehouse = FakeWarehouse()
     source = warehouse_source(warehouse)

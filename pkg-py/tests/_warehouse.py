@@ -175,6 +175,8 @@ class FakeWarehouse(_Recorder):
             return [dict(row) for row in self.semantic_rows]
         if sql.startswith("SELECT * FROM"):
             return self._probe(sql)
+        if sql.startswith("WITH "):
+            return [{"N": 1}]
         raise AssertionError(f"unexpected query: {sql}")
 
     def list_tables(self) -> list[str]:

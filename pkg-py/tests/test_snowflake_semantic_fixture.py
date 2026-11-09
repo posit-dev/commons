@@ -254,3 +254,18 @@ def test_verified_queries(case: dict[str, Any]) -> None:
         for c in verified_calculations(entries)
     ]
     assert actual == case["expected"]["calculations"]
+
+
+@pytest.mark.parametrize("case", cases("calculation_runs"), ids=lambda c: c["name"])
+def test_calculation_runs(case: dict[str, Any]) -> None:
+    from commons import DataSource
+    from commons._pool import call_calculation
+
+    from ._warehouse import FakeWarehouse
+
+    backend = FakeWarehouse(
+        relations=["ORDERS"], semantic_views={"REVENUE_MODEL": case["yaml"]}
+    )
+    source = DataSource._from_warehouse(backend, None, None, None)
+    call_calculation({"warehouse": source}, "warehouse", None, case["calculation"])
+    assert backend.queries[-1] == case["expected"]["sent"]

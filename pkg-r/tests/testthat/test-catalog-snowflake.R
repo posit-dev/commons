@@ -899,3 +899,37 @@ test_that("Snowflake verified queries read as the shared fixture says", {
     expect_equal(actual, case$expected$calculations, info = case$name)
   }
 })
+
+test_that("verified queries run as the shared fixture says", {
+  read_view <- snowflake_read_semantic_model
+  for (case in snowflake_semantic_cases("calculation_runs")) {
+    warehouse <- list(
+      relations = list("ORDERS"),
+      semantic_views = list(REVENUE_MODEL = case$yaml)
+    )
+    sent <- NULL
+    local_mocked_bindings(
+      dbGetQuery = fixture_snowflake_reply(warehouse),
+      .package = "DBI"
+    )
+    local_mocked_bindings(
+      snowflake_read_semantic_model = function(view, con, call) {
+        read_view(view, DBI::ANSI(), call = call)
+      },
+      source_query = function(source, sql) {
+        sent <<- sql
+        data.frame(n = 1)
+      }
+    )
+    registry <- snowflake_table_registry(DBI::ANSI())
+    source <- test_source()
+    state <- data_source_state(source)
+    state$semantic_stubs <- registry$semantic_stubs
+    call_calculation_impl(
+      list(warehouse = source),
+      new_handle_store(),
+      case$calculation
+    )
+    expect_identical(sent, case$expected$sent, info = case$name)
+  }
+})
