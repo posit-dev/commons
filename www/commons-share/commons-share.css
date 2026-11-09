@@ -126,3 +126,34 @@
   border-radius: 999px;
   padding-inline: 1.25rem;
 }
+
+.commons-share-placeholder-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.commons-share-placeholder-text .placeholder {
+  border-radius: 0.25rem;
+}
+
+.commons-share-avatar.placeholder {
+  min-height: 2rem;
+  color: inherit;
+  background-color: currentColor;
+  cursor: default;
+}
+
+.commons-share-copy .spinner-border-sm,
+.commons-share-status .spinner-border-sm {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-width: 0.15em;
+}
+
+.commons-share-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

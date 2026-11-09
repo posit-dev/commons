@@ -236,7 +236,7 @@ run_r_html <- function(code, segments) {
         plot_image_data(seg$path),
         dims$width,
         dims$height
-      ), "figure"))
+      ), "figure", plot_code_title(code)))
     } else {
       output <- c(
         output,

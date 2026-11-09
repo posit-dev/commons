@@ -538,11 +538,17 @@ connect_app_access <- function(visitor) {
   guid <- connect_content_guid()
   read <- function(client) {
     promises::then(connect_json(connect_req(client, "content", guid)), function(app) {
+      access <- list(
+        access_type = app$access_type,
+        owner_guid = app$owner_guid,
+        principals = list()
+      )
       if (!identical(app$access_type, "acl")) {
-        return(list(access_type = app$access_type, principals = list()))
+        return(access)
       }
       promises::then(connect_permissions(client, guid), function(principals) {
-        list(access_type = "acl", principals = principals)
+        access$principals <- principals
+        access
       })
     })
   }
@@ -553,14 +559,56 @@ connect_app_access <- function(visitor) {
   promises::catch(read(owner), function(err) read(visitor))
 }
 
-connect_app_url <- function() {
-  if (!exists("app_url", envir = share_cache)) {
-    share_cache$app_url <- tryCatch(
-      connect_content(connect_client(), connect_content_guid())$content_url,
-      error = function(err) NULL
+# Everyone who can open the app, as people and groups the share dialog can
+# offer: its owner, the people and groups it lists, and those groups'
+# members. NULL when the app is open to everyone on the server.
+connect_app_people <- function(client, access) {
+  if (!identical(access$access_type, "acl")) {
+    return(promises::promise_resolve(NULL))
+  }
+  lookups <- lapply(access$principals, function(p) {
+    if (identical(p$principal_type, "group")) {
+      connect_group_people(client, p$principal_guid)
+    } else {
+      promises::then(connect_principal(client, "user", p$principal_guid), function(x) list(x))
+    }
+  })
+  if (!is.null(access$owner_guid)) {
+    lookups <- c(lookups, list(promises::then(
+      connect_principal(client, "user", access$owner_guid),
+      function(x) list(x)
+    )))
+  }
+  # One unreadable person shouldn't hide the rest.
+  lookups <- lapply(lookups, function(x) promises::catch(x, function(err) list()))
+  promises::then(promises::promise_all(.list = lookups), function(found) {
+    people <- unlist(found, recursive = FALSE)
+    guids <- vapply(people, `[[`, character(1), "guid")
+    unname(people[!duplicated(guids)])
+  })
+}
+
+connect_group_people <- function(client, guid) {
+  group <- connect_principal(client, "group", guid)
+  members <- connect_json(connect_req(client, "groups", guid, "members"))
+  members <- promises::catch(members, function(err) list(results = list()))
+  promises::then(promises::promise_all(group = group, members = members), function(x) {
+    c(list(x$group), lapply(x$members$results, connect_user_principal))
+  })
+}
+
+# The app's link and title, for shared pages and untitled outputs.
+connect_app_info <- function() {
+  if (!exists("app_info", envir = share_cache)) {
+    share_cache$app_info <- tryCatch(
+      {
+        app <- connect_content(connect_client(), connect_content_guid())
+        list(url = app$content_url, title = app$title %||% app$name)
+      },
+      error = function(err) list()
     )
   }
-  share_cache$app_url
+  share_cache$app_info
 }
 
 connect_visitor_key <- function(client, token, audience) {

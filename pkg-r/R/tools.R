@@ -735,7 +735,11 @@ measure_plot_tool_result <- function(
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_result_html(share_wrap(rendered$html, "figure")),
+      measure_result_html(share_wrap(
+        rendered$html,
+        "figure",
+        share_clean_title(value$labels$title) %||% title
+      )),
       metadata
     ),
     footer = footer,
@@ -814,7 +818,11 @@ measure_gt_table_tool_result <- function(
   display_html <- measure_display_with_result_html(
     args,
     measure_result_html(
-      share_wrap(rendered$html, "table"),
+      share_wrap(
+        rendered$html,
+        "table",
+        share_clean_title(gt_table_title(value)) %||% metadata$title
+      ),
       "commons-measure-gt-table"
     ),
     metadata
@@ -1194,7 +1202,7 @@ measure_args_html <- function(args) {
 measure_display_html <- function(args, value, metadata = NULL) {
   measure_display_with_result_html(
     args,
-    measure_result_html(format_measure_html(value)),
+    measure_result_html(format_measure_html(value, metadata$title)),
     metadata
   )
 }
@@ -1348,10 +1356,10 @@ measure_result_html <- function(content, class = NULL) {
 
 # Render a measure result for display: data frames become HTML tables; other
 # values reuse the text formatting, escaped for HTML.
-format_measure_html <- function(value) {
+format_measure_html <- function(value, title = NULL) {
   value <- collect_lazy_table(value)
   if (is.data.frame(value)) {
-    return(share_wrap(df_to_html(value), "table"))
+    return(share_wrap(df_to_html(value), "table", title))
   }
   html_escape(format_measure_value(value))
 }

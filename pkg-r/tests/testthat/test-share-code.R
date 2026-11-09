@@ -106,3 +106,18 @@ test_that("an id that isn't in the turns finds nothing", {
   expect_null(share_output_find(tool_turns(), "abc123"))
   expect_null(share_output_find(tool_turns(), "<script>"))
 })
+
+test_that("a plot or table carries its own title when it has one", {
+  expect_identical(plot_code_title("ggplot(d, aes(x)) + geom_bar() + labs(title = \"Species by site\", x = \"Site\")"), "Species by site")
+  expect_identical(plot_code_title("p <- ggplot(d) + ggplot2::ggtitle(\"Richness\")"), "Richness")
+  expect_null(plot_code_title("ggplot(d) + labs(title = my_title)"))
+  expect_null(plot_code_title("not R ("))
+
+  html <- share_wrap("<table></table>", "table", "Counts <b>&</b> rates\n by site")
+  id <- regmatches(html, regexpr("[0-9a-f]{16}", html))
+  req <- request("a", "run_sql", list(sql = "SELECT 1"))
+  turns <- tool_turns(list(req, result(req, "1", html = html)))
+
+  expect_identical(share_output_find(turns, id)$title, "Counts & rates by site")
+  expect_null(share_clean_title(structure(list(), class = "waiver")))
+})

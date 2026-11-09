@@ -151,7 +151,8 @@ test_that("a plot or table is found by the id its display carries", {
   expect_identical(target$kind, "output")
   expect_identical(target$key, paste0("output:", id))
   expect_identical(target$heading, "Share this table")
-  expect_identical(target$title, "Which regions?")
+  # A run_sql table has no title of its own; the app names it when shared.
+  expect_null(target$title)
   expect_identical(target$code, "commons$run_sql(\"SELECT region FROM sales\")")
   expect_null(share_output_target(agent, "0000"))
 })
@@ -232,4 +233,63 @@ test_that("people search lists users and groups together", {
 
   expect_identical(vapply(found, `[[`, "", "name"), c("Ada L", "bob", "Analysts"))
   expect_identical(vapply(found, `[[`, "", "type"), c("user", "user", "group"))
+})
+
+test_that("an untitled output is named for the app", {
+  expect_identical(share_output_fallback_title("Biodiversity explorer", "figure"), "Biodiversity explorer (figure)")
+  expect_identical(share_output_fallback_title("Biodiversity explorer", "table"), "Biodiversity explorer (table)")
+  expect_identical(share_output_fallback_title(NULL, "table"), "Shared table")
+})
+
+test_that("the people search offers only those who can open the app", {
+  people <- list(
+    list(guid = "u1", type = "user", name = "Ada Lovelace", detail = "ada@example.com"),
+    list(guid = "u2", type = "user", name = "Grace Hopper", detail = "grace@example.com"),
+    list(guid = "g1", type = "group", name = "Analysts", detail = "Group")
+  )
+
+  expect_identical(vapply(share_filter_people(people, "LOVE"), `[[`, "", "guid"), "u1")
+  expect_identical(vapply(share_filter_people(people, "example"), `[[`, "", "guid"), c("u1", "u2"))
+  expect_identical(vapply(share_filter_people(people, "analy"), `[[`, "", "guid"), "g1")
+  expect_length(share_filter_people(people, "zed"), 0)
+})
+
+test_that("an app's audience is its owner, its people, and its groups' members", {
+  client <- list(server = "https://connect.example.com", api_key = "key")
+  user <- function(guid, name) list(guid = guid, username = name, first_name = name, last_name = "", email = paste0(name, "@x.com"))
+  httr2::local_mocked_responses(function(req) {
+    switch(
+      httr2::url_parse(req$url)$path,
+      "/__api__/v1/users/owner" = json_response(req, user("owner", "Olive")),
+      "/__api__/v1/users/u1" = json_response(req, user("u1", "Ada")),
+      "/__api__/v1/groups/g1" = json_response(req, list(guid = "g1", name = "Analysts")),
+      "/__api__/v1/groups/g1/members" = json_response(req, list(results = list(user("u2", "Grace"), user("u1", "Ada")))),
+      json_response(req, list(error = "gone"), 404L)
+    )
+  })
+  access <- list(
+    access_type = "acl",
+    owner_guid = "owner",
+    principals = list(
+      list(principal_guid = "u1", principal_type = "user"),
+      list(principal_guid = "g1", principal_type = "group"),
+      list(principal_guid = "missing", principal_type = "user")
+    )
+  )
+
+  people <- sync_promise(connect_app_people(client, access))
+
+  expect_setequal(vapply(people, `[[`, "", "guid"), c("u1", "g1", "u2", "owner"))
+  expect_null(sync_promise(connect_app_people(client, list(access_type = "logged_in"))))
+})
+
+test_that("the dialog shows placeholders until the people are known", {
+  loading <- as.character(share_people_ui(NULL, list(), NULL, loading = TRUE))
+  expect_match(loading, "aria-busy=\"true\"", fixed = TRUE)
+  expect_identical(lengths(regmatches(loading, gregexpr("placeholder-glow", loading))), 2L)
+
+  owner <- list(name = "Ada", detail = "ada@x.com", guid = "u1")
+  done <- as.character(share_people_ui(owner, list(), NULL))
+  expect_no_match(done, "placeholder", fixed = TRUE)
+  expect_null(share_status_ui(NULL))
 })

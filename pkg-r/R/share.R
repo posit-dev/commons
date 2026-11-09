@@ -53,7 +53,8 @@ share_server <- function(id, client, chat, session) {
   store <- client$artifact_store()
   ids <- share_ids_for(id)
   receipts <- share_receipts(chat)
-  app_url <- connect_app_url()
+  app <- connect_app_info()
+  app_url <- app$url
   input <- session$input
   output <- session$output
   ns <- session$ns
@@ -66,6 +67,7 @@ share_server <- function(id, client, chat, session) {
     url = NULL,
     owner = NULL,
     people = list(),
+    loading = TRUE,
     results = list(),
     access = "restricted",
     app_access = NULL,
@@ -108,7 +110,7 @@ share_server <- function(id, client, chat, session) {
     commons_share_dependency()
   ))
   output[[ids$people]] <- shiny::renderUI(
-    share_people_ui(view$owner, view$people, ns(ids$remove))
+    share_people_ui(view$owner, view$people, ns(ids$remove), view$loading)
   )
   output[[ids$results]] <- shiny::renderUI(
     share_results_ui(view$results, ns(ids$add))
@@ -120,6 +122,9 @@ share_server <- function(id, client, chat, session) {
   output[[ids$status]] <- shiny::renderUI(share_status_ui(view$status))
 
   offer <- function(target) {
+    if (identical(target$kind, "output") && is.null(target$title)) {
+      target$title <- share_title(share_output_fallback_title(app$title, target$noun))
+    }
     if (state$busy) {
       return(share_modal(target$heading, "A copy is still being published."))
     }
@@ -141,10 +146,11 @@ share_server <- function(id, client, chat, session) {
       url = receipt$url,
       owner = NULL,
       people = list(),
+      loading = TRUE,
       results = list(),
       access = share$access,
       app_access = NULL,
-      status = list(text = "Preparing a link\u2026")
+      status = NULL
     )
     shiny::showModal(share_dialog(target, share$access, ids, ns))
     publish(share)
@@ -177,14 +183,17 @@ share_server <- function(id, client, chat, session) {
         share,
         url = opened$content$content_url,
         owner = connect_user_principal(opened$user),
+        loading = !opened$created,
         access = share$access,
-        status = list(text = "Publishing the latest version\u2026")
+        status = list(text = "Publishing the latest version\u2026", busy = TRUE)
       )
-      promises::then(
-        connect_app_access(share$visitor),
-        function(app) show(share, app_access = app$access_type),
-        function(err) NULL
-      )
+      # Who can open the app bounds who the search offers; NULL means
+      # everyone on the server can.
+      share$audience <- promises::then(connect_app_access(share$visitor), function(access) {
+        show(share, app_access = access$access_type)
+        connect_app_people(share$visitor, access)
+      })
+      share$audience <- promises::catch(share$audience, function(err) NULL)
       if (!opened$created) {
         load_people(share)
       }
@@ -210,10 +219,13 @@ share_server <- function(id, client, chat, session) {
       }
       receipts$remember(target, share$content)
       save_history()
-      show(share, status = list(text = "Published."))
+      show(share, status = NULL)
     })
     done <- promises::catch(done, function(err) {
-      if (!share$abandoned) fail(share, err, "Sharing")
+      if (!share$abandoned) {
+        show(share, loading = FALSE)
+        fail(share, err, "Sharing")
+      }
     })
     promises::finally(done, function() state$busy <- FALSE)
   }
@@ -252,9 +264,12 @@ share_server <- function(id, client, chat, session) {
       people,
       function(people) {
         share$people <- unname(people)
-        show(share, people = share$people)
+        show(share, people = share$people, loading = FALSE)
       },
-      function(err) fail(share, err, "Reading who can see the copy")
+      function(err) {
+        show(share, loading = FALSE)
+        fail(share, err, "Reading who can see the copy")
+      }
     )
   }
 
@@ -369,8 +384,15 @@ share_server <- function(id, client, chat, session) {
       view$results <- list()
       return()
     }
+    found <- promises::then(share$audience, function(audience) {
+      if (is.null(audience)) {
+        connect_search_principals(share$visitor, query)
+      } else {
+        share_filter_people(audience, query)
+      }
+    })
     promises::then(
-      connect_search_principals(share$visitor, query),
+      found,
       function(found) {
         taken <- c(
           share$user$guid,
@@ -553,14 +575,34 @@ share_output_target <- function(client, id) {
     return(NULL)
   }
   noun <- if (identical(output$kind, "table")) "table" else "figure"
-  output$title <- share_title(
-    if (is.null(output$question)) tools::toTitleCase(noun) else truncate_title(output$question)
+  list(
+    kind = "output",
+    key = paste0("output:", id),
+    heading = paste("Share this", noun),
+    title = if (!is.null(output$title)) share_title(output$title),
+    html = output$html,
+    code = output$code,
+    noun = output$kind
   )
-  c(
-    list(kind = "output", key = paste0("output:", id), heading = paste("Share this", noun)),
-    output[c("title", "html", "code")],
-    list(noun = output$kind)
-  )
+}
+
+# An output without a title of its own is named for the app it came from.
+share_output_fallback_title <- function(app_title, noun) {
+  noun <- if (identical(noun, "table")) "table" else "figure"
+  if (is.null(app_title) || !nzchar(app_title)) {
+    return(paste("Shared", noun))
+  }
+  sprintf("%s (%s)", app_title, noun)
+}
+
+# People and groups whose name or email contains `query`.
+share_filter_people <- function(people, query, limit = 8) {
+  query <- tolower(query)
+  hits <- Filter(function(p) {
+    grepl(query, tolower(p$name), fixed = TRUE) ||
+      grepl(query, tolower(p$detail %||% ""), fixed = TRUE)
+  }, people)
+  utils::head(hits, limit)
 }
 
 share_archive <- function(client, target, app_url = NULL) {
@@ -615,7 +657,12 @@ share_dialog <- function(target, access, ids, ns) {
       search,
       shiny::uiOutput(ns(ids$results)),
       htmltools::h6("People with access"),
-      shiny::uiOutput(ns(ids$people)),
+      # Shiny replaces the placeholder once the people are known.
+      htmltools::div(
+        id = ns(ids$people),
+        class = "shiny-html-output",
+        share_people_ui(NULL, list(), NULL, loading = TRUE)
+      ),
       htmltools::h6("General access"),
       htmltools::div(
         class = "commons-share-access",
@@ -636,14 +683,18 @@ share_dialog <- function(target, access, ids, ns) {
     ),
     footer = htmltools::div(
       class = "commons-share-actions",
-      shiny::uiOutput(ns(ids$link)),
+      htmltools::div(
+        id = ns(ids$link),
+        class = "shiny-html-output",
+        share_copy_button(NULL, NULL)
+      ),
       shiny::actionButton(ns(ids$done), "Done", class = "btn-primary")
     ),
     easyClose = FALSE
   )
 }
 
-share_people_ui <- function(owner, people, remove_id) {
+share_people_ui <- function(owner, people, remove_id, loading = FALSE) {
   rows <- lapply(people, function(person) {
     share_person_row(
       person,
@@ -664,7 +715,30 @@ share_people_ui <- function(owner, people, remove_id) {
       rows
     )
   }
-  htmltools::div(class = "commons-share-people", rows)
+  if (loading) {
+    rows <- c(rows, list(share_person_placeholder()))
+    if (is.null(owner)) {
+      rows <- c(rows, list(share_person_placeholder()))
+    }
+  }
+  htmltools::div(
+    class = "commons-share-people",
+    `aria-busy` = if (loading) "true",
+    rows
+  )
+}
+
+share_person_placeholder <- function() {
+  htmltools::div(
+    class = "commons-share-person-row placeholder-glow",
+    `aria-hidden` = "true",
+    htmltools::span(class = "commons-share-avatar placeholder"),
+    htmltools::div(
+      class = "commons-share-placeholder-text",
+      htmltools::span(class = "placeholder col-6"),
+      htmltools::span(class = "placeholder placeholder-sm col-8")
+    )
+  )
 }
 
 share_results_ui <- function(results, add_id) {
@@ -729,7 +803,7 @@ share_copy_button <- function(url, copy_id) {
     disabled = if (is.null(url)) NA,
     `data-url` = url,
     `data-input` = copy_id,
-    maybe_icon("link-45deg"),
+    if (is.null(url)) share_spinner() else maybe_icon("link-45deg"),
     if (is.null(url)) "Preparing link\u2026" else "Copy link"
   )
 }
@@ -744,8 +818,13 @@ share_status_ui <- function(status) {
       if (isTRUE(status$error)) "text-danger" else "text-body-secondary"
     ),
     role = "status",
+    if (isTRUE(status$busy)) share_spinner(),
     status$text
   )
+}
+
+share_spinner <- function() {
+  htmltools::span(class = "spinner-border spinner-border-sm", `aria-hidden` = "true")
 }
 
 commons_share_dependency <- function() {

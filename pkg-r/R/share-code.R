@@ -5,16 +5,70 @@
 
 # Plots and tables in tool displays are wrapped so the browser can offer to
 # share them and the server can find them again in the turns.
-share_wrap <- function(html, kind) {
+share_wrap <- function(html, kind, title = NULL) {
   id <- share_new_id(html)
+  title <- share_clean_title(title)
   sprintf(
     paste0(
       "<div class=\"commons-shareable\" data-commons-share=\"%s\" ",
-      "data-commons-share-kind=\"%s\"><!--commons-share:%s-->%s",
+      "data-commons-share-kind=\"%s\"%s><!--commons-share:%s-->%s",
       "<!--/commons-share:%s--></div>"
     ),
-    id, kind, id, html, id
+    id,
+    kind,
+    if (is.null(title)) "" else sprintf(" data-commons-share-title=\"%s\"", html_escape(title)),
+    id,
+    html,
+    id
   )
+}
+
+# A title fit for a page heading: one line of text, or NULL when there's none.
+share_clean_title <- function(title) {
+  if (is.null(title) || inherits(title, "waiver") || length(title) != 1) {
+    return(NULL)
+  }
+  title <- gsub("<[^>]+>", "", as.character(title))
+  title <- trimws(gsub("\\s+", " ", title))
+  if (is.na(title) || !nzchar(title)) NULL else title
+}
+
+# The title a run_r plot's code gives it with labs() or ggtitle(), if any.
+plot_code_title <- function(code) {
+  exprs <- tryCatch(parse(text = code, keep.source = FALSE), error = function(err) NULL)
+  title <- NULL
+  find <- function(expr) {
+    if (!is.call(expr)) {
+      return()
+    }
+    fn <- expr[[1]]
+    if (is.call(fn) && identical(fn[[1]], as.symbol("::"))) {
+      fn <- fn[[3]]
+    }
+    if (is.symbol(fn)) {
+      fn <- as.character(fn)
+      arg <- if (fn == "labs") {
+        expr$title
+      } else if (fn == "ggtitle") {
+        if (!is.null(expr$label)) expr$label else if (length(expr) > 1) expr[[2]]
+      }
+      if (rlang::is_string(arg)) {
+        title <<- arg
+      }
+    }
+    for (i in seq_along(expr)[-1]) {
+      find(expr[[i]])
+    }
+  }
+  for (expr in exprs) {
+    find(expr)
+  }
+  title
+}
+
+gt_table_title <- function(value) {
+  title <- value[["_heading"]]$title
+  if (is.null(title)) NULL else as.character(title)
 }
 
 # Hashing rather than sampling leaves the session's random seed alone.
@@ -40,15 +94,21 @@ share_output_find <- function(turns, id) {
       next
     }
     close <- regexpr(paste0("<!--/commons-share:", id, "-->"), html, fixed = TRUE)
-    kind <- regmatches(
+    attrs <- regmatches(
       html,
       regexec(
-        paste0("data-commons-share=\"", id, "\" data-commons-share-kind=\"(\\w+)\""),
-        html
+        paste0(
+          "data-commons-share=\"", id, "\" data-commons-share-kind=\"(\\w+)\"",
+          "(?: data-commons-share-title=\"([^\"]*)\")?"
+        ),
+        html,
+        perl = TRUE
       )
-    )[[1]][2]
+    )[[1]]
+    title <- if (length(attrs) > 2 && nzchar(attrs[3])) html_unescape(attrs[3])
     return(list(
-      kind = kind,
+      kind = attrs[2],
+      title = title,
       html = substr(html, start + attr(start, "match.length"), close - 1),
       code = share_code(calls, i),
       question = calls[[i]]$question
@@ -330,4 +390,12 @@ share_handle_calls <- function(calls) {
     }
   }
   out
+}
+
+html_unescape <- function(x) {
+  x <- gsub("&lt;", "<", x, fixed = TRUE)
+  x <- gsub("&gt;", ">", x, fixed = TRUE)
+  x <- gsub("&quot;", "\"", x, fixed = TRUE)
+  x <- gsub("&#39;", "'", x, fixed = TRUE)
+  gsub("&amp;", "&", x, fixed = TRUE)
 }
