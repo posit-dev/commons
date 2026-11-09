@@ -235,10 +235,27 @@ test_that("people search lists users and groups together", {
   expect_identical(vapply(found, `[[`, "", "type"), c("user", "user", "group"))
 })
 
-test_that("an untitled output is named for the app", {
-  expect_identical(share_output_fallback_title("Biodiversity explorer", "figure"), "Biodiversity explorer (figure)")
-  expect_identical(share_output_fallback_title("Biodiversity explorer", "table"), "Biodiversity explorer (table)")
-  expect_identical(share_output_fallback_title(NULL, "table"), "Shared table")
+test_that("an untitled output or conversation is named for the app", {
+  expect_identical(share_fallback_title("Biodiversity explorer", "figure"), "Biodiversity explorer (figure)")
+  expect_identical(share_fallback_title("Biodiversity explorer", "table"), "Biodiversity explorer (table)")
+  expect_identical(share_fallback_title("Biodiversity explorer", "conversation"), "Biodiversity explorer (conversation)")
+  expect_identical(share_fallback_title(NULL, "table"), "Shared table")
+  expect_identical(share_fallback_title(NULL, "conversation"), "Shared conversation")
+})
+
+test_that("a conversation is shared under the title shinychat gave it", {
+  session <- shiny::MockShinySession$new()
+  record <- function(...) {
+    key <- session$ns("chat.history-controller")
+    session$userData$shinychat <- rlang::list2(!!key := list(record = list(...)))
+  }
+
+  expect_null(shinychat_title("chat", session))
+  record(title = "What do you know about?")
+  expect_null(shinychat_title("chat", session))
+  record(title = "Bird counts by region", title_source = "llm")
+  expect_identical(shinychat_title("chat", session), "Bird counts by region")
+  expect_null(shinychat_title("chat", NULL))
 })
 
 test_that("the people search offers only those who can open the app", {

@@ -2,7 +2,12 @@
 # they are, so a shared conversation has no R process behind it: nothing in it
 # can reach a model or take input.
 
-write_conversation_bundle <- function(client, dir, app_url = NULL) {
+write_conversation_bundle <- function(
+  client,
+  dir,
+  app_url = NULL,
+  title = conversation_title(client$get_turns())
+) {
   store <- client$artifact_store()
   # A trusted-only agent has no documents.
   ids <- if (!is.null(store)) {
@@ -17,7 +22,7 @@ write_conversation_bundle <- function(client, dir, app_url = NULL) {
 
   messages <- shared_messages(client)
   page <- shinychat::page_chat(
-    conversation_title(client$get_turns()),
+    title,
     id = "chat",
     theme = commons_theme(),
     sidebar = FALSE,

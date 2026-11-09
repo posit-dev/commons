@@ -124,8 +124,10 @@ share_server <- function(id, client, chat, session) {
   output[[ids$status]] <- shiny::renderUI(share_status_ui(view$status))
 
   offer <- function(target) {
-    if (identical(target$kind, "output") && is.null(target$title)) {
-      target$title <- share_title(share_output_fallback_title(app$title, target$noun))
+    if (is.null(target$title)) {
+      target$title <- share_title(
+        share_fallback_title(app$title, target$noun %||% target$kind)
+      )
     }
     if (state$busy) {
       return(share_modal(target$heading, "A copy is still being published."))
@@ -360,7 +362,7 @@ share_server <- function(id, client, chat, session) {
     } else if (length(client$get_turns()) == 0) {
       share_modal("Share this conversation", "There's nothing to share yet.")
     } else {
-      offer(share_conversation_target(client))
+      offer(share_conversation_target(shinychat_title(id, session)))
     }
   })
 
@@ -548,13 +550,31 @@ share_receipts <- function(chat) {
   )
 }
 
-share_conversation_target <- function(client) {
+share_conversation_target <- function(title = NULL) {
   list(
     kind = "conversation",
     key = "conversation",
     heading = "Share this conversation",
-    title = share_title(conversation_title(client$get_turns()))
+    title = if (!is.null(title)) share_title(title)
   )
+}
+
+# The title shinychat gave the conversation, from the model or a rename.
+# Reads shinychat internals as a workaround until it exposes the title:
+# https://github.com/posit-dev/shinychat/issues/471
+shinychat_title <- function(id, session) {
+  record <- tryCatch(
+    utils::getFromNamespace("get_session_chat_bookmark_info", "shinychat")(
+      session,
+      paste0(id, ".history-controller")
+    )$record,
+    error = function(e) NULL
+  )
+  # Without a `title_source`, the title is a placeholder: the first message.
+  if (is.null(record$title_source) || !rlang::is_string(record$title)) {
+    return(NULL)
+  }
+  record$title
 }
 
 share_document_target <- function(artifact) {
@@ -588,9 +608,10 @@ share_output_target <- function(client, id) {
   )
 }
 
-# An output without a title of its own is named for the app it came from.
-share_output_fallback_title <- function(app_title, noun) {
-  noun <- if (identical(noun, "table")) "table" else "figure"
+# A conversation or output without a title of its own is named for the app it
+# came from.
+share_fallback_title <- function(app_title, noun) {
+  noun <- if (noun %in% c("table", "conversation")) noun else "figure"
   if (is.null(app_title) || !nzchar(app_title)) {
     return(paste("Shared", noun))
   }
@@ -612,7 +633,7 @@ share_archive <- function(client, target, app_url = NULL) {
   dir.create(dir)
   switch(
     target$kind,
-    conversation = write_conversation_bundle(client, dir, app_url),
+    conversation = write_conversation_bundle(client, dir, app_url, target$title),
     document = write_document_bundle(
       artifact_get(client$artifact_store(), target$id),
       dir,
