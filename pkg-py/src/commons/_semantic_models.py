@@ -81,7 +81,7 @@ def check_trusted_query(sql: str) -> None:
     from sqlglot.tokens import TokenType
 
     try:
-        tokens = tokenize(sql)
+        tokens = tokenize(sql, read="snowflake")
     except Exception:  # noqa: BLE001 - unreadable SQL is refused below
         tokens = []
     while tokens and tokens[-1].token_type == TokenType.SEMICOLON:

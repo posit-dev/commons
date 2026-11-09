@@ -1371,6 +1371,19 @@
         }
       },
       {
+        "name": "a backslash-escaped quote is Snowflake string syntax",
+        "yaml": "verified_queries:\n  - name: phrase\n    sql: SELECT 'it\\'s' AS phrase\n",
+        "expected": {
+          "calculations": [
+            {
+              "name": "phrase",
+              "description": "phrase",
+              "sql": "SELECT 'it\\'s' AS phrase"
+            }
+          ]
+        }
+      },
+      {
         "name": "a view without verified queries has none",
         "yaml": "tables: []\n",
         "expected": {
