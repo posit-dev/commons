@@ -493,22 +493,39 @@ def metric_origin(
                 [d.kind for d in definition_named] + [r.kind for r in semantic_named]
             )
         )
-        raise ValueError(f"{name!r} is a {' or a '.join(kinds)}, not a metric.")
+        raise ValueError(
+            f"{name!r} is a {' or a '.join(kinds)}, not a metric.{_unread_text(unread)}"
+        )
     available = [d.name for d in definitions if d.kind == "metric"] + [
         row.name for row in rows if row.kind == "metric"
     ]
-    listed = (
-        f"Available metrics: {_vals(available)}."
-        if available
-        else "No governed metrics are defined."
+    if available:
+        listed = f"Available metrics: {_vals(available)}."
+    elif unread:
+        listed = "No metrics are known until a listed semantic model is read."
+    else:
+        listed = "No governed metrics are defined."
+    raise ValueError(
+        f"No governed metric is named {name!r}. {listed}{_unread_text(unread)}"
     )
-    unread_text = (
-        f" Semantic models not read yet: {_vals(list(unread))}. Name a metric on "
-        "one as `MODEL::metric`, or inspect one with describe_table."
-        if unread
-        else ""
+
+
+# How many unread models a refusal names; a namespace can list thousands.
+_UNREAD_SHOWN = 10
+
+
+def _unread_text(unread: Sequence[str]) -> str:
+    if not unread:
+        return ""
+    shown = list(unread)[:_UNREAD_SHOWN]
+    more = len(unread) - len(shown)
+    listed = _vals(shown) + (
+        f", and {more} more that search_pool finds" if more else ""
     )
-    raise ValueError(f"No governed metric is named {name!r}. {listed}{unread_text}")
+    return (
+        f" Semantic models not read yet: {listed}. Name a metric on one as "
+        "`MODEL::metric`, or inspect one with describe_table."
+    )
 
 
 _NUMERIC = re.compile(r"-?[0-9]+(\.[0-9]+)?")

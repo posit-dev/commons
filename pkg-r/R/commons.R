@@ -298,7 +298,8 @@ TheCommons <- R6::R6Class(
         filters = filters,
         where = as_where_triples(where),
         source_name = source,
-        arguments = arguments
+        arguments = arguments,
+        methods = TRUE
       )$result
     },
 

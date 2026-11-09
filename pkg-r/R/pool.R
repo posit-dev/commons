@@ -46,7 +46,8 @@ query_metrics <- function(
   where = NULL,
   source_name = NULL,
   arguments = "{}",
-  trusted_only = FALSE
+  trusted_only = FALSE,
+  methods = FALSE
 ) {
   source <- resolve_sql_source(sources, source_name)
   label <- source_name %||% rlang::names2(sources)[[1]]
@@ -57,7 +58,13 @@ query_metrics <- function(
   semantic_members <- registry_semantic_members(semantic_models, label)
   state <- data_source_state(source)
   unread <- setdiff(names(state$semantic_stubs), names(state$semantic_models))
-  origins <- resolve_metric_origins(metrics, defs, semantic_members, unread)
+  origins <- resolve_metric_origins(
+    metrics,
+    defs,
+    semantic_members,
+    unread,
+    methods = methods
+  )
   if (length(unique(origins)) > 1L) {
     cli::cli_abort(
       "Metrics in one call must come from either data-dict definitions or one native semantic model."
@@ -177,7 +184,8 @@ resolve_metric_origins <- function(
   metrics,
   definitions,
   semantic_members,
-  unread = character()
+  unread = character(),
+  methods = FALSE
 ) {
   metrics <- strip_token_braces(metrics %||% character())
   if (length(metrics) == 0L) {
@@ -189,7 +197,8 @@ resolve_metric_origins <- function(
     character(1),
     definitions = definitions,
     semantic_members = semantic_members,
-    unread = unread
+    unread = unread,
+    methods = methods
   )
 }
 
@@ -199,7 +208,8 @@ metric_origin <- function(
   name,
   definitions,
   semantic_members,
-  unread = character()
+  unread = character(),
+  methods = FALSE
 ) {
   definition_named <- pool_name_candidates(name, definitions)
   definition_metrics <- definition_named[
@@ -232,9 +242,10 @@ metric_origin <- function(
   } else if (nrow(definition_named) || nrow(semantic_named)) {
     kinds <- unique(c(definition_named$kind, semantic_named$kind))
     kind_text <- paste(kinds, collapse = " or a ")
-    cli::cli_abort(
-      "{.val {name}} is a {kind_text}, not a metric."
-    )
+    cli::cli_abort(c(
+      "{.val {name}} is a {kind_text}, not a metric.",
+      "i" = metric_origin_unread_text(unread, methods)
+    ))
   } else {
     available <- c(
       definitions$name[definitions$kind == "metric"],
@@ -244,17 +255,35 @@ metric_origin <- function(
       "No governed metric is named {.val {name}}.",
       "i" = if (length(available)) {
         "Available metrics: {.val {available}}."
+      } else if (length(unread)) {
+        "No metrics are known until a listed semantic model is read."
       } else {
         "No governed metrics are defined."
       },
-      "i" = if (length(unread)) {
-        paste(
-          "Semantic models not read yet: {.val {unread}}.",
-          "Name a metric on one as {.code MODEL::metric}, or inspect one with describe_table."
-        )
-      }
+      "i" = metric_origin_unread_text(unread, methods)
     ))
   }
+}
+
+# How many unread models a refusal names; a namespace can list thousands.
+metric_origin_unread_shown <- 10L
+
+metric_origin_unread_text <- function(unread, methods = FALSE) {
+  if (length(unread) == 0L) {
+    return(NULL)
+  }
+  shown <- utils::head(unread, metric_origin_unread_shown)
+  more <- length(unread) - length(shown)
+  search <- if (methods) "`$search()`" else "search_pool"
+  describe <- if (methods) "`$describe()`" else "describe_table"
+  listed <- paste(sprintf('"%s"', shown), collapse = ", ")
+  if (more > 0L) {
+    listed <- sprintf("%s, and %d more that %s finds", listed, more, search)
+  }
+  cli::format_inline(
+    "Semantic models not read yet: {listed}. ",
+    "Name a metric on one as {.code MODEL::metric}, or inspect one with {describe}."
+  )
 }
 
 query_semantic_metrics <- function(
