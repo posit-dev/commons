@@ -184,3 +184,45 @@ def test_selection(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> Non
     assert imported.tables == expected["tables"]
     assert list(imported.semantic_models) == expected["models"]
     assert list(imported.semantic_stubs) == expected["stubs"]
+
+
+@pytest.mark.parametrize("case", cases("hydration"), ids=lambda c: c["name"])
+def test_hydration(case: dict[str, Any]) -> None:
+    from commons import DataSource
+    from commons._definitions import Registry
+    from commons._handles import HandleStore
+    from commons._pool import call_metrics
+    from commons._semantic_models import describe
+
+    from ._semantic_fixture import assert_fixture_error
+    from ._warehouse import FakeWarehouse
+
+    warehouse = SPEC["selection"]["warehouse"]
+    backend = FakeWarehouse(
+        relations=warehouse["relations"], semantic_views=warehouse["semantic_views"]
+    )
+    source = DataSource._from_warehouse(backend, None, None, None)
+
+    def run(step: dict[str, Any]) -> None:
+        if "describe" in step:
+            described = describe(source, step["describe"])
+            if described.error is not None:
+                raise described.error
+            return
+        call_metrics(
+            Registry(),
+            source,
+            "warehouse",
+            HandleStore(),
+            metrics=step["call_metrics"],
+        )
+
+    for step in case["steps"]:
+        if "error" in step:
+            with pytest.raises(ValueError) as raised:
+                run(step)
+            assert_fixture_error(raised.value, step["error"])
+        else:
+            run(step)
+    assert backend.yaml_reads == case["expected"]["reads"]
+    assert list(source.semantic_models) == case["expected"]["models"]

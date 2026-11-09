@@ -1,11 +1,9 @@
 """call_metrics over a warehouse's native semantic metrics, end to end.
 
-Which calls are refused is pinned by tests/shared/semantic-models.json; these
-cover the run itself: the query sent, the values bound, and reading a listed
-model on first use.
+Which calls are refused is pinned by tests/shared/semantic-models.json, and
+when a listed model is read by tests/shared/snowflake-semantic-views.json;
+these cover the run itself: the query sent and the values bound.
 """
-
-import pytest
 
 from commons import DataSource
 from commons._definitions import Registry
@@ -25,16 +23,6 @@ tables:
         description: Booked revenue.
 """
 
-
-UNSUPPORTED = """variables:
-  - name: payload
-    data_type: VARIANT
-tables:
-  - name: orders
-    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}
-    metrics:
-      - name: revenue
-"""
 
 PARAMETERIZED = """variables:
   - name: REGION
@@ -78,30 +66,6 @@ def test_call_metrics_runs_a_native_metric() -> None:
     )
     assert isinstance(result.value, str)
     assert "1200" in result.value
-
-
-def test_call_metrics_hydrates_a_stub_from_a_qualified_name() -> None:
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": REVENUE})
-    source = warehouse_source(warehouse)
-    assert VIEW in source.semantic_stubs
-    run(source, metrics=[f"{VIEW}::revenue"])
-    assert warehouse.yaml_reads == ["REVENUE_MODEL"]
-    assert VIEW in source.semantic_models
-
-
-def test_hydration_skips_models_already_loaded() -> None:
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": REVENUE})
-    source = warehouse_source(warehouse)
-    run(source, metrics=[f"{VIEW}::revenue"])
-    run(source, metrics=[f"{{{{{VIEW}::revenue}}}}"])
-    assert warehouse.yaml_reads == ["REVENUE_MODEL"]
-
-
-def test_an_unsupported_stub_reports_why() -> None:
-    warehouse = FakeWarehouse(semantic_views={"REVENUE_MODEL": UNSUPPORTED})
-    source = warehouse_source(warehouse)
-    with pytest.raises(ValueError, match="is not supported: .*VARIANT"):
-        run(source, metrics=[f"{VIEW}::revenue"])
 
 
 def test_call_metrics_binds_arguments() -> None:

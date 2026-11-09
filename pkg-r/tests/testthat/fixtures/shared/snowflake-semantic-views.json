@@ -1187,5 +1187,115 @@
         }
       }
     ]
+  },
+  "hydration": {
+    "description": "When a model listed by a namespace selection is read. Every case starts from a fresh source over `selection.warehouse` with `tables` unset, so every view is listed and none is read, and runs its steps in order on that one source, as two agents sharing it would. A `call_metrics` step reads the listed models its `MODEL::member` names point at and keeps them, so a later step does not read them again; an unqualified name reads nothing. A `describe` step reads a listed model each time without keeping it. A step with `error` must fail, mentioning each of its `mentions`. `reads` names the views read, in order, and `models` the labels kept as read once every step has run.",
+    "cases": [
+      {
+        "name": "a qualified metric name reads its model once, and keeps it",
+        "steps": [
+          {
+            "call_metrics": [
+              "ANALYTICS.PUBLIC.REVENUE_MODEL::revenue"
+            ]
+          },
+          {
+            "call_metrics": [
+              "{{ANALYTICS.PUBLIC.REVENUE_MODEL::revenue}}"
+            ]
+          }
+        ],
+        "expected": {
+          "reads": [
+            "REVENUE_MODEL"
+          ],
+          "models": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "describing a listed model reads it each time without keeping it",
+        "steps": [
+          {
+            "describe": "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          },
+          {
+            "describe": "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          }
+        ],
+        "expected": {
+          "reads": [
+            "REVENUE_MODEL",
+            "REVENUE_MODEL"
+          ],
+          "models": []
+        }
+      },
+      {
+        "name": "a model read by call_metrics is described without reading it again",
+        "steps": [
+          {
+            "call_metrics": [
+              "ANALYTICS.PUBLIC.REVENUE_MODEL::revenue"
+            ]
+          },
+          {
+            "describe": "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          }
+        ],
+        "expected": {
+          "reads": [
+            "REVENUE_MODEL"
+          ],
+          "models": [
+            "ANALYTICS.PUBLIC.REVENUE_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "an unqualified metric name reads no listed model",
+        "steps": [
+          {
+            "call_metrics": [
+              "revenue"
+            ],
+            "error": {
+              "mentions": [
+                "revenue",
+                "ANALYTICS.PUBLIC.REVENUE_MODEL"
+              ]
+            }
+          }
+        ],
+        "expected": {
+          "reads": [],
+          "models": []
+        }
+      },
+      {
+        "name": "a listed model that cannot be used says why when it is read",
+        "steps": [
+          {
+            "call_metrics": [
+              "ANALYTICS.PUBLIC.PAYLOAD_MODEL::revenue"
+            ],
+            "error": {
+              "mentions": [
+                "ANALYTICS.PUBLIC.PAYLOAD_MODEL",
+                "not supported",
+                "VARIANT"
+              ]
+            }
+          }
+        ],
+        "expected": {
+          "reads": [
+            "PAYLOAD_MODEL"
+          ],
+          "models": []
+        }
+      }
+    ]
   }
 }
