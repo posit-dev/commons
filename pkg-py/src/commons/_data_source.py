@@ -469,14 +469,16 @@ def data_source(
     relation, or if a definition names an authored column the selected
     relation does not have.
 
-    A Snowflake selection also imports the warehouse's semantic views, whose
-    public metrics and dimensions become trusted calculations. A view named
-    in `tables` is read and checked for access when the source is created,
-    and raises if it cannot be used. A view a namespace selection reaches is
-    listed when the source is created and read only when the agent first
-    inspects or uses it. Naming
-    relations exactly also imports the views over them, when the selection
-    includes every table a view reads.
+    A Snowflake selection also imports the warehouse's semantic views, and a
+    Databricks selection its metric views. Their public metrics become
+    trusted calculations, which their dimensions can group and filter. A
+    view named in `tables` is read and checked for access when the source is
+    created, and raises if it cannot be used. A view a namespace selection
+    reaches is listed when the source is created and read only when the
+    agent first inspects or uses it. Naming relations exactly also imports,
+    where it can, the views in the same schemas that read only those
+    relations; their access is checked only when the agent uses one. Name a
+    view in `tables` to be sure it is imported.
     """
     from ._data_dictionary import as_data_dictionary
 
