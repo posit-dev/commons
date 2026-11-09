@@ -16,7 +16,7 @@ permissions: read-all
 jobs:
   check:
     runs-on: ${{ matrix.config.os }}
-    timeout-minutes: 15
+    timeout-minutes: ${{ matrix.config.r == 'devel' && 30 || 15 }}
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
     strategy:
       fail-fast: false
@@ -28,10 +28,15 @@ jobs:
           - {os: ubuntu-latest, r: oldrel-1}
           - {os: ubuntu-latest, r: oldrel-2}
           - {os: ubuntu-latest, r: oldrel-3}
-    env: &check-env
+        # R-devel has no binary packages, so a cold cache compiles every
+        # dependency from source, which takes 20 minutes or more. Pull requests
+        # skip it. Adding it here rather than as a separate job keeps a skipped
+        # job out of the pull request checks list.
+        include: ${{ fromJSON(github.event_name != 'pull_request' && '[{"config":{"os":"ubuntu-latest","r":"devel","http-user-agent":"release"}}]' || '[]') }}
+    env:
       COMMONS_SKIP_BROWSER_TESTS: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-    steps: &check-steps
+    steps:
       - uses: actions/checkout@v6
       - uses: r-lib/actions/setup-pandoc@v2
       # Temporary, with the job timeout: the runner's Azure Ubuntu mirror stalls apt.
@@ -74,17 +79,3 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           working-directory: pkg-r
-
-  # R-devel has no binary packages, so a cold cache compiles every dependency
-  # from source, which takes 20 minutes or more. Pull requests skip it.
-  check-devel:
-    if: github.event_name != 'pull_request'
-    runs-on: ${{ matrix.config.os }}
-    timeout-minutes: 30
-    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
-    strategy:
-      matrix:
-        config:
-          - {os: ubuntu-latest, r: devel, http-user-agent: release}
-    env: *check-env
-    steps: *check-steps
