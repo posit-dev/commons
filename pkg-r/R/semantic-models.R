@@ -752,7 +752,10 @@ semantic_where_conditions <- function(
     ) {
       triple$value
     } else {
-      as.character(DBI::dbQuoteString(con, triple$value))
+      # Snowflake and Databricks both read a backslash in a string literal as
+      # an escape, and DBI's quoting escapes only the quote character.
+      escaped <- gsub("\\", "\\\\", triple$value, fixed = TRUE)
+      as.character(DBI::dbQuoteString(con, escaped))
     }
     sprintf("(%s %s %s)", reference, triple$op, value)
   }, character(1))

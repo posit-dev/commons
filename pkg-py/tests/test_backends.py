@@ -60,7 +60,7 @@ def test_compiled_query_skips_the_parse_but_not_the_select_check(
         source._query_compiled(
             "SELECT * FROM SEMANTIC_VIEW(x VARIABLES y => :p0)", {"p0": 1}
         )
-    for sql in ("DELETE FROM sales", "SELECT 1; DELETE FROM sales"):
+    for sql in ("DELETE FROM sales", "SELECT 1; DELETE FROM sales", "SELECT 'a\\"):
         with pytest.raises(ValueError, match="read-only"):
             source._query_compiled(sql)
 

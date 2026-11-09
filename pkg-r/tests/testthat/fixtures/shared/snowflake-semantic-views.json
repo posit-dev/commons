@@ -607,7 +607,7 @@
     ]
   },
   "metric_sql": {
-    "description": "The `SEMANTIC_VIEW` query a call over native metrics compiles to. Names resolve against the model's members as `semantic-models.json` pins. Members are referenced by logical table and name, named filters become bare conditions, and each `where` entry becomes a comparison on a dimension: a value matching an optional minus, digits, and an optional fraction is written bare unless the entry sets `quoted`, and anything else is a quoted string. Each `arguments` name is bound as `?`, cast to the type the view declares when that type is safe to splice. Errors are pinned as a kind and the names the message must mention.",
+    "description": "The `SEMANTIC_VIEW` query a call over native metrics compiles to. Names resolve against the model's members as `semantic-models.json` pins. Members are referenced by logical table and name, named filters become bare conditions, and each `where` entry becomes a comparison on a dimension: a value matching an optional minus, digits, and an optional fraction is written bare unless the entry sets `quoted`, and anything else is a string literal, with each backslash and single quote doubled because Snowflake reads a backslash in a literal as an escape. Each `arguments` name is bound as `?`, cast to the type the view declares when that type is safe to splice. Errors are pinned as a kind and the names the message must mention.",
     "model": {
       "id": {
         "catalog": "ANALYTICS",
@@ -701,6 +701,27 @@
         ],
         "expected": {
           "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  WHERE (\"orders\".\"region\" = 'O''Brien')\n)"
+        }
+      },
+      {
+        "name": "a backslash in a value is doubled",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "region",
+            "op": "=",
+            "value": "C:\\temp\\"
+          },
+          {
+            "column": "region",
+            "op": "=",
+            "value": "\\' OR TRUE) --"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT * FROM SEMANTIC_VIEW(\n  \"ANALYTICS\".\"PUBLIC\".\"REVENUE_MODEL\"\n  METRICS \"orders\".\"revenue\"\n  WHERE (\"orders\".\"region\" = 'C:\\\\temp\\\\') AND (\"orders\".\"region\" = '\\\\'' OR TRUE) --')\n)"
         }
       },
       {

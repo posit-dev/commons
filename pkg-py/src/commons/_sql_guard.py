@@ -149,7 +149,10 @@ def is_single_select(sql: str, dialect: str | None = None) -> bool:
     does not know (Snowflake's `VARIABLES`) while still seeing a semicolon
     inside a quoted literal or identifier for what it is.
     """
-    tokens = sqlglot.tokenize(sql, read=sqlglot_dialect(dialect))
+    try:
+        tokens = sqlglot.tokenize(sql, read=sqlglot_dialect(dialect))
+    except sqlglot.errors.TokenError:
+        return False
     while tokens and tokens[-1].token_type == TokenType.SEMICOLON:
         tokens.pop()
     return (
