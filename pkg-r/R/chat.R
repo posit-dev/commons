@@ -75,8 +75,8 @@ commons_app <- function(client, ...) {
 #' still writes them. Documents read best in a wider drawer than the default,
 #' e.g. `drawer = shinychat::chat_drawer(width = 640, open = FALSE)`.
 #'
-#' On Posit Connect, viewers can share a read-only copy of a conversation or
-#' document; see [commons_share_button()].
+#' On Posit Connect, viewers can share a read-only copy of a conversation,
+#' document, plot, or table; see [commons_share_button()].
 #'
 #' `commons_theme()` bundles the commons chat CSS and JavaScript into an
 #' ordinary [bslib::bs_theme()] (via [shinychat::page_chat_theme()]), so it

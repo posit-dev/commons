@@ -17,7 +17,7 @@ A \code{\link[shiny:uiOutput]{shiny::uiOutput()}}.
 the conversation to Posit Connect. Put it in the page's toolbar, e.g.
 \code{page_chat(toolbar_global = bslib::toolbar(commons_share_button()))};
 \code{\link[=commons_app]{commons_app()}} includes it. Documents the agent writes get the same
-control in the chat's drawer.
+control in the chat's drawer, and plots and tables get one when hovered.
 }
 \details{
 The button appears only when the app runs on Posit Connect and its
@@ -26,11 +26,18 @@ with the "Visitor API Key" authentication type and a max role of Publisher
 or Admin. Through it, a copy is published as the viewer who shares it, so
 only viewers whose Connect account can publish content can share.
 
-A shared copy is static content that belongs to the viewer who shared it.
-Only they can see it at first; they choose who else can in Connect. It shows
-the conversation as it was displayed, including the results of the
-agent's calculations, so anyone it is shared with sees those results
-without needing access to the data behind them. Nothing in a copy can reach
-the model or continue the conversation. Sharing the same conversation or
-document again updates the existing copy.
+Sharing opens a dialog with a link to the copy, which is published as the
+dialog opens. The copy is static content that belongs to the viewer who
+shared it. In the dialog, they add people and groups who can open it, or
+open it to anyone who can access the app: for an app shared with a list of
+people, that list is copied once, so people added to the app later aren't
+added to the copy. A first share closed before its link is copied or anyone
+is added is deleted.
+
+A copy shows what was displayed, including the results of the agent's
+calculations, so anyone it is shared with sees those results without
+needing access to the data behind them. A shared plot or table includes the
+code that reproduces it in the app. Nothing in a copy can reach the model
+or continue the conversation. Sharing the same thing again updates the
+existing copy at the same link.
 }

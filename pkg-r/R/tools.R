@@ -735,7 +735,7 @@ measure_plot_tool_result <- function(
     icon = maybe_icon("shield-check"),
     html = measure_display_with_result_html(
       args,
-      measure_result_html(rendered$html),
+      measure_result_html(share_wrap(rendered$html, "figure")),
       metadata
     ),
     footer = footer,
@@ -813,7 +813,10 @@ measure_gt_table_tool_result <- function(
   model_note <- paste(model_note, collapse = " ")
   display_html <- measure_display_with_result_html(
     args,
-    measure_result_html(rendered$html, "commons-measure-gt-table"),
+    measure_result_html(
+      share_wrap(rendered$html, "table"),
+      "commons-measure-gt-table"
+    ),
     metadata
   )
   if (length(rendered$dependencies) > 0) {
@@ -982,7 +985,12 @@ run_sql_tool <- function(
 ) {
   res <- source_query(source, sql)
   body <- df_to_markdown(res)
-  display_md <- sprintf("```sql\n%s\n```\n\n%s", sql, body)
+  display_html <- paste0(
+    "<pre class=\"commons-run-code\"><code class=\"language-sql\">",
+    html_escape(sql),
+    "</code></pre>",
+    share_wrap(df_to_html(res), "table")
+  )
   advert <- register_handle(handles, res)
   note <- applied_definitions_text(applied)
   entries <- dictionary_sql_entries(source, sql, source_name, tracker)
@@ -990,7 +998,7 @@ run_sql_tool <- function(
     paste(c(body, note, advert, entries), collapse = "\n\n"),
     title = "Retrieved data",
     icon = maybe_icon("code-square"),
-    markdown = display_md,
+    html = display_html,
     tag = "B",
     open = FALSE,
     show_tag = FALSE
@@ -1343,7 +1351,7 @@ measure_result_html <- function(content, class = NULL) {
 format_measure_html <- function(value) {
   value <- collect_lazy_table(value)
   if (is.data.frame(value)) {
-    return(df_to_html(value))
+    return(share_wrap(df_to_html(value), "table"))
   }
   html_escape(format_measure_value(value))
 }

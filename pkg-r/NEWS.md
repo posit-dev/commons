@@ -45,11 +45,14 @@
 
 * The CSS classes on `run_r`'s display are now `commons-run-display`, `commons-run-details`, `commons-run-code`, and `commons-run-plot`, without the `-r`, because the Python package's code tool uses the same classes. App CSS that targets the old `commons-run-r-*` names needs updating.
 
-* On Posit Connect, viewers share a read-only copy of a conversation or a
-  document as static content they own, from a new `commons_share_button()`
-  or the document drawer. `commons_app()` includes the button. Sharing is
-  available when the app's deployer associates a Connect "Visitor API Key"
-  integration.
+* On Posit Connect, viewers share a read-only copy of a conversation, a
+  document, a plot, or a table as static content they own, from a new
+  `commons_share_button()`, the document drawer, or a button on the plot or
+  table. A dialog gives the link and sets who can open it: specific people
+  and groups, or anyone who can access the app. A shared plot or table
+  includes the code that reproduces it. `commons_app()` includes the button.
+  Sharing is available when the app's deployer associates a Connect "Visitor
+  API Key" integration.
 
 # commons 0.1.1
 

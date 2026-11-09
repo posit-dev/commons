@@ -40,8 +40,8 @@ that passes \code{drawer = FALSE} gets no documents in view, though the agent
 still writes them. Documents read best in a wider drawer than the default,
 e.g. \code{drawer = shinychat::chat_drawer(width = 640, open = FALSE)}.
 
-On Posit Connect, viewers can share a read-only copy of a conversation or
-document; see \code{\link[=commons_share_button]{commons_share_button()}}.
+On Posit Connect, viewers can share a read-only copy of a conversation,
+document, plot, or table; see \code{\link[=commons_share_button]{commons_share_button()}}.
 
 \code{commons_theme()} bundles the commons chat CSS and JavaScript into an
 ordinary \code{\link[bslib:bs_theme]{bslib::bs_theme()}} (via \code{\link[shinychat:page_chat_theme]{shinychat::page_chat_theme()}}), so it

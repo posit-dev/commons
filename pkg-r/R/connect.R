@@ -416,17 +416,10 @@ connect_visitor_integration <- function(client, guid) {
   NULL
 }
 
-# Publishes a static bundle as the viewer, updating `guid` when the viewer
-# still owns it. `on_created` hears of new content before its first deploy, so
-# a retry after a failure updates it rather than making another.
-connect_share <- coro::async(function(
-  token,
-  audience,
-  archive,
-  title,
-  guid = NULL,
-  on_created = function(content) NULL
-) {
+# Opens a share as the viewer: their key and identity, and the content the
+# copy goes to, which is `guid` when they still own it and new otherwise.
+# Creating the content first gives the viewer a link before the deploy.
+connect_share_open <- coro::async(function(token, audience, title, guid = NULL) {
   owner <- connect_client()
   key <- await(connect_visitor_key(owner, token, audience))
   visitor <- list(server = owner$server, api_key = key)
@@ -440,25 +433,135 @@ connect_share <- coro::async(function(
   if (!is.null(guid)) {
     content <- await(connect_owned_content(visitor, guid, user$guid))
   }
-  if (is.null(content)) {
+  created <- is.null(content)
+  if (created) {
     content <- await(connect_json(
       connect_req(visitor, "content") |>
         httr2::req_body_json(list(title = title))
     ))
-    on_created(content)
   }
+  list(visitor = visitor, user = user, content = content, created = created)
+})
 
+connect_share_deploy <- coro::async(function(visitor, guid, archive) {
   bundle <- await(connect_json(
-    connect_req(visitor, "content", content$guid, "bundles") |>
+    connect_req(visitor, "content", guid, "bundles") |>
       httr2::req_body_file(archive, type = "application/gzip")
   ))
   deploy <- await(connect_json(
-    connect_req(visitor, "content", content$guid, "deploy") |>
+    connect_req(visitor, "content", guid, "deploy") |>
       httr2::req_body_json(list(bundle_id = bundle$id))
   ))
   await(connect_wait_task(visitor, deploy$task_id))
-  content
 })
+
+# Users and groups whose name starts with `query`, as one list.
+connect_search_principals <- function(client, query, limit = 8) {
+  users <- connect_json(
+    connect_req(client, "users") |>
+      httr2::req_url_query(prefix = query, page_size = limit)
+  )
+  groups <- connect_json(
+    connect_req(client, "groups") |>
+      httr2::req_url_query(prefix = query, page_size = limit)
+  )
+  promises::then(promises::promise_all(users = users, groups = groups), function(x) {
+    c(
+      lapply(x$users$results, connect_user_principal),
+      lapply(x$groups$results, connect_group_principal)
+    )
+  })
+}
+
+connect_user_principal <- function(user) {
+  name <- trimws(paste(user$first_name %||% "", user$last_name %||% ""))
+  list(
+    guid = user$guid,
+    type = "user",
+    name = if (nzchar(name)) name else user$username,
+    detail = user$email %||% user$username
+  )
+}
+
+connect_group_principal <- function(group) {
+  list(guid = group$guid, type = "group", name = group$name, detail = "Group")
+}
+
+connect_principal <- function(client, type, guid) {
+  path <- if (identical(type, "group")) "groups" else "users"
+  promises::then(
+    connect_json(connect_req(client, path, guid)),
+    if (identical(type, "group")) connect_group_principal else connect_user_principal
+  )
+}
+
+connect_permissions <- function(client, guid) {
+  connect_json(connect_req(client, "content", guid, "permissions"))
+}
+
+connect_grant <- function(client, guid, principal_guid, type) {
+  connect_json(
+    connect_req(client, "content", guid, "permissions") |>
+      httr2::req_body_json(list(
+        principal_guid = principal_guid,
+        principal_type = type,
+        role = "viewer"
+      ))
+  )
+}
+
+connect_revoke <- function(client, guid, permission_id) {
+  httr2::req_perform_promise(
+    connect_req(client, "content", guid, "permissions", permission_id) |>
+      httr2::req_method("DELETE")
+  )
+}
+
+connect_set_access <- function(client, guid, access_type) {
+  connect_json(
+    connect_req(client, "content", guid) |>
+      httr2::req_method("PATCH") |>
+      httr2::req_body_json(list(access_type = access_type))
+  )
+}
+
+connect_delete_content <- function(client, guid) {
+  httr2::req_perform_promise(
+    connect_req(client, "content", guid) |> httr2::req_method("DELETE")
+  )
+}
+
+# Who can open this app: its access type and, when that is a list of people,
+# the people. Reading the list takes the app's own key; a viewer's key may not
+# be allowed to.
+connect_app_access <- function(visitor) {
+  guid <- connect_content_guid()
+  read <- function(client) {
+    promises::then(connect_json(connect_req(client, "content", guid)), function(app) {
+      if (!identical(app$access_type, "acl")) {
+        return(list(access_type = app$access_type, principals = list()))
+      }
+      promises::then(connect_permissions(client, guid), function(principals) {
+        list(access_type = "acl", principals = principals)
+      })
+    })
+  }
+  owner <- tryCatch(connect_client(), error = function(err) NULL)
+  if (is.null(owner)) {
+    return(read(visitor))
+  }
+  promises::catch(read(owner), function(err) read(visitor))
+}
+
+connect_app_url <- function() {
+  if (!exists("app_url", envir = share_cache)) {
+    share_cache$app_url <- tryCatch(
+      connect_content(connect_client(), connect_content_guid())$content_url,
+      error = function(err) NULL
+    )
+  }
+  share_cache$app_url
+}
 
 connect_visitor_key <- function(client, token, audience) {
   req <- httr2::request(client$server) |>
