@@ -186,6 +186,8 @@ def test_selection(case: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> Non
     assert imported.tables == expected["tables"]
     assert list(imported.semantic_models) == expected["models"]
     assert list(imported.semantic_stubs) == expected["stubs"]
+    if "reads" in expected:
+        assert backend.yaml_reads == expected["reads"]
 
 
 @pytest.mark.parametrize("case", cases("hydration"), ids=lambda c: c["name"])

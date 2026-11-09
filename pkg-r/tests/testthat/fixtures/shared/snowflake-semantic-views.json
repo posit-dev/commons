@@ -975,7 +975,8 @@
             "ANALYTICS.PUBLIC.BROKEN_MODEL",
             "ANALYTICS.PUBLIC.PARTIAL_MODEL",
             "ANALYTICS.PUBLIC.EMPTY_MODEL"
-          ]
+          ],
+          "reads": []
         }
       },
       {
@@ -988,7 +989,10 @@
           "models": [
             "ANALYTICS.PUBLIC.REVENUE_MODEL"
           ],
-          "stubs": []
+          "stubs": [],
+          "reads": [
+            "REVENUE_MODEL"
+          ]
         }
       },
       {

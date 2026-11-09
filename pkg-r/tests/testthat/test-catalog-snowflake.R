@@ -818,6 +818,9 @@ test_that("Snowflake semantic view selection follows the shared fixture", {
       case$expected$stubs,
       info = case$name
     )
+    if (!is.null(case$expected$reads)) {
+      expect_equal(as.list(reads), case$expected$reads, info = case$name)
+    }
   }
 })
 
