@@ -317,13 +317,14 @@ databricks_relations_from_information_schema <- function(
       rows$table_schema[[i]],
       rows$table_name[[i]]
     )
-    object_type <- unname(object_types[key])
-    if (length(object_type) == 0L || is.na(object_type)) {
-      object_type <- rows$table_type[[i]]
-    }
-    kind <- if (grepl("metric", object_type, ignore.case = TRUE)) {
+    # ODBC reports a Unity Catalog metric view as VIEW, where
+    # information_schema says METRIC_VIEW, so either source naming a metric
+    # view decides.
+    types <- c(rows$table_type[[i]], unname(object_types[key]))
+    types <- types[!is.na(types)]
+    kind <- if (any(grepl("metric", types, ignore.case = TRUE))) {
       "metric_view"
-    } else if (grepl("view", object_type, ignore.case = TRUE)) {
+    } else if (any(grepl("view", types, ignore.case = TRUE))) {
       "view"
     } else {
       "table"
@@ -449,6 +450,15 @@ databricks_read_semantic_model <- function(
   if (is.null(text)) {
     metadata <- databricks_metric_view_metadata(con, id)
     text <- metadata$view_text %||% metadata$viewText
+    if (is.null(text) && isTRUE(metadata$view_text_truncated)) {
+      cli::cli_abort(
+        c(
+          "Databricks metric view {.val {label}} has a definition longer than the ODBC driver returns.",
+          i = "Raise the connection's {.code DefaultStringColumnLength}, for example to 32767."
+        ),
+        call = call
+      )
+    }
   }
   if (is.null(text)) {
     cli::cli_abort(
@@ -519,12 +529,60 @@ databricks_metric_view_metadata <- function(con, id) {
     )[[1]][[1]],
     error = function(err) NULL
   )
-  if (is.null(text)) {
-    return(list())
+  metadata <- if (!is.null(text)) {
+    tryCatch(
+      jsonlite::fromJSON(text, simplifyVector = FALSE),
+      error = function(err) NULL
+    )
   }
-  tryCatch(
-    jsonlite::fromJSON(text, simplifyVector = FALSE),
-    error = function(err) list()
+  if (!is.null(metadata)) {
+    return(metadata)
+  }
+  # The ODBC driver cuts a string column at its DefaultStringColumnLength, so
+  # JSON that fails to parse gives the length it was cut to.
+  limit <- if (!is.null(text)) nchar(text, type = "bytes")
+  databricks_described_metric_view(con, id, limit) %||% list()
+}
+
+# A metric view's JSON metadata can outgrow the ODBC driver's string length,
+# so the plain DESCRIBE gives the same metadata in rows: the columns, with
+# " measure" after a measure's type, and the YAML in the "View Text" row.
+# YAML cut at `limit` could still parse with members missing, so text that
+# reaches it is dropped and reported as truncated.
+databricks_described_metric_view <- function(con, id, limit = NULL) {
+  rows <- tryCatch(
+    DBI::dbGetQuery(
+      con,
+      paste("DESCRIBE TABLE EXTENDED", DBI::dbQuoteIdentifier(con, id))
+    ),
+    error = function(err) NULL
+  )
+  if (is.null(rows) || nrow(rows) == 0L) {
+    return(NULL)
+  }
+  names(rows) <- tolower(names(rows))
+  names <- rows$col_name
+  section <- which(is.na(names) | !nzchar(trimws(names)) | startsWith(names, "#"))
+  count <- if (length(section) > 0L) section[[1]] - 1L else nrow(rows)
+  columns <- lapply(seq_len(count), function(i) {
+    type <- rows$data_type[[i]]
+    comment <- rows$comment[[i]]
+    list(
+      name = names[[i]],
+      type = sub("\\s+measure$", "", type),
+      comment = if (!is.na(comment) && nzchar(comment)) comment,
+      is_measure = grepl("\\s+measure$", type)
+    )
+  })
+  text <- rows$data_type[which(names == "View Text")]
+  text <- if (length(text) > 0L && !is.na(text[[1]])) text[[1]]
+  truncated <- !is.null(text) &&
+    !is.null(limit) &&
+    nchar(text, type = "bytes") >= limit
+  list(
+    view_text = if (!truncated) text,
+    view_text_truncated = truncated,
+    columns = columns
   )
 }
 

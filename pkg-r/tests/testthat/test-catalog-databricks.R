@@ -48,6 +48,25 @@ test_that("Databricks ODBC metadata identifies metric views", {
   expect_equal(relations[[3]]$description, "Governed sales metrics.")
 })
 
+test_that("Databricks information schema identifies a metric view ODBC calls a view", {
+  rows <- data.frame(
+    table_catalog = "main",
+    table_schema = "analytics",
+    table_name = "sales_metrics",
+    table_type = "METRIC_VIEW",
+    comment = "",
+    stringsAsFactors = FALSE
+  )
+  object_types <- stats::setNames(
+    "VIEW",
+    databricks_object_key("analytics", "sales_metrics")
+  )
+
+  relations <- databricks_relations_from_information_schema(rows, object_types)
+
+  expect_equal(relations[[1]]$kind, "metric_view")
+})
+
 test_that("Databricks normalizes information schema names before ODBC lookup", {
   schemas <- NULL
   local_mocked_bindings(
@@ -339,6 +358,135 @@ test_that("Databricks reads unsupported parameter types as unsupported models", 
   model <- databricks_read_semantic_model(view, DBI::ANSI())
   expect_s3_class(model, "commons_unsupported_databricks_metric_view")
   expect_match(model$reason, "unsupported type", fixed = TRUE)
+})
+
+local_truncating_describe <- function(
+  view_text,
+  limit,
+  definition = NULL,
+  env = parent.frame()
+) {
+  local_mocked_bindings(
+    databricks_view_definition = function(...) definition,
+    .env = env
+  )
+  local_mocked_bindings(
+    dbGetQuery = function(con, sql) {
+      if (grepl("AS JSON", sql, fixed = TRUE)) {
+        json <- strrep("{\"table_name\":\"metrics\"", 100L)
+        return(data.frame(json_metadata = substr(json, 1L, limit)))
+      }
+      # The shape a live Unity Catalog metric view's plain DESCRIBE has.
+      data.frame(
+        col_name = c(
+          "order_id", "revenue", "", "# Detailed Table Information", "View Text"
+        ),
+        data_type = c("bigint", "double measure", "", "", view_text),
+        comment = c("Order identifier.", NA, "", "", "")
+      )
+    },
+    .package = "DBI",
+    .env = env
+  )
+}
+
+test_that("Databricks reads a metric view's YAML when ODBC truncates its JSON", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  local_truncating_describe(
+    paste(
+      "version: 1.1",
+      "source: main.analytics.orders",
+      "measures:",
+      "  - name: revenue",
+      "    expr: SUM(total)",
+      sep = "\n"
+    ),
+    limit = 1023L
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+
+  expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
+})
+
+test_that("Databricks expands wildcard fields from DESCRIBE when ODBC truncates its JSON", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  local_truncating_describe(
+    paste(
+      "version: 1.1",
+      "source: main.analytics.orders",
+      "fields:",
+      "  - expr: source.*",
+      "measures:",
+      "  - name: revenue",
+      "    expr: SUM(total)",
+      sep = "\n"
+    ),
+    limit = 1023L
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+
+  expect_s3_class(model, "commons_semantic_model")
+  expect_equal(vapply(model$dimensions, `[[`, character(1), "name"), "order_id")
+  expect_equal(model$dimensions[[1]]$type, "bigint")
+  expect_equal(model$dimensions[[1]]$description, "Order identifier.")
+  expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
+})
+
+test_that("Databricks expands wildcards from DESCRIBE beside a full information schema definition", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  yaml <- paste(
+    "version: 1.1",
+    "source: main.analytics.orders",
+    "fields:",
+    "  - expr: source.*",
+    "measures:",
+    "  - name: revenue",
+    "    expr: SUM(total)",
+    sep = "\n"
+  )
+  limit <- 20L
+  local_truncating_describe(
+    substr(yaml, 1L, limit),
+    limit = limit,
+    definition = yaml
+  )
+
+  model <- databricks_read_semantic_model(view, DBI::ANSI())
+
+  expect_equal(vapply(model$dimensions, `[[`, character(1), "name"), "order_id")
+  expect_equal(vapply(model$metrics, `[[`, character(1), "name"), "revenue")
+})
+
+test_that("Databricks refuses metric view YAML cut at the ODBC string length", {
+  view <- list(
+    id = DBI::Id(catalog = "main", schema = "analytics", table = "metrics"),
+    description = NULL
+  )
+  yaml <- paste(
+    "version: 1.1",
+    "source: main.analytics.orders",
+    "measures:",
+    "  - name: revenue",
+    "    expr: SUM(total)",
+    sep = "\n"
+  )
+  local_truncating_describe(yaml, limit = nchar(yaml, type = "bytes"))
+
+  expect_error(
+    databricks_read_semantic_model(view, DBI::ANSI()),
+    "longer than the ODBC driver returns"
+  )
 })
 
 test_that("Databricks metric SQL uses MEASURE and model fields", {
