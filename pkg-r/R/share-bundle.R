@@ -87,12 +87,8 @@ write_output_bundle <- function(output, dir, app_url = NULL) {
 
 write_static_page <- function(title, pieces, path) {
   dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
-  writeLines(
-    artifact_document_html(title, pieces),
-    path,
-    sep = "",
-    useBytes = TRUE
-  )
+  # Bytes rather than `writeLines()`, which writes `\r\n` on Windows
+  writeBin(charToRaw(enc2utf8(artifact_document_html(title, pieces))), path)
 }
 
 share_code_html <- function(kind, code, app_url = NULL) {
