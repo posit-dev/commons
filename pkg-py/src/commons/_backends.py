@@ -104,9 +104,13 @@ def escape_quoted_colons(sql: str) -> str:
 
     SQLAlchemy reads `:name` as a bind wherever it appears, quotes included,
     and drops the backslash of a `\\:` it finds there. Escaping every quoted
-    colon keeps the text the warehouse receives as it was written. Literals
-    are read as commons compiles them for Snowflake: a backslash escapes the
-    next character, and a doubled quote is a quote.
+    colon keeps the text the warehouse receives as it was written, because
+    SQLAlchemy removes each escape it reads. Literals are read as Snowflake
+    reads them: a backslash escapes the next character, and a doubled quote
+    is a quote. In a dialect that reads a backslash literally the scan can
+    run past a literal's end, which escapes colons that were not quoted;
+    that only matters for a real bind there, and commons binds values only
+    in SQL it compiles for Snowflake.
     """
     out: list[str] = []
     quote: str | None = None
@@ -171,7 +175,9 @@ class EngineBackend:
         with self._engine.connect() as connection:
             if self.dialect() == "databricks":
                 return _databricks_rows(connection, sql, params)
-            result = connection.execute(sqlalchemy.text(sql), dict(params or {}))
+            result = connection.execute(
+                sqlalchemy.text(escape_quoted_colons(sql)), dict(params or {})
+            )
             return [dict(row) for row in result.mappings()]
 
     def list_tables(self) -> list[str]:

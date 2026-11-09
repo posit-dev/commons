@@ -25,6 +25,11 @@ def test_engine_query_binds_named_params(engine: sqlalchemy.Engine) -> None:
     assert EngineBackend(engine).query("SELECT :p0 AS x", {"p0": 3}) == [{"x": 3}]
 
 
+def test_engine_query_keeps_quoted_colons(engine: sqlalchemy.Engine) -> None:
+    # Catalog queries name objects in quotes, and a name may hold a colon.
+    assert EngineBackend(engine).query("SELECT ' :x' AS \"a:b\"") == [{"a:b": " :x"}]
+
+
 def test_duckdb_query_refuses_params() -> None:
     with pytest.raises(ValueError, match="does not bind"):
         DuckDBBackend(duckdb.connect()).query("SELECT 1", {"p0": 1})
