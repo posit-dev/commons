@@ -209,6 +209,49 @@
         }
       },
       {
+        "name": "on, off, yes, and no are read as words, as YAML 1.2 reads them",
+        "id": {
+          "catalog": "ANALYTICS",
+          "schema": "PUBLIC",
+          "table": "STATUS_MODEL"
+        },
+        "yaml": "name: status\ntables:\n  orders:\n    base_table:\n      database: ANALYTICS\n      schema: PUBLIC\n      table: ORDERS\n    dimensions:\n      on:\n        synonyms: [yes, no, off]\n",
+        "expected": {
+          "name": "status",
+          "description": null,
+          "dimensions": [
+            {
+              "name": "on",
+              "kind": "dimension",
+              "parent": "orders",
+              "label": null,
+              "description": null,
+              "type": null,
+              "synonyms": [
+                "yes",
+                "no",
+                "off"
+              ],
+              "filter": false
+            }
+          ],
+          "metrics": [],
+          "facts": [],
+          "filters": [],
+          "parameters": {},
+          "dependencies": [
+            {
+              "catalog": "ANALYTICS",
+              "schema": "PUBLIC",
+              "table": "ORDERS"
+            }
+          ],
+          "dependencies_complete": true,
+          "first_touch": [],
+          "retrieval": []
+        }
+      },
+      {
         "name": "filter labels mark facts and dimensions, and named filters are context only",
         "id": {
           "catalog": "ANALYTICS",

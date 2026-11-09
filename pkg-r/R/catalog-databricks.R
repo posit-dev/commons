@@ -467,7 +467,7 @@ databricks_read_semantic_model <- function(
     )
   }
   specification <- tryCatch(
-    yaml::yaml.load(text),
+    yaml::yaml.load(text, handlers = yaml12_booleans()),
     error = function(err) {
       cli::cli_abort(
         "Databricks metric view {.val {label}} returned invalid YAML.",

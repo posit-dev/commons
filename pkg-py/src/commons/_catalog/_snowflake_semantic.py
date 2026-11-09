@@ -22,6 +22,7 @@ from .._semantic_models import (
     SemanticStub,
     TrustedCalculation,
     UnsupportedSemanticParameter,
+    load_spec_yaml,
     members_context,
     new_trusted_calculation,
     parameters_from_spec,
@@ -344,7 +345,7 @@ def read_semantic_model(
             f"Failed to read Snowflake semantic view {label!r}."
         ) from error
     try:
-        spec = yaml.safe_load(text)
+        spec = load_spec_yaml(text)
     except yaml.YAMLError as error:
         raise ValueError(
             f"Snowflake semantic view {label!r} returned invalid YAML."

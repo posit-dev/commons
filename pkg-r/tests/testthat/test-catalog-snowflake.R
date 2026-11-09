@@ -681,7 +681,7 @@ test_that("Snowflake semantic YAML reads as the shared fixture says", {
     model <- tryCatch(
       snowflake_semantic_model_from_spec(
         id,
-        yaml::yaml.load(case$yaml),
+        yaml::yaml.load(case$yaml, handlers = yaml12_booleans()),
         description = case$description,
         identity = identity
       ),
@@ -882,7 +882,7 @@ test_that("Snowflake verified queries read as the shared fixture says", {
   cases <- snowflake_semantic_cases("verified_queries")
   for (case in cases) {
     result <- tryCatch(
-      snowflake_verified_calculations(yaml::yaml.load(case$yaml)$verified_queries),
+      snowflake_verified_calculations(yaml::yaml.load(case$yaml, handlers = yaml12_booleans())$verified_queries),
       error = function(err) err
     )
     if (!is.null(case$expected$error)) {

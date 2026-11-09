@@ -13,6 +13,7 @@ from .._semantic_models import (
     SemanticMember,
     SemanticModel,
     UnsupportedSemanticParameter,
+    load_spec_yaml,
     parameters_from_spec,
     semantic_key,
     spec_entries,
@@ -339,7 +340,7 @@ def read_semantic_model(backend: Any, view: Any) -> SemanticModel | Unsupported:
     if text is None:
         raise ValueError(f"Failed to read Databricks metric view {label!r}.")
     try:
-        spec = yaml.safe_load(text)
+        spec = load_spec_yaml(text)
     except yaml.YAMLError as error:
         raise ValueError(
             f"Databricks metric view {label!r} returned invalid YAML."

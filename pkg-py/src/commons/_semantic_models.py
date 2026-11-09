@@ -13,9 +13,34 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+import yaml
+
 from ._data_source import TableId
 
 _TYPES = ("string", "integer", "number", "logical", "date", "datetime")
+
+
+class _Yaml12Loader(yaml.SafeLoader):
+    """A safe loader where only true and false are booleans.
+
+    YAML 1.1 also reads `on`, `off`, `yes`, and `no` as booleans, which turns a
+    metric view join's `on:` key into True. The warehouses read YAML 1.2.
+    """
+
+
+_BOOL = "tag:yaml.org,2002:bool"
+_Yaml12Loader.yaml_implicit_resolvers = {
+    first: [(tag, pattern) for tag, pattern in resolvers if tag != _BOOL]
+    for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+_Yaml12Loader.add_implicit_resolver(
+    _BOOL, re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$"), list("tTfF")
+)
+
+
+def load_spec_yaml(text: str) -> Any:
+    """Parse a warehouse's semantic model YAML. Raises `yaml.YAMLError`."""
+    return yaml.load(text, Loader=_Yaml12Loader)
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,6 @@ from dataclasses import asdict
 from typing import Any
 
 import pytest
-import yaml
 
 from commons._catalog._databricks import relations_from_information_schema
 from commons._catalog._databricks_semantic import (
@@ -16,7 +15,7 @@ from commons._catalog._databricks_semantic import (
     type_text,
 )
 from commons._data_source import TableId
-from commons._semantic_models import UnsupportedSemanticParameter
+from commons._semantic_models import UnsupportedSemanticParameter, load_spec_yaml
 
 from ._semantic_fixture import assert_fixture_error
 from ._shared import load_shared_fixture
@@ -44,7 +43,7 @@ def test_specification(case: dict[str, Any]) -> None:
     def read():
         return model_from_spec(
             TableId(**case["id"]),
-            yaml.safe_load(case["yaml"]),
+            load_spec_yaml(case["yaml"]),
             description=case.get("description"),
             columns=case.get("columns"),
         )

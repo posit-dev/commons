@@ -65,14 +65,14 @@
             "Governed order metrics.",
             "Treat returned orders as active.",
             "Metric-view filter: source.is_active",
-            "Metric-view relationship `customer` joins `main.sales.customers` with many_to_one cardinality.",
+            "Metric-view relationship `customer` joins `main.sales.customers` on source.customer_id = customer.id with many_to_one cardinality.",
             "Metric-view relationship `region` joins ``main`.`sales`.`sales regions`` on using region_id."
           ],
           "retrieval": [
             "Governed order metrics.",
             "Treat returned orders as active.",
             "Metric-view filter: source.is_active",
-            "Metric-view relationship `customer` joins `main.sales.customers` with many_to_one cardinality.",
+            "Metric-view relationship `customer` joins `main.sales.customers` on source.customer_id = customer.id with many_to_one cardinality.",
             "Metric-view relationship `region` joins ``main`.`sales`.`sales regions`` on using region_id."
           ]
         }

@@ -638,7 +638,7 @@ test_that("Databricks metric view definitions read as the shared fixture says", 
     model <- tryCatch(
       databricks_semantic_model_from_spec(
         do.call(DBI::Id, case$id),
-        yaml::yaml.load(case$yaml),
+        yaml::yaml.load(case$yaml, handlers = yaml12_booleans()),
         description = case$description,
         columns = case$columns %||% list()
       ),
