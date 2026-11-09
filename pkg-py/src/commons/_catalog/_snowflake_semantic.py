@@ -37,6 +37,7 @@ from ._snowflake import (
 
 __all__ = [
     "BACKEND",
+    "NO_PUBLIC_MEMBER",
     "SemanticSelection",
     "Unsupported",
     "associated_models",
@@ -58,6 +59,7 @@ __all__ = [
 ]
 
 BACKEND = "snowflake_semantic_view"
+NO_PUBLIC_MEMBER = "The view has no public metric, dimension, or fact."
 
 _PRIVATE = {"private", "private_access"}
 _SQL_TYPE = re.compile(r"[A-Za-z_]+( *\( *[0-9]+( *, *[0-9]+)? *\))?")

@@ -42,6 +42,10 @@ snowflake_table_registry <- function(
     con = con,
     call = call
   )
+  registry$semantic_models <- lapply(
+    registry$semantic_models,
+    snowflake_require_public_member
+  )
   unsupported <- vapply(
     registry$semantic_models,
     inherits,
@@ -84,6 +88,19 @@ snowflake_table_registry <- function(
     call = call
   )
   catalog_check_nonempty(registry, call = call)
+}
+
+snowflake_require_public_member <- function(model) {
+  if (
+    inherits(model, "commons_unsupported_snowflake_semantic_view") ||
+      length(model$metrics) + length(model$dimensions) + length(model$facts) > 0L
+  ) {
+    return(model)
+  }
+  snowflake_unsupported_semantic_view(
+    model$id,
+    "The view has no public metric, dimension, or fact."
+  )
 }
 
 snowflake_abort_unsupported_semantic_views <- function(models, call) {

@@ -182,6 +182,8 @@ def _semantic_models(
         model = _snowflake_semantic.read_semantic_model(backend, semantic.views[label])
         if isinstance(model, _snowflake_semantic.Unsupported):
             unsupported.append(f"{label}: {model.reason}")
+        elif not (model.metrics or model.dimensions or model.facts):
+            unsupported.append(f"{label}: {_snowflake_semantic.NO_PUBLIC_MEMBER}")
         else:
             models[label] = model
     if unsupported:

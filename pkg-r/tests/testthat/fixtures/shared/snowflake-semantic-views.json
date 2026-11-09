@@ -954,7 +954,8 @@
         "ACROSS_MODEL": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n  - name: sales\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: SALES}\n",
         "PAYLOAD_MODEL": "variables:\n  - name: payload\n    data_type: VARIANT\ntables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n",
         "BROKEN_MODEL": "tables: [orders\n",
-        "PARTIAL_MODEL": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n  - name: other\n    base_table: {database: ANALYTICS, schema: PUBLIC}\n"
+        "PARTIAL_MODEL": "tables:\n  - name: orders\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: ORDERS}\n    metrics:\n      - name: revenue\n  - name: other\n    base_table: {database: ANALYTICS, schema: PUBLIC}\n",
+        "EMPTY_MODEL": "tables:\n  - name: hidden\n    base_table: {database: ANALYTICS, schema: PUBLIC, table: HIDDEN}\n    metrics:\n      - name: secret\n        access_modifier: private_access\n"
       }
     },
     "cases": [
@@ -972,7 +973,8 @@
             "ANALYTICS.PUBLIC.ACROSS_MODEL",
             "ANALYTICS.PUBLIC.PAYLOAD_MODEL",
             "ANALYTICS.PUBLIC.BROKEN_MODEL",
-            "ANALYTICS.PUBLIC.PARTIAL_MODEL"
+            "ANALYTICS.PUBLIC.PARTIAL_MODEL",
+            "ANALYTICS.PUBLIC.EMPTY_MODEL"
           ]
         }
       },
@@ -1051,7 +1053,8 @@
           "stubs": [
             "ANALYTICS.PUBLIC.ACROSS_MODEL",
             "ANALYTICS.PUBLIC.BROKEN_MODEL",
-            "ANALYTICS.PUBLIC.PARTIAL_MODEL"
+            "ANALYTICS.PUBLIC.PARTIAL_MODEL",
+            "ANALYTICS.PUBLIC.EMPTY_MODEL"
           ]
         }
       },
@@ -1117,12 +1120,12 @@
       {
         "name": "a namespace's listed views count toward the object limit",
         "tables": null,
-        "object_limit": 6,
+        "object_limit": 7,
         "expected": {
           "error": "object limit",
           "mentions": [
-            "7 objects",
-            "limit of 6"
+            "8 objects",
+            "limit of 7"
           ]
         }
       },
@@ -1131,12 +1134,12 @@
         "tables": [
           "ANALYTICS.PUBLIC.ORDERS"
         ],
-        "object_limit": 5,
+        "object_limit": 6,
         "expected": {
           "error": "object limit",
           "mentions": [
-            "6 objects",
-            "limit of 5"
+            "7 objects",
+            "limit of 6"
           ]
         }
       },
@@ -1154,6 +1157,19 @@
           "mentions": [
             "ANALYTICS.PUBLIC.REVENUE_MODEL",
             "REVENUE_MODEL"
+          ]
+        }
+      },
+      {
+        "name": "an exact view with no public member fails the selection",
+        "tables": [
+          "ANALYTICS.PUBLIC.EMPTY_MODEL"
+        ],
+        "expected": {
+          "error": "unsupported",
+          "mentions": [
+            "ANALYTICS.PUBLIC.EMPTY_MODEL",
+            "no public metric, dimension, or fact"
           ]
         }
       },
