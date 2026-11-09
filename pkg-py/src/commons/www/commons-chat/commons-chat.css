@@ -4,6 +4,14 @@
 
 /* ---- Chat-level polish ---------------------------------------------- */
 
+/* Wraps a plot or table so a share button can sit at its corner. Loaded with
+ * the chat, not the share assets, so outputs lay out the same everywhere. */
+.commons-shareable {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+}
+
 /* Set shinychat CSS variables */
 :root {
   --shiny-tool-card-spinner-color: var(--bs-secondary-color, #6c757d);

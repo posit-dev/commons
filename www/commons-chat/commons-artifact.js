@@ -224,7 +224,11 @@ parent.postMessage("ready", "*");
       if (!a) return;
       status.textContent = statusText[a.status] ?? "";
       const share = this.querySelector(".commons-artifact-share");
-      if (share) share.hidden = a.status !== "ready";
+      // The share config renders only for viewers who can share.
+      if (share) {
+        share.hidden =
+          a.status !== "ready" || !document.querySelector(".commons-share-config");
+      }
       notice.innerHTML = a.error ? `<p>${escape(a.error)}</p>` : "";
 
       const frame = this.frame();

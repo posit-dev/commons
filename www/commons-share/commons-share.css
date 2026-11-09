@@ -1,9 +1,3 @@
-.commons-shareable {
-  position: relative;
-  width: fit-content;
-  max-width: 100%;
-}
-
 .commons-share-output {
   position: absolute;
   top: 0.5rem;
@@ -18,12 +12,32 @@
   border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s;
 }
 
 .commons-shareable:hover > .commons-share-output,
-.commons-share-output:focus-visible {
+.commons-shareable:focus-within > .commons-share-output {
   opacity: 1;
+  pointer-events: auto;
+}
+
+/* Touch screens can't hover, so the button stays visible. */
+@media (hover: none) {
+  .commons-share-output {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.commons-share-empty {
+  margin: 0.5rem 0 0;
+  font-size: 0.85em;
+  color: var(--bs-secondary-color);
+}
+
+.commons-share-update {
+  margin-left: auto;
 }
 
 .commons-share-dialog h6 {

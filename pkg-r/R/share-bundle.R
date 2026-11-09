@@ -103,9 +103,9 @@ share_code_html <- function(kind, code, app_url = NULL) {
   paste0(
     "<details class=\"commons-share-code\"><summary>Code</summary><p>",
     sprintf(
-      "The following %s can be reproduced in %s with this code:",
-      if (identical(kind, "table")) "table" else "figure",
-      share_app_link("this application", app_url)
+      "The code %s ran to make this %s:",
+      share_app_link("the data agent", app_url),
+      if (identical(kind, "table")) "table" else "figure"
     ),
     "</p><pre><code class=\"language-r\">",
     html_escape(code),

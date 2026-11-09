@@ -34,9 +34,11 @@ share_clean_title <- function(title) {
 }
 
 # The title a run_r plot's code gives it with labs() or ggtitle(), if any.
+# Code that sets several titles likely draws several plots, and which title
+# is whose isn't known, so none gets one.
 plot_code_title <- function(code) {
   exprs <- tryCatch(parse(text = code, keep.source = FALSE), error = function(err) NULL)
-  title <- NULL
+  titles <- character()
   find <- function(expr) {
     if (!is.call(expr)) {
       return()
@@ -53,7 +55,7 @@ plot_code_title <- function(code) {
         if (!is.null(expr$label)) expr$label else if (length(expr) > 1) expr[[2]]
       }
       if (rlang::is_string(arg)) {
-        title <<- arg
+        titles <<- c(titles, arg)
       }
     }
     for (i in seq_along(expr)[-1]) {
@@ -63,7 +65,8 @@ plot_code_title <- function(code) {
   for (expr in exprs) {
     find(expr)
   }
-  title
+  titles <- unique(titles)
+  if (length(titles) == 1) titles else NULL
 }
 
 gt_table_title <- function(value) {

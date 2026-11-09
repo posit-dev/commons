@@ -123,7 +123,7 @@ test_that("receipts follow the conversation, not its turns", {
 
 test_that("shared copies get titles Connect accepts", {
   expect_identical(share_title("Orders\nby region"), "Orders by region")
-  expect_identical(share_title("Hi"), "Shared from commons")
+  expect_identical(share_title("Hi"), "Shared copy")
   expect_identical(nchar(share_title(strrep("a", 2000))), 1024L)
 })
 
@@ -151,8 +151,8 @@ test_that("a plot or table is found by the id its display carries", {
   expect_identical(target$kind, "output")
   expect_identical(target$key, paste0("output:", id))
   expect_identical(target$heading, "Share this table")
-  # A run_sql table has no title of its own; the app names it when shared.
-  expect_null(target$title)
+  # A run_sql table has no title of its own, so it's named for its question.
+  expect_identical(target$title, "Which regions?")
   expect_identical(target$code, "commons$run_sql(\"SELECT region FROM sales\")")
   expect_null(share_output_target(agent, "0000"))
 })
@@ -168,7 +168,7 @@ test_that("the dialog shows who can open the copy and how", {
 
   expect_match(
     as.character(share_access_note("restricted")),
-    "Only people with access can open with the link.",
+    "Only people with access can open it with the link.",
     fixed = TRUE
   )
   expect_match(
@@ -176,9 +176,14 @@ test_that("the dialog shows who can open the copy and how", {
     "People given access to the app later won't be added.",
     fixed = TRUE
   )
-  expect_no_match(
+  expect_match(
     as.character(share_access_note("app", "logged_in")),
-    "later",
+    "Anyone signed in to Posit Connect can open it with the link.",
+    fixed = TRUE
+  )
+  expect_match(
+    as.character(share_access_note("app", "all")),
+    "Anyone with the link can open it, without signing in.",
     fixed = TRUE
   )
 
@@ -268,6 +273,7 @@ test_that("the people search offers only those who can open the app", {
   expect_identical(vapply(share_filter_people(people, "LOVE"), `[[`, "", "guid"), "u1")
   expect_identical(vapply(share_filter_people(people, "example"), `[[`, "", "guid"), c("u1", "u2"))
   expect_identical(vapply(share_filter_people(people, "analy"), `[[`, "", "guid"), "g1")
+  expect_length(share_filter_people(people, "group"), 0)
   expect_length(share_filter_people(people, "zed"), 0)
 })
 
@@ -309,4 +315,44 @@ test_that("the dialog shows placeholders until the people are known", {
   done <- as.character(share_people_ui(owner, list(), NULL))
   expect_no_match(done, "placeholder", fixed = TRUE)
   expect_null(share_status_ui(NULL))
+})
+
+test_that("the people search says when no one matches", {
+  expect_null(share_results_ui(list(), "add"))
+  expect_match(
+    as.character(share_results_ui(list(), "add", "No one matches.")),
+    "No one matches.",
+    fixed = TRUE
+  )
+})
+
+test_that("a re-shared copy offers an update only when what it shows changed", {
+  agent <- test_agent()
+  agent$set_turns(list(
+    ellmer::UserTurn(list(ellmer::ContentText("How many orders?"))),
+    ellmer::AssistantTurn(list(ellmer::ContentText("Six.")))
+  ))
+  target <- share_conversation_target()
+  before <- share_fingerprint(agent, target)
+  expect_identical(share_fingerprint(agent, target), before)
+
+  agent$set_turns(c(agent$get_turns(), list(
+    ellmer::UserTurn(list(ellmer::ContentText("And returns?"))),
+    ellmer::AssistantTurn(list(ellmer::ContentText("Two.")))
+  )))
+  expect_false(identical(share_fingerprint(agent, target), before))
+
+  stale <- as.character(share_status_ui(list(text = share_stale_text("conversation"), update = TRUE), "update"))
+  expect_match(stale, "data-input=\"update\"", fixed = TRUE)
+})
+
+test_that("a failed integration check isn't remembered", {
+  withr::defer(rm(list = ls(share_cache), envir = share_cache))
+  rm(list = ls(share_cache), envir = share_cache)
+  local_mocked_bindings(connect_client = function(...) list())
+  local_mocked_bindings(connect_visitor_integration = function(...) stop("Connect is down"))
+  expect_warning(expect_null(connect_share_audience()))
+
+  local_mocked_bindings(connect_visitor_integration = function(...) "publisher")
+  expect_identical(connect_share_audience(), "publisher")
 })

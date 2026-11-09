@@ -74,6 +74,13 @@
       return;
     }
 
+    const update = event.target.closest(".commons-share-update");
+    if (update) {
+      update.disabled = true;
+      send(update.dataset.input, Date.now());
+      return;
+    }
+
     const copy = event.target.closest(".commons-share-copy");
     if (copy && !copy.disabled && copy.dataset.url) {
       const label = copy.lastChild;

@@ -148,8 +148,8 @@ test_that("a shared plot or table folds its code above the footer", {
   expect_match(
     html,
     paste0(
-      "The following table can be reproduced in <a href=\"https://connect.example.com/app/\" ",
-      "target=\"_blank\" rel=\"noopener\">this application</a> with this code:"
+      "The code <a href=\"https://connect.example.com/app/\" ",
+      "target=\"_blank\" rel=\"noopener\">the data agent</a> ran to make this table:"
     ),
     fixed = TRUE
   )

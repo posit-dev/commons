@@ -112,6 +112,7 @@ test_that("a plot or table carries its own title when it has one", {
   expect_identical(plot_code_title("p <- ggplot(d) + ggplot2::ggtitle(\"Richness\")"), "Richness")
   expect_null(plot_code_title("ggplot(d) + labs(title = my_title)"))
   expect_null(plot_code_title("not R ("))
+  expect_null(plot_code_title("print(p1 + labs(title = \"A\"))\nprint(p2 + labs(title = \"B\"))"))
 
   html <- share_wrap("<table></table>", "table", "Counts <b>&</b> rates\n by site")
   id <- regmatches(html, regexpr("[0-9a-f]{16}", html))

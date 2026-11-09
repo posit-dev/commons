@@ -17,15 +17,19 @@
 #' shared it. In the dialog, they add people and groups who can open it, or
 #' open it to anyone who can access the app: for an app shared with a list of
 #' people, that list is copied once, so people added to the app later aren't
-#' added to the copy. A first share closed before its link is copied or anyone
-#' is added is deleted.
+#' added to the copy. A first share canceled before its link is copied or
+#' anyone is added is deleted.
+#'
+#' The dialog offers only people who can access the app, but the copy belongs
+#' to the viewer, who can open it to anyone from the Connect dashboard. Treat
+#' that limit as a convenience, not a data boundary.
 #'
 #' A copy shows what was displayed, including the results of the agent's
 #' calculations, so anyone it is shared with sees those results without
 #' needing access to the data behind them. A shared plot or table includes the
-#' code that reproduces it in the app. Nothing in a copy can reach the model
-#' or continue the conversation. Sharing the same thing again updates the
-#' existing copy at the same link.
+#' code that made it. Nothing in a copy can reach the model or continue the
+#' conversation. Sharing the same thing again opens the existing copy at the
+#' same link and, if what it shows has changed, offers to update it.
 #'
 #' @param id The ID of the chat element, matching [commons_server()].
 #'
@@ -58,20 +62,30 @@ share_server <- function(id, client, chat, session) {
   input <- session$input
   output <- session$output
   ns <- session$ns
-  # `current` is the share the open dialog shows; `busy` holds it until its
-  # deploy settles, which can outlast the dialog.
+  # `current` is the share the open dialog shows; `busy` is the share being
+  # published, until its deploy settles, which can outlast the dialog.
   state <- new.env(parent = emptyenv())
   state$current <- NULL
-  state$busy <- FALSE
+  state$busy <- NULL
   view <- shiny::reactiveValues(
     url = NULL,
     owner = NULL,
     people = list(),
     loading = TRUE,
     results = list(),
+    empty = NULL,
     access = "restricted",
     app_access = NULL,
     status = NULL
+  )
+
+  # Viewer accounts can't publish, so they aren't offered the button. If the
+  # role can't be read, the button shows and a share reports what went wrong.
+  can_share <- shiny::reactiveVal(NULL)
+  promises::then(
+    connect_visitor_role(token, audience),
+    function(role) can_share(!identical(role, "viewer")),
+    function(err) can_share(TRUE)
   )
 
   # Copies a share's state into the dialog, unless another share replaced it.
@@ -92,36 +106,61 @@ share_server <- function(id, client, chat, session) {
     message <- share_error_message(err)
     if (share$closed) {
       shiny::showNotification(message, type = "error", session = session)
+    } else if (is.null(share$content) && identical(state$current, share)) {
+      # Without a link, nothing else in the dialog can work.
+      share$closed <- TRUE
+      state$current <- NULL
+      share_modal(share$target$heading, message)
+    } else {
+      show(share, status = list(text = message, error = TRUE))
     }
-    show(share, status = list(text = message, error = TRUE))
   }
 
-  output[[ids$button]] <- shiny::renderUI(htmltools::tagList(
-    bslib::toolbar_input_button(
-      ns(ids$open),
-      label = "Share",
-      icon = share_icon(),
-      tooltip = "Share"
-    ),
+  # A share the viewer acted on is kept when the dialog closes.
+  touch <- function(share) {
+    share$touched <- TRUE
+    if (identical(state$current, share)) {
+      shiny::updateActionButton(session, ids$done, label = "Done")
+    }
+  }
+
+  release <- function(share) {
+    if (identical(state$busy, share)) {
+      state$busy <- NULL
+    }
+  }
+
+  output[[ids$button]] <- shiny::renderUI({
+    shiny::req(can_share())
+    htmltools::tagList(
+      bslib::toolbar_input_button(
+        ns(ids$open),
+        label = "Share",
+        icon = share_icon(),
+        tooltip = "Share conversation"
+      ),
     htmltools::span(
       class = "commons-share-config",
       hidden = NA,
       `data-output-input` = ns(ids$output),
-      share_icon()
-    ),
-    commons_share_dependency()
-  ))
+        share_icon()
+      ),
+      commons_share_dependency()
+    )
+  })
   output[[ids$people]] <- shiny::renderUI(
     share_people_ui(view$owner, view$people, ns(ids$remove), view$loading)
   )
   output[[ids$results]] <- shiny::renderUI(
-    share_results_ui(view$results, ns(ids$add))
+    share_results_ui(view$results, ns(ids$add), view$empty)
   )
   output[[ids$note]] <- shiny::renderUI(
     share_access_note(view$access, view$app_access)
   )
   output[[ids$link]] <- shiny::renderUI(share_copy_button(view$url, ns(ids$copy)))
-  output[[ids$status]] <- shiny::renderUI(share_status_ui(view$status))
+  output[[ids$status]] <- shiny::renderUI(
+    share_status_ui(view$status, ns(ids$update))
+  )
 
   offer <- function(target) {
     if (is.null(target$title)) {
@@ -129,7 +168,7 @@ share_server <- function(id, client, chat, session) {
         share_fallback_title(app$title, target$noun %||% target$kind)
       )
     }
-    if (state$busy) {
+    if (!is.null(state$busy)) {
       return(share_modal(target$heading, "A copy is still being published."))
     }
     target$conversation <- receipts$conversation_id()
@@ -144,7 +183,7 @@ share_server <- function(id, client, chat, session) {
     share$closed <- FALSE
     share$abandoned <- FALSE
     state$current <- share
-    state$busy <- TRUE
+    state$busy <- share
     show(
       share,
       url = receipt$url,
@@ -152,14 +191,17 @@ share_server <- function(id, client, chat, session) {
       people = list(),
       loading = TRUE,
       results = list(),
+      empty = NULL,
       access = share$access,
       app_access = NULL,
       status = NULL
     )
-    shiny::showModal(share_dialog(target, share$access, ids, ns))
+    shiny::showModal(share_dialog(target, share$access, ids, ns, first = is.null(receipt)))
     publish(share)
   }
 
+  # Opens the share's copy, making one if there isn't one yet. A new copy is
+  # published right away; an existing one only when the viewer asks.
   publish <- function(share) {
     target <- share$target
     opened <- connect_share_open(
@@ -179,6 +221,17 @@ share_server <- function(id, client, chat, session) {
         receipts$remember(target, opened$content)
         share$inherited <- list()
         share$access <- "restricted"
+        # The receipt's copy may be gone, so the dialog shows the new one.
+        if (identical(state$current, share)) {
+          shiny::updateSelectInput(
+            session,
+            ids$access,
+            selected = share$pending_access %||% "restricted"
+          )
+          if (!share$touched) {
+            shiny::updateActionButton(session, ids$done, label = "Cancel")
+          }
+        }
       }
       if (share$closed && !share$touched && share$created) {
         return(abandon(share))
@@ -188,42 +241,27 @@ share_server <- function(id, client, chat, session) {
         url = opened$content$content_url,
         owner = connect_user_principal(opened$user),
         loading = !opened$created,
-        access = share$access,
-        status = list(text = "Publishing the latest version\u2026", busy = TRUE)
+        access = share$access
       )
       # Who can open the app bounds who the search offers; NULL means
-      # everyone on the server can.
+      # everyone on the server can, so a failure offers no one.
       share$audience <- promises::then(connect_app_access(share$visitor), function(access) {
         show(share, app_access = access$access_type)
         connect_app_people(share$visitor, access)
       })
-      share$audience <- promises::catch(share$audience, function(err) NULL)
+      share$audience <- promises::catch(share$audience, function(err) list())
       if (!opened$created) {
         load_people(share)
       }
       if (!is.null(share$pending_access)) {
         set_access(share, share$pending_access)
       }
-      ready <- if (identical(target$kind, "conversation")) {
-        artifact_store_rendered(store)
-      } else {
-        promises::promise_resolve(NULL)
+      if (opened$created) {
+        return(deploy(share))
       }
-      promises::then(ready, function(...) {
-        connect_share_deploy(
-          share$visitor,
-          share$content$guid,
-          share_archive(client, target, app_url)
-        )
-      })
-    })
-    done <- promises::then(done, function(...) {
-      if (share$abandoned) {
-        return(invisible())
+      if (!identical(share$receipt$fingerprint, share_fingerprint(client, target))) {
+        show(share, status = list(text = share_stale_text(target$kind), update = TRUE))
       }
-      receipts$remember(target, share$content)
-      save_history()
-      show(share, status = NULL)
     })
     done <- promises::catch(done, function(err) {
       if (!share$abandoned) {
@@ -231,12 +269,48 @@ share_server <- function(id, client, chat, session) {
         fail(share, err, "Sharing")
       }
     })
-    promises::finally(done, function() state$busy <- FALSE)
+    promises::finally(done, function() release(share))
+  }
+
+  deploy <- function(share) {
+    target <- share$target
+    state$busy <- share
+    show(share, status = list(text = "Publishing the latest version\u2026", busy = TRUE))
+    ready <- if (identical(target$kind, "conversation")) {
+      artifact_store_rendered(store)
+    } else {
+      promises::promise_resolve(NULL)
+    }
+    done <- promises::then(ready, function(...) {
+      fingerprint <- share_fingerprint(client, target)
+      deployed <- connect_share_deploy(
+        share$visitor,
+        share$content$guid,
+        share_archive(client, target, app_url)
+      )
+      promises::then(deployed, function(...) fingerprint)
+    })
+    done <- promises::then(done, function(fingerprint) {
+      if (share$abandoned) {
+        return(invisible())
+      }
+      receipts$remember(target, share$content)
+      receipts$update(target, list(fingerprint = fingerprint))
+      save_history()
+      show(share, status = NULL)
+    })
+    done <- promises::catch(done, function(err) {
+      if (!share$abandoned) {
+        fail(share, err, "Sharing")
+      }
+    })
+    promises::finally(done, function() release(share))
   }
 
   # A first share closed before anyone could use its link leaves nothing.
   abandon <- function(share) {
     share$abandoned <- TRUE
+    release(share)
     receipts$forget(share$target)
     promises::catch(
       connect_delete_content(share$visitor, share$content$guid),
@@ -279,7 +353,7 @@ share_server <- function(id, client, chat, session) {
 
   set_access <- function(share, access) {
     if (is.null(share$content)) {
-      share$pending_access <- access
+      share$pending_access <- if (!identical(access, share$access)) access
       return(invisible())
     }
     share$pending_access <- NULL
@@ -294,7 +368,11 @@ share_server <- function(id, client, chat, session) {
           return(connect_set_access(visitor, guid, app$access_type))
         }
         promises::then(connect_set_access(visitor, guid, "acl"), function(...) {
-          inherit_people(share, app$principals)
+          # The app's permissions don't list its owner.
+          owner <- if (!is.null(app$owner_guid)) {
+            list(list(principal_guid = app$owner_guid, principal_type = "user"))
+          }
+          inherit_people(share, c(app$principals, owner))
         })
       })
     } else {
@@ -329,6 +407,7 @@ share_server <- function(id, client, chat, session) {
       names(share$inherited)
     )
     principals <- Filter(function(p) !p$principal_guid %in% taken, principals)
+    principals <- principals[!duplicated(vapply(principals, `[[`, character(1), "principal_guid"))]
     grants <- lapply(principals, function(p) {
       promises::then(
         connect_grant(share$visitor, share$content$guid, p$principal_guid, p$principal_type),
@@ -375,8 +454,17 @@ share_server <- function(id, client, chat, session) {
 
   shiny::observeEvent(input[[ids$output]], {
     target <- share_output_target(client, input[[ids$output]]$id)
-    if (!is.null(target)) {
+    if (is.null(target)) {
+      share_modal("Share", "This is no longer in the conversation, so it can't be shared.")
+    } else {
       offer(target)
+    }
+  })
+
+  shiny::observeEvent(input[[ids$update]], {
+    share <- state$current
+    if (!is.null(share) && !is.null(share$content) && is.null(state$busy)) {
+      deploy(share)
     }
   })
 
@@ -386,13 +474,17 @@ share_server <- function(id, client, chat, session) {
     query <- trimws(search() %||% "")
     if (is.null(share) || is.null(share$visitor) || nchar(query) < 2) {
       view$results <- list()
+      view$empty <- NULL
       return()
     }
     found <- promises::then(share$audience, function(audience) {
       if (is.null(audience)) {
-        connect_search_principals(share$visitor, query)
+        promises::then(
+          connect_search_principals(share$visitor, query),
+          function(people) list(people = people, scoped = FALSE)
+        )
       } else {
-        share_filter_people(audience, query)
+        list(people = share_filter_people(audience, query), scoped = TRUE)
       }
     })
     promises::then(
@@ -402,7 +494,11 @@ share_server <- function(id, client, chat, session) {
           share$user$guid,
           vapply(share$people, `[[`, character(1), "guid")
         )
-        show(share, results = Filter(function(p) !p$guid %in% taken, found))
+        results <- Filter(function(p) !p$guid %in% taken, found$people)
+        empty <- if (length(results) == 0) {
+          if (found$scoped) "No one with access to this app matches." else "No one matches."
+        }
+        show(share, results = results, empty = empty)
       },
       function(err) fail(share, err, "Searching people")
     )
@@ -415,9 +511,10 @@ share_server <- function(id, client, chat, session) {
     if (is.null(share) || is.null(share$content) || is.null(person)) {
       return()
     }
-    share$touched <- TRUE
+    touch(share)
     shiny::updateTextInput(session, ids$search, value = "")
     view$results <- list()
+    view$empty <- NULL
     granted <- if (!is.null(share$inherited[[guid]])) {
       # Already a viewer through the app's access; now they're on the list
       # in their own right.
@@ -446,7 +543,7 @@ share_server <- function(id, client, chat, session) {
     if (is.null(share) || is.null(person)) {
       return()
     }
-    share$touched <- TRUE
+    touch(share)
     promises::then(
       connect_revoke(share$visitor, share$content$guid, person$permission_id),
       function(...) {
@@ -460,17 +557,17 @@ share_server <- function(id, client, chat, session) {
   shiny::observeEvent(input[[ids$access]], {
     share <- state$current
     access <- input[[ids$access]]
-    if (is.null(share) || identical(access, share$access)) {
+    if (is.null(share) || identical(access, share$pending_access %||% share$access)) {
       return()
     }
-    share$touched <- TRUE
+    touch(share)
     view$access <- access
     set_access(share, access)
   })
 
   shiny::observeEvent(input[[ids$copy]], {
     if (!is.null(state$current)) {
-      state$current$touched <- TRUE
+      touch(state$current)
     }
   })
 
@@ -493,7 +590,7 @@ share_server <- function(id, client, chat, session) {
 share_ids_for <- function(id) {
   inputs <- c(
     "open", "document", "output", "search", "add", "remove", "access",
-    "copy", "done", "people", "results", "note", "link", "status"
+    "copy", "done", "update", "people", "results", "note", "link", "status"
   )
   ids <- as.list(paste0(id, "_share_", inputs))
   names(ids) <- inputs
@@ -597,11 +694,14 @@ share_output_target <- function(client, id) {
     return(NULL)
   }
   noun <- if (identical(output$kind, "table")) "table" else "figure"
+  # Without a title of its own, an output is named for the question it answered.
+  title <- output$title %||%
+    (if (!is.null(output$question)) truncate_title(output$question))
   list(
     kind = "output",
     key = paste0("output:", id),
     heading = paste("Share this", noun),
-    title = if (!is.null(output$title)) share_title(output$title),
+    title = if (!is.null(title)) share_title(title),
     html = output$html,
     code = output$code,
     noun = output$kind
@@ -618,14 +718,42 @@ share_fallback_title <- function(app_title, noun) {
   sprintf("%s (%s)", app_title, noun)
 }
 
-# People and groups whose name or email contains `query`.
+# People whose name or email contains `query`, and groups whose name does.
 share_filter_people <- function(people, query, limit = 8) {
   query <- tolower(query)
   hits <- Filter(function(p) {
     grepl(query, tolower(p$name), fixed = TRUE) ||
-      grepl(query, tolower(p$detail %||% ""), fixed = TRUE)
+      (identical(p$type, "user") && grepl(query, tolower(p$detail %||% ""), fixed = TRUE))
   }, people)
   utils::head(hits, limit)
+}
+
+# What a copy shows, to tell whether it changed since it was published.
+share_fingerprint <- function(client, target) {
+  store <- client$artifact_store()
+  documents <- if (!is.null(store)) sort(ls(store$artifacts))
+  shown <- switch(
+    target$kind,
+    conversation = list(
+      wire_messages_json(shared_messages(client)),
+      lapply(documents, function(id) artifact_get(store, id)$html)
+    ),
+    document = {
+      artifact <- artifact_get(store, target$id)
+      list(artifact$title, artifact$html)
+    },
+    target[c("title", "html", "code")]
+  )
+  rlang::hash(shown)
+}
+
+share_stale_text <- function(kind) {
+  switch(
+    kind,
+    conversation = "The conversation has changed since this copy was published.",
+    document = "The document has changed since this copy was published.",
+    "This copy may be out of date."
+  )
 }
 
 share_archive <- function(client, target, app_url = NULL) {
@@ -651,7 +779,7 @@ share_archive <- function(client, target, app_url = NULL) {
 # Connect requires a title of 3 to 1024 characters without line breaks.
 share_title <- function(title) {
   title <- trimws(gsub("[\t\n\f\r]+", " ", title))
-  if (nchar(title) < 3) "Shared from commons" else substr(title, 1, 1024)
+  if (nchar(title) < 3) "Shared copy" else substr(title, 1, 1024)
 }
 
 share_receipt <- function(content) {
@@ -662,7 +790,9 @@ share_receipt <- function(content) {
   )
 }
 
-share_dialog <- function(target, access, ids, ns) {
+# Until the viewer acts on a first share, closing the dialog discards the
+# copy, so its button reads "Cancel".
+share_dialog <- function(target, access, ids, ns, first = TRUE) {
   search <- shiny::textInput(
     ns(ids$search),
     label = NULL,
@@ -711,7 +841,7 @@ share_dialog <- function(target, access, ids, ns) {
         class = "shiny-html-output",
         share_copy_button(NULL, NULL)
       ),
-      shiny::actionButton(ns(ids$done), "Done", class = "btn-primary")
+      shiny::actionButton(ns(ids$done), if (first) "Cancel" else "Done", class = "btn-primary")
     ),
     easyClose = FALSE
   )
@@ -764,9 +894,12 @@ share_person_placeholder <- function() {
   )
 }
 
-share_results_ui <- function(results, add_id) {
+share_results_ui <- function(results, add_id, empty = NULL) {
   if (length(results) == 0) {
-    return(NULL)
+    if (is.null(empty)) {
+      return(NULL)
+    }
+    return(htmltools::p(class = "commons-share-empty", role = "status", empty))
   }
   htmltools::div(
     class = "list-group commons-share-results",
@@ -801,16 +934,22 @@ share_person_tag <- function(person) {
   )
 }
 
+# "Anyone who can access this app" copies the app's access, which ranges from
+# a list of people to anyone on the internet.
 share_access_note <- function(access, app_access = NULL) {
-  text <- if (identical(access, "app")) {
+  text <- if (!identical(access, "app")) {
+    "Only people with access can open it with the link."
+  } else if (identical(app_access, "all")) {
+    "Anyone with the link can open it, without signing in."
+  } else if (identical(app_access, "logged_in")) {
+    "Anyone signed in to Posit Connect can open it with the link."
+  } else {
     paste(
-      "Anyone who can open this app can open with the link.",
+      "Anyone who can open this app can open it with the link.",
       if (identical(app_access, "acl")) {
         "People given access to the app later won't be added."
       }
     )
-  } else {
-    "Only people with access can open with the link."
   }
   htmltools::div(
     class = "commons-share-note",
@@ -831,7 +970,7 @@ share_copy_button <- function(url, copy_id) {
   )
 }
 
-share_status_ui <- function(status) {
+share_status_ui <- function(status, update_id = NULL) {
   if (is.null(status)) {
     return(NULL)
   }
@@ -842,7 +981,15 @@ share_status_ui <- function(status) {
     ),
     role = "status",
     if (isTRUE(status$busy)) share_spinner(),
-    status$text
+    htmltools::span(status$text),
+    if (isTRUE(status$update)) {
+      htmltools::tags$button(
+        type = "button",
+        class = "btn btn-sm btn-outline-primary commons-share-update",
+        `data-input` = update_id,
+        "Update copy"
+      )
+    }
   )
 }
 

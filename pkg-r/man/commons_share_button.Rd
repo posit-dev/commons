@@ -31,13 +31,17 @@ dialog opens. The copy is static content that belongs to the viewer who
 shared it. In the dialog, they add people and groups who can open it, or
 open it to anyone who can access the app: for an app shared with a list of
 people, that list is copied once, so people added to the app later aren't
-added to the copy. A first share closed before its link is copied or anyone
-is added is deleted.
+added to the copy. A first share canceled before its link is copied or
+anyone is added is deleted.
+
+The dialog offers only people who can access the app, but the copy belongs
+to the viewer, who can open it to anyone from the Connect dashboard. Treat
+that limit as a convenience, not a data boundary.
 
 A copy shows what was displayed, including the results of the agent's
 calculations, so anyone it is shared with sees those results without
 needing access to the data behind them. A shared plot or table includes the
-code that reproduces it in the app. Nothing in a copy can reach the model
-or continue the conversation. Sharing the same thing again updates the
-existing copy at the same link.
+code that made it. Nothing in a copy can reach the model or continue the
+conversation. Sharing the same thing again opens the existing copy at the
+same link and, if what it shows has changed, offers to update it.
 }

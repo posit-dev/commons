@@ -369,20 +369,24 @@ connect_add_collaborator <- function(client, guid, principal_guid) {
   invisible(NULL)
 }
 
+# Failures aren't cached, so a later session checks again.
 connect_share_audience <- function() {
-  if (!exists("audience", envir = share_cache)) {
-    share_cache$audience <- tryCatch(
-      connect_visitor_integration(connect_client(), connect_content_guid()),
-      error = function(err) {
-        cli::cli_warn(
-          "Couldn't check this content's integrations, so sharing is off.",
-          parent = err
-        )
-        NULL
-      }
-    )
+  if (exists("audience", envir = share_cache)) {
+    return(share_cache$audience)
   }
-  share_cache$audience
+  tryCatch(
+    share_cache$audience <- connect_visitor_integration(
+      connect_client(),
+      connect_content_guid()
+    ),
+    error = function(err) {
+      cli::cli_warn(
+        "Couldn't check this content's integrations, so sharing is off.",
+        parent = err
+      )
+      NULL
+    }
+  )
 }
 
 share_cache <- new.env(parent = emptyenv())
@@ -441,6 +445,14 @@ connect_share_open <- coro::async(function(token, audience, title, guid = NULL) 
     ))
   }
   list(visitor = visitor, user = user, content = content, created = created)
+})
+
+connect_visitor_role <- coro::async(function(token, audience) {
+  owner <- connect_client()
+  key <- await(connect_visitor_key(owner, token, audience))
+  visitor <- list(server = owner$server, api_key = key)
+  user <- await(connect_json(connect_req(visitor, "user")))
+  user$user_role
 })
 
 connect_share_deploy <- coro::async(function(visitor, guid, archive) {
@@ -599,16 +611,16 @@ connect_group_people <- function(client, guid) {
 
 # The app's link and title, for shared pages and untitled outputs.
 connect_app_info <- function() {
-  if (!exists("app_info", envir = share_cache)) {
-    share_cache$app_info <- tryCatch(
-      {
-        app <- connect_content(connect_client(), connect_content_guid())
-        list(url = app$content_url, title = app$title %||% app$name)
-      },
-      error = function(err) list()
-    )
+  if (exists("app_info", envir = share_cache)) {
+    return(share_cache$app_info)
   }
-  share_cache$app_info
+  tryCatch(
+    {
+      app <- connect_content(connect_client(), connect_content_guid())
+      share_cache$app_info <- list(url = app$content_url, title = app$title %||% app$name)
+    },
+    error = function(err) list()
+  )
 }
 
 connect_visitor_key <- function(client, token, audience) {

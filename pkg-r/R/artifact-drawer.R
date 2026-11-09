@@ -80,6 +80,7 @@ artifact_view_ui <- function(view, share_input = NULL) {
             type = "button",
             class = "btn btn-sm btn-outline-secondary commons-artifact-share",
             hidden = NA,
+            share_icon(),
             "Share"
           )
         }
