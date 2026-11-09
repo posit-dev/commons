@@ -1,3 +1,12 @@
+# a dictionary path without tables errors in data_source()
+
+    Code
+      data_source(sales = test_sales(), dictionary = path)
+    Condition
+      Error in `data_source()`:
+      ! The data dictionary at '<path>' has no top-level tables field.
+      i List each table, with its columns, under `tables:`.
+
 # tables and columns without names error
 
     Code

@@ -1,0 +1,32 @@
+{
+  "read_dictionary_file": {
+    "description": "Which data-dict.yaml files load from disk. A file without a top-level `tables` key gives the agent nothing to work from, and is almost always a mistake, like columns listed at the top level instead of under a table. An explicitly empty `tables` is accepted. Dictionaries built in memory are out of scope. Errors are pinned as reason slugs; the wording belongs to each language.",
+    "cases": [
+      {
+        "name": "tables are listed",
+        "yaml": "tables:\n  - name: hikes\n    columns:\n      - name: hike_name\n        type: string\n",
+        "tables": ["hikes"]
+      },
+      {
+        "name": "an explicitly empty tables",
+        "yaml": "name: hikes\ntables: []\n",
+        "tables": []
+      },
+      {
+        "name": "columns at the top level",
+        "yaml": "columns:\n  - name: hike_name\n    type: string\n    description: Name of the hike\n",
+        "error": "missing_tables"
+      },
+      {
+        "name": "prose without tables",
+        "yaml": "name: hikes\ndescription: Hikes in Shenandoah.\n",
+        "error": "missing_tables"
+      },
+      {
+        "name": "an empty file",
+        "yaml": "",
+        "error": "missing_tables"
+      }
+    ]
+  }
+}

@@ -2,9 +2,19 @@
 # rest of the package works from. Only the data-dict.yaml format exists
 # today; when other formats arrive (a dbt manifest, harvested catalog
 # metadata), this is where the format is inferred and dispatched.
-data_dictionary <- function(path) {
-  rlang::check_string(path, allow_empty = FALSE)
-  new_data_dictionary(yaml::read_yaml(path))
+data_dictionary <- function(path, call = rlang::caller_env()) {
+  rlang::check_string(path, allow_empty = FALSE, call = call)
+  raw <- yaml::read_yaml(path)
+  if (!is.list(raw) || !"tables" %in% names(raw)) {
+    cli::cli_abort(
+      c(
+        "The data dictionary at {.path {path}} has no top-level {.field tables} field.",
+        i = "List each table, with its columns, under {.code tables:}."
+      ),
+      call = call
+    )
+  }
+  new_data_dictionary(raw, call = call)
 }
 
 as_data_dictionary <- function(x, call = rlang::caller_env()) {
@@ -12,7 +22,7 @@ as_data_dictionary <- function(x, call = rlang::caller_env()) {
     return(x)
   }
   if (is.character(x) && length(x) == 1) {
-    return(data_dictionary(x))
+    return(data_dictionary(x, call = call))
   }
   cli::cli_abort(
     "{.arg dictionary} must be a path to a data-dict.yaml file.",

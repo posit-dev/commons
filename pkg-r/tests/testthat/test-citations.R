@@ -123,7 +123,8 @@ test_that("dataset-level dictionary prose is citable", {
       '$version: "0.1.0"',
       "name: retail sales",
       "description: Order and revenue data for a small retailer.",
-      "details: Revenue figures exclude tax collected at checkout."
+      "details: Revenue figures exclude tax collected at checkout.",
+      "tables: []"
     ),
     path
   )
