@@ -48,6 +48,8 @@ definition_export_table <- function(table, call = rlang::caller_env()) {
   if (length(collisions)) {
     cli::cli_abort(
       "Definitions on table {.val {table_name}} share names with columns: {.val {collisions}}.",
+      class = "commons_definition_invalid_error",
+      code = "S33",
       call = call
     )
   }
@@ -78,6 +80,8 @@ definition_export_table <- function(table, call = rlang::caller_env()) {
     if (length(ready) == 0L) {
       cli::cli_abort(
         "Definitions on table {.val {table_name}} reference each other in a cycle: {.val {pending}}.",
+        class = "commons_definition_invalid_error",
+        code = "S34",
         call = call
       )
     }
@@ -106,6 +110,8 @@ definition_prepare_envelopes <- function(definitions, table, call) {
     if (!rlang::is_string(expression) || !nzchar(trimws(expression))) {
       cli::cli_abort(
         "Definition {.val {name}} on table {.val {table}} needs a non-empty {.field expr}.",
+        class = "commons_definition_invalid_error",
+        code = "S19",
         call = call
       )
     }
@@ -124,6 +130,8 @@ definition_prepare_envelopes <- function(definitions, table, call) {
         cli::cli_abort(
           "Definition {.val {name}} on table {.val {table}} has an invalid expression.",
           parent = error,
+          class = "commons_definition_invalid_error",
+          code = "S19",
           call = call
         )
       }
@@ -148,9 +156,17 @@ definition_resolve_one <- function(
   ir <- tryCatch(
     definition_check_node(definition$ast, env, state, call = call),
     error = function(error) {
+      # A refusal without a more specific code is a type error.
+      code <- if (inherits(error, "commons_definition_invalid_error")) {
+        error$code
+      } else {
+        "S21"
+      }
       cli::cli_abort(
         "Definition {.val {definition$name}} on table {.val {table}} does not type-check.",
         parent = error,
+        class = "commons_definition_invalid_error",
+        code = code,
         call = call
       )
     }
@@ -159,21 +175,38 @@ definition_resolve_one <- function(
   if (total_selections > 1L) {
     cli::cli_abort(
       "Definition {.val {definition$name}} on table {.val {table}} recursively uses more than one {.code COLUMNS(...)} selection.",
+      class = "commons_definition_invalid_error",
+      code = "S21",
       call = call
     )
   }
   if (total_selections > 0L && !ir$type %in% c("boolean", "any")) {
     cli::cli_abort(
       "Definition {.val {definition$name}} on table {.val {table}} uses {.code COLUMNS(...)} but is not a boolean filter.",
+      class = "commons_definition_invalid_error",
+      code = "S21",
       call = call
     )
   }
   if (identical(ir$kind, "selected")) {
-    definition_require_selection(state$selection, "boolean", "a filter", call)
+    tryCatch(
+      definition_require_selection(state$selection, "boolean", "a filter", call),
+      error = function(error) {
+        cli::cli_abort(
+          "Definition {.val {definition$name}} on table {.val {table}} does not type-check.",
+          parent = error,
+          class = "commons_definition_invalid_error",
+          code = "S21",
+          call = call
+        )
+      }
+    )
   }
   if (identical(ir$type, "unknown")) {
     cli::cli_abort(
       "Definition {.val {definition$name}} on table {.val {table}} has no inferred type.",
+      class = "commons_definition_invalid_error",
+      code = "S21",
       call = call
     )
   }
@@ -462,7 +495,12 @@ definition_check_reference <- function(node, env, state, call) {
   if (length(path) == 1L && !path[[1]] %in% names(env$columns)) {
     definition <- env$definitions[[path[[1]]]]
     if (is.null(definition)) {
-      cli::cli_abort("Column {.val {path[[1]]}} not found.", call = call)
+      cli::cli_abort(
+        "Column {.val {path[[1]]}} not found.",
+        class = "commons_definition_invalid_error",
+        code = "S20",
+        call = call
+      )
     }
     state$definition_selection_count <- state$definition_selection_count +
       (attr(definition, "selection_count") %||% 0L)
@@ -475,7 +513,12 @@ definition_check_reference <- function(node, env, state, call) {
   }
   column <- env$columns[[path[[1]]]]
   if (is.null(column)) {
-    cli::cli_abort("Column {.val {path[[1]]}} not found.", call = call)
+    cli::cli_abort(
+      "Column {.val {path[[1]]}} not found.",
+      class = "commons_definition_invalid_error",
+      code = "S20",
+      call = call
+    )
   }
   current <- column
   if (length(path) > 1L) {
@@ -494,6 +537,8 @@ definition_check_reference <- function(node, env, state, call) {
       if (is.null(current)) {
         cli::cli_abort(
           "Struct {.val {prefix}} has no field {.val {path[[i]]}}.",
+          class = "commons_definition_invalid_error",
+          code = "S20",
           call = call
         )
       }
@@ -542,6 +587,8 @@ definition_check_function <- function(node, env, state, call) {
   ) {
     cli::cli_abort(
       "{.code {toupper(node$name)}()} cannot aggregate an expression that is already aggregated.",
+      class = "commons_definition_invalid_error",
+      code = "S30",
       call = call
     )
   }
@@ -691,7 +738,12 @@ definition_resolve_selection <- function(selector, columns, call) {
   if (identical(selector$kind, "list")) {
     missing <- setdiff(selector$names, names)
     if (length(missing)) {
-      cli::cli_abort("Columns not found: {.val {missing}}.", call = call)
+      cli::cli_abort(
+        "Columns not found: {.val {missing}}.",
+        class = "commons_definition_invalid_error",
+        code = "S20",
+        call = call
+      )
     }
     names <- selector$names
   }
@@ -833,7 +885,12 @@ definition_named_entries <- function(
       )
     }
     if (entry$name %in% names(out)) {
-      cli::cli_abort("Duplicate {what} name {.val {entry$name}}.", call = call)
+      cli::cli_abort(
+        "Duplicate {what} name {.val {entry$name}}.",
+        class = "commons_definition_invalid_error",
+        code = "S10",
+        call = call
+      )
     }
     out[[entry$name]] <- entry
   }

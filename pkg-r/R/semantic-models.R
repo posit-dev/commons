@@ -161,9 +161,13 @@ semantic_parameter_type <- function(type) {
   if (base %in% c("BYTEINT", "SMALLINT", "INT", "INTEGER", "BIGINT")) {
     return("integer")
   }
-  if (base %in% c(
-    "NUMBER", "NUMERIC", "DECIMAL", "FLOAT", "DOUBLE", "REAL"
-  )) {
+  if (base %in% c("NUMBER", "NUMERIC", "DECIMAL")) {
+    # Casting a fraction to scale 0 (the default) rounds it silently. Typing
+    # the parameter as an integer rejects the fraction instead.
+    scale <- regmatches(type, regexec(",\\s*([0-9]+)\\s*\\)", type))[[1]][2]
+    return(if (is.na(scale) || as.integer(scale) == 0L) "integer" else "number")
+  }
+  if (base %in% c("FLOAT", "DOUBLE", "REAL")) {
     return("number")
   }
   if (base %in% c("BOOL", "BOOLEAN")) {

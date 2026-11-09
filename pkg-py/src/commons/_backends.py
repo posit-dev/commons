@@ -90,6 +90,23 @@ class DuckDBBackend:
         return None
 
 
+def _databricks_rows(
+    connection: sqlalchemy.Connection, sql: str
+) -> list[dict[str, Any]]:
+    # The Databricks connector builds rows through pandas' nullable floats,
+    # which read NaN as missing, so the connector returns None to SQLAlchemy
+    # for a NaN double.
+    # The connector's Arrow table keeps NaN.
+    cursor = connection.connection.cursor()
+    try:
+        cursor.execute(sql)
+        if cursor.description is None:
+            return []
+        return cursor.fetchall_arrow().to_pylist()
+    finally:
+        cursor.close()
+
+
 class EngineBackend:
     def __init__(self, engine: sqlalchemy.Engine) -> None:
         self._engine = engine
@@ -100,6 +117,8 @@ class EngineBackend:
 
     def query(self, sql: str) -> list[dict[str, Any]]:
         with self._engine.connect() as connection:
+            if self.dialect() == "databricks":
+                return _databricks_rows(connection, sql)
             result = connection.execute(sqlalchemy.text(sql))
             return [dict(row) for row in result.mappings()]
 
@@ -107,18 +126,10 @@ class EngineBackend:
         return list(sqlalchemy.inspect(self._engine).get_table_names())
 
     def quote(self, table_id: TableId) -> str:
+        # Quote every part of the table name. Required because Snowflake converts unquoted
+        # names to upper case, which would cause a table name with lowercase to not be found.
         preparer = self._engine.dialect.identifier_preparer
-        quoted = preparer.quote(table_id.table)
-        if table_id.schema is None:
-            return quoted
-        # quote_schema() is given one component at a time: handed
-        # "ANALYTICS.PUBLIC" it produces one identifier containing a dot.
-        outer = ".".join(
-            preparer.quote_schema(part)
-            for part in (table_id.catalog, table_id.schema)
-            if part is not None
-        )
-        return f"{outer}.{quoted}"
+        return ".".join(preparer.quote_identifier(part) for part in table_id.parts)
 
     def columns(self, table_id: TableId) -> list[dict[str, Any]]:
         inspector = sqlalchemy.inspect(self._engine)

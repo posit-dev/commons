@@ -177,7 +177,13 @@ class DataDictionary(_Permissive):
     def from_path(cls, path: str | Path) -> DataDictionary:
         """Read a data-dict.yaml file. The YAML is the only input."""
         text = Path(path).read_text(encoding="utf-8")
-        return cls.model_validate(yaml.safe_load(text) or {})
+        raw = yaml.safe_load(text) or {}
+        if not isinstance(raw, dict) or "tables" not in raw:
+            raise ValueError(
+                f"The data dictionary at {path} has no top-level `tables` field. "
+                "List each table, with its columns, under `tables:`."
+            )
+        return cls.model_validate(raw)
 
     # ---- channel 1: always in the prompt ---------------------------------
 
@@ -263,15 +269,19 @@ class DataDictionary(_Permissive):
         return [*parts, terms] if terms else parts
 
     def columns_text(
-        self, table: str, live: list[dict[str, Any]] | None = None
+        self,
+        table: str,
+        live: list[dict[str, Any]] | None = None,
+        max_columns: int | None = None,
     ) -> str | None:
         """A table's documented columns, optionally merged with a live schema.
 
-        With `live` set, the relation's own columns lead and in its order,
-        each carrying whatever the dictionary documents about it, and a
-        documented column the relation does not have is named at the end so
-        the model does not write SQL against it. `describe_table` is what
-        has a live schema to merge.
+        With `live` set, up to `max_columns` of the relation's own columns
+        lead in its order, each carrying whatever the dictionary documents
+        about it, and documented columns claim the cap first. A documented
+        column the relation does not have is named at the end so the model
+        does not write SQL against it. `describe_table` is what has a live
+        schema to merge.
         """
         entry = self.tables.get(table)
         columns = entry.columns if entry is not None else {}
@@ -282,14 +292,20 @@ class DataDictionary(_Permissive):
                 _column_line(name, column) for name, column in columns.items()
             )
 
+        # `sorted` is stable, so each group keeps the relation's order.
+        ranked = sorted(
+            range(len(live)), key=lambda i: str(live[i]["column"]) not in columns
+        )
+        shown = [live[i] for i in sorted(ranked[:max_columns])]
         text = "\n".join(
             _column_line(
                 str(found["column"]),
                 columns.get(str(found["column"])),
                 live_type=found.get("type"),
             )
-            for found in live
+            for found in shown
         )
+        text += omitted_columns_note(len(live) - len(shown))
         present = {str(found["column"]) for found in live}
         undocumented = [name for name in columns if name not in present]
         if undocumented:
@@ -383,6 +399,11 @@ def as_data_dictionary(x: Any) -> DataDictionary | None:
     raise TypeError(
         f"dictionary must be a path to a data-dict.yaml file, got {type(x).__name__}."
     )
+
+
+def omitted_columns_note(count: int) -> str:
+    """The note closing a column listing that leaves `count` columns out."""
+    return f"\n\nAdditional columns not shown: {count}" if count > 0 else ""
 
 
 def _flatten_inline(text: str) -> str:

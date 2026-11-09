@@ -371,11 +371,9 @@ def test_the_translation_matches_the_shared_contract():
         for key, case in fixture[path.name].items():
             table, name = key.split("::")
             translation = exported[table].definitions[name].translations[0]
-            assert translation["target"] == case["translation"]["target"], key
-            assert translation["code"] == case["translation"]["code"], key
-            assert translation["notes"] == case["translation"]["notes"], key
+            assert translation == case["translation"], key
             checked += 1
-    assert checked == 42
+    assert checked == 45
 
 
 @pytest.mark.skipif(DATA_DICT is None, reason="the data-dict CLI is not installed")

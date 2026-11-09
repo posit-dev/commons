@@ -114,3 +114,15 @@ jobs:
             **Python site preview:** [https://posit-dev.github.io/commons/pr-${{ github.event.number }}/py/](https://posit-dev.github.io/commons/pr-${{ github.event.number }}/py/)
 
             Built from the latest commit on this branch. The R links in it point at the published R site, which no pull request rebuilds.
+
+      # A fork's token cannot comment, so the fork author reads this in the
+      # run's annotations and summary instead.
+      - name: Note that forks get no preview
+        if: >
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork == true
+        working-directory: .
+        run: |
+          msg="Pull requests from forks get no documentation preview. To publish one, a maintainer can push this branch to posit-dev/commons."
+          echo "::notice title=No documentation preview::$msg"
+          echo "$msg" >> "$GITHUB_STEP_SUMMARY"

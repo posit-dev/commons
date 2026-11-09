@@ -1,0 +1,17 @@
+$version: "0.1.0"
+$learn_more: https://data-dict.tidyverse.org/
+tables:
+  - name: orders
+    columns:
+      - name: amount
+        type: number(quantity)
+        range: [0, 1000]
+      - name: shipping
+        type: struct
+        fields:
+          - name: weight
+            type: number(quantity)
+            range: [0, 100]
+    definitions:
+      - name: broken
+        expr: shipping.height + amount

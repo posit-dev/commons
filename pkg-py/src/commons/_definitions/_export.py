@@ -27,7 +27,20 @@ import re2
 from ._emit_duckdb import emit_duckdb
 from ._expression import Node, parse_expression
 
-__all__ = ["DefinitionExport", "TableExport", "export_spec"]
+__all__ = ["DefinitionExport", "DefinitionInvalidError", "TableExport", "export_spec"]
+
+
+class DefinitionInvalidError(ValueError):
+    """A definition data-dict refuses, under the problem `code` it reports.
+
+    The code is data-dict's own (`S21` for a type error, `S34` for a reference
+    cycle, ...), so a refusal here can be checked against the binary's.
+    """
+
+    def __init__(self, message: str, code: str) -> None:
+        super().__init__(message)
+        self.code = code
+
 
 _SHAPE_ORDER = {"const": 1, "agg": 2, "row": 3}
 _EXPORTED_TYPES = frozenset(
@@ -161,9 +174,10 @@ def _export_table(table_name: str, table: dict[str, Any]) -> TableExport:
     definitions = _named_entries(table.get("definitions"), "definition")
     collisions = [name for name in definitions if name in columns]
     if collisions:
-        raise ValueError(
+        raise DefinitionInvalidError(
             f"Definitions on table {table_name!r} share names with columns: "
-            f"{', '.join(repr(name) for name in collisions)}."
+            f"{', '.join(repr(name) for name in collisions)}.",
+            "S33",
         )
     column_env = {name: _column_descriptor(name, col) for name, col in columns.items()}
     envelopes = _prepare_envelopes(definitions, table_name)
@@ -184,9 +198,10 @@ def _export_table(table_name: str, table: dict[str, Any]) -> TableExport:
             name for name in pending if all(ref in resolved for ref in references[name])
         ]
         if not ready:
-            raise ValueError(
+            raise DefinitionInvalidError(
                 f"Definitions on table {table_name!r} reference each other in a "
-                f"cycle: {', '.join(repr(name) for name in pending)}."
+                f"cycle: {', '.join(repr(name) for name in pending)}.",
+                "S34",
             )
         for name in ready:
             resolved[name] = _resolve_one(
@@ -207,8 +222,9 @@ def _prepare_envelopes(
     for name, definition in definitions.items():
         expression = definition.get("expr")
         if not isinstance(expression, str) or not expression.strip():
-            raise ValueError(
-                f"Definition {name!r} on table {table!r} needs a non-empty expr."
+            raise DefinitionInvalidError(
+                f"Definition {name!r} on table {table!r} needs a non-empty expr.",
+                "S19",
             )
         for key in ("label", "description", "details", "todo"):
             value = definition.get(key)
@@ -219,9 +235,10 @@ def _prepare_envelopes(
         try:
             ast = parse_expression(expression)
         except ValueError as error:
-            raise ValueError(
+            raise DefinitionInvalidError(
                 f"Definition {name!r} on table {table!r} has an invalid "
-                f"expression. {error}"
+                f"expression. {error}",
+                "S19",
             ) from error
         out[name] = {**definition, "name": name, "ast": ast}
     return out
@@ -240,26 +257,36 @@ def _resolve_one(
     try:
         ir = _check_node(definition["ast"], env, state)
     except ValueError as error:
-        raise ValueError(
-            f"Definition {name!r} on table {table!r} does not type-check. {error}"
+        # A refusal without a more specific code is a type error.
+        raise DefinitionInvalidError(
+            f"Definition {name!r} on table {table!r} does not type-check. {error}",
+            error.code if isinstance(error, DefinitionInvalidError) else "S21",
         ) from error
 
     total_selections = state.selection_count + state.definition_selection_count
     if total_selections > 1:
-        raise ValueError(
+        raise DefinitionInvalidError(
             f"Definition {name!r} on table {table!r} recursively uses more than "
-            f"one COLUMNS(...) selection."
+            f"one COLUMNS(...) selection.",
+            "S21",
         )
     if total_selections > 0 and ir.type not in ("boolean", "any"):
-        raise ValueError(
+        raise DefinitionInvalidError(
             f"Definition {name!r} on table {table!r} uses COLUMNS(...) but is "
-            f"not a boolean filter."
+            f"not a boolean filter.",
+            "S21",
         )
     if ir.kind == "selected":
-        _require_selection(state.selection, ("boolean",), "a filter")
+        try:
+            _require_selection(state.selection, ("boolean",), "a filter")
+        except ValueError as error:
+            raise DefinitionInvalidError(
+                f"Definition {name!r} on table {table!r} does not type-check. {error}",
+                "S21",
+            ) from error
     if ir.type == "unknown":
-        raise ValueError(
-            f"Definition {name!r} on table {table!r} has no inferred type."
+        raise DefinitionInvalidError(
+            f"Definition {name!r} on table {table!r} has no inferred type.", "S21"
         )
 
     emitted = emit_duckdb(ir, state.selection)
@@ -454,7 +481,7 @@ def _check_reference(node: Node, env: dict[str, Any], state: _State) -> Ir:
     if len(path) == 1 and path[0] not in columns:
         definition = env["definitions"].get(path[0])
         if definition is None:
-            raise ValueError(f"Column {path[0]!r} not found.")
+            raise DefinitionInvalidError(f"Column {path[0]!r} not found.", "S20")
         # A selection reached through a sibling still counts against the
         # one-selection rule.
         state.definition_selection_count += definition.selection_count
@@ -466,7 +493,7 @@ def _check_reference(node: Node, env: dict[str, Any], state: _State) -> Ir:
         )
     column = columns.get(path[0])
     if column is None:
-        raise ValueError(f"Column {path[0]!r} not found.")
+        raise DefinitionInvalidError(f"Column {path[0]!r} not found.", "S20")
     current = column
     for index in range(1, len(path)):
         prefix = ".".join(path[:index])
@@ -478,7 +505,9 @@ def _check_reference(node: Node, env: dict[str, Any], state: _State) -> Ir:
             raise ValueError(f"{prefix!r} is not a struct.")
         nested = current.fields.get(path[index])
         if nested is None:
-            raise ValueError(f"Struct {prefix!r} has no field {path[index]!r}.")
+            raise DefinitionInvalidError(
+                f"Struct {prefix!r} has no field {path[index]!r}.", "S20"
+            )
         current = nested
     return _ir(node, current.type, "row", reference="column")
 
@@ -499,9 +528,10 @@ def _check_function(node: Node, env: dict[str, Any], state: _State) -> Ir:
         for arg in args:
             _require(arg, signature.types, f"`{name.upper()}`")
     if signature.aggregate and any(arg.shape == "agg" for arg in args):
-        raise ValueError(
+        raise DefinitionInvalidError(
             f"{name.upper()}() cannot aggregate an expression that is already "
-            f"aggregated."
+            f"aggregated.",
+            "S30",
         )
     type_ = (args[0].type or "any") if signature.ret == "same" else signature.ret
     shape = "agg" if signature.aggregate else _shape_max(*[arg.shape for arg in args])
@@ -596,8 +626,9 @@ def _resolve_selection(
     if selector["kind"] == "list":
         missing = [name for name in selector["names"] if name not in names]
         if missing:
-            raise ValueError(
-                f"Columns not found: {', '.join(repr(name) for name in missing)}."
+            raise DefinitionInvalidError(
+                f"Columns not found: {', '.join(repr(name) for name in missing)}.",
+                "S20",
             )
         names = selector["names"]
     return {
@@ -749,7 +780,7 @@ def _named_entries(entries: Any, what: str) -> dict[str, Any]:
         if not isinstance(name, str) or not name:
             raise ValueError(f"Each {what} needs a non-empty name.")
         if name in out:
-            raise ValueError(f"Duplicate {what} name {name!r}.")
+            raise DefinitionInvalidError(f"Duplicate {what} name {name!r}.", "S10")
         out[name] = entry
     return out
 

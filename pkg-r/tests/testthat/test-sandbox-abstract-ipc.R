@@ -25,10 +25,35 @@ test_that("the network filter screens the fixture's address-taking calls", {
   expect_gt(length(screened$when_addressed), 0)
 
   network_filter <- c_function(sandbox_c_source(), "network_engage")
-  for (name in c(screened$always, screened$when_addressed)) {
+  screen_line <- function(name) {
+    at <- grep(paste0("__NR_", name, ","), network_filter, fixed = TRUE)
+    expect_length(at, 1)
+    at
+  }
+  # An unconditional screen matches and falls through to a deny.
+  for (name in screened$always) {
+    at <- screen_line(name)
+    if (length(at) != 1) next
     expect_true(
-      any(grepl(paste0("__NR_", name, ","), network_filter, fixed = TRUE)),
-      info = paste("network_engage does not screen", name)
+      grepl(paste0("__NR_", name, ", 0, 1)"), network_filter[[at]], fixed = TRUE),
+      info = paste(name, "is not screened unconditionally")
+    )
+    expect_true(
+      grepl("SECCOMP_RET_ERRNO", network_filter[[at + 1L]], fixed = TRUE),
+      info = paste(name, "does not fall through to a deny")
+    )
+  }
+  # An addressed screen reads the address argument before deciding.
+  for (name in screened$when_addressed) {
+    at <- screen_line(name)
+    if (length(at) != 1) next
+    expect_false(
+      grepl(paste0("__NR_", name, ", 0, 1)"), network_filter[[at]], fixed = TRUE),
+      info = paste(name, "is screened unconditionally")
+    )
+    expect_true(
+      any(grepl("args[4]", network_filter[at + 1:2], fixed = TRUE)),
+      info = paste(name, "does not read its address")
     )
   }
 })

@@ -22,6 +22,7 @@ dependencies = [
     "pyarrow>=17",
     "sqlglot>=25",
     "google-re2>=1.1.20251105",
+    "httpx>=0.27",
 ]
 
 [project.urls]
@@ -33,7 +34,6 @@ Issues = "https://github.com/posit-dev/commons/issues"
 tracing = [
     "opentelemetry-sdk>=1.39",
     "opentelemetry-exporter-otlp-json-file",
-    "httpx>=0.27",
 ]
 # Everything `commons.ui` needs beyond the core dependencies.
 shiny = [
@@ -43,7 +43,24 @@ shiny = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio", "ruff", "pyrefly", "pandas>=2", "polars>=1", "pins>=0.9", "commons[shiny]", "matplotlib>=3.8", "great-tables>=1.0.0", "plotnine>=0.15.8"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio",
+    "ruff",
+    "pyrefly",
+    "pandas>=2",
+    "polars>=1",
+    "pins>=0.9",
+    "commons[shiny]",
+    "matplotlib>=3.8",
+    "great-tables>=1.0.0",
+    "plotnine>=0.15.8",
+    "pytz",
+    "databricks-sdk>=0.55",
+    "databricks-sqlalchemy>=2",
+    "snowflake-sqlalchemy>=1.6",
+    "python-dotenv>=1",
+]
 docs = [
     "great-docs>=0.17",
 ]

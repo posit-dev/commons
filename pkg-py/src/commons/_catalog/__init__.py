@@ -13,6 +13,10 @@ warehouse is the whole point of them.
 
 from . import _databricks, _snowflake
 from ._core import (
+    CatalogAmbiguousColumnError,
+    CatalogAmbiguousTableError,
+    CatalogClaimedRelationError,
+    CatalogMergeError,
     Manifest,
     MergedDictionary,
     Relation,
@@ -40,7 +44,11 @@ from ._security import (
 
 __all__ = [
     "CatalogAccessError",
+    "CatalogAmbiguousColumnError",
+    "CatalogAmbiguousTableError",
     "CatalogAuthorizationError",
+    "CatalogClaimedRelationError",
+    "CatalogMergeError",
     "CatalogSessionChangedError",
     "CatalogTransientError",
     "Manifest",

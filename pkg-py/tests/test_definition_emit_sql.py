@@ -134,7 +134,7 @@ def test_every_corpus_definition_lowers_for_both_warehouses(dialect: str):
         records = compile_corpus(filename, dialect)
         assert records
         total += len(records)
-    assert total == 42
+    assert total == 45
 
 
 @pytest.mark.parametrize(
@@ -208,4 +208,4 @@ def test_no_compiled_definition_keeps_a_reference_marker(dialect: str):
         for record in compile_corpus(filename, dialect).values():
             assert "__commons_definition_reference_" not in record.sql, record.name
             checked += 1
-    assert checked == 42
+    assert checked == 45

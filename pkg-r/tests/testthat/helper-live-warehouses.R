@@ -1,9 +1,45 @@
+# The connection variable names and the provisioned schema and objects come
+# from tests/shared/live-warehouse-env.json, which the Python suite and
+# scripts/provision-live-warehouse.py read as well. The test table is one of
+# the tables that script creates.
+live_warehouse_table <- "orders"
+
+live_warehouse_spec <- function(backend) {
+  backend <- match.arg(backend, c("snowflake", "databricks"))
+  shared_fixture("live-warehouse-env")$backends[[backend]]
+}
+
+# Skips unless the backend's connection variables are all set.
+require_live_warehouse <- function(backend) {
+  spec <- live_warehouse_spec(backend)
+  names <- unlist(spec$connection$required)
+  missing <- names[!nzchar(Sys.getenv(names))]
+  skip_if(
+    length(missing) > 0L,
+    paste0("live ", backend, " needs ", paste(sort(missing), collapse = ", "))
+  )
+  invisible(spec)
+}
+
+live_warehouse_namespace <- function(backend) {
+  namespace <- unlist(live_warehouse_spec(backend)$provisioned$namespace)
+  c(catalog = namespace[[1]], schema = namespace[[2]])
+}
+
+# A relation the provisioning script creates, such as `denied_table`.
+live_warehouse_id <- function(backend, name) {
+  require_live_warehouse(backend)
+  table <- live_warehouse_spec(backend)$provisioned[[name]]
+  do.call(DBI::Id, c(as.list(live_warehouse_namespace(backend)), table = table))
+}
+
 local_warehouse_connection <- function(
   backend,
   require_table = TRUE,
   env = parent.frame()
 ) {
   backend <- match.arg(backend, c("snowflake", "databricks"))
+  spec <- require_live_warehouse(backend)
   if (require_table) {
     warehouse_test_table(backend)
   }
@@ -11,113 +47,74 @@ local_warehouse_connection <- function(
 
   con <- switch(
     backend,
-    snowflake = DBI::dbConnect(odbc::snowflake()),
+    snowflake = DBI::dbConnect(
+      odbc::snowflake(),
+      account = Sys.getenv("SNOWFLAKE_ACCOUNT"),
+      uid = Sys.getenv("SNOWFLAKE_USER"),
+      authenticator = "SNOWFLAKE_JWT",
+      priv_key_file = Sys.getenv("SNOWFLAKE_PRIVATE_KEY_FILE"),
+      warehouse = Sys.getenv("SNOWFLAKE_WAREHOUSE")
+    ),
+    # odbc::databricks() resolves credentials from the environment: a token,
+    # a client secret, or a federated OIDC token. The driver requests all-apis
+    # for a client secret unless told otherwise, and a secret scoped to sql
+    # refuses it. The tests need only sql.
     databricks = DBI::dbConnect(
-      odbc::odbc(),
-      "Databricks"
+      odbc::databricks(),
+      workspace = Sys.getenv("DATABRICKS_HOST"),
+      httpPath = Sys.getenv("DATABRICKS_HTTP_PATH"),
+      Auth_Scope = spec$connection$scopes
     )
   )
   withr::defer(DBI::dbDisconnect(con), envir = env)
   con
 }
 
-warehouse_test_table <- function(backend, call = rlang::caller_env()) {
-  backend <- match.arg(backend, c("snowflake", "databricks"))
-  option <- paste0("commons.test.", backend)
-  table <- getOption(option)
-  skip_if(
-    is.null(table),
-    paste0(
-      "Set options(", option, " = DBI::Id(...)) to run live warehouse tests"
-    )
+warehouse_test_table <- function(backend) {
+  require_live_warehouse(backend)
+  do.call(
+    DBI::Id,
+    c(as.list(live_warehouse_namespace(backend)), table = live_warehouse_table)
   )
-  if (!inherits(table, "Id")) {
-    cli::cli_abort(
-      "The {.option {option}} option must be a {.cls DBI::Id} object.",
-      call = call
-    )
-  }
-  table
 }
 
-warehouse_test_denied_table <- function(backend, call = rlang::caller_env()) {
-  backend <- match.arg(backend, c("snowflake", "databricks"))
-  option <- paste0("commons.test.", backend, ".denied_table")
-  table <- getOption(option)
-  skip_if(is.null(table), paste0("Set options(", option, " = DBI::Id(...))"))
-  if (!inherits(table, "Id")) {
-    cli::cli_abort(
-      "The {.option {option}} option must be a {.cls DBI::Id} object.",
-      call = call
-    )
-  }
-  table
-}
-
-warehouse_test_alternate_role <- function(call = rlang::caller_env()) {
-  option <- "commons.test.snowflake.alternate_role"
-  role <- getOption(option)
-  skip_if(is.null(role), paste0("Set options(", option, " = \"ROLE\")"))
-  rlang::check_string(role, call = call)
-  role
-}
-
-warehouse_test_semantic_view <- function(call = rlang::caller_env()) {
-  option <- "commons.test.snowflake.semantic_view"
-  view <- getOption(option)
-  skip_if(
-    is.null(view),
-    paste0("Set options(", option, " = DBI::Id(...)) to run this test")
+# A principal's default Databricks schema may be empty, so a test that reads
+# the session's namespace switches it to the fixture schema first.
+use_databricks_test_schema <- function(con) {
+  schema <- live_warehouse_namespace("databricks")
+  DBI::dbExecute(
+    con,
+    paste("USE CATALOG", DBI::dbQuoteIdentifier(con, schema[["catalog"]]))
   )
-  if (!inherits(view, "Id")) {
-    cli::cli_abort(
-      "The {.option {option}} option must be a {.cls DBI::Id} object.",
-      call = call
-    )
-  }
-  view
-}
-
-warehouse_test_parameterized_model <- function(
-  backend,
-  call = rlang::caller_env()
-) {
-  backend <- match.arg(backend, c("snowflake", "databricks"))
-  option <- paste0("commons.test.", backend, ".parameterized_model")
-  model <- getOption(option)
-  skip_if(is.null(model), paste0("Set options(", option, " = DBI::Id(...))"))
-  if (!inherits(model, "Id")) {
-    cli::cli_abort(
-      "The {.option {option}} option must be a {.cls DBI::Id} object.",
-      call = call
-    )
-  }
-  arguments_option <- paste0(option, "_arguments")
-  arguments <- getOption(arguments_option)
-  skip_if(
-    is.null(arguments),
-    paste0("Set options(", arguments_option, " = list(...))")
+  DBI::dbExecute(
+    con,
+    paste("USE SCHEMA", DBI::dbQuoteIdentifier(con, schema[["schema"]]))
   )
-  if (!is.list(arguments) || is.null(names(arguments))) {
-    cli::cli_abort(
-      "The {.option {arguments_option}} option must be a named list.",
-      call = call
-    )
-  }
-  list(id = model, arguments = arguments)
+  invisible(con)
 }
 
-warehouse_test_verified_query_view <- function(call = rlang::caller_env()) {
-  option <- "commons.test.snowflake.verified_query_view"
-  view <- getOption(option)
-  skip_if(is.null(view), paste0("Set options(", option, " = DBI::Id(...))"))
-  if (!inherits(view, "Id")) {
-    cli::cli_abort(
-      "The {.option {option}} option must be a {.cls DBI::Id} object.",
-      call = call
-    )
-  }
-  view
+warehouse_test_denied_table <- function(backend) {
+  live_warehouse_id(backend, "denied_table")
+}
+
+warehouse_test_alternate_role <- function() {
+  require_live_warehouse("snowflake")
+  live_warehouse_spec("snowflake")$provisioned$alternate_role
+}
+
+warehouse_test_semantic_view <- function() {
+  live_warehouse_id("snowflake", "semantic_view")
+}
+
+warehouse_test_verified_query_view <- function() {
+  live_warehouse_id("snowflake", "verified_query_view")
+}
+
+warehouse_test_parameterized_model <- function(backend) {
+  list(
+    id = live_warehouse_id(backend, "parameterized_model"),
+    arguments = live_warehouse_spec(backend)$provisioned$parameterized_model_arguments
+  )
 }
 
 warehouse_read_one <- function(con, id) {

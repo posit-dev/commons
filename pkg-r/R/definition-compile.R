@@ -56,7 +56,9 @@ definition_bind_export <- function(
   )
   tables <- lapply(tables, function(table) {
     binding <- definition_source_binding(source, table$name, call = call)
+    definition_check_selections(table$definitions, table$name, call = call)
     markers <- definition_reference_markers(table$definitions, binding)
+    null <- definition_null_names(table$definitions)
     definitions <- lapply(table$definitions, function(definition) {
       definition_bind_one(
         definition,
@@ -64,6 +66,7 @@ definition_bind_export <- function(
         binding,
         target,
         markers,
+        null,
         call = call
       )
     })
@@ -102,6 +105,22 @@ definition_check_metric_grain <- function(tables, call) {
           "Metric definition {.val {names(definitions)[invalid]}} on table {.val {table$name}} cannot be compiled into one SQL expression.",
           i = "The dependency chain mixes row and aggregate grain and requires a subquery rewrite."
         ),
+        class = "commons_definition_mixed_grain_error",
+        call = call
+      )
+    }
+  }
+}
+
+# A COLUMNS(...) selection that matched no authored column would lower to an
+# empty SQL expression on every target.
+definition_check_selections <- function(definitions, table, call) {
+  for (definition in definitions) {
+    selection <- attr(definition, "selection", exact = TRUE)
+    if (!is.null(selection) && length(selection$columns) == 0L) {
+      cli::cli_abort(
+        "Definition {.val {definition$name}} on table {.val {table}} selects columns, and its selection matches none of the columns the data dictionary describes.",
+        class = "commons_definition_empty_selection_error",
         call = call
       )
     }
@@ -114,6 +133,7 @@ definition_bind_one <- function(
   binding,
   target,
   markers,
+  null,
   call
 ) {
   ir <- attr(definition, "ir", exact = TRUE)
@@ -133,7 +153,6 @@ definition_bind_one <- function(
   bound_ir <- definition_bind_ir(
     ir,
     binding$columns,
-    binding$strict,
     definition$name,
     table,
     call
@@ -141,12 +160,11 @@ definition_bind_one <- function(
   bound_selection <- definition_bind_selection(
     selection,
     binding$columns,
-    binding$strict,
     definition$name,
     table,
     call
   )
-  execution_ir <- definition_mark_references(bound_ir, markers)
+  execution_ir <- definition_mark_references(bound_ir, markers, null)
   selected <- definition_emit_translation(
     target,
     execution_ir,
@@ -206,20 +224,52 @@ definition_ir_identifiers <- function(node) {
   ))
 }
 
-definition_mark_references <- function(node, markers) {
+# The definitions that are always NULL: a bare NULL, or a reference to one.
+definition_null_names <- function(definitions) {
+  names <- vapply(definitions, `[[`, character(1), "name")
+  null <- character()
+  repeat {
+    found <- names[vapply(
+      definitions,
+      function(definition) {
+        definition_ir_is_null(attr(definition, "ir", exact = TRUE), null)
+      },
+      logical(1)
+    )]
+    if (setequal(found, null)) {
+      return(null)
+    }
+    null <- found
+  }
+}
+
+definition_ir_is_null <- function(node, null) {
+  is.list(node) &&
+    (identical(node$kind, "null") ||
+      (definition_is_reference(node) && node$path[[1]] %in% null))
+}
+
+definition_is_reference <- function(node) {
+  identical(node$kind, "column") && identical(node$reference, "definition")
+}
+
+# A reference to an always-NULL sibling becomes the NULL itself, so the
+# emitters can type it where a dialect needs one: Snowflake refuses DATE + NULL.
+definition_mark_references <- function(node, markers, null) {
   if (!is.list(node)) {
     return(node)
   }
-  if (
-    identical(node$kind, "column") &&
-      identical(node$reference, "definition")
-  ) {
+  if (definition_is_reference(node)) {
+    if (node$path[[1]] %in% null) {
+      return(list(kind = "null", type = node$type, shape = "const"))
+    }
     node$path[[1]] <- markers[[node$path[[1]]]]
   }
   lapply(
     node,
     definition_mark_references,
-    markers = markers
+    markers = markers,
+    null = null
   )
 }
 
@@ -272,26 +322,22 @@ definition_source_binding <- function(source, table, call) {
         call = call
       )
     }
-    return(list(table = table, columns = NULL, strict = FALSE))
+    return(list(table = table, columns = NULL))
   }
   selected <- bindings$tables[[table]]
   if (is.null(selected) || is.na(selected)) {
     cli::cli_abort(
       "Authored table {.val {table}} with definitions does not match an exposed relation.",
+      class = "commons_definition_unmatched_table_error",
       call = call
     )
   }
-  list(
-    table = selected,
-    columns = bindings$columns[[table]],
-    strict = isTRUE(bindings$strict)
-  )
+  list(table = selected, columns = bindings$columns[[table]])
 }
 
 definition_bind_ir <- function(
   node,
   columns,
-  strict,
   definition,
   table,
   call
@@ -306,7 +352,6 @@ definition_bind_ir <- function(
     node$path <- definition_bind_column_path(
       node$path,
       columns,
-      strict,
       definition,
       table,
       call
@@ -316,7 +361,6 @@ definition_bind_ir <- function(
     node,
     definition_bind_ir,
     columns = columns,
-    strict = strict,
     definition = definition,
     table = table,
     call = call
@@ -326,7 +370,6 @@ definition_bind_ir <- function(
 definition_bind_selection <- function(
   selection,
   columns,
-  strict,
   definition,
   table,
   call
@@ -338,7 +381,6 @@ definition_bind_selection <- function(
     column$path <- definition_bind_column_path(
       column$path,
       columns,
-      strict,
       definition,
       table,
       call
@@ -351,7 +393,6 @@ definition_bind_selection <- function(
 definition_bind_column_path <- function(
   path,
   columns,
-  strict,
   definition,
   table,
   call
@@ -361,13 +402,11 @@ definition_bind_column_path <- function(
   }
   physical <- columns[[path[[1]]]]
   if (is.null(physical) || is.na(physical)) {
-    if (strict) {
-      cli::cli_abort(
-        "Definition {.val {definition}} on table {.val {table}} references authored column {.val {path[[1]]}}, which is absent from the selected relation.",
-        call = call
-      )
-    }
-    return(path)
+    cli::cli_abort(
+      "Definition {.val {definition}} on table {.val {table}} references authored column {.val {path[[1]]}}, which is absent from the selected relation.",
+      class = "commons_definition_absent_column_error",
+      call = call
+    )
   }
   path[[1]] <- physical
   path

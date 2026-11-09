@@ -2,9 +2,19 @@
 # rest of the package works from. Only the data-dict.yaml format exists
 # today; when other formats arrive (a dbt manifest, harvested catalog
 # metadata), this is where the format is inferred and dispatched.
-data_dictionary <- function(path) {
-  rlang::check_string(path, allow_empty = FALSE)
-  new_data_dictionary(yaml::read_yaml(path))
+data_dictionary <- function(path, call = rlang::caller_env()) {
+  rlang::check_string(path, allow_empty = FALSE, call = call)
+  raw <- yaml::read_yaml(path)
+  if (!is.list(raw) || !"tables" %in% names(raw)) {
+    cli::cli_abort(
+      c(
+        "The data dictionary at {.path {path}} has no top-level {.field tables} field.",
+        i = "List each table, with its columns, under {.code tables:}."
+      ),
+      call = call
+    )
+  }
+  new_data_dictionary(raw, call = call)
 }
 
 as_data_dictionary <- function(x, call = rlang::caller_env()) {
@@ -12,7 +22,7 @@ as_data_dictionary <- function(x, call = rlang::caller_env()) {
     return(x)
   }
   if (is.character(x) && length(x) == 1) {
-    return(data_dictionary(x))
+    return(data_dictionary(x, call = call))
   }
   cli::cli_abort(
     "{.arg dictionary} must be a path to a data-dict.yaml file.",
@@ -145,11 +155,12 @@ dictionary_entry_parts <- function(
   c(parts, dictionary_terms_text(dictionary, paste(parts, collapse = "\n")))
 }
 
-# One bullet per column. With a live schema (from describe_table), all live
-# columns appear, documented ones annotated and undocumented ones keeping
-# their inferred type; documented columns missing from the table are flagged.
-# Without one (the run_sql path), only documented columns appear.
-dictionary_columns_text <- function(columns, live = NULL) {
+# One bullet per column. With a live schema (from describe_table), up to
+# max_columns live columns appear in table order, documented ones annotated and
+# undocumented ones keeping their inferred type; documented columns missing
+# from the table are flagged. Without one (the run_sql path), only documented
+# columns appear.
+dictionary_columns_text <- function(columns, live = NULL, max_columns = Inf) {
   if (is.null(live)) {
     if (length(columns) == 0) {
       return(NULL)
@@ -162,18 +173,25 @@ dictionary_columns_text <- function(columns, live = NULL) {
     return(paste(lines, collapse = "\n"))
   }
 
+  # Documented columns claim the cap first, since the dictionary marks them as
+  # the ones worth the agent's attention.
+  ranked <- order(!live$column %in% names(columns))
+  shown <- live[sort(utils::head(ranked, max_columns)), , drop = FALSE]
   lines <- vapply(
-    seq_len(nrow(live)),
+    seq_len(nrow(shown)),
     function(i) {
       dictionary_column_line(
-        live$column[[i]],
-        columns[[live$column[[i]]]],
-        live_type = live$type[[i]]
+        shown$column[[i]],
+        columns[[shown$column[[i]]]],
+        live_type = shown$type[[i]]
       )
     },
     character(1)
   )
-  out <- paste(lines, collapse = "\n")
+  out <- paste0(
+    paste(lines, collapse = "\n"),
+    omitted_columns_note(nrow(live) - nrow(shown))
+  )
 
   missing <- setdiff(names(columns), live$column)
   if (length(missing)) {

@@ -126,12 +126,17 @@ test_that("valid definition fixtures pass the local exporter", {
   }
 })
 
-test_that("invalid definition fixtures fail the local exporter", {
-  for (path in definition_fixture_paths("invalid")) {
-    expect_error(
+test_that("invalid definition fixtures fail the local exporter with their code", {
+  codes <- shared_fixture("definitions")$invalid
+  paths <- definition_fixture_paths("invalid")
+  expect_setequal(basename(paths), names(codes))
+  for (path in paths) {
+    error <- expect_error(
       definition_export_spec(yaml::read_yaml(path)),
+      class = "commons_definition_invalid_error",
       info = basename(path)
     )
+    expect_identical(error$code, codes[[basename(path)]], info = basename(path))
   }
 })
 

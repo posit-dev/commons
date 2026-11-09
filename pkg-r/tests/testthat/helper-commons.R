@@ -75,6 +75,7 @@ test_agent <- function(
   context_layer = NULL,
   semantic_layer = NULL,
   data_sources = list(sales_db = test_source()),
+  instructions = NULL,
   log = FALSE,
   ...
 ) {
@@ -85,7 +86,8 @@ test_agent <- function(
     commons = commons(
       data_sources = data_sources,
       context_layer = context_layer,
-      semantic_layer = semantic_layer
+      semantic_layer = semantic_layer,
+      instructions = instructions
     ),
     log = log,
     ...

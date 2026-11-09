@@ -73,9 +73,25 @@
       "survey::dynamic match": {
         "SQL(snowflake)": { "notes_contain": ["newline characters"] }
       },
+      "survey::nullable date shift": {
+        "SQL(snowflake)": { "code": "CAST(NULL AS TIMESTAMP_TZ)" },
+        "SQL(databricks)": { "code": "CAST(NULL AS TIMESTAMP)" }
+      },
+      "survey::date shifted by a null sibling": {
+        "SQL(snowflake)": { "composed_code": "CAST(NULL AS TIMESTAMP_TZ)" },
+        "SQL(databricks)": { "composed_code": "CAST(NULL AS TIMESTAMP)" }
+      },
       "survey::negative quotient": {
-        "SQL(snowflake)": { "code_contains": ["CASE WHEN"] },
-        "SQL(databricks)": { "notes_contain": ["negative zero divisor"] }
+        "SQL(snowflake)": {
+          "code_contains": [
+            "CASE WHEN \"ratio\" + 1.0 = 0 THEN",
+            "ELSE -(\"amount\" - 2) / (\"ratio\" + 1.0) END"
+          ]
+        },
+        "SQL(databricks)": {
+          "code_contains": ["ELSE -(`amount` - 2) / (`ratio` + 1.0) END"],
+          "notes_contain": ["negative zero divisor"]
+        }
       }
     }
   },

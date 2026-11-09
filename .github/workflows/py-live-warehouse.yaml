@@ -1,0 +1,83 @@
+name: "Py: Live warehouse tests"
+
+on:
+  push:
+    branches: [main]
+    paths: [pkg-py/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/py-live-warehouse.yaml]
+  workflow_dispatch:
+  pull_request:
+    paths: [pkg-py/**, tests/shared/**, .github/scripts/live-warehouse-configured.sh, .github/workflows/py-live-warehouse.yaml]
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    # A pull request from a fork gets no secrets or OIDC token, so it could
+    # only fail or wait on an approval that cannot help. Skip it.
+    if: >-
+      github.event_name != 'pull_request'
+      || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # A temporary free Databricks workspace, signed in with a client
+          # secret, stands in until `databricks-ci` has its fixture tables.
+          - backend: databricks
+            environment: databricks-temp-free-ci
+          - backend: snowflake
+            environment: snowflake-ci
+    # Each backend's credentials live in its own environment.
+    environment:
+      name: ${{ matrix.environment }}
+      # No deployment record for a test run.
+      deployment: false
+    permissions:
+      contents: read
+      # GitHub OIDC for the Databricks service principal.
+      id-token: write
+    defaults:
+      run:
+        working-directory: pkg-py
+    env:
+      UV_PYTHON: "3.13"
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ vars.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_CLIENT_ID: ${{ vars.DATABRICKS_CLIENT_ID }}
+      # Unset unless the federation policy accepts an audience other than the
+      # workspace's token endpoint, which is what the SDK asks GitHub for.
+      DATABRICKS_TOKEN_AUDIENCE: ${{ vars.DATABRICKS_TOKEN_AUDIENCE }}
+      # Unset when the service principal signs in with GitHub OIDC instead.
+      DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+      SNOWFLAKE_ACCOUNT: ${{ vars.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ vars.SNOWFLAKE_USER }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Write the Snowflake private key
+        if: matrix.backend == 'snowflake'
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          if [ -n "$SNOWFLAKE_PRIVATE_KEY" ]; then
+            key="$RUNNER_TEMP/snowflake_key.p8"
+            (umask 077 && printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY" > "$key")
+            echo "SNOWFLAKE_PRIVATE_KEY_FILE=$key" >> "$GITHUB_ENV"
+          fi
+      - name: Check the configuration
+        id: configured
+        run: ../.github/scripts/live-warehouse-configured.sh '${{ matrix.backend }}'
+      - uses: astral-sh/setup-uv@v6
+        if: steps.configured.outputs.run == 'true'
+        with:
+          enable-cache: true
+          cache-dependency-glob: pkg-py/uv.lock
+      - name: Install dependencies
+        if: steps.configured.outputs.run == 'true'
+        run: uv sync --locked --all-extras
+      - name: Test
+        if: steps.configured.outputs.run == 'true'
+        run: uv run pytest tests/test_live_warehouses.py -k '${{ matrix.backend }}' -rs

@@ -93,6 +93,35 @@ test_that("Snowflake semantic YAML imports only public dimensions and metrics", 
   expect_equal(model$metrics[[1]]$parent, "orders")
 })
 
+test_that("Snowflake semantic dependencies read base tables as SQL identifiers", {
+  # The YAML gives each name as written in SQL, quotes and all.
+  specification <- list(tables = list(
+    list(base_table = list(
+      database = '"Commons"',
+      schema = "live",
+      table = '"order ""lines"""'
+    ))
+  ))
+  id <- DBI::Id(catalog = "COMMONS", schema = "LIVE", table = "MODEL")
+
+  model <- snowflake_semantic_model_from_spec(id, specification)
+
+  expect_identical(
+    model$dependencies[[1]],
+    DBI::Id(catalog = "Commons", schema = "LIVE", table = 'order "lines"')
+  )
+
+  # A namespace the YAML leaves out is the view's own, which is exact.
+  inherited <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "MyDb", schema = "MySchema", table = "MODEL"),
+    list(tables = list(list(base_table = list(table = "orders"))))
+  )
+  expect_identical(
+    inherited$dependencies[[1]],
+    DBI::Id(catalog = "MyDb", schema = "MySchema", table = "ORDERS")
+  )
+})
+
 test_that("Snowflake semantic scope retains dependencies and public context", {
   specification <- list(
     custom_instructions = "Use booked revenue for finance questions.",
@@ -391,7 +420,65 @@ test_that("Snowflake imports and binds semantic variables", {
   expect_equal(model$parameters$threshold$default, 42)
   expect_false(model$parameters$category$has_default)
   expect_identical(model$parameters$large_id$default, 2147483648)
-  expect_match(sql, 'VARIABLES "category" => ?', fixed = TRUE)
+  expect_match(sql, 'VARIABLES "category" => CAST(? AS TEXT)', fixed = TRUE)
+})
+
+test_that("Snowflake casts a bound variable to the type its view declares", {
+  # Snowflake requires a variable's value to match the declared type, and a
+  # driver may bind a number as text, so the placeholder is cast.
+  model <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "MIN_TOTAL", data_type = "NUMBER(10,2)"),
+        list(name = "SINCE", data_type = "TIMESTAMP_TZ")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+
+  expect_equal(
+    snowflake_semantic_variables(DBI::ANSI(), model, c("MIN_TOTAL", "SINCE")),
+    'VARIABLES "MIN_TOTAL" => CAST(? AS NUMBER(10,2)), "SINCE" => CAST(? AS TIMESTAMP_TZ)'
+  )
+
+  # A cast to scale 0 rounds a fraction, so such a variable takes only whole
+  # numbers.
+  whole <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "MIN_COUNT", data_type = "NUMBER(38,0)"),
+        list(name = "LIMIT_N", data_type = "NUMBER")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+  expect_equal(whole$parameters$MIN_COUNT$type, "integer")
+  expect_equal(whole$parameters$LIMIT_N$type, "integer")
+  expect_error(
+    validate_typed_arguments(
+      whole$parameters,
+      list(MIN_COUNT = 50.5, LIMIT_N = 10)
+    ),
+    "must be an integer value"
+  )
+
+  # A declared type is spliced into SQL, so one that is not a plain type name
+  # leaves its variable with a bare placeholder.
+  odd <- snowflake_semantic_model_from_spec(
+    DBI::Id(catalog = "ANALYTICS", schema = "PUBLIC", table = "MODEL"),
+    list(
+      variables = list(
+        list(name = "SINCE", data_type = "TIMESTAMP_TZ); DROP TABLE x; --")
+      ),
+      metrics = list(list(name = "revenue"))
+    )
+  )
+  expect_equal(
+    snowflake_semantic_variables(DBI::ANSI(), odd, "SINCE"),
+    'VARIABLES "SINCE" => ?'
+  )
 })
 
 test_that("Snowflake hydrates only explicitly selected semantic views", {

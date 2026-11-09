@@ -13,6 +13,17 @@
 #'   [semantic_layer()].
 #' @param semantic_layer An optional [semantic_layer()].
 #' @param context_layer An optional [context_layer()].
+#' @param instructions Optional instructions, as a single string or the path
+#'   to a text or Markdown file. They're shown at the end of the object's
+#'   printed overview, and [agent()] places them under an
+#'   `## Additional instructions` heading at the end of its system prompt.
+#'
+#'   ```r
+#'   commons(
+#'     # ...
+#'     instructions = "Use the organization's fiscal-year conventions."
+#'   )
+#'   ```
 #'
 #' @return A `commons` object with methods:
 #'
@@ -144,14 +155,16 @@ commons <- function(
   ...,
   data_sources,
   semantic_layer = NULL,
-  context_layer = NULL
+  context_layer = NULL,
+  instructions = NULL
 ) {
   if (is_legacy_commons_call(...)) {
     args <- c(
       rlang::list2(...),
       if (!missing(data_sources)) list(data_sources = data_sources),
       if (!missing(semantic_layer)) list(semantic_layer = semantic_layer),
-      if (!missing(context_layer)) list(context_layer = context_layer)
+      if (!missing(context_layer)) list(context_layer = context_layer),
+      if (!missing(instructions)) list(instructions = instructions)
     )
     return(rlang::exec(
       commons_legacy,
@@ -162,7 +175,7 @@ commons <- function(
   }
   rlang::check_dots_empty()
   rlang::check_required(data_sources)
-  new_commons(data_sources, semantic_layer, context_layer)
+  new_commons(data_sources, semantic_layer, context_layer, instructions)
 }
 
 # Before 0.2.0, commons() took a client first and returned the agent.
@@ -201,11 +214,16 @@ commons_legacy <- function(
     user_env = user_env
   )
   rlang::check_dots_empty(call = call)
-  commons <- new_commons(data_sources, semantic_layer, context_layer, call = call)
+  commons <- new_commons(
+    data_sources,
+    semantic_layer,
+    context_layer,
+    instructions,
+    call = call
+  )
   agent(
     client,
     commons = commons,
-    instructions = instructions,
     mode = mode,
     network = network,
     log = log,
@@ -217,13 +235,17 @@ new_commons <- function(
   data_sources,
   semantic_layer = NULL,
   context_layer = NULL,
+  instructions = NULL,
   call = rlang::caller_env()
 ) {
   data_sources <- as_data_sources(data_sources, call = call)
   check_context_layer(context_layer, call = call)
   semantic_layer <- semantic_layer %||% new_semantic_layer()
   check_semantic_layer(semantic_layer, call = call)
-  TheCommons$new(commons_state(data_sources, semantic_layer, context_layer, call))
+  check_instructions(instructions, call = call)
+  state <- commons_state(data_sources, semantic_layer, context_layer, call)
+  state$instructions <- read_instructions(instructions)
+  TheCommons$new(state)
 }
 
 TheCommons <- R6::R6Class(
@@ -372,6 +394,9 @@ commons_overview <- function(state) {
       )
     },
     if (state$has_context_layer) "Business context is available.",
+    if (nzchar(state$instructions %||% "")) {
+      c("Instructions:", indent_lines(state$instructions))
+    },
     "Methods:",
     commons_method_signatures(
       hide = c(
@@ -405,6 +430,11 @@ commons_overview <- function(state) {
       collapse = " "
     ))
   )
+}
+
+indent_lines <- function(x) {
+  lines <- strsplit(x, "\n", fixed = TRUE)[[1]]
+  ifelse(nzchar(lines), paste0("  ", lines), lines)
 }
 
 # Methods that run a kind of calculation the object has none of are hidden.

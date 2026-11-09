@@ -30,8 +30,7 @@ connect_client <- function(
       call = call
     )
   }
-  server <- sub("/+$", "", server)
-  server <- sub("/__api__$", "", server)
+  server <- sub("/+(__api__/*)?$", "", server)
   list(server = server, api_key = api_key)
 }
 

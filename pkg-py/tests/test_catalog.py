@@ -14,8 +14,11 @@ from typing import cast
 import pytest
 
 from commons._catalog import (
+    CatalogAmbiguousColumnError,
+    CatalogAmbiguousTableError,
+    CatalogClaimedRelationError,
+    CatalogMergeError,
     Manifest,
-    MergedDictionary,
     Relation,
     Selector,
     check_exclude,
@@ -30,6 +33,7 @@ from commons._catalog._core import OBJECT_LIMIT, PROMPT_LIMIT, SEARCH_PROBE_LIMI
 from commons._data_dictionary import DataDictionary
 from commons._data_source import TableId
 from tests._shared import load_shared_fixture
+from tests._warehouse import merge_shared_case
 
 
 def relation(label: str, **kwargs) -> Relation:
@@ -486,26 +490,11 @@ def test_exclusion_globs_match_the_shared_contract():
         assert excluded(case["names"], case["patterns"]) == case["hidden"], case["name"]
 
 
-def run_merge_case(case: dict) -> MergedDictionary:
-    relations = {}
-    for entry in case["relations"]:
-        relations[entry["label"]] = Relation(
-            id=TableId(
-                catalog=entry.get("catalog"),
-                schema=entry.get("schema"),
-                table=entry["table"],
-            ),
-            kind=entry.get("kind"),
-            description=entry.get("description"),
-        )
-    columns = {entry["label"]: entry["columns"] for entry in case["relations"]}
-    dictionary = DataDictionary.model_validate(case["dictionary"])
-    return merge_dictionary(
-        dictionary,
-        relations,
-        describe_relation=lambda table_id: columns[table_id.label],
-        identifier_case=case["identifier_case"],
-    )
+_MERGE_ERRORS = {
+    "ambiguous": CatalogAmbiguousTableError,
+    "claimed": CatalogClaimedRelationError,
+    "ambiguous_column": CatalogAmbiguousColumnError,
+}
 
 
 def test_the_dictionary_merge_matches_the_shared_contract():
@@ -514,11 +503,12 @@ def test_the_dictionary_merge_matches_the_shared_contract():
     for case in cases:
         expect = case["expect"]
         if "error" in expect:
-            with pytest.raises(ValueError):
-                run_merge_case(case)
+            with pytest.raises(_MERGE_ERRORS[expect["error"]]):
+                merge_shared_case(case)
+            assert issubclass(_MERGE_ERRORS[expect["error"]], CatalogMergeError)
             continue
 
-        merged = run_merge_case(case)
+        merged = merge_shared_case(case)
         assert list(merged.dictionary.tables) == list(expect["tables"]), case["name"]
         for label, want in expect["tables"].items():
             table = merged.dictionary.tables[label]

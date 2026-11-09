@@ -207,11 +207,21 @@ def test_the_engine_backend_quotes_each_component_separately() -> None:
     assert quoted == '"ANALYTICS"."PUBLIC"."ORDERS"'
 
 
-def test_the_engine_backend_still_quotes_a_two_part_name() -> None:
+def test_the_engine_backend_quotes_a_lowercase_name_too() -> None:
     backend = EngineBackend(sqlalchemy.create_engine("sqlite://"))
     assert backend.quote(TableId(table="sales", schema="analytics")) == (
-        "analytics.sales"
+        '"analytics"."sales"'
     )
+
+
+def test_a_lowercase_snowflake_table_keeps_its_case() -> None:
+    # SQLAlchemy treats an all-lowercase name as case-insensitive and leaves
+    # it bare, which Snowflake folds to upper case: a table created as
+    # "survey" would be looked up as SURVEY.
+    pytest.importorskip("snowflake.sqlalchemy")
+    backend = EngineBackend(sqlalchemy.create_engine("snowflake://u@account/db"))
+    quoted = backend.quote(TableId(table="survey", schema="LIVE", catalog="COMMONS_CI"))
+    assert quoted == '"COMMONS_CI"."LIVE"."survey"'
 
 
 def test_an_engine_backend_reports_columns_from_its_inspector(

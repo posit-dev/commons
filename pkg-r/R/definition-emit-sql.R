@@ -396,6 +396,16 @@ definition_sql_divide <- function(node, state, dialect, selected) {
     dialect,
     selected
   )
+  # Parenthesize compound operands so `a / (b * c)` keeps its grouping.
+  quotient <- definition_sql_infix(
+    node$lhs,
+    node$rhs,
+    "/",
+    6L,
+    state,
+    dialect,
+    selected
+  )
   nan <- definition_sql_non_finite_literal("nan", dialect)
   inf <- definition_sql_non_finite_literal("inf", dialect)
   neg_inf <- definition_sql_non_finite_literal("-inf", dialect)
@@ -407,7 +417,7 @@ definition_sql_divide <- function(node, state, dialect, selected) {
       "WHEN %s IS NULL THEN NULL ",
       "WHEN %s OR %s = 0 THEN %s ",
       "WHEN %s < 0 THEN %s ELSE %s END ",
-      "ELSE %s / %s END"
+      "ELSE %s END"
     ),
     divisor,
     numerator,
@@ -417,8 +427,7 @@ definition_sql_divide <- function(node, state, dialect, selected) {
     numerator,
     neg_inf,
     inf,
-    numerator,
-    divisor
+    quotient
   )
 }
 
@@ -572,6 +581,16 @@ definition_sql_similar <- function(node, state, dialect, selected) {
 }
 
 definition_sql_temporal_shift <- function(node, state, dialect, selected) {
+  # Snowflake refuses DATE + NULL, so write CAST(NULL AS <timestamp>) (#441).
+  if (
+    identical(node$type, "datetime") &&
+      "null" %in% c(node$lhs$kind, node$rhs$kind)
+  ) {
+    return(sprintf(
+      "CAST(NULL AS %s)",
+      definition_sql_null_datetime[[dialect]]
+    ))
+  }
   lhs_interval <- identical(node$lhs$type, "interval")
   rhs_interval <- identical(node$rhs$type, "interval")
   if (!lhs_interval && !rhs_interval) {
@@ -764,6 +783,11 @@ definition_sql_abort_unsupported <- function(dialect, what, why) {
     call = NULL
   )
 }
+
+definition_sql_null_datetime <- list(
+  snowflake = "TIMESTAMP_TZ",
+  databricks = "TIMESTAMP"
+)
 
 definition_sql_nan_note <- list(
   snowflake = paste(

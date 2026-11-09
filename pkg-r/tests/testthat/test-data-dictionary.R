@@ -67,6 +67,52 @@ test_that("data_dictionary() reads and keys tables and columns", {
   expect_length(dict$relationships, 1)
 })
 
+# Which files load is a cross-language contract, so the cases live in
+# tests/shared/data-dictionary-read.json and the Python suite runs the same
+# ones. The fixture pins the refusal as a slug; the wording belongs to each
+# language.
+dictionary_read_error_patterns <- list(
+  missing_tables = "no top-level .*tables"
+)
+
+test_that("data_dictionary() matches the shared read fixture", {
+  cases <- shared_fixture("data-dictionary-read")$read_dictionary_file$cases
+  expect_gt(length(cases), 0)
+  errors <- Filter(function(case) !is.null(case$error), cases)
+  expect_setequal(
+    vapply(errors, function(case) case$error, character(1)),
+    names(dictionary_read_error_patterns)
+  )
+
+  for (case in cases) {
+    path <- withr::local_tempfile(fileext = ".yaml")
+    writeLines(case$yaml, path, sep = "")
+    if (!is.null(case$error)) {
+      expect_error(
+        data_dictionary(path),
+        dictionary_read_error_patterns[[case$error]],
+        info = case$name
+      )
+      next
+    }
+    expect_equal(
+      names(data_dictionary(path)$tables) %||% character(),
+      as.character(unlist(case$tables)),
+      info = case$name
+    )
+  }
+})
+
+test_that("a dictionary path without tables errors in data_source()", {
+  path <- withr::local_tempfile(fileext = ".yaml")
+  writeLines(c("columns:", "  - name: hike_name"), path)
+  expect_snapshot(
+    data_source(sales = test_sales(), dictionary = path),
+    error = TRUE,
+    transform = function(x) gsub(path, "<path>", x, fixed = TRUE)
+  )
+})
+
 test_that("pre-keyed maps of tables and columns are accepted", {
   dict <- new_data_dictionary(list(
     tables = list(
@@ -252,7 +298,6 @@ test_that("warehouse metadata supplements an authored dictionary", {
     merged$definition_bindings$columns$orders,
     c(amount = "AMOUNT", missing = NA_character_)
   )
-  expect_true(merged$definition_bindings$strict)
   expect_length(merged$dictionary$relationships, 1L)
   entry <- dictionary_entry_text(
     merged$dictionary,

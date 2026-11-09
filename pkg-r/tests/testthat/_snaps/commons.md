@@ -196,6 +196,30 @@
       `$context("your query")` for guidance on the approach. Say in your
       answer which numbers came from trusted calculations and which didn't.
 
+# commons() prints its instructions
+
+    Code
+      commons(data_sources = list(sales_db = test_source()), instructions = "Use the organization's fiscal-year conventions.")
+    Output
+      <commons>
+      Sources: sales_db. Tables: sales.
+      Instructions:
+        Use the organization's fiscal-year conventions.
+      Methods:
+        $search(query)
+        $describe(table, source = NULL)
+        $run_sql(query, source = NULL)
+      This object provides access to trusted code and context. Say in your
+      answer which numbers came from trusted calculations and which didn't.
+
+# commons() validates its instructions
+
+    Code
+      commons(data_sources = test_source(), instructions = "missing-instructions.md")
+    Condition
+      Error in `commons()`:
+      ! Instructions file 'missing-instructions.md' does not exist.
+
 # commons() lists only the calculation methods it can run
 
     Code

@@ -107,3 +107,9 @@ tables:
         expr: amount - (ratio - 1)
       - name: nullable date shift
         expr: created + NULL
+      - name: absent offset
+        expr: "NULL"
+      - name: relayed offset
+        expr: "`absent offset`"
+      - name: date shifted by a null sibling
+        expr: created + `relayed offset`
