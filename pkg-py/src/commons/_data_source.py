@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 import sqlalchemy
 
 from . import _duckdb
-from ._backends import Backend, DuckDBBackend, EngineBackend
+from ._backends import Backend, DuckDBBackend, EngineBackend, escape_quoted_colons
 from ._frames import is_frame
 from ._sql_guard import check_query, is_single_select
 
@@ -323,6 +323,13 @@ class DataSource:
         check_session(self.backend, self.session)
         if not is_single_select(sql, dialect=self.backend.dialect()):
             raise ValueError("Only a single read-only SELECT statement is allowed.")
+        if (
+            isinstance(self.backend, EngineBackend)
+            and self.backend.dialect() != "databricks"
+        ):
+            # The SQL runs through SQLAlchemy's text(), which would read a
+            # colon inside a literal as a bind.
+            sql = escape_quoted_colons(sql)
         if params:
             return self.backend.query(sql, params)
         return self.backend.query(sql)

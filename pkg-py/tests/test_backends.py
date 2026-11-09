@@ -68,3 +68,15 @@ def test_compiled_query_allows_a_semicolon_inside_a_literal(
     assert source._query_compiled(
         "SELECT 'a;b' AS v, \"n\" FROM sales WHERE n = 1"
     ) == [{"v": "a;b", "n": 1}]
+
+
+def test_compiled_query_keeps_colons_inside_literals(
+    engine: sqlalchemy.Engine,
+) -> None:
+    source = data_source(engine, tables=["sales"])
+    # SQLite keeps a backslash in a literal, so the text it returns is the
+    # literal exactly as written.
+    assert source._query_compiled(
+        "SELECT ' :x' AS a, 'a\\\\:b' AS b, \"n\" FROM sales WHERE n = :p0",
+        {"p0": 1},
+    ) == [{"a": " :x", "b": "a\\\\:b", "n": 1}]

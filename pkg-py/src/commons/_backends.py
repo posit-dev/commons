@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 __all__ = ["Backend", "DuckDBBackend", "EngineBackend"]
 
+
 class Backend(Protocol):
     def query(
         self, sql: str, params: Mapping[str, Any] | None = None
@@ -96,6 +97,42 @@ class DuckDBBackend:
         # Frame and pin sources build their own tables, so nothing reaches
         # the existence check by this route.
         return None
+
+
+def escape_quoted_colons(sql: str) -> str:
+    """Escape each colon inside a quoted literal or identifier for `text()`.
+
+    SQLAlchemy reads `:name` as a bind wherever it appears, quotes included,
+    and drops the backslash of a `\\:` it finds there. Escaping every quoted
+    colon keeps the text the warehouse receives as it was written. Literals
+    are read as commons compiles them for Snowflake: a backslash escapes the
+    next character, and a doubled quote is a quote.
+    """
+    out: list[str] = []
+    quote: str | None = None
+    i = 0
+    while i < len(sql):
+        char = sql[i]
+        if quote is None:
+            if char in "'\"":
+                quote = char
+            out.append(char)
+        elif char == ":":
+            out.append("\\:")
+        elif char == "\\" and quote == "'" and i + 1 < len(sql):
+            out.append(sql[i : i + 2])
+            i += 1
+        elif char == quote:
+            if sql[i + 1 : i + 2] == quote:
+                out.append(char * 2)
+                i += 1
+            else:
+                quote = None
+                out.append(char)
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
 
 
 def _databricks_rows(
