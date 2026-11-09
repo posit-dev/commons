@@ -28,11 +28,16 @@ jobs:
           - {os: ubuntu-latest, r: oldrel-1}
           - {os: ubuntu-latest, r: oldrel-2}
           - {os: ubuntu-latest, r: oldrel-3}
+          - {os: ubuntu-latest, r: devel, http-user-agent: release}
         # R-devel has no binary packages, so a cold cache compiles every
         # dependency from source, which takes 20 minutes or more. Pull requests
-        # skip it. Adding it here rather than as a separate job keeps a skipped
-        # job out of the pull request checks list.
-        include: ${{ fromJSON(github.event_name != 'pull_request' && '[{"config":{"os":"ubuntu-latest","r":"devel","http-user-agent":"release"}}]' || '[]') }}
+        # skip it, through an exclude rather than a separate job, so the checks
+        # list has no skipped entry.
+        exclude:
+          - config:
+              os: ubuntu-latest
+              r: ${{ github.event_name == 'pull_request' && 'devel' || 'none' }}
+              http-user-agent: release
     env:
       COMMONS_SKIP_BROWSER_TESTS: "true"
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
