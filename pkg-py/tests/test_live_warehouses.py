@@ -182,7 +182,7 @@ def test_a_refusal_is_classified_as_authorization(backend):
     its cases were written from documentation. A refusal this test cannot
     classify is a defect in that file, not in the warehouse.
     """
-    live = require_live_warehouse(backend, "denied_table")
+    live = require_live_warehouse(backend)
     denied = live.fixture_table_id("denied_table")
     backend_obj = live.engine_backend
 

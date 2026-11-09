@@ -10,6 +10,7 @@ answer.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -115,9 +116,15 @@ def test_every_corpus_definition_runs_against_the_fixture_rows():
     assert checked > 35, f"only {checked} definitions ran"
 
 
+PROVISIONED = {
+    backend: spec["provisioned"]
+    for backend, spec in load_shared_fixture("live-warehouse-env")["backends"].items()
+}
+
+
 @pytest.mark.parametrize("dialect", ["databricks", "snowflake"])
 def test_the_provisioning_script_renders_every_fixture_table(dialect):
-    sql = _generator().render(dialect, "catalog.schema")
+    sql = _generator().render(dialect, "tester")
 
     for table in ROWS["tables"]:
         assert "CREATE TABLE" in sql and table in sql
@@ -131,47 +138,83 @@ def test_the_provisioning_script_renders_every_fixture_table(dialect):
 def test_every_databricks_table_maps_columns_by_name():
     # A fixture name with a space, like survey's `nick names` struct field,
     # fails CREATE TABLE on Delta without column mapping.
-    sql = _generator().render("databricks", "catalog.schema")
+    sql = _generator().render("databricks", "tester")
 
     assert sql.count("'delta.columnMapping.mode' = 'name'") == len(ROWS["tables"])
 
 
 @pytest.mark.parametrize("dialect", ["databricks", "snowflake"])
-def test_the_grants_cover_every_fixture_table_but_the_denied_one(dialect):
+def test_the_grants_cover_every_fixture_relation_but_the_denied_one(dialect):
     generator = _generator()
-    sql = generator.render(dialect, "catalog.schema", grantee="tester")
+    names = PROVISIONED[dialect]
+    sql = generator.render(dialect, "tester")
     granted = [line for line in sql.splitlines() if line.startswith("GRANT SELECT")]
+    relations = list(ROWS["tables"])
+    if dialect == "databricks":
+        relations.append(names["parameterized_model"])
 
-    assert len(granted) == len(ROWS["tables"])
-    for table in ROWS["tables"]:
+    assert len(granted) == len(relations)
+    for relation in relations:
         assert any(
-            generator.quote_identifier(table, dialect) in line for line in granted
+            generator.quote_identifier(relation, dialect) in line for line in granted
         )
-    assert not any(generator.DENIED_TABLE in line for line in granted)
-    assert (
-        f".{generator.quote_identifier(generator.DENIED_TABLE, dialect)} AS SELECT"
-        in sql
-    )
+    denied = generator.quote_identifier(names["denied_table"], dialect)
+    assert not any(denied in line for line in granted)
+    assert f".{denied} AS SELECT" in sql
 
 
-def test_every_semantic_fixture_is_provisioned_on_snowflake():
+def test_every_semantic_view_the_tests_name_is_provisioned_on_snowflake():
     generator = _generator()
-    fixtures = load_shared_fixture("live-warehouse-env")["backends"]["snowflake"][
-        "fixtures"
-    ]
-    sql = generator.render("snowflake", "catalog.schema", grantee="tester")
+    names = PROVISIONED["snowflake"]
+    sql = generator.render("snowflake", "tester")
+    namespace = ".".join(f'"{part}"' for part in names["namespace"])
 
-    for view in generator.SEMANTIC_VIEWS:
+    for fixture in ("semantic_view", "verified_query_view", "parameterized_model"):
+        view = names[fixture]
         assert f"name: {view}\n" in sql
-        assert f'SEMANTIC VIEW "catalog"."schema"."{view}" TO ROLE' in sql
-    for fixture, view in generator.SEMANTIC_FIXTURES.items():
-        assert f"export {fixtures[fixture]['variable']}=catalog.schema.{view}" in sql
-    assert fixtures["parameterized_model_arguments"]["variable"] in sql
-    assert "SEMANTIC VIEW" not in generator.render("databricks", "catalog.schema")
+        assert f'SEMANTIC VIEW {namespace}."{view}" TO ROLE' in sql
+    # Snowflake folds an unquoted variable name to upper case, as the
+    # arguments spell it.
+    for argument in names["parameterized_model_arguments"]:
+        assert f"- name: {argument}\n" in sql
+    assert "SEMANTIC VIEW" not in generator.render("databricks", "tester")
+
+
+def test_a_verified_query_view_apart_from_the_semantic_view_is_refused(tmp_path):
+    # One YAML template serves both, so distinct names would leave the
+    # verified query view uncreated.
+    contract = load_shared_fixture("live-warehouse-env")
+    contract["backends"]["snowflake"]["provisioned"]["verified_query_view"] = "OTHER"
+    path = tmp_path / "live-warehouse-env.json"
+    path.write_text(json.dumps(contract), encoding="utf-8")
+    generator = _generator()
+    generator.render.__globals__["ENV"] = path
+
+    with pytest.raises(SystemExit, match="verified query view"):
+        generator.render("snowflake", "tester")
+
+
+def test_the_snowflake_test_role_can_assume_the_alternate_role():
+    role = PROVISIONED["snowflake"]["alternate_role"]
+    sql = _generator().render("snowflake", "tester")
+
+    assert f'CREATE ROLE IF NOT EXISTS "{role}";' in sql
+    assert f'GRANT ROLE "{role}" TO ROLE "tester";' in sql
+
+
+def test_the_parameterized_metric_view_is_provisioned_on_databricks():
+    names = PROVISIONED["databricks"]
+    sql = _generator().render("databricks", "tester")
+    namespace = ".".join(f"`{part}`" for part in names["namespace"])
+
+    assert f"VIEW {namespace}.`{names['parameterized_model']}`\nWITH METRICS" in sql
+    for argument in names["parameterized_model_arguments"]:
+        assert f"- name: {argument}\n" in sql
 
 
 def test_a_semantic_view_escapes_the_namespace_for_yaml_alone():
-    sql = _generator().render("snowflake", "O'Brien.schema")
+    names = {**PROVISIONED["snowflake"], "namespace": ["O'Brien", "schema"]}
+    sql = "\n".join(_generator().semantic_views(names))
 
     assert "database: '\"O''Brien\"'" in sql
     assert 'FROM "O\'Brien"."schema"."orders"' in sql

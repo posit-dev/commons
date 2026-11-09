@@ -6,8 +6,9 @@ actually returns. This module is the other half: it builds a SQLAlchemy
 engine from the environment and loads the same rows into DuckDB, so the two
 engines' answers can be compared.
 
-The variable names come from `tests/shared/live-warehouse-env.json` rather
-than being written here, because the R suite reads the same contract and a
+The connection variable names and the provisioned schema and objects come
+from `tests/shared/live-warehouse-env.json` rather than being written here,
+because the R suite and the provisioning script read the same contract and a
 name spelled twice is a name that can drift. Nothing here fails when a
 warehouse is absent: an unconfigured backend, or a missing driver package,
 skips.
@@ -54,12 +55,12 @@ _SPECIAL_DOUBLES = {"NaN": math.nan, "Infinity": math.inf, "-Infinity": -math.in
 
 @dataclass
 class LiveWarehouse:
-    """A configured live backend and the identifiers it was pointed at."""
+    """A configured live backend and the objects provisioned in it."""
 
     backend: str
     engine: sqlalchemy.Engine
     namespace: tuple[str, ...]
-    fixtures: dict[str, str]
+    provisioned: dict[str, Any]
 
     @property
     def engine_backend(self) -> EngineBackend:
@@ -87,56 +88,24 @@ class LiveWarehouse:
         return _READER_QUOTING[self.backend](list(self.namespace))
 
     def fixture_table_id(self, name: str) -> TableId:
-        """A fixture variable's dotted value as a TableId.
-
-        Spelled out rather than passed positionally: TableId takes the table
-        first and the catalog last, so `TableId(*value.split("."))` reverses a
-        `catalog.schema.table` value and probes something else entirely.
-        """
-        parts = self.fixtures[name].split(".")
-        if len(parts) != 3:
-            raise ValueError(
-                f"{name} must name catalog.schema.table, got {self.fixtures[name]!r}."
-            )
-        catalog, schema, table = parts
-        return TableId(table=table, schema=schema, catalog=catalog)
+        """A provisioned relation, such as `denied_table`, as a TableId."""
+        return self.table_id(self.provisioned[name])
 
 
-def _missing(names: list[str]) -> list[str]:
-    return [name for name in names if not os.environ.get(name)]
-
-
-def require_live_warehouse(backend: str, *needs: str) -> LiveWarehouse:
-    """A live backend, or a skip naming what is unset.
-
-    `needs` lists optional fixtures the caller cannot run without, such as
-    `denied_table`. The required ones are always checked.
-    """
+def require_live_warehouse(backend: str) -> LiveWarehouse:
+    """A live backend, or a skip naming the connection variables that are unset."""
     spec = _ENV["backends"][backend]
-    connection = spec["connection"]
-
-    absent = _missing(connection["required"])
-    fixtures: dict[str, str] = {}
-    for name, fixture in spec["fixtures"].items():
-        value = os.environ.get(fixture["variable"], "")
-        if value:
-            fixtures[name] = value
-        elif fixture["required"] or name in needs:
-            absent.append(fixture["variable"])
+    absent = [
+        name for name in spec["connection"]["required"] if not os.environ.get(name)
+    ]
     if absent:
-        pytest.skip(f"live {backend} needs {', '.join(sorted(set(absent)))}")
+        pytest.skip(f"live {backend} needs {', '.join(sorted(absent))}")
 
-    namespace = tuple(fixtures["schema"].split("."))
-    expected = spec["fixtures"]["schema"]["arity"]
-    if len(namespace) != expected:
-        raise ValueError(
-            f"{spec['fixtures']['schema']['variable']} must name "
-            f"{expected} identifier parts, got {fixtures['schema']!r}."
-        )
-
+    provisioned = spec["provisioned"]
+    namespace = tuple(provisioned["namespace"])
     engine = _engine(backend, namespace)
     return LiveWarehouse(
-        backend=backend, engine=engine, namespace=namespace, fixtures=fixtures
+        backend=backend, engine=engine, namespace=namespace, provisioned=provisioned
     )
 
 
@@ -161,12 +130,11 @@ def _engine(backend: str, namespace: tuple[str, ...]) -> sqlalchemy.Engine:
         # environment: a token, a service principal's secret or GitHub OIDC
         # token, or a CLI login. The connector asks for headers per request,
         # and the SDK refreshes short-lived tokens behind them.
-        # Unset, the SDK requests all-apis, which a scoped secret refuses.
-        scopes_variable = _ENV["backends"]["databricks"]["connection"]["scopes"][
-            "variable"
-        ]
+        # Unset, the SDK requests all-apis, which a secret scoped to sql
+        # refuses. The tests need only sql.
         config = Config(
-            host=f"https://{host}", scopes=os.environ.get(scopes_variable) or None
+            host=f"https://{host}",
+            scopes=_ENV["backends"]["databricks"]["connection"]["scopes"],
         )
         return sqlalchemy.create_engine(
             url,

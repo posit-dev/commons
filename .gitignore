@@ -17,3 +17,6 @@ commons-reviews/
 .worktrees/
 /sandbox/commons-openai-citation-smoke/
 .kata.local.toml
+.env
+.env.*
+!.env.example

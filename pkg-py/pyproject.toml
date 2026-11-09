@@ -58,7 +58,8 @@ dev = [
     "pytz",
     "databricks-sdk>=0.55",
     "databricks-sqlalchemy>=2",
-    "snowflake-sqlalchemy>=1.6"
+    "snowflake-sqlalchemy>=1.6",
+    "python-dotenv>=1",
 ]
 docs = [
     "great-docs>=0.17",

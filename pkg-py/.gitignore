@@ -15,6 +15,11 @@ dist/
 # Jupyter writes these beside a notebook; they carry outputs and local paths.
 .ipynb_checkpoints/
 
+# hatchling reads only this file, so the root .gitignore does not keep these
+# out of the sdist.
+.env
+.env.*
+
 /.quarto/
 **/*.quarto_ipynb
 

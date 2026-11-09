@@ -52,16 +52,9 @@ jobs:
       DATABRICKS_TOKEN_AUDIENCE: ${{ vars.DATABRICKS_TOKEN_AUDIENCE }}
       # Unset when the service principal signs in with GitHub OIDC instead.
       DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
-      # Set when the client secret is scoped; see live-warehouse-env.json.
-      COMMONS_TEST_DATABRICKS_SCOPES: ${{ vars.COMMONS_TEST_DATABRICKS_SCOPES }}
-      COMMONS_TEST_DATABRICKS_SCHEMA: ${{ vars.COMMONS_TEST_DATABRICKS_SCHEMA }}
-      COMMONS_TEST_DATABRICKS_DENIED_TABLE: ${{ vars.COMMONS_TEST_DATABRICKS_DENIED_TABLE }}
       SNOWFLAKE_ACCOUNT: ${{ vars.SNOWFLAKE_ACCOUNT }}
       SNOWFLAKE_USER: ${{ vars.SNOWFLAKE_USER }}
       SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
-      COMMONS_TEST_SNOWFLAKE_SCHEMA: ${{ vars.COMMONS_TEST_SNOWFLAKE_SCHEMA }}
-      COMMONS_TEST_SNOWFLAKE_DENIED_TABLE: ${{ vars.COMMONS_TEST_SNOWFLAKE_DENIED_TABLE }}
-      COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE: ${{ vars.COMMONS_TEST_SNOWFLAKE_ALTERNATE_ROLE }}
     steps:
       - uses: actions/checkout@v6
       - name: Write the Snowflake private key
