@@ -30,16 +30,12 @@ def test_duckdb_query_refuses_params() -> None:
         DuckDBBackend(duckdb.connect()).query("SELECT 1", {"p0": 1})
 
 
-def test_data_source_query_passes_params(engine: sqlalchemy.Engine) -> None:
+def test_compiled_query_passes_params(engine: sqlalchemy.Engine) -> None:
     source = data_source(engine, tables=["sales"])
-    rows = source.query("SELECT n FROM sales WHERE region = :p0", {"p0": "APAC"})
+    rows = source._query_compiled(
+        "SELECT n FROM sales WHERE region = :p0", {"p0": "APAC"}
+    )
     assert rows == [{"n": 2}]
-
-
-def test_read_only_check_still_applies_with_params(engine: sqlalchemy.Engine) -> None:
-    source = data_source(engine, tables=["sales"])
-    with pytest.raises(ValueError):
-        source.query("DELETE FROM sales WHERE region = :p0", {"p0": "APAC"})
 
 
 def test_query_has_no_way_to_skip_the_read_only_check(

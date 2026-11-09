@@ -293,23 +293,18 @@ class DataSource:
             )
         )
 
-    def query(
-        self, sql: str, params: Mapping[str, Any] | None = None
-    ) -> list[dict[str, Any]]:
+    def query(self, sql: str) -> list[dict[str, Any]]:
         """Run one read-only statement, rejecting anything else first.
 
         On a warehouse source the connection identity is checked before the
         statement is read: access to these tables was decided for one
         principal, role, and namespace, so a query raises rather than runs
-        once any of those has moved. `params` binds named values written
-        `:name`.
+        once any of those has moved.
         """
         from ._catalog import check_session
 
         check_session(self.backend, self.session)
         check_query(sql, dialect=self.backend.dialect())
-        if params:
-            return self.backend.query(sql, params)
         if self.pending is None:
             return self.backend.query(sql)
         return self._query_loading_pins(sql)
