@@ -14,7 +14,7 @@ export DATABRICKS_HOST=https://example.cloud.databricks.com
 export DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/abc123
 ```
 
-You can also keep the variables in a `.env` file at the repository root, which git ignores. To start one, copy `.env.example` from the repository root to `.env`; it lists every variable and shows the format the file needs. `devtools::test()` reads it with `readRenviron()` for the length of the run, and a variable already set in the environment wins over it. `R CMD check` does not read it. `tests/shared/live-warehouse-env.json` lists the rules both suites follow under `env_file`.
+You can also keep the variables in a `.env` file at the repository root, which git ignores. To start one, copy `.env.example` from the repository root to `.env`; it lists every variable and shows the format the file needs. `devtools::test()` reads it with `readRenviron()` for the length of the run, and a variable already set in the environment wins over it. `tests/shared/live-warehouse-env.json` lists the rules both suites follow under `env_file`.
 
 Snowflake signs in with a key pair registered to `SNOWFLAKE_USER`. `odbc::databricks()` finds Databricks credentials in the environment: `DATABRICKS_TOKEN`, a service principal's `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET`, or a `databricks auth login` session. Both need the vendor's ODBC driver.
 
