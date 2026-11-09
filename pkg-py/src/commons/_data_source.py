@@ -179,7 +179,9 @@ class DataSource:
 
         `exclude` takes unqualified object-name globs to drop from a
         warehouse catalog listing, such as `"TMP_*"`. Only a warehouse has a
-        listing to drop from, so any other engine refuses it.
+        listing to drop from, so any other engine refuses it. A glob matches
+        a semantic view by its own name, not by the tables it reads, so a
+        view over an excluded table can still answer metric queries.
 
         On a warehouse `dictionary` is taken here because the catalog listing
         is folded into it during construction; on any other engine it is

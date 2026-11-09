@@ -56,7 +56,9 @@
 #'   For a board, a named character vector of pins to read: the names become
 #'   table names, and the values are pin names passed to [pins::pin_read()].
 #' @param exclude For Snowflake and Databricks namespace selections, optional
-#'   unqualified object-name globs to omit, such as `"TMP_*"`.
+#'   unqualified object-name globs to omit, such as `"TMP_*"`. A glob matches
+#'   a semantic view or metric view by its own name, not by the tables it
+#'   reads, so a view over an excluded table can still answer metric queries.
 #' @param dictionary An optional path to a data dictionary describing the
 #'   source's tables and columns, in the
 #'   [data-dict.yaml](https://data-dict.tidyverse.org/) format. See the
