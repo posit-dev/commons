@@ -652,7 +652,7 @@
     ]
   },
   "metric_sql": {
-    "description": "The query a call over a metric view's measures compiles to. Measures are read with `MEASURE()` under their own names, dimensions are selected and grouped by, each `where` entry compares a dimension as `semantic-models.json` and the Snowflake fixture describe, and each `arguments` name is passed to the view as a `?` bind. Identifiers are written as Databricks quotes them, in backticks; R renders with `DBI::ANSI()` and its runner swaps the double quotes for backticks.",
+    "description": "The query a call over a metric view's measures compiles to. Measures are read with `MEASURE()` under their own names, dimensions are selected and grouped by, each `where` entry compares a dimension as `semantic-models.json` and the Snowflake fixture describe, and each `arguments` name is passed to the view as a `?` bind. Identifiers are written as Databricks quotes them, in backticks; R renders with `DBI::ANSI()` and its runner swaps the double quotes for backticks. A string literal escapes a quote or a backslash with a backslash, because Databricks reads a doubled quote as two adjacent literals.",
     "model": {
       "id": {
         "catalog": "main",
@@ -722,7 +722,23 @@
           }
         ],
         "expected": {
-          "sql": "SELECT `region`, MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics` WHERE (`region` = 'O''Brien') AND (`tier` > 2) GROUP BY `region`"
+          "sql": "SELECT `region`, MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics` WHERE (`region` = 'O\\'Brien') AND (`tier` > 2) GROUP BY `region`"
+        }
+      },
+      {
+        "name": "a backslash in a where value is escaped, so it cannot end the literal",
+        "metrics": [
+          "revenue"
+        ],
+        "where": [
+          {
+            "column": "region",
+            "op": "=",
+            "value": "C:\\temp\\"
+          }
+        ],
+        "expected": {
+          "sql": "SELECT MEASURE(`revenue`) AS `revenue` FROM `main`.`sales`.`order_metrics` WHERE (`region` = 'C:\\\\temp\\\\')"
         }
       },
       {

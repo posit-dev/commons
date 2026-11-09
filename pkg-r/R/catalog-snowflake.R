@@ -901,7 +901,13 @@ snowflake_semantic_where <- function(where, members, con) {
     where,
     members,
     con,
-    snowflake_semantic_member_references
+    snowflake_semantic_member_references,
+    # Snowflake reads a backslash in a string literal as an escape, and DBI's
+    # quoting escapes only the quote character.
+    quote_string = function(value) {
+      escaped <- gsub("\\", "\\\\", value, fixed = TRUE)
+      as.character(DBI::dbQuoteString(con, escaped))
+    }
   )
 }
 

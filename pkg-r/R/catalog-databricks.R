@@ -5,6 +5,15 @@ is_databricks_connection <- function(con) {
   length(labels) > 0L && any(grepl("databricks", labels, ignore.case = TRUE))
 }
 
+# Databricks reads a backslash in a string literal as an escape and joins
+# adjacent literals, so 'O''Brien' reads as OBrien. Both characters are
+# escaped with a backslash, whatever class the connection has.
+databricks_quote_string <- function(x) {
+  x <- gsub("\\", "\\\\", x, fixed = TRUE)
+  x <- gsub("'", "\\'", x, fixed = TRUE)
+  paste0("'", x, "'")
+}
+
 databricks_table_registry <- function(
   con,
   tables = NULL,
@@ -237,19 +246,19 @@ databricks_list_unity_relations <- function(
   predicates <- c(
     paste0(
       "table_catalog = ",
-      DBI::dbQuoteString(con, components[["catalog"]])
+      databricks_quote_string(components[["catalog"]])
     ),
     "table_schema <> 'information_schema'",
     if ("schema" %in% names(components)) {
       paste0(
         "table_schema = ",
-        DBI::dbQuoteString(con, components[["schema"]])
+        databricks_quote_string(components[["schema"]])
       )
     },
     if ("table" %in% names(components)) {
       paste0(
         "table_name = ",
-        DBI::dbQuoteString(con, components[["table"]])
+        databricks_quote_string(components[["table"]])
       )
     }
   )
@@ -599,9 +608,9 @@ databricks_view_definition_chunk_size <- 900L
 databricks_view_definition <- function(con, id) {
   components <- id@name
   predicates <- c(
-    paste0("table_catalog = ", DBI::dbQuoteString(con, components[["catalog"]])),
-    paste0("table_schema = ", DBI::dbQuoteString(con, components[["schema"]])),
-    paste0("table_name = ", DBI::dbQuoteString(con, components[["table"]]))
+    paste0("table_catalog = ", databricks_quote_string(components[["catalog"]])),
+    paste0("table_schema = ", databricks_quote_string(components[["schema"]])),
+    paste0("table_name = ", databricks_quote_string(components[["table"]]))
   )
   where <- paste(predicates, collapse = " AND ")
   length_row <- tryCatch(
@@ -961,7 +970,8 @@ databricks_semantic_metric_sql <- function(
     where,
     members,
     con,
-    databricks_semantic_member_references
+    databricks_semantic_member_references,
+    quote_string = databricks_quote_string
   )
   if (length(conditions)) {
     sql <- paste(sql, "WHERE", paste(conditions, collapse = " AND "))
@@ -1009,9 +1019,9 @@ databricks_column_nullability <- function(
     return(logical())
   }
   predicates <- c(
-    paste0("table_catalog = ", DBI::dbQuoteString(con, components[["catalog"]])),
-    paste0("table_schema = ", DBI::dbQuoteString(con, components[["schema"]])),
-    paste0("table_name = ", DBI::dbQuoteString(con, components[["table"]]))
+    paste0("table_catalog = ", databricks_quote_string(components[["catalog"]])),
+    paste0("table_schema = ", databricks_quote_string(components[["schema"]])),
+    paste0("table_name = ", databricks_quote_string(components[["table"]]))
   )
   rows <- tryCatch(
     DBI::dbGetQuery(

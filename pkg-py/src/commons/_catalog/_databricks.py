@@ -41,7 +41,13 @@ def _quote_path(parts: list[str]) -> str:
 
 
 def _quote_string(value: str) -> str:
-    escaped = str(value).replace("'", "''")
+    """A string literal.
+
+    Databricks reads a backslash in one as an escape and joins adjacent
+    literals, so `'O''Brien'` reads as `OBrien`; both characters are escaped
+    with a backslash instead.
+    """
+    escaped = str(value).replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
 
 

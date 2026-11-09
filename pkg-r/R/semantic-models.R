@@ -743,6 +743,7 @@ semantic_where_conditions <- function(
   members,
   con,
   member_references,
+  quote_string,
   call = rlang::caller_env()
 ) {
   vapply(normalize_where(where), function(triple) {
@@ -774,10 +775,7 @@ semantic_where_conditions <- function(
     ) {
       triple$value
     } else {
-      # Snowflake and Databricks both read a backslash in a string literal as
-      # an escape, and DBI's quoting escapes only the quote character.
-      escaped <- gsub("\\", "\\\\", triple$value, fixed = TRUE)
-      as.character(DBI::dbQuoteString(con, escaped))
+      quote_string(triple$value)
     }
     sprintf("(%s %s %s)", reference, triple$op, value)
   }, character(1))
