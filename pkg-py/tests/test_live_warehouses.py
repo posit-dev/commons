@@ -288,8 +288,7 @@ def test_live_snowflake_discovers_and_executes_a_semantic_view():
     view = live.fixture_table_id("semantic_view")
     source = _semantic_source(live, view.label)
     model = source.semantic_models[view.label]
-    if not model.metrics:
-        pytest.skip("The selected Snowflake semantic view has no public metrics")
+    assert model.metrics
     metric = model.metrics[0].name
 
     search = search_pool_text(
@@ -322,45 +321,20 @@ def test_live_snowflake_binds_native_semantic_variables():
 
 
 def test_live_snowflake_scopes_models_associated_with_physical_tables():
-    from commons._catalog._core import Selector
-    from commons._catalog._snowflake_semantic import (
-        Unsupported,
-        list_semantic_views,
-        read_semantic_model,
-    )
-
+    # The provisioned semantic view reads only the orders table, so selecting
+    # orders brings it in and selecting another table leaves it out.
     live = require_live_warehouse("snowflake")
-    catalog, schema = live.namespace
-    backend = live.engine_backend
-    models = []
-    for view in list_semantic_views(backend, Selector(catalog=catalog, schema=schema)):
-        try:
-            model = read_semantic_model(backend, view)
-        except ValueError:
-            continue
-        if (
-            not isinstance(model, Unsupported)
-            and model.dependencies_complete
-            and model.dependencies
-            and model.metrics
-        ):
-            models.append(model)
-    if not models:
-        pytest.skip("No queryable associated semantic view is configured")
-    model = models[0]
+    view = live.fixture_table_id("semantic_view")
 
-    source = _semantic_source(live, *(d.label for d in model.dependencies))
+    source = _semantic_source(live, live.table_id("orders").label)
+    model = source.semantic_models[view.label]
+    assert model.dependencies == [live.table_id("orders")]
+    assert model.metrics
     result, _ = _run_metrics(source, [model.metrics[0].name])
 
-    assert model.id.label in source.semantic_models
     assert result.extra[TAG_EXTRA_KEY] == Tag.A
-    fixtures = {live.table_id(name) for name in ("orders", "values", "survey")}
-    outside = sorted(fixtures - set(model.dependencies), key=lambda t: t.label)
-    if outside:
-        assert (
-            model.id.label
-            not in _semantic_source(live, outside[0].label).semantic_models
-        )
+    outside = _semantic_source(live, live.table_id("values").label)
+    assert view.label not in outside.semantic_models
 
 
 def test_live_snowflake_hydrates_a_namespace_stub():
@@ -374,8 +348,7 @@ def test_live_snowflake_hydrates_a_namespace_stub():
     assert view.label not in source.semantic_models
 
     exact = _semantic_source(live, view.label).semantic_models[view.label]
-    if not exact.metrics:
-        pytest.skip("The selected Snowflake semantic view has no public metrics")
+    assert exact.metrics
     result, _ = _run_metrics(source, [f"{view.label}::{exact.metrics[0].name}"])
 
     assert view.label in source.semantic_models
