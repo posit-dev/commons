@@ -99,34 +99,26 @@ class DuckDBBackend:
         return None
 
 
-def escape_quoted_colons(sql: str) -> str:
-    """Escape each colon inside a quoted literal or identifier for `text()`.
+def escape_colons(sql: str, params: Mapping[str, Any] | None = None) -> str:
+    """Escape the colons SQLAlchemy's `text()` must not read as binds.
 
-    SQLAlchemy reads `:name` as a bind wherever it appears, quotes included,
-    and drops the backslash of a `\\:` it finds there. Escaping every quoted
-    colon keeps the text the warehouse receives as it was written, because
-    SQLAlchemy removes each escape it reads. Literals are read as Snowflake
-    reads them: a backslash escapes the next character, and a doubled quote
-    is a quote. In a dialect that reads a backslash literally the scan can
-    run past a literal's end, which escapes colons that were not quoted;
-    that only matters for a real bind there, and commons binds values only
-    in SQL it compiles for Snowflake.
+    `text()` reads `:name` as a bind wherever it appears, quotes and comments
+    included, and drops the backslash of a `\\:` it finds. It also removes
+    each escape it reads, so an escaped colon reaches the warehouse as it
+    was written. Without `params` every colon is escaped, which needs no
+    reading of the SQL at all. With them, only colons inside quotes are:
+    values are bound only in SQL commons compiles for Snowflake, which has
+    no comments, and whose literals escape with a backslash and a doubled
+    quote.
     """
+    if not params:
+        return sql.replace(":", "\\:")
     out: list[str] = []
     quote: str | None = None
     i = 0
     while i < len(sql):
         char = sql[i]
         if quote is None:
-            # A comment is copied as it is, so a quote in it opens nothing.
-            pair = sql[i : i + 2]
-            if pair in ("--", "/*"):
-                close = "\n" if pair == "--" else "*/"
-                end = sql.find(close, i + 2)
-                end = len(sql) if end == -1 else end + len(close)
-                out.append(sql[i:end])
-                i = end
-                continue
             if char in "'\"":
                 quote = char
             out.append(char)
@@ -185,7 +177,7 @@ class EngineBackend:
             if self.dialect() == "databricks":
                 return _databricks_rows(connection, sql, params)
             result = connection.execute(
-                sqlalchemy.text(escape_quoted_colons(sql)), dict(params or {})
+                sqlalchemy.text(escape_colons(sql, params)), dict(params or {})
             )
             return [dict(row) for row in result.mappings()]
 

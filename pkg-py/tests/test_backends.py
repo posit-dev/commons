@@ -30,16 +30,12 @@ def test_engine_query_keeps_quoted_colons(engine: sqlalchemy.Engine) -> None:
     assert EngineBackend(engine).query("SELECT ' :x' AS \":x\"") == [{":x": " :x"}]
 
 
-def test_engine_query_binds_after_a_comment_with_a_quote(
+def test_engine_query_keeps_colons_in_comments_and_casts(
     engine: sqlalchemy.Engine,
 ) -> None:
     backend = EngineBackend(engine)
-    assert backend.query("SELECT 1 AS n -- don't\n, :p AS v", {"p": 2}) == [
-        {"n": 1, "v": 2}
-    ]
-    assert backend.query("SELECT 1 AS n /* it's */, :p AS v", {"p": 3}) == [
-        {"n": 1, "v": 3}
-    ]
+    sql = "SELECT CAST('1' AS INT) AS n -- don't :x\n, '$$--$$ :y' AS v /* :z */"
+    assert backend.query(sql) == [{"n": 1, "v": "$$--$$ :y"}]
 
 
 def test_duckdb_query_refuses_params() -> None:
